@@ -14,11 +14,10 @@ import {
   getAvailablePort,
   startServerWithHttp,
   waitForHealth,
-  sendMcpRequestWithSse,
-  sendMcpRequestsOverSseSession,
   killServer,
   StreamableHttpMcpClient,
   httpPost,
+  parseJsonOrSse,
   PROJECT_ROOT as HTTP_PROJECT_ROOT,
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
@@ -258,83 +257,13 @@ describe('MCP Server Smoke Tests', () => {
    * These tests use HTTP/SSE transport instead of STDIO to avoid
    * Jest/ESM/spawn stdio capture issues.
    */
-  describe('MCP Protocol via HTTP Transport', () => {
-    it('server responds to MCP initialize request via HTTP', async () => {
-      // Get available port
-      httpServerPort = await getAvailablePort();
-      const baseUrl = `http://localhost:${httpServerPort}`;
-
-      // Start server with SSE transport
-      httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
-
-      // Wait for health endpoint (server takes ~5s to initialize)
-      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
-
-      // Send initialize request via SSE
-      const result = await sendMcpRequestWithSse(
-        baseUrl,
-        'initialize',
-        {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'e2e-test', version: '1.0.0' },
-        },
-        1,
-        { timeout: 10000 }
-      );
-
-      expect(result).toHaveProperty('protocolVersion');
-      expect(result).toHaveProperty('serverInfo');
-      expect((result as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
-    }, 20000);
-
-    it('server registers expected MCP tools via HTTP', async () => {
-      // Get available port
-      httpServerPort = await getAvailablePort();
-      const baseUrl = `http://localhost:${httpServerPort}`;
-
-      // Start server with SSE transport
-      httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
-
-      // Wait for health endpoint (server takes ~5s to initialize)
-      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
-
-      // Initialize and list tools over ONE session. Sending these as two separate SSE calls opens
-      // two independent sessions, and the server attaches one transport at a time — so the second
-      // one only connects if the first connection's close has already propagated. That race is
-      // load-dependent, which is what made this test fail after `test:integration` and pass alone.
-      const [, result] = (await sendMcpRequestsOverSseSession(
-        baseUrl,
-        [
-          {
-            method: 'initialize',
-            params: {
-              protocolVersion: '2024-11-05',
-              capabilities: {},
-              clientInfo: { name: 'e2e-test', version: '1.0.0' },
-            },
-          },
-          { method: 'tools/list' },
-        ],
-        { timeout: 15000 }
-      )) as [unknown, { tools: Array<{ name: string }> }];
-
-      expect(Array.isArray(result.tools)).toBe(true);
-
-      const toolNames = result.tools.map((t) => t.name);
-      expect(toolNames).toContain('prompt_engine');
-      expect(toolNames).toContain('resource_manager');
-      expect(toolNames).toContain('system_control');
-    }, 20000);
-  });
-
   /**
    * Streamable HTTP Transport Tests
    *
-   * Tests the new MCP standard transport (since 2025-03-26):
+   * Tests the MCP standard transport:
    * - Single /mcp endpoint for POST, GET, DELETE
-   * - Session management via mcp-session-id header
-   * - Stateful session mode with session ID generator
+   * - Stateless: revision 2026-07-28 removed protocol sessions, so the server
+   *   issues no session id and every request is served on its own instance
    */
   describe('MCP Protocol via Streamable HTTP Transport', () => {
     it('server starts with streamable-http transport', async () => {
@@ -373,9 +302,9 @@ describe('MCP Server Smoke Tests', () => {
       const client = new StreamableHttpMcpClient(baseUrl);
       const { sessionId, capabilities } = await client.initialize();
 
-      // Should have a session ID
-      expect(sessionId).toBeTruthy();
-      expect(typeof sessionId).toBe('string');
+      // No session id: the handler serves each request from its own instance,
+      // so there is nothing for an `Mcp-Session-Id` header to refer to.
+      expect(sessionId).toBeNull();
 
       // Should have MCP capabilities
       expect(capabilities).toHaveProperty('protocolVersion');
@@ -418,7 +347,7 @@ describe('MCP Server Smoke Tests', () => {
       await client.close();
     }, 20000);
 
-    it('session returns unique session ID via Streamable HTTP', async () => {
+    it('serves requests without a session id via Streamable HTTP', async () => {
       // Get available port
       streamableHttpServerPort = await getAvailablePort();
       const baseUrl = `http://localhost:${streamableHttpServerPort}`;
@@ -432,16 +361,13 @@ describe('MCP Server Smoke Tests', () => {
       // Wait for health endpoint (server initialization takes time)
       await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-      // Create client and verify session ID is returned
+      // Create client and verify no session id is minted
       const client = new StreamableHttpMcpClient(baseUrl);
       const { sessionId } = await client.initialize();
 
-      // Session ID should be a valid UUID format
-      expect(sessionId).toBeTruthy();
-      expect(typeof sessionId).toBe('string');
-      expect(sessionId.length).toBeGreaterThan(0);
+      expect(sessionId).toBeNull();
 
-      // Verify client can make requests with the session
+      // Verify follow-up requests are served anyway
       const result = (await client.request('tools/list', {}, 2)) as {
         tools: Array<{ name: string }>;
       };
@@ -451,11 +377,14 @@ describe('MCP Server Smoke Tests', () => {
     }, 25000);
 
     /**
-     * MCP Spec Compliance: 400 Bad Request without session ID
-     * Per spec: "Servers that require a session ID SHOULD respond to requests
-     * without an Mcp-Session-Id header (other than initialization) with HTTP 400"
+     * Statelessness: revision 2026-07-28 removed protocol sessions.
+     *
+     * These two cases previously asserted the session contract -- 400 without an
+     * `Mcp-Session-Id` and 404 for an unknown one. Both are now served normally:
+     * there is no registry to miss, so a request carrying no session, or a stale
+     * one from a 2025-era client, is answered on its own instance.
      */
-    it('returns 400 Bad Request for non-init request without session ID', async () => {
+    it('serves a non-init request that carries no session id', async () => {
       streamableHttpServerPort = await getAvailablePort();
       const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
@@ -466,30 +395,19 @@ describe('MCP Server Smoke Tests', () => {
 
       await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-      // Send a tools/list request WITHOUT session ID (not an init request)
-      const request = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      };
+      const response = await httpPost(
+        `${baseUrl}/mcp`,
+        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        { Accept: 'application/json, text/event-stream' }
+      );
 
-      const response = await httpPost(`${baseUrl}/mcp`, request, {
-        Accept: 'application/json, text/event-stream',
-      });
-
-      // Should return 400 Bad Request per MCP spec
-      expect(response.status).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBeDefined();
-      expect(body.error.message).toContain('session');
+      expect(response.status).toBe(200);
+      const result = parseJsonOrSse(response.body, 1);
+      expect(result.error).toBeUndefined();
+      expect(Array.isArray((result.result as { tools: unknown[] }).tools)).toBe(true);
     }, 20000);
 
-    /**
-     * MCP Spec Compliance: 404 for invalid session ID
-     * When a session ID is provided but not found, return 404
-     */
-    it('returns 404 for invalid session ID', async () => {
+    it('ignores a stale session id header instead of rejecting it', async () => {
       streamableHttpServerPort = await getAvailablePort();
       const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
@@ -500,24 +418,18 @@ describe('MCP Server Smoke Tests', () => {
 
       await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-      // Send a request with a fake session ID
-      const request = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      };
+      const response = await httpPost(
+        `${baseUrl}/mcp`,
+        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        {
+          'mcp-session-id': 'invalid-session-id-12345',
+          Accept: 'application/json, text/event-stream',
+        }
+      );
 
-      const response = await httpPost(`${baseUrl}/mcp`, request, {
-        'mcp-session-id': 'invalid-session-id-12345',
-        Accept: 'application/json, text/event-stream',
-      });
-
-      // Should return 404 Not Found for invalid session
-      expect(response.status).toBe(404);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBeDefined();
-      expect(body.error.message).toContain('Session not found');
+      expect(response.status).toBe(200);
+      const result = parseJsonOrSse(response.body, 1);
+      expect(result.error).toBeUndefined();
     }, 20000);
   });
 });

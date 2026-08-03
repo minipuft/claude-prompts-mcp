@@ -9,7 +9,7 @@
 
 import * as path from 'node:path';
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
@@ -31,6 +31,7 @@ import type { McpToolRouter } from '#mcp/tools/index.js';
 import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { PathResolver } from './paths.js';
+import type { McpServerFactory } from '@modelcontextprotocol/server';
 
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateManager } from '#engine/gates/gate-manager.js';
@@ -229,20 +230,7 @@ export class Application {
     this.textReferenceStore = new TextReferenceStore(this.logger);
     this.conversationStore = createConversationStore(this.logger);
 
-    const config = this.configManager.getConfig();
-    this.mcpServer = new McpServer(
-      {
-        name: config.server.name,
-        version: config.server.version,
-      },
-      {
-        capabilities: {
-          prompts: { listChanged: true },
-          tools: { listChanged: true },
-          resources: { listChanged: true },
-        },
-      }
-    );
+    this.mcpServer = this.constructMcpServer();
     this.debugLog('McpServer created successfully');
 
     // Initialize hook registry and notification emitter
@@ -257,13 +245,14 @@ export class Application {
     this.debugLog('HookRegistry and McpNotificationEmitter initialized');
 
     // Initialize telemetry lifecycle (creates runtime + hook observer, does not start SDK yet)
+    const serverConfig = this.configManager.getConfig().server;
     const telemetryConfig = this.configManager.getTelemetryConfig();
     this.telemetryLifecycle = new TelemetryLifecycle({
       config: telemetryConfig,
       logger: this.logger,
       hookRegistry: this.hookRegistry,
-      serviceName: config.server.name,
-      serviceVersion: config.server.version,
+      serviceName: serverConfig.name,
+      serviceVersion: serverConfig.version,
     });
     this.debugLog('TelemetryLifecycle initialized');
 
@@ -357,7 +346,7 @@ export class Application {
     await this.ensurePromptHotReload();
 
     // Register MCP resources for token-efficient read-only access
-    this.registerMcpResources();
+    this.registerMcpResources(this.mcpServer);
 
     this.logger.info('All modules initialized successfully');
   }
@@ -366,7 +355,49 @@ export class Application {
    * Register MCP resources for prompts, gates, frameworks, and observability.
    * Resources provide 5-16x more token-efficient discovery than tool-based list operations.
    */
-  private registerMcpResources(): void {
+  /**
+   * Construct an unregistered `McpServer` shell.
+   *
+   * Capabilities are declared per instance, so every serving unit — the STDIO
+   * connection and each HTTP request — advertises the same surface.
+   */
+  private constructMcpServer(): McpServer {
+    const config = this.configManager.getConfig();
+    return new McpServer(
+      {
+        name: config.server.name,
+        version: config.server.version,
+      },
+      {
+        capabilities: {
+          prompts: { listChanged: true },
+          tools: { listChanged: true },
+          resources: { listChanged: true },
+        },
+      }
+    );
+  }
+
+  /**
+   * Build the factory the SDK calls once per serving unit.
+   *
+   * Protocol revision 2026-07-28 removes protocol sessions: `createMcpHandler`
+   * constructs a fresh `McpServer` for each HTTP request, and `serveStdio` one
+   * per connection. Only the server shell and its tool/resource bindings are
+   * per-unit — the executors, managers, and stores those bindings close over
+   * stay the singletons built during module initialization, so this is a
+   * binding step rather than a second startup.
+   */
+  createMcpServerFactory(): McpServerFactory {
+    return async () => {
+      const server = this.constructMcpServer();
+      await this.mcpToolsManager.registerAllTools(server);
+      this.registerMcpResources(server);
+      return server;
+    };
+  }
+
+  private registerMcpResources(target: McpServer): void {
     // Check if resources registration is enabled
     const resourcesConfig = this.configManager.getResourcesConfig();
     if (resourcesConfig.registerWithMcp === false) {
@@ -379,7 +410,7 @@ export class Application {
     const csm = this.mcpToolsManager.getChainSessionStore();
     const mc = this.mcpToolsManager.getMetricsCollector();
 
-    registerResources(this.mcpServer, {
+    registerResources(target, {
       logger: this.logger,
       // Wrap convertedPrompts array as a getter function for hot-reload compatibility
       promptManager: {
@@ -446,6 +477,7 @@ export class Application {
       promptManager: this.promptManager,
       mcpToolsManager: this.mcpToolsManager,
       mcpServer: this.mcpServer,
+      mcpServerFactory: this.createMcpServerFactory(),
       runtimeOptions: this.runtimeOptions,
       promptsData: this._promptsData,
       categories: this._categories,
@@ -1077,9 +1109,6 @@ export class Application {
       application: {
         promptsLoaded: this._promptsData.length,
         categoriesLoaded: this._categories.length,
-        ...(this.transportRouter?.isSse()
-          ? { serverConnections: this.transportRouter.getActiveConnectionsCount() }
-          : {}),
       },
       executionCoordinator: executionCoordinatorMetrics,
     };

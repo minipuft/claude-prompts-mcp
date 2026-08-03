@@ -520,7 +520,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * Parse response body that may be JSON or SSE format
  */
-function parseJsonOrSse(body: string, expectedId?: number): { result?: unknown; error?: unknown } {
+export function parseJsonOrSse(
+  body: string,
+  expectedId?: number
+): { result?: unknown; error?: unknown } {
   const trimmed = body.trim();
 
   // Try direct JSON parse first
@@ -579,7 +582,7 @@ export class StreamableHttpMcpClient {
   /**
    * Initialize the session by sending an initialize request
    */
-  async initialize(): Promise<{ sessionId: string; capabilities: unknown }> {
+  async initialize(): Promise<{ sessionId: string | null; capabilities: unknown }> {
     const request = {
       jsonrpc: '2.0',
       id: 1,
@@ -616,23 +619,23 @@ export class StreamableHttpMcpClient {
     }
 
     return {
-      sessionId: this.sessionId || '',
+      sessionId: this.sessionId,
       capabilities: parsed.result,
     };
   }
 
   /**
-   * Send a request using the established session
+   * Send a request.
+   *
+   * Protocol revision 2026-07-28 removed protocol sessions, so a session id is
+   * no longer required and the server issues none. The header is still sent
+   * when one exists, which keeps this client usable against a 2025-era server.
    */
   async request(
     method: string,
     params: Record<string, unknown> = {},
     requestId: number = 1
   ): Promise<unknown> {
-    if (!this.sessionId) {
-      throw new Error('Session not initialized. Call initialize() first.');
-    }
-
     const request = {
       jsonrpc: '2.0',
       id: requestId,
@@ -640,10 +643,14 @@ export class StreamableHttpMcpClient {
       params,
     };
 
-    const response = await httpPost(`${this.baseUrl}/mcp`, request, {
-      'mcp-session-id': this.sessionId,
+    const headers: Record<string, string> = {
       Accept: 'application/json, text/event-stream',
-    });
+    };
+    if (this.sessionId) {
+      headers['mcp-session-id'] = this.sessionId;
+    }
+
+    const response = await httpPost(`${this.baseUrl}/mcp`, request, headers);
 
     if (response.status !== 200) {
       throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);

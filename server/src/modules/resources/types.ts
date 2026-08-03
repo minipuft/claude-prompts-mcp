@@ -7,7 +7,7 @@
  */
 
 import type { Logger } from '#shared/types/index.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 /**
  * Resource URI patterns for discovery and content retrieval.

@@ -10,7 +10,7 @@ import { buildLauncherMessages } from './launcher-envelope.js';
 import { ConversationStore } from '../text-refs/conversation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 import { type ConfigManager, type Logger } from '#shared/types/index.js';
 import { isChainPrompt } from '#shared/utils/chainUtils.js';

@@ -4,7 +4,7 @@
  * Reuses shared utilities and avoids duplicating transport detection.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
@@ -16,6 +16,7 @@ import type { PromptAssetManager } from '#modules/prompts/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { TransportMode } from '#shared/types/index.js';
 import type { RuntimeLaunchOptions } from './options.js';
+import type { McpServerFactory } from '@modelcontextprotocol/server';
 
 import { createTransportRouter, startMcpServer, TransportRouter } from '#infra/http/index.js';
 import { createApiRouter } from '#mcp/http/api.js';
@@ -26,6 +27,8 @@ export interface ServerStartupParams {
   promptManager: PromptAssetManager;
   mcpToolsManager: McpToolRouter;
   mcpServer: McpServer;
+  /** Builds a fresh server per HTTP request; see TransportRouter. */
+  mcpServerFactory: McpServerFactory;
   runtimeOptions: RuntimeLaunchOptions;
   transportType?: TransportMode;
   promptsData: PromptData[];
@@ -48,6 +51,7 @@ export async function startServerWithManagers(
     promptManager,
     mcpToolsManager,
     mcpServer,
+    mcpServerFactory,
     runtimeOptions,
     transportType,
     promptsData,
@@ -59,11 +63,11 @@ export async function startServerWithManagers(
     transportType ?? TransportRouter.determineTransport(runtimeOptions.args, configManager);
   logger.debug(`[startup-server] Transport selected: ${transport}`);
 
-  const transportRouter = createTransportRouter(logger, configManager, mcpServer, transport);
+  const transportRouter = createTransportRouter(logger, mcpServer, mcpServerFactory, transport);
 
   let apiRouter: ApiRouter | undefined;
-  // Create ApiRouter for any HTTP-based transport (SSE or Streamable HTTP)
-  if (transportRouter.isSse() || transportRouter.isStreamableHttp()) {
+  // Create ApiRouter for the HTTP transport
+  if (transportRouter.isStreamableHttp()) {
     apiRouter = createApiRouter(logger, configManager, promptManager, mcpToolsManager);
     apiRouter.updateData(promptsData, categories, convertedPrompts);
   }

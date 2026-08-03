@@ -10,13 +10,12 @@
  * - resource://framework/{id}/system-prompt → Raw system prompt template only
  */
 
-import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { ResourceTemplate } from '@modelcontextprotocol/server';
 
 import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 
 import type { FrameworkResourceMetadata, ResourceDependencies } from '../types.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
 /**
  * Build resource URI from pattern and optional ID

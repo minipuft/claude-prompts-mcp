@@ -10,13 +10,12 @@
  * - resource://prompt/{id}/template → Raw template content only
  */
 
-import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { ResourceTemplate } from '@modelcontextprotocol/server';
 
 import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 
 import type { PromptResourceMetadata, ResourceDependencies } from '../types.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
 /**
  * Build resource URI from pattern and optional ID

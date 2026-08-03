@@ -58,8 +58,7 @@ export class ServerLifecycle {
         // STDIO only
         await this.startStdioServer();
       } else if (mode === 'sse') {
-        // SSE only (deprecated, use streamable-http)
-        await this.startSseServer();
+        throw new Error("The HTTP+SSE transport was removed. Set transport to 'streamable-http'.");
       } else if (mode === 'streamable-http') {
         // Streamable HTTP (MCP standard since 2025-03-26)
         await this.startStreamableHttpServer();
@@ -87,7 +86,7 @@ export class ServerLifecycle {
     // Then start SSE transport if API manager is available
     if (this.apiRouter !== undefined) {
       const app = this.apiRouter.createApp() as Application;
-      this.transportRouter.setupSseTransport(app);
+      this.transportRouter.setupStreamableHttpTransport(app);
       this.httpServer = createServer(app);
       this.setupHttpServerEventHandlers();
 
@@ -128,53 +127,6 @@ export class ServerLifecycle {
   }
 
   /**
-   * Start server with SSE transport
-   */
-  private async startSseServer(): Promise<void> {
-    if (this.apiRouter === undefined) {
-      throw new Error('API Manager is required for SSE transport');
-    }
-
-    // Create Express app
-    const app = this.apiRouter.createApp() as Application;
-
-    // Setup SSE transport endpoints
-    this.transportRouter.setupSseTransport(app);
-
-    // Create HTTP server
-    this.httpServer = createServer(app);
-
-    // Setup HTTP server event handlers
-    this.setupHttpServerEventHandlers();
-
-    // Start listening
-    await new Promise<void>((resolve, reject) => {
-      const httpServer = this.httpServer;
-      if (httpServer === undefined) {
-        reject(new Error('HTTP server not initialized'));
-        return;
-      }
-
-      httpServer.listen(this.port, () => {
-        this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
-        this.logger.info(`Connect to http://localhost:${this.port}/mcp for MCP connections`);
-        resolve();
-      });
-
-      httpServer.on('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'EADDRINUSE') {
-          this.logger.error(
-            `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
-          );
-        } else {
-          this.logger.error('Server error:', error);
-        }
-        reject(error);
-      });
-    });
-  }
-
-  /**
    * Start server with Streamable HTTP transport (MCP standard since 2025-03-26)
    * This is the preferred HTTP transport, replacing deprecated SSE
    */
@@ -206,9 +158,6 @@ export class ServerLifecycle {
       httpServer.listen(this.port, () => {
         this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
         this.logger.info(`Streamable HTTP transport ready at http://localhost:${this.port}/mcp`);
-        this.logger.info(
-          `Sessions: ${this.transportRouter.getActiveStreamableHttpSessionsCount()}`
-        );
         resolve();
       });
 
@@ -381,11 +330,6 @@ export class ServerLifecycle {
 
     if (isHttpActive) {
       status.port = this.port;
-      status.connections = this.transportRouter.getActiveConnectionsCount();
-    }
-
-    if (mode === 'streamable-http') {
-      status.sessions = this.transportRouter.getActiveStreamableHttpSessionsCount();
     }
 
     if (mode === 'both') {

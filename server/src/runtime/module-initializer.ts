@@ -24,7 +24,7 @@ import type {
 } from '#shared/types/index.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/runtime-framework-loader.js';
 import {
@@ -247,7 +247,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   }
 
   if (isVerbose) logger.info('🔄 Registering all MCP tools...');
-  await mcpToolsManager.registerAllTools();
+  await mcpToolsManager.registerAllTools(mcpServer);
 
   // Index resources to SQLite for hook consumption (prompt-suggest, etc.)
   if (serverRoot !== undefined && serverRoot !== '') {

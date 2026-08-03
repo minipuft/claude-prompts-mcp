@@ -16,8 +16,7 @@
  * - Improved maintainability and clear separation of concerns
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Implementation } from '@modelcontextprotocol/sdk/types.js';
+import { McpServer } from '@modelcontextprotocol/server';
 
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
@@ -49,6 +48,7 @@ import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
+import type { Implementation } from '@modelcontextprotocol/server';
 
 import { FrameworkManager, createFrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
@@ -519,7 +519,16 @@ export class McpToolRouter {
   /**
    * Register all consolidated MCP tools with the server (centralized registration)
    */
-  async registerAllTools(): Promise<void> {
+  /**
+   * Bind the three consolidated tools onto `target`.
+   *
+   * The server is a parameter rather than `this.mcpServer` because protocol
+   * revision 2026-07-28 serves each HTTP request from a freshly constructed
+   * `McpServer` (`McpServerFactory`), while the STDIO path keeps one instance
+   * for the life of the connection. The handlers close over this router's
+   * singletons either way, so only the registration target varies.
+   */
+  async registerAllTools(target: McpServer): Promise<void> {
     this.logger.info('Registering consolidated MCP tools with server (centralized)...');
 
     // Get current framework state for dynamic descriptions
@@ -576,7 +585,7 @@ export class McpToolRouter {
         getPromptEngineParamDescription
       );
 
-      this.mcpServer.registerTool(
+      target.registerTool(
         'prompt_engine',
         {
           title: 'Prompt Engine',
@@ -747,7 +756,7 @@ export class McpToolRouter {
       // Build schema with framework-aware parameter descriptions
       const systemControlSchema = buildSystemControlSchema(getSystemControlParamDescription);
 
-      this.mcpServer.registerTool(
+      target.registerTool(
         'system_control',
         {
           title: 'System Control',
@@ -804,7 +813,7 @@ export class McpToolRouter {
           { applyFrameworkOverride: true }
         ) ?? '';
 
-      this.mcpServer.registerTool(
+      target.registerTool(
         'resource_manager',
         {
           title: 'Resource Manager',

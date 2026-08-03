@@ -27,7 +27,7 @@ import { TextReferenceStore } from '../text-refs/index.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 import { type ConfigManager, type Logger } from '#shared/types/index.js';
 
