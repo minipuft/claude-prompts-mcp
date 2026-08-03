@@ -1,0 +1,12 @@
+{
+  "known": [
+    "ConvertedPrompt.delegation",
+    "ConvertedPrompt.delegationAgent",
+    "ConvertedPrompt.executionModifiers",
+    "ConvertedPrompt.gates",
+    "ConvertedPrompt.requiresExecution",
+    "ConvertedPrompt.tools",
+    "GateEnforcementInput.enforcementMode",
+    "GateEnforcementInput.gateInstructions"
+  ]
+}

@@ -129,7 +129,6 @@ export interface PipelineInternalState {
   gates: {
     /** Gate overrides requested in the input payload */
     requestedOverrides?: {
-      llmValidation?: boolean;
       gates?: unknown[];
       [key: string]: unknown;
     };
