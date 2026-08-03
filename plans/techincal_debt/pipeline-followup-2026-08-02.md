@@ -1,15 +1,16 @@
 ---
-title: "Pipeline Follow-up — Tiers 8-9"
+title: "Pipeline Follow-up — Tiers 8-10"
 date: 2026-08-02
-status: backlog
+status: active
 tags: []
 ---
 
-# Pipeline Follow-up — Tiers 8-9
+# Pipeline Follow-up — Tiers 8-10
 
 **Date**: 2026-08-02
 **Area**: `server/src/engine/execution/pipeline/`, `server/src/engine/gates/`
-**Work type**: Tier 8 = explore (review only) · Tier 9 = bug_fix
+**Work type**: Tier 8 = explore (review only) · Tier 9 = bug_fix (**✓ complete 2026-08-02**) ·
+Tier 10 = explore → tooling (raised by Tier 9)
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
@@ -47,9 +48,36 @@ fired.
 
 ---
 
-## Tier 9: Judge selection has two dead channels — do this one first
+## Tier 9: Judge selection has two dead channels — ✓ COMPLETE 2026-08-02
 
 Smaller, self-contained, and a live user-facing gap. Independent of Tier 8.
+
+> **9.1 inverted this tier's premise.** The plan assumed a half-wired feature (read side
+> shipped, write side missing) and scoped 9.3 to "implement the producer(s)". The menu's own
+> text settles it the other way: `JudgeMenuFormatter.buildJudgeResponse` instructs the client to
+> "Call `prompt_engine` again using inline operators" — `@<framework> :: <gate> #<style>` — and
+> **all three operator paths are live**. The judge feature works end to end. What was dead is a
+> redundant _second_ channel for two of the three selections, structurally shadowed by the first:
+> `clientOverride` sits at framework Priority 3 behind the operator at Priority 2, and
+> `clientSelectedGateIds` at gate rank 90 behind `inline-operator` at rank 100. A producer would
+> have been unreachable for any client following the instructions it was given.
+>
+> **9.2 therefore decided: delete the consumers, do not wire producers.** Rejected alternative —
+> wiring producers — would add a second path to the same outcome, the parallel-system pattern
+> `cleanup-standards.md` forbids, and would be dead on arrival besides.
+>
+> **Deviation from the stated gate.** The gate required "an integration test that fails on today's
+> `main` and passes after". Under a delete decision there is no behavior change, so no test can be
+> RED-then-GREEN — and that is the finding, not a gap in it. The substituted criterion is stronger
+> in the direction that matters: `tests/integration/gates/judge-selection-reentry.test.ts` proves
+> all three operator channels reach their consumers, and it was run **against unmodified `HEAD` in
+> a detached worktree with the dead fields still present — 4/4 pass there and 4/4 after**. The
+> removed channels demonstrably contributed nothing.
+>
+> `clientSelectedStyle` was **kept**: it has a real writer and is load-bearing. It carries the
+> `parsedCommand.styleSelection` path that `executionPlan.styleSelection` does not, and normalizes
+> to lowercase. The plan's concern that it "is not fed by the judge flow" was mistaken — `#style`
+> _is_ the judge flow's documented answer mechanism.
 
 ### The finding
 
@@ -66,30 +94,42 @@ client can re-invoke with a selection. Probed 2026-08-02:
 Probe: `rg -n "framework\.<field>\s*=" src/` returns nothing for the latter two; every apparent
 "write" is a local `const` binding of the read.
 
-Two of the three things the menu offers cannot be selected. The consumers are real and reachable
+~~Two of the three things the menu offers cannot be selected. The consumers are real and reachable
 — `12-framework-stage.ts:100,197-199` folds `clientOverride` into its decision input, and
 `gate-enhancement-service.ts:164,290` folds `clientSelectedGates` into the gate accumulator — so
 this is not dead code to delete. It is a **half-wired feature**: the read side shipped, the write
-side did not.
+side did not.~~
+
+**Corrected by 9.1**: all three menu offerings _can_ be selected — through `@`, `::` and `#`, which
+is what the menu tells the client to send. The consumer line-numbers above are accurate; the
+inference from them was not. Reachable consumers reading a never-written field do not imply a
+missing writer — they can equally mean a **redundant channel**, which is what these were. It _was_
+dead code to delete.
 
 **Same defect class as Finding 5d**, which Tier 1 fixed: `temporaryGatesApplied` read a metadata
-key no writer set any more and was pinned at zero. That one was found; these two were not.
+key no writer set any more and was pinned at zero. That one was found; these two were not — and the
+generalization is Tier 10 below.
 
 ### The style channel is also not what it looks like
 
-`clientSelectedStyle`'s only writer is `applyInlineStyleSelection` (`10-judge-selection-stage.ts:105`),
-which reads `parsedCommand.styleSelection` — the **inline `%style` operator**, not a response to
-the judge menu. So even the working channel is not fed by the judge flow it appears to serve.
-Whether the menu was ever meant to be answered by re-invocation is the first thing to establish.
+~~`clientSelectedStyle`'s only writer is `applyInlineStyleSelection` (`10-judge-selection-stage.ts:105`),
+which reads `parsedCommand.styleSelection` — the inline `%style` operator, not a response to the
+judge menu. So even the working channel is not fed by the judge flow it appears to serve.~~
+
+**Corrected by 9.1**: the writer and the line number are right, the reading of them is wrong. The
+operator is `#style`, and the judge menu explicitly instructs the client to answer with
+`#<analytical|procedural|creative|reasoning>`. This channel _is_ the judge flow working as designed
+— it is the model the other two should have followed, not an anomaly.
 
 ### Subtiers
 
-| #   | Step                                                                                                                                                                | Files                                                                               | Depends | Verification                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------- | --------------------------------------------------- |
-| 9.1 | Establish the intended re-entry path: MCP param, symbolic operator, or chain resume. Read the menu text the formatter emits — it tells the client what to send back | `judge-menu-formatter.ts`, `prompt-engine.schema.ts`, `docs/reference/mcp-tools.md` | —       | Written answer + the probe that settles it          |
-| 9.2 | Decide per channel: wire the producer, or delete the consumers                                                                                                      | —                                                                                   | 9.1     | Decision recorded with rejected alternative         |
-| 9.3 | Implement the producer(s) at the path 9.1 identifies                                                                                                                | TBD by 9.1                                                                          | 9.2     | Integration test driving menu → selection → applied |
-| 9.4 | Integration test: `%judge` returns a menu, a follow-up selection reaches `FrameworkDecisionAuthority` and the gate accumulator                                      | `tests/integration/`                                                                | 9.3     | RED first — must fail before 9.3                    |
+| #   | Status | Step                                                                                                                        | Files                                                                                                                                                                                                         | Depends | Verification                                                          |
+| --- | ------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------- |
+| 9.1 | ✓      | Establish the intended re-entry path                                                                                        | `judge-menu-formatter.ts`                                                                                                                                                                                     | —       | **Answered: inline operators**, stated verbatim in the menu it emits  |
+| 9.2 | ✓      | Decide per channel: wire the producer, or delete the consumers                                                              | —                                                                                                                                                                                                             | 9.1     | **Delete**; rejected alternative recorded above and in ADR 0001       |
+| 9.3 | ✓      | Remove both dead channels, their 12 reads, the uncallable resolver input, and the now-unreachable rank/source union members | `internal-state.ts`, `12-framework-stage.ts`, `15-prompt-guidance-stage.ts`, `framework-decision-authority.ts`, `decisions/types.ts`, `gate-enhancement-service.ts`, `gate-set-resolver.ts`, `state/types.ts` | 9.2     | typecheck clean · 1784 unit + 434 integration pass · verify:mcp 11/11 |
+| 9.4 | ✓      | Integration test proving all three operator channels reach their consumers                                                  | `tests/integration/gates/judge-selection-reentry.test.ts`                                                                                                                                                     | 9.3     | 4/4 after **and** 4/4 against unmodified `HEAD` — see deviation above |
+| 9.5 | ✓      | Amend ADR 0001: rank 90 `client-selection` removed, veto-scope claim preserved                                              | `docs/adr/0001-gate-resolution-precedence.md`, `docs/architecture/overview.md`                                                                                                                                | 9.3     | Amendment section with the probe table and both removal arguments     |
 
 **Gate**: full suite **+** `verify:mcp`, plus the tier criterion — an integration test that fails
 on today's `main` and passes after, proving a menu-selected framework and gate actually reach
@@ -162,6 +202,45 @@ The question is **not** "is this over a threshold". It is:
 
 **Explicitly out of scope**: touching any of the six files. If the review finds something urgent,
 it becomes its own tier with its own gate rather than being fixed inline here.
+
+---
+
+## Tier 10: Mechanical check for write-never state fields — NEW, from Tier 9
+
+Tier 9 found `clientOverride` and `clientSelectedGates` by hand. ADR 0001's **F2** found
+`enhancedGateConfiguration` — declared once, read in five places, written nowhere — the same way,
+three days earlier. Two instances of one shape, both found by someone happening to look.
+
+**The shape**: a field on a shared state/config interface that has readers and zero writers. It is
+worse than unreachable code, because the readers _are_ reachable — they run on every request and
+silently take the `undefined` branch, so the feature they gate looks implemented and is measured as
+covered.
+
+| Instance                                  | Declared | Readers | Writers | Found               |
+| ----------------------------------------- | -------- | ------- | ------- | ------------------- |
+| `enhancedGateConfiguration` (ADR 0001 F2) | 1        | 5       | 0       | 2026-07-29, by hand |
+| `state.framework.clientOverride`          | 1        | 8       | 0       | 2026-08-02, by hand |
+| `state.framework.clientSelectedGates`     | 1        | 4       | 0       | 2026-08-02, by hand |
+
+A check over the interfaces that carry pipeline state — `InternalState`, `ExecutionPlan`,
+`ConvertedPrompt` — asking "does every optional field have at least one assignment in `src/`?"
+would have caught all three at once, and would catch the next one without an audit.
+
+### Subtiers
+
+| #    | Step                                                                                                                          | Depends | Verification                                               |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------- |
+| 10.1 | Enumerate the state-carrying interfaces in scope; decide which are worth gating                                               | —       | Written list with the reason each is in or out             |
+| 10.2 | Prototype the detector (ts-morph: find property declarations with no `PropertyAccessExpression` on the left of an assignment) | 10.1    | Run against `HEAD~1` — must flag all three known instances |
+| 10.3 | Decide enforcement: `validate:*` script vs. advisory report. Weigh the false-positive rate first                              | 10.2    | Measured FP count on today's tree                          |
+| 10.4 | Wire into `validate:all` if 10.3 says gate; add to CI's `full` route                                                          | 10.3    | Green on a clean tree, red on a seeded phantom field       |
+
+**Do not skip 10.2's back-test.** A detector that cannot re-find the three known instances is not
+measuring the thing that motivated it. **Do not skip 10.3**: fields assigned only via object
+literals, spreads, or `Object.assign` will read as unwritten, and the false-positive rate decides
+whether this can be a gate at all or has to stay a report.
+
+**Risk**: low — analysis only until 10.4.
 
 ---
 

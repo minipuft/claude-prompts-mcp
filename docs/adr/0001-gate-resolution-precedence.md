@@ -1,6 +1,6 @@
 # ADR 0001: Gate Resolution Precedence
 
-- Status: accepted
+- Status: accepted (amended 2026-08-02 — see § Amendment 2026-08-02)
 - Date: 2026-07-29
 - Owners: @minipuft
 
@@ -51,15 +51,14 @@ stage are both convergent findings there, not local invention.
 **Stage 1 — additive.** Sources contribute gate IDs; the set is their union. Rank decides only which
 source a duplicate ID is attributed to, and which definition body wins under (b).
 
-| Rank | Source              | Origin                                                                        |
-| ---- | ------------------- | ----------------------------------------------------------------------------- |
-| 100  | `inline-operator`   | `::` operator typed in the command                                            |
-| 90   | `client-selection`  | gate chosen during a judge phase                                              |
-| 80   | `temporary-request` | caller-supplied gate spec via the MCP `gates` parameter                       |
-| 60   | `prompt-config`     | prompt/folder configuration — **including `inline_gate_definitions`**         |
-| 50   | `chain-level`       | a chain's `finalValidation`                                                   |
-| 40   | `framework`         | active framework's framework gates                                            |
-| 20   | `registry-auto`     | `GateManager.selectGates()` — the registry's activation-rule query. See below |
+| Rank | Source              | Origin                                                                                |
+| ---- | ------------------- | ------------------------------------------------------------------------------------- |
+| 100  | `inline-operator`   | `::` operator typed in the command — **including a gate chosen during a judge phase** |
+| 80   | `temporary-request` | caller-supplied gate spec via the MCP `gates` parameter                               |
+| 60   | `prompt-config`     | prompt/folder configuration — **including `inline_gate_definitions`**                 |
+| 50   | `chain-level`       | a chain's `finalValidation`                                                           |
+| 40   | `framework`         | active framework's framework gates                                                    |
+| 20   | `registry-auto`     | `GateManager.selectGates()` — the registry's activation-rule query. See below         |
 
 This is the existing `GATE_SOURCE_PRIORITY` table, adopted unchanged as the canonical ranking.
 Prompt-authored inline definitions enter at **60 (`prompt-config`)**, not at 80: 80 is the caller's
@@ -106,8 +105,8 @@ ranking becomes subtractive, and it is deliberate: a veto whose scope is unstate
 binding everything, which is how a prompt author would silently overrule the person invoking the
 prompt. `exclude` is capped at rank 60 for exactly that reason — it is an authoring preference, not
 a safety constraint, so it does not transfer Cedar's forbid-wins justification. A caller who types
-`:: gate` (rank 100), selects one in a judge phase (90), or passes a spec through the MCP `gates`
-parameter (80) keeps it against any prompt or category `exclude`.
+`:: gate` — which is also how a judge-phase selection re-enters — keeps it at rank 100, and a spec
+passed through the MCP `gates` parameter keeps it at 80, against any prompt or category `exclude`.
 
 Within a single rank tier, exclude beats include: an ID both included and excluded by prompt-level
 config is excluded.
@@ -219,6 +218,49 @@ inline-definition registration via the temporary-gate seam.
   writer in the same change. A read-only phantom field that silently disables a documented flag is
   the defect, not a compatibility surface.
 
+## Amendment 2026-08-02 — rank 90 `client-selection` removed
+
+**Rank 90 is deleted from the Stage 1 ladder.** Judge-phase gate selections enter at rank 100.
+
+This ADR adopted `GATE_SOURCE_PRIORITY` "unchanged as the canonical ranking" without checking that
+each rank had a producer. Rank 90 did not, and never had:
+
+| Channel                               | Writers | Readers | Probe                                      |
+| ------------------------------------- | ------- | ------- | ------------------------------------------ |
+| `state.framework.clientSelectedGates` | **0**   | 4       | `rg "clientSelectedGates\s*="` over `src/` |
+| `state.framework.clientOverride`      | **0**   | 8       | `rg "clientOverride\s*="` over `src/`      |
+
+`git log -S` over full history returns only reads for both — there was never a producer, so this
+is not a regression but a path that shipped its read side and never got a write side. **This is F2's
+shape** — a read-only phantom field with no writer — inside the ADR that named F2. The finding
+generalizes: F2 was found by auditing one field, not by a rule, so sibling fields kept the defect.
+
+Two facts make removal correct rather than "add the missing writer":
+
+1. **The menu documents the operator path.** `JudgeMenuFormatter.buildJudgeResponse` tells the client
+   verbatim to "Call `prompt_engine` again using inline operators" with
+   `@<framework> :: <gate_id> #<style>`. All three operator paths are live and reach their
+   consumers — `@` via `executionPlan.frameworkOverride` → `operatorOverride`, `::` via
+   `parsedCommand.inlineGateCriteria` → `InlineGateProcessor`, `#` via `parsedCommand.styleSelection`.
+   The judge feature was never half-wired; it works through operators.
+2. **Rank 90 was unreachable by construction, not merely unwritten.** It sits _below_ rank 100, and
+   the documented re-entry is the rank-100 operator. A judge-selected gate therefore always arrives
+   at 100. Adding a rank-90 producer would create a second path to the same outcome, readable only
+   when the client ignored the instructions it was given — a parallel system per
+   `cleanup-standards.md`, not a feature.
+
+The veto-scope claim in Stage 2 is **unchanged in meaning**: a judge-phase selection still outranks
+the rank-60 `exclude` cap, because it arrives at 100.
+
+Removed in the same change (per this ADR's own "deleted or given a writer in the same change"
+criterion): both state fields and their 12 reads, `GateResolutionInput.clientSelectedGateIds`,
+`'client-selection'` from `GateSource` and `GATE_SOURCE_PRIORITY`, and from
+`FrameworkDecision['source']`.
+
+**Carried forward as a follow-up**: the audit that found this was field-by-field. A mechanical
+check for declared-and-read-but-never-written state fields would have caught F2 and rank 90 at once.
+Logged in `plans/techincal_debt/pipeline-followup-2026-08-02.md`.
+
 ## Prior art
 
 The model above was checked against five systems that resolve policy from layered sources. Three
@@ -306,7 +348,7 @@ Two cautions taken from the same sources:
   `engine/gates`.
 - Behavioral checks that prove each answer, to be written with the tier that implements it:
   - (a) a prompt naming a gate in both `include` and `exclude` resolves to excluded; a gate the
-    caller supplies at rank 80/90/100 **survives** a prompt-level `exclude` naming it.
+    caller supplies at rank 80/100 **survives** a prompt-level `exclude` naming it.
   - (a) the veto set is order-independent: applying the four vetoes in any permutation yields the
     same set. Worth a property test over permutations rather than one fixed-order assertion.
   - (b) a prompt whose inline definition reuses a registry gate ID yields one entry in the executed

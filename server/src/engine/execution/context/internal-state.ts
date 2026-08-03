@@ -41,11 +41,13 @@ export interface PipelineInternalState {
    * State related to the Two-Phase Judge Selection and Framework Resolution.
    */
   framework: {
-    /** Explicit framework override selected by the client (Judge Phase) */
-    clientOverride?: string;
-    /** Gate IDs selected by the client (Judge Phase) */
-    clientSelectedGates?: string[];
-    /** Style ID selected by the client (Judge Phase) */
+    /**
+     * Style ID selected by the client, normalized to lowercase.
+     * Written by JudgeSelectionStage from the `#style` operator — the re-entry
+     * mechanism the judge menu documents. Framework and gate selections re-enter
+     * through `@framework` and `::`, which reach their consumers via
+     * `parsedCommand` and need no state field here.
+     */
     clientSelectedStyle?: string;
     /** Whether the judge selection phase was triggered */
     judgePhaseTriggered: boolean;

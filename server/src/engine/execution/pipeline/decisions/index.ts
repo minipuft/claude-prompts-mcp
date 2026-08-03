@@ -7,7 +7,7 @@
 // │                                                                 │
 // │  ├── FrameworkDecisionAuthority                                 │
 // │  │     Resolves framework application: modifier → operator →    │
-// │  │     client-selection → global-active                         │
+// │  │     global-active                                            │
 // │  │                                                              │
 // │  ├── GateEnforcementAuthority                                   │
 // │  │     Gate verdicts, retry limits, enforcement modes           │

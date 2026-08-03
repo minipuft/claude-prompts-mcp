@@ -323,49 +323,6 @@ describe('PromptGuidanceStage', () => {
       expect(service.applyGuidance).not.toHaveBeenCalled();
     });
 
-    test('detects client-selected framework from JudgeSelectionStage', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
-      const convertedPrompt = createConvertedPrompt();
-      context.executionPlan = createExecutionPlan({ requiresFramework: true });
-      context.parsedCommand = {
-        commandType: 'single',
-        convertedPrompt,
-      } as any;
-
-      // JudgeSelectionStage sets this key directly
-      context.state.framework.clientOverride = 'CAGEERF';
-
-      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
-
-      await stage.execute(context);
-
-      // Framework override should still be present (set by JudgeSelectionStage)
-      expect(context.state.framework.clientOverride).toBe('CAGEERF');
-    });
-
-    test('detects client-selected gates from JudgeSelectionStage', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
-      const convertedPrompt = createConvertedPrompt();
-      context.executionPlan = createExecutionPlan({ requiresFramework: true });
-      context.parsedCommand = {
-        commandType: 'single',
-        convertedPrompt,
-      } as any;
-
-      // JudgeSelectionStage sets this key directly
-      context.state.framework.clientSelectedGates = ['code-quality', 'security-awareness'];
-
-      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
-
-      await stage.execute(context);
-
-      // Gate selections should still be present (set by JudgeSelectionStage)
-      expect(context.state.framework.clientSelectedGates).toEqual([
-        'code-quality',
-        'security-awareness',
-      ]);
-    });
-
     test('applies style enhancement to single prompt system message', async () => {
       const context = new ExecutionContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt({
@@ -467,7 +424,7 @@ describe('PromptGuidanceStage', () => {
       expect(service.applyGuidance).toHaveBeenCalledTimes(2);
     });
 
-    test('applies all client selections together', async () => {
+    test('applies style enhancement from the style JudgeSelectionStage selected', async () => {
       const context = new ExecutionContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan({ requiresFramework: true });
@@ -476,18 +433,13 @@ describe('PromptGuidanceStage', () => {
         convertedPrompt,
       } as any;
 
-      // All client selections from JudgeSelectionStage
-      context.state.framework.clientOverride = 'ReACT';
-      context.state.framework.clientSelectedGates = ['research-quality'];
+      // JudgeSelectionStage writes this from the `#style` operator.
       context.state.framework.clientSelectedStyle = 'reasoning';
 
       service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 
-      // All selections should still be present and style enhancement applied
-      expect(context.state.framework.clientOverride).toBe('ReACT');
-      expect(context.state.framework.clientSelectedGates).toEqual(['research-quality']);
       expect(context.state.framework.styleEnhancementApplied).toBe(true);
     });
 

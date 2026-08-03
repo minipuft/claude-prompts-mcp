@@ -5,8 +5,7 @@
  * Each source represents where a gate ID came from in the pipeline.
  */
 export type GateSource =
-  | 'inline-operator' // From :: operator in command
-  | 'client-selection' // From judge phase selection
+  | 'inline-operator' // From :: operator in command, including judge-phase selections
   | 'framework-guide' // From framework guide
   | 'prompt-config' // From prompt/folder configuration
   | 'temporary-request' // User-provided temporary gate
@@ -18,17 +17,20 @@ export type GateSource =
  * Higher number = higher priority (wins in conflicts).
  *
  * Priority order (highest to lowest):
- * 1. inline-operator (100) - User explicitly typed :: "criteria"
- * 2. client-selection (90) - User chose in judge phase
- * 3. temporary-request (80) - User-provided gate spec via MCP
- * 4. prompt-config (60) - Prompt author's configured gates
- * 5. chain-level (50) - Chain's finalValidation configuration
- * 6. framework (40) - Framework gates
- * 7. registry-auto (20) - GateManager.selectGates() activation rules - lowest
+ * 1. inline-operator (100) - User explicitly typed :: "criteria", including the
+ *    re-invocation that answers a judge menu
+ * 2. temporary-request (80) - User-provided gate spec via MCP
+ * 3. prompt-config (60) - Prompt author's configured gates
+ * 4. chain-level (50) - Chain's finalValidation configuration
+ * 5. framework (40) - Framework gates
+ * 6. registry-auto (20) - GateManager.selectGates() activation rules - lowest
+ *
+ * Rank 90 (`client-selection`) was removed 2026-08-02: it had no producer in any
+ * revision, and the judge menu directs re-entry through `::`, so a judge-phase
+ * choice arrives at rank 100. See ADR 0001 § Amendment.
  */
 export const GATE_SOURCE_PRIORITY: Record<GateSource, number> = {
   'inline-operator': 100, // Explicit user intent - highest
-  'client-selection': 90, // User chose in judge phase
   'temporary-request': 80, // User-provided gate spec
   'prompt-config': 60, // Prompt author's intent
   'chain-level': 50, // Chain configuration

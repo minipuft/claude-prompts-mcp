@@ -95,10 +95,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     // Check if framework is disabled by modifiers (%clean, %lean)
     if (!decision.shouldApply && decision.source === 'disabled') {
       // Allow @ operator override even when framework system is globally disabled
-      const hasFrameworkOverride = Boolean(
-        context.parsedCommand?.executionPlan?.frameworkOverride ||
-        context.state.framework.clientOverride
-      );
+      const hasFrameworkOverride = Boolean(context.parsedCommand?.executionPlan?.frameworkOverride);
 
       if (!this.frameworkEnabled?.() && !hasFrameworkOverride) {
         this.logExit({
@@ -192,11 +189,6 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
     if (operatorOverride) {
       decisionInput.operatorOverride = operatorOverride;
-    }
-
-    const clientOverride = context.state.framework.clientOverride;
-    if (clientOverride) {
-      decisionInput.clientOverride = clientOverride;
     }
 
     const globalActiveFramework = context.frameworkContext?.selectedFramework?.id;

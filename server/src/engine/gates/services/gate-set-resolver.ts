@@ -32,10 +32,11 @@ export interface GateResolutionInput {
    * was not injected is incoherent, so those gates are withheld.
    */
   readonly frameworkInjected: boolean;
-  /** Rank 100 — `::` operator typed in the command. */
+  /**
+   * Rank 100 — `::` operator typed in the command. A gate chosen during a judge
+   * phase also arrives here: the judge menu directs re-entry through `::`.
+   */
   readonly inlineOperatorGateIds?: readonly string[] | undefined;
-  /** Rank 90 — gate chosen during a judge phase. */
-  readonly clientSelectedGateIds?: readonly string[] | undefined;
   /** Rank 80 — caller-supplied spec via the MCP `gates` parameter. */
   readonly callerGateIds?: readonly string[] | undefined;
   /**
@@ -150,7 +151,6 @@ export class GateSetResolver {
     const accumulated = new Map<string, ResolvedGate>();
 
     this.addAll(accumulated, input.inlineOperatorGateIds, 'inline-operator');
-    this.addAll(accumulated, input.clientSelectedGateIds, 'client-selection');
     this.addAll(accumulated, input.callerGateIds, 'temporary-request');
     this.addAll(
       accumulated,

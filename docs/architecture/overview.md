@@ -445,8 +445,10 @@ Prevents duplicate gates by tracking source priority:
 
 ```typescript
 // Priority order (higher wins):
-// inline-operator (100) > client-selection (90) > temporary-request (80) >
-// prompt-config (60) > chain-level (50) > framework (40) > registry-auto (20)
+// inline-operator (100) > temporary-request (80) > prompt-config (60) >
+// chain-level (50) > framework (40) > registry-auto (20)
+// A gate chosen during a judge phase enters at 100 — the menu directs re-entry
+// through the `::` operator.
 
 context.gates.add("research-quality", "registry-auto");
 context.gates.addAll(frameworkGates, "framework-guide");
@@ -458,11 +460,12 @@ const finalGates = context.gates.getAll(); // Deduplicated
 Resolves framework from multiple sources:
 
 ```typescript
-// Priority: modifiers (%clean/%lean) > @ operator > client > global
+// Priority: modifiers (%clean/%lean) > @ operator > global
+// A judge-phase framework choice re-enters through `@framework`, so it arrives
+// as operatorOverride rather than through a separate client channel.
 const decision = context.frameworkAuthority.decide({
   modifiers: context.executionPlan?.modifiers,
   operatorOverride: context.parsedCommand?.frameworkOverride,
-  clientOverride: context.state.framework.clientOverride,
   globalActiveFramework: "CAGEERF",
 });
 if (decision.shouldApply) {

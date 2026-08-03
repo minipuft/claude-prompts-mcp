@@ -221,7 +221,6 @@ describe('ExecutionContext pipeline state management', () => {
     // Test operator override takes precedence
     const decision = context.frameworkAuthority.decide({
       operatorOverride: 'CAGEERF',
-      clientOverride: 'ReACT',
       globalActiveFramework: '5W1H',
     });
 

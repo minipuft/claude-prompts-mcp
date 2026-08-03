@@ -161,7 +161,6 @@ export class GateEnhancementService {
     }
 
     const { prompt, inlineGateIds } = gateContext;
-    const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
 
     const activeFrameworkId = this.getActiveFrameworkId(context);
 
@@ -177,7 +176,6 @@ export class GateEnhancementService {
       frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
       knownFrameworkGateIds: [...frameworkGateIds],
       inlineOperatorGateIds: inlineGateIds,
-      clientSelectedGateIds: clientSelectedGates,
       callerGateIds: registeredGates.temporaryGateIds,
       plannedGateIds: executionPlan.gates,
       frameworkGateIds: registeredGates.canonicalGateIds,
@@ -287,8 +285,6 @@ export class GateEnhancementService {
     const { steps } = gateContext;
     let totalGatesApplied = 0;
 
-    const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
-    this.addGatesToAccumulator(context, clientSelectedGates, 'client-selection');
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
     this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
 
@@ -550,9 +546,6 @@ export class GateEnhancementService {
     const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
     if (operatorOverride !== undefined) {
       result.operatorOverride = operatorOverride;
-    }
-    if (context.state.framework.clientOverride !== undefined) {
-      result.clientOverride = context.state.framework.clientOverride;
     }
     if (globalActiveFramework !== undefined) {
       result.globalActiveFramework = globalActiveFramework;
