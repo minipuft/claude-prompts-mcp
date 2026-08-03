@@ -17,6 +17,7 @@ import { loadPromptData } from './data-loader.js';
 import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
+import { publishResourcesChanged, publishToolsChanged } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
@@ -31,6 +32,7 @@ import type { ApiRouter } from '#mcp/http/api.js';
 import type { McpToolRouter } from '#mcp/tools/index.js';
 import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { ListChangeTargets } from './list-change-notifier.js';
 import type { PathResolver } from './paths.js';
 import type { McpServerFactory } from '@modelcontextprotocol/server';
 
@@ -42,7 +44,6 @@ import { Logger } from '#infra/logging/index.js';
 import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
-import { notifyResourcesChanged } from '#modules/resources/index.js';
 import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
@@ -352,15 +353,10 @@ export class Application {
     // Route tool-list-changed to whichever transport is serving. HTTP has no
     // long-lived instance to push from, so it publishes through the handler's
     // notifier; STDIO pushes from the instance `serveStdio` pinned.
+    // The notifier stays async so the routing can change without rippling into
+    // every caller, though both publish paths are synchronous today.
     this.mcpToolsManager.setToolsChangedNotifier(async () => {
-      // Both publish synchronously; the notifier stays async so the routing can
-      // change without rippling into every caller.
-      const httpHandler = this.transportRouter?.getHttpHandler();
-      if (httpHandler != null) {
-        httpHandler.notify.toolsChanged();
-        return;
-      }
-      this.mcpServer.sendToolListChanged();
+      publishToolsChanged(this.listChangeTargets());
     });
 
     this.logger.info('All modules initialized successfully');
@@ -444,12 +440,16 @@ export class Application {
    * prompt hot-reload completion below is it.
    */
   private notifyResourcesChanged(): void {
-    const httpHandler = this.transportRouter?.getHttpHandler();
-    if (httpHandler != null) {
-      httpHandler.notify.resourcesChanged();
-      return;
-    }
-    notifyResourcesChanged(this.mcpServer, this.logger);
+    publishResourcesChanged(this.listChangeTargets());
+  }
+
+  /** Collaborators the list-change routing picks between. */
+  private listChangeTargets(): ListChangeTargets {
+    return {
+      httpPublisher: this.transportRouter?.getHttpHandler()?.notify,
+      pinnedServer: this.mcpServer,
+      logger: this.logger,
+    };
   }
 
   private registerMcpResources(target: McpServer): void {
