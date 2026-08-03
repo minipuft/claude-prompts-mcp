@@ -7,26 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.0](https://github.com/minipuft/claude-prompts/compare/v3.0.2...v3.1.0) (2026-08-03)
 
-
 ### Added
 
 * **frameworks:** make the default framework config-declarable per project ([8b948fb](https://github.com/minipuft/claude-prompts/commit/8b948fbc78fbd8cf1fd92f45405e17419e59b009))
 * **frameworks:** scope framework state per project ([905c926](https://github.com/minipuft/claude-prompts/commit/905c92614eac6896cfb74fa1746b63116123902a))
 
-
-### Fixed
-
-* **ci:** allow Renovate validator to inspect updates ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
-* **ci:** allow Renovate validator to inspect updates ([3bac454](https://github.com/minipuft/claude-prompts/commit/3bac454135714d6df0aeef30ac51d577586c927d))
-* **deps:** align Renovate with delivery contracts ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
-* **deps:** align Renovate with delivery contracts ([a5f152c](https://github.com/minipuft/claude-prompts/commit/a5f152c0612100d45670b2586f0e1ee3e8a26990))
-* **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/issues/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
-* **gates:** declare the gate surface on the hook and notification ports ([d4a5360](https://github.com/minipuft/claude-prompts/commit/d4a5360fa546eae5336af5d0759067431ec4d74c))
-* **pipeline:** derive skipped stages instead of accumulating them ([cd7abc0](https://github.com/minipuft/claude-prompts/commit/cd7abc0775acdbb39c2c0809e048141daf2de548))
-
-
 ### Changed
 
+- **Dependency delivery contract:** Renovate now preserves semantic release types, validates extraction, uses the committed MCPB resolution path, and limits future automerge to observed low-risk development updates.
+- **Supply-chain controls:** GitHub Actions use immutable full commit SHAs with readable release comments, backed by a repository validator.
+- **Runtime support:** The server and desktop extension require Node.js >=22.13.0; server CI covers 22.13.0 and 24, the standalone CPM CLI remains >=18.18.0, and local/publish tooling uses Node 24.
 * **ci:** route validation by change impact ([#183](https://github.com/minipuft/claude-prompts/issues/183)) ([c7509c2](https://github.com/minipuft/claude-prompts/commit/c7509c2b56e9266d9ac0c70dd8f2c89f6e3f3f19))
 * **frameworks:** route fallback defaults through DEFAULT_FRAMEWORK_ID ([b41adc4](https://github.com/minipuft/claude-prompts/commit/b41adc438cd577e22663550c1055747f8fce761a))
 * **mcp-tools:** drop dead wiring from the tool constructor seams ([6642c04](https://github.com/minipuft/claude-prompts/commit/6642c049586b6ac7990fa5b133c6d0f080de4e39))
@@ -38,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **server:** type McpToolRouter's mcpServer as McpServer ([2ddd763](https://github.com/minipuft/claude-prompts/commit/2ddd763fc46977631633b62572d31c2fa19fb67d))
 * **server:** type TransportRouter's mcpServer as McpServer ([4feaab2](https://github.com/minipuft/claude-prompts/commit/4feaab29e93698eb24865f7dc924db48f4288eaa))
 
+### Fixed
+
+* **ci:** allow Renovate validator to inspect updates ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
+* **ci:** allow Renovate validator to inspect updates ([3bac454](https://github.com/minipuft/claude-prompts/commit/3bac454135714d6df0aeef30ac51d577586c927d))
+* **deps:** align Renovate with delivery contracts ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
+* **deps:** align Renovate with delivery contracts ([a5f152c](https://github.com/minipuft/claude-prompts/commit/a5f152c0612100d45670b2586f0e1ee3e8a26990))
+* **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/issues/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
+* **gates:** declare the gate surface on the hook and notification ports ([d4a5360](https://github.com/minipuft/claude-prompts/commit/d4a5360fa546eae5336af5d0759067431ec4d74c))
+* **pipeline:** derive skipped stages instead of accumulating them ([cd7abc0](https://github.com/minipuft/claude-prompts/commit/cd7abc0775acdbb39c2c0809e048141daf2de548))
 
 ### Documentation
 
@@ -233,11 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
 
-- **Dependency delivery contract:** Renovate now preserves semantic release types, validates extraction, uses the committed MCPB resolution path, and limits future automerge to observed low-risk development updates.
-- **Supply-chain controls:** GitHub Actions use immutable full commit SHAs with readable release comments, backed by a repository validator.
-- **Runtime support:** The server and desktop extension require Node.js >=22.13.0; server CI covers 22.13.0 and 24, the standalone CPM CLI remains >=18.18.0, and local/publish tooling uses Node 24.
 
 ## [2.1.0](https://github.com/minipuft/claude-prompts/compare/v2.0.0...v2.1.0) (2026-03-19)
 
