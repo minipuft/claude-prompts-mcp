@@ -85,3 +85,8 @@ The clean Python environment initially failed 13 hook tests because PyYAML was p
 on the developer machine but absent from the CI install contract. PyYAML is now pinned,
 Renovate-managed, and installed before the hook suite; the isolated rerun passed all 178
 tests. This closes the environment-leak unknown instead of relying on runner contents.
+
+The first hosted run then failed before checkout: `lint` and `build` inherit
+`working-directory: server`, but their new prerequisite assertions intentionally run
+before checkout creates that directory. Those two assertions now override the working
+directory to repository root; no validation command was bypassed.
