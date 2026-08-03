@@ -22,6 +22,6 @@
     "esbuild": "^0.28.0",
     "jest": "^30.3.0",
     "ts-jest": "^29.1.2",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.0"
   }
 }
