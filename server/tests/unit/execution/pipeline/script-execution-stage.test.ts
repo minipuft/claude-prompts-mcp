@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { ToolTriggerFilter } from '../../../../src/modules/automation/execution/tool-trigger-filter.js';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { ScriptExecutionStage } from '../../../../src/engine/execution/pipeline/stages/08-script-execution-stage.js';
@@ -76,6 +77,14 @@ describe('ScriptExecutionStage', () => {
     } as unknown as jest.Mocked<ToolDetectionService>;
 
     toolTriggerFilter = {
+      // Delegates to the real implementation: `partitionAutoApprove` is pure, and several
+      // cases below assert the stage routes by `autoApproveOnValid`, which a fixed stub
+      // would answer for them.
+      partitionAutoApprove: jest
+        .fn()
+        .mockImplementation((matches, tools) =>
+          new ToolTriggerFilter().partitionAutoApprove(matches, tools)
+        ),
       filterByTrigger: jest.fn().mockReturnValue({
         readyForExecution: [],
         skippedManual: [],

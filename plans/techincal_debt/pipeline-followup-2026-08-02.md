@@ -1,7 +1,7 @@
 ---
 title: "Pipeline Follow-up — Tiers 8-14"
 date: 2026-08-02
-status: active
+status: done
 tags: []
 ---
 
@@ -10,8 +10,8 @@ tags: []
 **Date**: 2026-08-02
 **Area**: `server/src/engine/execution/pipeline/`, `server/src/engine/gates/`
 **Work type**: Tier 8 = explore, review only (**✓ complete 2026-08-02**) · Tier 9 = bug_fix
-(**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling (raised by Tier 9) ·
-**Tiers 11-14 = refactor, scoped by Tier 8** — Tiers 11-13 ✓ complete 2026-08-02; 14 open
+(**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling, raised by Tier 9 (**✓ complete 2026-08-03**) ·
+**Tiers 11-14 = refactor, scoped by Tier 8** — Tiers 11-14 ✓ complete 2026-08-02/03
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
@@ -585,7 +585,68 @@ call. Routing it through the optional authority would reintroduce exactly the nu
 
 ---
 
-## Tier 10: Mechanical check for write-never state fields — NEW, from Tier 9
+## Tier 14: auto-approve partitioning — ✓ COMPLETE 2026-08-03
+
+Scoped by Tier 8 F4.
+
+> **F4's lifecycle check passed — the first of Tiers 12-14 where it did.** `toolTriggerFilter`
+> is a **required** constructor dependency reached through `ToolTriggerFilterPort`, not an
+> optional field like Tier 13's `gateEnforcement`, and the filter caches no decision. The
+> extension is safe as prescribed, and the port has one implementor and one consumer.
+
+> **F4 bundled two things that are not one extension.** It described "auto-approve
+> partitioning + policy" as a single missed extension point on `ToolTriggerFilter`. They
+> answer different questions: `separateAutoApproveTools` decides _which path a tool takes_ —
+> the same question `filterByTrigger` answers over the same list, which is the real missed
+> extension — while `checkValidationOutput` decides _what a script said_, parsing a stdout
+> protocol (`{valid, warnings, errors}`). Putting a stdout protocol on a trigger/confirmation
+> service would give that service a second domain. Split: the partitioner joined the filter,
+> the interpreter did not.
+
+> **`validate:arch` rejected the interpreter's natural home, and was right.** Domain put it in
+> `modules/automation/execution/` beside the executor producing `ScriptExecutionResult`. The
+> engine may not import values from `modules/` (`engine-no-modules-or-mcp-value`), and the
+> filter escapes that rule only by arriving through an injected port — over-wiring for one
+> pure function. It moved to `src/shared/utils/`, where `ScriptExecutionResult` itself lives,
+> so a pure reader sits at the same layer as the type it reads. Third tier running where the
+> prescribed owner was structurally wrong; first one where a mechanical gate caught it instead
+> of a probe.
+
+### Subtiers
+
+| #    | Status | Step                                                                        | Files                                                                                                     | Depends | Verification                                                    |
+| ---- | ------ | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------- |
+| 14.1 | ✓      | Check the collaborator's lifecycle before extending it                      | `tool-trigger-filter.ts`, `shared/types/index.ts`                                                         | —       | required dep, no cache, 1 implementor / 1 consumer — safe       |
+| 14.2 | ✓      | Move the partition to the filter, keeping execution in the stage            | `shared/types/index.ts`, `tool-trigger-filter.ts`                                                         | 14.1    | `partitionAutoApprove` pure; candidates returned, not verdicts  |
+| 14.3 | ✓      | Place the validation-output interpreter with its own domain, not the filter | `shared/utils/script-validation-output.ts` (new)                                                          | 14.1    | `validate:arch` rejected `modules/`; landed at the shared layer |
+| 14.4 | ✓      | Delete both private methods from the stage                                  | `stages/08-script-execution-stage.ts`                                                                     | 14.2-3  | cognitive 19; both helpers gone                                 |
+| 14.5 | ✓      | Update the port mock the extension broke, and cover both new units          | `script-execution-stage.test.ts`, `tool-trigger-filter.test.ts`, `script-validation-output.test.ts` (new) | 14.4    | 13 new tests; mock delegates to the real pure partitioner       |
+
+**Gate**: two partitioners over one list became one, and the stage keeps only what needs I/O.
+
+| Check                                       | Result                                             |
+| ------------------------------------------- | -------------------------------------------------- |
+| `npm run typecheck`                         | clean                                              |
+| eslint, 4 files vs `HEAD`                   | 21 → 21, per-rule identical                        |
+| `npm run test:unit`                         | 154 suites / 1870 tests                            |
+| `npm run test:integration`                  | 34 suites / 434 tests                              |
+| `npm run validate:arch`                     | 443 modules — the rule that caught 14.3 now passes |
+| `npm run validate:state-field-writers`      | 8 known, none new                                  |
+| `npm run validate:contracts` · `verify:mcp` | in sync · 11/11                                    |
+
+**Mock drift, as `cleanup-standards.md` predicts.** Extending the port broke 10 tests whose
+hand-written stub lacked the new method — invisible to `rg` for the port name. The mock now
+delegates to the real `partitionAutoApprove` rather than returning a fixed partition, because
+several of those cases assert the stage routes by `autoApproveOnValid`, which a stub would
+have answered for them.
+
+**Complexity**: stage cognitive 19, unchanged and still over 15 — both deleted methods were
+separate functions, not branches inside `execute`. 8.4 sets the exit criterion as ownership,
+not score.
+
+---
+
+## Tier 10: Mechanical check for write-never state fields — ✓ COMPLETE 2026-08-03
 
 Tier 9 found `clientOverride` and `clientSelectedGates` by hand. ADR 0001's **F2** found
 `enhancedGateConfiguration` — declared once, read in five places, written nowhere — the same way,
@@ -606,21 +667,83 @@ A check over the interfaces that carry pipeline state — `InternalState`, `Exec
 `ConvertedPrompt` — asking "does every optional field have at least one assignment in `src/`?"
 would have caught all three at once, and would catch the next one without an audit.
 
+### Outcome — ✓ COMPLETE 2026-08-03
+
+`scripts/validate-state-field-writers.js` (ts-morph), wired into `validate:all` with a
+`--self-test` beside the other guards, plus a ratchet baseline.
+
+> **The first detector passed its self-test and failed its back-test, 1 of 3.** It matched
+> property _names_ — deliberately, to over-count writes and keep false positives low. Against
+> `76630b73^` it missed `clientOverride`, because the phantom state field existed to feed a
+> same-named field on `FrameworkDecisionInput`, and `decisionInput.clientOverride = ...`
+> made the state field look written. That is not an edge case: **a phantom channel almost
+> always has a same-named consumer being written**, so name matching misses the exact shape
+> it targets. Rewritten to resolve references through the type checker
+> (`findReferencesAsNodes` + write-position test). The self-test now carries a same-name
+> decoy on another interface — the case that defeated v1.
+>
+> It also missed `enhancedGateConfiguration` for an unrelated reason: that field lived on
+> `ConvertedPrompt`, which 10.1 named as a candidate and the first watched set omitted.
+> Two misses, two causes, only one of them a detector defect.
+
+**10.3 measurement.** Type-aware detection first reported 15 findings. Seven were one
+systematic false-positive class: members of a nested object that is only ever assigned
+wholesale (`decisionInput.modifiers = executionPlan.modifiers`), so no member has an
+individual writer by construction rather than by defect. Fixed by descending into a nested
+type literal only when at least one of its members is individually written. **15 → 8, and
+all 8 are true positives** — verified by hand:
+
+| Finding                                                     | Why it is real                                                                                                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConvertedPrompt.delegation` (+5 more)                      | `converter.ts` is the only construction site and sets none of them, while `06-operator-validation-stage.ts:129` reads `convertedPrompt?.delegation`       |
+| `GateEnforcementInput.gateInstructions`, `.enforcementMode` | Fields of the input to `GateEnforcementAuthority.decide()`, **which has no callers** — so `getCachedDecision()` always returns null for its two consumers |
+
+**A false-positive rate of zero on today's tree, and eight pre-existing findings.** Rather
+than choose between "gate that cannot go green" and "report nobody reads", it ships as a
+**ratchet** — the pattern this repo already uses for `lint` and `typecheck:tests`. New
+findings fail; the eight are baselined in `scripts/state-field-writers-baseline.json`, and
+fixing one fails the check until the baseline is lowered, so it cannot silently drift up or
+stall on the way down.
+
+**Not an instance, and worth recording as a scope boundary**: Tier 12's `globalActiveFramework`
+is _not_ what this detects. It has two writers; what was dead was one specific call site's
+contribution. Call-site-local dead assignment is a different shape, and this detector will
+not catch it.
+
 ### Subtiers
 
-| #    | Step                                                                                                                          | Depends | Verification                                               |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------- |
-| 10.1 | Enumerate the state-carrying interfaces in scope; decide which are worth gating                                               | —       | Written list with the reason each is in or out             |
-| 10.2 | Prototype the detector (ts-morph: find property declarations with no `PropertyAccessExpression` on the left of an assignment) | 10.1    | Run against `HEAD~1` — must flag all three known instances |
-| 10.3 | Decide enforcement: `validate:*` script vs. advisory report. Weigh the false-positive rate first                              | 10.2    | Measured FP count on today's tree                          |
-| 10.4 | Wire into `validate:all` if 10.3 says gate; add to CI's `full` route                                                          | 10.3    | Green on a clean tree, red on a seeded phantom field       |
+| #    | Status | Step                                                                                                                          | Depends | Verification                                               |
+| ---- | ------ | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------- |
+| 10.1 | ✓      | Enumerate the state-carrying interfaces in scope; decide which are worth gating                                               | —       | Written list with the reason each is in or out             |
+| 10.2 | ✓      | Prototype the detector (ts-morph: find property declarations with no `PropertyAccessExpression` on the left of an assignment) | 10.1    | Run against `HEAD~1` — must flag all three known instances |
+| 10.3 | ✓      | Decide enforcement: `validate:*` script vs. advisory report. Weigh the false-positive rate first                              | 10.2    | Measured FP count on today's tree                          |
+| 10.4 | ✓      | Wire into `validate:all` if 10.3 says gate; add to CI's `full` route                                                          | 10.3    | Green on a clean tree, red on a seeded phantom field       |
 
 **Do not skip 10.2's back-test.** A detector that cannot re-find the three known instances is not
 measuring the thing that motivated it. **Do not skip 10.3**: fields assigned only via object
 literals, spreads, or `Object.assign` will read as unwritten, and the false-positive rate decides
 whether this can be a gate at all or has to stay a report.
 
-**Risk**: low — analysis only until 10.4.
+**Gate**: the detector re-finds every known instance, its false-positive rate is measured, and
+it fails on a new phantom field.
+
+| Check                                    | Result                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------ |
+| Back-test `a06287dd^`                    | flags `enhancedGateConfiguration`, `clientOverride`, `clientSelectedGates` — **3/3** |
+| Back-test `76630b73^`                    | flags `clientOverride`, `clientSelectedGates` — both present there                   |
+| False positives, today's tree            | **0** of 8 findings, each verified by hand                                           |
+| Seeded phantom field                     | exit 1, names the field and its declaration site                                     |
+| Clean tree                               | exit 0, 72 optional fields across 6 interfaces                                       |
+| `--self-test`                            | passes, including a same-name decoy on another interface                             |
+| typecheck · unit · integration           | clean · 1847 · 434                                                                   |
+| `validate:arch` · contracts · verify:mcp | 442 modules · in sync · 11/11                                                        |
+
+**Risk**: low — analysis only until 10.4; 10.4 ships as a ratchet, so it cannot block on
+pre-existing debt.
+
+**Follow-on**: the eight baselined findings are real defects, not detector noise. The
+`GateEnforcementInput` pair implies `GateEnforcementAuthority.decide()` is dead along with
+both `getCachedDecision()` consumers — the Tier 9 shape at method scope. That is its own tier.
 
 ---
 
@@ -633,5 +756,6 @@ whether this can be a gate at all or has to stay a report.
   says a function is hard to read, not what it should have been instead. Tier 7's value came from
   naming the defect (a duplicated derivation) before extracting; without that step this is
   refactoring toward a number.
-- **Delete the dead judge consumers instead of wiring producers** — still on the table, and it is
-  9.2's decision. It cannot be made before 9.1 establishes whether the menu was ever answerable.
+- **Delete the dead judge consumers instead of wiring producers** — **chosen** by 9.2 on
+  2026-08-02, once 9.1 established the menu was already answerable through inline operators.
+  Wiring a producer would have added a second channel structurally shadowed by the first.

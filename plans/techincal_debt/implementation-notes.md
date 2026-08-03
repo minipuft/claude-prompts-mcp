@@ -815,3 +815,75 @@ the three suites covering this path pass 19/19 on both sides.
 'assertTransportSupported'` in `src/infra/http/transport/index.ts` — a concurrent session's
 uncommitted transport work, caught mid-save. Clean on re-run, and the file is not in this
 tier's scope.
+
+## Tiers 10 + 14 (2026-08-03)
+
+### Deviations
+
+- **D33 — the detector passed its self-test and failed its back-test, and that gap is the
+  tier's finding.** Tier 10's v1 matched property _names_, chosen deliberately to over-count
+  writes and suppress false positives. It re-found 1 of 3 known instances. The miss that
+  matters: `clientOverride` existed to feed a same-named field on `FrameworkDecisionInput`,
+  so `decisionInput.clientOverride = ...` made the state field look written. **A phantom
+  channel almost always has a same-named consumer being written** — name matching misses
+  precisely the shape it targets. Rewritten to resolve references through the type checker.
+  The self-test now carries a same-name decoy on another interface, so v1's defect cannot
+  return silently. Second miss, `enhancedGateConfiguration`, had an unrelated cause: it lived
+  on `ConvertedPrompt`, which 10.1 listed and the first watched set omitted. Two misses, two
+  causes, one detector defect. **A self-test proves the check runs; only a back-test against
+  a known-bad tree proves it measures the right thing.**
+
+- **D34 — shipped as a ratchet rather than taking 10.3's binary choice.** 10.3 framed the
+  decision as gate vs. advisory report. Measured false positives were 0 across 8 findings,
+  which argues for a gate, but the tree is red with all 8 — a gate that cannot go green gets
+  disabled, and a report gets ignored. The repo already resolves this twice (`lint:ratchet`,
+  `typecheck:tests:ratchet`), so the detector baselines the 8 and fails only on new ones.
+  Lowering the baseline is also enforced: fixing a known finding fails until the baseline is
+  updated, so it cannot stall on the way down.
+
+- **D35 — one systematic false-positive class killed by a descent rule, not by an ignore
+  list.** Type-aware detection first reported 15; 7 were members of a nested object only ever
+  assigned wholesale (`decisionInput.modifiers = executionPlan.modifiers`), which have no
+  individual writer by construction. Fixed by descending into a nested type literal only when
+  at least one member is individually written. Suppressing them by name would have hidden the
+  next real phantom in the same object.
+
+- **D36 — corrected a claim from earlier the same session.** Tier 12's `globalActiveFramework`
+  was described as a third instance of the write-never shape. It is not: it has two writers,
+  and what was dead was one call site's contribution. Call-site-local dead assignment is a
+  different shape and this detector will not catch it. Recorded in the plan as a scope
+  boundary so the distinction is not lost.
+
+- **D37 — F4 bundled two extensions that answer different questions.** Tier 14's
+  `separateAutoApproveTools` decides which path a tool takes, the same question
+  `filterByTrigger` answers over the same list — the real missed extension point.
+  `checkValidationOutput` parses a stdout protocol. Only the first joined `ToolTriggerFilter`;
+  giving a trigger/confirmation service a second domain is what F4 was diagnosing elsewhere.
+
+- **D38 — `validate:arch` overruled the domain-correct placement, and was right.** The
+  validation-output interpreter belongs beside the executor in `modules/automation/execution/`
+  by domain. `engine-no-modules-or-mcp-value` forbids the engine importing values from
+  `modules/`; the filter escapes it only via an injected port, which is over-wiring for one
+  pure function. Moved to `src/shared/utils/`, where `ScriptExecutionResult` already lives.
+  Third tier running where the prescribed owner was structurally wrong — and the first caught
+  by a mechanical gate rather than by probing.
+
+- **D39 — extending a port broke 10 tests through a hand-written mock.** `rg ToolTriggerFilterPort`
+  finds the port, not the stub that structurally implements it, which is the Test Surface
+  Audit case in `cleanup-standards.md`. The mock now delegates to the real
+  `partitionAutoApprove` instead of returning a fixed partition, because several of those
+  cases assert the stage routes by `autoApproveOnValid` — a stub would answer that for them.
+
+### Lint accounting
+
+Tier 14: eslint over the four touched files vs a detached `HEAD` worktree, **21 → 21,
+per-rule identical**. One `import-x/order` violation I introduced was found this way and
+fixed. Tier 10 adds only scripts, which the source lint config does not cover.
+
+### Not mine
+
+`npm run typecheck` failed twice mid-tier on the concurrent session's in-flight files —
+`assertTransportSupported` in `infra/http/transport/index.ts`, then `readToolSurfaceState` in
+`mcp/tools/index.ts`, both absent at `HEAD`. Both clean on re-run. One unit test also failed
+once during Tier 14 and passed on re-run at 154 suites / 1870 tests; it was not identified,
+and is reported as transient rather than diagnosed.

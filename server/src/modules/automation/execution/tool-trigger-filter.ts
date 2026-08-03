@@ -23,7 +23,7 @@ import {
   type PendingConfirmationTracker,
 } from './pending-confirmation-tracker.js';
 
-import type { ToolTriggerFilterPort } from '#shared/types/index.js';
+import type { ToolAutoApprovePartition, ToolTriggerFilterPort } from '#shared/types/index.js';
 import type {
   LoadedScriptTool,
   ToolDetectionMatch,
@@ -91,6 +91,38 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
    * @param promptId - Parent prompt ID for resume command
    * @returns Categorized filter result
    */
+  /**
+   * Split matches by whether the tool approves itself from its own validation output.
+   *
+   * Sits beside `filterByTrigger` because both partition the same collection on how a tool
+   * reaches execution, and running two partitioners over one list from two layers is what
+   * made this one easy to miss. This half stays pure: it reads `autoApproveOnValid` and
+   * nothing else. Deciding whether a given auto-approve tool actually passed requires
+   * running it, which is the caller's to do — this returns the candidates, not the verdict.
+   *
+   * A match naming a tool that is not in `tools` goes to `normal`, matching
+   * `filterByTrigger`, which skips unknown tools rather than granting them a fast path.
+   */
+  partitionAutoApprove(
+    matches: ToolDetectionMatch[],
+    tools: LoadedScriptTool[]
+  ): ToolAutoApprovePartition {
+    const toolMap = new Map(tools.map((tool) => [tool.id, tool]));
+    const autoApprove: ToolDetectionMatch[] = [];
+    const normal: ToolDetectionMatch[] = [];
+
+    for (const match of matches) {
+      const tool = toolMap.get(match.toolId);
+      if (tool?.execution?.autoApproveOnValid === true) {
+        autoApprove.push(match);
+      } else {
+        normal.push(match);
+      }
+    }
+
+    return { autoApprove, normal };
+  }
+
   filterByTrigger(
     matches: ToolDetectionMatch[],
     tools: LoadedScriptTool[],

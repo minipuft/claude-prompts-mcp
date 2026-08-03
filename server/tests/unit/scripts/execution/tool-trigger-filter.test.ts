@@ -340,3 +340,52 @@ describe('ToolTriggerFilter', () => {
     });
   });
 });
+
+describe('partitionAutoApprove', () => {
+  const match = (toolId) => ({ toolId, confidence: 1, extractedInputs: {} });
+  const tool = (id, autoApproveOnValid) => ({
+    id,
+    ...(autoApproveOnValid === undefined ? {} : { execution: { autoApproveOnValid } }),
+  });
+
+  test('routes tools declaring autoApproveOnValid away from the confirmation flow', () => {
+    const filter = new ToolTriggerFilter();
+
+    const partition = filter.partitionAutoApprove(
+      [match('validator'), match('formatter')],
+      [tool('validator', true), tool('formatter', false)]
+    );
+
+    expect(partition.autoApprove.map((m) => m.toolId)).toEqual(['validator']);
+    expect(partition.normal.map((m) => m.toolId)).toEqual(['formatter']);
+  });
+
+  test('a tool with no execution block is normal, not auto-approve', () => {
+    const filter = new ToolTriggerFilter();
+
+    const partition = filter.partitionAutoApprove([match('plain')], [tool('plain', undefined)]);
+
+    expect(partition.autoApprove).toEqual([]);
+    expect(partition.normal.map((m) => m.toolId)).toEqual(['plain']);
+  });
+
+  test('an unknown tool goes to normal rather than being granted the fast path', () => {
+    // filterByTrigger skips unknown tools; granting one auto-approval would be the more
+    // dangerous divergence, so the unknown case defaults to the path that asks.
+    const filter = new ToolTriggerFilter();
+
+    const partition = filter.partitionAutoApprove([match('ghost')], []);
+
+    expect(partition.autoApprove).toEqual([]);
+    expect(partition.normal.map((m) => m.toolId)).toEqual(['ghost']);
+  });
+
+  test('an empty match list partitions to two empty lists', () => {
+    const filter = new ToolTriggerFilter();
+
+    expect(filter.partitionAutoApprove([], [tool('validator', true)])).toEqual({
+      autoApprove: [],
+      normal: [],
+    });
+  });
+});
