@@ -101,7 +101,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Gate normalization | GateService (`gates/services/`) | Call `gateService.normalize()` |
 | Gate enhancement | GateEnhancementService | Call `enhancementService.enhance*()` |
 | Gate selection | GateManager (`gates/gate-manager.ts`) | Call `gateManager.selectGates()` |
-| Gate enforcement | GateEnforcementAuthority (`execution/pipeline/decisions/gates/`) | Call `authority.resolveEnforcementMode()` |
+| Gate enforcement mode | `resolveEnforcementMode` (`execution/pipeline/decisions/gates/`) | Call `resolveEnforcementMode(mode)` -- a pure import, because `context.gateEnforcement` is optional and `?.` would silently relax enforcement |
 | Gate verdict processing | GateVerdictProcessor (`gates/services/`) | Call `processor.handleGateAction()` |
 | Inline gate parsing | InlineGateProcessor (`gates/services/`) | Call `processor.processInlineGates()` |
 | Prompt resolution | PromptRegistry (`prompts/registry.ts`) | Call `registry.get()` |
@@ -159,6 +159,13 @@ breaking and major versions inflate until they carry no information.
 | Resource formats: prompt/gate/methodology YAML schema, `config.json` | `src/` layer structure, module layout, import style |
 | Python hook contract consumed by downstream plugins | Which files land in the published tarball |
 | Symbolic command language (`>>`, `==>`) | Build tooling, validation scripts, CI |
+
+**The tool surface is a union, not a snapshot.** `prompt_engine` builds its `inputSchema` from
+runtime state: the three gate parameters (`gates`, `gate_verdict`, `gate_action`) are advertised
+only while the gate system is enabled. The contract is the **union of every reachable shape** --
+`tooling/contracts/prompt-engine.json`. Narrowing within that union is not breaking; adding or
+removing a union member is. The alternative reading (contract = shape at current state) makes
+every state change a major bump, which drains the major version of meaning.
 
 **This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
 It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,

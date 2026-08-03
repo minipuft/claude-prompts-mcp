@@ -68,11 +68,6 @@ const WATCHED = [
     interfaces: ['FrameworkDecisionInput'],
     reason: 'Assembled by several callers; a field no caller sets is a channel with no producer.',
   },
-  {
-    file: 'src/engine/execution/pipeline/decisions/gates/gate-enforcement-types.ts',
-    interfaces: ['GateEnforcementInput'],
-    reason: 'Same shape as FrameworkDecisionInput, same failure mode.',
-  },
 ];
 
 /**

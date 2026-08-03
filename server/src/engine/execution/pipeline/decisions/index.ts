@@ -29,14 +29,12 @@ export { FrameworkDecisionAuthority } from './framework/index.js';
 export type { FrameworkDecisionInput } from './framework/index.js';
 
 // Gate enforcement decisions
-export { GateEnforcementAuthority } from './gates/index.js';
+export { GateEnforcementAuthority, resolveEnforcementMode } from './gates/index.js';
 export type {
   ActionResult,
   CreateReviewOptions,
   EnforcementMode,
   GateAction,
-  GateEnforcementDecision,
-  GateEnforcementInput,
   ParsedVerdict,
   PendingGateReview,
   RetryConfig,

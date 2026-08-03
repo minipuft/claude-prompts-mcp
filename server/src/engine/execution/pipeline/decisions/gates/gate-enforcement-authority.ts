@@ -15,8 +15,6 @@ import type {
   GateVerdict,
   EnforcementMode,
   GateAction,
-  GateEnforcementDecision,
-  GateEnforcementInput,
   ParsedVerdict,
   PendingGateReview,
   ReviewOutcome,
@@ -54,8 +52,6 @@ export class GateEnforcementAuthority {
   private readonly logger: Logger;
   private readonly chainSessionStore: ChainSessionService;
   private readonly gateLoader: GateDefinitionProvider | undefined;
-
-  private enforcementDecision: GateEnforcementDecision | null = null;
 
   // Verdict patterns loaded from YAML configuration
   private verdictPatterns: VerdictPattern[] | null = null;
@@ -176,17 +172,6 @@ export class GateEnforcementAuthority {
         };
       })
       .filter((v): v is GateVerdict => v !== null);
-  }
-
-  /**
-   * Resolve enforcement mode for a set of gates.
-   * Currently returns the configured mode or defaults to 'blocking'.
-   *
-   * @param configuredMode - Mode from pipeline state or undefined
-   * @returns Resolved enforcement mode
-   */
-  resolveEnforcementMode(configuredMode?: EnforcementMode): EnforcementMode {
-    return configuredMode ?? 'blocking';
   }
 
   /**
@@ -465,67 +450,5 @@ export class GateEnforcementAuthority {
    */
   async clearPendingReview(sessionId: string): Promise<void> {
     await this.chainSessionStore.clearPendingGateReview(sessionId);
-  }
-
-  /**
-   * Get the enforcement decision. Computes on first call, returns cached thereafter.
-   */
-  decide(input: GateEnforcementInput): GateEnforcementDecision {
-    if (this.enforcementDecision !== null) {
-      return this.enforcementDecision;
-    }
-
-    this.enforcementDecision = this.computeDecision(input);
-
-    this.logger.debug('[GateEnforcementAuthority] Decision made', {
-      shouldEnforce: this.enforcementDecision.shouldEnforce,
-      enforcementMode: this.enforcementDecision.enforcementMode,
-      gateCount: this.enforcementDecision.gateIds.length,
-    });
-
-    return this.enforcementDecision;
-  }
-
-  /**
-   * Check if decision has been made.
-   */
-  hasDecided(): boolean {
-    return this.enforcementDecision !== null;
-  }
-
-  /**
-   * Get the cached decision without computing (returns null if not decided).
-   */
-  getCachedDecision(): GateEnforcementDecision | null {
-    return this.enforcementDecision;
-  }
-
-  /**
-   * Reset the authority (for testing or request reprocessing).
-   */
-  reset(): void {
-    this.enforcementDecision = null;
-  }
-
-  private computeDecision(input: GateEnforcementInput): GateEnforcementDecision {
-    const timestamp = Date.now();
-
-    if (input.gateIds.length === 0) {
-      return {
-        shouldEnforce: false,
-        enforcementMode: 'blocking',
-        gateIds: [],
-        reason: 'No gates to enforce',
-        decidedAt: timestamp,
-      };
-    }
-
-    return {
-      shouldEnforce: true,
-      enforcementMode: this.resolveEnforcementMode(input.enforcementMode),
-      gateIds: input.gateIds,
-      reason: `Enforcing ${input.gateIds.length} gates`,
-      decidedAt: timestamp,
-    };
   }
 }

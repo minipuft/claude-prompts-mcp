@@ -56,28 +56,6 @@ export interface VerdictParseInput {
 }
 
 /**
- * Input for enforcement decision.
- * Decouples authority from ExecutionContext.
- */
-export interface GateEnforcementInput {
-  readonly sessionId: string;
-  readonly gateIds: string[];
-  readonly gateInstructions?: string;
-  readonly enforcementMode?: EnforcementMode;
-}
-
-/**
- * Gate enforcement decision result.
- */
-export interface GateEnforcementDecision {
-  readonly shouldEnforce: boolean;
-  readonly enforcementMode: EnforcementMode;
-  readonly gateIds: string[];
-  readonly reason: string;
-  readonly decidedAt: number;
-}
-
-/**
  * Per-gate verdict from a gate review response.
  * Parsed from GATE_VERDICTS blocks for granular delivery tracking.
  */
