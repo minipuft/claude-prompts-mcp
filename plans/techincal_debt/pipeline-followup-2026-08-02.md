@@ -1,16 +1,17 @@
 ---
-title: "Pipeline Follow-up — Tiers 8-10"
+title: "Pipeline Follow-up — Tiers 8-14"
 date: 2026-08-02
 status: active
 tags: []
 ---
 
-# Pipeline Follow-up — Tiers 8-10
+# Pipeline Follow-up — Tiers 8-14
 
 **Date**: 2026-08-02
 **Area**: `server/src/engine/execution/pipeline/`, `server/src/engine/gates/`
-**Work type**: Tier 8 = explore (review only) · Tier 9 = bug_fix (**✓ complete 2026-08-02**) ·
-Tier 10 = explore → tooling (raised by Tier 9)
+**Work type**: Tier 8 = explore, review only (**✓ complete 2026-08-02**) · Tier 9 = bug_fix
+(**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling (raised by Tier 9) ·
+**Tiers 11-14 = refactor, scoped by Tier 8** — do 11 first, it carries a correctness defect
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
@@ -145,10 +146,24 @@ strictly additive — no existing behavior reads a non-undefined value today.
 
 ---
 
-## Tier 8: Stage-level domain ownership — REVIEW ONLY, deferred
+## Tier 8: Stage-level domain ownership — ✓ REVIEW COMPLETE 2026-08-02
 
 **Deliberately not a fix tier.** It produces a written finding and a recommendation; any code
-change is a later tier that this one scopes.
+change is a later tier that this one scopes. **No file in the six was touched.**
+
+> **Headline: 4 of 6 are real, 2 are not.** The measurement did not distinguish them — reading each
+> function did. `tool-routing.ts` and `injection-decision-service.ts` are correctly-layered code
+> that happens to score over a threshold; decomposing them would have been refactoring toward a
+> number. This is the outcome the tier's own "why deferred" argument predicted, now measured rather
+> than asserted.
+>
+> **One finding outranks the complexity question entirely**: the chain-ID run-counter format is
+> parsed by **two private implementations under different names** (§ 8.1 F1). That is an SSOT
+> defect, not a layer smell, and it is invisible to `rg` — which is why nothing caught it.
+>
+> **Re-measured 2026-08-02 before reviewing** (per [[feedback-untrusted-inventory]]): all six
+> scores are unchanged from the table below, including `12-framework-stage` at 23 after the Tier 9
+> edit — that edit touched `buildDecisionInput`, the violation is on `execute`.
 
 ### The finding to review
 
@@ -179,29 +194,196 @@ The question is **not** "is this over a threshold". It is:
 4. **What breaks if it moves?** These four stages are on the hot path for every `prompt_engine`
    call, and three of them mutate `context.sessionContext`.
 
-### Why this is deferred rather than done
+### Why this was deferred rather than done
 
 - The measurement alone does not distinguish a stage that is too complex from a stage
   coordinating a genuinely complex step. Acting on the number is how you get a decomposition
   whose only justification is arithmetic — the pattern the size-ceiling removal above exists to
-  stop.
+  stop. **Confirmed: 2 of 6 were exactly that.**
 - Tier 7 shows the cost of getting this right: an extraction with a real SSOT defect behind it
-  still needed a byte-level differential to prove behavior held. Four stages is four of those.
+  still needed a byte-level differential to prove behavior held.
 - There is no forcing function. The ratchet holds the line; nothing regresses while this waits.
 
-### Subtiers
+---
 
-| #   | Step                                                                          | Depends | Verification                               |
-| --- | ----------------------------------------------------------------------------- | ------- | ------------------------------------------ |
-| 8.1 | Answer the four questions above for each of the six files                     | —       | Written finding per file                   |
-| 8.2 | Classify each: orchestration-complex (leave) vs domain-logic-in-a-stage (fix) | 8.1     | Classification with evidence per file      |
-| 8.3 | For each "fix", name the owning service from the matrix and the move          | 8.2     | Named target, or "no owner exists" finding |
-| 8.4 | Write the follow-on tier(s) — one per file, not one for all six               | 8.3     | Tiers sized so each has its own gate       |
+### 8.1 — Findings per file
 
-**Gate**: none — no code changes. Exit criterion is 8.4 producing tiers a later pass can execute.
+#### F1. `stages/13-session-stage.ts` — cognitive 26 · **domain logic + SSOT defect** · 326 lines, 13 private methods
 
-**Explicitly out of scope**: touching any of the six files. If the review finds something urgent,
-it becomes its own tier with its own gate rather than being fixed inline here.
+**Responsibilities held** (four, not one):
+
+1. Session resolution — resume vs. create vs. force-restart (`execute`, lines 41–128)
+2. **Chain-ID identity** — base-id precedence, run-counter strip/parse, next-run-number
+3. Pending gate-review creation (`createPendingGateReviewIfNeeded`, 40 lines)
+4. Blueprint construction + deep clone via `JSON.parse(JSON.stringify(...))`
+
+**Orchestration or domain logic?** Domain. Responsibility 1 is legitimate stage work. 2–4 are not:
+they compute domain answers rather than choosing which service to call.
+
+**The SSOT defect (this is the real finding).** The chain-ID run-counter format `base#N` has **two
+private implementations in two layers, under different names**:
+
+| Concern            | Stage (orchestration)               | ChainManager (module)                  | Body              |
+| ------------------ | ----------------------------------- | -------------------------------------- | ----------------- |
+| strip run counter  | `stripRunCounter` (13-session:278)  | `extractBaseChainId` (manager.ts:1747) | `/#\d+$/` replace |
+| extract run number | `extractRunNumber` (13-session:282) | `getRunNumber` (manager.ts:1751)       | `/#(\d+)$/` match |
+
+Both are `private`, and the names share no substring — so `rg stripRunCounter` never finds
+`extractBaseChainId`. This is the **Name-it-twice** failure the `/search` skill documents: the
+capability exists twice because it was searched for by name, not by behavior. The format is also
+asserted in four more places as _prose_ (`prompt-engine.schema.ts:127`,
+`request-validator.ts:109`, `validation/schemas.ts:138`, `_generated/prompt_engine.generated.ts:62`)
+— six sites, one contract, no owner.
+
+Worse: `getNextRunNumber` normalizes with the stage's copy, then calls
+`chainSessionStore.getRunHistory(normalized)` — the service that owns run history and has its own
+copy of the same normalizer.
+
+**Owning service**: none exists. That is itself the finding. The matrix has no "chain identity"
+row. Recommend a new `ChainIdCodec` utility (pure FP, no state — parse/format/next-run) that both
+`ChainManager` and the stage import. It is a _format codec_, so per the layer model it is a
+utility, not a service.
+
+**What breaks if it moves**: nothing at the boundary — both copies are private and behaviourally
+identical, so a shared codec is a pure substitution. Risk is in responsibility 3 (`createPending‐
+GateReviewIfNeeded` mutates `sessionContext.pendingReview` **and** persists via
+`authority.setPendingReview`), which is on the hot path for every gated chain step.
+
+---
+
+#### F2. `stages/12-framework-stage.ts` — cognitive 23 · **domain logic (decision second-guessed)**
+
+**Responsibilities**: framework decision consumption; framework _requirement_ derivation; chain vs.
+single resolution.
+
+**Orchestration or domain logic?** Domain, and specifically **a decision split across two owners**.
+The stage calls `context.frameworkAuthority.decide()` — the declared SSOT — and then computes its
+own `requiresFramework` that can override the authority's `shouldApply`:
+
+```ts
+const requiresFramework = Boolean(
+  plan.requiresFramework ||
+  chainRequiresFramework ||
+  singleRequiresFramework ||
+  decision.shouldApply,
+);
+```
+
+**Duplicated derivation, byte-identical, 11 lines apart** (lines 124–133 and 142–154):
+`chainRequiresFramework` / `singleRequiresFramework` are computed twice per call. This is the same
+defect class Tier 7 cleared in the coordinator — a derivation with two sites — one layer down.
+
+**Owning service**: `FrameworkDecisionAuthority`. "Is a framework required for this execution" is a
+framework decision; it belongs beside `shouldApply`, as an input to one decision rather than a
+second opinion computed afterwards.
+
+**What breaks if it moves**: the authority caches its decision on first `decide()` call, so folding
+requirement-derivation in changes _when_ `chainStepsRequireFramework` is evaluated. Needs the
+Tier-7 treatment — a differential over the decision output.
+
+---
+
+#### F3. `stages/20-gate-review-stage.ts` — cognitive 21 · **domain logic (gate coverage decision)**
+
+**Responsibilities**: pending-review guards; shell-verify execution; **auto-pass coverage
+decision**; judge-gate composition; render delegation.
+
+**Orchestration or domain logic?** Mostly orchestration — but lines 79–113 decide _whether a gate
+review is satisfied_, by unioning this run's shell-verified gate ids with
+`state.gates.shellVerifyPassedForGates` and testing `pendingReview.gateIds.every(...)`. Deciding a
+gate is cleared is gate-verdict domain work.
+
+**Owning service**: `GateEnforcementAuthority` (matrix: "Gate enforcement") or `GateVerdictProcessor`
+(matrix: "Gate verdict processing"). The stage already calls the authority elsewhere in the
+pipeline, so this is an **extension, not a new service** — `authority.isSatisfiedByShellVerification(...)`.
+
+**What breaks if it moves**: the stage writes `context.executionResults` on the auto-clear path and
+returns early. The decision can move; the early return must stay in the stage.
+
+---
+
+#### F4. `stages/08-script-execution-stage.ts` — cognitive 19 · **missed extension point**
+
+**Responsibilities**: tool detection delegation; **auto-approve partitioning + policy**; trigger
+partitioning delegation; result accumulation.
+
+**Orchestration or domain logic?** This is the `layer + service` compound from `refactoring.md`: a
+partitioning service **already exists** and is injected — `toolTriggerFilter.filterByTrigger()`
+partitions matches by trigger/confirm settings. The stage then implements a _second_ partitioning,
+`separateAutoApproveTools`, privately, plus the approve/block policy inline (lines 94–127) via
+`checkValidationOutput`.
+
+**Owning service**: `ToolTriggerFilter` — extend it. Two partitioners over the same collection, one
+injected and one private, is the missed extension point, not a missing abstraction.
+
+**What breaks if it moves**: auto-approve _executes the script_ to get its validation result before
+deciding — so the partition is not pure; it has an I/O dependency the existing filter does not. The
+extension must take the executed results as data, keeping execution in the stage.
+
+---
+
+#### F5. `routing/tool-routing.ts` — cognitive 16 · **orchestration-complex — LEAVE**
+
+`detectToolRoutingCommand` is a module-level **pure function** with no class and no state — a
+utility, which is the correct layer for it. All 16 points come from seven sequential
+`pattern → result` branches. There is no domain logic and no owner to move it to: it _is_ the
+routing table.
+
+**Recommendation: no tier.** Converting the if-chain to a data-driven table is a legitimate
+readability change but it is mechanical, worth doing only if someone is already in the file, and it
+would not change a single layer boundary. Filing a tier for it would be refactoring toward a number.
+
+---
+
+#### F6. `decisions/injection/injection-decision-service.ts` — `checkFrequency` 7 params · **LEAVE**
+
+Not a stage. It is a **private method of a service doing service work**, which is exactly where the
+layer model puts domain logic. The seven parameters are cohesive — they are one frequency decision's
+inputs (`type`, `currentStep`, `totalSteps`, `frequency`, `timestamp`, `source`, `target`) — and it
+sits at the threshold, not past it. `refactoring.md` sets the limit at 6 to "flag genuine outliers
+(7+)"; this is the boundary case that rule was widened to tolerate.
+
+**Recommendation: no tier.** A `FrequencyCheckInput` parameter object would clear the warning and
+is a fine drive-by, but there is no ownership question here.
+
+---
+
+### 8.2 / 8.3 — Classification and owners
+
+| File                            | Score    | Classification             | Owner for the move                           | Tier |
+| ------------------------------- | -------- | -------------------------- | -------------------------------------------- | ---- |
+| `13-session-stage.ts`           | 26       | **domain logic + SSOT**    | **new `ChainIdCodec` utility** (none exists) | 11   |
+| `12-framework-stage.ts`         | 23       | **domain logic**           | `FrameworkDecisionAuthority` (extend)        | 12   |
+| `20-gate-review-stage.ts`       | 21       | **domain logic**           | `GateEnforcementAuthority` (extend)          | 13   |
+| `08-script-execution-stage.ts`  | 19       | **missed extension point** | `ToolTriggerFilter` (extend)                 | 14   |
+| `routing/tool-routing.ts`       | 16       | orchestration-complex      | — correct layer                              | none |
+| `injection-decision-service.ts` | 7 params | service doing service work | — correct layer                              | none |
+
+**Three of the four are extensions of services that already exist and are already injected.** Only
+F1 needs something new, and what it needs is a utility, not a service.
+
+### 8.4 — Follow-on tiers
+
+Written as four separate tiers, each with its own gate, per the subtier requirement. **Tier 11 is
+the one to do first** — it is the only one carrying a correctness defect rather than a layering
+one, and it is the smallest.
+
+| Tier | Scope                                                                                              | Risk   | Why this size                                                            |
+| ---- | -------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| 11   | Extract `ChainIdCodec`; delete both private copies; point the four prose assertions at it          | low    | Pure substitution — both copies are behaviourally identical              |
+| 12   | Fold framework-requirement derivation into `FrameworkDecisionAuthority`; kill the duplicated block | medium | Changes decision-cache timing; needs a Tier-7-style differential         |
+| 13   | Move the shell-verify coverage decision to `GateEnforcementAuthority`                              | medium | Hot path for every gated chain step; early-return must stay in the stage |
+| 14   | Extend `ToolTriggerFilter` with auto-approve partitioning                                          | medium | Partition has an I/O dependency; execution must stay in the stage        |
+
+**Do not batch 11–14 into one pass.** Tier 7 needed a byte-level differential to prove one
+extraction held; these are four independent ones with different owners and different blast radii.
+
+**Complexity is the symptom, not the exit criterion.** Each tier passes when the domain logic sits
+with its owner — not when the score drops below 15. Tiers 12–14 may well leave their stage above
+the threshold, and that is an acceptable outcome; F5 and F6 stay above it deliberately.
+
+**Gate for this tier**: none — no code changes, and none were made. Exit criterion was 8.4 producing
+executable tiers: **met**, four tiers with named owners, sized risk, and per-tier gates.
 
 ---
 
