@@ -30,23 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **ci:** allow Renovate validator to inspect updates ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
-* **ci:** allow Renovate validator to inspect updates ([3bac454](https://github.com/minipuft/claude-prompts/commit/3bac454135714d6df0aeef30ac51d577586c927d))
-* **deps:** align Renovate with delivery contracts ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
-* **deps:** align Renovate with delivery contracts ([a5f152c](https://github.com/minipuft/claude-prompts/commit/a5f152c0612100d45670b2586f0e1ee3e8a26990))
-* **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/issues/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
+* **ci:** allow Renovate validator to inspect updates ([#179](https://github.com/minipuft/claude-prompts/pull/179)) ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
+* **deps:** align Renovate with delivery contracts ([#177](https://github.com/minipuft/claude-prompts/pull/177)) ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
+* **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/pull/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
 * **gates:** declare the gate surface on the hook and notification ports ([d4a5360](https://github.com/minipuft/claude-prompts/commit/d4a5360fa546eae5336af5d0759067431ec4d74c))
 * **pipeline:** derive skipped stages instead of accumulating them ([cd7abc0](https://github.com/minipuft/claude-prompts/commit/cd7abc0775acdbb39c2c0809e048141daf2de548))
 
 ### Documentation
 
-* **deps:** close Phase 6 Renovate rollout ([a785167](https://github.com/minipuft/claude-prompts/commit/a78516776979df4ba51f62cb8a256c8026188b22))
-* **deps:** close Phase 6 Renovate rollout ([3c2a28d](https://github.com/minipuft/claude-prompts/commit/3c2a28db4ea4efa042adfda84f50b0369895610e))
+* **deps:** close Phase 6 Renovate rollout ([#180](https://github.com/minipuft/claude-prompts/pull/180)) ([a785167](https://github.com/minipuft/claude-prompts/commit/a78516776979df4ba51f62cb8a256c8026188b22))
 * **deps:** scope the SDK v2 package swap and record Tier B's blockers ([59dfdee](https://github.com/minipuft/claude-prompts/commit/59dfdee762262cdcf840ce8da98762f8c80a7c77))
-* **docs:** record acquisition recovery baseline ([8bfd41b](https://github.com/minipuft/claude-prompts/commit/8bfd41b8622c8361e1fe337533180ece6c88a19c))
-* **docs:** record acquisition recovery baseline ([c06067f](https://github.com/minipuft/claude-prompts/commit/c06067fadc54df1937ffb68f7f244bdd52b7c475))
-* **pipeline:** add coordinator decomposition tier ([41cbbb9](https://github.com/minipuft/claude-prompts/commit/41cbbb91ddeadeb96adb19f6fb83e8b0eb2d936f))
-* **pipeline:** add coordinator decomposition tier ([e841e1d](https://github.com/minipuft/claude-prompts/commit/e841e1d8d22721f55b76bb75e979b20a44d6ceab))
+* **docs:** record acquisition recovery baseline ([#182](https://github.com/minipuft/claude-prompts/pull/182)) ([8bfd41b](https://github.com/minipuft/claude-prompts/commit/8bfd41b8622c8361e1fe337533180ece6c88a19c))
+* **pipeline:** add coordinator decomposition tier ([#181](https://github.com/minipuft/claude-prompts/pull/181)) ([41cbbb9](https://github.com/minipuft/claude-prompts/commit/41cbbb91ddeadeb96adb19f6fb83e8b0eb2d936f))
 * **pipeline:** drop a doubled stage name left by the renumber sweep ([bd8095a](https://github.com/minipuft/claude-prompts/commit/bd8095a73c8a17ccfabae5287fec36a2f1f99edd))
 
 ## [3.0.2](https://github.com/minipuft/claude-prompts/compare/v3.0.1...v3.0.2) (2026-08-02)
