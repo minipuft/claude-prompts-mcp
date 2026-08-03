@@ -511,8 +511,8 @@ Renovate cycle; no automerge behavior was enabled during rollout.
 - Renovate-specific evidence remains Phase 6's hosted dashboard, corrected extraction
   contract, and representative PR #178 reporting all four protected checks plus
   `renovate/stability-days` successfully.
-- The compensating controls are a narrow eligible set, a 14-day release age, PR-based
-  platform automerge, strict up-to-date branch protection, and durable manual-review
+- The compensating controls are a narrow eligible set, a 14-day release age,
+  Renovate-controlled PR automerge, strict up-to-date branch protection, and durable manual-review
   exclusions for production, majors, 0.x packages, Actions, TypeScript, MCP SDK,
   testing/lint tooling, Python validation tools, and vulnerabilities.
 - The implementation and its validation-routing changes ship in one protected PR;
@@ -520,7 +520,7 @@ Renovate cycle; no automerge behavior was enabled during rollout.
 
 ### Phase 7 local implementation evidence
 
-- `platformAutomerge` is enabled, while global `automerge:false` remains the default.
+- `platformAutomerge` is disabled, while global `automerge:false` remains the default.
   One earlier rule admits stable, nonmajor development updates after 14 days; later
   rules explicitly restore manual review for production, majors, TypeScript, MCP SDK,
   testing/linting/build/packaging/hook tools, Actions, and Python validation tools.
@@ -528,10 +528,29 @@ Renovate cycle; no automerge behavior was enabled during rollout.
   immediate and manual.
 - Renovate 44.6.0 strict validation and real local extraction passed under Node 24.15.0.
   The extraction contract now asserts the eligible rule, every durable exclusion,
-  platform PR mode, lock maintenance, and five pinned workflow Python tools.
+  Renovate-controlled PR mode, lock maintenance, and five pinned workflow Python tools.
 - The validation-routing audit surfaced a previously hidden environment dependency:
   hook tests imported PyYAML but CI did not install it, and `validate:python` did not run
   the 178-test hook suite. Pytest 9.1.1 and PyYAML 6.0.3 are now pinned, Renovate-owned,
   and part of that gate; a clean Python 3.10 environment passed all 178 tests.
 - Phase 7 remains `migrating` until the implementation PR reports the four protected
   contexts and hosted Renovate confirms the bounded rule on an eligible PR.
+
+### Hosted canary failure and corrective guard
+
+- The first post-merge lock-maintenance canary, PR #186, reported all four protected
+  contexts as successful while `renovate/stability-days` remained pending.
+- GitHub native auto-merge nevertheless merged PR #186 as `ccce9d9b` on 2026-08-03.
+  The stability status was not a protected required context, so GitHub did not treat
+  it as a merge gate. Requiring it globally is not viable because non-Renovate PRs do
+  not report that context.
+- **Diagnosis:** platform-owned automerge and Renovate-owned release-age policy were
+  split across two decision makers. The protected checks proved functional validity,
+  but did not prove the configured soak had elapsed.
+- **Correction:** `platformAutomerge:false` makes Renovate the sole merge decision
+  owner for eligible PRs, allowing it to observe both protected CI and its internal
+  age check. The extraction validator rejects any future re-enable of platform
+  automerge.
+- The lock refresh merged through the failed guard is reverted in the same protected
+  correction PR. It may be regenerated and merged later after the configured guard
+  actually passes.

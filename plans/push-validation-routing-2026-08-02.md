@@ -1,8 +1,8 @@
 # Push Validation Routing Plan
 
-**Status:** locally validated; protected-PR proof pending
+**Status:** canonical; protected PR #183 passed all required contexts
 
-**Lifecycle:** unconditional monolithic validation = `migrating`; impact-aware validation = `canonical` after hosted proof
+**Lifecycle:** unconditional monolithic validation = `removed`; impact-aware validation = `canonical`
 
 **Risk:** high — CI required contexts and protected-branch mergeability
 
@@ -90,3 +90,7 @@ The first hosted run then failed before checkout: `lint` and `build` inherit
 `working-directory: server`, but their new prerequisite assertions intentionally run
 before checkout creates that directory. Those two assertions now override the working
 directory to repository root; no validation command was bypassed.
+
+The corrected hosted run on PR #183 passed `Lint & Validate`, `CLI`, `Build`, and
+`Test Suite`. A subsequent documentation-only push to the Release Please branch selected
+the `docs` route locally and completed without the server or CLI test suites.
