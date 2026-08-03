@@ -1,4 +1,10 @@
 // @lifecycle canonical - Applies framework guidance to prompts.
+import {
+  anyStepRequiresFramework,
+  containsFrameworkGate,
+  stepHasDisablingModifiers,
+  stepRequiresFramework,
+} from '../decisions/framework/framework-requirement.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -6,7 +12,6 @@ import type { FrameworkManager } from '../../../frameworks/framework-manager.js'
 import type { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ExecutionContext } from '../../context/index.js';
-import type { ChainStepPrompt } from '../../operators/types.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
 
 type FrameworkEnabledProvider = () => boolean;
@@ -23,12 +28,6 @@ type FrameworkEnabledProvider = () => boolean;
  */
 export class FrameworkResolutionStage extends BasePipelineStage {
   readonly name = 'FrameworkResolution';
-
-  /**
-   * Request-scoped framework gate IDs (set during execute, used synchronously within).
-   * Reset to null after execute completes to prevent stale data across requests.
-   */
-  private currentRequestFrameworkGates: Set<string> | null = null;
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
@@ -64,7 +63,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     this.logEntry(context);
 
     // Load fresh framework gate IDs for this request (prevents stale cache after hot-reload)
-    this.currentRequestFrameworkGates = await this.loadFrameworkGateIds();
+    const frameworkGateIds = await this.loadFrameworkGateIds();
 
     if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
@@ -116,13 +115,13 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     // framework gate requires one regardless. This derivation stays in the stage rather than
     // folding into FrameworkDecisionAuthority: the authority caches on first `decide()`, and
     // GateEnhancementService (stage 11) calls it first on the normal path — so a requirement
-    // computed inside `decide()` would be evaluated before `currentRequestFrameworkGates` is
-    // loaded here, and would silently never apply. See Tier 12 in the follow-up plan.
+    // computed inside `decide()` would be evaluated before the framework gate ids are loaded
+    // here, and would silently never apply. See Tier 12 in the follow-up plan.
     const chainRequiresFramework = context.hasChainCommand()
-      ? this.chainStepsRequireFramework(context)
+      ? anyStepRequiresFramework(context.parsedCommand.steps, frameworkGateIds)
       : false;
     const singleRequiresFramework = context.hasSinglePromptCommand()
-      ? this.hasFrameworkGate(context.parsedCommand.inlineGateIds)
+      ? containsFrameworkGate(context.parsedCommand.inlineGateIds, frameworkGateIds)
       : false;
 
     const requiresFramework = Boolean(
@@ -139,7 +138,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
     try {
       if (context.hasChainCommand()) {
-        const result = this.resolveChainFrameworks(context, decision.frameworkId);
+        const result = this.resolveChainFrameworks(context, frameworkGateIds, decision.frameworkId);
         this.logExit(result);
         return;
       }
@@ -226,6 +225,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    */
   private resolveChainFrameworks(
     context: ExecutionContext,
+    frameworkGateIds: ReadonlySet<string>,
     authorityFrameworkId?: string
   ): Record<string, unknown> {
     const steps = context.requireChainSteps();
@@ -236,12 +236,12 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
     for (const step of steps) {
       // Check step-level modifiers for per-step framework control
-      if (this.stepHasDisablingModifiers(step)) {
+      if (stepHasDisablingModifiers(step)) {
         delete step.frameworkContext;
         continue;
       }
 
-      const requiresFrameworkForStep = this.stepRequiresFramework(step);
+      const requiresFrameworkForStep = stepRequiresFramework(step, frameworkGateIds);
 
       if (!requiresFrameworkForStep) {
         delete step.frameworkContext;
@@ -278,55 +278,5 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       override: Boolean(frameworkOverride),
       source: 'authority-decision',
     };
-  }
-
-  /**
-   * Check if a step has modifiers that disable framework.
-   * This is for per-step control within chains.
-   */
-  private stepHasDisablingModifiers(step: ChainStepPrompt): boolean {
-    const modifiers = step.executionPlan?.modifiers;
-    if (!modifiers) {
-      return false;
-    }
-    return modifiers.clean === true || modifiers.lean === true;
-  }
-
-  private chainStepsRequireFramework(context: ExecutionContext): boolean {
-    if (!context.hasChainCommand()) {
-      return false;
-    }
-    return context.parsedCommand.steps.some((step) => this.stepRequiresFramework(step));
-  }
-
-  private stepRequiresFramework(step: ChainStepPrompt): boolean {
-    if (step.executionPlan?.requiresFramework) {
-      return true;
-    }
-
-    if (this.hasFrameworkGate(step.executionPlan?.gates)) {
-      return true;
-    }
-
-    if (this.hasFrameworkGate(step.inlineGateIds)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if any gates in the array are framework gates.
-   * Uses request-scoped data loaded at start of execute().
-   */
-  private hasFrameworkGate(gates?: readonly string[] | null): boolean {
-    if (!Array.isArray(gates)) {
-      return false;
-    }
-
-    return gates.some(
-      (gateId) =>
-        Boolean(gateId) && (this.currentRequestFrameworkGates?.has(gateId as string) ?? false)
-    );
   }
 }
