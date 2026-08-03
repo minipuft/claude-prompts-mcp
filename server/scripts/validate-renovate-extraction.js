@@ -13,20 +13,41 @@ const ACTION_FILES = [
   '.github/workflows/renovate-config-validator.yml',
 ];
 const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'];
-const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, regex: 3 };
+const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, regex: 5 };
 const EXPECTED_REGEX_IDENTITIES = [
+  ['PyYAML', '.github/workflows/ci.yml'],
   ['pyrefly', '.github/workflows/ci.yml'],
+  ['pytest', '.github/workflows/ci.yml'],
   ['renovate', '.github/workflows/renovate-config-validator.yml'],
   ['ruff', '.github/workflows/ci.yml'],
 ];
 const RULES = [
   ['Default dependency PRs remain maintenance-only', { semanticCommitType: 'chore' }],
-  ['Server runtime dependencies trigger patch releases', { semanticCommitType: 'fix' }],
-  ['Isolate major updates for manual review', { groupName: null }],
-  ['TypeScript - require manual review', { groupName: 'TypeScript' }],
-  ['MCP SDK - critical dependency', { groupName: 'MCP SDK' }],
-  ['GitHub Actions - one executable supply-chain boundary', { groupName: 'GitHub Actions' }],
-  ['Pinned Python validation tools', { groupName: 'Python validation tools' }],
+  [
+    'Server runtime dependencies trigger patch releases',
+    { semanticCommitType: 'fix', automerge: false },
+  ],
+  [
+    'Automerge stable nonmajor development updates after a 14-day soak',
+    {
+      automerge: true,
+      matchCurrentVersion: '!/^0/',
+      matchDepTypes: ['devDependencies'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'digest'],
+      minimumReleaseAge: '14 days',
+    },
+  ],
+  ['Isolate major updates for manual review', { groupName: null, automerge: false }],
+  ['TypeScript - require manual review', { groupName: 'TypeScript', automerge: false }],
+  ['MCP SDK - critical dependency', { groupName: 'MCP SDK', automerge: false }],
+  ['Testing frameworks - require validation', { automerge: false }],
+  ['ESLint and Prettier - require validation', { automerge: false }],
+  ['Build, packaging, and developer-hook tools require manual review', { automerge: false }],
+  [
+    'GitHub Actions - one executable supply-chain boundary',
+    { groupName: 'GitHub Actions', automerge: false },
+  ],
+  ['Pinned Python validation tools', { groupName: 'Python validation tools', automerge: false }],
 ];
 
 const same = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected);
@@ -53,10 +74,17 @@ function onlyRecord(rows, message, errors) {
 
 function validateConfig(config, errors) {
   if (!same(config.labels, ['dependencies'])) errors.push('resolved labels must be [dependencies]');
-  if (config.automerge !== false || config.platformAutomerge !== false) {
-    errors.push('resolved automerge policy must remain disabled');
+  if (
+    config.automerge !== false ||
+    config.platformAutomerge !== true ||
+    config.automergeType !== 'pr'
+  ) {
+    errors.push('resolved global automerge policy must be fail-closed and use platform PR merge');
   }
   if (!same(config.schedule, ['* 0-5 * * 1'])) errors.push('resolved maintenance schedule changed');
+  if (config.lockFileMaintenance?.automerge !== true) {
+    errors.push('lock-file maintenance must be eligible for automerge');
+  }
   const alerts = config.vulnerabilityAlerts ?? {};
   if (!same(alerts.addLabels, ['security', 'vulnerability']) || alerts.automerge !== false) {
     errors.push('resolved vulnerability label/automerge policy changed');
@@ -76,6 +104,23 @@ function validateConfig(config, errors) {
   }
   if (indexes.get(RULES[0][0]) >= indexes.get(RULES[1][0])) {
     errors.push('default semantic rule must precede the server runtime override');
+  }
+  const eligibleIndex = indexes.get(
+    'Automerge stable nonmajor development updates after a 14-day soak'
+  );
+  for (const description of [
+    'Isolate major updates for manual review',
+    'TypeScript - require manual review',
+    'MCP SDK - critical dependency',
+    'Testing frameworks - require validation',
+    'ESLint and Prettier - require validation',
+    'Build, packaging, and developer-hook tools require manual review',
+    'GitHub Actions - one executable supply-chain boundary',
+    'Pinned Python validation tools',
+  ]) {
+    if (eligibleIndex >= indexes.get(description)) {
+      errors.push(`manual exclusion must follow eligible automerge rule: ${description}`);
+    }
   }
 }
 
@@ -153,7 +198,13 @@ function fixtureRows() {
   const emptyEntries = (files) => files.map((packageFile) => ({ packageFile, deps: [] }));
   const packageEntries = emptyEntries(PACKAGE_FILES);
   packageEntries[1].deps.push({ depName: '@anthropic-ai/mcpb', currentValue: '2.1.2' });
-  const versions = { pyrefly: '1.1.1', renovate: '44.6.0', ruff: '0.16.0' };
+  const versions = {
+    PyYAML: '6.0.3',
+    pyrefly: '1.1.1',
+    pytest: '9.1.1',
+    renovate: '44.6.0',
+    ruff: '0.16.0',
+  };
   const regex = EXPECTED_REGEX_IDENTITIES.map(([depName, packageFile]) => ({
     packageFile,
     deps: [{ depName, currentValue: versions[depName] }],
@@ -161,8 +212,10 @@ function fixtureRows() {
   const config = {
     labels: ['dependencies'],
     automerge: false,
-    platformAutomerge: false,
+    platformAutomerge: true,
+    automergeType: 'pr',
     schedule: ['* 0-5 * * 1'],
+    lockFileMaintenance: { automerge: true },
     vulnerabilityAlerts: { addLabels: ['security', 'vulnerability'], automerge: false },
     packageRules: RULES.map(([description, expected]) => ({
       description: [description],
@@ -210,6 +263,15 @@ function main() {
     const invalidRegexValue = fixtureRows();
     invalidRegexValue[2].packageFiles.regex[0].deps[0].currentValue = '';
     if (!validateRows(invalidRegexValue).length) throw new Error('invalid regex value passed');
+    const broadAutomerge = fixtureRows();
+    broadAutomerge[0].config.automerge = true;
+    if (!validateRows(broadAutomerge).length) throw new Error('broad automerge passed');
+    const missingExclusion = fixtureRows();
+    const typescriptRule = missingExclusion[0].config.packageRules.find((rule) =>
+      rule.description.includes('TypeScript - require manual review')
+    );
+    typescriptRule.automerge = true;
+    if (!validateRows(missingExclusion).length) throw new Error('missing exclusion passed');
     console.log('PASSED: Renovate extraction validator self-test');
     return;
   }

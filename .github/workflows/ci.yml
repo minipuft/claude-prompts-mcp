@@ -1,17 +1,9 @@
 name: CI
 
-# No `paths-ignore` here, deliberately. A PR whose every file matches an ignore
-# pattern (a CHANGELOG-only fix, a plan-file-only PR) never triggers the workflow,
-# so no check runs are created — which GitHub does not treat as a skipped job. The
-# required contexts stay pending forever and the PR can only merge by admin override.
-#
-# The documented remedy — a companion workflow with the inverse `paths:` trigger and
-# identically named no-op jobs — is worse here: `paths` and `paths-ignore` both fire on
-# "any file matches", so a mixed docs+code PR triggers BOTH workflows and produces two
-# check runs sharing a name. A required context resolves to the most recent run with
-# that name, so the no-op could satisfy a check the real job failed.
-#
-# Running full CI on docs-only PRs costs runner minutes. That is the cheaper error.
+# Required CI deliberately has no workflow-level path filter: every protected context
+# must report on every PR. The classifier below routes work *inside* this workflow, so
+# documentation and hook-only changes avoid installs/builds/tests while mixed, unknown,
+# configuration, dependency, and executable changes fail closed to the full suite.
 on:
   push:
     branches: [main]
@@ -33,21 +25,78 @@ permissions:
   actions: read
 
 jobs:
+  classify:
+    name: Classify validation scope
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.changes.outputs.scope }}
+      full: ${{ steps.changes.outputs.full }}
+      python: ${{ steps.changes.outputs.python }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ".node-version"
+
+      - name: Classify changed paths
+        id: changes
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          changed_files="$RUNNER_TEMP/changed-files.txt"
+
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_SHA" ]; then
+            git diff --name-only --diff-filter=ACMRD "$PR_BASE_SHA...$GITHUB_SHA" > "$changed_files"
+            git diff --check "$PR_BASE_SHA...$GITHUB_SHA"
+          elif [ -n "$PUSH_BASE_SHA" ] && ! printf '%s' "$PUSH_BASE_SHA" | grep -Eq '^0+$' && git cat-file -e "$PUSH_BASE_SHA^{commit}"; then
+            git diff --name-only --diff-filter=ACMRD "$PUSH_BASE_SHA..$GITHUB_SHA" > "$changed_files"
+            git diff --check "$PUSH_BASE_SHA..$GITHUB_SHA"
+          else
+            git ls-tree -r --name-only "$GITHUB_SHA" > "$changed_files"
+            git show --check --format= "$GITHUB_SHA"
+          fi
+
+          node scripts/classify-validation-scope.js --github-output "$GITHUB_OUTPUT" < "$changed_files"
+          echo "Changed paths:"
+          cat "$changed_files"
+
+      - name: Summarize routing decision
+        run: |
+          echo "### Validation scope: \`${{ steps.changes.outputs.scope }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full Node validation: \`${{ steps.changes.outputs.full }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Python validation: \`${{ steps.changes.outputs.python }}\`" >> "$GITHUB_STEP_SUMMARY"
+
   # ============================================================
   # Stage 1: Fast validation (single Node LTS)
   # Deterministic checks that don't depend on Node version
   # ============================================================
   lint:
     name: Lint & Validate
+    needs: classify
+    if: always()
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: server
     steps:
+      - name: Assert change classification passed
+        working-directory: .
+        run: |
+          echo "classifier result: ${{ needs.classify.result }}"
+          [ "${{ needs.classify.result }}" = "success" ] || exit 1
+
       - name: Checkout
+        if: needs.classify.result == 'success'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_LTS }}
@@ -55,30 +104,45 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
+        if: needs.classify.outputs.scope == 'full'
         run: npm ci --prefer-offline --no-audit
 
       # Pinned on purpose. An unpinned `pip install pyrefly` turned an untouched branch
       # red on 2026-07-31 when the package went 0.55.x -> 1.1.1 and the newer inference
-      # flagged two pre-existing lines no commit had touched. Renovate tracks both
-      # versions through the customManagers regex in .github/renovate.json5.
+      # flagged two pre-existing lines no commit had touched. Renovate tracks Ruff,
+      # Pyrefly, Pytest, and PyYAML through customManagers in .github/renovate.json5.
       # ruff is installed here rather than via astral-sh/ruff-action because
       # `validate:python` (inside validate:all) is the single definition of the Python
       # gate — the action would have been a second, silently divergent one.
       - name: Install Ruff
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
         working-directory: .
         run: pip install ruff==0.16.0 --quiet
 
       - name: Install Pyrefly
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
         working-directory: .
         run: pip install pyrefly==1.1.1 --quiet
+
+      - name: Install Pytest
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
+        working-directory: .
+        run: pip install pytest==9.1.1 --quiet
+
+      - name: Install PyYAML
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
+        working-directory: .
+        run: pip install PyYAML==6.0.3 --quiet
 
       # The seven `validate:no-*` recurrence guards shell out to ripgrep, which the
       # GitHub runner image does not ship. This was latent until validate:all started
       # running in CI below — the guards exited 127 (`rg: not found`), not 0.
       - name: Install ripgrep
+        if: needs.classify.outputs.scope == 'full'
         run: sudo apt-get install -y --no-install-recommends ripgrep
 
       - name: Typecheck
+        if: needs.classify.outputs.scope == 'full'
         run: npm run typecheck
 
       # The whole suite, not a hand-picked subset. Before this, 16 of validate:all's 21
@@ -87,24 +151,48 @@ jobs:
       # `ChainSessionManager` or `StepState` merged green.
       # Members already covered elsewhere were removed from this job rather than run twice:
       # lint:ratchet, validate:contracts, validate:metadata, validate:versions, validate:arch.
-      # Includes the Python gate: `validate:python` runs ruff check, ruff format --check
-      # and pyrefly. There is no separate pyrefly step here on purpose — when pyrefly ran
-      # only in CI, a clean local push could still fail it, which is how the 0.55 -> 1.1.1
-      # breakage reached main.
+      # Includes the Python gate: `validate:python` runs Ruff, Pyrefly, and the hook
+      # Pytest suite. There is no separate pyrefly/test step here on purpose — one
+      # command is the local and hosted contract.
       - name: Validate (full suite)
+        if: needs.classify.outputs.scope == 'full'
         run: npm run validate:all
+
+      - name: Validate Python hooks
+        if: needs.classify.outputs.scope == 'hooks'
+        working-directory: .
+        run: npm --prefix server run validate:python
+
+      - name: Confirm lightweight validation
+        if: needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: echo "${{ needs.classify.outputs.scope }} scope passed its selected validation"
 
   # The cpm CLI ships as the `cpm` bin of the claude-prompts npm package and
   # bundles server/src/cli-shared, so a server-side change can break it without
-  # touching cli/. It is validated on every run, not on a path filter.
+  # touching cli/. Every full-scope change validates it; safe scopes retain the
+  # required job name and record why its heavy steps were omitted.
   cli:
     name: CLI
+    needs: classify
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Assert change classification passed
+        run: |
+          echo "classifier result: ${{ needs.classify.result }}"
+          [ "${{ needs.classify.result }}" = "success" ] || exit 1
+
+      - name: Record intentional lightweight pass
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'full'
+        run: echo "CLI is unaffected by the ${{ needs.classify.outputs.scope }} scope"
+
       - name: Checkout
+        if: needs.classify.outputs.scope == 'full'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
+        if: needs.classify.outputs.scope == 'full'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: ".node-version"
@@ -112,22 +200,27 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies (root workspaces)
+        if: needs.classify.outputs.scope == 'full'
         run: npm ci --prefer-offline --no-audit
 
       # cli/tsconfig.json maps @cli-shared/* into server/src, so typechecking the CLI
       # pulls in server sources that import zod. Those resolve from server/node_modules,
       # which the root workspace install does not provide.
       - name: Install server dependencies (CLI typechecks against server sources)
+        if: needs.classify.outputs.scope == 'full'
         run: npm ci --prefix server --prefer-offline --no-audit
 
       - name: Typecheck
+        if: needs.classify.outputs.scope == 'full'
         run: npm -w cli run typecheck
 
       # Build before test: the integration suite execs cli/dist/cpm.js
       - name: Build
+        if: needs.classify.outputs.scope == 'full'
         run: npm -w cli run build
 
       - name: Test
+        if: needs.classify.outputs.scope == 'full'
         run: npm -w cli run test:ci
 
   # ============================================================
@@ -136,17 +229,32 @@ jobs:
   # ============================================================
   build:
     name: Build
-    needs: lint
-    if: ${{ always() && needs.lint.result != 'cancelled' && (github.event_name == 'pull_request' || needs.lint.result == 'success') }}
+    needs: [classify, lint]
+    if: always()
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: server
     steps:
+      - name: Assert prerequisite checks passed
+        working-directory: .
+        run: |
+          echo "classifier result: ${{ needs.classify.result }}"
+          echo "lint result: ${{ needs.lint.result }}"
+          [ "${{ needs.classify.result }}" = "success" ]
+          [ "${{ needs.lint.result }}" = "success" ]
+
+      - name: Record intentional lightweight pass
+        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: echo "Build is unaffected by the ${{ needs.classify.outputs.scope }} scope"
+
       - name: Checkout
+        if: needs.classify.outputs.scope == 'full'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
+        if: needs.classify.outputs.scope == 'full'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_LTS }}
@@ -154,12 +262,15 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
+        if: needs.classify.outputs.scope == 'full'
         run: npm ci --prefer-offline --no-audit
 
       - name: Build bundled distribution
+        if: needs.classify.outputs.scope == 'full'
         run: npm run build
 
       - name: Startup smoke test
+        if: needs.classify.outputs.scope == 'full'
         run: npm run start:test
 
       # Guards the published MCP tool surface, which CLAUDE.md places inside the Public
@@ -169,9 +280,11 @@ jobs:
       # changes. Lives here rather than in validate:all because it spawns the built
       # server, and validate:all runs before the build.
       - name: MCP tool schema snapshot
+        if: needs.classify.outputs.scope == 'full'
         run: npm run validate:tool-schemas
 
       - name: Upload build artifact
+        if: needs.classify.outputs.scope == 'full'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
@@ -184,8 +297,8 @@ jobs:
   # ============================================================
   test:
     name: Test (Node ${{ matrix.node }})
-    needs: build
-    if: ${{ always() && needs.build.result == 'success' }}
+    needs: [classify, build]
+    if: ${{ needs.classify.outputs.scope == 'full' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -249,21 +362,26 @@ jobs:
   # ============================================================
   test-suite:
     name: Test Suite
-    needs: test
+    needs: [classify, test]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Assert every matrix leg passed
+      - name: Assert selected test scope passed
         run: |
+          echo "classifier result: ${{ needs.classify.result }}"
+          echo "validation scope: ${{ needs.classify.outputs.scope }}"
           echo "test matrix aggregate result: ${{ needs.test.result }}"
-          [ "${{ needs.test.result }}" = "success" ] || exit 1
+          [ "${{ needs.classify.result }}" = "success" ] || exit 1
+          if [ "${{ needs.classify.outputs.scope }}" = "full" ]; then
+            [ "${{ needs.test.result }}" = "success" ] || exit 1
+          fi
 
   # ============================================================
   # PR Summary: Comment with validation results
   # ============================================================
   pr-summary:
     name: PR Summary
-    needs: [lint, cli, build, test-suite]
+    needs: [classify, lint, cli, build, test-suite]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -289,6 +407,7 @@ jobs:
           CLI_RESULT: ${{ needs.cli.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           TEST_RESULT: ${{ needs.test-suite.result }}
+          VALIDATION_SCOPE: ${{ needs.classify.outputs.scope }}
         with:
           script: |
             const fs = require('fs');
@@ -303,6 +422,7 @@ jobs:
             const cliResult = process.env.CLI_RESULT || 'unknown';
             const buildResult = process.env.BUILD_RESULT || 'unknown';
             const testResult = process.env.TEST_RESULT || 'unknown';
+            const validationScope = process.env.VALIDATION_SCOPE || 'unknown';
             const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
 
             const statusEmoji = (result) => result === 'success' ? '✅' : result === 'skipped' ? '⏭️' : '❌';
@@ -310,6 +430,8 @@ jobs:
 
             const message = [
               allPassed ? '## ✅ CI Passed' : '## ❌ CI Failed',
+              '',
+              `Validation scope: **${validationScope}**`,
               '',
               '| Stage | Status |',
               '|-------|--------|',

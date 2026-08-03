@@ -2,22 +2,65 @@
 
 set -eu
 
-# This hook is a STRICT SUBSET of the CI `Lint & Validate` + `Build` jobs — every step
-# here also runs there. That direction is the contract (CLAUDE.md § Validation Gates):
-# a green pre-push must never be able to disagree with CI. Adding a step CI does not
-# run breaks the subset property, and so does dropping one CI depends on.
+# CI is the contract. This hook uses the same fail-closed scope classifier as CI,
+# then runs a strict subset of the hosted checks selected for that scope.
 
 SERVER_DIR=server
 
 if UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
-  PUSHED_FILES=$(git diff --name-only --diff-filter=ACMR "$UPSTREAM"..HEAD)
+  PUSH_RANGE="$UPSTREAM..HEAD"
+elif git rev-parse --verify origin/main >/dev/null 2>&1; then
+  BASE=$(git merge-base origin/main HEAD)
+  PUSH_RANGE="$BASE..HEAD"
+elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+  PUSH_RANGE="HEAD^..HEAD"
 else
-  PUSHED_FILES=$(git diff --name-only --diff-filter=ACMR HEAD~1..HEAD)
+  PUSH_RANGE=""
 fi
 
-echo "🔍 Running pre-push validation..."
+if [ -n "$PUSH_RANGE" ]; then
+  PUSHED_FILES=$(git diff --name-only --diff-filter=ACMRD "$PUSH_RANGE")
+  FORMATTABLE_FILES=$(git diff --name-only --diff-filter=ACMR "$PUSH_RANGE")
+else
+  PUSHED_FILES=$(git ls-tree -r --name-only HEAD)
+  FORMATTABLE_FILES=$PUSHED_FILES
+fi
+
+VALIDATION_SCOPE=$(printf '%s\n' "$PUSHED_FILES" | node scripts/classify-validation-scope.js --scope)
+
+echo "🔍 Running pre-push validation (scope: $VALIDATION_SCOPE)..."
 echo ""
 
+echo "Change hygiene..."
+if [ -n "$PUSH_RANGE" ]; then
+  git diff --check "$PUSH_RANGE" || { echo "❌ Changed-line whitespace check failed"; exit 1; }
+else
+  git diff-tree --check --root -r HEAD || { echo "❌ Changed-line whitespace check failed"; exit 1; }
+fi
+
+ROOT_FORMATTABLE=$(printf '%s\n' "$FORMATTABLE_FILES" | grep -v '^server/' | grep -E '\.(json|md|ya?ml)$' || true)
+if [ -n "$ROOT_FORMATTABLE" ]; then
+  printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --check
+else
+  echo "✅ No existing repo-level JSON/Markdown/YAML files in push range"
+fi
+
+if [ "$VALIDATION_SCOPE" = "docs" ]; then
+  echo ""
+  echo "✅ Documentation-only pre-push validation passed."
+  exit 0
+fi
+
+if [ "$VALIDATION_SCOPE" = "hooks" ]; then
+  echo ""
+  echo "Python hook validation..."
+  npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
+  echo ""
+  echo "✅ Hook-only pre-push validation passed."
+  exit 0
+fi
+
+echo ""
 echo "1/8 Type checking..."
 npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
@@ -27,12 +70,7 @@ npm --prefix "$SERVER_DIR" run lint:ratchet || { echo "❌ Lint ratchet failed (
 
 echo ""
 echo "3/8 Format checking..."
-ROOT_FORMATTABLE=$(printf '%s\n' "$PUSHED_FILES" | grep -v '^server/' | grep -E '\.(json|md|ya?ml)$' || true)
-if [ -n "$ROOT_FORMATTABLE" ]; then
-  printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --check
-else
-  echo "✅ No repo-level JSON/Markdown/YAML files in push range"
-fi
+echo "✅ Changed repo-level files checked above"
 
 echo ""
 echo "4/8 Python hook validation..."
@@ -55,12 +93,10 @@ echo ""
 echo "7/8 Version consistency check..."
 npm --prefix "$SERVER_DIR" run validate:versions || { echo "❌ Version mismatch across manifests"; exit 1; }
 
-# `Build` is a required status check on main. Without this step a push can pass every
-# local gate and still be blocked by a check the developer had no way to run locally.
 echo ""
 echo "8/8 Build..."
 npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
 
 echo ""
-echo "✅ All pre-push validation passed!"
+echo "✅ Full pre-push validation passed!"
 echo ""

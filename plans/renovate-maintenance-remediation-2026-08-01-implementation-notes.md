@@ -500,3 +500,38 @@ the hosted workflow's floating Node 24 pin must report its exact patch version.
 
 The Phase 6 gate is satisfied. Phase 7 may observe PR #178 and a second qualifying
 Renovate cycle; no automerge behavior was enabled during rollout.
+
+## Phase 7 Decision
+
+### Deviation: accelerated bounded automerge
+
+- On 2026-08-02 the maintainer explicitly waived the second weekly observation cycle.
+  Prior Dependabot operation was supporting context, not treated as proof of Renovate
+  rule matching.
+- Renovate-specific evidence remains Phase 6's hosted dashboard, corrected extraction
+  contract, and representative PR #178 reporting all four protected checks plus
+  `renovate/stability-days` successfully.
+- The compensating controls are a narrow eligible set, a 14-day release age, PR-based
+  platform automerge, strict up-to-date branch protection, and durable manual-review
+  exclusions for production, majors, 0.x packages, Actions, TypeScript, MCP SDK,
+  testing/lint tooling, Python validation tools, and vulnerabilities.
+- The implementation and its validation-routing changes ship in one protected PR;
+  no plan-only PR is created.
+
+### Phase 7 local implementation evidence
+
+- `platformAutomerge` is enabled, while global `automerge:false` remains the default.
+  One earlier rule admits stable, nonmajor development updates after 14 days; later
+  rules explicitly restore manual review for production, majors, TypeScript, MCP SDK,
+  testing/linting/build/packaging/hook tools, Actions, and Python validation tools.
+- Weekly lock maintenance is eligible for automerge. Vulnerability alerts remain
+  immediate and manual.
+- Renovate 44.6.0 strict validation and real local extraction passed under Node 24.15.0.
+  The extraction contract now asserts the eligible rule, every durable exclusion,
+  platform PR mode, lock maintenance, and five pinned workflow Python tools.
+- The validation-routing audit surfaced a previously hidden environment dependency:
+  hook tests imported PyYAML but CI did not install it, and `validate:python` did not run
+  the 178-test hook suite. Pytest 9.1.1 and PyYAML 6.0.3 are now pinned, Renovate-owned,
+  and part of that gate; a clean Python 3.10 environment passed all 178 tests.
+- Phase 7 remains `migrating` until the implementation PR reports the four protected
+  contexts and hosted Renovate confirms the bounded rule on an eligible PR.
