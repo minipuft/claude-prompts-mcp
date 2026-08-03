@@ -31,6 +31,26 @@ import type { McpHttpHandler, McpServerFactory } from '@modelcontextprotocol/ser
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
 /**
+ * Reject a transport that was removed, rather than quietly substituting one.
+ *
+ * Falling back to the configured default here would start the server on a
+ * transport the operator did not ask for and report success — the `start:sse`
+ * script did exactly that after the HTTP+SSE transport was deleted. A removed
+ * option has to fail loudly enough to be fixed.
+ *
+ * `source` names where the value came from so the message points at the thing
+ * to edit: a CLI flag or the config file.
+ */
+function assertTransportSupported(value: string, source: string): void {
+  if (value === 'sse') {
+    throw new Error(
+      `${source}=sse is no longer supported: the HTTP+SSE transport was removed in the MCP SDK v2 ` +
+        `upgrade. Use streamable-http instead.`
+    );
+  }
+}
+
+/**
  * Transport types supported by the server
  */
 export enum TransportType {
@@ -75,20 +95,22 @@ export class TransportRouter {
     // CLI argument takes highest priority
     const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
     if (transportArg) {
-      const value = transportArg.split('=')[1];
+      const value = transportArg.split('=')[1] ?? '';
+      assertTransportSupported(value, '--transport');
       if (value === 'stdio' || value === 'streamable-http' || value === 'both') {
         return value;
       }
-      const reason =
-        value === 'sse'
-          ? 'The HTTP+SSE transport was removed. Use --transport=streamable-http.'
-          : `Invalid --transport value: "${value}". Using config default.`;
       // Use stderr to avoid corrupting STDIO protocol
-      console.error(`[TransportRouter] ${reason}`);
+      console.error(
+        `[TransportRouter] Invalid --transport value: "${value}". Using config default.`
+      );
     }
 
-    // Fall back to config value
-    return configManager.getTransportMode();
+    // Fall back to config value — which is a second way a removed transport can
+    // arrive, so it is checked too rather than trusted.
+    const configured = configManager.getTransportMode();
+    assertTransportSupported(String(configured), 'config.transport');
+    return configured;
   }
 
   /**

@@ -434,7 +434,6 @@ export enum LogLevel {
 
 export enum TransportType {
   STDIO = 'stdio',
-  SSE = 'sse',
 }
 
 export enum StepStatus {

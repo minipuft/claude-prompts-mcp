@@ -21,9 +21,9 @@
         },
         "transport": {
           "type": "string",
-          "enum": ["stdio", "sse"],
+          "enum": ["stdio", "streamable-http", "both"],
           "default": "stdio",
-          "description": "Transport protocol: 'stdio' for CLI tools (Claude Code), 'sse' for web clients"
+          "description": "Transport protocol: 'stdio' for CLI tools (Claude Code), 'streamable-http' for web clients, 'both' for either"
         },
         "port": {
           "type": "integer",

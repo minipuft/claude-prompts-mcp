@@ -671,7 +671,7 @@ rejected-alternative note warns about.
 
 - **D20 — the tier's own inventory was wrong in both directions, and re-measuring changed
   the design.** Tier 8 F1 recorded "two code copies + four prose assertions". Probing the
-  regex literal instead of the method names found six _executable_ literals (two of the four
+  regex literal instead of the method names found six *executable* literals (two of the four
   "prose" sites are inlined Zod regexes) and, decisively, an already-exported
   `CHAIN_ID_PATTERN` in `shared/utils/constants.ts` holding the same regex with two live
   importers. Had the codec been written to the plan's inventory it would have become a
@@ -683,7 +683,7 @@ rejected-alternative note warns about.
   Tier 11 first because it "carries a correctness defect rather than a layering one". It does
   not: both strip copies are byte-identical, both parse copies behave identically on every
   input, and every prompt id in the repo conforms to the validating character class, so no id
-  can be minted that validation would later reject. The defect is latent drift. The _ranking_
+  can be minted that validation would later reject. The defect is latent drift. The *ranking*
   still holds for a different reason — it is the smallest and the only pure substitution — so
   the tier ran, with the justification corrected in the plan rather than silently inherited.
 

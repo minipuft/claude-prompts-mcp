@@ -403,7 +403,7 @@ Scoped by Tier 8 F1. Executed first per 8.4.
 > - Worse for the "no owner" claim: `shared/utils/constants.ts:8` already exported a
 >   `CHAIN_ID_PATTERN` holding that exact regex, and two call sites already imported it. A
 >   partial owner existed. Creating a fresh codec without absorbing it would have added a
->   _seventh_ literal — this is the `defined` pre-flight check earning its place.
+>   *seventh* literal — this is the `defined` pre-flight check earning its place.
 > - A fifth prose site the plan missed: `shared/types/execution.ts:105`. And a sixth
 >   inconsistency: the `constants.ts` doc called `N` a **version**; everything else calls it
 >   a **run number**.
@@ -421,27 +421,27 @@ Scoped by Tier 8 F1. Executed first per 8.4.
 
 ### Subtiers
 
-| #    | Status | Step                                                                                   | Files                                                                                            | Depends | Verification                                                              |
-| ---- | ------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------- |
-| 11.1 | ✓      | Re-measure the format's real footprint by behaviour, not by name                       | —                                                                                                | —       | 6 executable literals + 5 prose sites + 1 name collision (plan said 2+4)  |
-| 11.2 | ✓      | Create the codec, absorbing the existing `CHAIN_ID_PATTERN` rather than duplicating it | `shared/utils/chain-id-codec.ts` (new), `shared/utils/constants.ts`, `shared/utils/index.ts`     | 11.1    | one `RUN_SUFFIX_PATTERN` literal serves strip, parse, and format          |
-| 11.3 | ✓      | Delete both private copies and rewire all 16 call sites                                | `stages/13-session-stage.ts` (−39 ln), `modules/chains/manager.ts` (−43 ln)                      | 11.2    | `rg extractBaseChainId\|getRunNumber\|stripRunCounter` → 0 outside docs   |
-| 11.4 | ✓      | Point the two inlined Zod regexes and the three prose assertions at the codec          | `validation/schemas.ts`, `prompt-engine.schema.ts`, `request-validator.ts`, `types/execution.ts` | 11.2    | `rg 'chain-\[a-zA-Z0-9_-\]'` → 1 hit, the codec                           |
-| 11.5 | ✓      | Break the `CHAIN_ID_PATTERN` name collision inside `shared/utils/`                     | `shared/utils/chainUtils.ts`                                                                     | 11.2    | renamed `CHAIN_SLUG_PATTERN`, both meanings documented against each other |
-| 11.6 | ✓      | Unit-test the codec, encoding what the deleted copies did rather than a new contract   | `tests/unit/shared/chain-id-codec.test.ts` (new)                                                 | 11.3    | 18/18                                                                     |
+| #    | Status | Step                                                                                        | Files                                                                                      | Depends | Verification                                                             |
+| ---- | ------ | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------ |
+| 11.1 | ✓      | Re-measure the format's real footprint by behaviour, not by name                            | —                                                                                          | —       | 6 executable literals + 5 prose sites + 1 name collision (plan said 2+4) |
+| 11.2 | ✓      | Create the codec, absorbing the existing `CHAIN_ID_PATTERN` rather than duplicating it      | `shared/utils/chain-id-codec.ts` (new), `shared/utils/constants.ts`, `shared/utils/index.ts` | 11.1    | one `RUN_SUFFIX_PATTERN` literal serves strip, parse, and format         |
+| 11.3 | ✓      | Delete both private copies and rewire all 16 call sites                                     | `stages/13-session-stage.ts` (−39 ln), `modules/chains/manager.ts` (−43 ln)                 | 11.2    | `rg extractBaseChainId\|getRunNumber\|stripRunCounter` → 0 outside docs |
+| 11.4 | ✓      | Point the two inlined Zod regexes and the three prose assertions at the codec               | `validation/schemas.ts`, `prompt-engine.schema.ts`, `request-validator.ts`, `types/execution.ts` | 11.2    | `rg 'chain-\[a-zA-Z0-9_-\]'` → 1 hit, the codec                        |
+| 11.5 | ✓      | Break the `CHAIN_ID_PATTERN` name collision inside `shared/utils/`                          | `shared/utils/chainUtils.ts`                                                                | 11.2    | renamed `CHAIN_SLUG_PATTERN`, both meanings documented against each other |
+| 11.6 | ✓      | Unit-test the codec, encoding what the deleted copies did rather than a new contract        | `tests/unit/shared/chain-id-codec.test.ts` (new)                                            | 11.3    | 18/18                                                                    |
 
 **Gate**: the format has one owner, and the stage no longer computes chain identity.
 
-| Check                             | Result                                                          |
-| --------------------------------- | --------------------------------------------------------------- |
-| `npm run typecheck`               | clean                                                           |
-| eslint, my 11 files vs `HEAD`     | 329 vs 332 — **−3 `strict-boolean-expressions`, no rule added** |
-| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions                                 |
-| `npm run test:unit`               | 149 suites / 1816 tests                                         |
-| `npm run test:integration`        | 34 suites / 434 tests                                           |
-| `npm run validate:arch`           | 440 modules, 2 pre-existing warnings                            |
-| `npm run validate:contracts`      | in sync                                                         |
-| `npm run verify:mcp`              | 11/11                                                           |
+| Check                             | Result                                                             |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `npm run typecheck`               | clean                                                              |
+| eslint, my 11 files vs `HEAD`     | 329 vs 332 — **−3 `strict-boolean-expressions`, no rule added**    |
+| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions                                     |
+| `npm run test:unit`               | 149 suites / 1816 tests                                             |
+| `npm run test:integration`        | 34 suites / 434 tests                                               |
+| `npm run validate:arch`           | 440 modules, 2 pre-existing warnings                                |
+| `npm run validate:contracts`      | in sync                                                            |
+| `npm run verify:mcp`              | 11/11                                                              |
 
 **Deliberately left duplicated**: `tooling/contracts/prompt-engine.json:44` states the format in
 the `chain_id` tool description, which regenerates `_generated/prompt_engine.generated.ts:62`.
@@ -451,6 +451,7 @@ call, so the format belongs inline there. It is a duplicate by design, and the o
 **Net**: 44 insertions, 88 deletions across 10 files, plus one new 84-line utility and its test.
 
 ---
+
 
 ## Tier 10: Mechanical check for write-never state fields — NEW, from Tier 9
 

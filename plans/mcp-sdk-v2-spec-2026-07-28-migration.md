@@ -323,6 +323,29 @@ The envelope is not merely the newer source — **it is the only correct one ove
 
 **Remaining: B5 + B7 together.** The open decision is where notifications bind once `serveStdio(factory)` removes the long-lived instance `McpNotificationEmitter.setServer()` targets. `TransportRouter.getHttpHandler()` already exposes the `notify` facade for the HTTP half.
 
+#### B3 follow-up — the SSE _surface_, not just the transport (2026-08-02)
+
+**A correction.** B3 was marked done when the transport implementation was deleted, but the tier's own done-criterion is broader: `rg 'sseTransports|SSEServerTransport|transport=sse'` → zero hits in `server/src/` **and** `server/package.json` scripts. It was not met. The implementation was gone; the surface was not.
+
+**The live misbehavior.** `determineTransport` warned on `--transport=sse` and then fell back to the configured default, so `npm run start:sse` started the server on a _different_ transport and reported success. A script that lies about what it does is worse than one that errors. `assertTransportSupported` now throws from both places a transport value can arrive — the CLI flag and `config.transport` — naming `streamable-http` in the message. An unrecognized value still falls back, deliberately: a typo is not a decommissioned feature.
+
+**Two sites found only by widening the search past `.ts`:**
+
+| Site                       | Was                                                         |
+| -------------------------- | ----------------------------------------------------------- |
+| `src/smithery.yaml:8`      | deployment descriptor launching `--transport=sse`           |
+| `config.schema.json:24,26` | `"enum": ["stdio", "sse"]` — the schema still advertised it |
+
+The first is the one that mattered: a container deployment would have started on the wrong transport. Neither is a `.ts` file, which is why the earlier sweeps missed them.
+
+**Removed:** `'sse'` from `TransportMode` and the `TransportType` enum, the `start:sse` script, `--transport=sse` from `start:development` and the smithery descriptor, the enum value from `config.schema.json`, and the accepted-value lists in four validators (`config-input-validator`, `config-operations`, `config-utils`, `index.ts`). The compiler then pointed at four dead branches in `infra/http/index.ts`, which went with them, along with the SSE-era comments and a `sse` field in the status shape.
+
+`createSimpleLogger`'s default transport was `'sse'`; it is now `'stdio'`, matching the actual default.
+
+**Tested**, because "must fail loudly" is a contract worth pinning: 8 cases in `tests/unit/infra/transport-mode-resolution.test.ts` covering both arrival paths, the actionable message, and the deliberate lenient fallback for typos.
+
+**Measured:** typecheck green · lint ratchet 3356 / 1068, no regressions · 152 suites / 1847 unit · 34 / 434 integration · 3 / 41 e2e · `verify:mcp` 11/11 · `validate:arch` 0 errors, 442 modules · `validate:contracts` green · `--transport=sse` exits 1.
+
 #### B5 + B7 (2026-08-02, final pass) — Tier B complete
 
 **What B5 actually bought, measured before building it.** The old path connected an `McpServer` straight to a `StdioServerTransport`. Probed against that build, STDIO answered a modern `tools/list` — but only because the protocol layer is permissive. `server/discover` and `subscriptions/listen` both returned `-32601`, and the request `_meta` envelope was never lifted, so B6's identity read had nothing to find there. STDIO was 2025-era wearing a modern coat. After `serveStdio`, all three work and the legacy handshake still answers.

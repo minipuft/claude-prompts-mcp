@@ -126,10 +126,10 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
 
     case 'server.transport': {
       const normalized = value.trim().toLowerCase();
-      if (!['stdio', 'streamable-http', 'sse', 'both'].includes(normalized)) {
+      if (!['stdio', 'streamable-http', 'both'].includes(normalized)) {
         return {
           valid: false,
-          error: "Transport mode must be 'stdio', 'streamable-http', 'sse', or 'both'",
+          error: "Transport mode must be 'stdio', 'streamable-http', or 'both'",
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };

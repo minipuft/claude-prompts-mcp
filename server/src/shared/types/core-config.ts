@@ -40,11 +40,10 @@ export interface ServerConfig {
 /**
  * Transport mode options
  * - 'stdio': Standard I/O transport for Claude Desktop/CLI (default)
- * - 'sse': Server-sent events over HTTP for web clients (deprecated, use streamable-http)
  * - 'streamable-http': Streamable HTTP transport (MCP standard since 2025-03-26)
- * - 'both': Run both STDIO and SSE transports simultaneously
+ * - 'both': Run STDIO and Streamable HTTP simultaneously
  */
-export type TransportMode = 'stdio' | 'sse' | 'streamable-http' | 'both';
+export type TransportMode = 'stdio' | 'streamable-http' | 'both';
 
 /**
  * LLM provider for semantic analysis
@@ -440,8 +439,8 @@ export interface Config {
   /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
   /**
-   * Transport mode: 'stdio' (default), 'sse', or 'both'
-   * STDIO is used by Claude Desktop/CLI, SSE for web clients
+   * Transport mode: 'stdio' (default), 'streamable-http', or 'both'
+   * STDIO is used by Claude Desktop/CLI, Streamable HTTP for web clients
    */
   transport?: TransportMode;
   /** Logging configuration */

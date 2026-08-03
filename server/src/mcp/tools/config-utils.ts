@@ -78,10 +78,10 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
 
     case 'server.transport': {
       const normalized = value.trim().toLowerCase();
-      if (!['stdio', 'sse', 'both'].includes(normalized)) {
+      if (!['stdio', 'streamable-http', 'both'].includes(normalized)) {
         return {
           valid: false,
-          error: "Transport mode must be 'stdio', 'sse', or 'both'",
+          error: "Transport mode must be 'stdio', 'streamable-http', or 'both'",
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };
@@ -464,10 +464,10 @@ export class SafeConfigWriter {
       }
 
       // Transport validation
-      if (config.transport && !['stdio', 'sse', 'both'].includes(config.transport)) {
+      if (config.transport && !['stdio', 'streamable-http', 'both'].includes(config.transport)) {
         return {
           valid: false,
-          error: "Invalid transport mode (must be 'stdio', 'sse', or 'both')",
+          error: "Invalid transport mode (must be 'stdio', 'streamable-http', or 'both')",
         };
       }
 

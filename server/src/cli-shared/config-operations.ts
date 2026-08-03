@@ -381,7 +381,7 @@ function getKeyTypeInfo(key: string): {
 
   // Transport
   if (key === 'server.transport')
-    return { type: 'string', description: "'stdio', 'streamable-http', 'sse', or 'both'" };
+    return { type: 'string', description: "'stdio', 'streamable-http', or 'both'" };
 
   // Ports and numbers
   if (key === 'server.port') return { type: 'number', description: '1024-65535' };

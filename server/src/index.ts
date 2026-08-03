@@ -326,7 +326,7 @@ PATH OPTIONS:
 
 RUNTIME OPTIONS:
   --init=/path            Create a new workspace with starter prompts at the specified path
-  --transport=TYPE        Transport type: stdio (default) or sse
+  --transport=TYPE        Transport type: stdio (default), streamable-http, or both
   --log-level=LEVEL       Log level: debug, info, warn, error
   --quiet                 Minimal output mode (production-friendly)
   --verbose               Detailed diagnostics and strategy information
@@ -381,7 +381,7 @@ EXAMPLES:
 
 STARTUP MODES:
   Production:    npx claude-prompts --quiet
-  Development:   npx claude-prompts --verbose --transport=sse
+  Development:   npx claude-prompts --verbose --transport=streamable-http
   Debugging:     npx claude-prompts --debug-startup
   Testing:       npx claude-prompts --startup-test
 
@@ -555,9 +555,12 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
     return { shouldExit: true, exitCode: result.success ? 0 : 1 };
   }
 
-  if (cli.transport !== undefined && !['stdio', 'sse', 'streamable-http'].includes(cli.transport)) {
+  if (
+    cli.transport !== undefined &&
+    !['stdio', 'streamable-http', 'both'].includes(cli.transport)
+  ) {
     console.error(
-      `Error: Invalid transport '${cli.transport}'. Supported: stdio, sse, streamable-http`
+      `Error: Invalid transport '${cli.transport}'. Supported: stdio, streamable-http, both`
     );
     console.error('Use --help for usage information');
     return { shouldExit: true, exitCode: 1 };
