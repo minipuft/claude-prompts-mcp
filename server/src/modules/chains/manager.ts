@@ -37,6 +37,7 @@ import type { Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
+import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
@@ -1374,7 +1375,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   getRunHistory(baseChainId: string): string[] {
-    const normalized = this.extractBaseChainId(baseChainId);
+    const normalized = stripRunNumber(baseChainId);
     const history = this.baseChainMapping.get(normalized);
     if (history && history.length > 0) {
       return [...history];
@@ -1385,18 +1386,18 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const fallbackRuns = Array.from(this.chainSessionMapping.keys()).filter(
-      (chainId) => this.extractBaseChainId(chainId) === normalized
+      (chainId) => stripRunNumber(chainId) === normalized
     );
 
     return fallbackRuns.sort((a, b) => {
-      const runA = this.getRunNumber(a) ?? 0;
-      const runB = this.getRunNumber(b) ?? 0;
+      const runA = parseRunNumber(a) ?? 0;
+      const runB = parseRunNumber(b) ?? 0;
       return runA - runB;
     });
   }
 
   getLatestSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = this.extractBaseChainId(baseChainId);
+    const normalized = stripRunNumber(baseChainId);
     const history = this.baseChainMapping.get(normalized);
 
     if (history && history.length > 0) {
@@ -1438,7 +1439,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     // Try base chain fallback
-    const normalized = this.extractBaseChainId(chainId);
+    const normalized = stripRunNumber(chainId);
     const baseFallback = this.findScopedSessionForChain(normalized, scopeFilter, includeDormant);
     if (baseFallback) {
       if (baseFallback.lifecycle === 'dormant') {
@@ -1580,7 +1581,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void> {
     const scopeFilter = this.resolveScopeFilter(scope);
-    const baseChainId = this.extractBaseChainId(chainId);
+    const baseChainId = stripRunNumber(chainId);
     const runChainIds = chainId === baseChainId ? [...this.getRunHistory(baseChainId)] : [chainId];
 
     if (runChainIds.length === 0 && this.chainSessionMapping.has(chainId)) {
@@ -1642,7 +1643,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   private registerRunHistory(chainId: string): string {
-    const baseChainId = this.extractBaseChainId(chainId);
+    const baseChainId = stripRunNumber(chainId);
     const history = this.baseChainMapping.get(baseChainId) ?? [];
 
     const existingIndex = history.indexOf(chainId);
@@ -1730,7 +1731,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   private removeRunFromBaseTracking(chainId: string): void {
-    const baseChainId = this.runChainToBase.get(chainId) ?? this.extractBaseChainId(chainId);
+    const baseChainId = this.runChainToBase.get(chainId) ?? stripRunNumber(chainId);
     const history = this.baseChainMapping.get(baseChainId);
     if (history) {
       const filtered = history.filter((entry) => entry !== chainId);
@@ -1744,25 +1745,9 @@ export class ChainSessionStore implements ChainSessionService {
     this.runChainToBase.delete(chainId);
   }
 
-  private extractBaseChainId(chainId: string): string {
-    return chainId.replace(/#\d+$/, '');
-  }
-
-  private getRunNumber(chainId: string): number | undefined {
-    const match = chainId.match(/#(\d+)$/);
-    if (!match) {
-      return undefined;
-    }
-    const matchGroup = match[1];
-    if (matchGroup === undefined) {
-      return undefined;
-    }
-    return Number.parseInt(matchGroup, 10);
-  }
-
   private ensureRunMappingConsistency(): void {
     for (const chainId of this.chainSessionMapping.keys()) {
-      const baseChainId = this.extractBaseChainId(chainId);
+      const baseChainId = stripRunNumber(chainId);
       if (!this.baseChainMapping.has(baseChainId)) {
         this.baseChainMapping.set(baseChainId, []);
       }
@@ -1770,8 +1755,8 @@ export class ChainSessionStore implements ChainSessionService {
       if (!history.includes(chainId)) {
         history.push(chainId);
         history.sort((a, b) => {
-          const runA = this.getRunNumber(a) ?? 0;
-          const runB = this.getRunNumber(b) ?? 0;
+          const runA = parseRunNumber(a) ?? 0;
+          const runB = parseRunNumber(b) ?? 0;
           return runA - runB;
         });
       }
@@ -1917,7 +1902,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   private getDormantSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = this.extractBaseChainId(baseChainId);
+    const normalized = stripRunNumber(baseChainId);
     const history = this.baseChainMapping.get(normalized) ?? [];
     for (let idx = history.length - 1; idx >= 0; idx -= 1) {
       const runChainId = history[idx];

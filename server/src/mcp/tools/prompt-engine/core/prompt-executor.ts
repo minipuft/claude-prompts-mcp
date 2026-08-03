@@ -75,7 +75,7 @@ import {
   ConfigManager,
   ChainSessionService,
 } from '#shared/types/index.js';
-import { CHAIN_ID_PATTERN } from '#shared/utils/index.js';
+import { isChainId } from '#shared/utils/chain-id-codec.js';
 
 export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -425,8 +425,8 @@ export class PromptExecutor {
     if (!command) {
       return undefined;
     }
-    const match = command.trim().match(CHAIN_ID_PATTERN);
-    return match ? match[0] : undefined;
+    const trimmed = command.trim();
+    return isChainId(trimmed) ? trimmed : undefined;
   }
 
   private async routeToTool(

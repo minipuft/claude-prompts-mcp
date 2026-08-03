@@ -7,6 +7,8 @@
  */
 import { z } from 'zod/v4';
 
+import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
+
 /**
  * Zod schema for GateScope validation
  */
@@ -131,13 +133,7 @@ export const mcpToolRequestSchema = z
   .object(
     {
       command: z.string().trim().min(1, 'Command cannot be empty').optional(),
-      chain_id: z
-        .string()
-        .regex(
-          /^chain-[a-zA-Z0-9_-]+(?:#\d+)?$/,
-          'Chain ID must follow format: chain-{prompt} or chain-{prompt}#runNumber'
-        )
-        .optional(),
+      chain_id: z.string().regex(CHAIN_ID_PATTERN, CHAIN_ID_FORMAT_MESSAGE).optional(),
       gate_verdict: z.string().trim().optional(),
       gate_action: gateActionSchema.optional(),
       user_response: z.string().trim().optional(),

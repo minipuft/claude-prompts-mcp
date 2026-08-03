@@ -8,6 +8,7 @@
 export * from './errorHandling.js';
 export * from './jsonUtils.js';
 export * from './chainUtils.js';
+export * from './chain-id-codec.js';
 export * from './constants.js';
 export * from './yaml/index.js';
 export * from './resource-loader-types.js';

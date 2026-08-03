@@ -11,6 +11,8 @@
 
 import { z } from 'zod/v4';
 
+import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
+
 // ---------------------------------------------------------------------------
 // Gate sub-schemas (shared with resource_manager)
 // ---------------------------------------------------------------------------
@@ -122,10 +124,7 @@ export function buildPromptEngineSchema(
 
     chain_id: z
       .string()
-      .regex(
-        /^chain-[a-zA-Z0-9_-]+(?:#\d+)?$/,
-        'Chain ID must follow format: chain-{prompt} or chain-{prompt}#runNumber'
-      )
+      .regex(CHAIN_ID_PATTERN, CHAIN_ID_FORMAT_MESSAGE)
       .optional()
       .describe(resolve('chain_id', PARAM_DEFAULTS.chain_id)),
 

@@ -11,7 +11,7 @@ tags: []
 **Area**: `server/src/engine/execution/pipeline/`, `server/src/engine/gates/`
 **Work type**: Tier 8 = explore, review only (**✓ complete 2026-08-02**) · Tier 9 = bug_fix
 (**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling (raised by Tier 9) ·
-**Tiers 11-14 = refactor, scoped by Tier 8** — do 11 first, it carries a correctness defect
+**Tiers 11-14 = refactor, scoped by Tier 8** — Tier 11 ✓ complete 2026-08-02; 12-14 open
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
@@ -384,6 +384,71 @@ the threshold, and that is an acceptable outcome; F5 and F6 stay above it delibe
 
 **Gate for this tier**: none — no code changes, and none were made. Exit criterion was 8.4 producing
 executable tiers: **met**, four tiers with named owners, sized risk, and per-tier gates.
+
+---
+
+## Tier 11: `ChainIdCodec` — ✓ COMPLETE 2026-08-02
+
+Scoped by Tier 8 F1. Executed first per 8.4.
+
+> **The tier's inventory was low, and its severity framing was high.** Re-measured before
+> executing (`rg` on the regex literal, not on any method name — the probe F1 itself
+> recommends):
+>
+> - The plan counted **two** code copies and "four more places [that] assert the format as
+>   prose". Two of those four are not prose: `validation/schemas.ts:137` and
+>   `mcp/tools/schemas/prompt-engine.schema.ts:126` each **inline the validating regex**
+>   `/^chain-[a-zA-Z0-9_-]+(?:#\d+)?$/` verbatim. So the format lived in **six** executable
+>   literals, not two.
+> - Worse for the "no owner" claim: `shared/utils/constants.ts:8` already exported a
+>   `CHAIN_ID_PATTERN` holding that exact regex, and two call sites already imported it. A
+>   partial owner existed. Creating a fresh codec without absorbing it would have added a
+>   _seventh_ literal — this is the `defined` pre-flight check earning its place.
+> - A fifth prose site the plan missed: `shared/types/execution.ts:105`. And a sixth
+>   inconsistency: the `constants.ts` doc called `N` a **version**; everything else calls it
+>   a **run number**.
+> - **`shared/utils/` contained two different constants both named `CHAIN_ID_PATTERN`** —
+>   the run-id regex in `constants.ts` and a filesystem-slug regex in `chainUtils.ts:18`.
+>   Same name, same directory, different meanings. Renamed to `CHAIN_SLUG_PATTERN`.
+>
+> **There is no live defect.** The plan called Tier 11 "the only one carrying a correctness
+> defect". Probed: the two strip copies are byte-identical and the two parse copies differ
+> only in null-check style, with identical behaviour on every input. Prompt ids were checked
+> against the pattern's character class — all conform, so no id can be minted that the
+> validator would later reject. The defect is **latent drift**, not observable misbehaviour.
+> Tier 11 is still worth doing first because it is the smallest and the only pure
+> substitution; the ranking survives, the justification does not.
+
+### Subtiers
+
+| #    | Status | Step                                                                                   | Files                                                                                            | Depends | Verification                                                              |
+| ---- | ------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------- |
+| 11.1 | ✓      | Re-measure the format's real footprint by behaviour, not by name                       | —                                                                                                | —       | 6 executable literals + 5 prose sites + 1 name collision (plan said 2+4)  |
+| 11.2 | ✓      | Create the codec, absorbing the existing `CHAIN_ID_PATTERN` rather than duplicating it | `shared/utils/chain-id-codec.ts` (new), `shared/utils/constants.ts`, `shared/utils/index.ts`     | 11.1    | one `RUN_SUFFIX_PATTERN` literal serves strip, parse, and format          |
+| 11.3 | ✓      | Delete both private copies and rewire all 16 call sites                                | `stages/13-session-stage.ts` (−39 ln), `modules/chains/manager.ts` (−43 ln)                      | 11.2    | `rg extractBaseChainId\|getRunNumber\|stripRunCounter` → 0 outside docs   |
+| 11.4 | ✓      | Point the two inlined Zod regexes and the three prose assertions at the codec          | `validation/schemas.ts`, `prompt-engine.schema.ts`, `request-validator.ts`, `types/execution.ts` | 11.2    | `rg 'chain-\[a-zA-Z0-9_-\]'` → 1 hit, the codec                           |
+| 11.5 | ✓      | Break the `CHAIN_ID_PATTERN` name collision inside `shared/utils/`                     | `shared/utils/chainUtils.ts`                                                                     | 11.2    | renamed `CHAIN_SLUG_PATTERN`, both meanings documented against each other |
+| 11.6 | ✓      | Unit-test the codec, encoding what the deleted copies did rather than a new contract   | `tests/unit/shared/chain-id-codec.test.ts` (new)                                                 | 11.3    | 18/18                                                                     |
+
+**Gate**: the format has one owner, and the stage no longer computes chain identity.
+
+| Check                             | Result                                                          |
+| --------------------------------- | --------------------------------------------------------------- |
+| `npm run typecheck`               | clean                                                           |
+| eslint, my 11 files vs `HEAD`     | 329 vs 332 — **−3 `strict-boolean-expressions`, no rule added** |
+| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions                                 |
+| `npm run test:unit`               | 149 suites / 1816 tests                                         |
+| `npm run test:integration`        | 34 suites / 434 tests                                           |
+| `npm run validate:arch`           | 440 modules, 2 pre-existing warnings                            |
+| `npm run validate:contracts`      | in sync                                                         |
+| `npm run verify:mcp`              | 11/11                                                           |
+
+**Deliberately left duplicated**: `tooling/contracts/prompt-engine.json:44` states the format in
+the `chain_id` tool description, which regenerates `_generated/prompt_engine.generated.ts:62`.
+Per `.claude/rules/mcp-contracts.md` a tool description exists to let an LLM construct a correct
+call, so the format belongs inline there. It is a duplicate by design, and the only one left.
+
+**Net**: 44 insertions, 88 deletions across 10 files, plus one new 84-line utility and its test.
 
 ---
 

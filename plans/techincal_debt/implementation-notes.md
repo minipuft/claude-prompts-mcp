@@ -664,3 +664,51 @@ rejected-alternative note warns about.
 | `npm run test:integration`        | 33 suites / 430 tests                    |
 | `npm run validate:arch`           | 439 modules, 2 pre-existing warnings     |
 | `npm run verify:mcp`              | 11/11                                    |
+
+## Tier 11 — ChainIdCodec (2026-08-02)
+
+### Deviations
+
+- **D20 — the tier's own inventory was wrong in both directions, and re-measuring changed
+  the design.** Tier 8 F1 recorded "two code copies + four prose assertions". Probing the
+  regex literal instead of the method names found six _executable_ literals (two of the four
+  "prose" sites are inlined Zod regexes) and, decisively, an already-exported
+  `CHAIN_ID_PATTERN` in `shared/utils/constants.ts` holding the same regex with two live
+  importers. Had the codec been written to the plan's inventory it would have become a
+  seventh copy of the format sitting beside a sixth. The `defined` pre-flight check —
+  "defined elsewhere? PROBE: rg `<symbol>` ALL modules" — is what caught it; the plan
+  authored one day earlier had already missed it.
+
+- **D21 — the tier was mis-sold as a correctness defect and executed anyway.** 8.4 ranked
+  Tier 11 first because it "carries a correctness defect rather than a layering one". It does
+  not: both strip copies are byte-identical, both parse copies behave identically on every
+  input, and every prompt id in the repo conforms to the validating character class, so no id
+  can be minted that validation would later reject. The defect is latent drift. The _ranking_
+  still holds for a different reason — it is the smallest and the only pure substitution — so
+  the tier ran, with the justification corrected in the plan rather than silently inherited.
+
+- **D22 — one finding was outside the tier and taken anyway, because it was the same defect.**
+  `shared/utils/` held two different constants both named `CHAIN_ID_PATTERN`: the run-id regex
+  and, in `chainUtils.ts`, a filesystem-slug regex. Not in the tier scope, three lines to fix,
+  and squarely the confusion the tier exists to remove — a future `rg CHAIN_ID_PATTERN` would
+  otherwise return two unrelated things. Renamed to `CHAIN_SLUG_PATTERN` with each constant's
+  doc naming the other.
+
+- **D23 — `nextRunNumber` moved to the codec, `getRunHistory` did not.** The stage's
+  `getNextRunNumber` mixed a pure derivation with an I/O fetch. Only the pure half is in the
+  codec, which takes the history as data; the stage still owns the fetch. Keeps the codec free
+  of state and I/O, which is what makes it a utility rather than a service.
+
+- **D24 — `extractChainId` in `prompt-executor.ts` was simplified, not just rewired.** It ran
+  `command.trim().match(CHAIN_ID_PATTERN)` and returned `match[0]` — with an anchored pattern
+  that is a whole-string test spelled as an extraction. Replaced with the codec's `isChainId`
+  guard. Behaviour-preserving, and it stops the call site from depending on the pattern
+  staying anchored.
+
+### Lint accounting
+
+`lint:ratchet` measures the whole working tree, which currently carries a concurrent session's
+uncommitted CLI/release work, so it cannot attribute a violation. Measured instead by linting
+exactly the 11 changed source files against a detached `HEAD` worktree: **332 → 329**, the
+delta being −3 `strict-boolean-expressions` and no rule increased. Two violations I did
+introduce (`import-x/order`, `prettier/prettier`) were found this way and fixed before commit.
