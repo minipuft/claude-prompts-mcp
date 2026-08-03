@@ -29,7 +29,7 @@ flowchart LR
     end
 
     subgraph Transport
-        B[STDIO/SSE]
+        B[STDIO/Streamable HTTP]
     end
 
     subgraph Pipeline["PromptExecutionPipeline (22 stages)"]
@@ -151,7 +151,7 @@ This design means:
 server/src/
 ├── runtime/                    # Application lifecycle
 │   └── application.ts          # 4-phase startup orchestrator
-├── server/transport/           # STDIO + SSE protocol handlers
+├── server/transport/           # STDIO + Streamable HTTP protocol handlers
 ├── mcp-tools/                  # MCP tool layer
 │   ├── index.ts                # Registers 3 MCP tools
 │   ├── prompt-engine/          # → PromptExecutionPipeline
@@ -778,19 +778,27 @@ Four-phase startup:
 
 ### Transports (`src/server/transport/`)
 
-| Transport       | Protocol                       | Use Case                    | Status          |
-| --------------- | ------------------------------ | --------------------------- | --------------- |
-| STDIO           | Line-based JSON                | Claude Desktop, Claude Code | Active          |
-| Streamable HTTP | HTTP POST/GET with SSE streams | Web dashboards, remote APIs | **Recommended** |
-| SSE             | HTTP Server-Sent Events        | Legacy integrations         | Deprecated      |
+| Transport       | Protocol                       | Use Case                    | Status |
+| --------------- | ------------------------------ | --------------------------- | ------ |
+| STDIO           | Line-based JSON                | Claude Desktop, Claude Code | Active |
+| Streamable HTTP | HTTP POST/GET with SSE streams | Web dashboards, remote APIs | Active |
+
+The `SSE streams` above are `text/event-stream` framing _within_ Streamable HTTP. The separate
+**HTTP+SSE transport** was removed in the SDK v2 upgrade — the TypeScript SDK no longer ships
+`SSEServerTransport`. `--transport=sse` fails with a message naming `streamable-http` rather than
+falling back to another transport.
 
 **Streamable HTTP** (`--transport=streamable-http`):
 
 - One endpoint (`/mcp`) handles POST, GET, DELETE—no separate message paths
-- Sessions tracked via `mcp-session-id` header
-- Use this for web clients and remote APIs. SSE is deprecated.
+- **No protocol sessions.** Revision 2026-07-28 removed them; a fresh `McpServer` is built per
+  request from the server factory and nothing is retained between exchanges. Cross-call state
+  uses the repo's own run handles (`chain_id`), passed as ordinary tool arguments.
 
-Transport auto-detects at startup. All modes share the same message handling.
+**STDIO** keeps one `McpServer` for the life of the connection. That lifetime difference is the
+one place the transports genuinely diverge — see `CLAUDE.md` Core Principle 3.
+
+Transport is selected at startup. Both modes share the same message handling.
 
 ### Prompts (`src/prompts/`)
 

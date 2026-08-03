@@ -28,7 +28,7 @@
         "port": {
           "type": "integer",
           "default": 9090,
-          "description": "Port for SSE transport (ignored for stdio)"
+          "description": "Port for the Streamable HTTP transport (ignored for stdio)"
         }
       }
     },

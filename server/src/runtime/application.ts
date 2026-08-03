@@ -768,7 +768,7 @@ export class Application {
       }
 
       if (this.apiRouter) {
-        // The API manager is only available for the SSE transport.
+        // The API router only exists on the Streamable HTTP transport.
         this.apiRouter.updateData(this._promptsData, this._categories, this.convertedPrompts);
         this.logger.info('✅ ApiRouter updated with new data.');
       }

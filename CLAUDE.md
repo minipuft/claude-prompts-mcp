@@ -6,9 +6,9 @@
 
 1. **MCP Tooling Only** -- Prompts, templates, chains flow through MCP tools. Manual edits under `server/prompts/**` forbidden.
 2. **Contracts as SSOT** -- Schemas generated from `tooling/contracts/*.json`. Run `npm run generate:contracts`, never edit `_generated/`.
-3. **Transport Parity** -- Runtime changes must work in STDIO and SSE.
+3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
-5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries.
+5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran.
 
 ## Node.js Support Boundaries
 
@@ -105,10 +105,10 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Gate verdict processing | GateVerdictProcessor (`gates/services/`) | Call `processor.handleGateAction()` |
 | Inline gate parsing | InlineGateProcessor (`gates/services/`) | Call `processor.processInlineGates()` |
 | Prompt resolution | PromptRegistry (`prompts/registry.ts`) | Call `registry.get()` |
-| Command parsing | CommandParser (`execution/parsers/`) | Call `parser.parse()` |
+| Command parsing | CommandParser (`execution/parsers/`) | Call `parser.parseCommand()` |
 | Step capture | StepCaptureService (`execution/capture/`) | Call `captureService.captureStep()` |
 | Response assembly | ResponseAssembler (`execution/formatting/`) | Call `assembler.format*()` |
-| Framework selection | FrameworkManager (`frameworks/`) | Call `frameworkManager.select()` |
+| Framework selection | FrameworkManager (`frameworks/`) | Call `frameworkManager.selectFramework()` |
 | Framework validity | FrameworkManager | Call `frameworkManager.getFramework(id)` -- never hardcode |
 | Injection decisions | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()` |
 | Style resolution | StyleManager (`styles/style-manager.ts`) | Call `styleManager.getStyle()` |

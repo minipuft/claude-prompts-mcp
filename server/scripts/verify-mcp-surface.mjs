@@ -13,20 +13,20 @@
  * `start:test` (--startup-test) proves the process boots. It does not prove a single tool
  * answers. This is the complement.
  *
- * WHY streamable-http AND NOT THE E2E SSE HELPER
+ * WHY A SEPARATE CLIENT FROM THE E2E HELPER
  * `tests/e2e/helpers/http-mcp-client.ts` spawns a server too, and reusing it was the obvious
- * move. It drives SSE, and the SSE handshake hangs whenever it runs after a substantial jest
- * run in the same shell (measured: e2e alone 4/4 green; test:unit -> e2e fails; test:integration
- * -> e2e fails; raising the timeouts moved the error three times and then exhausted 30s, which
- * falsified the slowness hypothesis). Building the operator's trust tool on that path would give
- * it false failures in exactly the loop it exists to fix.
+ * move. The original reason not to was transport: that helper drove HTTP+SSE, whose handshake
+ * hung whenever it ran after a substantial jest run in the same shell (measured: e2e alone 4/4
+ * green; test:unit -> e2e fails; test:integration -> e2e fails; raising timeouts moved the error
+ * three times then exhausted 30s, falsifying the slowness hypothesis), while streamable-http
+ * under identical preconditions did not (alone 981ms | after test:unit 846ms | after
+ * test:integration 1013ms).
  *
- * streamable-http was probed under the identical preconditions and did not hang:
- *   alone -> health 981ms | after test:unit -> 846ms | after test:integration -> 1013ms
- * So the hang is transport-specific, not spawn-specific. MCP has also superseded SSE with
- * streamable HTTP, so this rides the current transport rather than the retired one. The e2e
- * helper stays the single SSE client; this is the single streamable-http client. Different
- * transports, not a forked implementation.
+ * That reason is now void: the HTTP+SSE transport was removed in the SDK v2 upgrade and the e2e
+ * helper drives streamable-http too, so the two are no longer different transports. What still
+ * separates them is purpose — this is an operator tool with read-only safety assertions and
+ * paste-sized output, that one is a jest fixture. Consolidating them is defensible and unclaimed;
+ * the measured history above is kept so nobody re-derives the SSE hang as a live constraint.
  *
  * SAFETY: every call is read-only. Nothing here creates, updates or deletes a resource, and the
  * run asserts afterwards that `state.db` and the workspace resources were left alone.

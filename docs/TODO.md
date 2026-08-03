@@ -14,7 +14,7 @@ What's next for Claude Prompts MCP.
 
 **Expect**: Open `localhost:3000`, build a prompt visually, test it—Claude sees it immediately. Zero file editing.
 
-**Foundation**: `prompts/hot-reload-manager.ts`, SSE transport, `resource_manager` CRUD.
+**Foundation**: `prompts/hot-reload-manager.ts`, HTTP transport, `resource_manager` CRUD.
 
 ---
 
@@ -121,7 +121,7 @@ See [test-modernization-roadmap.md](../plans/techincal_debt/test-modernization-r
 - [ ] **Phase 2**: Test classification audit & migration (8 sub-phases analyzing all 67 test files)
 - [ ] **Phase 3**: Missing unit test coverage (8 subsystems without tests)
 - [ ] **Phase 4**: Integration test suite (MCP protocol, chains, hot-reload, pipeline)
-- [ ] **Phase 5**: E2E test suite (STDIO/SSE transports, MCP compliance)
+- [ ] **Phase 5**: E2E test suite (STDIO/Streamable HTTP transports, MCP compliance)
 - [ ] **Phase 6**: Test quality improvements (remove implementation detail tests, consolidation)
 
 ---

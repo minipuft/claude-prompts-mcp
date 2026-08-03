@@ -256,7 +256,7 @@ describe('MCP Server Smoke Tests', () => {
   /**
    * HTTP Transport Tests
    *
-   * These tests use HTTP/SSE transport instead of STDIO to avoid
+   * These tests use the Streamable HTTP transport instead of STDIO to avoid
    * Jest/ESM/spawn stdio capture issues.
    */
   /**

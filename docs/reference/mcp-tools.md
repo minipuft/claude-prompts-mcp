@@ -1001,14 +1001,16 @@ There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `-
 
 ### Transport Options
 
-| Transport        | Flag                          | Use Case                                            |
-| ---------------- | ----------------------------- | --------------------------------------------------- |
-| STDIO            | `--transport=stdio`           | Claude Desktop, Claude Code                         |
-| Streamable HTTP  | `--transport=streamable-http` | Web dashboards, remote APIs (**use this for HTTP**) |
-| SSE (deprecated) | `--transport=sse`             | Legacy integrations                                 |
-| Dual mode        | `--transport=both`            | STDIO + SSE simultaneously                          |
+| Transport       | Flag                          | Use Case                               |
+| --------------- | ----------------------------- | -------------------------------------- |
+| STDIO           | `--transport=stdio`           | Claude Desktop, Claude Code            |
+| Streamable HTTP | `--transport=streamable-http` | Web dashboards, remote APIs            |
+| Dual mode       | `--transport=both`            | STDIO + Streamable HTTP simultaneously |
 
-For HTTP clients, use Streamable HTTP. It's the current MCP standard and replaces SSE.
+`--transport=sse` was removed with the SDK v2 upgrade and now **exits with an error** naming
+`streamable-http`. It does not fall back to another transport: a removed option that silently
+resolved to something else started the server on a transport nobody asked for and reported
+success. The same check applies to `transport` in `config.json`.
 
 ### Environment Variables
 

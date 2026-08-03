@@ -32,7 +32,7 @@ already excludes that type (`gate-manager.ts:302`), so framework gates enter the
 
 - The accumulator's union semantics (F1) are load-bearing for provenance diagnostics and are not
   being replaced by this ADR.
-- STDIO/SSE parity applies: resolution runs in the pipeline, so both transports inherit it.
+- STDIO/Streamable HTTP parity applies: resolution runs in the pipeline, so both transports inherit it.
 - `modules/prompts` → `engine/gates` is a new data direction and must satisfy `validate:arch`.
 
 ## Decision
@@ -358,7 +358,7 @@ Two cautions taken from the same sources:
     are unchanged.
   - (d) a prompt with no `inline_gate_definitions` produces a byte-identical gate set before and
     after the change.
-- Transport parity: resolution runs inside the pipeline, so a STDIO smoke check covers SSE.
+- Transport parity: resolution runs inside the pipeline, so a STDIO smoke check covers Streamable HTTP.
 
 ## References
 

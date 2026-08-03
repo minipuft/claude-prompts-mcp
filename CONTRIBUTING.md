@@ -103,7 +103,7 @@ Choose the path that matches your change:
 1. Read [Architecture Overview](docs/architecture/overview.md) for the pipeline, transports, and runtime model.
 2. Identify the correct domain from the ownership matrix in `CLAUDE.md` -- stages are thin orchestration, domain logic lives in services.
 3. Make focused, reversible changes. Respect [AGENTS.md](AGENTS.md) guardrails.
-4. Keep STDIO and SSE behavior in parity.
+4. Keep STDIO and Streamable HTTP behavior in parity.
 5. Register new modules through the `Application` orchestrator (`server/src/runtime/`).
 
 > [!IMPORTANT]
