@@ -13,6 +13,7 @@ tags: []
 (**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling, raised by Tier 9 (**✓ complete 2026-08-03**) ·
 **Tiers 11-14 = refactor, scoped by Tier 8** — Tiers 11-14 ✓ complete 2026-08-02/03
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
+**Successor**: [`pipeline-followup-2026-08-03.md`](./pipeline-followup-2026-08-03.md) (Tiers 15-16 — the eight baselined fields, and the predicates Tier 12 left in the stage)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
 
