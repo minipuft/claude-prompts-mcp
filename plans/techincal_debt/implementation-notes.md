@@ -529,3 +529,67 @@ a renamed file changes nothing on its own.
 ran: all 51 resolve. The tests-typecheck ratchet added earlier this session earned its
 keep here — it is the check that proves 28 rewritten test files still compile, which
 `npm run typecheck` cannot see.
+
+---
+
+## D18 — T6: a seeded invariant that did not exist (2026-08-02)
+
+Phase 2 designed three seed invariants. Probing before writing them found the third one
+false: `state.framework.clientFrameworkOverride` is not a field of `InternalState`, and
+`state.framework.clientOverride` — the field that does exist — has **no producer anywhere
+in `src/`**. Seeding either would have made the validator report a violation against the
+production array, and the constructor throws on non-empty, so the first `prompt_engine`
+call after T6 would have failed.
+
+The real judge-phase coupling is `clientSelectedStyle`: written by JudgeSelection at
+`10-judge-selection-stage.ts:105`, read by PromptGuidance at `15-prompt-guidance-stage.ts:108,125`.
+
+**Why it was worth probing a design that came from a verified Phase 2.5.** Phase 2.5
+verified 18/18 _symbol line numbers_, which is a different claim from _this field exists
+and this stage writes it_. A line-number check answers "is the citation current"; it does
+not answer "is the assertion at that line true". The seed table's entries were prose in
+the Phase 2 design, never a cited symbol, so nothing in 2.5 covered them.
+
+Generalizes: **a plan's verification pass certifies the claims it enumerated, not the
+plan.** Rows added to a design after (or beside) the verification pass carry the
+confidence of the section they sit in, which is zero.
+
+### Also corrected
+
+The same false field appeared in four comments that had been asserting it for some time —
+`pipeline-builder.ts` (stage-array rationale), `15-prompt-guidance-stage.ts:25,100`, and
+`pipeline-orchestrator.test.ts:22`. Leaving a false comment beside a newly-true
+declaration is worse than either alone, so all four were rewritten to the real fields.
+
+### Scope added
+
+6.5 (constructor calls validator, throws) shipped with no test in the plan. Three cases
+appended to `pipeline-orchestrator.test.ts`. The tier's whole value is that a miswire
+fails mechanically; leaving the mechanism itself unverified would have been the same
+class of gap T6 exists to close.
+
+### RED induced, not assumed
+
+`sessionStage`/`injectionControlStage` were swapped in the production array and the server
+rebuilt: `verify:mcp` 11/11 → 10/11 with the constraint-violation message. Worth recording
+the failure _shape_: `PipelineBuilder.build()` runs on first tool call, not at boot, so an
+inversion surfaces as a `prompt_engine` tool error, not a startup crash. "Throws at
+construction" is true but does not mean "fails fast at startup".
+
+### Gate
+
+| Check                                | Result                                       |
+| ------------------------------------ | -------------------------------------------- |
+| `npm run typecheck`                  | clean                                        |
+| `npx eslint validate-stage-order.ts` | 0 problems (after decomposition — see below) |
+| `npm run lint:ratchet`               | 3437 / 1405, no regressions                  |
+| `npm run typecheck:tests:ratchet`    | 395 in `tests/`, no regressions              |
+| `npm test`                           | 146 suites / 1770 tests                      |
+| `npm run validate:arch`              | 438 modules, 2 pre-existing warnings         |
+| `npm run verify:mcp`                 | 11/11                                        |
+
+First draft of `validateStageOrder` measured **cyclomatic 11 against a limit of 10** — the
+`?? []` and `?.`/`?? null` chains each count a branch, which is invisible when reading for
+control flow. Decomposed into `indexFirstProducers` + `toViolation` + the loop. eslint
+reports it only as a warning; the refactoring rule treats it as blocking, which is why it
+was fixed rather than accepted at 11.

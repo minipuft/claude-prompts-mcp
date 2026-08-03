@@ -20,7 +20,7 @@ const stageOrder = [
   'ExecutionPlanning',
   'JudgeSelection', // before framework/gate stages, for the two-phase judge flow
   'GateEnhancement', // after the judge decision
-  'FrameworkResolution', // reads clientFrameworkOverride set by the judge flow
+  'FrameworkResolution', // after the judge decision, so %judge returns an uninjected menu
   'SessionManagement', // populates currentStep
   'InjectionControl', // needs currentStep; writes state.injection
   'PromptGuidance', // reads state.injection
@@ -186,5 +186,37 @@ describe('PromptExecutionPipeline orchestration', () => {
       frameworkStage.execute.mock.invocationCallOrder[0]
     );
     expect(contentText(response)).toBe('framework:CAGEERF');
+  });
+});
+
+describe('PromptExecutionPipeline stage-order enforcement', () => {
+  const declared = (
+    name: string,
+    declarations: Pick<PipelineStage, 'provides' | 'requires'>
+  ): PipelineStage => ({
+    name,
+    ...declarations,
+    execute: async () => undefined,
+  });
+
+  const session = declared('SessionManagement', { provides: ['sessionContext.currentStep'] });
+  const injection = declared('InjectionControl', { requires: ['sessionContext.currentStep'] });
+
+  test('constructs when a declared requirement is met by an earlier stage', () => {
+    expect(
+      () => new PromptExecutionPipeline([session, injection], { logger: createLogger() })
+    ).not.toThrow();
+  });
+
+  test('throws when a declared requirement is produced by a later stage', () => {
+    expect(
+      () => new PromptExecutionPipeline([injection, session], { logger: createLogger() })
+    ).toThrow(/InjectionControl requires "sessionContext\.currentStep"/);
+  });
+
+  test('the throw names the count and the producing stage, so the fix is the message', () => {
+    expect(
+      () => new PromptExecutionPipeline([injection, session], { logger: createLogger() })
+    ).toThrow(/1 declared ordering constraint\(s\)[\s\S]*SessionManagement at index 1/);
   });
 });

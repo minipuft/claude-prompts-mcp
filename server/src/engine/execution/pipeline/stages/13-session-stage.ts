@@ -21,6 +21,7 @@ import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-ty
  */
 export class SessionManagementStage extends BasePipelineStage {
   readonly name = 'SessionManagement';
+  readonly provides = ['sessionContext.currentStep'] as const;
 
   constructor(
     private readonly chainSessionStore: ChainSessionService,

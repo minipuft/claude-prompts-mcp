@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
 import { buildRootSpanAttributes, resolveStageType } from './execution-telemetry.js';
+import { formatStageOrderViolations, validateStageOrder } from './validate-stage-order.js';
 import { ExecutionContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -56,6 +57,12 @@ export class PromptExecutionPipeline {
   constructor(stages: readonly PipelineStage[], ports: PipelinePorts) {
     if (stages.length === 0) {
       throw new Error('PromptExecutionPipeline requires at least one stage');
+    }
+    const orderViolations = validateStageOrder(stages);
+    if (orderViolations.length > 0) {
+      throw new Error(
+        `PromptExecutionPipeline received a stage array that violates ${orderViolations.length} declared ordering constraint(s):\n${formatStageOrderViolations(orderViolations)}`
+      );
     }
     this.stages = stages;
     this.logger = ports.logger;

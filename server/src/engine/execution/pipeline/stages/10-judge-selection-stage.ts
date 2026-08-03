@@ -28,6 +28,7 @@ import type { ExecutionContext } from '../../context/index.js';
  */
 export class JudgeSelectionStage extends BasePipelineStage {
   readonly name = 'JudgeSelection';
+  readonly provides = ['state.framework.clientSelectedStyle'] as const;
 
   constructor(
     private readonly resourceCollector: JudgeResourceCollector,

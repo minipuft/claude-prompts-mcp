@@ -21,13 +21,14 @@ type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
  * using the centralized PromptGuidanceService. In the two-phase client-driven
  * judge flow, this stage applies style enhancement from client selections.
  *
- * Client selections (set by JudgeSelectionStage, checked by this stage):
- * - clientFrameworkOverride: Override framework (used by FrameworkResolutionStage)
- * - clientSelectedGates: Additional gates (used by GateEnhancementStage)
- * - clientSelectedStyle: Response style enhancement (applied by this stage)
+ * Client selections read by this stage, under `context.state.framework`:
+ * - clientSelectedStyle: response style enhancement, written by JudgeSelectionStage
+ * - clientSelectedGates: additional gates, read by GateEnhancementStage
+ * - clientOverride: framework override, read by FrameworkResolutionStage
  */
 export class PromptGuidanceStage extends BasePipelineStage {
   readonly name = 'PromptGuidance';
+  readonly requires = ['state.injection', 'state.framework.clientSelectedStyle'] as const;
 
   constructor(
     private readonly promptGuidanceService: PromptGuidanceService | null,
@@ -97,7 +98,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
 
   /**
    * Check if client has provided resource selections from judge phase or operator-based style.
-   * JudgeSelectionStage sets: clientFrameworkOverride, clientSelectedGates, clientSelectedStyle
+   * JudgeSelectionStage sets clientSelectedStyle; the other two are set upstream of the pipeline.
    * Symbolic operators set: context.parsedCommand.executionPlan.styleSelection
    */
   private hasClientSelections(context: ExecutionContext): boolean {

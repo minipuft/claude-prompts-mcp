@@ -14,7 +14,7 @@ Six confirmed defects in the prompt execution pipeline, plus a fourth telemetry 
 design. Folded into independently shippable tiers. Touches 14 existing files, adds 5 new
 (3 are tests). Net ~-180 lines of source.
 
-**Tiers 1-5 are complete.** Tier 6 makes stage ordering mechanically enforced. Tier 7 was promoted
+**Tiers 1-6 are complete.** Tier 6 made stage ordering mechanically enforced. Tier 7 was promoted
 from Deferred once measurement showed its bullet was both numerically wrong and mis-classified —
 it carries the file's four remaining complexity violations, one of them Critical.
 
@@ -314,17 +314,54 @@ Plus: `index.ts` 22 export paths; builder grouping comments; **strip `MOVED:` / 
 
 **Gate**: full suite **+** `npm run validate:format`
 
-### Tier 6: Make ordering invariants mechanical
+### Tier 6: Make ordering invariants mechanical — ✓ COMPLETE (2026-08-02)
 
-| #   | File                                     | Change                                 | ~Ln | Dep     |
-| --- | ---------------------------------------- | -------------------------------------- | --- | ------- |
-| 6.1 | `stage.ts:8-18`                          | Add optional `requires?` / `provides?` | +8  | T5      |
-| 6.2 | `pipeline/validate-stage-order.ts`       | **NEW** — pure validator               | +55 | 6.1     |
-| 6.3 | `tests/.../validate-stage-order.test.ts` | **NEW** — 3 inversions caught          | +80 | 6.2     |
-| 6.4 | 5 stage files                            | Seed `requires`/`provides`             | ~15 | 6.1     |
-| 6.5 | coordinator ctor                         | Call validator; throw on non-empty     | +10 | 6.2,6.4 |
+| #     | File                                     | Change                                 | ~Ln  | Dep     |
+| ----- | ---------------------------------------- | -------------------------------------- | ---- | ------- |
+| ✓ 6.1 | `stage.ts:8-18`                          | Add optional `requires?` / `provides?` | +16  | T5      |
+| ✓ 6.2 | `pipeline/validate-stage-order.ts`       | **NEW** — pure validator               | +111 | 6.1     |
+| ✓ 6.3 | `tests/.../validate-stage-order.test.ts` | **NEW** — 3 inversions caught          | +188 | 6.2     |
+| ✓ 6.4 | 4 stage files                            | Seed `requires`/`provides`             | ~5   | 6.1     |
+| ✓ 6.5 | coordinator ctor                         | Call validator; throw on non-empty     | +7   | 6.2,6.4 |
 
-**Gate**: full suite **+** `validate:arch` **+** `verify:mcp`
+**Gate**: full suite **+** `validate:arch` **+** `verify:mcp` — all green (1770 unit tests, 0 arch
+errors, 11/11 MCP checks). Both ratchets report no regressions.
+
+#### Correction: one seeded invariant did not exist
+
+The Phase 2 seed table's third invariant — `JudgeSelection provides
+state.framework.clientFrameworkOverride` → `FrameworkResolution requires` it — is unbacked.
+`clientFrameworkOverride` is not a field of `InternalState`, and no stage anywhere in `src/` writes
+`state.framework.clientOverride` either. Seeding it would have made the validator report a
+violation against the production array, so the constructor would have thrown on the first
+`prompt_engine` call.
+
+The real coupling behind the same judge-phase constraint is **JudgeSelection provides
+`state.framework.clientSelectedStyle`** (`10-judge-selection-stage.ts:105`) → **PromptGuidance
+requires it** (`15-prompt-guidance-stage.ts:108,125`). That is what shipped, so 6.4 touched 4 stage
+files rather than 5. The same false claim appeared in three comments (`pipeline-builder.ts`,
+`15-prompt-guidance-stage.ts:25,100`) and one test comment
+(`pipeline-orchestrator.test.ts:22`); all four now describe the real fields.
+
+#### Scope added beyond the plan
+
+6.5 had no test. Three cases were appended to `pipeline-orchestrator.test.ts` covering the
+constructor path — accepts a satisfied order, throws on an inverted one, and the message names the
+producing stage and index. Without them the wiring that makes this tier mechanical was itself
+unverified.
+
+#### What the guard is observably worth
+
+Inverting `sessionStage`/`injectionControlStage` in the production array and rebuilding was run as
+a RED check: `verify:mcp` went 11/11 → 10/11 with
+`PromptExecutionPipeline received a stage array that violates 1 declared ordering constraint(s)`.
+Note the failure shape — `PipelineBuilder.build()` runs on first tool call, not at boot, so an
+inversion surfaces as a `prompt_engine` tool error rather than a startup crash. Reverted and
+re-verified 11/11.
+
+Two of the five documented constraints stay comment-only: ScriptExecution→ScriptAutoExecute and
+ShellVerification→StepExecution couple through template context and verify loops rather than a
+named context key, so there is nothing for `provides` to name.
 
 ### New file justifications
 
