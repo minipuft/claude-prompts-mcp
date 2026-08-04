@@ -2,6 +2,8 @@
 
 # Claude Prompts MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fminipuft%2Fclaude-prompts.svg)](https://mcptoplist.com/server/glama%2Fminipuft%2Fclaude-prompts)
+
 <div align="center">
 
 <img src="assets/logo.png" alt="Claude Prompts MCP Server Logo" width="200" />
