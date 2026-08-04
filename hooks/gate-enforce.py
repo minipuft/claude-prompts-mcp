@@ -43,8 +43,27 @@ def main():
     chain_id = tool_input.get("chain_id", "")
     gate_verdict = tool_input.get("gate_verdict", "")
 
-    # Check 1: FAIL verdict should trigger retry guidance
-    if gate_verdict:
+    # Check 1: FAIL verdict should trigger retry guidance.
+    # gate_verdict has two schema shapes: the structured object
+    # {overall, rationale, per_gate[]} (preferred) and the legacy
+    # "GATE_REVIEW: FAIL - reason" string.
+    if isinstance(gate_verdict, dict):
+        if gate_verdict.get("overall", "").upper() == "FAIL":
+            reason = str(gate_verdict.get("rationale", "unspecified"))[:50]
+
+            hook_response = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"Gate FAIL: {reason}. Review the failing criteria, "
+                        "address the gaps in your output, then resubmit your verdict."
+                    ),
+                }
+            }
+            print(json.dumps(hook_response))
+            sys.exit(0)
+    elif gate_verdict:
         # Parse verdict: "GATE_REVIEW: FAIL - reason" or "GATE_REVIEW: PASS - reason"
         fail_match = re.search(r"GATE_REVIEW:\s*FAIL", gate_verdict, re.IGNORECASE)
         if fail_match:
