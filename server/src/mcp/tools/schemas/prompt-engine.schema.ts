@@ -142,7 +142,7 @@ export interface ToolSurfaceState {
    *
    * Deliberately NOT the `gatesConfig.enableFrameworkGates` switch. That one is
    * a veto over the `framework-guide` rank only: it withholds gates the server
-   * loads from the active methodology, and never touches what a client supplies
+   * loads from the active framework, and never touches what a client supplies
    * through `gates`. Reading it here would strip a parameter that still works.
    */
   readonly gateSystemEnabled: boolean;
