@@ -3,9 +3,9 @@
  * Retires finished plans at release time by moving them into `plans/archive/`.
  *
  * The queue is the frontmatter, not a separate list: `status: done` IS the tag meaning
- * "retire at the next release" (~/knowledge-hub/meta/plan-frontmatter.md). There is no
- * fifth frontmatter field, because the convention is exactly four and the two plans that
- * invented one both fell off the hub board.
+ * "retire at the next release" — see docs/guides/release-process.md, Plan retirement. There
+ * is no fifth frontmatter field: the convention is exactly four, and the plans that invented
+ * a fifth are the ones that fell off the board reading it.
  *
  * WHY A PLAN CAN BE RETIRED, and why that is not just "it is finished":
  *
@@ -186,7 +186,7 @@ function main() {
     }
     console.error(
       '\nArchiving these would break the documents citing them. A finished plan something still\n' +
-        'points at is `reference`, not `done` — see ~/knowledge-hub/meta/plan-frontmatter.md.'
+        'points at is `reference`, not `done` — see docs/guides/release-process.md.'
     );
     process.exitCode = 1;
     return;

@@ -136,7 +136,7 @@ Push to main
 
 The release PR retires finished plans. `status: done` is the tag meaning "retire at the next
 release" — there is no separate queue file, and no fifth frontmatter field (the convention is
-exactly four: `~/knowledge-hub/meta/plan-frontmatter.md`).
+exactly four).
 
 `scripts/retire-done-plans.js --apply` moves every `done` plan with **no inbound links** into
 `plans/archive/`, preserving its subpath and re-basing its relative links for the added depth.
