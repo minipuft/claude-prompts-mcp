@@ -30,15 +30,25 @@ from workspace import get_runtime_state_dir
 # === Configuration Classes ===
 
 
+def _default_client() -> Literal["claude", "codex"]:
+    """Spawn client selection: RALPH_SPAWN_CLIENT env var, else claude."""
+    return "codex" if os.environ.get("RALPH_SPAWN_CLIENT") == "codex" else "claude"
+
+
 @dataclass
 class SpawnConfig:
-    """Configuration for spawning a Claude CLI instance."""
+    """Configuration for spawning a CLI agent instance (claude or codex)."""
 
     max_budget_usd: float = 1.00
     timeout_seconds: int = 300
     permission_mode: Literal["delegate", "prompt", "deny"] = "delegate"
     output_format: Literal["text", "json", "stream-json"] = "text"
     working_directory: str | None = None
+    # Which CLI binary carries the spawned work. max_budget_usd and
+    # output_format are claude-only concepts; the codex branch ignores them.
+    # Defaults from RALPH_SPAWN_CLIENT so downstream adapters (codex-prompts)
+    # can select the client without touching upstream hook code.
+    client: Literal["claude", "codex"] = field(default_factory=lambda: _default_client())
 
 
 @dataclass
@@ -202,6 +212,13 @@ def _calculate_backoff_delay(attempt: int, config: RetryConfig) -> float:
 
 
 def _build_command(config: SpawnConfig) -> list[str]:
+    """Build the CLI command for the configured client."""
+    if config.client == "codex":
+        return _build_codex_command(config)
+    return _build_claude_command(config)
+
+
+def _build_claude_command(config: SpawnConfig) -> list[str]:
     """Build the claude CLI command for --print mode with tool execution."""
     cmd = [
         "claude",
@@ -219,6 +236,36 @@ def _build_command(config: SpawnConfig) -> list[str]:
         cmd.append(f"--add-dir={config.working_directory}")
 
     return cmd
+
+
+def _build_codex_command(config: SpawnConfig) -> list[str]:
+    """Build the codex CLI command for non-interactive (exec) mode.
+
+    codex exec reads the prompt from stdin (same delivery as claude --print),
+    has no per-run budget flag, and emits plain text — so max_budget_usd and
+    output_format are not forwarded. The bypass flag is the analog of claude's
+    --dangerously-skip-permissions: spawned Ralph work must execute tools
+    without interactive approval.
+    """
+    cmd = [
+        "codex",
+        "exec",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+    ]
+
+    # Root the agent at the working directory if specified
+    if config.working_directory:
+        cmd.extend(["--cd", config.working_directory])
+
+    return cmd
+
+
+def _cli_not_found_message(config: SpawnConfig) -> str:
+    """Error text for a missing CLI binary, per client."""
+    if config.client == "codex":
+        return "Codex CLI not found. Is codex installed?"
+    return "Claude CLI not found. Is claude-code installed?"
 
 
 def _get_spawn_env() -> dict[str, str]:
@@ -375,7 +422,7 @@ async def spawn_claude_print_async(
             return SpawnResult(
                 success=False,
                 output="",
-                error="Claude CLI not found. Is claude-code installed?",
+                error=_cli_not_found_message(config),
                 exit_code=-1,
                 timed_out=False,
                 retries_used=retries_used,
@@ -436,8 +483,9 @@ def spawn_claude_print(prompt: str, config: SpawnConfig | None = None, task_id: 
         max_budget_usd=config.max_budget_usd,
         timeout_seconds=config.timeout_seconds,
         permission_mode=config.permission_mode,
-        output_format="json",  # Force JSON for stats
+        output_format="json",  # Force JSON for stats (claude-only; codex ignores)
         working_directory=config.working_directory,
+        client=config.client,
     )
 
     cmd = _build_command(json_config)
@@ -479,7 +527,7 @@ def spawn_claude_print(prompt: str, config: SpawnConfig | None = None, task_id: 
         return SpawnResult(
             success=False,
             output="",
-            error="Claude CLI not found. Is claude-code installed?",
+            error=_cli_not_found_message(config),
             exit_code=-1,
             timed_out=False,
         )
@@ -538,7 +586,7 @@ def _spawn_claude_print_blocking(
         return SpawnResult(
             success=False,
             output="",
-            error="Claude CLI not found. Is claude-code installed?",
+            error=_cli_not_found_message(config),
             exit_code=-1,
             timed_out=False,
         )
