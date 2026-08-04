@@ -21,6 +21,9 @@ cd server && npm run validate:versions
 # Run full validation (includes README charter check)
 cd server && npm run validate:all
 
+# Build and verify the npm tarball from a temporary consumer
+cd server && npm run build:prod && npm run verify:package-artifact
+
 # Trigger a release
 gh workflow run release-please.yml
 
@@ -55,6 +58,17 @@ Before merging a Release PR, walk the README as a first-time reader. Log violati
 
 The `dist` branch is **force-pushed** after each release for the desktop extension.
 
+### Distribution Surfaces
+
+| Surface                 | Includes                                                                       | Excludes                                                      |
+| ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| npm `claude-prompts`    | `claude-prompts` + `cpm` bins, resources, hooks                                | external source maps                                          |
+| GitHub Release          | MCPB, versioned `cpm` bundle, SHA-256 checksum, source-map archive             | source and development dependencies                           |
+| MCPB                    | self-contained registered MCP server entry and public resources                | `cpm`, source maps, generated state, duplicate `node_modules` |
+| `dist` / plugin archive | registered MCP server entry, server map, resources, hooks/agents as applicable | unregistered `cpm` bundle and duplicate `node_modules`        |
+
+`server/package.json#version` is the sole release identity. The npm workflow verifies and publishes the same packed tarball; the extension workflow asserts that every named asset reports that version.
+
 ### Downstream Consumers
 
 Both extension projects use `claude-prompts` as an **npm dependency**:
@@ -69,7 +83,7 @@ Both extension projects use `claude-prompts` as an **npm dependency**:
 { "dependencies": { "claude-prompts": "^1.x" } }
 ```
 
-Dependabot creates PRs daily when new versions are published. Auto-merge handles patch/minor updates.
+Dependabot creates PRs daily when new versions are published. Centralized release synchronization also opens validated PRs. Protected downstream repositories use GitHub auto-merge; the unprotected marketplace repository merges its validated PR immediately. No workflow pushes directly to a downstream default branch.
 
 ---
 
@@ -87,6 +101,8 @@ Push to main
 │  • .claude-plugin/plugin.json      │
 │  Changelog: conventional commits   │
 │  → Keep a Changelog sections       │
+│  Merges manual [Unreleased] notes  │
+│  Retires finished plans → archive  │
 └────────────────────────────────────┘
      │ (merge PR)
      ▼
@@ -99,13 +115,15 @@ Push to main
      ▼                      ▼
 ┌──────────────────┐  ┌──────────────────┐
 │  npm-publish.yml │  │ extension-publish│
-│  • npm publish   │  │ • Desktop ext    │
-│  • Provenance    │  │ • dist branch    │
+│  • pack + verify │  │ • Desktop ext    │
+│  • publish tgz   │  │ • cpm + checksum │
+│  • Provenance    │  │ • maps + dist    │
 └──────────────────┘  └──────────────────┘
      │
      ▼
 ┌────────────────────────────────────┐
 │  Downstream (daily Dependabot)     │
+│  • marketplace: validated merge    │
 │  • gemini-prompts: auto-merge PR   │
 │  • opencode-prompts: auto-merge PR │
 │    + dispatches downstream-release │
@@ -113,6 +131,28 @@ Push to main
 ```
 
 ---
+
+### Plan retirement
+
+The release PR retires finished plans. `status: done` is the tag meaning "retire at the next
+release" — there is no separate queue file, and no fifth frontmatter field (the convention is
+exactly four: `~/knowledge-hub/meta/plan-frontmatter.md`).
+
+`scripts/retire-done-plans.js --apply` moves every `done` plan with **no inbound links** into
+`plans/archive/`, preserving its subpath and re-basing its relative links for the added depth.
+Plans something still cites — an ADR, a successor plan, a doc — are `reference`, not `done`, and
+are never archived.
+
+The check half runs in `validate:all` on every CI run. It does **not** fail because the queue is
+non-empty; `done` plans exist legitimately between releases, and a gate that fired on their
+existence would be red almost always and therefore ignored. It fails on exactly one thing: a
+`done` plan that something still cites, which is a misclassification that would break the citing
+document if archived.
+
+```bash
+npm run plans:retire:check   # report the queue; fail on misclassification
+node scripts/retire-done-plans.js --apply   # what the release PR runs
+```
 
 ## Configuration
 
@@ -209,3 +249,14 @@ Files that must match:
 - `server/package.json`
 - `manifest.json`
 - `.claude-plugin/plugin.json`
+
+### Release artifact mismatch
+
+```bash
+cd server
+npm run build:prod
+npm run verify:package-artifact
+npm run prepare:release-artifacts -- --output-dir /tmp/claude-prompts-release
+```
+
+The npm tarball must contain both declared bins and no `.map` files. GitHub Release diagnostics are the versioned `claude-prompts-<version>-sourcemaps.tar.gz` asset.

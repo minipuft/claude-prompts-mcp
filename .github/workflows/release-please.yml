@@ -57,6 +57,20 @@ jobs:
             git push
           fi
 
+      - name: Retire finished plans
+        if: steps.release.outputs.pr && steps.release.outputs.release_created != 'true'
+        run: |
+          node scripts/retire-done-plans.js --apply
+          if [ -z "$(git status --porcelain plans/)" ]; then
+            echo "No plans to retire"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add plans/
+            git commit -m "chore(docs): retire finished plans to plans/archive/"
+            git push
+          fi
+
       - name: Summary
         if: always()
         env:
