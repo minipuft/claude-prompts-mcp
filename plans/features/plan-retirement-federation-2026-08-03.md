@@ -8,7 +8,8 @@ tags: []
 # Plan Retirement Federation — Tier F4
 
 **Date**: 2026-08-03
-**Area**: `scripts/retire-done-plans.js` → `minipuft/repository-standards`; consuming repos' CI
+**Area**: `scripts/retire-done-plans.js` → `minipuft/repository-standards`; invoked as a script by
+every plan-bearing repo, and additionally from CI in the one that has any
 **Work type**: feature (extract local tooling into a shared, versioned contract)
 **Origin**: plan-cleanup pass 2026-08-03; depends on the federation model in
 [`downstream-standards-federation-2026-08-02.md`](../downstream-standards-federation-2026-08-02.md)
@@ -36,6 +37,22 @@ finished plans. Copying the script into the other five would create five copies 
 other — the exact failure this session spent a day fixing in three other places (thresholds in
 skills, method names in a matrix, a proxy standing in for an invariant).
 
+### Who actually needs this (measured 2026-08-04, against remotes — not local clones)
+
+| Class                                                       | Repos                                                         | Plans | `done` |
+| ----------------------------------------------------------- | ------------------------------------------------------------- | ----: | -----: |
+| CI **and** standards consumer (`consumer-contract.yml`)     | gemini-prompts, opencode-prompts, minipuft-plugins            |     0 |      0 |
+| CI, has plans, not a consumer                               | claude-prompts-mcp                                            |    35 |      7 |
+| **No CI at all** — no remote, or a remote with no workflows | cloudySky, portfolio, chatUI, mediaFlow, claude-prompts-media |   143 | **51** |
+
+**88% of finished plans live in repos no workflow can reach.** cloudySky alone holds 49 of the 58,
+has no remote, and originated the convention. Its `done` pile is the clearest evidence the
+mechanism is needed and the clearest proof a CI-shaped delivery cannot supply it.
+
+The delivery model therefore inverts: the **script** is the product, and the reusable workflow is
+optional packaging for the single repo that can call one. See §Correction below — this plan was
+written the other way round.
+
 ## The danger this tier exists to contain
 
 **A false negative deletes something still referenced.**
@@ -56,19 +73,24 @@ So: **configuration absence must be an error, never an empty scan.**
 
 ## Subtiers
 
-| #    | Status | Step                                                                           | Files                                                   | Depends | Verification                                                             |
-| ---- | ------ | ------------------------------------------------------------------------------ | ------------------------------------------------------- | ------- | ------------------------------------------------------------------------ |
-| F4.1 | ☐      | Make link sources configurable, defaulting to nothing                          | `retire-done-plans.js`                                  | —       | No config → hard error naming the missing key, never a clean empty scan  |
-| F4.2 | ☐      | Fail when a configured link source does not exist on disk                      | `retire-done-plans.js`                                  | F4.1    | Back-test: point a source at a missing dir → exit 1, not "0 findings"    |
-| F4.3 | ✓      | Publish the frontmatter convention to the standards repo as the citable source | `repository-standards`                                  | —       | Script and docs cite a public path; no `~/knowledge-hub` path in either  |
-| F4.4 | ☐      | Move the script to the standards repo, versioned                               | `repository-standards`                                  | F4.1-3  | Tagged release; this repo consumes a pinned version                      |
-| F4.5 | ☐      | Reusable workflow consumers call from their release PR                         | `repository-standards/.github/workflows`                | F4.4    | This repo's release-please step calls it and behaves identically         |
-| F4.6 | ☐      | Migrate this repo to the shared version; delete the local copy                 | `scripts/`, `server/package.json`, `release-please.yml` | F4.5    | Queue still 7/0; back-test still exits 1 on a misclassified plan         |
-| F4.7 | ☐      | Onboard one second project as the generalization proof                         | one sibling repo                                        | F4.6    | Its queue is correct **and** its back-test fails on a seeded misclassify |
+| #    | Status | Step                                                                           | Files                                                   | Depends | Verification                                                            |
+| ---- | ------ | ------------------------------------------------------------------------------ | ------------------------------------------------------- | ------- | ----------------------------------------------------------------------- |
+| F4.1 | ☐      | Make link sources configurable, defaulting to nothing                          | `retire-done-plans.js`                                  | —       | No config → hard error naming the missing key, never a clean empty scan |
+| F4.2 | ☐      | Fail when a configured link source does not exist on disk                      | `retire-done-plans.js`                                  | F4.1    | Back-test: point a source at a missing dir → exit 1, not "0 findings"   |
+| F4.3 | ✓      | Publish the frontmatter convention to the standards repo as the citable source | `repository-standards`                                  | —       | Script and docs cite a public path; no `~/knowledge-hub` path in either |
+| F4.4 | ☐      | Move the script to the standards repo, versioned, runnable with no CI          | `repository-standards`                                  | F4.1-3  | Tagged release; runs from a clone in a repo with no workflows           |
+| F4.5 | ☐      | Migrate this repo to the shared version; delete the local copy                 | `scripts/`, `server/package.json`, `release-please.yml` | F4.4    | Queue still 7/0; back-test still exits 1 on a misclassified plan        |
+| F4.6 | ☐      | Onboard **cloudySky** — 131 plans, 49 `done`, no remote, no CI                 | cloudySky `plans/`, its release routine                 | F4.5    | Its queue is correct **and** a seeded misclassification exits 1         |
+| F4.7 | ☐      | _Optional_ — reusable workflow for the one repo that has CI                    | `repository-standards/.github/workflows`                | F4.5    | This repo's release-please step calls it and behaves identically        |
 
-**Gate**: a second repository retires its own finished plans through the shared workflow, and a
-deliberately misclassified plan in that repo fails its CI — proving the check measures there, not
-merely that it runs.
+**Gate**: cloudySky retires its own finished plans by running the shared script, and a deliberately
+misclassified plan there exits 1 — proving the check measures in a repo with a different layout and
+no CI, not merely that it runs where it was written.
+
+**F4.7 is last and optional on purpose.** It serves one repository out of six. Building it before
+F4.6 would prove the mechanism works in the environment it already worked in, which is not a
+generalization proof — and it would leave the 51 finished plans it structurally cannot reach
+exactly where they are.
 
 ## Decisions
 
@@ -97,9 +119,15 @@ A check that has only ever passed has not been shown to measure anything — est
 once when a detector watched the wrong interface and once when a gate measured compiled output
 instead of its source.
 
-**F4.7 is the real gate, not F4.6.** Migrating this repo proves the extraction did not break the
-place it already worked. Only a second repo proves it generalizes, and only a seeded failure there
-proves the check is live rather than vacuous.
+**F4.6 is the real gate, not F4.5.** Migrating this repo proves the extraction did not break the
+place it already worked. Only cloudySky proves it generalizes — different layout, no CI, and the
+only pile large enough for a wrong archive to hurt — and only a seeded failure there proves the
+check is live rather than vacuous.
+
+**cloudySky raises the blast radius.** 131 plans against this repo's 35, and 49 `done` against 7.
+A misconfigured `LINK_SOURCES` there archives an order of magnitude more, in a repo with no remote
+to restore from beyond local git. F4.1's "absent configuration is an error" is written for exactly
+that repo; do not relax it to make onboarding smoother.
 
 ## Rejected alternatives
 
@@ -114,6 +142,41 @@ proves the check is live rather than vacuous.
   deliberately not a per-repo CI gate for the same reason.
 - **Make `repository-standards` private** — undermines its purpose; the boundary that matters is
   content, and that is already enforced by the hub's `.gitignore`.
+- **Ship it as a reusable workflow first** — see §Correction. It reaches one of the six
+  plan-bearing repos and none of the three holding 88% of the finished plans.
+- **Register the plan-bearing repos as standards consumers to make the workflow reach them** —
+  three of them have no remote at all, so there is nothing to register. Of the two that do have
+  remotes (portfolio, mediaFlow), neither has any `.github/workflows`, so joining the fleet would
+  mean standing up CI in order to run a check they could run directly. The disclosure is minor —
+  both are already public — but the mechanism would be built backwards.
+
+---
+
+## Correction — the delivery model was wrong (2026-08-04)
+
+**Written for the fleet I had been working in, not for the repos that have plans.**
+
+F4.4–F4.7 originally moved the script into `repository-standards` and had consumers call a
+reusable workflow from their release PR. That assumed the standards consumers and the plan-bearing
+repos were the same set. They are disjoint, and I never checked: the two facts came from different
+places and were joined on a name that matched in my head.
+
+Measured against remotes on 2026-08-04, the three registered consumers hold **zero** plans, while
+51 of the 58 finished plans sit in five repos with no CI to call anything — three with no remote at
+all, and two whose remotes have no `.github/workflows`. I had also assumed a remote implied CI;
+portfolio and mediaFlow disprove that.
+
+**What changed**: the script became the product and the workflow became optional packaging (F4.7,
+demoted and made last). The generalization gate moved from "one sibling repo" to **cloudySky**
+specifically — the largest pile, a different layout, no CI, and the repo the convention came from.
+
+**What did not change**: F4.1 and F4.2. Configurable link sources with no default are correct under
+either delivery model, and the false-negative asymmetry that motivates them is unaffected. The
+error was in how the mechanism reaches repos, never in what the mechanism does.
+
+**Cost of the error**: none in code — the delivery subtiers had not been started. It would have
+been expensive after F4.7, which is the argument for re-measuring a plan's premises at execution
+time rather than trusting the state they were authored in.
 
 ---
 
