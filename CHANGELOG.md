@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Codex CLI support seams:** generic `PLUGIN_ROOT` workspace resolution, a `codex exec` spawn strategy (`SpawnConfig.client` + `CodexModelStrategy`), and a codex skills-sync registration — consumed by the new [codex-prompts](https://github.com/minipuft/codex-prompts) downstream plugin.
+
+### Fixed
+
+- **Structured gate verdicts are now hook-enforced:** `hooks/gate-enforce.py` crashed on the object form of `gate_verdict` (the schema-preferred shape); because hook failures are fail-open, object verdicts were never gate-enforced on any client. Surfaced by the codex-prompts port's live E2E.
+
 ## [3.1.0](https://github.com/minipuft/claude-prompts/compare/v3.0.2...v3.1.0) (2026-08-03)
 
 ### Added
