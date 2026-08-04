@@ -143,6 +143,12 @@ exactly four: `~/knowledge-hub/meta/plan-frontmatter.md`).
 Plans something still cites — an ADR, a successor plan, a doc — are `reference`, not `done`, and
 are never archived.
 
+It runs on the **release PR**, not on the created release. No workflow in this repo pushes to
+`main` — the release doc states that as a principle, and `main` is protected — so retirement that
+fired on `release_created` would need a new push-to-main path. On the PR the moves are reviewable
+before merge, and the step is idempotent: if Release Please updates the PR branch and drops the
+archive commit, the next update re-runs it. That is the same property the changelog merge relies on.
+
 The check half runs in `validate:all` on every CI run. It does **not** fail because the queue is
 non-empty; `done` plans exist legitimately between releases, and a gate that fired on their
 existence would be red almost always and therefore ignored. It fails on exactly one thing: a

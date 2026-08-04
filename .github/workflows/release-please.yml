@@ -59,7 +59,13 @@ jobs:
 
       - name: Retire finished plans
         if: steps.release.outputs.pr && steps.release.outputs.release_created != 'true'
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
         run: |
+          # Check out the PR branch explicitly rather than inheriting the checkout a
+          # sibling step happens to have done. Reordering or removing that step would
+          # otherwise leave this one archiving on whatever branch was current.
+          git checkout "$(echo "$PR_JSON" | jq -r '.headBranchName')"
           node scripts/retire-done-plans.js --apply
           if [ -z "$(git status --porcelain plans/)" ]; then
             echo "No plans to retire"
