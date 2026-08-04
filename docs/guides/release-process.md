@@ -138,6 +138,13 @@ The release PR retires finished plans. `status: done` is the tag meaning "retire
 release" — there is no separate queue file, and no fifth frontmatter field (the convention is
 exactly four).
 
+The frontmatter schema, the status vocabulary, and the `done` vs `reference` test are defined
+once, publicly, at
+[`repository-standards/conventions/plan-frontmatter.md`](https://github.com/minipuft/repository-standards/blob/main/conventions/plan-frontmatter.md).
+This guide owns only how **this** repository runs the retirement — the workflow step, its
+placement on the release PR, and the local commands. Restating the convention here is what let it
+drift the last time it had two homes.
+
 `scripts/retire-done-plans.js --apply` moves every `done` plan with **no inbound links** into
 `plans/archive/`, preserving its subpath and re-basing its relative links for the added depth.
 Plans something still cites — an ADR, a successor plan, a doc — are `reference`, not `done`, and

@@ -3,9 +3,14 @@
  * Retires finished plans at release time by moving them into `plans/archive/`.
  *
  * The queue is the frontmatter, not a separate list: `status: done` IS the tag meaning
- * "retire at the next release" — see docs/guides/release-process.md, Plan retirement. There
- * is no fifth frontmatter field: the convention is exactly four, and the plans that invented
- * a fifth are the ones that fell off the board reading it.
+ * "retire at the next release". The convention it reads — four fields, the status vocabulary,
+ * and the done/reference test below — is defined at:
+ *
+ *   https://github.com/minipuft/repository-standards/blob/main/conventions/plan-frontmatter.md
+ *
+ * That citation is public deliberately. This script is destined for that repository, where a
+ * path into any one consumer's docs would resolve for nobody. `docs/guides/release-process.md`
+ * still owns how THIS repo runs it — the workflow step, the placement on the release PR.
  *
  * WHY A PLAN CAN BE RETIRED, and why that is not just "it is finished":
  *
@@ -186,7 +191,8 @@ function main() {
     }
     console.error(
       '\nArchiving these would break the documents citing them. A finished plan something still\n' +
-        'points at is `reference`, not `done` — see docs/guides/release-process.md.'
+        'points at is `reference`, not `done`:\n' +
+        'https://github.com/minipuft/repository-standards/blob/main/conventions/plan-frontmatter.md'
     );
     process.exitCode = 1;
     return;
