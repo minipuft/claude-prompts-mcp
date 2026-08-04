@@ -1,7 +1,7 @@
 ---
 title: "Pipeline Defect Remediation — 7 Tiers"
 date: 2026-08-01
-status: done
+status: reference
 tags: []
 ---
 

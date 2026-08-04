@@ -1,3 +1,10 @@
+---
+title: "Compat-Site Audit — Tier 4"
+date: 2026-07-30
+status: reference
+tags: []
+---
+
 # Compat-site audit — Tier 4 (REPORT ONLY)
 
 **Date**: 2026-07-30 · **Scope**: `server/src` · **Status**: 4.1 ✓, 4.2 ✓, 4.3 not started (needs

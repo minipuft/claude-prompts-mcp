@@ -1,3 +1,10 @@
+---
+title: "npm Dependency Updates — 4 Tiers"
+date: 2026-08-01
+status: done
+tags: []
+---
+
 # npm Dependency Updates — 4 Tiers
 
 **Date**: 2026-08-01

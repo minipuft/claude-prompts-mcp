@@ -1,3 +1,10 @@
+---
+title: "Push Validation Routing Plan"
+date: 2026-08-02
+status: done
+tags: []
+---
+
 # Push Validation Routing Plan
 
 **Status:** canonical; protected PR #183 passed all required contexts

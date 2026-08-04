@@ -1,3 +1,10 @@
+---
+title: "OpenTelemetry Telemetry & Logging Upgrade — Implementation Plan"
+date: 2026-02-15
+status: done
+tags: []
+---
+
 # OpenTelemetry Telemetry & Logging Upgrade — Implementation Plan
 
 **Status**: Ready for Implementation (baseline verified clean 2026-03-15)

@@ -1,3 +1,10 @@
+---
+title: "Argument & Gate/Injection Pipeline Fixes"
+date: 2026-07-28
+status: reference
+tags: []
+---
+
 # claude-prompts-mcp — Argument & Gate/Injection Pipeline Fixes
 
 **Date**: 2026-07-28 · **Target**: claude-prompts-mcp v2.1.0 · **Repo**: `/home/minipuft/Applications/claude-prompts-mcp`

@@ -1,3 +1,10 @@
+---
+title: "Observability Dashboard — Refactor Plan"
+date: 2026-05-14
+status: backlog
+tags: []
+---
+
 # Observability Dashboard — Refactor Plan
 
 **Status**: Archived — awaiting refactor

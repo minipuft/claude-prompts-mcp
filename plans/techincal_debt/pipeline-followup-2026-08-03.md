@@ -1,7 +1,7 @@
 ---
 title: "Pipeline Follow-up — Tiers 15-16"
 date: 2026-08-03
-status: done
+status: reference
 tags: []
 ---
 

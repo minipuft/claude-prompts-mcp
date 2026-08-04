@@ -1,3 +1,10 @@
+---
+title: "Type Safety Baseline & Tracking"
+date: 2025-11-16
+status: reference
+tags: []
+---
+
 # Technical Debt - Type Safety Baseline & Tracking
 
 **Generated**: 2025-11-16

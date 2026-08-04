@@ -1,3 +1,10 @@
+---
+title: "StepState → StepLifecycle Data-Model Migration"
+date: 2026-07-29
+status: reference
+tags: []
+---
+
 # StepState → StepLifecycle: deferred data-model migration
 
 **Status**: ✓ **COMPLETE 2026-07-30.** Deferred out of the sweep, then executed the same day on

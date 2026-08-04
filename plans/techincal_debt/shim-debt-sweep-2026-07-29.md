@@ -1,3 +1,10 @@
+---
+title: "Shim & Compat-Alias Debt Sweep"
+date: 2026-07-29
+status: active
+tags: []
+---
+
 # Shim & Compat-Alias Debt Sweep
 
 **Date**: 2026-07-29

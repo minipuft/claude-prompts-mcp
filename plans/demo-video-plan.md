@@ -1,3 +1,10 @@
+---
+title: "Demo Video Recording Plan"
+date: 2026-07-31
+status: active
+tags: []
+---
+
 # Demo Video Recording Plan
 
 ## Format Decision

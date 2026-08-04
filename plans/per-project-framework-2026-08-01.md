@@ -1,3 +1,10 @@
+---
+title: "Per-Project Framework Selection"
+date: 2026-08-01
+status: done
+tags: []
+---
+
 # Per-Project Framework Selection
 
 **Date**: 2026-08-01
