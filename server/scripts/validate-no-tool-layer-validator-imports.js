@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 
+/**
+ * Forbids the MCP tool layer importing validator and schema modules directly, which would put
+ * validation decisions in a layer that is supposed to route to processors.
+ *
+ * RETIREMENT CONDITION: delete this guard when `validate:arch` expresses the same edge as a
+ * dependency-cruiser layer rule. That is strictly the better home — this file carries a literal
+ * list of six module paths, so renaming any one of them silently empties the guard while leaving
+ * it green, whereas a path-based rule follows the move. Until that rule exists, the literal list
+ * is what stands between the tool layer and its own validation logic.
+ */
+
 import { execSync } from 'node:child_process';
 
 const IMPORT_PATTERN = [

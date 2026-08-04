@@ -1,5 +1,18 @@
 #!/usr/bin/env node
 
+/**
+ * Forbids re-aliasing `args.gates` onto `gateConfiguration` in the prompt lifecycle processor,
+ * which would give one concept two accepted spellings at the tool boundary.
+ *
+ * RETIREMENT CONDITION: not soon, and this guard is the opposite of a tombstone. Its target file
+ * already contains `gateConfiguration: args['gate_configuration'],` — the exact left-hand side of
+ * the first forbidden expression — so reintroducing the defect is appending ` || args.gates` to a
+ * line that is already there. Both spellings remain live in the surface: `gate_configuration` in
+ * resource-manager.schema.ts, `args.gates` in three tool-layer files. Delete this guard when one
+ * of those two spellings no longer exists, at which point the coalescing expression cannot be
+ * written at all.
+ */
+
 import { execSync } from 'node:child_process';
 
 const PATTERN = [

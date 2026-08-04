@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 
+/**
+ * Forbids the JSON sidecar state files that SQLite replaced.
+ *
+ * RETIREMENT CONDITION: this one does not retire on a vocabulary schedule, unlike the guards
+ * that watch a renamed symbol. It forbids six file-path and field shapes, and a contributor can
+ * reach for a sidecar without ever typing a retired name — writing `runtime-state/sessions/x.json`
+ * is a natural thing to do when you want to persist something and have not yet found the state
+ * store. Delete it when persistence can no longer be added outside `SqliteStateStore`, i.e. when
+ * a write to disk from outside that module fails a stronger structural check than this grep.
+ */
+
 import { execSync } from 'node:child_process';
 
 const PATTERN = [
