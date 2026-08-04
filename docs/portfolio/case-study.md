@@ -147,7 +147,7 @@ Same pattern for `>>create_prompt` and `>>create_framework`. Zero API memorizati
 
 ## Links
 
-- [GitHub](https://github.com/minipuft/claude-prompts)
+- [GitHub](https://github.com/minipuft/wolfflow-mcp)
 - [NPM](https://www.npmjs.com/package/claude-prompts)
 - [Architecture](../architecture/overview.md)
 - [Design Decisions](design-decisions.md)

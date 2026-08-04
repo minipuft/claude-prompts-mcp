@@ -72,6 +72,19 @@ Technical, direct, evidence-led.
 - Examples include expected output or behavior, not just commands.
 - Section openings name the reader's question, not the feature name.
 
+### Positioning litmus (assistant to the client)
+
+Every section must describe something the server does **for** the client, never **instead of** the client:
+
+| Passes                                        | Fails                                           |
+| --------------------------------------------- | ----------------------------------------------- |
+| "Author workflows that run on any MCP client" | "A workflow engine that replaces native skills" |
+| "Add quality gates to your existing prompts"  | "Our gate system is better than the client's"   |
+| "Export templates as client-native skills"    | "Use our template format instead"               |
+| "Delegate steps to your client's subagents"   | "Our execution is more powerful"                |
+
+This keeps the positioning one whose value grows **as** clients get more capable, instead of one clients eventually obsolete. It applies to repo metadata (description, listings copy) as much as README prose.
+
 ## 6. Syntax & Semantic Conventions
 
 ### Section headers
