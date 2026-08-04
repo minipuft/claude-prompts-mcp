@@ -13,7 +13,8 @@
  *
  * Ground truth is read from source at run time, never from a hardcoded list — a guard carrying
  * its own copy of the flag set would drift exactly like the docs did:
- *   - flags: the `options: { ... }` tables in server/src/runtime/cli.ts and cli/src/cli.ts
+ *   - flags: the `options: { ... }` tables in server/src/runtime/cli.ts and cli/src/cli.ts, plus
+ *     the argv tests in scripts/ and server/scripts/ (`--apply`, `--self-test`, `--output-dir`)
  *   - env vars: every `process.env['MCP_*']` read anywhere in server/src or cli/src
  *
  * Exit 0 when every documented option is backed by source; exit 1 with the offending lines.
@@ -30,6 +31,9 @@ const DOC_PATHS = ['docs', 'README.md', 'server/README.md', 'CONTRIBUTING.md', '
 
 /** Parsers whose `options:` table defines the real flag set. */
 const PARSER_FILES = ['server/src/runtime/cli.ts', 'cli/src/cli.ts'];
+
+/** First-party scripts whose flags the docs also name (`--apply`, `--self-test`, `--output-dir`). */
+const SCRIPT_DIRS = ['scripts', 'server/scripts'];
 
 /**
  * Documented tokens that are not this project's options and never will be.
@@ -71,6 +75,29 @@ function parsedFlagsFrom(relPath) {
   const flags = new Set();
   for (const match of source.matchAll(/^\s*'?([a-zA-Z][a-zA-Z0-9-]*)'?\s*:\s*\{\s*type:/gm)) {
     flags.add(`--${match[1]}`);
+  }
+  return flags;
+}
+
+/**
+ * Long flags declared by first-party scripts under SCRIPT_DIRS.
+ *
+ * These test argv directly (`args.includes('--apply')`, `process.argv.indexOf('--output-dir')`)
+ * instead of declaring a `parseArgs` options table, so parsedFlagsFrom cannot see them. Without
+ * this, every documented script flag reads as unbacked — a false positive, but one that makes the
+ * whole guard fail on correct docs and therefore get ignored.
+ *
+ * Only the declaration idioms are harvested, never every `'--x'` literal in the file. Scripts
+ * shell out to other tools (`execFileSync('rg', ['--no-heading', ...])`), and harvesting those
+ * would let the docs claim another tool's flags as this project's surface — the exact confusion
+ * NOT_OUR_OPTIONS exists to prevent.
+ */
+function scriptDeclaredFlags() {
+  const idiom = String.raw`(?:includes|indexOf|startsWith)\(\s*'(--[a-z][a-z0-9-]+)'|===\s*'(--[a-z][a-z0-9-]+)'`;
+  const flags = new Set();
+  for (const hit of runRg(['-o', '--no-filename', '-e', idiom, ...SCRIPT_DIRS]).split('\n')) {
+    const match = hit.match(/'(--[a-z][a-z0-9-]+)'/);
+    if (match) flags.add(match[1]);
   }
   return flags;
 }
@@ -186,12 +213,18 @@ function isAnchorMention(text, token) {
   return new RegExp(`#[a-z0-9-]*${token.replace(/^--/, '')}`, 'i').test(text);
 }
 
-const parsedFlags = new Set(PARSER_FILES.flatMap((file) => [...parsedFlagsFrom(file)]));
+const cliFlags = new Set(PARSER_FILES.flatMap((file) => [...parsedFlagsFrom(file)]));
+const scriptFlags = scriptDeclaredFlags();
+const parsedFlags = new Set([...cliFlags, ...scriptFlags]);
 const envVars = readEnvVars();
 
-if (parsedFlags.size === 0 || envVars.size === 0) {
-  console.error('Could not read ground truth from source — parser table or env reads not found.');
-  console.error('This check is only meaningful against real source; refusing to pass vacuously.');
+// Each source is checked for emptiness separately. Merging first would let a working harvester
+// mask a broken one: if the parseArgs regex stopped matching, a healthy script sweep would keep
+// the union non-empty and the guard would pass while measuring half of what it claims to.
+if (cliFlags.size === 0 || scriptFlags.size === 0 || envVars.size === 0) {
+  console.error('Could not read ground truth from source — parser table, script flags, or env');
+  console.error('reads not found. This check is only meaningful against real source; refusing to');
+  console.error('pass vacuously.');
   process.exit(1);
 }
 
