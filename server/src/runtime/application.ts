@@ -717,6 +717,14 @@ export class Application {
 
       this.cleanup();
 
+      // Close the database LAST. Every subsystem above may still write on its way down
+      // (state stores flush, the chain manager clears its PID-owned rows), so closing
+      // earlier would turn an orderly shutdown into a series of writes against a closed
+      // handle. This is also the only place the WAL gets checkpointed: nothing called
+      // `SqliteEngine.shutdown()` before, so the log grew unbounded across restarts.
+      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+      await SqliteEngine.shutdownInstance();
+
       if (this.logger) {
         this.logger.info('Application shutdown completed successfully');
       }
@@ -773,27 +781,28 @@ export class Application {
         this.logger.info('✅ ApiRouter updated with new data.');
       }
 
-      // Step 3.5: Re-sync resource index for hook consumption
+      // Step 3.5: Re-sync resource index for hook consumption.
+      //
+      // Deliberately uncaught. `fullServerRefresh` already has one error boundary at the
+      // bottom of this method, which logs and re-throws to the caller; an inner catch
+      // meant that boundary never fired while the refresh went on to report
+      // "completed successfully" over a stale index.
       if (this.serverRoot) {
-        try {
-          const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-          const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
-          const { ScriptToolDefinitionLoader } =
-            await import('#modules/automation/core/script-definition-loader.js');
-          const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
-          await dbManager.initialize();
-          const resourcesDir =
-            this.pathResolver?.getResourcesPath() ?? path.join(this.serverRoot, 'resources');
-          const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
-          const indexer = createResourceIndexer(dbManager, this.logger, {
-            resourcesDir,
-            toolLoader: (dir, id) => scriptLoader.loadAllToolsForPrompt(dir, id),
-          });
-          await indexer.syncAll();
-          this.logger.info('✅ Resource index re-synced after hot-reload.');
-        } catch (error) {
-          this.logger.warn('Failed to re-sync resource index:', error);
-        }
+        const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+        const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
+        const { ScriptToolDefinitionLoader } =
+          await import('#modules/automation/core/script-definition-loader.js');
+        const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
+        await dbManager.initialize();
+        const resourcesDir =
+          this.pathResolver?.getResourcesPath() ?? path.join(this.serverRoot, 'resources');
+        const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
+        const indexer = createResourceIndexer(dbManager, this.logger, {
+          resourcesDir,
+          toolLoader: (dir, id) => scriptLoader.loadAllToolsForPrompt(dir, id),
+        });
+        await indexer.syncAll();
+        this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 
       // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)

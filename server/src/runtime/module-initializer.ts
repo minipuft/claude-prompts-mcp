@@ -137,7 +137,14 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         }
       }
     } catch (error) {
-      logger.warn('Failed to initialize ResourceChangeTracker:', error);
+      // Loud, not degraded. The `serverRoot` guard above already expresses "persistence
+      // is not configured"; reaching this catch means it WAS configured and failed, and
+      // swallowing it started the server with no audit trail while reporting success.
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to initialize ResourceChangeTracker (state.db at ${runtimeDbPath ?? '<unresolved>'}): ${msg}`,
+        { cause: error }
+      );
     }
   }
 
@@ -255,8 +262,13 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       const versionHistoryScope = workspaceId != null ? { workspaceId } : undefined;
       mcpToolsManager.setDatabasePort(dbManager, argHistoryStore, versionHistoryScope);
     } catch (error) {
-      logger.warn(
-        `Failed to wire DatabasePort to MCP tools: ${error instanceof Error ? error.message : String(error)}`
+      // This wiring owns argument history and version history. A swallow here left the
+      // rollback feature silently inert — `resource_manager` would report no versions
+      // rather than report that it could not reach them.
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to wire DatabasePort to MCP tools (serverRoot ${serverRoot}): ${msg}`,
+        { cause: error }
       );
     }
   }
@@ -304,7 +316,19 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       await indexer.syncAll();
       if (isVerbose) logger.info('✅ ResourceIndexer synced to SQLite');
     } catch (error) {
-      logger.warn('Failed to sync resource index:', error);
+      // `resource_index` is what the Python hooks read; a stale one makes prompt-suggest
+      // recommend resources that no longer exist.
+      //
+      // Reachability note: `syncAll()` catches per resource type internally and reports
+      // failures through `SyncResult.errors` rather than throwing, so this catch fires
+      // only if the engine or the dynamic imports fail — the same root cause that would
+      // already have thrown at the DatabasePort site above. It is corrected for posture
+      // consistency, not because a test can currently reach it. The unchecked
+      // `SyncResult.errors` is a separate silent-failure channel, out of Tier 5's scope.
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to sync resource index (serverRoot ${serverRoot}): ${msg}`, {
+        cause: error,
+      });
     }
   }
 

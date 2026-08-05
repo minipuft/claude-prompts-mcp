@@ -749,12 +749,26 @@ export class SqliteEngine implements DatabasePort {
   }
 
   /**
+   * Shut down the process-wide instance, if one was ever opened.
+   *
+   * Shutdown must not route through `getInstance()`, which CREATES an engine when none
+   * exists — a teardown path that constructs the thing it is tearing down would open a
+   * database handle during shutdown and log a checkpoint for a file nobody wrote.
+   */
+  static async shutdownInstance(): Promise<void> {
+    if (SqliteEngine.instance) {
+      await SqliteEngine.instance.shutdown();
+    }
+  }
+
+  /**
    * Shutdown and cleanup
    */
   async shutdown(): Promise<void> {
     this.logger.info('Shutting down SqliteEngine...');
 
     if (this.db) {
+      this.checkpointWal();
       this.db.close();
       this.db = null;
     }
@@ -763,6 +777,29 @@ export class SqliteEngine implements DatabasePort {
     SqliteEngine.instance = null;
 
     this.logger.info('SqliteEngine shutdown complete');
+  }
+
+  /**
+   * Truncate the write-ahead log so the next process opens a small file.
+   *
+   * SQLite checkpoints on its own when the LAST connection closes, which is why this
+   * looks redundant. It is not: `state.db` typically has concurrent readers (Python
+   * hooks, the skills-sync CLI), so this connection is often not the last one and that
+   * automatic pass is skipped. Measured 2026-08-05 — a 4.2 MB WAL against a 598 KB
+   * database, because shutdown never ran at all.
+   *
+   * A checkpoint may return SQLITE_BUSY while a reader holds the file. That is not a
+   * shutdown failure: the WAL stays valid and replayable, and the next clean close
+   * retries. So this logs and returns rather than throwing — a throw here would skip
+   * `db.close()` below and leak the handle, trading a large file for a lost one.
+   */
+  private checkpointWal(): void {
+    try {
+      this.db?.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`WAL checkpoint skipped during shutdown: ${msg}`);
+    }
   }
 
   /**
