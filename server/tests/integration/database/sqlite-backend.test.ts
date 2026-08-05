@@ -53,7 +53,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(17);
+      expect(version).toBe(18);
     });
 
     it('should execute queries', async () => {
@@ -259,18 +259,23 @@ describe('Schema version bump', () => {
   });
 
   it('recreates the schema at the current version', () => {
-    expect(engine.getSchemaVersion()).toBe(17);
+    expect(engine.getSchemaVersion()).toBe(18);
   });
 
-  it('preserves version_history rows across the recreate', () => {
-    const row = engine.queryOne<{ resource_id: string; version: number; snapshot: string }>(
-      `SELECT resource_id, version, snapshot FROM version_history WHERE resource_id = ?`,
+  it('drops version_history on this bump, by declaration rather than by accident', () => {
+    // Inverted deliberately for v18. version_history is `durable` and is normally carried, but
+    // DROPPED_ON_THIS_BUMP excludes it once: pre-Tier-4 rows all carry the literal
+    // `tenant_id = 'default'`, cannot be attributed to a workspace, and are unreachable to a
+    // scoped read anyway. The durable *mechanism* stays covered by the skills_sync_manifests
+    // case below — that is what would catch a regression in snapshot/restore itself.
+    //
+    // When DROPPED_ON_THIS_BUMP is emptied at the next bump, this expectation flips back.
+    const row = engine.queryOne<{ resource_id: string }>(
+      `SELECT resource_id FROM version_history WHERE resource_id = ?`,
       ['survives-bump']
     );
 
-    expect(row).not.toBeNull();
-    expect(row?.version).toBe(1);
-    expect(JSON.parse(row?.snapshot ?? '{}')).toEqual({ content: 'original' });
+    expect(row).toBeNull();
   });
 
   it('preserves skills_sync_manifests rows across the recreate', () => {
@@ -293,17 +298,30 @@ describe('Schema version bump', () => {
 
   it('leaves AUTOINCREMENT able to allocate past the restored ids', () => {
     // The restore carries explicit ids, so sqlite_sequence must be re-seeded from them
-    // or the next insert collides on the primary key.
+    // or the next insert collides on the primary key. Asserted against a table that IS
+    // carried — version_history is excluded on this bump, so it would prove nothing here.
     engine.run(
-      `INSERT INTO version_history
-         (tenant_id, resource_type, resource_id, version, snapshot, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      ['default', 'prompt', 'survives-bump', 2, JSON.stringify({ content: 'next' }), 'now']
+      `INSERT INTO skills_sync_manifests
+         (client, scope, resource_key, resource_id, resource_type, source_hash, output_hash,
+          output_files, exported_at, config_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'claude',
+        'project',
+        'prompt:second-entry',
+        'second-entry',
+        'prompt',
+        'h1',
+        'h2',
+        JSON.stringify(['skills/second-entry/SKILL.md']),
+        new Date().toISOString(),
+        'cfg-hash',
+      ]
     );
 
     const count = engine.queryOne<{ n: number }>(
-      `SELECT COUNT(*) as n FROM version_history WHERE resource_id = ?`,
-      ['survives-bump']
+      `SELECT COUNT(*) as n FROM skills_sync_manifests WHERE client = ?`,
+      ['claude']
     );
     expect(count?.n).toBe(2);
   });

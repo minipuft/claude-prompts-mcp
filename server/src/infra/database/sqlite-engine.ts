@@ -45,6 +45,18 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v18: drops pre-scoping `version_history` rows via `DROPPED_ON_THIS_BUMP`. Every row written
+ * before Tier 4 carried the literal `tenant_id = 'default'`, and many projects sharing one
+ * state.db wrote into it, so nothing distinguishes which workspace produced which row. Once reads
+ * are workspace-scoped those rows are unreachable regardless; carrying them across would preserve
+ * data no query can return. **This destroys rollback history predating the upgrade** — intended and
+ * operator-approved, not incidental.
+ *
+ * The drop is expressed as a bump rather than as engine-resident purge code on purpose: F5 in the
+ * remediation plan was migration logic that ran on every startup forever, and a one-time step
+ * guarded by a marker in `kv_state` — an `ephemeral` table — would have been the same shape, since
+ * anything clearing that table would re-arm the deletion against legitimately scoped rows.
+ *
  * v17: added the `v_execution_history` view. A view is only created by `applySchema()`, which
  * runs only on a version mismatch, so adding one to the DDL without bumping leaves every existing
  * database without it — and `assertSchemaMatchesContracts()` then fails startup, because the
@@ -63,7 +75,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -76,6 +88,17 @@ const SCHEMA_VERSION = 17;
  * rows.
  */
 const DURABLE_TABLES = DURABLE_TABLE_NAMES;
+
+/**
+ * Durable tables deliberately NOT carried across the current bump.
+ *
+ * This is the escape hatch for a one-time data migration that a recreate can express: rather than
+ * shipping migration code that lives in the engine forever — the F5 anti-pattern this schema was
+ * cleaned of — the drop IS the migration, and this set plus the SCHEMA_VERSION docblock are its
+ * record. **Empty it at the next bump**; an entry left behind silently discards a durable table on
+ * an unrelated schema change.
+ */
+const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set(['version_history']);
 
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
@@ -96,9 +119,6 @@ export interface DatabaseConfig {
  * Replaces the former sql.js WASM-based DatabaseManager with node:sqlite.
  * All state writes go directly to the file — no persist() step needed.
  */
-/** kv_state discriminator recording that the one-time version_history purge has run. */
-const VERSION_HISTORY_PURGE_KEY = 'version_history_scope_purge';
-
 export class SqliteEngine implements DatabasePort {
   private static instance: SqliteEngine | null = null;
 
@@ -159,8 +179,7 @@ export class SqliteEngine implements DatabasePort {
       this.db.exec('PRAGMA journal_mode=WAL');
 
       // Ensure schema is current (creates or recreates if version mismatch)
-      const schemaWasRecreated = this.ensureSchema();
-      this.purgeUnattributableVersionHistory(schemaWasRecreated);
+      this.ensureSchema();
       this.assertSchemaMatchesContracts();
 
       this.initialized = true;
@@ -308,6 +327,13 @@ export class SqliteEngine implements DatabasePort {
     const snapshot: DurableSnapshot = new Map();
 
     for (const table of DURABLE_TABLES) {
+      if (DROPPED_ON_THIS_BUMP.has(table)) {
+        this.logger.info(
+          `Durable table ${table}: intentionally NOT carried across the v${SCHEMA_VERSION} recreate ` +
+            '(see the SCHEMA_VERSION docblock for why).'
+        );
+        continue;
+      }
       if (this.getTableColumns(table).size === 0) {
         continue;
       }
@@ -693,66 +719,6 @@ export class SqliteEngine implements DatabasePort {
       rows
         .map((row) => row.name)
         .filter((name): name is string => typeof name === 'string' && name.length > 0)
-    );
-  }
-
-  /**
-   * One-time purge of pre-Tier-4 `version_history` rows.
-   *
-   * Every row written before Tier 4 carried the literal `tenant_id = 'default'`, and many
-   * projects sharing one state.db wrote into it. Nothing distinguishes which workspace produced
-   * which row, so they cannot be retroactively attributed — and once reads are scoped they are
-   * unreachable anyway. They are deleted rather than left as permanently invisible rows.
-   *
-   * **This destroys rollback history predating the upgrade. That is the intended, operator-chosen
-   * behavior**, not a side effect: `version_history` is declared `durable`, so the deletion is
-   * explicit, marker-guarded, and happens exactly once.
-   *
-   * The marker is what makes it safe to run on every boot. Without it, an unscoped deployment —
-   * where `resolveContinuityScopeId` legitimately falls back to `'default'` — would have its own
-   * fresh rows deleted on the next start, which is the failure mode a blanket
-   * `DELETE ... WHERE tenant_id = 'default'` would introduce.
-   */
-  private purgeUnattributableVersionHistory(schemaWasRecreated: boolean): void {
-    // A recreate has just restored the durable tables on purpose, and it also dropped kv_state —
-    // which is `ephemeral`, so the marker went with it. Purging now would delete exactly the rows
-    // ensureSchema worked to carry across, on every future bump. The marker alone cannot express
-    // this, because the marker cannot outlive the table it lives in.
-    if (schemaWasRecreated) {
-      this.run(
-        `INSERT OR REPLACE INTO kv_state (tenant_id, key, state, updated_at) VALUES (?, ?, ?, ?)`,
-        [
-          'default',
-          VERSION_HISTORY_PURGE_KEY,
-          JSON.stringify({ purged: 0, reason: 'schema recreate — durable rows just restored' }),
-          new Date().toISOString(),
-        ]
-      );
-      return;
-    }
-
-    const marker = this.queryOne<{ state: string }>(
-      `SELECT state FROM kv_state WHERE key = ? LIMIT 1`,
-      [VERSION_HISTORY_PURGE_KEY]
-    );
-    if (marker !== null) {
-      return;
-    }
-
-    const before = this.queryOne<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM version_history`);
-    const purged = before?.cnt ?? 0;
-
-    if (purged > 0) {
-      this.run(`DELETE FROM version_history`);
-      this.logger.info(
-        `Purged ${purged} unattributable version_history row(s) predating workspace scoping. ` +
-          'Rollback history from before this upgrade is not recoverable.'
-      );
-    }
-
-    this.run(
-      `INSERT OR REPLACE INTO kv_state (tenant_id, key, state, updated_at) VALUES (?, ?, ?, ?)`,
-      ['default', VERSION_HISTORY_PURGE_KEY, JSON.stringify({ purged }), new Date().toISOString()]
     );
   }
 
