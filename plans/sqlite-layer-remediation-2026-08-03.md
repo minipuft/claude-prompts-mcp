@@ -389,26 +389,116 @@ destroyed the rollback snapshots.
 > no-ops now that `applySchema()` declares both columns, and all 8 of its `CREATE INDEX` statements
 > are duplicated verbatim at `sqlite-engine.ts:536-548`. Deleting it loses no index.
 
-### Tier 5 — Lifecycle correctness.
+### Tier 5 ✅ COMPLETE 2026-08-05 — Lifecycle correctness.
 
-| #   | File                                                   | Change                                                                               | ~Lines | Depends | Verify                                     |
-| --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------ | ------- | ------------------------------------------ |
-| 5.1 | `sqlite-engine.ts:553` `shutdown`                      | `PRAGMA wal_checkpoint(TRUNCATE)` before `db.close()`                                | ~6     | none    | WAL shrinks from 4.2 MB                    |
-| 5.2 | `application.ts:570`                                   | Call `SqliteEngine.shutdown()` **last**, after the 9 subsystems that may still write | ~10    | 5.1     | Restart; WAL is small                      |
-| 5.3 | `module-initializer.ts:127,221,270` + `application.ts` | Throw instead of `logger.warn` on init failure                                       | ~25    | 5.2     | Unwritable `dbPath` → startup fails loudly |
+| #      | File                                                   | Change                                                                               | ~Lines | Depends | Verify                                                                                                                        |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 5.1 ✅ | `sqlite-engine.ts:754` `shutdown`                      | `PRAGMA wal_checkpoint(TRUNCATE)` before `db.close()`                                | +37    | none    | ✅ Live: WAL **4,152,992 → 0 bytes** across a real SIGTERM. Main DB 598,016 → 659,456 — the log was checkpointed IN, not lost |
+| 5.2 ✅ | `application.ts:570`                                   | Call `SqliteEngine.shutdown()` **last**, after the 9 subsystems that may still write | +9     | 5.1     | ✅ Ordering asserted in `database-lifecycle-posture.test.ts`; falsified by moving the close to the top of `shutdown()`        |
+| 5.3 ✅ | `module-initializer.ts:139,257,306` + `application.ts` | Throw instead of `logger.warn` on init failure                                       | +32    | 5.2     | ✅ Broken `runtime-state` path → `initializeModules()` rejects; falsified by reverting site 1 to `logger.warn`                |
 
-**Gate**: `npm run build && npm run verify:mcp` + real restart with WAL measured before/after
+**Gate**: ✅ `npm run build && npm run verify:mcp` (12/12) + real restart with WAL measured
+before/after · `test:ci` 1945 pass · `test:integration` 471 pass · typecheck clean · both ratchets
+no regressions · `validate:arch`, `validate:table-contracts`, `validate:no-phantom-columns`,
+`validate:filesize`, `validate:contracts`, `validate:state-field-writers`,
+`validate:no-crosslayer-reexport`, `validate:package-entries` all pass individually.
+`validate:all` exits 123 on `validate:format` against `.claude/rules/mcp-contracts.md` — a file
+with an empty working diff, last written by `84b74cfa`, i.e. the pre-existing red step recorded in
+the Tier 1 gate note (C2). Not attributable here.
 
-### Tier 6 — Consolidate access paths, bound growth, disambiguate `tenant_id`.
+> **Every line reference in this tier had drifted.** `shutdown` was at `:754` not `:553`; the
+> module-initializer swallow sites at `:139, :257, :306` not `:127, :221, :270`. Re-measured before
+> acting, per the untrusted-inventory rule.
+>
+> **5.2 needed a new static, because the obvious call is wrong.** `SqliteEngine.getInstance()`
+> CREATES an engine when none exists, so calling it from `shutdown()` would open a database handle
+> during teardown and checkpoint a file nobody wrote. Added `SqliteEngine.shutdownInstance()`,
+> which no-ops on a null singleton. Covered by its own test.
+>
+> **The 4th F7 site is not an init site, and "throw" was the wrong fix for it.** The plan groups
+> `application.ts` with the three module-initializer sites, but its catch is inside
+> `fullServerRefresh()` — a hot-reload path whose outer boundary at `:807` already logs `error` and
+> re-throws. That is the double-catch `architecture.md` names: the outer boundary never fired
+> because the inner one hid the failure, and the refresh went on to report "completed successfully"
+> over a stale index. Fix was **deleting the inner catch**, not adding a throw.
+>
+> **Site 3's catch is unreachable for the failure mode 5.3 targets.** `syncAll()` catches per
+> resource type internally and reports failures through `SyncResult.errors` rather than throwing,
+> so that catch fires only if the engine or the dynamic imports fail — the same root cause that
+> already threw at the DatabasePort site above it. Corrected for posture consistency; **no test
+> claims to reach it**, and the code says so at the site.
+>
+> **New finding, not fixed here.** `SyncResult.errors` is never checked: `module-initializer.ts`
+> logs "✅ ResourceIndexer synced to SQLite" whatever the error count. That is the same
+> reports-success-while-broken class as F7, but closing it means deciding a policy on partial index
+> failure — a design decision, not a lifecycle correction. Belongs with 6.4, not Tier 5.
+>
+> **Scope-constraint deviation.** _Explicitly out of scope_ requires "no net lines" in
+> `application.ts`. It grew **+9** (29 added / 20 removed) — but **−1 executable line**, since the
+> deleted `try`/`catch` outweighs the two added statements and the rest is the comment explaining
+> why the close must be last. The tier row itself budgeted ~10 lines for 5.2, which contradicts the
+> stricter criterion; recording the number rather than reading the looser rule as permission.
+>
+> **A checkpoint failure is deliberately logged, not thrown** — the one place this tier does not
+> apply its own rule. `SQLITE_BUSY` while a reader holds the file is not data loss: the WAL stays
+> valid and the next clean close retries. Throwing would skip `db.close()` and leak the handle,
+> trading a large file for a lost one. Asserted by a test that stubs the PRAGMA to throw.
 
-| #   | File                                          | Change                                                                                                                                     | ~Lines | Depends | Verify                              |
-| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------- | ----------------------------------- |
-| 6.1 | `cli-shared/version-history.ts`               | Replace `spawnSync(python3)` + duplicate `ensure_schema` with `node:sqlite`                                                                | ~-120  | T1      | Versioning integration suite        |
-| 6.2 | `verify-active-state-store.ts:55`             | Fold `verify_active_state` into `state.db` via `DatabasePort`; delete the private `DatabaseSync`                                           | ~-45   | 6.1     | `npm run test`                      |
-| 6.3 | `sqlite-engine.ts:280-286`                    | Delete `tenants` + seed; update the 3 tests that insert into it                                                                            | ~-25   | T1      | `validate:table-contracts`          |
-| 6.4 | `sqlite-engine.ts` + new `enforceRetention()` | One startup pass driven by `TABLE_CONTRACTS.retention`; remove inline trim at `resource-change-tracker.ts:281`                             | ~70    | T1, 6.3 | Seed over-cap rows; assert trimmed  |
-| 6.5 | `manager.ts:351` + schema                     | Add `run_owner_pid`; `tenant_id` becomes scope-only. **Keep writing `tenant_id`=PID one release**; hooks read the new column with fallback | ~55    | 6.4     | `validate:python` + live hook probe |
-| 6.6 | `hooks/lib/db_reader.py:195-240`              | Read `run_owner_pid` with `tenant_id` fallback                                                                                             | ~30    | 6.5     | `python3 -m pytest hooks/tests`     |
+### Tier 6 — Consolidate access paths, bound growth, disambiguate `tenant_id`. **6.1 done; 6.2–6.6 open.**
+
+> **6.1 was not cleanup. It was a live startup defect, and the plan under-rated it.**
+> The row reads as "remove a redundant access path, save ~120 lines". Reproduced 2026-08-05:
+> the embedded Python helper's `ensure_schema()` predated the identity-scope columns, so a `cpm`
+> invocation on a machine where the server had never run created `version_history` **without**
+> `organization_id`/`workspace_id` and wrote no `schema_version` row. The engine then read version
+> 0, took its fresh-database path, and `CREATE TABLE IF NOT EXISTS` silently no-opped against the
+> existing table — the scope columns stayed absent and `applySchema()` threw
+> `no such column: workspace_id` while building the scope index. **The MCP server could not start.**
+> After Tier 5.3 that is a hard startup failure rather than a degraded boot.
+>
+> **Tier 4 also split the two writers apart, which nobody noticed at the time.** Scoping the nine
+> TS query sites left the Python helper still filtering `tenant_id = 'default'`, so from Tier 4
+> until now CLI-written and server-written history were mutually invisible. 6.1 closes that by
+> resolving the same id through `shared/utils/project-scope.ts`.
+>
+> **`deriveProjectScopeId` moved to `shared/` (L0).** `cli-shared` must derive the same scope as the
+> server but cannot import `runtime/` — `modules/` already imports `cli-shared`, so that edge closes
+> a cycle `no-circular` blocks. `runtime/options.ts` re-exports it, so its consumers are unchanged.
+>
+> **Known limitation, recorded not hidden**: a server launched with an explicit `--workspace-id`
+> flag still diverges from the CLI, because nothing on disk records which flag the server was
+> started with. The CLI mirrors the config→derived→`'default'` precedence, which covers the common
+> case. Closing it needs the server to persist its resolved scope.
+>
+> **The line estimate was wrong in sign.** The row budgets ~-120; actual is **+6** (312 added / 306
+> removed). 262 lines of that deletion were a Python source string being replaced by typed,
+> prepared-statement TypeScript. Fewer lines was never the point.
+>
+> **The foreign-writer exception was rewritten, not deleted.** The CLI is still a second writer —
+> `cpm` has no server to route through — so the exception stays, but its `reason` and `closedBy`
+> now describe what is actually true. It had gone stale the moment the rewrite landed, and neither
+> gate detects a satisfied exception. Sixth occurrence of that blind spot this initiative.
+>
+> **A test that could not fail was caught by falsification.** The first version of
+> `cli-schema-ownership.test.ts` asserted schema ownership, but the `existsSync(db_path)`
+> short-circuit fired first, so mutating the schema check changed nothing and all three tests still
+> passed. The two guards are now exercised separately and each mutation fails exactly its own test.
+>
+> **Remaining Tier 6 work, and why it is not batched here**: 6.3 deletes `tenants` from
+> `applySchema()`, which existing databases still carry — so it forces `SCHEMA_VERSION` 18 → 19,
+> and the v19 bump in turn forces the `DROPPED_ON_THIS_BUMP` retirement that
+> `validate:table-contracts` gates. 6.5/6.6 changes the Python hook contract, declared **public API**
+> in CLAUDE.md, and must land in one PR. Both are user-data-affecting and deserve their own session
+> rather than being appended to a passing one.
+
+| #      | File                                          | Change                                                                                                                                     | ~Lines | Depends | Verify                                                                                                                            |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 6.1 ✅ | `cli-shared/version-history.ts`               | Replace `spawnSync(python3)` + duplicate `ensure_schema` with `node:sqlite`                                                                | **+6** | T1      | ✅ Versioning integration + unit suites 40 pass, `cli-shared` 80 pass; 3 new regression tests, each guard falsified independently |
+| 6.2    | `verify-active-state-store.ts:55`             | Fold `verify_active_state` into `state.db` via `DatabasePort`; delete the private `DatabaseSync`                                           | ~-45   | 6.1     | `npm run test`                                                                                                                    |
+| 6.3    | `sqlite-engine.ts:280-286`                    | Delete `tenants` + seed; update the 3 tests that insert into it                                                                            | ~-25   | T1      | `validate:table-contracts`                                                                                                        |
+| 6.4    | `sqlite-engine.ts` + new `enforceRetention()` | One startup pass driven by `TABLE_CONTRACTS.retention`; remove inline trim at `resource-change-tracker.ts:281`                             | ~70    | T1, 6.3 | Seed over-cap rows; assert trimmed                                                                                                |
+| 6.5    | `manager.ts:351` + schema                     | Add `run_owner_pid`; `tenant_id` becomes scope-only. **Keep writing `tenant_id`=PID one release**; hooks read the new column with fallback | ~55    | 6.4     | `validate:python` + live hook probe                                                                                               |
+| 6.6    | `hooks/lib/db_reader.py:195-240`              | Read `run_owner_pid` with `tenant_id` fallback                                                                                             | ~30    | 6.5     | `python3 -m pytest hooks/tests`                                                                                                   |
 
 **Gate**: `npm run validate:all && npm run validate:python && npm run verify:mcp`
 

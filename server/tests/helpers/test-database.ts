@@ -68,6 +68,25 @@ export async function createTestDatabaseManager(
   };
 }
 
+/**
+ * Create `<serverRoot>/runtime-state/state.db` with the real engine schema, then close it.
+ *
+ * For consumers that open `state.db` themselves and must NOT own its DDL — currently
+ * `cli-shared/version-history.ts`. That module used to carry its own `ensure_schema()`,
+ * so tests only had to `mkdir runtime-state` and the CLI would invent the table. It no
+ * longer does: a second DDL whose shape predated the scope columns left the server unable
+ * to boot. Tests now bootstrap through the one owner, which also means they exercise the
+ * schema the server actually creates rather than a test-only approximation.
+ *
+ * The engine is shut down before returning so the caller can open its own handle, and so
+ * the `SqliteEngine` singleton does not leak into the next test.
+ */
+export async function seedStateDbSchema(serverRoot: string): Promise<void> {
+  const engine = await SqliteEngine.getInstance(serverRoot, createMockLogger());
+  await engine.initialize();
+  await engine.shutdown();
+}
+
 export interface TestResourceIndexerContext extends TestDatabaseContext {
   indexer: ResourceIndexer;
   resourcesDir: string;

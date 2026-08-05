@@ -12,6 +12,7 @@ import {
 } from '../../../src/cli-shared/resource-operations.js';
 import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
 import type { ResourceValidationResult } from '../../../src/cli-shared/resource-validation.js';
+import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 describe('resource-operations', () => {
   let tempDir: string;
@@ -131,8 +132,9 @@ describe('resource-operations', () => {
       expect(content).toContain('# This is a comment');
     });
 
-    it('updates history file resource_id', () => {
-      mkdirSync(join(tempDir, 'runtime-state'), { recursive: true });
+    it('updates history file resource_id', async () => {
+      // Engine-owned DDL; the CLI no longer bootstraps it (see version-history.ts runSqlite).
+      await seedStateDbSchema(tempDir);
       const dir = join(tempDir, 'resources', 'gates', 'hist-res');
       writeResource(dir, 'gate.yaml', 'id: hist-res\nname: Test');
       saveVersion(dir, 'gate', 'hist-res', { id: 'hist-res' }, { description: 'init' });

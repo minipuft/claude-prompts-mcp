@@ -240,20 +240,24 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     scope: 'workspace',
     retention: { maxRowsPerResource: 50 },
     readers: ['src/cli-shared/version-history.ts'],
-    finding:
-      'F6 — src/cli-shared/version-history.ts is a second WRITER, reaching this table by ' +
-      'spawning python3 with an embedded sqlite3 script and its own divergent CREATE TABLE. ' +
-      'Closed by Tier 6.1 (rewrite on node:sqlite against the engine).',
     acceptedForeignWriters: [
       {
         subject: 'src/cli-shared/version-history.ts',
         reason:
-          'Reaches state.db by spawning python3 with an embedded sqlite3 script, from a Node ' +
-          'process that already has node:sqlite. Carries its own CREATE TABLE whose shape omits ' +
-          'organization_id and workspace_id, so the two DDLs disagree.',
-        closedBy: 'Tier 6.1',
+          'The CLI still writes this table directly — the `cpm` binary has no server process to ' +
+          'route through. What Tier 6.1 removed is the DIVERGENCE, not the second writer: it now ' +
+          'uses node:sqlite against the engine-created schema, binds the same scope columns, and ' +
+          'creates no DDL of its own (it reports a missing table instead). Retiring this needs ' +
+          'the CLI to reach the server, not another rewrite of this module.',
+        closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
       },
     ],
+    // F6's divergent-DDL half is closed. The old `ensure_schema()` here created version_history
+    // without organization_id/workspace_id and wrote no schema_version row, which left the engine
+    // taking its "fresh database" path against an existing table — CREATE TABLE IF NOT EXISTS
+    // no-opped, the scope columns stayed absent, and applySchema threw `no such column:
+    // workspace_id`. Reproduced 2026-08-05; regression-tested in cli-schema-ownership.test.ts.
+    //
     // Phantom exceptions removed by Tier 4: saveVersion now binds organization_id and workspace_id
     // from the service's injected scope. They were still listed after the writers landed, and the
     // gate said nothing — an exception suppresses its finding whether or not it is still true.

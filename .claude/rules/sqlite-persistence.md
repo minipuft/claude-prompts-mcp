@@ -106,11 +106,26 @@ One file serves every project; isolation comes from `workspace_id`, not from sep
 The scope id derives from `CLAUDE_PROJECT_DIR` → cwd basename unless `--workspace-id` is passed.
 Never commit `state.db`.
 
-## Four Access Paths, Not One
+## Three Access Paths, Not One
 
-`SqliteEngine` is not the only writer of `state.db`. `src/cli-shared/version-history.ts` reaches it
-by `spawnSync`-ing `python3` from a Node process that already has `node:sqlite`. There are also two
-other database files: `hooks-state.db` (Python) and `verify-state.db`.
+`SqliteEngine` is not the only writer of `state.db`. `src/cli-shared/version-history.ts` opens the
+file directly with its own `DatabaseSync` — the `cpm` binary has no server process to route
+through. Tier 6.1 removed the `spawnSync('python3', …)` round-trip and the divergent DDL it
+carried, but **not** the second writer, which is declared as an accepted foreign writer.
+
+There are also two other database files: `hooks-state.db` (Python) and `verify-state.db` (declared
+in code, never written — Tier 6.2).
+
+**No module outside `SqliteEngine.applySchema()` may create a table in `state.db`.** The CLI used
+to carry its own `ensure_schema()` predating the scope columns, so a `cpm` invocation before the
+server's first run created `version_history` without `organization_id`/`workspace_id` and wrote no
+`schema_version` row. The engine then read version 0, took its fresh-database path, and
+`CREATE TABLE IF NOT EXISTS` no-opped against the existing table — leaving the columns absent and
+`applySchema()` throwing `no such column: workspace_id`. **The server could not boot at all.**
+Reproduced 2026-08-05; guarded by `tests/integration/database/cli-schema-ownership.test.ts`.
+
+A second writer must also resolve the SAME scope id, or its rows are invisible to the other.
+`shared/utils/project-scope.ts` holds that derivation precisely so both layers read one definition.
 
 Before assuming a table has one writer, run the gate — it enumerates every SQL site.
 
