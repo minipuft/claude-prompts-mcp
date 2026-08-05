@@ -14,6 +14,7 @@ const files = [
   { path: join(serverDir, 'package.json'), name: 'server/package.json' },
   { path: join(repoRoot, 'manifest.json'), name: 'manifest.json' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), name: '.claude-plugin/plugin.json' },
+  { path: join(repoRoot, 'server.json'), name: 'server.json' },
 ];
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
@@ -57,6 +58,29 @@ if (uniqueVersions.length === 0) {
 }
 
 const coreVersion = uniqueVersions[0];
+
+// server.json also carries per-package versions the MCP registry validates
+try {
+  const serverJson = readJson(join(repoRoot, 'server.json'));
+  for (const pkg of serverJson.packages ?? []) {
+    if (pkg.version !== coreVersion) {
+      console.error(
+        `\n❌ server.json package ${pkg.identifier} version ${pkg.version} != ${coreVersion}`
+      );
+      process.exit(1);
+    }
+  }
+  const pkgJson = readJson(join(serverDir, 'package.json'));
+  if (serverJson.name !== pkgJson.mcpName) {
+    console.error(
+      `\n❌ server.json name (${serverJson.name}) must equal package.json mcpName (${pkgJson.mcpName}) — the MCP registry rejects mismatches`
+    );
+    process.exit(1);
+  }
+} catch (err) {
+  console.error(`\n❌ Unable to cross-check server.json: ${err.message}`);
+  process.exit(1);
+}
 
 const releaseManifestPath = join(repoRoot, '.release-please-manifest.json');
 try {
@@ -106,10 +130,10 @@ const assertMarketplaceSource = (source) => {
   if (!source || source.source !== 'url') {
     throw new Error('Marketplace source must use url source');
   }
-  // The repo was renamed claude-prompts-mcp -> claude-prompts. Assert the real name,
-  // not the rename redirect: a redirect the marketplace silently depends on breaks the
-  // day the old name is reclaimed, and this check is the only thing that would notice.
-  if (source.url !== 'https://github.com/minipuft/claude-prompts.git') {
+  // Assert the repo's real current name (claude-prompts-mcp since 2026-08-05), not a
+  // rename redirect: a redirect the marketplace silently depends on breaks the day the
+  // old name is reclaimed, and this check is the only thing that would notice.
+  if (source.url !== 'https://github.com/minipuft/claude-prompts-mcp.git') {
     throw new Error(`Marketplace source url mismatch: ${source.url}`);
   }
   if (source.ref !== 'dist') {

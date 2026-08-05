@@ -1,0 +1,8 @@
+version: 1
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction: |-
+    (config) => ({ command: 'npx', args: ['-y', 'claude-prompts@latest'] })

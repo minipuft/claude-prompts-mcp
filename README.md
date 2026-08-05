@@ -63,9 +63,9 @@ Export as native skills to any client.
 Load plugin from local source for development:
 
 ```bash
-git clone https://github.com/minipuft/claude-prompts ~/Applications/claude-prompts
-cd ~/Applications/claude-prompts/server && npm install && npm run build
-claude --plugin-dir ~/Applications/claude-prompts
+git clone https://github.com/minipuft/claude-prompts-mcp ~/Applications/claude-prompts-mcp
+cd ~/Applications/claude-prompts-mcp/server && npm install && npm run build
+claude --plugin-dir ~/Applications/claude-prompts-mcp
 ```
 
 Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
@@ -78,7 +78,7 @@ Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 
 **Option A: GitHub Release** (recommended)
 
-1. Download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts/releases/latest)
+1. Download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts-mcp/releases/latest)
 2. Drag into Claude Desktop Settings → MCP Servers
 3. Done
 
@@ -130,8 +130,8 @@ codex plugin add codex-prompts@minipuft
 **From source** (developers):
 
 ```bash
-git clone https://github.com/minipuft/claude-prompts.git
-cd claude-prompts/server && npm install && npm run build && npm test
+git clone https://github.com/minipuft/claude-prompts-mcp.git
+cd claude-prompts-mcp/server && npm install && npm run build && npm test
 ```
 
 Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` (default) or `--transport=streamable-http`.

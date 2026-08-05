@@ -385,7 +385,7 @@ STARTUP MODES:
   Debugging:     npx claude-prompts --debug-startup
   Testing:       npx claude-prompts --startup-test
 
-For more information: https://github.com/minipuft/claude-prompts
+For more information: https://github.com/minipuft/claude-prompts-mcp
 `);
 }
 
@@ -518,7 +518,7 @@ Next steps:
 
    Claude will use resource_manager to update your prompts automatically!
 
-📖 Full docs: https://github.com/minipuft/claude-prompts
+📖 Full docs: https://github.com/minipuft/claude-prompts-mcp
 `,
     };
   } catch (error) {

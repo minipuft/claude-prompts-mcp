@@ -7,7 +7,7 @@ Thank you for contributing to the Claude Prompts MCP server. This guide covers e
 ```bash
 # 1. Fork and clone
 git clone https://github.com/<your-fork>/claude-prompts.git
-cd claude-prompts/server
+cd claude-prompts-mcp/server
 
 # 2. Install (hooks auto-configure via Husky)
 npm install
@@ -259,7 +259,7 @@ npm run typecheck && npm run lint:ratchet && npm test && npm run validate:all
 
 ### Opening an Issue
 
-Use the [issue templates](https://github.com/minipuft/claude-prompts/issues/new/choose) -- they provide structured forms for bug reports and feature requests. Check [Troubleshooting](docs/guides/troubleshooting.md) before filing a bug.
+Use the [issue templates](https://github.com/minipuft/claude-prompts-mcp/issues/new/choose) -- they provide structured forms for bug reports and feature requests. Check [Troubleshooting](docs/guides/troubleshooting.md) before filing a bug.
 
 ### Pull Request Process
 
@@ -395,14 +395,14 @@ Check `plans/` before touching a subsystem -- there may be an active migration t
 
 ## Getting Help
 
-| Need                              | Where                                                              |
-| --------------------------------- | ------------------------------------------------------------------ |
-| Understand the architecture       | [Architecture Overview](docs/architecture/overview.md)             |
-| Look up MCP tool syntax           | [MCP Tools Reference](docs/reference/mcp-tools.md)                 |
-| Debug a common error              | [Troubleshooting](docs/guides/troubleshooting.md)                  |
-| Understand agent automation       | [AGENTS.md](AGENTS.md)                                             |
-| Find any doc by topic             | [Docs Index](docs/README.md)                                       |
-| Report a bug or request a feature | [GitHub Issues](https://github.com/minipuft/claude-prompts/issues) |
+| Need                              | Where                                                                  |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| Understand the architecture       | [Architecture Overview](docs/architecture/overview.md)                 |
+| Look up MCP tool syntax           | [MCP Tools Reference](docs/reference/mcp-tools.md)                     |
+| Debug a common error              | [Troubleshooting](docs/guides/troubleshooting.md)                      |
+| Understand agent automation       | [AGENTS.md](AGENTS.md)                                                 |
+| Find any doc by topic             | [Docs Index](docs/README.md)                                           |
+| Report a bug or request a feature | [GitHub Issues](https://github.com/minipuft/claude-prompts-mcp/issues) |
 
 ---
 
