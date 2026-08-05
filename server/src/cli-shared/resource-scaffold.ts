@@ -299,7 +299,6 @@ function writeResourceFiles(
   writeFileSync(join(resourceDir, companion.name), companion.content, 'utf8');
 }
 
-// eslint-disable-next-line max-params
 function validateAndFinalize(
   resourceDir: string,
   type: ResourceType,

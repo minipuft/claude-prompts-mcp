@@ -131,9 +131,7 @@ export async function createRuntimeFoundation(
   // Log level can be overridden via CLI flag
   const effectiveLogLevel = options.logLevel ?? loggingConfig.level;
 
-  const logDirectory = path.isAbsolute(loggingConfig.directory)
-    ? loggingConfig.directory
-    : path.resolve(serverRoot, loggingConfig.directory);
+  const logDirectory = pathResolver.getLogsPath(loggingConfig.directory);
   const logFile = path.join(logDirectory, 'mcp-server.log');
 
   await fs.mkdir(logDirectory, { recursive: true });

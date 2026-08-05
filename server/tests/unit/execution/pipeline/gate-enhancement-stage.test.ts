@@ -94,7 +94,6 @@ const baseGatesConfig = {
 
 const createGateService = (): GateService => {
   return {
-    serviceType: 'compositional',
     supportsValidation: jest.fn().mockReturnValue(false) as unknown as () => boolean,
     updateConfig: jest.fn() as unknown as GateService['updateConfig'],
     enhancePrompt: jest.fn(async (prompt: ConvertedPrompt, gateIds: string[]) => ({
@@ -104,7 +103,6 @@ const createGateService = (): GateService => {
       },
       gateInstructionsInjected: true,
       injectedGateIds: gateIds,
-      validationResults: [],
       instructionLength: gateIds.join(',').length,
     })) as unknown as GateService['enhancePrompt'],
   };

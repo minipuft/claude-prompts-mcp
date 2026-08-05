@@ -235,19 +235,7 @@ export class GateEnhancementService {
 
       executionPlan.gates = gateIds;
 
-      if (result.validationResults !== undefined && result.validationResults.length > 0) {
-        context.state.gates.validationResults = result.validationResults.map((r) => ({
-          ...r,
-          valid: r.passed,
-        }));
-      }
-
-      this.metricsRecorder.recordGateUsageMetrics(
-        context,
-        gateIds,
-        result.instructionLength,
-        result.validationResults
-      );
+      this.metricsRecorder.recordGateUsageMetrics(context, gateIds, result.instructionLength);
 
       context.state.gates.accumulatedGateIds = gateIds;
 
@@ -375,12 +363,7 @@ export class GateEnhancementService {
 
         totalGatesApplied += gateIds.length;
 
-        this.metricsRecorder.recordGateUsageMetrics(
-          context,
-          gateIds,
-          result.instructionLength,
-          result.validationResults
-        );
+        this.metricsRecorder.recordGateUsageMetrics(context, gateIds, result.instructionLength);
       } catch (error) {
         this.logger.warn(
           `[GateEnhancementService] Gate enhancement failed for step ${step.stepNumber}`,

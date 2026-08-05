@@ -5,7 +5,7 @@ import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/pro
 import type { ConfigManager } from '../../../../src/infra/config/index.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
-import type { ContentAnalyzer as SemanticAnalyzer } from '../../../../src/modules/semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalyzer as SemanticAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
 import type { TextReferenceStore } from '../../../../src/modules/text-refs/index.js';
 
 const mockLogger: Logger = {

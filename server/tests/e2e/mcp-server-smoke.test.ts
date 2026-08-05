@@ -8,6 +8,7 @@
 import { describe, expect, it, afterEach, beforeAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
+import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { promises as fs } from 'fs';
 import {
@@ -41,13 +42,14 @@ let streamableHttpServerPort: number | null = null;
 /**
  * Helper to spawn MCP server with proper env
  */
-function spawnServer(): ChildProcess {
+function spawnServer(runtimeRoot?: string): ChildProcess {
   return spawn('node', [SERVER_PATH, '--transport=stdio', '--quiet'], {
     cwd: path.join(PROJECT_ROOT, 'server'),
     env: {
       ...process.env,
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+      ...(runtimeRoot !== undefined ? { MCP_RUNTIME_ROOT: runtimeRoot } : {}),
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -165,6 +167,40 @@ describe('MCP Server Smoke Tests', () => {
 
       expect(result).toBe('running');
     }, 5000);
+
+    it('writes state and logs beneath an explicit runtime root', async () => {
+      const runtimeRoot = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-runtime-'));
+      const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
+        cwd: path.join(PROJECT_ROOT, 'server'),
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          NODE_OPTIONS: '',
+          JEST_WORKER_ID: undefined,
+          CI: 'false',
+          GITHUB_ACTIONS: 'false',
+          MCP_RUNTIME_ROOT: runtimeRoot,
+          MCP_WORKSPACE: PROJECT_ROOT,
+          MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      startup.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      const exitCode = await new Promise<number | null>((resolve, reject) => {
+        startup.once('error', reject);
+        startup.once('exit', resolve);
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`Startup test exited ${exitCode}: ${stderr}`);
+      }
+      await fs.access(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      await fs.access(path.join(runtimeRoot, 'logs', 'mcp-server.log'));
+      await fs.rm(runtimeRoot, { recursive: true, force: true });
+    }, 30000);
 
     // TODO: Jest ESM mode has issues with spawned process stdio capture
     // The server responds correctly when tested manually (see npm run start:test)

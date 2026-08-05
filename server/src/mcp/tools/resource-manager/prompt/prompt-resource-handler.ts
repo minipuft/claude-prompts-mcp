@@ -23,7 +23,7 @@ import type { PromptResourceHandlerPort } from '../core/types.js';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
-import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { VersionHistoryService } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';

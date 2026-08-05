@@ -62,7 +62,12 @@
           },
           "priority": {
             "type": "string",
-            "enum": ["critical", "high", "medium", "low"]
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
           },
           "validationCriteria": {
             "type": "array",
@@ -78,10 +83,18 @@
           },
           "severity": {
             "type": "string",
-            "enum": ["critical", "high", "medium", "low"]
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
           }
         },
-        "required": ["id", "name"]
+        "required": [
+          "id",
+          "name"
+        ]
       }
     },
     "methodologyGates": {
@@ -105,7 +118,12 @@
           },
           "priority": {
             "type": "string",
-            "enum": ["critical", "high", "medium", "low"]
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
           },
           "validationCriteria": {
             "type": "array",
@@ -121,10 +139,18 @@
           },
           "severity": {
             "type": "string",
-            "enum": ["critical", "high", "medium", "low"]
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
           }
         },
-        "required": ["id", "name"]
+        "required": [
+          "id",
+          "name"
+        ]
       }
     },
     "phasesFile": {
@@ -150,11 +176,18 @@
         "properties": {
           "section": {
             "type": "string",
-            "enum": ["system", "user"]
+            "enum": [
+              "system",
+              "user"
+            ]
           },
           "type": {
             "type": "string",
-            "enum": ["addition", "structure", "modification"]
+            "enum": [
+              "addition",
+              "structure",
+              "modification"
+            ]
           },
           "description": {
             "type": "string"
@@ -167,14 +200,27 @@
           },
           "impact": {
             "type": "string",
-            "enum": ["high", "medium", "low"]
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
           }
         },
-        "required": ["section", "type"]
+        "required": [
+          "section",
+          "type"
+        ]
       }
     }
   },
-  "required": ["id", "name", "type", "version", "enabled"],
+  "required": [
+    "id",
+    "name",
+    "type",
+    "version",
+    "enabled"
+  ],
   "additionalProperties": {},
   "title": "Framework Definition",
   "description": "Schema for framework.yaml — defines a framework with gates, guidance, and tool overlays."

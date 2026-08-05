@@ -24,7 +24,7 @@ import { ExecutionPlanner } from '../../../src/engine/execution/planning/executi
 import type { LoadedScriptTool } from '../../../src/modules/automation/types.js';
 import type { ConvertedPrompt } from '../../../src/shared/types/index.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { ContentAnalyzer } from '../../../src/modules/semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
 import type { ContentAnalysisResult } from '../../../src/modules/semantic/types.js';
 
 // Mock filesystem for controlled fixtures

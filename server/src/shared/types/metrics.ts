@@ -43,8 +43,12 @@ export interface GateValidationData {
   }>;
 }
 
-export type GateValidationResult = 'passed' | 'failed' | 'skipped';
-
+/**
+ * Gate usage records injection facts only. There is deliberately no pass/fail field: gate
+ * services render guidance and never evaluate, so nothing at this point in the pipeline has a
+ * verdict to report. Verdicts arrive through `gate_verdict` and are owned by
+ * `GateVerdictProcessor`. A field here would only ever be written `undefined`.
+ */
 export interface GateUsageMetric {
   gateId: string;
   gateType: 'canonical' | 'temporary';
@@ -52,7 +56,6 @@ export interface GateUsageMetric {
   instructionCount: number;
   instructionCharacters?: number;
   temporary: boolean;
-  validationResult?: GateValidationResult;
   metadata?: Record<string, unknown>;
   timestamp?: number;
 }

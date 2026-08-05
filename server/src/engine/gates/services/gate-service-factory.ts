@@ -1,52 +1,30 @@
 // @lifecycle canonical - Factory for instantiating gate service pipelines.
 import { CompositionalGateService } from './compositional-gate-service.js';
-import { SemanticGateService } from './semantic-gate-service.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ConfigManager } from '#shared/types/index.js';
-import type { GateServiceConfig, GateService } from './gate-service-interface.js';
-import type { GateValidator } from '../core/gate-validator.js';
+import type { GateService } from './gate-service-interface.js';
 import type { GateGuidanceRenderer } from '../guidance/GateGuidanceRenderer.js';
 
+/**
+ * Builds the gate service and rebuilds it on config reload.
+ *
+ * There is exactly one implementation, and selection is unconditional — no config value picks a
+ * different service. Model-based gate evaluation is not this layer's job: it is served by the
+ * `%judge` modifier and `gates.evaluation.defaultMode`, which delegate to the client's own
+ * subagent rather than calling an outbound API.
+ *
+ * The factory earns its place despite the single implementation because `hotReload` owns the
+ * reload seam — the one place that re-reads config and hands back a fresh service.
+ */
 export class GateServiceFactory {
   constructor(
     private readonly logger: Logger,
     private readonly configManager: ConfigManager,
-    private readonly gateGuidanceRenderer: GateGuidanceRenderer,
-    private readonly gateValidator: GateValidator
+    private readonly gateGuidanceRenderer: GateGuidanceRenderer
   ) {}
 
   createGateService(): GateService {
-    const config = this.configManager.getConfig();
-    const llmIntegration = config.analysis?.semanticAnalysis?.llmIntegration;
-
-    if (llmIntegration?.enabled) {
-      const normalizedIntegration: NonNullable<GateServiceConfig['llmIntegration']> = {
-        enabled: true,
-      };
-
-      if (llmIntegration.apiKey != null) {
-        normalizedIntegration.apiKey = llmIntegration.apiKey;
-      }
-      if (llmIntegration.endpoint != null) {
-        normalizedIntegration.endpoint = llmIntegration.endpoint;
-      }
-      if (llmIntegration.model !== undefined) {
-        normalizedIntegration.model = llmIntegration.model;
-      }
-      if (llmIntegration.maxTokens !== undefined) {
-        normalizedIntegration.maxTokens = llmIntegration.maxTokens;
-      }
-      if (llmIntegration.temperature !== undefined) {
-        normalizedIntegration.temperature = llmIntegration.temperature;
-      }
-      this.logger.info('[GateServiceFactory] Semantic layer enabled via configuration');
-      return new SemanticGateService(this.logger, this.gateGuidanceRenderer, {
-        llmIntegration: normalizedIntegration,
-      });
-    }
-
-    this.logger.info('[GateServiceFactory] Falling back to compositional gate service');
     return new CompositionalGateService(this.logger, this.gateGuidanceRenderer);
   }
 

@@ -391,6 +391,56 @@
       }
     },
 
+    "analysis": {
+      "type": "object",
+      "description": "Semantic analysis of prompts and gate verdicts. Read by ConfigManager.getAnalysisConfig() and GateServiceFactory, which selects SemanticGateService over the default when llmIntegration.enabled is true.",
+      "properties": {
+        "semanticAnalysis": {
+          "type": "object",
+          "properties": {
+            "llmIntegration": {
+              "type": "object",
+              "description": "Modelled on LLMIntegrationConfig in src/shared/types/core-config.ts, which is what the runtime reads. There is deliberately no 'mode' member: the CLI used to accept a 'mode' of 'on'|'off' here that no reader consulted. That spelling is gone from the CLI surface, and ConfigManager adopts it into 'enabled' for configs already carrying one.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Enable LLM-backed semantic analysis. Changing this requires a restart."
+                },
+                "apiKey": {
+                  "type": ["string", "null"],
+                  "default": null,
+                  "description": "API key for the LLM provider"
+                },
+                "endpoint": {
+                  "type": ["string", "null"],
+                  "default": null,
+                  "description": "Custom endpoint URL; the provider is auto-detected from the URL"
+                },
+                "model": {
+                  "type": "string",
+                  "default": "gpt-4",
+                  "description": "Model name used for analysis requests"
+                },
+                "maxTokens": {
+                  "type": "integer",
+                  "default": 1000,
+                  "minimum": 100,
+                  "description": "Maximum tokens per analysis request"
+                },
+                "temperature": {
+                  "type": "number",
+                  "default": 0.1,
+                  "minimum": 0,
+                  "description": "Temperature for analysis requests"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     "logging": {
       "type": "object",
       "description": "Server logging configuration",

@@ -17,7 +17,7 @@ import { config } from './commands/config.js';
 import { enableDisable } from './commands/enable-disable.js';
 import { output } from './lib/output.js';
 
-const VERSION = process.env['CPM_VERSION'] ?? '0.1.0';
+const VERSION = process.env['CPM_VERSION'] ?? 'development';
 
 const COMMANDS = [
   'validate',
@@ -364,16 +364,16 @@ Usage: cpm enable <subsystem> [options]
 Shorthand for 'cpm config set <key> on'.
 
 Subsystems:
-  gates                     Quality gates (gates.mode)
-  frameworks             Framework system (frameworks.mode)
-  resources                 MCP resource registration (resources.mode)
-  resources.prompts         Prompt resources (resources.prompts.mode)
-  resources.gates           Gate resources (resources.gates.mode)
-  resources.frameworks   Framework resources (resources.frameworks.mode)
-  resources.observability   Observability resources (resources.observability.mode)
-  resources.logs            Log resources (resources.logs.mode)
-  verification              Verification isolation (verification.isolation.mode)
-  analysis                  LLM semantic analysis (analysis.semanticAnalysis.llmIntegration.mode)
+  gates                     Quality gates (gates.enabled)
+  frameworks                Framework system (frameworks.enabled)
+  resources                 MCP resource registration (resources.registerWithMcp)
+  resources.prompts         Prompt resources (resources.prompts.enabled)
+  resources.gates           Gate resources (resources.gates.enabled)
+  resources.frameworks      Framework resources (resources.frameworks.enabled)
+  resources.observability   Observability resources (resources.observability.enabled)
+  resources.logs            Log resources (resources.logs.enabled)
+  verification              Verification isolation (verification.isolation.enabled)
+  analysis                  DEPRECATED - no runtime effect; use the %judge gate modifier
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)

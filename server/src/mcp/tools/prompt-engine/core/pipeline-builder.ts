@@ -243,7 +243,7 @@ export class PipelineBuilder {
       () => deps.frameworkManager?.selectFramework({})?.id,
       () => deps.gateManager,
       deps.lightweightGateSystem.gateLoader,
-      new GateMetricsRecorder(deps.getAnalyticsService, gateService?.serviceType),
+      new GateMetricsRecorder(deps.getAnalyticsService),
       deps.logger
     );
     const temporaryGateRegistrar = new TemporaryGateRegistrar(
@@ -430,8 +430,7 @@ export class PipelineBuilder {
     const factory = new GateServiceFactory(
       deps.logger,
       deps.configManager,
-      deps.gateGuidanceRenderer,
-      deps.lightweightGateSystem.gateValidator
+      deps.gateGuidanceRenderer
     );
     return factory.createGateService();
   }

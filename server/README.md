@@ -6,7 +6,7 @@
 
 MCP server for prompt management, thinking frameworks, and quality gates. Hot-reloads prompts, injects structured reasoning, enforces output validation—all through MCP tools Claude can call directly.
 
-The server and desktop extension require Node.js >=22.13.0 because the runtime uses `node:sqlite` without an experimental flag. The separately packaged CPM CLI supports Node.js >=18.18.0.
+The server, desktop extension, and npm package require Node.js >=22.13.0 because the runtime uses `node:sqlite` without an experimental flag. The same npm package exposes the self-contained `cpm` bin; its standalone GitHub Release asset supports Node.js >=18.18.0.
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ The server and desktop extension require Node.js >=22.13.0 because the runtime u
 
 Set `--client` to match your host client (`claude-code`, `codex`, `gemini`, `opencode`, `cursor`, or `unknown`) so handoff guidance stays client-aware.
 
-**Desktop Extension** — [Download `.mcpb`](https://github.com/minipuft/claude-prompts/releases), drag into Claude Desktop Settings. Done.
+**Desktop Extension** — [Download `.mcpb`](https://github.com/minipuft/claude-prompts-mcp/releases), drag into Claude Desktop Settings. Done.
 
 **NPX** — Add to `claude_desktop_config.json`:
 
@@ -263,7 +263,7 @@ my-workspace/
 
 **Minimum required:** Just `prompts/` with at least one prompt directory.
 
-Script tools enable validation scripts that auto-trigger on schema match. See [Script Tools Guide](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/script-tools.md) for details.
+Script tools enable validation scripts that auto-trigger on schema match. See [Script Tools Guide](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/script-tools.md) for details.
 
 ---
 
@@ -287,6 +287,8 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 2. Release Please opens a Release PR; review the version bump + `CHANGELOG.md`.
 3. Merge the Release PR.
 4. Publish the draft GitHub Release created for the new tag (this triggers the npm publish workflow).
+
+The publish workflow verifies the packed npm consumer before publishing. The extension workflow then attaches the MCPB, standalone `cpm` bundle, checksum, and source-map archive to the same GitHub Release.
 
 ---
 
@@ -451,24 +453,24 @@ npx claude-prompts --startup-test --verbose
 
 ## Documentation
 
-Full guides in the [main repository](https://github.com/minipuft/claude-prompts):
+Full guides in the [main repository](https://github.com/minipuft/claude-prompts-mcp):
 
-- [Architecture](https://github.com/minipuft/claude-prompts/blob/main/docs/architecture/overview.md) — System design
-- [MCP Tooling](https://github.com/minipuft/claude-prompts/blob/main/docs/reference/mcp-tools.md) — Complete tool reference
-- [Prompt Authoring](https://github.com/minipuft/claude-prompts/blob/main/docs/tutorials/build-first-prompt.md) — Tutorial
-- [Chains](https://github.com/minipuft/claude-prompts/blob/main/docs/concepts/chains-lifecycle.md) — Multi-step patterns
-- [Gates](https://github.com/minipuft/claude-prompts/blob/main/docs/concepts/quality-gates.md) — Quality validation
-- [Client Integration](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/client-integration.md) — Per-client `--client` install setup
-- [Client Capabilities](https://github.com/minipuft/claude-prompts/blob/main/docs/reference/client-capabilities.md) — Preset mapping, status, and integration limits
-- [Skills Sync](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/skills-sync.md) — Export prompts to client-native skills
+- [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture/overview.md) — System design
+- [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/reference/mcp-tools.md) — Complete tool reference
+- [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/tutorials/build-first-prompt.md) — Tutorial
+- [Chains](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/concepts/chains-lifecycle.md) — Multi-step patterns
+- [Gates](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/concepts/quality-gates.md) — Quality validation
+- [Client Integration](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/client-integration.md) — Per-client `--client` install setup
+- [Client Capabilities](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/reference/client-capabilities.md) — Preset mapping, status, and integration limits
+- [Skills Sync](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/skills-sync.md) — Export prompts to client-native skills
 
 ---
 
 ## Development
 
 ```bash
-git clone https://github.com/minipuft/claude-prompts.git
-cd claude-prompts/server
+git clone https://github.com/minipuft/claude-prompts-mcp.git
+cd claude-prompts-mcp/server
 npm install && npm run build
 npm run start:stdio
 ```

@@ -7,7 +7,7 @@ tags: [cleanup, gates, config, breaking-candidate]
 
 # Semantic LLM Side-Client Retirement
 
-**Status**: T0 decided · T1, T2 landed · T2.5 (discovered at T2), T3–T5 pending
+**Status**: T0 decided · T1, T2, T2.5, T3 landed · T4–T5 pending · F9 + F10 filed for a dead-code tier
 **Created**: 2026-08-05
 **Supersedes nothing.** Follows the `llmIntegration.mode` fix (same session), which made the config
 surface honest enough for this removal to be scoped.
@@ -225,29 +225,135 @@ Deliberately **not** executed inside T2: it touches `gate-enhancement-service.ts
 `gate-metrics-recorder.ts`, neither in T2's Files column, and it changes an emitted metric shape —
 a different unit of review than deleting an unreachable service.
 
-| ID    | Status | Step                                                                                        | Files                                                     | Verification                                  |
-| ----- | ------ | ------------------------------------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------- |
-| 2.5.1 | ☐      | Decide: delete the channel, or keep it as the seam a future in-process validator would fill | —                                                         | decision recorded with the metric consequence |
-| 2.5.2 | ☐      | If delete: drop `GateValidationResult`, `GateEnhancementResult.validationResults`           | `gate-service-interface.ts`                               | `npm run typecheck`                           |
-| 2.5.3 | ☐      | Remove the starved reader branches                                                          | `gate-enhancement-service.ts`, `gate-metrics-recorder.ts` | gate integration suite green                  |
-| 2.5.4 | ☐      | Remove `serviceType` if it stays single-valued, incl. its telemetry metadata field          | `gate-service-interface.ts`, `gate-metrics-recorder.ts`   | `rg -n "serviceType" src/` reflects decision  |
+| ID    | Status | Step                                                                                        | Files                                                                                                           | Verification                            |
+| ----- | ------ | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 2.5.1 | ✓      | Decide: delete the channel, or keep it as the seam a future in-process validator would fill | —                                                                                                               | **DELETE** — rationale below            |
+| 2.5.2 | ✓      | Drop `GateValidationResult`, `GateEnhancementResult.validationResults`                      | `gate-service-interface.ts`                                                                                     | `npm run typecheck` clean ✓             |
+| 2.5.3 | ✓      | Remove the starved reader branches                                                          | `gate-enhancement-service.ts`, `gate-metrics-recorder.ts`                                                       | 664 gate integration tests green ✓      |
+| 2.5.4 | ✓      | Remove `serviceType`, incl. its telemetry metadata field                                    | `gate-service-interface.ts`, `gate-metrics-recorder.ts`, `compositional-gate-service.ts`, `pipeline-builder.ts` | `rg -n "serviceType" src/ tests/` → 0 ✓ |
 
-**Gate**: no type in the gates layer has readers but no producer, or the exception names why it is
-a seam and what fills it.
+**Gate**: ✓ no type in the gates layer has readers but no producer. The two remaining
+reader-without-producer surfaces found while verifying belong to a different lineage and are filed
+as F9 rather than absorbed here.
+
+### 2.5.1 — the decision, and what it rests on
+
+**Delete.** Five measurements, not a preference:
+
+1. `GateValidationResult` had **zero producers** anywhere in `src/`.
+2. `context.state.gates.validationResults` was written at exactly one site and read at **zero** —
+   a write to nowhere.
+3. `metric.validationResult` could only ever be `undefined`, because its sole input was the empty
+   channel. It surfaced only in a `logger.debug` call.
+4. `gateUsageHistory` is pushed and trimmed but **never projected**. `InMemoryMetricsCollector` is
+   the only `MetricsCollector` implementation and there is no exporter — so **no MCP response
+   shape moves**, and this is not a contract change.
+5. The decided replacement routes elsewhere: `%judge` returns verdicts through `gate_verdict` →
+   `GateVerdictProcessor`. A future in-process validator would extend _that_ seam.
+
+Against keeping it: `cleanup-standards.md` requires a retained seam to name the evidence that
+fills it. Nothing could be named here, and an unfillable seam is a permanent bypass wearing a
+temporary label.
+
+### Scope extensions this tier made, and why each was in-bounds
+
+Both were **created by** 2.5.3, not merely adjacent to it — removing the writer is what stranded them:
+
+- **`GateUsageMetric.validationResult` + the `GateValidationResult` metrics type**
+  (`shared/types/metrics.ts`, `infra/observability/metrics/index.ts`). After 2.5.3 removed the
+  only assignment, this field had zero writers — the declaration-dead shape this repo runs
+  validators against. Leaving it would have traded a starved channel for a starved field.
+- **`context.state.gates.validationResults`** (`execution/context/internal-state.ts`). Its only
+  writer was the branch 2.5.3 deleted, leaving zero writers and zero readers.
+
+**Not extended into**: F9 below. Those are a different lineage.
+
+### F9 — Two more reader-without-producer surfaces, different lineage (found while verifying 2.5)
+
+- **`GateValidator.shouldRetry` / `getRetryHints`** have **no callers**. `gates/core/index.ts:252`
+  delegates to `shouldRetry`, and that wrapper is itself called by nothing —
+  `rg "\.shouldRetry\(|\.getRetryHints\("` finds only the internal delegation. The whole
+  retry-hint API is unreachable.
+- **`StepResult.validationResults`** (`engine/gates/types.ts:298`) has no writers.
+
+These belong to the gate **retry** system, not the semantic sidecar, so retiring them is not this
+plan's job. Filed here because the measurement was taken; they want their own tier with their own
+evidence about whether the retry path is meant to be live.
+
+**Falsification (2.5.2).** The replacement key-set assertion was run against a reintroduced
+channel before being trusted: adding `validationResults: []` back to the compositional service's
+return failed exactly one test — the new one — and nothing else. Probe reverted;
+`rg FALSIFICATION src/ tests/` → 0.
 
 ---
 
 ## T3 — Collapse the analyzer · depends T2, T0.2, T0.3
 
-| ID  | Status | Step                                                                 | Files                                                                                                      | Verification                                           |
-| --- | ------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 3.1 | ☐      | Remove the dual-mode branch and the always-false `llmUsed` metadata  | `configurable-semantic-analyzer.ts`                                                                        | `rg -n "llmUsed\|'semantic' : 'minimal'" src/` → 0     |
-| 3.2 | ☐      | Rename per T0.3; update the four consumers                           | analyzer + `prompt-analyzer.ts`, `classification.ts`, `execution-planner.ts`, `prompt-resource-handler.ts` | `npm run typecheck && npm run typecheck:tests:ratchet` |
-| 3.3 | ☐      | Remove the `analyzerMode` log line that can now only print one value | `mcp/tools/index.ts:226`                                                                                   | —                                                      |
-| 3.4 | ☐      | Rewrite the analyzer tests against the surviving surface             | `tests/unit/semantic/semantic-analyzer.test.ts`                                                            | suite green                                            |
+| ID  | Status | Step                                                                 | Files                                                  | Verification                                         |
+| --- | ------ | -------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------- |
+| 3.1 | ✓      | Remove the dual-mode branch and the always-false `llmUsed` metadata  | `content-analyzer.ts`, `shared/types/core-config.ts`   | `rg -n "llmUsed\|'semantic' : 'minimal'" src/` → 0 ✓ |
+| 3.2 | ✓      | Rename per T0.3; update consumers (**six**, not four — see below)    | `content-analyzer.ts` + 6 src consumers + 4 test files | typecheck + tests ratchet ✓                          |
+| 3.3 | ✓      | Remove the `analyzerMode` log line that can now only print one value | `mcp/tools/index.ts`                                   | landed early in T1 ✓                                 |
+| 3.4 | ✓      | Rewrite the analyzer tests against the surviving surface             | `tests/unit/semantic/content-analyzer.test.ts`         | 1933 unit · 468 integration · 43 e2e ✓               |
 
-**Gate**: the analyzer's public surface has no mode concept; all four consumers compile and their
-existing tests pass unchanged except for the rename.
+**Gate**: ✓ the analyzer has one analysis path and no LLM surface. 404 lines (382 analyzer + 22
+`types.ts`) → **219**; `modules/semantic/` is now a single file.
+
+**T0.3 was right that this is a file move, not an API rename.** `git mv` preserved history for
+both the source and its test. The class stayed `ContentAnalyzer`, so the six consumers changed only
+their import path.
+
+**The plan said four consumers; there are six.** F3's table listed `prompt-analyzer`,
+`classification`, `execution-planner`, `prompt-resource-handler`. Also importing the analyzer:
+`mcp/tools/index.ts`, `resource-manager/prompt/core/types.ts`, and
+`prompt-engine/core/prompt-executor.ts` — while `execution-planner` turned out to reference it
+only from its **test**. Net six src importers, four test files.
+
+**What was removed**: `LLMClient` (and `modules/semantic/types.ts`, which held nothing else),
+`llmClient`, `setLLMClient`, `performLLMAnalysis`, `analyzeStructuralCharacteristics`,
+`calculateTemplateComplexity`, `suggestExecutionGates`, `normalizeExecutionType`, the
+`BUILTIN_FRAMEWORK_TYPES` import, `getPerformanceStats().llmIntegrationEnabled`, the
+`llmIntegration` term in the cache key, and `analysisMetadata.llmUsed` (zero writers **and** zero
+readers once the LLM path went — the same caused-by-this-tier removal T2.5 made).
+
+`analyzePrompt` also lost a `try/catch` whose only recovery was to call the same total, pure
+builder it had just called.
+
+### Two decisions T3 made that the plan did not anticipate
+
+**`isLLMEnabled()` is retained, deliberately.** It is on the `ContentAnalyzerPort` contract and
+drives **user-visible output** in two live branches: `prompt-analyzer.ts:44` prints
+"⚠️ API Analysis Disabled" and suppresses gate suggestions when false, and
+`prompt-lifecycle-processor.ts:153` appends "💡 Suggested Gates" when true. It reports the _config
+flag_, not client availability — so post-T1 it can still return `true` while no model-backed path
+exists. Hardcoding it to `false` would silently change MCP response text, which is not a
+collapse-the-analyzer change. Its fate belongs with the config it reads → **new row T4.7**.
+
+**`analysisMetadata.mode` keeps its `'semantic'` union member.** No producer emits it any more, but
+`framework-semantic-integration.ts` compares against it in five places; narrowing the union turns
+those into no-overlap type errors. That file is dead (F10), and deleting it is what unblocks the
+narrowing. Documented at the type rather than left to look like an oversight.
+
+**Falsification (3.1).** Re-adding `llmUsed: false` to the metadata failed exactly one test — the
+new one — and nothing else. Probe reverted.
+
+**Ratchet.** `typecheck:tests:ratchet` caught the test rename, exactly as its message describes:
+baseline tracked `semantic-analyzer.test.ts` at 2 errors, and the renamed file reported 2 — the
+"looks fixed, actually moved" case. Rather than carry the debt to a new key, the two errors were
+**fixed** (`ChainStep` has `promptId`/`stepName`, never `id`), leaving the new path at 0. The stale
+key was then removed **surgically** rather than by regenerating the whole baseline, which could
+have absorbed unrelated drift: 389 → 387 errors, 106 → 105 entries, no other entry touched.
+
+### F10 — `FrameworkSemanticIntegration` is 863 lines that are never constructed
+
+`createFrameworkSemanticIntegration` (line 849) is the only construction site for the class, and
+**nothing calls that factory** — `rg "createFrameworkSemanticIntegration|new FrameworkSemanticIntegration"`
+returns only the file's own two lines. The entire module is unreachable, including its five
+`analysisMetadata.mode === 'semantic'` branches, which is why T3 did not need to touch them.
+
+Not deleted here: an 863-line subsystem removal is its own unit of review, and it is not a
+sidecar artifact — it predates this plan. Filed with F9 for a dead-code tier. Deleting it is the
+precondition for narrowing `mode`.
 
 ---
 
@@ -255,14 +361,16 @@ existing tests pass unchanged except for the rename.
 
 Shape depends on T0.1. Under the default (b):
 
-| ID  | Status | Step                                                                                     | Files                       | Verification                                                    |
-| --- | ------ | ---------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------- |
-| 4.1 | ☐      | Mark the `analysis` section deprecated in the schema with the replacement named          | `config.schema.json`        | `npm run validate:config-schema`                                |
-| 4.2 | ☐      | Warn once at load when a config still carries `analysis.semanticAnalysis`                | `infra/config/index.ts`     | unit test asserts the warning                                   |
-| 4.3 | ☐      | Remove the 5 MCP tool keys + restart-required entry                                      | `config-utils.ts`           | `rg -n "llmIntegration" src/mcp/` → 0                           |
-| 4.4 | ☐      | Remove the CLI key                                                                       | `config-input-validator.ts` | the generator-vs-validator test added this session still passes |
-| 4.5 | ☐      | Remove `analysis` from this repo's config                                                | `server/config.json`        | `npm run validate:config-schema`                                |
-| 4.6 | ☐      | Add the retired paths to the `INERT_SPELLINGS` retirement note, or state why they differ | `infra/config/index.ts`     | —                                                               |
+| ID  | Status | Step                                                                                                                                                                                               | Files                                                                                                 | Verification                                                      |
+| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 4.1 | ☐      | Mark the `analysis` section deprecated in the schema with the replacement named                                                                                                                    | `config.schema.json`                                                                                  | `npm run validate:config-schema`                                  |
+| 4.2 | ☐      | Warn once at load when a config still carries `analysis.semanticAnalysis`                                                                                                                          | `infra/config/index.ts`                                                                               | unit test asserts the warning                                     |
+| 4.3 | ☐      | Remove the 5 MCP tool keys + restart-required entry                                                                                                                                                | `config-utils.ts`                                                                                     | `rg -n "llmIntegration" src/mcp/` → 0                             |
+| 4.4 | ☐      | Remove the CLI key                                                                                                                                                                                 | `config-input-validator.ts`                                                                           | the generator-vs-validator test added this session still passes   |
+| 4.5 | ☐      | Remove `analysis` from this repo's config                                                                                                                                                          | `server/config.json`                                                                                  | `npm run validate:config-schema`                                  |
+| 4.6 | ☐      | Add the retired paths to the `INERT_SPELLINGS` retirement note, or state why they differ                                                                                                           | `infra/config/index.ts`                                                                               | —                                                                 |
+| 4.7 | ☐      | _(added at T3)_ Resolve `isLLMEnabled()` — it reports the dying flag and gates user-visible response text in two places. Rename to what it actually gates, or retire it with `ContentAnalyzerPort` | `content-analyzer.ts`, `shared/types/index.ts`, `prompt-analyzer.ts`, `prompt-lifecycle-processor.ts` | the two branches produce the intended text under both flag states |
+| 4.8 | ☐      | _(added at T0.5 / F6)_ Decouple `runLLMSelfCheck` from `LLMIntegrationConfig` without deleting the `llm_self_check` gate type                                                                      | `gate-validator.ts`, `prompt-executor.ts`                                                             | `rg -n "LLMIntegrationConfig" src/engine/` → 0; gate suite green  |
 
 **Gate**: no setter for any `analysis.*` key on either surface; a config carrying the section still
 loads and says so once.

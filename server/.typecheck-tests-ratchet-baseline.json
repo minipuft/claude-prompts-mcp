@@ -105,7 +105,6 @@
     "tests/unit/prompts/hot-reload-auxiliary.test.ts": 5,
     "tests/unit/prompts/inline-gate-definitions.test.ts": 1,
     "tests/unit/prompts/yaml-to-prompt-data.test.ts": 2,
-    "tests/unit/semantic/semantic-analyzer.test.ts": 2,
     "tests/unit/versioning/version-history-service.test.ts": 4
   }
 }

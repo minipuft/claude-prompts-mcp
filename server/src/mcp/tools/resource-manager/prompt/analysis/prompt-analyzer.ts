@@ -7,7 +7,7 @@ import { PromptClassification, AnalysisResult, PromptResourceDependencies } from
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 
-import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { type Logger } from '#shared/types/index.js';
 
 /**

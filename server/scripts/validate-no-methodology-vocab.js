@@ -21,7 +21,6 @@ const EXCLUDED_PATHS = [
   // Archived record of the sweep itself; rewriting it would falsify the history it exists to keep.
   { glob: '**/plans/**', reason: 'archived plan files' },
   { glob: 'CHANGELOG.md', reason: 'historical release record' },
-  { glob: 'server/scripts/rename-symbols.ts', reason: 'historical record of past renames' },
   { glob: 'cli/dist/**', reason: 'build artifact, regenerated' },
   { glob: 'server/dist/**', reason: 'build artifact, regenerated' },
   { glob: '**/node_modules/**', reason: 'third-party' },

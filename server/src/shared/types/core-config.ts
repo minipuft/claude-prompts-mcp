@@ -564,13 +564,19 @@ export interface ContentAnalysisResult {
   };
   analysisMetadata: {
     version: string;
-    /** Analysis mode - 'semantic' when LLM used, 'minimal' otherwise */
+    /**
+     * Analysis mode. Only `'minimal'` is produced — `ContentAnalyzer` is the sole producer and
+     * emits nothing else. `'semantic'` is retained solely because
+     * `engine/frameworks/integration/framework-semantic-integration.ts` still compares against
+     * it; narrowing the union turns those comparisons into no-overlap type errors. That file is
+     * never constructed (F10 in `plans/semantic-llm-sidecar-retirement-2026-08-05.md`), and
+     * removing it is what unblocks narrowing this.
+     */
     mode?: 'semantic' | 'minimal';
     analysisTime: number;
     analyzer: 'content';
     cacheHit: boolean;
     fallbackUsed?: boolean;
-    llmUsed?: boolean;
     hooksUsed?: boolean;
   };
 }

@@ -73,8 +73,7 @@ import {
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
-import { createContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
-import { createSemanticIntegrationFactory } from '#modules/semantic/integrations/index.js';
+import { createContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
@@ -215,16 +214,14 @@ export class McpToolRouter {
 
     // Initialize shared components with configurable analysis
     const analysisConfig = this.configManager.getSemanticAnalysisConfig();
-    const integrationFactory = createSemanticIntegrationFactory(this.logger);
-    this.semanticAnalyzer = await integrationFactory.createFromEnvironment(analysisConfig);
+    this.semanticAnalyzer = createContentAnalyzer(this.logger, analysisConfig);
     this.analyticsService = metricsCollector;
 
     // Initialize gate system manager for runtime gate control
     this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot());
     await this.gateStateStore.initialize();
 
-    const analyzerMode = analysisConfig.llmIntegration.enabled ? 'semantic' : 'minimal';
-    this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
+    this.logger.info('Content analyzer initialized');
 
     // Initialize consolidated tools
     // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
@@ -398,7 +395,7 @@ export class McpToolRouter {
    *
    * The adjacent `gatesConfig.enableFrameworkGates` switch is deliberately not
    * consulted. It vetoes only the `framework-guide` rank — gates the server
-   * loads from the active methodology — and leaves client-supplied gates fully
+   * loads from the active framework — and leaves client-supplied gates fully
    * functional, so reading it here would withdraw a parameter that still works.
    *
    * Read from the state store rather than `GateManager.isGateSystemEnabled()`,

@@ -4,7 +4,7 @@ import { ExecutionPlanner } from '../../../../src/engine/execution/planning/exec
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/execution-context.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { ContentAnalyzer } from '../../../../src/modules/semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
 import type { ContentAnalysisResult } from '../../../../src/modules/semantic/types.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
 

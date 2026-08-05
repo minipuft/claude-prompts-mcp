@@ -226,7 +226,6 @@ export class InMemoryMetricsCollector extends EventEmitter implements MetricsCol
     this.logger.debug('[Analytics] Gate usage recorded', {
       gateId: entry.gateId,
       type: entry.gateType,
-      validation: entry.validationResult,
     });
   }
 

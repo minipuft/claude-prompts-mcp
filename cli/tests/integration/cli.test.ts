@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI = join(__dirname, '../../dist/cpm.js');
+const SERVER_PACKAGE = join(__dirname, '../../../server/package.json');
 const VALID_WS = join(__dirname, '../fixtures/valid-workspace');
 const INVALID_WS = join(__dirname, '../fixtures/invalid-workspace');
 const EMPTY_WS = join(__dirname, '../fixtures/empty-workspace');
@@ -39,8 +40,9 @@ describe('cpm CLI', () => {
 
     it('prints version', () => {
       const { stdout, exitCode } = run(['--version']);
+      const releaseVersion = JSON.parse(readFileSync(SERVER_PACKAGE, 'utf8')).version;
       expect(exitCode).toBe(0);
-      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(stdout.trim()).toBe(releaseVersion);
     });
 
     it('errors on unknown command', () => {

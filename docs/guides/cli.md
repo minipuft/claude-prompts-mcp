@@ -29,7 +29,17 @@ npm install -g claude-prompts
 cpm validate --all -w ./my-workspace
 ```
 
-`cpm` is a self-contained bundle with no runtime dependencies, so it works against any workspace directory on disk.
+The npm installation follows the package's Node.js requirement. For CLI-only use on Node.js >=18.18.0, download the checksummed standalone bundle from the matching GitHub Release:
+
+```bash
+VERSION=3.1.1
+curl -LO "https://github.com/minipuft/claude-prompts-mcp/releases/download/v${VERSION}/cpm-${VERSION}.js"
+curl -LO "https://github.com/minipuft/claude-prompts-mcp/releases/download/v${VERSION}/cpm-${VERSION}.js.sha256"
+sha256sum --check "cpm-${VERSION}.js.sha256"
+node "cpm-${VERSION}.js" --version
+```
+
+Both forms are the same self-contained CLI bundle and report the `claude-prompts` release version. The CLI works against any workspace directory on disk without starting the MCP server.
 
 <details>
 <summary><strong>Building from source (contributors)</strong></summary>
@@ -41,6 +51,7 @@ node cli/dist/cpm.js --help
 ```
 
 `npm --prefix server run build` also emits `server/dist/cpm.js` from the same source; that is the copy published to npm.
+`server/package.json#version` is the release identity for both builds; `cli/package.json` remains private build metadata.
 
 </details>
 
@@ -270,7 +281,7 @@ Manage workspace `config.json` (read, write, validate, reset).
 
 ```bash
 cpm config list --workspace server                  # Display full config
-cpm config get gates.mode -w server                 # Get a single value
+cpm config get gates.enabled -w server              # Get a single value
 cpm config set logging.level debug -w server        # Set a value (backup + validate)
 cpm config validate -w server                       # Validate all keys/values
 cpm config reset --force -w server                  # Reset to defaults
@@ -286,34 +297,45 @@ cpm config keys                                     # List all valid config keys
 | `reset`    | `cpm config reset --force`     | Reset to defaults (requires `--force`) |
 | `keys`     | `cpm config keys`              | List all valid keys with types         |
 
-Keys use dot-notation (e.g., `gates.mode`, `server.port`, `logging.level`). The `set` subcommand creates a timestamped backup before writing and warns when a key requires server restart. The `--json` and `-w` flags work with all subcommands.
+Keys use dot-notation (e.g., `gates.enabled`, `server.port`, `logging.level`). The `set` subcommand creates a timestamped backup before writing and warns when a key requires server restart. The `--json` and `-w` flags work with all subcommands.
 
 Exit codes: `0` success, `1` error or validation failure.
 
 ### enable / disable
 
-Shorthand for toggling subsystem mode switches (`on`/`off`).
+Shorthand for toggling a subsystem's boolean switch.
 
 ```bash
-cpm enable gates                       # gates.mode = on
-cpm disable frameworks -w server    # frameworks.mode = off
-cpm enable resources --json            # resources.mode = on (JSON output)
+cpm enable gates                    # gates.enabled = true
+cpm disable frameworks -w server    # frameworks.enabled = false
+cpm enable resources --json         # resources.registerWithMcp = true (JSON output)
 ```
 
-| Subsystem                 | Config Key                                      |
-| ------------------------- | ----------------------------------------------- |
-| `gates`                   | `gates.mode`                                    |
-| `frameworks`              | `frameworks.mode`                               |
-| `resources`               | `resources.mode`                                |
-| `resources.prompts`       | `resources.prompts.mode`                        |
-| `resources.gates`         | `resources.gates.mode`                          |
-| `resources.frameworks`    | `resources.frameworks.mode`                     |
-| `resources.observability` | `resources.observability.mode`                  |
-| `resources.logs`          | `resources.logs.mode`                           |
-| `verification`            | `verification.isolation.mode`                   |
-| `analysis`                | `analysis.semanticAnalysis.llmIntegration.mode` |
+| Subsystem                 | Config Key                        |
+| ------------------------- | --------------------------------- |
+| `gates`                   | `gates.enabled`                   |
+| `frameworks`              | `frameworks.enabled`              |
+| `resources`               | `resources.registerWithMcp`       |
+| `resources.prompts`       | `resources.prompts.enabled`       |
+| `resources.gates`         | `resources.gates.enabled`         |
+| `resources.frameworks`    | `resources.frameworks.enabled`    |
+| `resources.observability` | `resources.observability.enabled` |
+| `resources.logs`          | `resources.logs.enabled`          |
+| `verification`            | `verification.isolation.enabled`  |
+| `analysis`                | _Deprecated_ — see note below     |
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
+
+> **Deprecated in 3.1.2: `analysis`.** The LLM side client it switched on has been removed, so the
+> key is still accepted and persisted but no runtime reader consults it. Gate evaluation by a model
+> is served by the `%judge` modifier and `gates.evaluation.defaultMode`, which run in the client's
+> own subagent rather than through an outbound API call. The key is scheduled for removal.
+
+> **Changed in 3.1.2.** These ten keys were previously `*.mode` holding `"on"`/`"off"`, which no
+> reader consulted — the command reported success and changed nothing. A `config.json` still
+> carrying a `*.mode` key is adopted into the boolean on load, so no edit is required; `cpm config
+set` no longer accepts the old spelling. `telemetry.mode`, `phaseGuards.mode` and `identity.mode`
+> are unaffected — those are read, and none of them is an on/off toggle.
 
 ## Write Validation Behavior
 

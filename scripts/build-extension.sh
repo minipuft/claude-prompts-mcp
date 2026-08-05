@@ -7,12 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 STAGING_DIR="$ROOT_DIR/.mcpb-staging"
 OUTPUT_FILE="$ROOT_DIR/claude-prompts.mcpb"
-INSTALL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/claude-prompts-mcpb-install.XXXXXX")"
+SMOKE_WORKSPACE="$(mktemp -d "${TMPDIR:-/tmp}/claude-prompts-mcpb-smoke.XXXXXX")"
 MCPB_BIN="$ROOT_DIR/node_modules/.bin/mcpb"
-MCPB_EXCLUDED_DEPS=("chokidar" "ulid")
 
 cleanup() {
-  rm -rf "$STAGING_DIR" "$INSTALL_DIR"
+  rm -rf "$STAGING_DIR" "$SMOKE_WORKSPACE"
 }
 trap cleanup EXIT
 
@@ -30,7 +29,7 @@ mkdir -p "$STAGING_DIR/server"
 # Build server if needed
 echo "==> Building server..."
 cd "$ROOT_DIR/server"
-npm run build
+npm run build:prod
 
 # Copy manifest and essential files
 echo "==> Copying files..."
@@ -38,8 +37,10 @@ cp "$ROOT_DIR/manifest.json" "$STAGING_DIR/"
 cp "$ROOT_DIR/LICENSE" "$STAGING_DIR/"
 cp "$ROOT_DIR/.node-version" "$STAGING_DIR/" 2>/dev/null || true
 
-# Copy server dist and resources
-cp -r "$ROOT_DIR/server/dist" "$STAGING_DIR/server/"
+# Copy the exposed server runtime and resources. The cpm CLI is distributed through
+# npm and GitHub Releases; MCPB does not register a cpm executable.
+bash "$ROOT_DIR/scripts/stage-server-runtime.sh" \
+  "$ROOT_DIR/server/dist" "$STAGING_DIR/server/dist"
 cp -r "$ROOT_DIR/server/resources" "$STAGING_DIR/server/"
 cp "$ROOT_DIR/server/config.json" "$STAGING_DIR/server/"
 cp "$ROOT_DIR/server/LICENSE" "$STAGING_DIR/server/"
@@ -47,59 +48,54 @@ cp "$ROOT_DIR/server/LICENSE" "$STAGING_DIR/server/"
 # Copy skills
 cp -r "$ROOT_DIR/skills" "$STAGING_DIR/" 2>/dev/null || true
 
-echo "==> Installing the locked production dependency tree..."
-cp "$ROOT_DIR/server/package.json" "$ROOT_DIR/server/package-lock.json" "$INSTALL_DIR/"
-if [[ -f "$ROOT_DIR/server/.npmrc" ]]; then
-  cp "$ROOT_DIR/server/.npmrc" "$INSTALL_DIR/"
-fi
-(cd "$INSTALL_DIR" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
-cp -R "$INSTALL_DIR/node_modules" "$STAGING_DIR/server/"
-
-for dependency in "${MCPB_EXCLUDED_DEPS[@]}"; do
-  rm -rf "$STAGING_DIR/server/node_modules/$dependency"
-done
-
-# npm creates relative links in .bin. Excluding a bundled package must also remove
-# its now-dangling executable link or MCPB refuses to archive the staged tree.
-node - "$STAGING_DIR/server/node_modules/.bin" <<'NODE'
-const fs = require('node:fs');
-const path = require('node:path');
-const binDir = process.argv[2];
-if (fs.existsSync(binDir)) {
-  for (const entry of fs.readdirSync(binDir)) {
-    const entryPath = path.join(binDir, entry);
-    if (fs.lstatSync(entryPath).isSymbolicLink() && !fs.existsSync(entryPath)) {
-      fs.unlinkSync(entryPath);
-    }
-  }
-}
-NODE
-
 echo "==> Generating the staged package contract..."
-node - "$ROOT_DIR/server/package.json" "$STAGING_DIR/server/package.json" "${MCPB_EXCLUDED_DEPS[@]}" <<'NODE'
+node - "$ROOT_DIR/server/package.json" "$STAGING_DIR/server/package.json" <<'NODE'
 const fs = require('node:fs');
-const [sourcePath, outputPath, ...excluded] = process.argv.slice(2);
+const [sourcePath, outputPath] = process.argv.slice(2);
 const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const dependencies = Object.fromEntries(
-  Object.entries(source.dependencies).filter(([name]) => !excluded.includes(name)),
-);
 const staged = {
   name: source.name,
   version: source.version,
   type: source.type,
   main: source.main,
-  dependencies,
 };
 fs.writeFileSync(outputPath, `${JSON.stringify(staged, null, 2)}\n`);
 NODE
 
-node "$ROOT_DIR/server/scripts/validate-extension-deps.js" --staging-dir "$STAGING_DIR"
+MCP_WORKSPACE="$SMOKE_WORKSPACE" node "$STAGING_DIR/server/dist/index.js" --startup-test
+rm -rf "$STAGING_DIR/server/runtime-state"
+node "$ROOT_DIR/server/scripts/validate-extension-artifact.js" --staging-dir "$STAGING_DIR"
 
 # Pack using mcpb
 echo "==> Packing extension..."
 cd "$STAGING_DIR"
 rm -f "$OUTPUT_FILE"
 "$MCPB_BIN" pack . "$OUTPUT_FILE"
+
+echo "==> Verifying packed extension inventory..."
+ARCHIVE_FILES="$(unzip -Z1 "$OUTPUT_FILE")"
+grep -qx 'server/dist/index.js' <<<"$ARCHIVE_FILES" || {
+  echo "ERROR: packed extension is missing server/dist/index.js" >&2
+  exit 1
+}
+for forbidden in \
+  'server/dist/cpm.js' \
+  'server/dist/cpm.js.map' \
+  'server/node_modules/' \
+  'server/runtime-state/'; do
+  if grep -q "^${forbidden}" <<<"$ARCHIVE_FILES"; then
+    echo "ERROR: packed extension contains forbidden path: $forbidden" >&2
+    exit 1
+  fi
+done
+node - "$OUTPUT_FILE" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const budget = 3_000_000;
+const bytes = fs.statSync(file).size;
+if (bytes > budget) throw new Error(`MCPB size ${bytes} exceeds ${budget} bytes`);
+console.log(`  MCPB size: ${bytes} bytes (budget ${budget})`);
+NODE
 
 # Show results
 echo ""

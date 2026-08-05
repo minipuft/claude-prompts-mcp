@@ -89,7 +89,7 @@
   "analysis": {
     "semanticAnalysis": {
       "llmIntegration": {
-        "mode": "on"
+        "enabled": false
       }
     }
   }

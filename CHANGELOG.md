@@ -13,23 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Codex prompt resource activation:** the downstream launcher now reads a persistent user-level resource path while keeping mutable MCP state under the OS temporary runtime root; the curated 26-prompt package catalog remains the default.
 - **Structured gate verdicts are now hook-enforced:** `hooks/gate-enforce.py` crashed on the object form of `gate_verdict` (the schema-preferred shape); because hook failures are fail-open, object verdicts were never gate-enforced on any client. Surfaced by the codex-prompts port's live E2E.
 
-## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
-
+## [3.1.2] - 2026-08-03
 
 ### Fixed
 
-* **deps:** defer CLI TypeScript 6 migration ([#193](https://github.com/minipuft/claude-prompts/issues/193)) ([aef8e5e](https://github.com/minipuft/claude-prompts/commit/aef8e5ef1b07654984feede76abe556e99e138ae))
-* **deps:** defer TypeScript 7 migration ([#190](https://github.com/minipuft/claude-prompts/issues/190)) ([04a9931](https://github.com/minipuft/claude-prompts/commit/04a9931d691214e8a0d6e0f47d60014495b58aff))
-* **deps:** update server runtime dependencies to ^0.221.0 ([#184](https://github.com/minipuft/claude-prompts/issues/184)) ([b848ae6](https://github.com/minipuft/claude-prompts/commit/b848ae68b0bf6f31c0d6aba66e780b474ba0382d))
+- **Codex plugin runtime:** plugin launch no longer depends on Claude root interpolation, and mutable SQLite/log output can be routed to a sandbox-writable runtime root without moving bundled resources.
+
+## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
+
+### Fixed
+
+- **deps:** defer CLI TypeScript 6 migration ([#193](https://github.com/minipuft/claude-prompts/issues/193)) ([aef8e5e](https://github.com/minipuft/claude-prompts/commit/aef8e5ef1b07654984feede76abe556e99e138ae))
+- **deps:** defer TypeScript 7 migration ([#190](https://github.com/minipuft/claude-prompts/issues/190)) ([04a9931](https://github.com/minipuft/claude-prompts/commit/04a9931d691214e8a0d6e0f47d60014495b58aff))
+- **deps:** update server runtime dependencies to ^0.221.0 ([#184](https://github.com/minipuft/claude-prompts/issues/184)) ([b848ae6](https://github.com/minipuft/claude-prompts/commit/b848ae68b0bf6f31c0d6aba66e780b474ba0382d))
 
 ## [3.1.0](https://github.com/minipuft/claude-prompts/compare/v3.0.2...v3.1.0) (2026-08-03)
 
 ### Added
 
-* **frameworks:** make the default framework config-declarable per project ([8b948fb](https://github.com/minipuft/claude-prompts/commit/8b948fbc78fbd8cf1fd92f45405e17419e59b009))
-* **frameworks:** scope framework state per project ([905c926](https://github.com/minipuft/claude-prompts/commit/905c92614eac6896cfb74fa1746b63116123902a))
+- **frameworks:** make the default framework config-declarable per project ([8b948fb](https://github.com/minipuft/claude-prompts/commit/8b948fbc78fbd8cf1fd92f45405e17419e59b009))
+- **frameworks:** scope framework state per project ([905c926](https://github.com/minipuft/claude-prompts/commit/905c92614eac6896cfb74fa1746b63116123902a))
 
 ### Changed
 
@@ -45,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The deprecated HTTP+SSE transport.** SDK v2 no longer ships `SSEServerTransport`, so keeping it would have meant hand-maintaining a transport upstream had deleted. **`--transport=sse` now exits with an error** naming `streamable-http` rather than falling back to the configured default — the previous fallback started the server on a transport nobody asked for and reported success. The same check applies to `transport` in `config.json`. Streamable HTTP still uses `text/event-stream` framing for responses; only the separate transport is gone.
 - The protocol session registry, together with the session-attachment failure path it required.
+
 * **ci:** route validation by change impact ([#183](https://github.com/minipuft/claude-prompts/issues/183)) ([c7509c2](https://github.com/minipuft/claude-prompts/commit/c7509c2b56e9266d9ac0c70dd8f2c89f6e3f3f19))
 * **frameworks:** route fallback defaults through DEFAULT_FRAMEWORK_ID ([b41adc4](https://github.com/minipuft/claude-prompts/commit/b41adc438cd577e22663550c1055747f8fce761a))
 * **mcp-tools:** drop dead wiring from the tool constructor seams ([6642c04](https://github.com/minipuft/claude-prompts/commit/6642c049586b6ac7990fa5b133c6d0f080de4e39))
@@ -58,54 +65,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **ci:** allow Renovate validator to inspect updates ([#179](https://github.com/minipuft/claude-prompts/pull/179)) ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
-* **deps:** align Renovate with delivery contracts ([#177](https://github.com/minipuft/claude-prompts/pull/177)) ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
-* **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/pull/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
-* **gates:** declare the gate surface on the hook and notification ports ([d4a5360](https://github.com/minipuft/claude-prompts/commit/d4a5360fa546eae5336af5d0759067431ec4d74c))
-* **pipeline:** derive skipped stages instead of accumulating them ([cd7abc0](https://github.com/minipuft/claude-prompts/commit/cd7abc0775acdbb39c2c0809e048141daf2de548))
+- **ci:** allow Renovate validator to inspect updates ([#179](https://github.com/minipuft/claude-prompts/pull/179)) ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
+- **deps:** align Renovate with delivery contracts ([#177](https://github.com/minipuft/claude-prompts/pull/177)) ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
+- **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/pull/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
+- **gates:** declare the gate surface on the hook and notification ports ([d4a5360](https://github.com/minipuft/claude-prompts/commit/d4a5360fa546eae5336af5d0759067431ec4d74c))
+- **pipeline:** derive skipped stages instead of accumulating them ([cd7abc0](https://github.com/minipuft/claude-prompts/commit/cd7abc0775acdbb39c2c0809e048141daf2de548))
 
 ### Documentation
 
-* **deps:** close Phase 6 Renovate rollout ([#180](https://github.com/minipuft/claude-prompts/pull/180)) ([a785167](https://github.com/minipuft/claude-prompts/commit/a78516776979df4ba51f62cb8a256c8026188b22))
-* **deps:** scope the SDK v2 package swap and record Tier B's blockers ([59dfdee](https://github.com/minipuft/claude-prompts/commit/59dfdee762262cdcf840ce8da98762f8c80a7c77))
-* **docs:** record acquisition recovery baseline ([#182](https://github.com/minipuft/claude-prompts/pull/182)) ([8bfd41b](https://github.com/minipuft/claude-prompts/commit/8bfd41b8622c8361e1fe337533180ece6c88a19c))
-* **pipeline:** add coordinator decomposition tier ([#181](https://github.com/minipuft/claude-prompts/pull/181)) ([41cbbb9](https://github.com/minipuft/claude-prompts/commit/41cbbb91ddeadeb96adb19f6fb83e8b0eb2d936f))
-* **pipeline:** drop a doubled stage name left by the renumber sweep ([bd8095a](https://github.com/minipuft/claude-prompts/commit/bd8095a73c8a17ccfabae5287fec36a2f1f99edd))
+- **deps:** close Phase 6 Renovate rollout ([#180](https://github.com/minipuft/claude-prompts/pull/180)) ([a785167](https://github.com/minipuft/claude-prompts/commit/a78516776979df4ba51f62cb8a256c8026188b22))
+- **deps:** scope the SDK v2 package swap and record Tier B's blockers ([59dfdee](https://github.com/minipuft/claude-prompts/commit/59dfdee762262cdcf840ce8da98762f8c80a7c77))
+- **docs:** record acquisition recovery baseline ([#182](https://github.com/minipuft/claude-prompts/pull/182)) ([8bfd41b](https://github.com/minipuft/claude-prompts/commit/8bfd41b8622c8361e1fe337533180ece6c88a19c))
+- **pipeline:** add coordinator decomposition tier ([#181](https://github.com/minipuft/claude-prompts/pull/181)) ([41cbbb9](https://github.com/minipuft/claude-prompts/commit/41cbbb91ddeadeb96adb19f6fb83e8b0eb2d936f))
+- **pipeline:** drop a doubled stage name left by the renumber sweep ([bd8095a](https://github.com/minipuft/claude-prompts/commit/bd8095a73c8a17ccfabae5287fec36a2f1f99edd))
 
 ## [3.0.2](https://github.com/minipuft/claude-prompts/compare/v3.0.1...v3.0.2) (2026-08-02)
 
-
 ### Changed
 
-* **deps:** the published MCP `inputSchema` changed in 39 places, all of them **permissive**. `@modelcontextprotocol/sdk` selects its JSON Schema converter from the installed zod major (`zod-json-schema-compat.js:19-28`), so upgrading to zod 4 swapped the engine that produces the tool surface. The principal difference is that `additionalProperties: false` is now emitted as `additionalProperties: {}`. **No consumer action is required**: every request that validated under zod 3 still validates under zod 4 — the surface changed shape without narrowing what it accepts, which is why this ships as a patch rather than the major Release Please computed. The surface is now pinned by `server/tests/snapshots/mcp-input-schemas.json` and checked in CI, so a future converter change cannot land unnoticed.
+- **deps:** the published MCP `inputSchema` changed in 39 places, all of them **permissive**. `@modelcontextprotocol/sdk` selects its JSON Schema converter from the installed zod major (`zod-json-schema-compat.js:19-28`), so upgrading to zod 4 swapped the engine that produces the tool surface. The principal difference is that `additionalProperties: false` is now emitted as `additionalProperties: {}`. **No consumer action is required**: every request that validated under zod 3 still validates under zod 4 — the surface changed shape without narrowing what it accepts, which is why this ships as a patch rather than the major Release Please computed. The surface is now pinned by `server/tests/snapshots/mcp-input-schemas.json` and checked in CI, so a future converter change cannot land unnoticed.
 
 ### Fixed
 
-* **scripts:** check gemini's dependency range, not its own version ([#170](https://github.com/minipuft/claude-prompts/issues/170)) ([adee76c](https://github.com/minipuft/claude-prompts/commit/adee76c2a28c65c00e9989df466fc071a0110ba6))
-
+- **scripts:** check gemini's dependency range, not its own version ([#170](https://github.com/minipuft/claude-prompts/issues/170)) ([adee76c](https://github.com/minipuft/claude-prompts/commit/adee76c2a28c65c00e9989df466fc071a0110ba6))
 
 ### Maintenance
 
-* **deps:** dependency modernization — Tiers A–D (zod 4, js-yaml 5, TypeScript 6, ESLint 10) ([#172](https://github.com/minipuft/claude-prompts/issues/172)) ([a28119c](https://github.com/minipuft/claude-prompts/commit/a28119cf859a3ba34b32aa7fa92092b767236847))
-* release 3.0.2 rather than the computed 4.0.0 ([#173](https://github.com/minipuft/claude-prompts/issues/173)) ([550b2e4](https://github.com/minipuft/claude-prompts/commit/550b2e455275ddb5c7f870f7651e1cae76659556))
+- **deps:** dependency modernization — Tiers A–D (zod 4, js-yaml 5, TypeScript 6, ESLint 10) ([#172](https://github.com/minipuft/claude-prompts/issues/172)) ([a28119c](https://github.com/minipuft/claude-prompts/commit/a28119cf859a3ba34b32aa7fa92092b767236847))
+- release 3.0.2 rather than the computed 4.0.0 ([#173](https://github.com/minipuft/claude-prompts/issues/173)) ([550b2e4](https://github.com/minipuft/claude-prompts/commit/550b2e455275ddb5c7f870f7651e1cae76659556))
 
 ## [3.0.1](https://github.com/minipuft/claude-prompts/compare/v3.0.0...v3.0.1) (2026-08-01)
 
-
 ### Fixed
 
-* **ci:** ship agents/ in the plugin distribution and assert it ([#160](https://github.com/minipuft/claude-prompts/issues/160)) ([1341e08](https://github.com/minipuft/claude-prompts/commit/1341e08e7abe40013069c5f008d56bebc5496668))
-
+- **ci:** ship agents/ in the plugin distribution and assert it ([#160](https://github.com/minipuft/claude-prompts/issues/160)) ([1341e08](https://github.com/minipuft/claude-prompts/commit/1341e08e7abe40013069c5f008d56bebc5496668))
 
 ### Changed
 
-* **server:** migrate cross-layer imports to package.json subpath imports ([901081a](https://github.com/minipuft/claude-prompts/commit/901081a144d9c79f5a5a4808f3bbd50d90cf4e65))
-* **server:** subpath imports + declared public API contract ([b05a181](https://github.com/minipuft/claude-prompts/commit/b05a1815b9e13292fa97c8b03877435a412bd9fb))
-
+- **server:** migrate cross-layer imports to package.json subpath imports ([901081a](https://github.com/minipuft/claude-prompts/commit/901081a144d9c79f5a5a4808f3bbd50d90cf4e65))
+- **server:** subpath imports + declared public API contract ([b05a181](https://github.com/minipuft/claude-prompts/commit/b05a1815b9e13292fa97c8b03877435a412bd9fb))
 
 ### Documentation
 
-* declare the public API contract that major versions protect ([02f937f](https://github.com/minipuft/claude-prompts/commit/02f937f65ad52a919c415fce2b04eeb22a58894b))
+- declare the public API contract that major versions protect ([02f937f](https://github.com/minipuft/claude-prompts/commit/02f937f65ad52a919c415fce2b04eeb22a58894b))
 
 ## [3.0.0](https://github.com/minipuft/claude-prompts/compare/v2.1.0...v3.0.0) (2026-08-01)
 
@@ -119,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ExecutionRecord` persistence** (Tier 5): Pipeline stages 9 and 10 now emit append-only ledger rows to the `execution_records` table on every chain-step transition. Stage 9 emits a `working` record per render (with `substate.renderedAt`); stage 10 emits a `completed` record on chain terminal. Records carry SEP-1686-aligned `StepLifecycle` + `StepSubstate` + `GateVerdictSummary` shape. ULIDs (monotonic) preserve insertion order across rapid emissions. Emission is best-effort — failures log a warning and never break pipeline execution.
 - **`command-tokenizer.ts`**: Pure function `tokenizeCommand()` with quote-aware detection for all 8 operator types (chain, delegation, gate, parallel, repetition, conditional, framework, style). Includes delimiter overlap filtering to prevent `==>` from false-matching as gate operator
 - **`command-tokenizer.test.ts`**: 56 tests covering all operator types, quoted argument regression suite, mixed operators, prompt ID extraction, cleaned command generation, and edge cases
+
 * **execution:** execution ledger Tiers 1-5 + Phase 4 SQLite cleanup ([#131](https://github.com/minipuft/claude-prompts/issues/131)) ([9fd4520](https://github.com/minipuft/claude-prompts/commit/9fd45205771fae4c8d603bb32a2e0ed9956b51ad))
 * **gates:** add script_tool verification criteria and fix schema normalization ([d12c278](https://github.com/minipuft/claude-prompts/commit/d12c2789897d5365374c7e1d4d7e0e0268adc679))
 * **gates:** clarify gate vocabulary, add path-verification gate, documentation pass ([#132](https://github.com/minipuft/claude-prompts/issues/132)) ([7d46db0](https://github.com/minipuft/claude-prompts/commit/7d46db02e0d55a348372dc8a3181e7acb916c78a))
@@ -151,6 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `parser-utils.ts`: 198→156 lines; removed `hasOperatorOutsideQuotes` and `stripFrameworkOperatorOutsideQuotes` (zero consumers — tokenizer subsumes)
   - Strategies now consume `TokenizedCommand` instead of re-detecting operators: `canHandle(command, tokens)` reads `tokens.format` and `tokens.hasSymbolicOperators`
   - Eliminates the class of bugs where special characters inside quoted arguments (e.g., `"R3F + Visx"`, `"modes: (1)"`) triggered false operator detection
+
 * **chains:** rename ChainSessionManager identifiers to ChainSessionStore ([6f9428a](https://github.com/minipuft/claude-prompts/commit/6f9428ade77f31a8220215383b1e1a823e8bbc6d))
 * **chains:** retire StepState enum for StepLifecycle + StepMilestone ([d617330](https://github.com/minipuft/claude-prompts/commit/d6173301d4f956677ed8d70fd6259256a2de631f))
 * **config:** separate authored framework settings from the resolved view ([0bc61f8](https://github.com/minipuft/claude-prompts/commit/0bc61f845e54a533e0df6e1f6ee6aa5ee4deb211))
@@ -184,78 +188,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **ci:** keep the Docker build working now that server/ builds the cpm bin ([1bb6f6e](https://github.com/minipuft/claude-prompts/commit/1bb6f6e2ebcc79976a679e3030c29104f6f610ba))
-* **ci:** make CI enforce what the repo already checks, and stop sync-downstream shipping broken lockfiles ([708c81b](https://github.com/minipuft/claude-prompts/commit/708c81bbb35e45867ced4dc29db0b3f459a210a4))
-* **ci:** make sync-downstream regenerate lockfiles and assert npm ci ([dbba335](https://github.com/minipuft/claude-prompts/commit/dbba33529508a5d61d9508c758caa4d480dd66e7))
-* **ci:** make the new CI jobs work in a clean runner environment ([809089b](https://github.com/minipuft/claude-prompts/commit/809089bc5ba231bdfa30077819ac3827747b556a))
-* **ci:** stop prettier reformatting the generated gate index ([499c04e](https://github.com/minipuft/claude-prompts/commit/499c04e84e106d5f43152e12a49989cefcad3c12))
-* **ci:** stop validate:format failing on tool-generated files ([#159](https://github.com/minipuft/claude-prompts/issues/159)) ([ef3d39c](https://github.com/minipuft/claude-prompts/commit/ef3d39ce72959bbf0a822bc135e7b8e1bf140951))
-* **config:** sync config.json and its schema to the framework rename ([39db875](https://github.com/minipuft/claude-prompts/commit/39db8757ce7096e7da04c92b0b866ad78ae8c474))
-* **contracts:** correct two tool descriptions that named an invalid value ([436e2d5](https://github.com/minipuft/claude-prompts/commit/436e2d575c83f6a127e8ed2d940583fe713b0f6a))
-* **docs:** repair nested code fences in the first-prompt tutorial ([ffef5d7](https://github.com/minipuft/claude-prompts/commit/ffef5d73e56e4edcb64b0bdfbce51029249be648))
-* **frameworks:** reconnect frameworkGates — the YAML rename orphaned it ([280603e](https://github.com/minipuft/claude-prompts/commit/280603e838f334fdae88f5623e36d5d6b9f9a386))
-* **frameworks:** repair five methodology-vocabulary defects; finish the rename ([8a547d9](https://github.com/minipuft/claude-prompts/commit/8a547d912ef040ce3e05664f675ae56a61f73d87))
-* **frameworks:** unstick [@deprecated](https://github.com/deprecated) from version, lay out tier 4.3 ([9d8cbe2](https://github.com/minipuft/claude-prompts/commit/9d8cbe2f562fff75a819b0ef7eafdefedb34c494))
-* **hooks:** filter deleted files from pre-push prettier check ([5ee1fb2](https://github.com/minipuft/claude-prompts/commit/5ee1fb28bb02faa497846c2e8a6c8e8ecb370f8d))
-* **hooks:** make every local gate a strict subset of CI ([3924713](https://github.com/minipuft/claude-prompts/commit/39247139ca3b7ca76149e1ba15ca4e7ca74e7aca))
-* **hooks:** remove stale hooks-state.db fallback from ralph-stop ([2be57ab](https://github.com/minipuft/claude-prompts/commit/2be57ab1102083d9913dd3f87502d011db444180))
-* **hooks:** use --diff-filter=ACMR instead of shell workaround ([edb9526](https://github.com/minipuft/claude-prompts/commit/edb95267b3055cadf7198a38fd7b3dc0580069fb))
-* **mcp-tools:** rename the methodology creation param to framework ([e2b632c](https://github.com/minipuft/claude-prompts/commit/e2b632c29ebdfa567d7e0815887a63ab2f9c3861))
-* **parsers:** quote-aware operator detection prevents special chars in args from breaking prompt resolution ([0beb3ff](https://github.com/minipuft/claude-prompts/commit/0beb3ff2009a487bb5a39d0367429b8e07934be1))
-* repoint the cpm CLI at resources/frameworks — Stage 3a broke it ([19f9d71](https://github.com/minipuft/claude-prompts/commit/19f9d71b7907875d3603a25848962ce6c844aba1))
-* **scripts:** make the action-metadata guard able to fail again ([95fa1cb](https://github.com/minipuft/claude-prompts/commit/95fa1cbd84ffe06ecec83ad0615cc4cd1fb3fed2))
-* **server:** fail fast instead of hanging when an SSE session cannot attach ([dc83489](https://github.com/minipuft/claude-prompts/commit/dc83489ed5ad5a891fab812463539101a980c600))
-* **server:** preserve resource ids containing a slash when detecting removals ([126a037](https://github.com/minipuft/claude-prompts/commit/126a0372a8d6c0a28b3d121383109ea2e9d3aeb9))
-* **server:** set rootDir so the published types entry resolves ([741a384](https://github.com/minipuft/claude-prompts/commit/741a384ee8d3532e25fa3cf10057e79682692242))
-* **server:** survive EPIPE when a shell_verify child ignores stdin ([5bb0d05](https://github.com/minipuft/claude-prompts/commit/5bb0d0502dccb26bc1661d15198ef0b85ea7bee2))
+- **ci:** keep the Docker build working now that server/ builds the cpm bin ([1bb6f6e](https://github.com/minipuft/claude-prompts/commit/1bb6f6e2ebcc79976a679e3030c29104f6f610ba))
+- **ci:** make CI enforce what the repo already checks, and stop sync-downstream shipping broken lockfiles ([708c81b](https://github.com/minipuft/claude-prompts/commit/708c81bbb35e45867ced4dc29db0b3f459a210a4))
+- **ci:** make sync-downstream regenerate lockfiles and assert npm ci ([dbba335](https://github.com/minipuft/claude-prompts/commit/dbba33529508a5d61d9508c758caa4d480dd66e7))
+- **ci:** make the new CI jobs work in a clean runner environment ([809089b](https://github.com/minipuft/claude-prompts/commit/809089bc5ba231bdfa30077819ac3827747b556a))
+- **ci:** stop prettier reformatting the generated gate index ([499c04e](https://github.com/minipuft/claude-prompts/commit/499c04e84e106d5f43152e12a49989cefcad3c12))
+- **ci:** stop validate:format failing on tool-generated files ([#159](https://github.com/minipuft/claude-prompts/issues/159)) ([ef3d39c](https://github.com/minipuft/claude-prompts/commit/ef3d39ce72959bbf0a822bc135e7b8e1bf140951))
+- **config:** sync config.json and its schema to the framework rename ([39db875](https://github.com/minipuft/claude-prompts/commit/39db8757ce7096e7da04c92b0b866ad78ae8c474))
+- **contracts:** correct two tool descriptions that named an invalid value ([436e2d5](https://github.com/minipuft/claude-prompts/commit/436e2d575c83f6a127e8ed2d940583fe713b0f6a))
+- **docs:** repair nested code fences in the first-prompt tutorial ([ffef5d7](https://github.com/minipuft/claude-prompts/commit/ffef5d73e56e4edcb64b0bdfbce51029249be648))
+- **frameworks:** reconnect frameworkGates — the YAML rename orphaned it ([280603e](https://github.com/minipuft/claude-prompts/commit/280603e838f334fdae88f5623e36d5d6b9f9a386))
+- **frameworks:** repair five methodology-vocabulary defects; finish the rename ([8a547d9](https://github.com/minipuft/claude-prompts/commit/8a547d912ef040ce3e05664f675ae56a61f73d87))
+- **frameworks:** unstick [@deprecated](https://github.com/deprecated) from version, lay out tier 4.3 ([9d8cbe2](https://github.com/minipuft/claude-prompts/commit/9d8cbe2f562fff75a819b0ef7eafdefedb34c494))
+- **hooks:** filter deleted files from pre-push prettier check ([5ee1fb2](https://github.com/minipuft/claude-prompts/commit/5ee1fb28bb02faa497846c2e8a6c8e8ecb370f8d))
+- **hooks:** make every local gate a strict subset of CI ([3924713](https://github.com/minipuft/claude-prompts/commit/39247139ca3b7ca76149e1ba15ca4e7ca74e7aca))
+- **hooks:** remove stale hooks-state.db fallback from ralph-stop ([2be57ab](https://github.com/minipuft/claude-prompts/commit/2be57ab1102083d9913dd3f87502d011db444180))
+- **hooks:** use --diff-filter=ACMR instead of shell workaround ([edb9526](https://github.com/minipuft/claude-prompts/commit/edb95267b3055cadf7198a38fd7b3dc0580069fb))
+- **mcp-tools:** rename the methodology creation param to framework ([e2b632c](https://github.com/minipuft/claude-prompts/commit/e2b632c29ebdfa567d7e0815887a63ab2f9c3861))
+- **parsers:** quote-aware operator detection prevents special chars in args from breaking prompt resolution ([0beb3ff](https://github.com/minipuft/claude-prompts/commit/0beb3ff2009a487bb5a39d0367429b8e07934be1))
+- repoint the cpm CLI at resources/frameworks — Stage 3a broke it ([19f9d71](https://github.com/minipuft/claude-prompts/commit/19f9d71b7907875d3603a25848962ce6c844aba1))
+- **scripts:** make the action-metadata guard able to fail again ([95fa1cb](https://github.com/minipuft/claude-prompts/commit/95fa1cbd84ffe06ecec83ad0615cc4cd1fb3fed2))
+- **server:** fail fast instead of hanging when an SSE session cannot attach ([dc83489](https://github.com/minipuft/claude-prompts/commit/dc83489ed5ad5a891fab812463539101a980c600))
+- **server:** preserve resource ids containing a slash when detecting removals ([126a037](https://github.com/minipuft/claude-prompts/commit/126a0372a8d6c0a28b3d121383109ea2e9d3aeb9))
+- **server:** set rootDir so the published types entry resolves ([741a384](https://github.com/minipuft/claude-prompts/commit/741a384ee8d3532e25fa3cf10057e79682692242))
+- **server:** survive EPIPE when a shell_verify child ignores stdin ([5bb0d05](https://github.com/minipuft/claude-prompts/commit/5bb0d0502dccb26bc1661d15198ef0b85ea7bee2))
 
 ### Documentation
 
-* add F5b — hooks diverge from the repo's own hook standard ([bf93ca7](https://github.com/minipuft/claude-prompts/commit/bf93ca7aa5a683ed43d96b6ffc136cf0bded23be))
-* add the CI enforcement and import-alias plan ([6022bb0](https://github.com/minipuft/claude-prompts/commit/6022bb0a413e7255c57f3eda78c50fec91f2b995))
-* add Tier 5 (contract surface + guard) and Tier 6 (dead options) ([5d74253](https://github.com/minipuft/claude-prompts/commit/5d742531e1ffab199ca2c99ba1e3c770133e2e6c))
-* audit the 62 compat sites and classify each by verdict ([c0dc894](https://github.com/minipuft/claude-prompts/commit/c0dc894555ad8d6cd15a5fa3f5aefe376f4b67a0))
-* close out sweep stage 3 and record its deliberate exclusions ([2693bfc](https://github.com/minipuft/claude-prompts/commit/2693bfc18b3b3e767fc5d179e15eeb62c420fc04))
-* close plan row 3.9 — the guard now proves it complete ([a16d021](https://github.com/minipuft/claude-prompts/commit/a16d021a956a4e9c31034ce57394563868d785d9))
-* close the shim-debt sweep with Tier V, E2E and ORD outcomes ([0503463](https://github.com/minipuft/claude-prompts/commit/050346381dcf100368189308f01a39988324d4ee))
-* correct the doc instructions that no longer work ([62897a0](https://github.com/minipuft/claude-prompts/commit/62897a03d73da1b178647296e1e5433cf865f3df))
-* correct the plan's own counts after tiers 1-3 ([4f9bc66](https://github.com/minipuft/claude-prompts/commit/4f9bc66088f1779fba432fdd38b2f3206a53bd3a))
-* correct version-storage reference, record shim-debt sweep ([94fa37d](https://github.com/minipuft/claude-prompts/commit/94fa37d0a460ea22d71a97bc2c661a079f8218e2))
-* drop dead CLI flags and env vars from server README; fix barrel rule ([d25b323](https://github.com/minipuft/claude-prompts/commit/d25b323cb754bd6a117a89cd2a4a02759492be16))
-* finish removing the path-override surface that does not exist ([2a3084b](https://github.com/minipuft/claude-prompts/commit/2a3084bf069251de588c5ce8295f8f154359787a))
-* make the docs-vs-parser gap a CI failure instead of a recurring bug ([0e76c03](https://github.com/minipuft/claude-prompts/commit/0e76c03a4b235f4927eca99bf179d7947a6dce98))
-* narrow F1b — path filters apply to the PR diff, not the push ([db5eb40](https://github.com/minipuft/claude-prompts/commit/db5eb408d89967db77417c6b3603e85729f1f9c5))
-* open Tier E2E and Tier V for the two findings this sweep created ([90bf97c](https://github.com/minipuft/claude-prompts/commit/90bf97c00404c4a64c1048b8fd070d061ecab0e2))
-* **prompts:** correct the allowedValues deprecation notices ([ae6da7f](https://github.com/minipuft/claude-prompts/commit/ae6da7fd8a696687aa2429f4e873bbd9b9bc4356))
-* reconcile stale tier status prose against the row marks ([3315b05](https://github.com/minipuft/claude-prompts/commit/3315b053593ead884a139782a1eaf0aea8cec2c1))
-* reconcile Tier 3 and Tier 5 plan rows against measurement ([1497b4f](https://github.com/minipuft/claude-prompts/commit/1497b4f9d8d4bfc13bc5c0d0fb105620e27d923f))
-* reconcile two stale plan rows against what actually happened ([f452463](https://github.com/minipuft/claude-prompts/commit/f452463211b61b2d28fc1e062f7a5646222b40d3))
-* record Stage 4 outcome — three live regressions, guard blocked ([b8a8b17](https://github.com/minipuft/claude-prompts/commit/b8a8b1719b612fd466c779db161466bd9c356e6c))
-* record sweep tiers 3.1-3.9 and the StepState migration ([8f3731e](https://github.com/minipuft/claude-prompts/commit/8f3731ea3985c2eee314dee146bbe6fd215694f2))
-* record that Tier 1 is stacked on the shim branch, not cut from main ([2471d28](https://github.com/minipuft/claude-prompts/commit/2471d28b851b2292de2adf6bd2aaa8c2cbbd195e))
-* record the bb1f590a follow-up outcome ([ef4aa75](https://github.com/minipuft/claude-prompts/commit/ef4aa75640cfeb2168c2ba21a4982a9f8dbc7c60))
-* record the tier 4.3 outcome and the fourth falsified verdict ([41c84e0](https://github.com/minipuft/claude-prompts/commit/41c84e0edb79c1c966ca28297a3f27026f705439))
+- add F5b — hooks diverge from the repo's own hook standard ([bf93ca7](https://github.com/minipuft/claude-prompts/commit/bf93ca7aa5a683ed43d96b6ffc136cf0bded23be))
+- add the CI enforcement and import-alias plan ([6022bb0](https://github.com/minipuft/claude-prompts/commit/6022bb0a413e7255c57f3eda78c50fec91f2b995))
+- add Tier 5 (contract surface + guard) and Tier 6 (dead options) ([5d74253](https://github.com/minipuft/claude-prompts/commit/5d742531e1ffab199ca2c99ba1e3c770133e2e6c))
+- audit the 62 compat sites and classify each by verdict ([c0dc894](https://github.com/minipuft/claude-prompts/commit/c0dc894555ad8d6cd15a5fa3f5aefe376f4b67a0))
+- close out sweep stage 3 and record its deliberate exclusions ([2693bfc](https://github.com/minipuft/claude-prompts/commit/2693bfc18b3b3e767fc5d179e15eeb62c420fc04))
+- close plan row 3.9 — the guard now proves it complete ([a16d021](https://github.com/minipuft/claude-prompts/commit/a16d021a956a4e9c31034ce57394563868d785d9))
+- close the shim-debt sweep with Tier V, E2E and ORD outcomes ([0503463](https://github.com/minipuft/claude-prompts/commit/050346381dcf100368189308f01a39988324d4ee))
+- correct the doc instructions that no longer work ([62897a0](https://github.com/minipuft/claude-prompts/commit/62897a03d73da1b178647296e1e5433cf865f3df))
+- correct the plan's own counts after tiers 1-3 ([4f9bc66](https://github.com/minipuft/claude-prompts/commit/4f9bc66088f1779fba432fdd38b2f3206a53bd3a))
+- correct version-storage reference, record shim-debt sweep ([94fa37d](https://github.com/minipuft/claude-prompts/commit/94fa37d0a460ea22d71a97bc2c661a079f8218e2))
+- drop dead CLI flags and env vars from server README; fix barrel rule ([d25b323](https://github.com/minipuft/claude-prompts/commit/d25b323cb754bd6a117a89cd2a4a02759492be16))
+- finish removing the path-override surface that does not exist ([2a3084b](https://github.com/minipuft/claude-prompts/commit/2a3084bf069251de588c5ce8295f8f154359787a))
+- make the docs-vs-parser gap a CI failure instead of a recurring bug ([0e76c03](https://github.com/minipuft/claude-prompts/commit/0e76c03a4b235f4927eca99bf179d7947a6dce98))
+- narrow F1b — path filters apply to the PR diff, not the push ([db5eb40](https://github.com/minipuft/claude-prompts/commit/db5eb408d89967db77417c6b3603e85729f1f9c5))
+- open Tier E2E and Tier V for the two findings this sweep created ([90bf97c](https://github.com/minipuft/claude-prompts/commit/90bf97c00404c4a64c1048b8fd070d061ecab0e2))
+- **prompts:** correct the allowedValues deprecation notices ([ae6da7f](https://github.com/minipuft/claude-prompts/commit/ae6da7fd8a696687aa2429f4e873bbd9b9bc4356))
+- reconcile stale tier status prose against the row marks ([3315b05](https://github.com/minipuft/claude-prompts/commit/3315b053593ead884a139782a1eaf0aea8cec2c1))
+- reconcile Tier 3 and Tier 5 plan rows against measurement ([1497b4f](https://github.com/minipuft/claude-prompts/commit/1497b4f9d8d4bfc13bc5c0d0fb105620e27d923f))
+- reconcile two stale plan rows against what actually happened ([f452463](https://github.com/minipuft/claude-prompts/commit/f452463211b61b2d28fc1e062f7a5646222b40d3))
+- record Stage 4 outcome — three live regressions, guard blocked ([b8a8b17](https://github.com/minipuft/claude-prompts/commit/b8a8b1719b612fd466c779db161466bd9c356e6c))
+- record sweep tiers 3.1-3.9 and the StepState migration ([8f3731e](https://github.com/minipuft/claude-prompts/commit/8f3731ea3985c2eee314dee146bbe6fd215694f2))
+- record that Tier 1 is stacked on the shim branch, not cut from main ([2471d28](https://github.com/minipuft/claude-prompts/commit/2471d28b851b2292de2adf6bd2aaa8c2cbbd195e))
+- record the bb1f590a follow-up outcome ([ef4aa75](https://github.com/minipuft/claude-prompts/commit/ef4aa75640cfeb2168c2ba21a4982a9f8dbc7c60))
+- record the tier 4.3 outcome and the fourth falsified verdict ([41c84e0](https://github.com/minipuft/claude-prompts/commit/41c84e0edb79c1c966ca28297a3f27026f705439))
 
 ### ⚠ BREAKING CHANGES
 
-* **server:** the project is re-licensed from AGPL-3.0-only to MIT. Network use of modified versions no longer triggers the source-disclosure obligation of AGPL section 13; MIT imposes attribution only. Skills already exported by `skills:export` carry the old AGPL-3.0-only license field and must be regenerated to pick up MIT.
-* **mcp-tools:** resource_manager parameter `methodology` is now `framework`; FrameworkCreationData.methodology removed and `type` is now required.
-* **frameworks:** FrameworkDefinition.methodology removed; use `type`.
-* resource://methodology/ is now resource://framework/.
-* **prompts:** `>>create_methodology` is now `>>create_framework`.
-* **config:** the config.json section `methodologies` is now `frameworks`. Existing files are migrated in place on load; the legacy key is ignored after that and can be deleted.
-* **frameworks:** a framework.yaml with only `methodology:` and no `type:` no longer loads. All bundled definitions already declared both, so nothing shipped requires an edit; a hand-authored workspace definition may.
-* **mcp-tools:** resource_manager(resource_type: "methodology") is now resource_type: "framework". Existing version history for frameworks is discarded by the schema recreate rather than migrated; this is accepted for a pre-release project. The 'switch' action remains valid only for this type, now under its new name.
-* **resources:** workspace overlays under MCP_WORKSPACE/resources/methodologies/ will no longer resolve and must be renamed to resources/frameworks/ with their methodology.yaml renamed to framework.yaml. This fails silently - the resource simply stops being found - rather than raising an error. No overlay was present in this environment at the time of the rename.
-* **chains:** SCHEMA_VERSION 15 -> 16. Persisted step state values `rendered` and `response_captured` no longer exist and substate_json changed shape, so the first server start after this drops and recreates state.db. Any in-flight chain session is lost; run it between chains rather than mid-run.
+- **server:** the project is re-licensed from AGPL-3.0-only to MIT. Network use of modified versions no longer triggers the source-disclosure obligation of AGPL section 13; MIT imposes attribution only. Skills already exported by `skills:export` carry the old AGPL-3.0-only license field and must be regenerated to pick up MIT.
+- **mcp-tools:** resource_manager parameter `methodology` is now `framework`; FrameworkCreationData.methodology removed and `type` is now required.
+- **frameworks:** FrameworkDefinition.methodology removed; use `type`.
+- resource://methodology/ is now resource://framework/.
+- **prompts:** `>>create_methodology` is now `>>create_framework`.
+- **config:** the config.json section `methodologies` is now `frameworks`. Existing files are migrated in place on load; the legacy key is ignored after that and can be deleted.
+- **frameworks:** a framework.yaml with only `methodology:` and no `type:` no longer loads. All bundled definitions already declared both, so nothing shipped requires an edit; a hand-authored workspace definition may.
+- **mcp-tools:** resource_manager(resource_type: "methodology") is now resource_type: "framework". Existing version history for frameworks is discarded by the schema recreate rather than migrated; this is accepted for a pre-release project. The 'switch' action remains valid only for this type, now under its new name.
+- **resources:** workspace overlays under MCP_WORKSPACE/resources/methodologies/ will no longer resolve and must be renamed to resources/frameworks/ with their methodology.yaml renamed to framework.yaml. This fails silently - the resource simply stops being found - rather than raising an error. No overlay was present in this environment at the time of the rename.
+- **chains:** SCHEMA_VERSION 15 -> 16. Persisted step state values `rendered` and `response_captured` no longer exist and substate_json changed shape, so the first server start after this drops and recreates state.db. Any in-flight chain session is lost; run it between chains rather than mid-run.
 
 ### Maintenance
 
-* **server:** re-license from AGPL-3.0-only to MIT ([07f2f0a](https://github.com/minipuft/claude-prompts/commit/07f2f0ab1afe07f6f6d020aefd79ab20248dc2b1))
+- **server:** re-license from AGPL-3.0-only to MIT ([07f2f0a](https://github.com/minipuft/claude-prompts/commit/07f2f0ab1afe07f6f6d020aefd79ab20248dc2b1))
 
 ## [Unreleased]
-
-
 
 ## [2.1.0](https://github.com/minipuft/claude-prompts/compare/v2.0.0...v2.1.0) (2026-03-19)
 

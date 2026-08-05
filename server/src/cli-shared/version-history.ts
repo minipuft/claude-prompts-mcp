@@ -479,7 +479,6 @@ export function compareVersions(
 
 // ── Write operations ────────────────────────────────────────────────────────
 
-// eslint-disable-next-line max-params
 export function saveVersion(
   resourceDir: string,
   resourceType: ResourceType,
@@ -509,7 +508,6 @@ export function saveVersion(
   return { success: true, version: result.version ?? 0 };
 }
 
-// eslint-disable-next-line max-params
 export function rollbackVersion(
   resourceDir: string,
   resourceType: ResourceType,

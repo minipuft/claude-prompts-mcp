@@ -68,9 +68,10 @@ cp -r "$SOURCE_DIR/.mcp.json" "$CACHE_DIR/" 2>/dev/null || true
 # Sync server directory (needed for MCP server and cache)
 if [ -d "$SOURCE_DIR/server" ]; then
     mkdir -p "$CACHE_DIR/server"
-    # Sync dist (compiled server)
+    # Sync only the MCP server runtime registered by the plugin manifest.
     if [ -d "$SOURCE_DIR/server/dist" ]; then
-        cp -r "$SOURCE_DIR/server/dist" "$CACHE_DIR/server/"
+        bash "$SOURCE_DIR/scripts/stage-server-runtime.sh" \
+            "$SOURCE_DIR/server/dist" "$CACHE_DIR/server/dist"
     fi
     # Sync runtime-state (SQLite databases for hooks)
     if [ -d "$SOURCE_DIR/server/runtime-state" ]; then

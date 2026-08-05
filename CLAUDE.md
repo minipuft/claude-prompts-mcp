@@ -25,8 +25,9 @@ The server floor is where `node:sqlite` is available without an experimental fla
 **CI is the contract; every other gate is a documented strict subset of it.**
 
 The three gates once ran three different suites with no subset relation, so a green
-`pre-push` did not predict CI and `validate:full` did not either -- that is how a pyrefly
-failure reached `main` from a clean local push.
+`pre-push` did not predict CI, and neither did the local full-validation wrapper that
+existed at the time -- that is how a pyrefly failure reached `main` from a clean local
+push. That wrapper was deleted once the subset relation made it redundant.
 
 `scripts/classify-validation-scope.js` is the changed-path SSOT for local push and CI.
 It recognizes two narrow safe scopes and sends every empty, mixed, executable,
@@ -141,9 +142,9 @@ system_control → SystemControl Router → 10 action handlers
 | `execution_records` | SEP-1686 append-only per-step execution log (ULID-sorted); source for `v_execution_status` view |
 | `resource_index` | Resource discovery cache |
 
-State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. `SCHEMA_VERSION` bump triggers drop-and-recreate; no migration code since `state.db` is ephemeral.
+State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates, but `version_history` and `skills_sync_manifests` are durable: `ensureSchema()` snapshots their rows, recreates, and restores by column intersection. Adding a `NOT NULL` column with no default to either makes the restore throw by design -- that change needs a real migration. Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 
-**Rows are workspace-scoped, and `state.db` is shared across projects.** One file serves every project, so isolation comes from `workspace_id`, not from separate databases. A scope with no row falls back to `frameworks.defaultFramework`; the scope id itself is derived from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing `kv_state` without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
+**`state.db` is shared across projects, but workspace isolation is delivered by `kv_state` alone.** One file serves every project, so isolation would have to come from `workspace_id` -- and `kv_state` is the only table that writes it. Four others declare **and index** scope columns no writer populates, so their rows are global; for `version_history` that means rollback history is shared across every project on the machine. Which four, and what closes each: `.claude/rules/sqlite-persistence.md`. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
 
 ## Public API Contract (what a major version protects)
 
@@ -194,6 +195,7 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 - **Environment**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 
 -> `.claude/rules/mcp-contracts.md` for full contract protocol (auto-loaded)
+-> `.claude/rules/sqlite-persistence.md` for the table map, `tenant_id` trisemy, and durable-table rules (glob-loaded)
 -> `docs/architecture/overview.md` for architecture, pipeline stages, subsystems
 -> `docs/reference/mcp-tools.md` for MCP tool workflows, symbolic command language
 -> `docs/guides/injection-control.md` for injection types, frequency, hierarchy

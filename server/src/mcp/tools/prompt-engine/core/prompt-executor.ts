@@ -66,7 +66,7 @@ import {
 import { createChainSessionStore } from '#modules/chains/manager.js';
 import { StyleManager, createStyleManager } from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
-import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
 import {
   type Logger,

@@ -561,7 +561,7 @@ export interface GateDefinition {
 
 /**
  * Semantic content analyzer interface (engine/ contract).
- * Concrete: modules/semantic/configurable-semantic-analyzer.ts ContentAnalyzer
+ * Concrete: modules/semantic/content-analyzer.ts ContentAnalyzer
  */
 export interface ContentAnalyzerPort {
   analyzePrompt(prompt: unknown): Promise<ContentAnalysisResult>;

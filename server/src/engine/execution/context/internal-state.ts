@@ -136,8 +136,6 @@ export interface PipelineInternalState {
     temporaryGateIds: string[];
     /** Scopes for temporary gates */
     temporaryGateScopes?: Array<{ scope: string; scopeId: string }>;
-    /** Validation results from the gate system */
-    validationResults?: unknown[];
     /** IDs of framework-specific gates registered for this execution */
     frameworkGateIds: string[];
     /** IDs of canonical gates that were resolved from temporary inputs */

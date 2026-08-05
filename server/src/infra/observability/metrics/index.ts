@@ -14,7 +14,6 @@ export type {
   ExecutionData,
   GateValidationData,
   GateUsageMetric,
-  GateValidationResult,
   FrameworkSwitchData,
   ExecutionStats,
   SystemMetrics,
