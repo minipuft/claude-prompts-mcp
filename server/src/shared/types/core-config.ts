@@ -565,14 +565,12 @@ export interface ContentAnalysisResult {
   analysisMetadata: {
     version: string;
     /**
-     * Analysis mode. Only `'minimal'` is produced — `ContentAnalyzer` is the sole producer and
-     * emits nothing else. `'semantic'` is retained solely because
-     * `engine/frameworks/integration/framework-semantic-integration.ts` still compares against
-     * it; narrowing the union turns those comparisons into no-overlap type errors. That file is
-     * never constructed (F10 in `plans/semantic-llm-sidecar-retirement-2026-08-05.md`), and
-     * removing it is what unblocks narrowing this.
+     * Analysis mode. `ContentAnalyzer` is the sole producer and emits only `'minimal'`, so the
+     * union has one member. This is narrower than the consumer-facing `analysisMode` string in
+     * `resource-manager/prompt/core/types.ts`, which additionally carries `'fallback'` and
+     * `'disabled'` from paths that never set this field.
      */
-    mode?: 'semantic' | 'minimal';
+    mode?: 'minimal';
     analysisTime: number;
     analyzer: 'content';
     cacheHit: boolean;

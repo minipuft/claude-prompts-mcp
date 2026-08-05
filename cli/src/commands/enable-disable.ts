@@ -28,7 +28,10 @@ const SUBSYSTEM_MAP: Record<string, [string, string]> = {
   'resources.observability': ['resources.observability.enabled', 'Observability resources'],
   'resources.logs': ['resources.logs.enabled', 'Log resources'],
   verification: ['verification.isolation.enabled', 'Verification isolation'],
-  analysis: ['analysis.semanticAnalysis.llmIntegration.enabled', 'LLM semantic analysis'],
+  // `analysis` is gone. It mapped into the deprecated `analysis.semanticAnalysis.*` section, whose
+  // readers were all retired; `CONFIG_VALID_KEYS` no longer accepts the key, so leaving the entry
+  // would make `cpm enable analysis` fail validation instead of doing nothing. Model-graded gate
+  // evaluation is the `%judge` modifier / `gates.evaluation.defaultMode`, not a subsystem toggle.
 };
 
 function resolveWorkspace(workspace?: string): string {

@@ -52,20 +52,6 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
   }
 
   /**
-   * Reports the `analysis.semanticAnalysis.llmIntegration.enabled` config flag.
-   *
-   * This does NOT indicate that model-backed analysis is available — no such path exists here.
-   * Two callers branch on it to decide how much detail their responses carry
-   * (`prompt-analyzer`, `prompt-lifecycle-processor`), so it reports the flag rather than a
-   * hardcoded `false`, which would change user-visible output. Its fate is tied to the config
-   * section it reads, resolved in T4 of
-   * `plans/semantic-llm-sidecar-retirement-2026-08-05.md`.
-   */
-  isLLMEnabled(): boolean {
-    return this.config.llmIntegration.enabled;
-  }
-
-  /**
    * Main analysis method
    */
   async analyzePrompt(prompt: ConvertedPrompt): Promise<ContentAnalysisResult> {

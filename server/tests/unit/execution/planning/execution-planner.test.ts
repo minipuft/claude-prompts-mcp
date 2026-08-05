@@ -68,7 +68,7 @@ const baseAnalysis: ContentAnalysisResult = {
 
 const createAnalyzer = (
   overrides: Partial<ContentAnalysisResult> = {}
-): Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEnabled'> => {
+): Pick<ContentAnalyzer, 'analyzePrompt'> => {
   const merged: ContentAnalysisResult = {
     ...baseAnalysis,
     ...overrides,
@@ -88,8 +88,7 @@ const createAnalyzer = (
   };
 
   const analyzePrompt = jest.fn().mockResolvedValue(merged);
-  const isLLMEnabled = jest.fn().mockReturnValue(true);
-  return { analyzePrompt, isLLMEnabled };
+  return { analyzePrompt };
 };
 
 describe('ExecutionPlanner', () => {

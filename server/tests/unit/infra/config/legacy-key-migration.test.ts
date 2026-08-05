@@ -7,6 +7,7 @@
  * tests pin the adoption because `tsc` cannot see it — the shape is only bound at load time.
  */
 
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -20,6 +21,17 @@ async function loadConfigFrom(raw: Record<string, unknown>) {
   const manager = new ConfigLoader(configPath);
   const config = await manager.loadConfig();
   return { config, manager, cleanup: () => rm(dir, { recursive: true, force: true }) };
+}
+
+/** Same, but hands back an unloaded manager so a spy can be installed before the first load. */
+async function managerFor(raw: Record<string, unknown>) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'cfg-deprecation-'));
+  const configPath = path.join(dir, 'config.json');
+  await writeFile(configPath, JSON.stringify(raw), 'utf8');
+  return {
+    manager: new ConfigLoader(configPath),
+    cleanup: () => rm(dir, { recursive: true, force: true }),
+  };
 }
 
 describe('legacy config key migration', () => {
@@ -285,7 +297,6 @@ describe('legacy config key migration', () => {
         'resources.observability.enabled',
         'resources.logs.enabled',
         'verification.isolation.enabled',
-        'analysis.semanticAnalysis.llmIntegration.enabled',
         'versioning.enabled',
         'versioning.auto_version',
       ]) {
@@ -300,6 +311,36 @@ describe('legacy config key migration', () => {
         valid: true,
         convertedValue: 42,
       });
+    });
+
+    // The one dropped spelling with NO canonical twin, which is why it is asserted apart from the
+    // loop above rather than inside it. `analysis.semanticAnalysis.llmIntegration.mode` was inert
+    // like the other nine, but its canonical `enabled` partner has since been retired too: every
+    // reader of that section was deleted, so a settable key would write a value nothing consults.
+    // The section is still PARSED (a config carrying it keeps loading and gets a deprecation
+    // warning) — it is only the setter surface that is withdrawn, on both tools.
+    it('offers no setter for the retired analysis section, on either surface', async () => {
+      const { CONFIG_VALID_KEYS, validateConfigInput } =
+        await import('../../../../src/cli-shared/config-input-validator.js');
+      const mcp = await import('../../../../src/mcp/tools/config-utils.js');
+
+      const retired = [
+        'analysis.semanticAnalysis.llmIntegration.enabled',
+        'analysis.semanticAnalysis.llmIntegration.endpoint',
+        'analysis.semanticAnalysis.llmIntegration.model',
+        'analysis.semanticAnalysis.llmIntegration.maxTokens',
+        'analysis.semanticAnalysis.llmIntegration.temperature',
+      ];
+
+      for (const key of retired) {
+        expect(CONFIG_VALID_KEYS).not.toContain(key);
+        expect(mcp.CONFIG_VALID_KEYS).not.toContain(key);
+        // Not merely absent from the list — the validator rejects it, which is what a user hits.
+        expect(validateConfigInput(key, 'false')).toMatchObject({ valid: false });
+      }
+
+      // A restart-required entry naming a key that cannot be set is its own kind of stale.
+      expect(mcp.CONFIG_RESTART_REQUIRED_KEYS).not.toContain(retired[0]);
     });
 
     it('keeps the three modes that a reader actually consults', async () => {
@@ -337,6 +378,88 @@ describe('legacy config key migration', () => {
       for (const leaf of leaves) {
         expect(CONFIG_VALID_KEYS).toContain(leaf);
       }
+    });
+  });
+
+  // Deprecation, not migration: there is nothing to adopt the `analysis` section INTO. Its
+  // replacement is a different mechanism (the `%judge` modifier), so the section is kept parsed
+  // for one cycle and announced rather than folded. `config.json` is declared public API surface,
+  // so a config that sets it has to keep loading — the warning is what makes that honest instead
+  // of merely silent.
+  describe('deprecated `analysis` section', () => {
+    let warnSpy: jest.SpiedFunction<typeof console.warn>;
+
+    beforeEach(() => {
+      // logger.warn writes through console.warn (infra/logging/index.ts), which is the only
+      // externally observable surface — the ConfigLoader's logger is module-private.
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    const analysisWarnings = (): string[] =>
+      warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((line) => line.includes('analysis.semanticAnalysis'));
+
+    it('warns when a config still carries the section', async () => {
+      const { manager, cleanup } = await managerFor({
+        analysis: { semanticAnalysis: { llmIntegration: { enabled: true } } },
+      });
+
+      await manager.loadConfig();
+
+      const warnings = analysisWarnings();
+      expect(warnings).toHaveLength(1);
+      // Naming the replacement is the point: a deprecation that only says "stop" reads as breakage.
+      expect(warnings[0]).toContain('deprecated');
+      expect(warnings[0]).toContain('%judge');
+
+      await cleanup();
+    });
+
+    it('still loads the section rather than rejecting it', async () => {
+      const { manager, cleanup } = await managerFor({
+        analysis: { semanticAnalysis: { llmIntegration: { enabled: true, model: 'gpt-4o' } } },
+      });
+
+      const config = await manager.loadConfig();
+
+      // Parsed-and-ignored, not parsed-and-dropped: an existing config keeps its values through
+      // the deprecation cycle. This is what makes the removal — not this tier — the breaking act.
+      expect(config.analysis?.semanticAnalysis?.llmIntegration?.enabled).toBe(true);
+      expect(config.analysis?.semanticAnalysis?.llmIntegration?.model).toBe('gpt-4o');
+
+      await cleanup();
+    });
+
+    it('warns once per process, not once per load', async () => {
+      const { manager, cleanup } = await managerFor({
+        analysis: { semanticAnalysis: { llmIntegration: { enabled: false } } },
+      });
+
+      // File watching re-enters loadConfig on every external edit; a notice that repeats per
+      // reload becomes noise the operator filters out, which is how a deprecation goes unread.
+      await manager.loadConfig();
+      await manager.loadConfig();
+      await manager.loadConfig();
+
+      expect(analysisWarnings()).toHaveLength(1);
+
+      await cleanup();
+    });
+
+    it('stays silent for a config that never mentions the section', async () => {
+      const { manager, cleanup } = await managerFor({ gates: { enabled: true } });
+
+      await manager.loadConfig();
+
+      // The defaulted case must not warn: a user who never wrote the key has nothing to act on.
+      expect(analysisWarnings()).toHaveLength(0);
+
+      await cleanup();
     });
   });
 });

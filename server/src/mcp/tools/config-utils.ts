@@ -29,19 +29,17 @@ export const CONFIG_VALID_KEYS = [
   'verification.isolation.enabled',
   'verification.isolation.maxBudget',
   'verification.isolation.timeout',
-  'analysis.semanticAnalysis.llmIntegration.enabled',
-  'analysis.semanticAnalysis.llmIntegration.model',
-  'analysis.semanticAnalysis.llmIntegration.maxTokens',
-  'analysis.semanticAnalysis.llmIntegration.temperature',
+  // The four `analysis.semanticAnalysis.*` model-integration keys are gone. They set a section no
+  // runtime path reads any more: the LLM side client, the gate service that consumed it, and the
+  // validator branch that read the flag were all removed. The section is still parsed and still
+  // loads (ConfigManager warns once), so an existing config.json keeps working — but offering a
+  // setter for it would let a user turn on something that cannot happen. Model-graded gate
+  // evaluation is the `%judge` modifier / `gates.evaluation.defaultMode`.
 ] as const;
 
 export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
 
-export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = [
-  'server.port',
-  'server.transport',
-  'analysis.semanticAnalysis.llmIntegration.enabled',
-];
+export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = ['server.port', 'server.transport'];
 
 export interface ConfigInputValidationResult {
   valid: boolean;
@@ -162,54 +160,6 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.enabled': {
-      const boolValue = value.trim().toLowerCase();
-      if (!['true', 'false'].includes(boolValue)) {
-        return {
-          valid: false,
-          error: "Value must be 'true' or 'false'",
-        };
-      }
-      return {
-        valid: true,
-        convertedValue: boolValue === 'true',
-        valueType: 'boolean',
-      };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.model': {
-      const trimmed = value?.trim();
-      if (!trimmed) {
-        return {
-          valid: false,
-          error: 'Model name cannot be empty',
-        };
-      }
-      return { valid: true, convertedValue: trimmed, valueType: 'string' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.maxTokens': {
-      const tokens = parseInt(value, 10);
-      if (isNaN(tokens) || tokens < 1 || tokens > 4000) {
-        return {
-          valid: false,
-          error: 'Max tokens must be a number between 1-4000',
-        };
-      }
-      return { valid: true, convertedValue: tokens, valueType: 'number' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.temperature': {
-      const temp = parseFloat(value);
-      if (isNaN(temp) || temp < 0 || temp > 2) {
-        return {
-          valid: false,
-          error: 'Temperature must be a number between 0-2',
-        };
-      }
-      return { valid: true, convertedValue: temp, valueType: 'number' };
     }
 
     default:

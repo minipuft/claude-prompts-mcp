@@ -422,10 +422,6 @@ function getKeyTypeInfo(key: string): {
     return { type: 'string', description: 'organization identifier' };
   if (key === 'identity.launchDefaults.workspaceId')
     return { type: 'string', description: 'workspace identifier' };
-  if (key === 'analysis.semanticAnalysis.llmIntegration.endpoint')
-    return { type: 'string', description: 'API endpoint URL (or empty)' };
-  if (key === 'analysis.semanticAnalysis.llmIntegration.model')
-    return { type: 'string', description: 'model name' };
 
   // Booleans
   const boolKeys = [
@@ -452,7 +448,6 @@ function getKeyTypeInfo(key: string): {
     'verification.isolation.enabled',
     'versioning.enabled',
     'versioning.auto_version',
-    'analysis.semanticAnalysis.llmIntegration.enabled',
   ];
   if (boolKeys.includes(key)) return { type: 'boolean', description: 'true or false' };
 

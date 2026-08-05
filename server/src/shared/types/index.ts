@@ -565,7 +565,6 @@ export interface GateDefinition {
  */
 export interface ContentAnalyzerPort {
   analyzePrompt(prompt: unknown): Promise<ContentAnalysisResult>;
-  isLLMEnabled(): boolean;
 }
 
 /**

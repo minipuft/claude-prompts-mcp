@@ -80,6 +80,11 @@ const INERT_SPELLINGS: ReadonlyArray<{
   { path: ['resources', 'observability'], from: 'mode', to: 'enabled', coerce: 'onOff' },
   { path: ['resources', 'logs'], from: 'mode', to: 'enabled', coerce: 'onOff' },
   { path: ['verification', 'isolation'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  // This entry outlives its target on purpose. `analysis.semanticAnalysis` is deprecated and no
+  // longer settable from either tool surface, but it is still parsed for one cycle, so a config
+  // written with the inert `mode` spelling must still normalize to the one key the deprecation
+  // warning names — otherwise a user is told to remove a section whose spelling we refused to
+  // recognize. It retires WITH the section, not on the schedule above.
   {
     path: ['analysis', 'semanticAnalysis', 'llmIntegration'],
     from: 'mode',
@@ -227,6 +232,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private frameworksConfigCache: ResolvedFrameworkConfig;
+  /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
+  private warnedAnalysisDeprecated = false;
 
   constructor(configPath: string) {
     super();
@@ -639,10 +646,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       };
     }
 
-    // Ensure analysis config exists
+    // Ensure analysis config exists.
+    //
+    // DEPRECATED SECTION: `analysis` is parsed and defaulted, and nothing consults the result any
+    // more. It stays for one cycle because `config.json` is declared public API surface
+    // (CLAUDE.md §Public API Contract), so a config that sets it must keep loading rather than
+    // fail. The warning below is the deprecation notice; removal is the breaking act and carries
+    // the major bump.
     if (!this.config.analysis) {
       this.config.analysis = DEFAULT_ANALYSIS_CONFIG;
     } else {
+      this.warnAnalysisSectionDeprecated(this.config.analysis);
       this.config.analysis = this.validateAnalysisConfig(this.config.analysis);
     }
 
@@ -735,6 +749,25 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
         },
       };
     }
+  }
+
+  /**
+   * Emit the `analysis` deprecation notice at most once per process.
+   *
+   * Fires only when a config file actually carries the section — the defaulted case is silent,
+   * because a user who never wrote the key has nothing to act on. Names the replacement rather
+   * than only the removal: a warning that says "stop doing X" without saying what to do instead
+   * reads as breakage.
+   */
+  private warnAnalysisSectionDeprecated(analysisConfig: Partial<AnalysisConfig>): void {
+    if (this.warnedAnalysisDeprecated || !analysisConfig.semanticAnalysis) return;
+    this.warnedAnalysisDeprecated = true;
+    logger.warn(
+      '[CONFIG] `analysis.semanticAnalysis` is deprecated and no longer read by any runtime path. ' +
+        'It is still parsed so existing configs keep loading, and will be removed in the next major. ' +
+        'For model-graded gate evaluation use the `%judge` modifier or `gates.evaluation.defaultMode`. ' +
+        'Remove the `analysis` section from config.json to silence this notice.'
+    );
   }
 
   /**

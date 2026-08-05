@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **The semantic LLM side client is gone** — roughly 2,200 lines across an outbound provider client (`LLMClient` + factory), the gate service that consumed it, the dual-mode analyzer's model branch, and an 863-line framework-integration module that was never constructed. None of it ever ran: it was reachable only when `analysis.semanticAnalysis.llmIntegration.enabled` was true, that flag defaults to `false`, and the only spelling the CLI ever wrote (`…llmIntegration.mode`) reached no reader. Model-graded gate review is served by [judge mode](docs/guides/judge-mode.md) — the `%judge` modifier and `gates.evaluation.defaultMode` — which delegates to the client's own sub-agent and returns through `gate_verdict`, so no API key is configured, stored, or sent anywhere.
+- **The undocumented `MCP_LLM_*` environment variables** (`MCP_LLM_ENABLED`, `_API_KEY`, `_ENDPOINT`, `_MODEL`, `_MAX_TOKENS`, `_TEMPERATURE`). They were never listed in the declared environment surface.
+
+### Changed
+
+- **The `analysis` config section is deprecated, and no longer settable from either tool surface.** A `config.json` carrying it **still loads with its values intact** — the section is parsed and ignored for one deprecation cycle, and the server now warns once at startup naming the replacement. What is withdrawn is the ability to _set_ it: `cpm enable analysis` reports `Unknown subsystem`, and both `cpm config set` and `system_control config` reject the five `analysis.semanticAnalysis.…` keys. Scripts that set them were previously writing values no runtime path read; they now receive a non-zero exit instead of a silent no-op. Delete the `analysis` section to silence the warning. The section itself is removed in the next major.
+- **`llm_self_check` gate criteria no longer consult configuration.** The reserved type is unchanged in the gate YAML schema and still auto-passes, so gates declaring it are unaffected. Its skip message previously told the reader to enable a config key that no longer exists; it now names `%judge` and `shell_verify`.
+- **Prompt analysis feedback is no longer suppressed by a disabled flag.** `resource_manager` prompt create/update responses previously printed `⚠️ API Analysis Disabled` and withheld gate suggestions whenever the LLM flag was off — which was every installation, since it defaults off. The underlying analysis is rule-based and needs no model, and a sibling code path already ran it ungated, so the suggestions now always appear.
+
 ### Added
 
 - **Codex CLI support seams:** generic `PLUGIN_ROOT` workspace resolution, a `codex exec` spawn strategy (`SpawnConfig.client` + `CodexModelStrategy`), and a codex skills-sync registration — consumed by the new [codex-prompts](https://github.com/minipuft/codex-prompts) downstream plugin.

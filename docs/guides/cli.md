@@ -322,16 +322,22 @@ cpm enable resources --json         # resources.registerWithMcp = true (JSON out
 | `resources.observability` | `resources.observability.enabled` |
 | `resources.logs`          | `resources.logs.enabled`          |
 | `verification`            | `verification.isolation.enabled`  |
-| `analysis`                | _Deprecated_ — see note below     |
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
 
-> **Deprecated in 3.1.2: `analysis`.** The LLM side client it switched on has been removed, so the
-> key is still accepted and persisted but no runtime reader consults it. Gate evaluation by a model
-> is served by the `%judge` modifier and `gates.evaluation.defaultMode`, which run in the client's
-> own subagent rather than through an outbound API call. The key is scheduled for removal.
+> **Removed in 3.1.2: the `analysis` subsystem.** It switched on an outbound LLM side client that
+> has been deleted, so `cpm enable analysis` now reports `Unknown subsystem`, and
+> `cpm config set analysis.semanticAnalysis.…` reports `Unknown configuration key`. Gate evaluation
+> by a model is served by the [`%judge` modifier](./judge-mode.md) and `gates.evaluation.defaultMode`,
+> which run in the client's own subagent rather than through an outbound API call — so no API key
+> is configured or stored.
+>
+> **A `config.json` that still carries the `analysis` section keeps loading.** The section is
+> parsed and ignored for one deprecation cycle, and the server warns once at startup naming the
+> replacement. Only the ability to _set_ it from `cpm` or `system_control` is withdrawn. Delete the
+> section to silence the warning; it is removed entirely in the next major.
 
-> **Changed in 3.1.2.** These ten keys were previously `*.mode` holding `"on"`/`"off"`, which no
+> **Changed in 3.1.2.** These nine keys were previously `*.mode` holding `"on"`/`"off"`, which no
 > reader consulted — the command reported success and changed nothing. A `config.json` still
 > carrying a `*.mode` key is adopted into the boolean on load, so no edit is required; `cpm config
 set` no longer accepts the old spelling. `telemetry.mode`, `phaseGuards.mode` and `identity.mode`

@@ -7,7 +7,7 @@ tags: [cleanup, gates, config, breaking-candidate]
 
 # Semantic LLM Side-Client Retirement
 
-**Status**: T0 decided · T1, T2, T2.5, T3 landed · T4–T5 pending · F9 + F10 filed for a dead-code tier
+**Status**: **COMPLETE** — T0 decided; T1, T2, T2.5, T3, T3.5, T3.6, T4, T5 all landed · F9, F11 filed for follow-up · F10, F12 resolved
 **Created**: 2026-08-05
 **Supersedes nothing.** Follows the `llmIntegration.mode` fix (same session), which made the config
 surface honest enough for this removal to be scoped.
@@ -351,9 +351,137 @@ have absorbed unrelated drift: 389 → 387 errors, 106 → 105 entries, no other
 returns only the file's own two lines. The entire module is unreachable, including its five
 `analysisMetadata.mode === 'semantic'` branches, which is why T3 did not need to touch them.
 
-Not deleted here: an 863-line subsystem removal is its own unit of review, and it is not a
-sidecar artifact — it predates this plan. Filed with F9 for a dead-code tier. Deleting it is the
-precondition for narrowing `mode`.
+Not deleted at T3: an 863-line subsystem removal is its own unit of review, and it is not a
+sidecar artifact — it predates this plan. Deleting it is the precondition for narrowing `mode`.
+
+**RESOLVED — deleted in T3.5** (below), once the `mode` narrowing made it the blocking item rather
+than a bystander. Confirmed dead three independent ways before removal: no construction site
+outside its own factory; its directory barrel `engine/frameworks/integration/index.ts` had **zero
+importers**; and `npx knip --include files` listed both files as unused. 869 lines removed.
+
+---
+
+## T3.5 — Retire `isLLMEnabled` and narrow `mode` · executed 2026-08-05 · depends T3
+
+Requested directly after T3 rather than deferred into T4, because the two questions are coupled:
+`mode` cannot narrow while F10 compares against `'semantic'`.
+
+| ID    | Status | Step                                                 | Files                                                                                                               | Verification                      |
+| ----- | ------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| 3.5.1 | ✓      | Delete F10 (blocker)                                 | `engine/frameworks/integration/` (2 files, 869 lines)                                                               | `rg` → 0; knip no longer lists ✓  |
+| 3.5.2 | ✓      | Narrow `analysisMetadata.mode` to `'minimal'`        | `shared/types/core-config.ts`                                                                                       | typecheck clean ✓                 |
+| 3.5.3 | ✓      | Retire `isLLMEnabled` from port, impl, both branches | `shared/types/index.ts`, `content-analyzer.ts`, `prompt-analyzer.ts`, `prompt-lifecycle-processor.ts`, 4 test files | `rg -c "isLLMEnabled" src/` → 0 ✓ |
+
+**Gate**: ✓ typecheck · lint:ratchet · typecheck:tests:ratchet · validate:arch · 8 further validators
+exit 0; 1936 unit · 468 integration · 43 e2e; `verify:mcp` 12/12.
+
+### The decision, and the evidence that settled it
+
+Removing the flag forced a choice: do the two gated branches take the enabled or the disabled path?
+Three measurements said **enabled**, and none of them is a preference:
+
+1. **The gated capability never needed a model.** `GateAnalyzer.analyzePromptForGates` is entirely
+   rule-based. The only LLM-dependent part was `confidence`, already hardcoded `0.0`.
+2. **A sibling call site already ran it ungated** — `prompt-discovery-processor.ts:373` calls the
+   identical method with no flag check. The gate was inconsistent, not protective.
+3. **The flag defaulted false**, so both behaviors were dark for every user: everyone saw
+   "⚠️ API Analysis Disabled" and nobody saw "💡 Suggested Gates", while the analyzer produced real
+   output the whole time.
+
+So this is not switching on something risky — it is removing an inconsistent gate that hid a
+working, deterministic feature behind a flag for a subsystem that no longer exists. It remains a
+**user-visible response-text change** and is recorded as one.
+
+### Tests came first, and failed first
+
+Neither branch had **any** test — `rg "API Analysis Disabled|Suggested Gates" tests/` returned
+nothing, so the change would have been invisible to every gate. A new
+`tests/unit/mcp-tools/resource-manager/prompt/prompt-analyzer.test.ts` was written against the
+intended behavior and run against the **unchanged** source first: 2 of its 3 cases failed. That
+failure is what makes them evidence rather than description. It uses a real `ContentAnalyzer`, not
+a mock — the analyzer is pure, so a mock would only assert what it was told to return.
+
+**Coverage gap — CLOSED in T3.6.** At the time this tier shipped, the `prompt-lifecycle-processor`
+branch had no direct test and I recorded `all_criteria_mapped: partial — 1 of 2 branches directly
+asserted`, judging a harness impractical because the processor "needs the full context plus file
+writes."
+
+**That judgment was wrong**, and the correction is worth keeping: I estimated testability from the
+size of the surrounding class rather than from what the method under test actually reaches.
+`createPrompt` touches five of `PromptResourceContext`'s nine fields plus `dependencies.onRefresh`,
+and its only disk write is behind an injected `fileOperations.updatePromptImplementation` returning
+a three-field result. Stubbing that one method leaves every analysis collaborator real — which is
+the prescribed mock boundary, not the mock-everything shape I assumed I'd be forced into.
+`all_criteria_mapped: complete — 2 of 2.`
+
+---
+
+## T3.6 — Close the icon and coverage debts · executed 2026-08-05 · depends T3.5
+
+Two follow-ups requested directly, both deferrals this plan had recorded rather than resolved.
+
+| ID    | Status | Step                                                           | Files                                                                             | Verification                                 |
+| ----- | ------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------- |
+| 3.6.1 | ✓      | Remove the unreachable arms from `getAnalysisIcon`             | `prompt-analyzer.ts`, `prompt-analyzer.test.ts`                                   | icon asserted identically before and after ✓ |
+| 3.6.2 | ✓      | Build the missing `PromptLifecycleProcessor.createPrompt` test | `tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor.test.ts` | 4 cases; falsified by re-gating the branch ✓ |
+
+**Gate**: ✓ typecheck · lint:ratchet · typecheck:tests:ratchet · validate:arch all exit 0.
+
+### 3.6.1 — the probe found four dead arms, not the two named
+
+The request named `'structural'` and `'hybrid'`. Probing every arm for a producer found two more:
+
+- `'configurable'` is reachable only through the `|| framework` fallback, which needs `analysisMode`
+  absent — and all three `PromptClassification` producers set it.
+- `'disabled'` is dead because **`createDisabledAnalysisFallback` has zero callers**.
+
+**The dead producer had to go with the dead arm.** Removing the `'disabled'` arm alone would leave
+a method producing a value nothing renders; if anyone later wired it up, `'disabled'` would silently
+render 🧠 instead of 🔧 — a behavior change planted by a cleanup. Same file, ~50 lines, mutually
+dependent for their deadness, so they shipped together. Seven branches → one ternary with two
+outcomes (🚨 when analysis threw, 🧠 otherwise).
+
+Left alone: `framework: 'configurable'` at `:80` is a **producer**, not an arm, and `framework` has
+a live reader at `prompt-engine/utils/classification.ts:61`.
+
+**Verification shape differs from the earlier tiers on purpose.** This change is
+behavior-_preserving_, so the icon assertions were written to pass **before as well as after** —
+the invariance is the property being protected. Falsification then confirmed they discriminate: an
+unconditional `'🧠'` body failed exactly the fallback case.
+
+### 3.6.2 — the harness that was supposedly impractical
+
+Four cases, real `PromptAnalyzer` / `ContentAnalyzer` / `GateAnalyzer`, one stub
+(`updatePromptImplementation`). Both sides of the branch are pinned: suggestions present without a
+`gate_configuration`, and suppressed with one.
+
+**The fixture wording is load-bearing.** `GateAnalyzer.analyzePromptContent` matches
+`/code|programming|function|class|method|variable/` to emit `code-quality`. A neutral fixture yields
+an empty list, the `recommendedGates.length > 0` guard short-circuits, and an assertion on the
+suggestions block would pass against a response containing nothing — proving the branch _didn't_
+fire while claiming it did. The fixture says "Review this code function", and the test asserts the
+gate id the **real** analyzer derived, not one the test supplied.
+
+**Two discovery misses, both caught by running rather than reasoning.** `dependencies.onRefresh` is
+reached from `handleSystemRefresh` _after_ the response is assembled, so Phase 1's "five fields"
+enumeration was one short — the first run failed on it. And `typecheck:tests:ratchet` caught an
+untyped `jest.fn()` whose `mock.calls[0]` is a zero-length tuple; `typecheck` alone could not see it,
+which is the gap that ratchet exists to close.
+
+**Falsified** by restoring the pre-T3.5 gating (`else if (false)`): exactly one test failed, the one
+asserting the suggestions appear. The other three are branch-independent and correctly stayed green.
+
+### What this does to T4
+
+**The config section now has exactly one runtime reader left.** After 3.5.3, `rg llmIntegration
+src/` outside config plumbing returns only `gate-validator.ts` (the `runLLMSelfCheck` stub) and the
+`prompt-executor.ts:197` line that feeds it. That is precisely row **4.8**. T4 is now: decouple one
+stub, then retire the config.
+
+Also left alone deliberately: `getAnalysisIcon` still carries `'structural'` and `'hybrid'` arms
+with no producer. They were dead before this work and are not caused by it. The `'semantic'` arm —
+which this change _did_ invalidate — was replaced with an explicit `'minimal'` arm returning the
+icon the `default` already produced, so intent is stated without altering behavior.
 
 ---
 
@@ -361,32 +489,224 @@ precondition for narrowing `mode`.
 
 Shape depends on T0.1. Under the default (b):
 
-| ID  | Status | Step                                                                                                                                                                                               | Files                                                                                                 | Verification                                                      |
-| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 4.1 | ☐      | Mark the `analysis` section deprecated in the schema with the replacement named                                                                                                                    | `config.schema.json`                                                                                  | `npm run validate:config-schema`                                  |
-| 4.2 | ☐      | Warn once at load when a config still carries `analysis.semanticAnalysis`                                                                                                                          | `infra/config/index.ts`                                                                               | unit test asserts the warning                                     |
-| 4.3 | ☐      | Remove the 5 MCP tool keys + restart-required entry                                                                                                                                                | `config-utils.ts`                                                                                     | `rg -n "llmIntegration" src/mcp/` → 0                             |
-| 4.4 | ☐      | Remove the CLI key                                                                                                                                                                                 | `config-input-validator.ts`                                                                           | the generator-vs-validator test added this session still passes   |
-| 4.5 | ☐      | Remove `analysis` from this repo's config                                                                                                                                                          | `server/config.json`                                                                                  | `npm run validate:config-schema`                                  |
-| 4.6 | ☐      | Add the retired paths to the `INERT_SPELLINGS` retirement note, or state why they differ                                                                                                           | `infra/config/index.ts`                                                                               | —                                                                 |
-| 4.7 | ☐      | _(added at T3)_ Resolve `isLLMEnabled()` — it reports the dying flag and gates user-visible response text in two places. Rename to what it actually gates, or retire it with `ContentAnalyzerPort` | `content-analyzer.ts`, `shared/types/index.ts`, `prompt-analyzer.ts`, `prompt-lifecycle-processor.ts` | the two branches produce the intended text under both flag states |
-| 4.8 | ☐      | _(added at T0.5 / F6)_ Decouple `runLLMSelfCheck` from `LLMIntegrationConfig` without deleting the `llm_self_check` gate type                                                                      | `gate-validator.ts`, `prompt-executor.ts`                                                             | `rg -n "LLMIntegrationConfig" src/engine/` → 0; gate suite green  |
+| ID  | Status | Step                                                                                                                                                                                                             | Files                                                                                                 | Verification                                                         |
+| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 4.1 | ✓      | Mark the `analysis` section deprecated in the schema with the replacement named                                                                                                                                  | `config.schema.json`                                                                                  | `npm run validate:config-schema` ✓                                   |
+| 4.2 | ✓      | Warn once at load when a config still carries `analysis.semanticAnalysis`                                                                                                                                        | `infra/config/index.ts`                                                                               | 4 unit tests, falsified twice ✓                                      |
+| 4.3 | ✓      | Remove the MCP tool keys (**4**, not 5 — see count correction) + restart-required entry                                                                                                                          | `config-utils.ts`                                                                                     | `rg -n "llmIntegration" src/mcp/` → 0 ✓                              |
+| 4.4 | ✓      | Remove the CLI keys (**5**, incl. `endpoint`) + restart entry + 5 validation cases                                                                                                                               | `config-input-validator.ts`, `config-operations.ts`, `cli/` (2 files)                                 | generator-vs-validator test still passes ✓                           |
+| 4.5 | ✓      | Remove `analysis` from this repo's config                                                                                                                                                                        | `server/config.json`                                                                                  | `npm run validate:config-schema` ✓                                   |
+| 4.6 | ✓      | Add the retired paths to the `INERT_SPELLINGS` retirement note, or state why they differ                                                                                                                         | `infra/config/index.ts`, `config-input-validator.ts`                                                  | **they differ** — rationale recorded at both sites ✓                 |
+| 4.7 | ✓      | _(added at T3, done in T3.5)_ Resolve `isLLMEnabled()` — it reports the dying flag and gates user-visible response text in two places. Rename to what it actually gates, or retire it with `ContentAnalyzerPort` | `content-analyzer.ts`, `shared/types/index.ts`, `prompt-analyzer.ts`, `prompt-lifecycle-processor.ts` | the two branches produce the intended text under both flag states    |
+| 4.8 | ✓      | _(added at T0.5 / F6)_ Decouple `runLLMSelfCheck` from `LLMIntegrationConfig` without deleting the `llm_self_check` gate type                                                                                    | `gate-validator.ts`, `gates/core/index.ts`, `prompt-executor.ts`                                      | `rg -n "LLMIntegrationConfig" src/engine/` → 0 ✓; gate suite green ✓ |
 
-**Gate**: no setter for any `analysis.*` key on either surface; a config carrying the section still
-loads and says so once.
+**Gate**: ✓ no setter for any `analysis.*` key on either surface (asserted per key against **both**
+key lists, and against the validator's rejection — not just list membership); a config carrying the
+section still loads, keeps its values, and warns exactly once.
+
+Verified: typecheck · lint:ratchet · typecheck:tests:ratchet · 30 `validate:*` steps · 18
+`*:self-test` steps all exit 0; 1950 unit · 484 integration; build clean; `verify:mcp` 12/12; the
+three changed CLI flows driven end-to-end. `all_criteria_mapped: complete — 7 of 7.`
+
+**One pre-existing red, not caused by this tier**: `validate:format` fails on
+`.claude/rules/mcp-contracts.md` → **F12**. It is the third step of `validate:all`, so the wrapper
+exits before reaching anything else — the 30+18 steps above were therefore run individually rather
+than reported from a wrapper that never got to them.
+
+### Count correction — the plan's inventory was wrong in both directions
+
+The inventory line said "5 MCP tool keys (`config-utils.ts:32-35,43`), 1 CLI key". Measured:
+
+| Surface                        | Settable keys | Restart entry | Validation cases |
+| ------------------------------ | ------------- | ------------- | ---------------- |
+| MCP (`config-utils.ts`)        | **4**         | 1             | 4                |
+| CLI (`config-input-validator`) | **5**         | 1             | 5                |
+
+The MCP surface never offered `endpoint`; the CLI did. And "1 CLI key" undercounted by four. The
+line-number citation `32-35,43` was accurate and the prose was not — which is the argument for
+re-measuring rather than trusting a plan's own arithmetic.
+
+### Scope extensions, and why each was caused by this tier
+
+None were adjacent-and-tempting; each was **created by** a row's edit:
+
+- **`config-operations.ts`** (2 type-hint branches, 1 `boolKeys` entry). These describe how to
+  coerce a key the validator no longer accepts — dead the moment 4.4 landed.
+- **`cli/src/commands/enable-disable.ts`** (`SUBSYSTEM_MAP.analysis`). This is the sharpest one:
+  the entry routes to the key 4.4 removed, so leaving it would have turned `cpm enable analysis`
+  from a **no-op that reports success** into a **validation error**. Removing the setter without
+  removing its caller doesn't preserve behavior, it degrades it. Verified by running the built
+  binary: the command now reports `Unknown subsystem` and lists the real ones.
+- **`cli/src/cli.ts`** help line. T1 marked `analysis` DEPRECATED here rather than deleting it,
+  precisely so `SUBSYSTEM_MAP` would not advertise a hidden command "until T4". This is T4.
+- **`legacy-key-migration.test.ts`**. Its "offers a canonical replacement for every key it dropped"
+  loop asserted the canonical `…llmIntegration.enabled` key is settable. That invariant is now
+  false by design, so the entry moved out of the loop into a test that states the exception and
+  why — see below.
+
+### The one dropped spelling with no canonical twin
+
+Nine inert `*.mode` keys were deleted earlier because each had a working twin beside it. This one
+had a twin too, and the twin has now been retired as well — so `analysis.semanticAnalysis` becomes
+the first entry in `INERT_SPELLINGS` whose target is not settable.
+
+That is why **4.6's answer is "they differ"** rather than "add them to the note". The inert
+spellings were _never_ read; these keys _were_ read, correctly, until their reader was deleted.
+Different defect, different retirement trigger: the `INERT_SPELLINGS` entry now retires **with the
+config section**, not on the one-major-cycle schedule the rest of that table follows. Recorded at
+the table entry, in the validator's header, and in the test that no longer asserts the twin.
+
+The entry is deliberately kept alive meanwhile: a config written with `mode: "on"` must still
+normalize to the single key the deprecation warning names, or the warning would tell a user to
+remove a section whose spelling the loader refused to recognize.
+
+### 4.8 — what "decouple" meant in practice
+
+All three of `runLLMSelfCheck`'s config branches returned the same verdict (`passed: true`,
+`score: 1.0`, `skipped: true`); only the message differed. So removing the config input could not
+change what a gate does — it could only change what the skip _says_.
+
+It changes that deliberately. The old text instructed the reader to
+`set analysis.semanticAnalysis.llmIntegration.enabled=true` — a key that, as of 4.3/4.4, **neither
+tool surface accepts**. A skip message that names an impossible remedy is worse than one that names
+none, so it now points at `%judge` / `shell_verify`. Logged as a **user-visible text change**.
+
+Two more directions in the same file pointed readers at the runner-less type — `runValidationCheck`'s
+doc comment calling `llm_self_check` one of "the only valuable runtime validations", and the
+auto-pass message recommending it. Both now name the types that actually run. These were stale
+before this tier, but 4.8 is what put a flat contradiction three lines away from them.
+
+The structural half is asserted by arity: `createGateValidator` and `GateValidator` both take 2
+parameters, so there is no path by which config could reach the verdict. Arity is the only way to
+assert an argument's _absence_.
+
+**Falsified three times.** (1) Removing the once-guard failed exactly the "warns once per process"
+test, leaving the other three green. (2) Removing the warning call failed that one **and** "warns
+when a config still carries the section", still leaving "stays silent" and "still loads" green —
+the two probes discriminate different properties. (3) Restoring the old config-key message failed
+exactly "points at the live replacement", leaving acceptance, auto-pass and arity green. Probes
+reverted; `rg FALSIFICATION src/ tests/ ../cli/src` → 0.
+
+**The tests ratchet earned its keep again.** Four `TS18048` errors — `result.checks` is optional on
+`ValidationResult`, and I indexed it without `?.` while the surrounding file already used `?.[0]`.
+`typecheck` cannot see `tests/`, so this would have reached CI green.
+
+### F11 — `ContentAnalyzer` is handed a config it never reads
+
+`ContentAnalyzer` stores `SemanticAnalysisConfig` and exposes `getConfig`/`updateConfig`, and reads
+no field from it: T3 removed the last one (the `llmIntegration` cache-key term). Both accessors have
+**zero `src/` callers** — only tests. So `mcp/tools/index.ts:216 → getSemanticAnalysisConfig()` is a
+live wire feeding a dead terminal.
+
+Not executed here, and not merely for scope reasons: under T0.1 the section stays parsed for one
+cycle, so this plumbing has to survive until the removal major regardless. It is genuinely a
+next-cycle item, not a deferral of this one.
+
+### F12 — `validate:format` was red on a file untouched since March — RESOLVED in T5
+
+`.claude/rules/mcp-contracts.md` fails `npx prettier --check` while being **unmodified** relative to
+`HEAD` (last commit `84b74cfa`, 2026-03-14). The diff is table alignment and one blank line — no
+content. Since the file has not changed, the formatter's opinion of it did; `package.json` and
+`package-lock.json` both carry uncommitted dependency changes this branch, which is the likely
+mechanism.
+
+It is the third step of `validate:all`, so **the whole CI contract stops there** — every gate after
+it goes unrun, and a green local subset says nothing about them. Left unfixed on purpose: putting an
+unrelated rules file in this tier's diff would break the tier-scoped commit boundary. Fix is
+`npx --prefix server prettier --write .claude/rules/mcp-contracts.md` in its own commit.
+
+Worth noting for the retirement-condition convention this repo follows: this is a gate that has been
+failing without anyone's change causing it, which is the failure mode that makes a suite get ignored.
 
 ---
 
 ## T5 — Docs and a guard · depends T4
 
-| ID  | Status | Step                                                                                                          | Files                                                                       | Verification                               |
-| --- | ------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------ |
-| 5.1 | ☐      | Point "semantic analysis" docs at `%judge` / `evaluation.defaultMode`                                         | `docs/guides/gates.md`, `docs/guides/cli.md`, `docs/reference/mcp-tools.md` | `npm run validate:documented-options`      |
-| 5.2 | ☐      | CHANGELOG entry; if T0.1 chose (a), mark breaking per `CONTRIBUTING.md` §Breaking Changes                     | `CHANGELOG.md`                                                              | —                                          |
-| 5.3 | ☐      | Guard against reintroduction — with a retirement condition, per the convention every other guard here follows | `server/scripts/validate-no-llm-sidecar.js` + `validate:all`                | `--self-test` fails on a planted violation |
+| ID  | Status | Step                                                                                                          | Files                                                                             | Verification                                         |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 5.1 | ✓      | Point "semantic analysis" docs at `%judge` / `evaluation.defaultMode`                                         | `docs/guides/gates.md`, `docs/guides/cli.md` (**not** `mcp-tools.md` — see below) | **substituted** — the listed command is vacuous here |
+| 5.2 | ✓      | CHANGELOG entry; if T0.1 chose (a), mark breaking per `CONTRIBUTING.md` §Breaking Changes                     | `CHANGELOG.md`                                                                    | not marked breaking — but see the open question      |
+| 5.3 | ✓      | Guard against reintroduction — with a retirement condition, per the convention every other guard here follows | `server/scripts/validate-no-llm-client.js` (**renamed**) + `validate:all`         | 8 self-test rules + a real planted violation ✓       |
 
-**Gate**: `npm run validate:all` green except the known-red `validate:no-methodology-vocab`;
-`npm run verify:mcp` answers on all 3 tools.
+**Gate**: ✓ **`npm run validate:all` exits 0 — fully green**, which is better than this row asked
+for: it was written expecting `validate:no-methodology-vocab` to stay red, and that guard was fixed
+earlier in the session. `npm run verify:mcp` 12/12 on all 3 tools. `all_criteria_mapped: complete — 5 of 5.`
+
+### 5.1's stated Verification is vacuous — substituted
+
+`validate:documented-options` compares documented **CLI flags and `MCP_*` env vars** against the
+parsers that declare them. It reads no config key, no gate criteria table, and none of the prose
+this row rewrote. It passes identically before and after, so reporting it as this row's evidence
+would be reporting a check that cannot observe the row's output.
+
+Run anyway (it is cheap and guards a real class), and **substituted** with checks that do observe
+the files: `prettier --check` on all three, `validate:readme`, and — for the substantive claim —
+reading the source of the replacement being documented, below.
+
+**`docs/reference/mcp-tools.md` needed no change.** The plan listed it; measured, it contains no
+reference to semantic analysis, the `analysis` config, or the LLM client. Recorded rather than
+edited, so the ✓ does not imply a file was touched that wasn't.
+
+### The claim in these docs was verified against source, not assumed
+
+Writing "`%judge` is the replacement" into three docs, a runtime message, and a guard is a claim
+worth being wrong about. `mcp-tools.md:280` describes `%judge` as "Show guidance menu, don't
+execute" — which would have made every one of those statements misleading.
+
+Checked: both are true and they are different layers. `judge-menu-formatter.ts` serves the
+command-level preview; `judge-prompt-builder.ts` builds the context-isolated evaluation prompt
+("the judge sub-agent receives ONLY the output + criteria — no generation reasoning, chain history,
+or framework context"), selected by `gates.evaluation.defaultMode: 'self' | 'judge'`
+(`core-config.ts:211`). So the precise replacement is **judge mode**, reachable via `%judge`, and
+the docs say that rather than naming the modifier alone.
+
+### 5.3 — renamed, and why
+
+The plan specified `validate-no-llm-sidecar.js`. Shipped as **`validate-no-llm-client.js`**:
+`validate:no-legacy-sidecars` already exists and "sidecar" already means _a JSON state file SQLite
+replaced_. Two guards whose names differ by one word while forbidding unrelated things is the exact
+homonym trap `validate-no-execution-mode.js` documents avoiding. Named for what it forbids.
+
+Shape: 10 zero-tolerance symbols, plus 2 config terms allowed only inside 4 allowlisted plumbing
+files, each entry carrying a `closedBy`. Scoped to `src/` + `../cli/src`, **not** `tests/` — several
+tests name the retired symbols in assertions that pin their _absence_, which is the retirement
+working, not a violation of it.
+
+**`GateValidationResult` is deliberately not forbidden** even though T2.5 deleted a type by that
+name: a live, unrelated one exists at `prompt-engine/utils/validation.ts:28`. It was on my first
+draft of the forbidden list and the measurement caught it — the same homonym failure the guard's
+own name avoids.
+
+**It has a satisfied-exception check.** An allowlist entry whose file no longer names the term, or
+no longer exists, is reported as a finding. This repo has been bitten by the opposite six times in
+one initiative: exceptions kept passing silently after the thing they excused was fixed.
+
+**Writing that check is what found a bug in the guard.** Probing a deleted allowlisted file made it
+**crash** — `ripgrep()` re-threw on rg's exit 2 (path not found) instead of reporting staleness. And
+a deleted plumbing file is not a hypothetical: it is precisely what happens when the config section
+is removed, i.e. the guard's own retirement event. Fixed to report both stale forms; both probed.
+
+**Falsification**: 8 self-test rules all behave (5 catch, 3 accept); a violation planted in a real
+file (`judge/types.ts`) was caught by the scanning path, not just the classifier; and both
+stale-exception forms were probed against a modified copy. Tree left clean.
+
+### Open question for the version decision — 5.2 did not mark this breaking, and that may be wrong
+
+T0.1 decided "deprecate in place… no bump this cycle; major at removal." That reasoning was about
+**the config section staying parsed**, which it does — no user's `config.json` breaks.
+
+But T4 also **withdrew the setter keys** from both tool surfaces, which T0.1 never considered.
+`CLAUDE.md` §Public API Contract names the CLI commands and the MCP tool surface as contract, and
+its own precedent for `gate_verdict` reads: "the contract is the **union** of every reachable
+shape… adding or removing a union member is [breaking]." A settable config key is close to a union
+member, and `cpm enable analysis` now exits non-zero where it previously exited 0.
+
+Mitigating: those invocations were **already semantically inert** — they set a flag whose readers
+were dead. The break is an exit code, not a behavior.
+
+I have written the CHANGELOG to describe the change plainly under **Changed/Removed** without a
+breaking marker, because that matches T0.1 as decided. **Flagging rather than deciding**: whether
+the setter withdrawal alone warrants the major bump is a release call, not a cleanup call.
 
 ---
 

@@ -193,16 +193,13 @@ export class PromptExecutor {
       chainSessionOptions,
       this.argumentHistoryTracker
     );
-    const config = configManager.getConfig();
-    const llmConfig = config.analysis?.semanticAnalysis?.llmIntegration;
-
     const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
       maxMemoryGates: 100,
       defaultExpirationMs: 30 * 60 * 1000,
     });
 
     const gateProvider = new GateManagerProvider(gateManager, temporaryGateRegistry);
-    const gateValidator = createGateValidator(logger, gateProvider, llmConfig);
+    const gateValidator = createGateValidator(logger, gateProvider);
     this.lightweightGateSystem = new LightweightGateSystem(
       gateProvider,
       gateValidator,

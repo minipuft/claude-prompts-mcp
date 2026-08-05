@@ -45,7 +45,7 @@ const createLogger = (): Logger => ({
   debug: jest.fn(),
 });
 
-const createMockAnalyzer = (): Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEnabled'> => {
+const createMockAnalyzer = (): Pick<ContentAnalyzer, 'analyzePrompt'> => {
   const baseAnalysis: ContentAnalysisResult = {
     executionType: 'single',
     requiresExecution: true,
@@ -90,13 +90,12 @@ const createMockAnalyzer = (): Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEna
 
   return {
     analyzePrompt: jest.fn().mockResolvedValue(baseAnalysis),
-    isLLMEnabled: jest.fn().mockReturnValue(true),
   };
 };
 
 describe('Script Tools Workflow Integration', () => {
   let logger: Logger;
-  let analyzer: Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEnabled'>;
+  let analyzer: Pick<ContentAnalyzer, 'analyzePrompt'>;
 
   beforeEach(() => {
     jest.clearAllMocks();

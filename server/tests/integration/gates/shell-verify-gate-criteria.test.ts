@@ -338,4 +338,72 @@ describe('Shell Verify Gate Criteria Integration', () => {
       expect(stats.successfulValidations).toBe(2);
     });
   });
+
+  /**
+   * `llm_self_check` is a reserved criteria type: declared in gate YAML (contract surface per
+   * CLAUDE.md §Public API Contract) and documented as having no runner. It used to branch on
+   * `config.analysis.semanticAnalysis.llmIntegration`, whose readers have all been retired —
+   * so the branch is gone and the type keeps its documented behavior with no config input.
+   *
+   * These pin the decoupling as behavior, not just as a missing constructor argument: the
+   * verdict must be identical no matter what a deployment's config once said, because the
+   * validator can no longer be told anything about it.
+   */
+  describe('llm_self_check reserved criteria type', () => {
+    const llmGate: LightweightGateDefinition = {
+      id: 'reserved-llm-gate',
+      name: 'Reserved LLM Gate',
+      type: 'validation',
+      description: 'Gate declaring the reserved llm_self_check type',
+      pass_criteria: [{ type: 'llm_self_check', prompt_template: 'Assess depth' }],
+    };
+
+    test('still accepts a gate declaring the type', async () => {
+      const loader = createMockLoader({ 'reserved-llm-gate': llmGate });
+      validator = createGateValidator(mockLogger, loader);
+
+      const result = await validator.validateGate('reserved-llm-gate', { content: 'anything' });
+
+      // Deleting the type would break existing gate files; T0.5 chose to keep it and decouple
+      // the stub instead, so a gate that declares it must still resolve rather than error.
+      expect(result).not.toBeNull();
+      expect(result?.checks).toHaveLength(1);
+      expect(result?.checks?.[0]?.type).toBe('llm_self_check');
+    });
+
+    test('auto-passes so a reserved type cannot fail the gate that declares it', async () => {
+      const loader = createMockLoader({ 'reserved-llm-gate': llmGate });
+      validator = createGateValidator(mockLogger, loader);
+
+      const result = await validator.validateGate('reserved-llm-gate', { content: 'anything' });
+
+      expect(result?.passed).toBe(true);
+      expect(result?.checks?.[0]?.passed).toBe(true);
+      expect(result?.checks?.[0]?.details?.['skipped']).toBe(true);
+    });
+
+    test('points at the live replacement instead of a retired config key', async () => {
+      const loader = createMockLoader({ 'reserved-llm-gate': llmGate });
+      validator = createGateValidator(mockLogger, loader);
+
+      const result = await validator.validateGate('reserved-llm-gate', { content: 'anything' });
+      const check = result?.checks?.[0];
+
+      // The old message told the reader to set
+      // `analysis.semanticAnalysis.llmIntegration.enabled=true` — a key neither tool surface
+      // accepts any more, so following the instruction now fails. The skip has to name something
+      // a user can actually do.
+      expect(check?.message).toContain('%judge');
+      expect(check?.message).not.toContain('llmIntegration');
+      expect(check?.details?.['configPath']).toBeUndefined();
+    });
+
+    test('takes no configuration input at all', () => {
+      // Structural half of the decoupling: the third `llmConfig` parameter is gone from both the
+      // factory and the constructor, so there is no longer a path by which config could reach
+      // this verdict. Arity is the only way to assert an argument's absence.
+      expect(createGateValidator).toHaveLength(2);
+      expect(GateValidator).toHaveLength(2);
+    });
+  });
 });

@@ -373,7 +373,6 @@ Subsystems:
   resources.observability   Observability resources (resources.observability.enabled)
   resources.logs            Log resources (resources.logs.enabled)
   verification              Verification isolation (verification.isolation.enabled)
-  analysis                  DEPRECATED - no runtime effect; use the %judge gate modifier
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)

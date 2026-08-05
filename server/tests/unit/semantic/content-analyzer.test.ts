@@ -157,12 +157,10 @@ describe('ContentAnalyzer configuration', () => {
     expect(analyzer.getConfig().llmIntegration.model).toBe('gpt-3.5-turbo');
   });
 
-  // `isLLMEnabled` reports the config flag and does NOT indicate that model-backed analysis
-  // exists — it does not. Two callers branch on it to size their response detail
-  // (prompt-analyzer, prompt-lifecycle-processor), so it is pinned in both directions: hardcoding
-  // it to false would silently change user-visible output. Retirement is T4's call.
-  test('isLLMEnabled reports the config flag in both directions', () => {
-    expect(createAnalyzer(false).isLLMEnabled()).toBe(false);
-    expect(createAnalyzer(true).isLLMEnabled()).toBe(true);
+  // The analyzer exposes no method named for a removed capability. `isLLMEnabled` used to report
+  // the config flag and gated user-visible output in two callers; both now run unconditionally
+  // because the work behind them never needed a model.
+  test('exposes no LLM-capability method', () => {
+    expect(createAnalyzer()).not.toHaveProperty('isLLMEnabled');
   });
 });

@@ -393,14 +393,16 @@
 
     "analysis": {
       "type": "object",
-      "description": "Semantic analysis of prompts and gate verdicts. Read by ConfigManager.getAnalysisConfig() and GateServiceFactory, which selects SemanticGateService over the default when llmIntegration.enabled is true.",
+      "deprecated": true,
+      "description": "DEPRECATED - no runtime path reads this section. It is still parsed so an existing config.json keeps loading, and is scheduled for removal in the next major. The gate service that consumed it and the LLM side client behind it were both deleted; for model-graded gate evaluation use the '%judge' modifier or gates.evaluation.defaultMode. ConfigManager.getAnalysisConfig() still returns the parsed value and ConfigManager warns once at load when the section is present.",
       "properties": {
         "semanticAnalysis": {
           "type": "object",
           "properties": {
             "llmIntegration": {
               "type": "object",
-              "description": "Modelled on LLMIntegrationConfig in src/shared/types/core-config.ts, which is what the runtime reads. There is deliberately no 'mode' member: the CLI used to accept a 'mode' of 'on'|'off' here that no reader consulted. That spelling is gone from the CLI surface, and ConfigManager adopts it into 'enabled' for configs already carrying one.",
+              "deprecated": true,
+              "description": "DEPRECATED with its parent section - every member is parsed and defaulted, and none is consulted. Modelled on LLMIntegrationConfig in src/shared/types/core-config.ts. There is deliberately no 'mode' member: the CLI used to accept a 'mode' of 'on'|'off' here that no reader consulted. That spelling is gone from both tool surfaces, and ConfigManager still adopts it into 'enabled' for configs already carrying one so the deprecation notice names a single spelling.",
               "properties": {
                 "enabled": {
                   "type": "boolean",

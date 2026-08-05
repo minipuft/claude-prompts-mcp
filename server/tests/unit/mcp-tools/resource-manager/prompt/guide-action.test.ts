@@ -30,7 +30,6 @@ function createTestService() {
       suggestions: [],
       classification: { executionType: 'prompt', requiresFramework: false, confidence: 0.5 },
     }),
-    isLLMEnabled: jest.fn().mockReturnValue(false),
   } as any;
 
   const service = createPromptResourceHandler(

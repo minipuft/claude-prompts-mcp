@@ -333,7 +333,6 @@ export function createLightweightGateSystem(
     enableTemporaryGates?: boolean;
     maxMemoryGates?: number;
     defaultExpirationMs?: number;
-    llmConfig?: any; // LLMIntegrationConfig from types
   }
 ): LightweightGateSystem {
   // Create temporary gate registry if enabled
@@ -351,7 +350,7 @@ export function createLightweightGateSystem(
 
   const gateLoader =
     options?.provider ?? createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
-  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
+  const gateValidator = createGateValidator(logger, gateLoader);
 
   const gateSystem = new LightweightGateSystem(gateLoader, gateValidator, temporaryGateRegistry);
 

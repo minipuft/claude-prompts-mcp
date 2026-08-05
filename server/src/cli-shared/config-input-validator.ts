@@ -12,6 +12,16 @@
  * with the old spelling. `telemetry.mode`, `phaseGuards.mode` and `identity.mode` remain because
  * a reader consults each of them — the first two are `off`/`warn`/`enforce`, the third is
  * `permissive`/`strict`/`locked`. None is an on/off toggle.
+ *
+ * WHY THE `analysis.semanticAnalysis.*` KEYS ARE GONE — A DIFFERENT LINEAGE
+ * The five keys dropped here are not inert spellings. Each had a real reader and worked exactly
+ * as documented; what changed is that the reader was retired. The LLM side client, the gate
+ * service that consumed it, and the validator branch that read the flag are all deleted, so a
+ * setter for them would now write a value nothing consults — which is what the paragraph above
+ * exists to prevent. Unlike the `*.mode` keys, these have no canonical twin to fold into: the
+ * replacement is a different mechanism, the `%judge` modifier / `gates.evaluation.defaultMode`.
+ * The config section itself is still parsed for one deprecation cycle, so an existing config.json
+ * keeps loading; only the ability to set it from a tool surface is withdrawn.
  */
 
 export const CONFIG_VALID_KEYS = [
@@ -42,11 +52,6 @@ export const CONFIG_VALID_KEYS = [
   'identity.allowPerRequestOverride',
   'verification.inContextAttempts',
   'verification.isolation.timeout',
-  'analysis.semanticAnalysis.llmIntegration.enabled',
-  'analysis.semanticAnalysis.llmIntegration.endpoint',
-  'analysis.semanticAnalysis.llmIntegration.model',
-  'analysis.semanticAnalysis.llmIntegration.maxTokens',
-  'analysis.semanticAnalysis.llmIntegration.temperature',
   'prompts.directory',
   'gates.directory',
   'gates.enforcePendingVerdict',
@@ -87,7 +92,6 @@ export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
 export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = [
   'server.port',
   'server.transport',
-  'analysis.semanticAnalysis.llmIntegration.enabled',
   'telemetry.mode',
   'telemetry.exporterEndpoint',
 ];
@@ -169,8 +173,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     case 'hooks.expandedOutput':
     case 'verification.isolation.enabled':
     case 'versioning.enabled':
-    case 'versioning.auto_version':
-    case 'analysis.semanticAnalysis.llmIntegration.enabled': {
+    case 'versioning.auto_version': {
       const boolValue = value.trim().toLowerCase();
       if (!['true', 'false'].includes(boolValue)) {
         return {
@@ -331,48 +334,6 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.model': {
-      const trimmed = value.trim();
-      if (trimmed.length === 0) {
-        return {
-          valid: false,
-          error: 'Model name cannot be empty',
-        };
-      }
-      return { valid: true, convertedValue: trimmed, valueType: 'string' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.endpoint': {
-      const trimmed = value.trim();
-      return {
-        valid: true,
-        convertedValue: trimmed.length > 0 ? trimmed : null,
-        valueType: 'string',
-      };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.maxTokens': {
-      const tokens = parseInt(value, 10);
-      if (isNaN(tokens) || tokens < 1 || tokens > 4000) {
-        return {
-          valid: false,
-          error: 'Max tokens must be a number between 1-4000',
-        };
-      }
-      return { valid: true, convertedValue: tokens, valueType: 'number' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.temperature': {
-      const temp = parseFloat(value);
-      if (isNaN(temp) || temp < 0 || temp > 2) {
-        return {
-          valid: false,
-          error: 'Temperature must be a number between 0-2',
-        };
-      }
-      return { valid: true, convertedValue: temp, valueType: 'number' };
     }
 
     case 'prompts.directory':

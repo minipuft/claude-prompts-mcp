@@ -150,7 +150,10 @@ export class PromptLifecycleProcessor {
       if (promptData.gateConfiguration.inline_gate_definitions) {
         response += `- Inline Gate Definitions: ${promptData.gateConfiguration.inline_gate_definitions.length} defined\n`;
       }
-    } else if (this.context.dependencies.semanticAnalyzer.isLLMEnabled()) {
+      // No explicit gate configuration: offer rule-based recommendations. This was previously
+      // gated on an LLM-integration flag that defaulted off, which hid `GateAnalyzer` output
+      // that never depended on a model.
+    } else {
       try {
         const gateAnalysis = await this.context.gateAnalyzer.analyzePromptForGates({
           id: promptData.id,
