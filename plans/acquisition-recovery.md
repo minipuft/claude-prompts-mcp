@@ -309,6 +309,33 @@ The observation window (A7) forbids README changes to keep the MIT signal clean.
 
 ---
 
+## Tier 4 — Dependabot Vulnerability Triage (audited 2026-08-05; window-neutral, land BEFORE the merge)
+
+GitHub shows "3 vulnerabilities (1 high, 1 moderate, 1 low)" on the repo's security tab — a badge
+visible to exactly the evaluators the Tier 2 listings will send. Unlike Tiers 1–3 this is
+window-neutral (no README/metadata surface changes), and it should land **before** the
+merge→publish ship event so the listings never point at a repo wearing a high-severity flag.
+
+**Audit (per-alert, traced 2026-08-05):**
+
+| #   | Package         | Severity | Scope                      | How it enters                                                                                                                                                                                                                                    | Actual exposure                                                                                                                                 | Remediation                                                                                                                                                                                                                                            |
+| --- | --------------- | -------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 165 | `tmp` <0.2.6    | **high** | dev, root lockfile         | `@anthropic-ai/mcpb@2.1.2` → `@inquirer/prompts` → `external-editor` → `tmp@0.0.33`                                                                                                                                                              | Packaging-time only (`mcpb pack` in CI, non-interactive — the vulnerable editor-prompt path never runs). The cost is the badge, not the exploit | Root `package.json` `"overrides": { "tmp": "^0.2.6" }` — mcpb 2.1.2 is **latest** and still pins the chain, so no upstream bump exists to wait for. Verify `npm ls tmp` → 0.2.6, then smoke `build-extension.sh` (external-editor loads tmp at import) |
+| 164 | `tmp` <=0.2.3   | low      | dev, root lockfile         | same chain                                                                                                                                                                                                                                       | same                                                                                                                                            | same override closes both                                                                                                                                                                                                                              |
+| 166 | `hono` <4.12.34 | medium   | "runtime", server lockfile | **not installed** — only an _optional peerDependency_ range declared by `@modelcontextprotocol/node`; no `node_modules/hono`, no lockfile package entry, no `src/` import; `dist/index.js` matches are the `@hono/node-server` adapter, not hono | None — the vulnerable CORS middleware isn't in the artifact. Alert fires on the declared peer range, not shipped code                           | Dismiss with reason `vulnerable code is not actually used` + note; **re-verify on every MCP SDK upgrade** (an SDK that starts hard-depending on hono re-arms it)                                                                                       |
+
+**Execution**: (1) add the override + `npm install` at root to regenerate the lockfile · (2)
+`npm ls tmp` shows ≥0.2.6 and alerts 164/165 auto-resolve on push · (3) run
+`scripts/build-extension.sh` as the compat smoke (tmp 0.0.x→0.2.x had API changes; external-editor
+only needs `fileSync`, which survives, but prove it) · (4) dismiss 166 via
+`gh api -X PATCH .../dependabot/alerts/166` with the not-used reason · (5) date each here.
+
+**Standing rule this tier leaves behind**: dev-scope alerts on the packaging chain get fixed via
+root `overrides` (upstream mcpb pins are slow); "runtime" alerts get traced to the artifact before
+believing the label — the hono alert's `runtime` scope was wrong about what we ship.
+
+---
+
 ## Sequencing Summary
 
 ```
