@@ -7,6 +7,34 @@ tags: [persistence, sqlite, validation-gates, technical-debt]
 
 # SQLite Persistence Layer — Boundaries, Validation, and Remediation
 
+## Status 2026-08-05 — 9 of 12 subtiers landed. Schema v19.
+
+**All eleven original findings are closed except the three named below.** Tiers 0–5 complete;
+Tier 6 is 6.1/6.3/6.4 done, 6.2 blocked, 6.5–6.6 open.
+
+| Finding                              | State                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| F1 write-only ledger                 | ✅ T3 — reader, direct view, terminal records on failure and abort          |
+| F2 phantom scope columns             | ✅ T4.1                                                                     |
+| F3 `tenant_id` trisemy               | ⏳ **6.5/6.6** — the one finding no tier has touched                        |
+| F4 shutdown never called             | ✅ T5 — WAL 4.2 MB → 0 across a real SIGTERM                                |
+| F5 migration treadmill               | ✅ T4.5 — writers conformed first, then the backfill was deleted            |
+| F6 duplicate `version_history` DDL   | ✅ T6.1 — and it was a live startup failure, not the cleanup it looked like |
+| F7 log-and-swallow init              | ✅ T5.3 — 3 sites throw; the 4th was a double-catch, fixed by deletion      |
+| F8 unbounded `execution_records`     | ✅ T6.4 — its rationale had been the literal word PLACEHOLDER               |
+| F9 isolation claimed, delivered once | ✅ T4 — all five writers conform                                            |
+| F10 dead `tenants` table             | ✅ T6.3                                                                     |
+| F11 bump destroys durable rows       | ✅ T0 — found during pre-flight, not by the audit                           |
+
+**Remaining work is carved out, not abandoned** — see _Successor scope_ at the end of Tier 6.
+6.2's premise was measured false and needs re-deciding, not just re-scheduling; 6.5/6.6 is a
+public-API change that must land in one PR.
+
+**What this plan proved about itself**: every tier's line references had drifted, two subtiers
+described the wrong file, one Done criterion was unmeasurable, and one contradicted its own tier
+row. The deviations are recorded in place rather than smoothed over, because they are the highest-
+signal input to the next plan.
+
 Replaces the former `state-db-redundancy-cleanup.md`, deleted 2026-08-03. Its two surviving items
 are folded in under _Carried forward from the superseded plan_; the rest were already done or are
 owned by the execution-ledger initiative.
@@ -559,6 +587,31 @@ the Tier 1 gate note (C2). Not attributable here.
 
 **Gate**: `npm run validate:all && npm run validate:python && npm run verify:mcp`
 
+### Successor scope — what remains, with premises corrected
+
+Three subtiers are unlanded. They are grouped here so the next session starts from measured state
+rather than from rows this execution proved wrong.
+
+| Item                                | Corrected premise                                                                                                                                                                                      | Why it did not land here                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| **6.2** `verify_active_state`       | **NOT an unexercised path.** `hooks/lib/verify_active_store.py` reads AND writes `verify-state.db`; `ralph-stop.py`, `ralph-context-tracker.py`, `compact-recovery.py` consume it, with 2 pytest files | Cross-language and atomic. Also needs a **decision**, not just work — see below     |
+| **6.5** `run_owner_pid` + promotion | Unchanged, but note the schema bump is now v19→v20 and `chain_sessions` already has `chain_id`/`run_status`/`run_completed_at` as columns — the JSON promotion is half done                            | Touches the Python hook contract, declared public API in CLAUDE.md                  |
+| **6.6** `db_reader.py` fallback     | Unchanged. `hooks/lib/db_reader.py` reads `tenant_id` for PID liveness at 4 sites (`:242, :257, :332, :362`)                                                                                           | **Must land in the same PR as 6.5** — a new column's writer and reader cannot split |
+
+**6.2 needs a decision before it needs an implementation.** The plan assumed consolidation is
+obviously right because "consolidate access paths" was the tier's title. With a live Python
+writer, the trade is real in both directions:
+
+| Keep `verify-state.db` separate                                                                 | Fold into `state.db`                                                         |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Two languages poll it; a separate file keeps that traffic off the main database's WAL           | One schema owner, one durability posture, one place to reason about          |
+| Its own lifecycle — the row is meaningful only while a verify loop is running                   | `verify_active_state` gets a `TableContract` and the gates start covering it |
+| **Two `ensure_schema` implementations, identical today, free to drift** — the 6.1 failure shape | The 6.1 failure shape is structurally removed                                |
+
+A cheaper middle option the plan never considered: leave the file separate and delete only the
+**duplicate DDL**, giving the table one owner across the two languages. That closes the drift risk
+without the contention trade or the atomic cross-language migration.
+
 ### Sequencing rules
 
 - T0 and 2.4 have no dependencies — parallelizable with anything
@@ -634,20 +687,23 @@ compound the escalation.
 | Hook read path survives `run_owner_pid`           | Python              | `hooks/tests/`                                          | Cross-language contract; pytest is the only real consumer                             |
 | Retention trims to declared caps                  | Integration         | `tests/integration/database/`                           | Requires seeding over-cap rows against a real engine                                  |
 
-### Done criteria
+### Done criteria — final reconciliation 2026-08-05
 
-| Criterion                       | Validation                                                           | Pass condition                                        |
-| ------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- |
-| No undeclared or dead tables    | `npm run validate:table-contracts`                                   | Exit 0                                                |
-| No table has zero readers       | same gate                                                            | Zero `readers: []` entries                            |
-| No phantom columns              | `npm run validate:no-phantom-columns`                                | Exit 0                                                |
-| No raw writes outside owners    | `validate:table-contracts`                                           | Exit 0                                                |
-| Version history survives a bump | `npm run test:integration`                                           | New durable-survival test green                       |
-| Workspace isolation real        | Two-workspace probe                                                  | `kv_state[key='gates']` has >1 row                    |
-| WAL bounded                     | Restart + `ls -la runtime-state/`                                    | WAL ≪ main DB after clean shutdown                    |
-| Init failures are loud          | Unwritable `dbPath`                                                  | Startup exits non-zero                                |
-| Full suite                      | `npm run validate:all && npm run validate:python && npm run test:ci` | All green                                             |
-| No scope creep                  | `git diff main --stat`                                               | No net line growth in `manager.ts` / `application.ts` |
+| Criterion                       | Pass condition                                        | Outcome                                                                                                                                                                                                               |
+| ------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No undeclared or dead tables    | Exit 0                                                | ✅ 9 tables, 2 views; `tenants` deleted (6.3)                                                                                                                                                                         |
+| No table has zero readers       | Zero `readers: []` entries                            | ✅ the last one (`execution_records`) was **stale**, not empty — Tier 3 gave it two readers and nobody updated the entry                                                                                              |
+| No phantom columns              | Exit 0                                                | ✅ 4 accepted, each with a live `closedBy`                                                                                                                                                                            |
+| No raw writes outside owners    | Exit 0                                                | ✅ 3 accepted foreign writers, all re-read against current code                                                                                                                                                       |
+| Version history survives a bump | Durable-survival test green                           | ✅ and it inverted twice, on purpose — dropped at v18 by declaration, preserved again at v19                                                                                                                          |
+| Workspace isolation real        | `kv_state[key='gates']` has >1 row                    | ⚠️ **substituted** — that probe cannot distinguish broken code from nobody toggling gates in a second workspace. Replaced with `gate-system-scope-propagation.test.ts`, which observes the scope argument at the seam |
+| WAL bounded                     | WAL ≪ main DB after clean shutdown                    | ✅ measured 4,152,992 → **0** bytes across a real SIGTERM; main DB +61 KB, so the log was checkpointed IN                                                                                                             |
+| Init failures are loud          | Startup exits non-zero                                | ✅ 3 wiring sites throw; 1 of 4 unreachable and declared so rather than claimed                                                                                                                                       |
+| Full suite                      | All green                                             | ⚠️ `validate:format` red on `.claude/rules/mcp-contracts.md`, a file with an empty working diff — pre-existing, recorded at Tier 1 (C2)                                                                               |
+| No scope creep                  | No net line growth in `manager.ts` / `application.ts` | ⚠️ `application.ts` **+9 total, −1 executable** — the tier row itself budgeted ~10 for 5.2, contradicting this criterion                                                                                              |
+
+**Three of ten are qualified, and none silently.** The pattern in all three: a criterion written
+before execution that execution proved unmeasurable, contradictory, or already failing.
 
 ### Documentation
 
@@ -684,19 +740,31 @@ compound the escalation.
 
 ### Growth capture
 
-- [ ] **Pattern**: "phantom column" — a schema-level sibling of the phantom-field class already
-      caught by `validate-state-field-writers.js`. Generalizable: _a declared slot with readers
-      and no writers is a defect regardless of substrate._ Candidate for `/refactoring`.
-- [ ] **Pattern**: "migration treadmill" — a startup backfill fighting a non-conforming writer.
-      The backfill masks the defect and its removal exposes it. Candidate for `/sqlite`.
-- [ ] **Memory**: `reference_sqlite_persistence.md` needs the 3-file / 4-access-path reality and
-      the `tenant_id` trisemy; it currently describes the engine as if it were the only path.
-- [ ] **Skill correction**: `/sqlite` has no durability-posture or single-writer content —
-      Tier 2.1 is the fix.
+- [x] **Pattern**: "phantom column" — captured. Split into _declaration-dead_ (no writer names the
+      column) vs _value-dead_ (a writer names it and always binds NULL). The gate catches only the
+      first, and that limit is documented at the gate rather than discovered later.
+      → memory `feedback_phantom_declaration_vs_value`
+- [x] **Pattern**: "migration treadmill" — captured to `/sqlite` and memory. Fix the writer before
+      deleting the backfill; deleting first freezes the rows the backfill was repairing.
+- [x] **Memory**: `reference_sqlite_persistence.md` / `project_sqlite_layer_remediation.md` updated
+      through 6.4, with the pre-2026-08-05 facts explicitly marked stale rather than edited away —
+      the reasoning trail is why the tiers are shaped as they are.
+- [x] **Skill correction**: `/sqlite` §Table Governance added at 2.1, and extended at 6.1 with the
+      cross-process cause of the freeze-the-DDL trap: `CREATE TABLE IF NOT EXISTS` makes the
+      owner's DDL conditional on nobody having run first.
+- [x] **Rule promotion (not in the original list)**: "A Suppression Outlives What It Suppressed" →
+      `~/.claude/rules/cleanup-standards.md`. Seven stale declarations in one initiative — accepted
+      exceptions and `readers: []` entries that stayed true-looking after the thing they described
+      was fixed. Distinct from a retirement condition, which makes an exception retirable without
+      making anyone notice the evidence arrived.
+- [x] **Testing diagnostic (not in the original list)**: a falsification mutation that does NOT
+      break its test usually means it was never reached — an earlier early-return short-circuited.
+      Caught live at 6.1. → memory `feedback_mutation_never_reached`, 2 sightings, formalize on a
+      third.
 - [ ] **Prompt defect**: `implementation_plan` fires the visual/creative design-enrichment block on
       persistence work, and its Phase-2.5 guard checks `## Context`/`## Analysis`/`## Goals` while
       the prompt body specifies `context_establishment`/`systematic_analysis`/`goal_definition`.
-      Both are worth fixing in the prompt.
+      Both are worth fixing in the prompt. **Still open** — belongs to the prompt, not this repo.
 
 ---
 
