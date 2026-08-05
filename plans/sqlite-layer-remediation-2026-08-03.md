@@ -444,7 +444,64 @@ the Tier 1 gate note (C2). Not attributable here.
 > valid and the next clean close retries. Throwing would skip `db.close()` and leak the handle,
 > trading a large file for a lost one. Asserted by a test that stubs the PRAGMA to throw.
 
-### Tier 6 — Consolidate access paths, bound growth, disambiguate `tenant_id`. **6.1 done; 6.2–6.6 open.**
+### Tier 6 — Consolidate access paths, bound growth, disambiguate `tenant_id`. **6.1/6.3/6.4 done; 6.2 blocked; 6.5–6.6 open.**
+
+> **6.2 is blocked because its premise is false, and the plan recorded the opposite.**
+> Phase 2.5 correction #3 states `verify-state.db` is "code-only and has never executed a write",
+> reclassifying 6.2 from "consolidate a live store" to "remove an unexercised path". Re-measured
+> 2026-08-05: `hooks/lib/verify_active_store.py` both READS and WRITES that database, consumed by
+> `ralph-stop.py`, `ralph-context-tracker.py`, and `compact-recovery.py`, with two pytest files
+> covering it. The file is absent from disk only because nobody has run `:: verify:"cmd" loop:true`
+> in this workspace — an unexercised **feature**, not dead code. The store's own docblock
+> ("so Python hooks can read it independently") is therefore accurate, not stale.
+>
+> Consequence: folding `verify_active_state` into `state.db` is a cross-language contract change of
+> the same class as 6.5/6.6 — it must update the Python library, land atomically, and verify with
+> `validate:python` + pytest. It is not the `~-45` line deletion budgeted, and `npm run test` cannot
+> observe it. It also deserves re-deciding rather than re-scheduling: a separate database is a
+> defensible design for a file two languages poll, and consolidating adds WAL contention on the main
+> database to buy tidiness.
+>
+> What IS confirmed is the 6.1 defect, twice more: the TS store and the Python library each carry
+> their own `CREATE TABLE IF NOT EXISTS verify_active_state`. The two DDLs are byte-identical today,
+> so nothing is broken — but that is two independent schema owners for one table, which is exactly
+> the shape that produced the 6.1 startup failure once they drifted.
+>
+> **6.3 forced the `DROPPED_ON_THIS_BUMP` retirement, and the gate built for it fired.** Deleting
+> `tenants` from `applySchema()` required `SCHEMA_VERSION` 18 → 19, and `validate:table-contracts`
+> then rejected the stale exclusion by name until the set was emptied and `DROPPED_AT_VERSION`
+> moved together. Verified by mutation: re-introducing the stale pair fails the gate with the exact
+> message it was written to emit. The v18 test that asserted `version_history` is DROPPED has
+> flipped back to PRESERVED, as its own comment said it would.
+>
+> **6.4 found the retention declarations were nearly all honest, and one was a lie.**
+> `execution_records` declared `unbounded-justified` with a `retentionRationale` whose text was the
+> word PLACEHOLDER — F8 documented in the contract rather than fixed. It now declares
+> `{ maxRows: 5000 }`, an order of magnitude above the reader's 500-row clamp.
+>
+> Two design corrections against the row as written:
+>
+> 1. **The inline trim was not simply removed.** The row says "remove inline trim", but a
+>    startup-only pass lets the one table measured AT its cap and actively evicting grow unbounded
+>    for a whole session. The trim now _delegates_ to `enforceRetention(db, logger, 'resource_changes')`
+>    — one implementation, two call sites — instead of holding a second hand-rolled DELETE that
+>    could drift from the declared cap. It previously did exactly that, against a `maxEntries`
+>    config value rather than the contract.
+> 2. **Only `{ maxRows }` is enforced generically**, and the test asserts the limit rather than
+>    leaving it implied. `{ maxRowsPerResource }` needs partition columns that differ per table and
+>    `version_history` already prunes correctly at its write sites; a generic second pass would add
+>    a way to be wrong without adding coverage. A near-miss worth recording: had `kv_state` declared
+>    `maxRows: 1` (as `schema_version` does) a generic pass would have deleted every workspace's
+>    framework state but one. It declares `unbounded-justified`, so it does not — but that is the
+>    hazard a declaration-driven DELETE carries.
+>
+> **Phantom config found in passing, not fixed**: `resources.logs.maxEntries` is user-settable and
+> range-validated (50-5000), and reaches nothing — `initializeResourceChangeTracker` hardcodes 1000.
+> It was already inert before this tier. Marked `@deprecated` at the type; removing it is a
+> config-surface change (schema + validator + docs), not a retention one.
+>
+> **Seventh stale declaration**: `execution_records` still carried `readers: []` after Tier 3 gave
+> it two. Corrected here. No gate detects a satisfied exception or an out-of-date `readers` list.
 
 > **6.1 was not cleanup. It was a live startup defect, and the plan under-rated it.**
 > The row reads as "remove a redundant access path, save ~120 lines". Reproduced 2026-08-05:
@@ -491,14 +548,14 @@ the Tier 1 gate note (C2). Not attributable here.
 > in CLAUDE.md, and must land in one PR. Both are user-data-affecting and deserve their own session
 > rather than being appended to a passing one.
 
-| #      | File                                          | Change                                                                                                                                     | ~Lines | Depends | Verify                                                                                                                            |
-| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 6.1 ✅ | `cli-shared/version-history.ts`               | Replace `spawnSync(python3)` + duplicate `ensure_schema` with `node:sqlite`                                                                | **+6** | T1      | ✅ Versioning integration + unit suites 40 pass, `cli-shared` 80 pass; 3 new regression tests, each guard falsified independently |
-| 6.2    | `verify-active-state-store.ts:55`             | Fold `verify_active_state` into `state.db` via `DatabasePort`; delete the private `DatabaseSync`                                           | ~-45   | 6.1     | `npm run test`                                                                                                                    |
-| 6.3    | `sqlite-engine.ts:280-286`                    | Delete `tenants` + seed; update the 3 tests that insert into it                                                                            | ~-25   | T1      | `validate:table-contracts`                                                                                                        |
-| 6.4    | `sqlite-engine.ts` + new `enforceRetention()` | One startup pass driven by `TABLE_CONTRACTS.retention`; remove inline trim at `resource-change-tracker.ts:281`                             | ~70    | T1, 6.3 | Seed over-cap rows; assert trimmed                                                                                                |
-| 6.5    | `manager.ts:351` + schema                     | Add `run_owner_pid`; `tenant_id` becomes scope-only. **Keep writing `tenant_id`=PID one release**; hooks read the new column with fallback | ~55    | 6.4     | `validate:python` + live hook probe                                                                                               |
-| 6.6    | `hooks/lib/db_reader.py:195-240`              | Read `run_owner_pid` with `tenant_id` fallback                                                                                             | ~30    | 6.5     | `python3 -m pytest hooks/tests`                                                                                                   |
+| #      | File                                    | Change                                                                                                                                     | ~Lines | Depends | Verify                                                                                                                            |
+| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 6.1 ✅ | `cli-shared/version-history.ts`         | Replace `spawnSync(python3)` + duplicate `ensure_schema` with `node:sqlite`                                                                | **+6** | T1      | ✅ Versioning integration + unit suites 40 pass, `cli-shared` 80 pass; 3 new regression tests, each guard falsified independently |
+| 6.2 ⛔ | `verify-active-state-store.ts:55`       | Fold `verify_active_state` into `state.db` via `DatabasePort`; delete the private `DatabaseSync`                                           | ~-45   | 6.1     | **BLOCKED — premise false, see below**                                                                                            |
+| 6.3 ✅ | `sqlite-engine.ts:457`                  | Delete `tenants` + seed; update the 3 tests that insert into it                                                                            | -33    | T1      | ✅ `validate:table-contracts` — 9 tables; live v19 bump verified on the real `state.db`                                           |
+| 6.4 ✅ | `sqlite-engine.ts` + new `retention.ts` | One startup pass driven by `TABLE_CONTRACTS.retention`; remove inline trim at `resource-change-tracker.ts:281`                             | +96    | T1, 6.3 | ✅ 6 tests in `retention.test.ts`, falsified two ways                                                                             |
+| 6.5    | `manager.ts:351` + schema               | Add `run_owner_pid`; `tenant_id` becomes scope-only. **Keep writing `tenant_id`=PID one release**; hooks read the new column with fallback | ~55    | 6.4     | `validate:python` + live hook probe                                                                                               |
+| 6.6    | `hooks/lib/db_reader.py:195-240`        | Read `run_owner_pid` with `tenant_id` fallback                                                                                             | ~30    | 6.5     | `python3 -m pytest hooks/tests`                                                                                                   |
 
 **Gate**: `npm run validate:all && npm run validate:python && npm run verify:mcp`
 

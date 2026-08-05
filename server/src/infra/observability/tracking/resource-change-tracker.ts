@@ -36,6 +36,7 @@ import { Logger } from '../../logging/index.js';
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
 
+import { enforceRetention } from '#infra/database/retention.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 export type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
@@ -86,7 +87,16 @@ export interface GetChangesParams {
  * Configuration for the tracker
  */
 export interface ResourceChangeTrackerConfig {
-  /** Maximum entries to retain (default: 1000) */
+  /**
+   * @deprecated Reads nothing. The cap for `resource_changes` is declared in
+   * `table-contracts.ts` and enforced by `enforceRetention()`, which is now the single owner.
+   *
+   * Left in place rather than deleted because removing it also touches the user-facing
+   * `resources.logs.maxEntries` config key, its validator, and its docs — a config-surface
+   * change, not a retention one. Worth knowing: that key was ALREADY inert before this tier,
+   * because `initializeResourceChangeTracker` hardcodes 1000 and never reads config. It is
+   * settable, range-validated (50-5000), and consumed by nothing.
+   */
   maxEntries: number;
   /** Server root directory (for SqliteEngine singleton) */
   serverRoot: string;
@@ -288,29 +298,18 @@ export class ResourceChangeTracker {
   }
 
   /**
-   * Rotate log if it exceeds maxEntries (SQL DELETE)
+   * Trim the change log to the cap declared for `resource_changes` in table-contracts.ts.
+   *
+   * Delegates rather than inlining its own DELETE, which is what this used to do with a
+   * `maxEntries` config value that could disagree with the declared contract. One definition now
+   * serves two call sites: the engine's startup pass and this per-write trim.
+   *
+   * The per-write call is kept deliberately. A startup-only pass would let the table grow without
+   * bound for the length of a session, and this table is the one measured at its cap and actively
+   * evicting — so the write site is where the bound actually holds.
    */
   private rotateLogIfNeeded(): void {
-    try {
-      const countResult = this.dbManager!.queryOne<{ cnt: number }>(
-        'SELECT COUNT(*) as cnt FROM resource_changes'
-      );
-      const count = countResult?.cnt ?? 0;
-
-      if (count > this.config.maxEntries) {
-        this.dbManager!.run(
-          `DELETE FROM resource_changes WHERE id NOT IN (
-            SELECT id FROM resource_changes ORDER BY id DESC LIMIT ?
-          )`,
-          [this.config.maxEntries]
-        );
-        this.logger.debug(
-          `ResourceChangeTracker: Rotated log from ${count} to ${this.config.maxEntries} entries`
-        );
-      }
-    } catch (error) {
-      this.logger.warn('ResourceChangeTracker: Failed to rotate log', error);
-    }
+    enforceRetention(this.dbManager!, this.logger, 'resource_changes');
   }
 
   /**

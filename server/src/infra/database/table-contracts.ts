@@ -125,18 +125,10 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     retention: { maxRows: 1 },
     readers: ['src/infra/database/sqlite-engine.ts'],
   },
-  {
-    table: 'tenants',
-    owner: 'src/infra/database/sqlite-engine.ts',
-    posture: 'derived',
-    rebuiltFrom: 'applySchema() seeds the single default row',
-    scope: 'none',
-    retention: { maxRows: 1 },
-    readers: [],
-    finding:
-      'F10 — no reader outside tests, which insert into it only to prove it exists. ' +
-      'Closed by Tier 6.3 (delete the table and its seed).',
-  },
+  // `tenants` was deleted by Tier 6.3 (F10). It held one seeded row, had no reader outside tests
+  // that inserted into it only to prove it existed, and no foreign key referenced it — `tenant_id`
+  // on the other tables is a bare TEXT column, never a REFERENCES. It was a registry nothing
+  // registered with. `readers: []` is what surfaced it.
   {
     table: 'chain_sessions',
     owner: 'src/modules/chains/manager.ts',
@@ -307,16 +299,21 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     owner: 'src/modules/chains/execution-record-store.ts',
     posture: 'ephemeral',
     scope: 'workspace',
-    retention: 'unbounded-justified',
-    retentionRationale:
-      'PLACEHOLDER — this table has no DELETE anywhere and state.db is shared across every ' +
-      'project on the machine, so it is unbounded in fact rather than by justification. ' +
-      'Tier 6.4 replaces this with a real cap.',
-    readers: [],
+    // 5000 rows, not a smaller number: this is an append-only per-STEP ledger, so a single busy
+    // chain run contributes dozens of rows, and the `execution_history` action reads it newest-
+    // first with a clamp of 500. A cap an order of magnitude above the largest readable page
+    // keeps history the reader can actually reach while bounding a file shared across every
+    // project on the machine. Enforced by `enforceRetention()` at startup — see retention.ts for
+    // why only `maxRows` is enforced generically.
+    retention: { maxRows: 5000 },
+    readers: [
+      'src/mcp/tools/system-control/handlers/execution-history-action-handler.ts',
+      'src/infra/database/sqlite-engine.ts',
+    ],
     finding:
-      'F1 — queryBySession/queryByChain have zero callers, and the one documented consumer ' +
-      '(v_execution_status) cannot reach completed runs. F8 — no retention. F2 — workspace_id ' +
-      'and organization_id are declared and indexed but structurally unwritable. ' +
+      'F1 — queryBySession/queryByChain had zero callers, and the one documented consumer ' +
+      '(v_execution_status) could not reach completed runs. F2 — workspace_id and ' +
+      'organization_id were declared and indexed but structurally unwritable. ' +
       'Closed by Tier 3 (reader + direct view + terminal records), 4.1 (scope), 6.4 (retention). ' +
       "Posture is 'ephemeral' deliberately: the SCHEMA_VERSION 16 note records that v15 rows " +
       'decode to a lifecycle outside StepLifecycle, so these rows must not survive a bump.',

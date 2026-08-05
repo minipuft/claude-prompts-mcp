@@ -159,24 +159,20 @@ describe('Tenant Isolation', () => {
   });
 
   describe('Database-level tenant table', () => {
-    test('default scope exists after initialization', () => {
-      const result = dbManager.queryOne<{ id: string }>(
-        "SELECT id FROM tenants WHERE id = 'default'"
+    // Tier 6.3 deleted `tenants`. The two tests here inserted into it and read the row back,
+    // which proved the table existed and nothing more — it had no reader in src/, and no
+    // `tenant_id` column anywhere declared it as a foreign key. Isolation is delivered by the
+    // scope columns on each table, which the rest of this file covers.
+    test('is gone, and no table claims a foreign key into it', () => {
+      const present = dbManager.query<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='tenants'`
       );
+      expect(present).toHaveLength(0);
 
-      expect(result).not.toBeNull();
-      expect(result?.id).toBe('default');
-    });
-
-    test('can create additional scopes', () => {
-      dbManager.run("INSERT OR IGNORE INTO tenants (id, name) VALUES ('new-tenant', 'New Tenant')");
-
-      const result = dbManager.queryOne<{ id: string; name: string }>(
-        "SELECT id, name FROM tenants WHERE id = 'new-tenant'"
-      );
-
-      expect(result).not.toBeNull();
-      expect(result?.name).toBe('New Tenant');
+      const referencing = dbManager
+        .query<{ sql: string | null }>(`SELECT sql FROM sqlite_master WHERE type='table'`)
+        .filter((row) => /REFERENCES\s+tenants/i.test(row.sql ?? ''));
+      expect(referencing).toHaveLength(0);
     });
   });
 

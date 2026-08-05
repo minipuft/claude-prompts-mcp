@@ -53,36 +53,40 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(18);
+      expect(version).toBe(19);
     });
 
+    // These exercise run/queryOne/transaction, not any particular table. They used `tenants`,
+    // which Tier 6.3 deleted; `resource_index` is a live table with a real writer.
     it('should execute queries', async () => {
-      // Insert a test tenant
-      dbManager.run(`INSERT OR IGNORE INTO tenants (id, name) VALUES (?, ?)`, [
-        'test-tenant',
-        'Test Tenant',
-      ]);
-
-      const result = dbManager.queryOne<{ id: string; name: string }>(
-        `SELECT id, name FROM tenants WHERE id = ?`,
-        ['test-tenant']
+      dbManager.run(
+        `INSERT OR IGNORE INTO resource_index (id, type, name, file_path, content_hash, indexed_at)
+         VALUES (?, 'prompt', ?, ?, ?, ?)`,
+        ['query-probe', 'Query Probe', '/tmp/query-probe.md', 'hash-q', 1]
       );
 
-      expect(result).toEqual({ id: 'test-tenant', name: 'Test Tenant' });
+      const result = dbManager.queryOne<{ id: string; name: string }>(
+        `SELECT id, name FROM resource_index WHERE id = ?`,
+        ['query-probe']
+      );
+
+      expect(result).toEqual({ id: 'query-probe', name: 'Query Probe' });
     });
 
     it('should support transactions', async () => {
       await dbManager.transaction(async () => {
-        dbManager.run(`INSERT OR IGNORE INTO tenants (id, name) VALUES (?, ?)`, [
-          'tx-tenant',
-          'Transaction Tenant',
-        ]);
+        dbManager.run(
+          `INSERT OR IGNORE INTO resource_index (id, type, name, file_path, content_hash, indexed_at)
+           VALUES (?, 'prompt', ?, ?, ?, ?)`,
+          ['tx-probe', 'Transaction Probe', '/tmp/tx-probe.md', 'hash-tx', 1]
+        );
       });
 
-      const result = dbManager.queryOne<{ id: string }>(`SELECT id FROM tenants WHERE id = ?`, [
-        'tx-tenant',
-      ]);
-      expect(result?.id).toBe('tx-tenant');
+      const result = dbManager.queryOne<{ id: string }>(
+        `SELECT id FROM resource_index WHERE id = ?`,
+        ['tx-probe']
+      );
+      expect(result?.id).toBe('tx-probe');
     });
   });
 
@@ -259,23 +263,29 @@ describe('Schema version bump', () => {
   });
 
   it('recreates the schema at the current version', () => {
-    expect(engine.getSchemaVersion()).toBe(18);
+    expect(engine.getSchemaVersion()).toBe(19);
   });
 
-  it('drops version_history on this bump, by declaration rather than by accident', () => {
-    // Inverted deliberately for v18. version_history is `durable` and is normally carried, but
-    // DROPPED_ON_THIS_BUMP excludes it once: pre-Tier-4 rows all carry the literal
-    // `tenant_id = 'default'`, cannot be attributed to a workspace, and are unreachable to a
-    // scoped read anyway. The durable *mechanism* stays covered by the skills_sync_manifests
-    // case below — that is what would catch a regression in snapshot/restore itself.
-    //
-    // When DROPPED_ON_THIS_BUMP is emptied at the next bump, this expectation flips back.
+  it('preserves version_history rows across the recreate', () => {
+    // Flipped back at v19, exactly as the v18 version of this test said it would be.
+    // `DROPPED_ON_THIS_BUMP` held version_history for one bump — pre-Tier-4 rows carried the
+    // literal `tenant_id = 'default'`, could not be attributed to a workspace, and were
+    // unreachable to a scoped read. That exclusion was retired here, so the table is durable
+    // again and its rows are carried by snapshot/restore.
     const row = engine.queryOne<{ resource_id: string }>(
       `SELECT resource_id FROM version_history WHERE resource_id = ?`,
       ['survives-bump']
     );
 
-    expect(row).toBeNull();
+    expect(row?.resource_id).toBe('survives-bump');
+  });
+
+  it('carries no stale one-time exclusion into this bump', () => {
+    // The gate that forces the retirement lives in validate:table-contracts and in
+    // snapshotDurableTables(); this asserts the observable consequence rather than the constant.
+    // A non-empty DROPPED_ON_THIS_BUMP declared for an older SCHEMA_VERSION throws on init, so
+    // reaching this line at all means the two are consistent.
+    expect(engine.isInitialized()).toBe(true);
   });
 
   it('preserves skills_sync_manifests rows across the recreate', () => {

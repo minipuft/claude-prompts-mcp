@@ -32,6 +32,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { enforceRetention } from './retention.js';
 import {
   CONTRACTED_TABLE_NAMES,
   DURABLE_TABLE_NAMES,
@@ -44,6 +45,16 @@ import type { Logger } from '../logging/index.js';
 
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
+ *
+ * v19: deletes the `tenants` table and its seeded default row (F10). It held exactly one row,
+ * had no reader outside tests that inserted into it to prove it existed, and nothing referenced
+ * it — `tenant_id` elsewhere is a bare TEXT column, never a `REFERENCES tenants(id)`. Removing a
+ * table from `applySchema()` requires a bump: existing databases still carry it, and
+ * `assertSchemaMatchesContracts()` rejects a live table with no contract.
+ *
+ * This bump also **retires `DROPPED_ON_THIS_BUMP`**, which is why the set below is empty and
+ * `DROPPED_AT_VERSION` moved to 19. `version_history` is therefore preserved across this bump, as
+ * a durable table should be — the v18 drop was the one-time act and has already run.
  *
  * v18: drops pre-scoping `version_history` rows via `DROPPED_ON_THIS_BUMP`. Every row written
  * before Tier 4 carried the literal `tenant_id = 'default'`, and many projects sharing one
@@ -75,7 +86,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -92,13 +103,17 @@ const DURABLE_TABLES = DURABLE_TABLE_NAMES;
 /**
  * Durable tables deliberately NOT carried across the current bump.
  *
+ * **Currently empty, and that is the resting state.** It held `version_history` for v18 and was
+ * retired at v19 — the retirement this file's gate was built to force.
+ *
  * This is the escape hatch for a one-time data migration that a recreate can express: rather than
  * shipping migration code that lives in the engine forever — the F5 anti-pattern this schema was
  * cleaned of — the drop IS the migration, and this set plus the SCHEMA_VERSION docblock are its
- * record. **Empty it at the next bump**; an entry left behind silently discards a durable table on
- * an unrelated schema change.
+ * record. If you add an entry, **empty it again at the next bump**; an entry left behind silently
+ * discards a durable table on an unrelated schema change. `DROPPED_AT_VERSION` below is what makes
+ * that forgetting impossible rather than merely discouraged.
  */
-const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set(['version_history']);
+const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set([]);
 
 /**
  * The SCHEMA_VERSION that `DROPPED_ON_THIS_BUMP` was declared for.
@@ -111,7 +126,7 @@ const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set(['version_history']);
  * Retiring the exclusion is therefore two edits that the gate forces to happen together: empty the
  * set, and move this to the new version.
  */
-const DROPPED_AT_VERSION = 18;
+const DROPPED_AT_VERSION = 19;
 
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
@@ -196,6 +211,12 @@ export class SqliteEngine implements DatabasePort {
       this.assertSchemaMatchesContracts();
 
       this.initialized = true;
+
+      // Trim to the caps declared in table-contracts.ts. Runs after `initialized` is set because
+      // it goes back through this instance's own query/run methods, which refuse an uninitialized
+      // engine. Startup is the right moment: it is the one point where every table is reachable
+      // and nothing is mid-write.
+      enforceRetention(this, this.logger);
       this.logger.info('SQLite database initialized successfully');
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -453,14 +474,6 @@ export class SqliteEngine implements DatabasePort {
         version INTEGER PRIMARY KEY,
         applied_at TEXT DEFAULT (datetime('now'))
       );
-
-      CREATE TABLE IF NOT EXISTS tenants (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        created_at TEXT DEFAULT (datetime('now'))
-      );
-
-      INSERT OR IGNORE INTO tenants (id, name) VALUES ('default', 'Default Tenant');
 
       -- Derived hook-read view of chain_run_registry (the SSOT blob).
       -- Holds only the active subset of sessions for indexed PID-scoped queries
