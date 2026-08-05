@@ -443,7 +443,7 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           title: "chore: sync claude-prompts to v${{ steps.version.outputs.version }}"
           body: |
-            Automated version sync from [claude-prompts v${{ steps.version.outputs.version }}](https://github.com/minipuft/claude-prompts/releases/tag/v${{ steps.version.outputs.version }}).
+            Automated version sync from [claude-prompts v${{ steps.version.outputs.version }}](https://github.com/minipuft/claude-prompts-mcp/releases/tag/v${{ steps.version.outputs.version }}).
 
             **Validated**: JSON parseable, version matches, upstream dist branch published.
           branch: upstream-sync/v${{ steps.version.outputs.version }}
