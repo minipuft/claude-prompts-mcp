@@ -40,16 +40,17 @@ A reader should be able to stop at any point and feel they got value; sections a
 
 ## 4. Budgets (hard limits)
 
-| Constraint                        | Limit       | Rationale                                |
-| --------------------------------- | ----------- | ---------------------------------------- |
-| Total file length                 | ≤ 400 lines | Above this, no one reads to the bottom   |
-| Tagline → Quick Start             | ≤ 30 lines  | Pitch must precede plumbing              |
-| Tagline → "What You Get"          | ≤ 80 lines  | Install plumbing can't dominate          |
-| Per-section length                | ≤ 100 lines | Forces decomposition                     |
-| `<details>` blocks above the fold | ≤ 4         | More than this signals hidden complexity |
-| `> [!TIP]` callouts (total)       | ≤ 4         | "See the X Guide" fatigue otherwise      |
+| Constraint                        | Limit       | Rationale                                                        |
+| --------------------------------- | ----------- | ---------------------------------------------------------------- |
+| Total file length                 | ≤ 400 lines | Above this, no one reads to the bottom                           |
+| Tagline → Quick Start             | ≤ 40 lines  | Pitch must precede plumbing                                      |
+| Per-section length                | ≤ 100 lines | Forces decomposition; also caps how much install plumbing weighs |
+| `<details>` blocks above the fold | ≤ 4         | More than this signals hidden complexity                         |
+| `> [!TIP]` callouts (total)       | ≤ 4         | "See the X Guide" fatigue otherwise                              |
 
 A PR exceeding any limit must justify the exception in the charter, not in the PR description.
+
+**Amended 2026-08-04.** Tagline → Quick Start was ≤ 30; raised to 40 because the hero legitimately grew by a charter-serving block — the one-click VS Code/Cursor install buttons in the badge row (the strongest adoption-correlated pattern in a survey of seven high-adoption MCP server READMEs) — while the pitch region already carries the six-row comparison table and the "Is this for me?" filter. The former "Tagline → What You Get ≤ 80" row was removed as unsatisfiable: §3 requires two clients in the Quick Start main flow, which alone measures ~130 lines from the tagline, so the budget failed from the day it was written. Pitch-before-plumbing is guaranteed by the ≤ 40 row; plumbing size is bounded by the per-section limit. Both are now enforced mechanically by `validate:readme` — before this amendment the validator checked only total length, forbidden words, Diátaxis markers, and links, which is how a 59-line tagline→Quick Start distance shipped green.
 
 ## 5. Voice
 

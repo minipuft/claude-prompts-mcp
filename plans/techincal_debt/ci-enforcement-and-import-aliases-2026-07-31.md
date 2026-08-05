@@ -78,7 +78,7 @@ name**, which is the job's `name:` field — `Lint & Validate` and `Build`. The 
 could never be reported by anything, so **every** PR into `main` sat at `mergeStateStatus=BLOCKED`
 regardless of CI result.
 
-> Probe: `gh api repos/minipuft/wolfflow-mcp/branches/main/protection/required_status_checks`
+> Probe: `gh api repos/minipuft/claude-prompts/branches/main/protection/required_status_checks`
 > → `contexts: ["lint","build"]`; `gh api .../commits/<sha>/check-runs` → `Lint & Validate`, `Build`.
 
 **Corrected 2026-07-31** via `PATCH .../required_status_checks` to

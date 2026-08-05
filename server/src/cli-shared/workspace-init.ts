@@ -139,7 +139,7 @@ Next steps:
 
    Claude will use resource_manager to update your prompts automatically!
 
-\ud83d\udcd6 Full docs: https://github.com/minipuft/wolfflow-mcp
+\ud83d\udcd6 Full docs: https://github.com/minipuft/claude-prompts
 `,
     };
   } catch (error) {

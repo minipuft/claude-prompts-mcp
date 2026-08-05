@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts",
-  "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+  "description": "Model Context Protocol (MCP) server for versioned prompt templates, multi-step workflow chains, and quality gates. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
   "author": {
     "name": "minipuft"
   },
@@ -15,5 +15,5 @@
     "chains",
     "workflows"
   ],
-  "version": "3.1.0"
+  "version": "3.1.2"
 }

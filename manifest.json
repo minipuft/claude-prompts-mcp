@@ -4,19 +4,15 @@
     "url": "https://github.com/minipuft"
   },
   "compatibility": {
-    "platforms": [
-      "darwin",
-      "win32",
-      "linux"
-    ],
+    "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
       "node": ">=22.13.0"
     }
   },
-  "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates, Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+  "description": "Model Context Protocol (MCP) server for versioned prompt templates, multi-step workflow chains, and quality gates. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
   "display_name": "Claude Prompts",
-  "documentation": "https://github.com/minipuft/wolfflow-mcp#readme",
-  "homepage": "https://github.com/minipuft/wolfflow-mcp",
+  "documentation": "https://github.com/minipuft/claude-prompts#readme",
+  "homepage": "https://github.com/minipuft/claude-prompts",
   "keywords": [
     "mcp",
     "prompts",
@@ -33,15 +29,12 @@
   "name": "claude-prompts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/minipuft/wolfflow-mcp.git"
+    "url": "https://github.com/minipuft/claude-prompts.git"
   },
   "server": {
     "entry_point": "server/dist/index.js",
     "mcp_config": {
-      "args": [
-        "${__dirname}/server/dist/index.js",
-        "--transport=stdio"
-      ],
+      "args": ["${__dirname}/server/dist/index.js", "--transport=stdio"],
       "command": "node",
       "env": {
         "MCP_RESOURCES_PATH": "${__dirname}/server/resources",
@@ -50,7 +43,7 @@
     },
     "type": "node"
   },
-  "support": "https://github.com/minipuft/wolfflow-mcp/issues",
+  "support": "https://github.com/minipuft/claude-prompts/issues",
   "tools": [
     {
       "description": "Execute prompts with frameworks, gates, and chains. Supports symbolic syntax (>>prompt --> >>chain).",

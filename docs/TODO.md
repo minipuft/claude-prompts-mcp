@@ -128,6 +128,6 @@ See [test-modernization-roadmap.md](../plans/techincal_debt/test-modernization-r
 
 ## Contributing
 
-Ideas welcome. [Open an issue](https://github.com/minipuft/wolfflow-mcp/issues) with the `enhancement` label.
+Ideas welcome. [Open an issue](https://github.com/minipuft/claude-prompts/issues) with the `enhancement` label.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for dev setup.

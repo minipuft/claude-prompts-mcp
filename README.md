@@ -1,21 +1,21 @@
 <!-- maintainers: this README is governed by docs/portfolio/readme-charter.md — run `cd server && npm run validate:readme` before committing changes -->
 
-# Wolfflow
+# Claude Prompts
 
 <div align="center">
 
-<img src="assets/logo.png" alt="Wolfflow logo" width="200" />
+<img src="assets/logo.png" alt="Claude Prompts logo" width="200" />
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=claude-prompts&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22claude-prompts%40latest%22%5D%7D&quality=stable)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-F14F21?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==)
 
-**An MCP workflow server.** _Written once, always followed._
+**A Model Context Protocol (MCP) server for prompt workflows.** _Written once, always followed._
 
-Craft reusable prompts with validation and reasoning guidance.<br>
-Orchestrate agentic workflows with a composable operator syntax.<br>
-Export as native skills.
-
-<sub>Wolfflow ships on npm as <a href="https://www.npmjs.com/package/claude-prompts"><code>claude-prompts</code></a>. The package and CLI names are unchanged.</sub>
+Craft reusable prompt templates with quality gates and reasoning guidance.<br>
+Orchestrate multi-step workflow chains with a composable operator syntax.<br>
+Export as native skills to any client.
 
 [Quick Start](#quick-start) · [What You Get](#what-you-get) · [Compose Workflows](#compose-workflows) · [Run Anywhere](#run-anywhere) · [Docs](#documentation)
 
@@ -36,33 +36,7 @@ Export as native skills.
 
 - **Use this if** you write the same prompts repeatedly, run multi-step workflows, or want to share reusable prompts with a team.
 - **Skip if** your client's built-in `/commands` already handle what you need, or you're looking for a no-code prompt library.
-- **Works with** Claude Code, Claude Desktop, Cursor, OpenCode, Gemini CLI, Codex, Windsurf, and Zed. Plugin installers add hooks (chain tracking, gate enforcement, state preservation) for Claude Code, OpenCode, and Gemini CLI; other clients run MCP-only.
-
-### How to write a chain
-
-```
->>review target:'src/auth/' @ReACT :: 'cite sources'
-  --> security_scan :: verify:"npm test"
-  ==> implementation
-```
-
-Read top-to-bottom:
-
-- `>>review target:'src/auth/'` runs the `review` prompt against your auth folder.
-- `@ReACT` overlays the ReACT reasoning framework on this step.
-- `:: 'cite sources'` adds a gate the AI must satisfy (cite sources, or retry).
-- `--> security_scan :: verify:"npm test"` chains to step 2, which must pass `npm test` before producing output.
-- `==> implementation` hands the final step off to a client-native agent (a subagent in Claude Code).
-
-Validation runs between steps, not only at the end. For the full operator set including `*`, `%`, and `#`, see the **Syntax Reference** details block near the bottom.
-
-<div align="center">
-
-<img src="assets/demos/hero-demo.gif" alt="Chain workflow with gate validation. A prompt executes through hooks, a gate catches a missing field on the first attempt, and the model self-corrects" width="720" />
-
-<sub>A gate catches a missing field, the model corrects itself, and the chain passes. Recorded on haiku, the cheapest model.</sub>
-
-</div>
+- **Works with** Claude Code, Claude Desktop, Cursor, OpenCode, Gemini CLI, Codex, Windsurf, and Zed. Plugin installers add hooks (chain tracking, gate enforcement, state preservation) for Claude Code, OpenCode, Gemini CLI, and Codex (experimental); other clients run MCP-only.
 
 ---
 
@@ -89,9 +63,9 @@ Validation runs between steps, not only at the end. For the full operator set in
 Load plugin from local source for development:
 
 ```bash
-git clone https://github.com/minipuft/wolfflow-mcp ~/Applications/wolfflow-mcp
-cd ~/Applications/wolfflow-mcp/server && npm install && npm run build
-claude --plugin-dir ~/Applications/wolfflow-mcp
+git clone https://github.com/minipuft/claude-prompts ~/Applications/claude-prompts
+cd ~/Applications/claude-prompts/server && npm install && npm run build
+claude --plugin-dir ~/Applications/claude-prompts
 ```
 
 Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
@@ -104,7 +78,7 @@ Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 
 **Option A: GitHub Release** (recommended)
 
-1. Download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/wolfflow-mcp/releases/latest)
+1. Download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts/releases/latest)
 2. Drag into Claude Desktop Settings → MCP Servers
 3. Done
 
@@ -135,10 +109,7 @@ Restart Claude Desktop and test: `>>research_chain topic:'remote team policies'`
 <details>
 <summary><strong>Other clients</strong>: VS Code · Cursor · OpenCode · Gemini CLI · Codex · Windsurf · Zed · From Source</summary>
 
-**One-click install**:
-
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=claude-prompts&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22claude-prompts%40latest%22%5D%7D&quality=stable)
-[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-F14F21?style=flat-square&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==)
+**One-click install**: the VS Code and Cursor buttons at the top of this README register the server via `npx`.
 
 **Plugin installers** (recommended, adds hooks):
 
@@ -148,6 +119,10 @@ npm install -g opencode-prompts && opencode-prompts install
 
 # Gemini CLI (partial hooks)
 gemini extensions install https://github.com/minipuft/gemini-prompts
+
+# Codex (experimental hooks; requires hooks = true under [features] in ~/.codex/config.toml)
+codex plugin marketplace add https://github.com/minipuft/minipuft-plugins.git
+codex plugin add codex-prompts@minipuft
 ```
 
 **Manual config** for VS Code, Cursor, OpenCode (no hooks), Gemini CLI (no hooks), Codex, Windsurf, Zed: see [Client Integration Guide](docs/guides/client-integration.md) for per-client config locations, JSON examples, and `--client` preset matrix. [Client Capabilities Reference](docs/reference/client-capabilities.md) covers profile mapping and limits.
@@ -155,8 +130,8 @@ gemini extensions install https://github.com/minipuft/gemini-prompts
 **From source** (developers):
 
 ```bash
-git clone https://github.com/minipuft/wolfflow-mcp.git
-cd wolfflow-mcp/server && npm install && npm run build && npm test
+git clone https://github.com/minipuft/claude-prompts.git
+cd claude-prompts/server && npm install && npm run build && npm test
 ```
 
 Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` (default) or `--transport=streamable-http`.
@@ -182,13 +157,51 @@ Four primitives you author, version, and compose. The bundled set ships 120+ pro
 
 Prompts, gates, and frameworks are managed through the `resource_manager` tool. Your AI creates, edits, versions, and rolls them back through MCP, no file editing required. Styles are managed with the bundled `cpm` CLI. Failed gate checks can retry automatically or pause for your decision ([Gates Guide](docs/guides/gates.md)). Build your first primitive: [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md).
 
+### The Three Tools
+
+Everything above reaches your client through three MCP tools:
+
+| Tool               | Purpose                                          |
+| ------------------ | ------------------------------------------------ |
+| `prompt_engine`    | Execute prompts with frameworks and validation   |
+| `resource_manager` | Create, update, version, and roll back resources |
+| `system_control`   | Status, analytics, framework switching           |
+
+Most users invoke these via `>>` syntax in conversation; hooks construct the actual calls. For programmatic MCP clients calling tools directly, see [MCP Tools Reference](docs/reference/mcp-tools.md).
+
 ---
 
 <!-- diataxis: how-to -->
 
 ## Compose Workflows
 
-The basic chain syntax is in [How to write a chain](#how-to-write-a-chain) at the top. Two patterns extend it. Chains also support context threading between steps and agent handoffs. See [Chains Lifecycle](docs/concepts/chains-lifecycle.md) and [MCP Tools Reference](docs/reference/mcp-tools.md).
+### How to write a chain
+
+```
+>>review target:'src/auth/' @ReACT :: 'cite sources'
+  --> security_scan :: verify:"npm test"
+  ==> implementation
+```
+
+Read top-to-bottom:
+
+- `>>review target:'src/auth/'` runs the `review` prompt against your auth folder.
+- `@ReACT` overlays the ReACT reasoning framework on this step.
+- `:: 'cite sources'` adds a gate the AI must satisfy (cite sources, or retry).
+- `--> security_scan :: verify:"npm test"` chains to step 2, which must pass `npm test` before producing output.
+- `==> implementation` hands the final step off to a client-native agent (a subagent in Claude Code).
+
+Validation runs between steps, not only at the end. For the full operator set including `*`, `%`, and `#`, see the **Syntax Reference** details block near the bottom.
+
+<div align="center">
+
+<img src="assets/demos/hero-demo.gif" alt="Chain workflow with gate validation. A prompt executes through hooks, a gate catches a missing field on the first attempt, and the model self-corrects" width="720" />
+
+<sub>A gate catches a missing field, the model corrects itself, and the chain passes. Recorded on haiku, the cheapest model.</sub>
+
+</div>
+
+Two patterns extend the basic syntax. Chains also support context threading between steps and agent handoffs. See [Chains Lifecycle](docs/concepts/chains-lifecycle.md) and [MCP Tools Reference](docs/reference/mcp-tools.md).
 
 <details>
 <summary><strong>See the output</strong>: tech evaluation chain with context7 research</summary>
@@ -272,7 +285,7 @@ What hooks unlock:
 | **Native agent handoffs**              | `==>` routes to your client's subagent system automatically; no manual subagent invocation                   |
 | **Session persistence**                | Workflow state preserved when context compacts mid-chain                                                     |
 
-Hooks ship with the plugin install. Full support on Claude Code (this repo) and [OpenCode](https://github.com/minipuft/opencode-prompts); partial on [Gemini CLI](https://github.com/minipuft/gemini-prompts). Other clients get the three MCP tools but no hook-driven behaviors. Detail: [hooks/README.md](hooks/README.md).
+Hooks ship with the plugin install. Full support on Claude Code (this repo) and [OpenCode](https://github.com/minipuft/opencode-prompts); partial on [Gemini CLI](https://github.com/minipuft/gemini-prompts); experimental on [Codex](https://github.com/minipuft/codex-prompts), where Codex hooks are off by default and each install requires a one-time `/hooks` trust review. Other clients get the three MCP tools but no hook-driven behaviors. Detail: [hooks/README.md](hooks/README.md).
 
 ---
 
@@ -298,19 +311,6 @@ Hooks ship with the plugin install. Full support on Claude Code (this repo) and 
 - `%judge` — AI recommends resources; you confirm
 
 → [MCP Tools Reference](docs/reference/mcp-tools.md) for full command documentation.
-
-</details>
-
-<details>
-<summary><strong>The Three Tools</strong></summary>
-
-| Tool               | Purpose                                          |
-| ------------------ | ------------------------------------------------ |
-| `prompt_engine`    | Execute prompts with frameworks and validation   |
-| `resource_manager` | Create, update, version, and roll back resources |
-| `system_control`   | Status, analytics, framework switching           |
-
-Most users invoke these via `>>` syntax in conversation; hooks construct the actual calls. For programmatic MCP clients calling tools directly, see [MCP Tools Reference](docs/reference/mcp-tools.md).
 
 </details>
 
