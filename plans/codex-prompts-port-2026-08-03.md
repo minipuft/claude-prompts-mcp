@@ -1,3 +1,10 @@
+---
+title: "codex-prompts: Codex CLI Downstream Port"
+date: 2026-08-03
+status: active
+tags: []
+---
+
 # codex-prompts: Codex CLI Downstream Port — Implementation Plan (2026-08-03)
 
 **Status**: COMPLETE — all tiers (0-5) executed 2026-08-03, plus a user-requested isolation validation (global MCP server disabled) that passed end-to-end under sandbox bypass and surfaced a third divergence pair: Codex sandboxes MCP server children under a fixed profile, and the packaged claude-prompts server writes package-relative, ignoring `MCP_WORKSPACE` (upstream defect → backlog). All four spikes answered; Tier 3 surfaced + fixed the gate-enforce structured-verdict bug. Commits pending user approval in all three repos. Details: implementation-notes deviations 16-17.

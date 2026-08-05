@@ -1,7 +1,7 @@
 ---
 title: "SQLite Persistence Layer — Boundaries, Validation, and Remediation"
 date: 2026-08-03
-status: ready
+status: active
 tags: [persistence, sqlite, validation-gates, technical-debt]
 ---
 
