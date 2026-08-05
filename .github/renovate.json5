@@ -98,18 +98,17 @@
       automerge: false,
     },
     {
-      // No `allowedVersions` pin here on purpose. Both holds this file used to carry were
-      // retired on 2026-08-01 by finishing the migrations they deferred, not by relaxing a
-      // rule, and a pin would also block the TS 6.x patches we do want. The 7.x blockers are
-      // stated in the PR body instead, so the reasoning arrives where the decision is made
-      // rather than in a plan file nobody opens during review.
+      // TypeScript 7 replaces the JavaScript compiler API used by this repository's
+      // test and architecture tooling. Keep accepting 6.x updates, but do not create
+      // another 7.x PR until every removal condition in the note below is satisfied.
       description: "TypeScript - require manual review",
       matchPackageNames: ["typescript"],
+      allowedVersions: "<7.0.0",
       reviewers: ["minipuft"],
       groupName: "TypeScript",
       automerge: false,
       prBodyNotes: [
-        "### TypeScript 7 is BLOCKED — close this PR unless all three boxes tick",
+        "### TypeScript 7 hold — remove `allowedVersions` only when all three boxes tick",
         "",
         "TS 7 is the Go-native compiler. `require('typescript')` exposes **2** symbols instead of 2248 and `lib/` drops from 24MB to 24KB — the JS compiler API moved behind `./unstable/*`. Every tool that does type-aware work has to be rewritten against it, so this is one upstream cause, not three lagging libraries.",
         "",
@@ -120,6 +119,23 @@
         "The third one is why this note exists. dependency-cruiser does not fail on an unsupported TypeScript; it emits a `warn`, finds nothing to parse, and reports success over an empty graph — green CI with every layer and cycle rule switched off. `scripts/validate-arch.js` now asserts a module floor so that state fails instead of passing, but read the checklist before trusting a green run on a TypeScript major.",
         "",
         "Minor and patch updates within TS 6.x are fine and need none of this.",
+      ],
+    },
+    {
+      // The server has completed its TypeScript 6 migration, but the standalone CLI
+      // still fails its hosted validation on 6. Keep CLI patches on 5.x until a
+      // dedicated migration makes its typecheck, build, and integration suite pass.
+      description: "CLI TypeScript 6 requires a dedicated migration",
+      matchPackageNames: ["typescript"],
+      matchFileNames: ["cli/package.json"],
+      allowedVersions: "<6.0.0",
+      reviewers: ["minipuft"],
+      groupName: "CLI TypeScript",
+      automerge: false,
+      prBodyNotes: [
+        "### CLI TypeScript 6 hold",
+        "",
+        "Remove the CLI-specific `<6.0.0` hold only in a dedicated migration where CLI typecheck, build, integration tests, and the full protected matrix pass with TypeScript 6.",
       ],
     },
     {
@@ -192,9 +208,9 @@
     // ^5.2.1. The migration the hold existed to defer had already happened, so all the
     // rule still did was block v5.x PATCH updates — including any security fix.
     //
-    // Both holds are now gone; there are no `allowedVersions` pins left in this file.
-    // Neither was retired by relaxing a rule — each was retired by finishing the
-    // migration it was deferring.
+    // Both historical zod/express holds are gone. The guarded TypeScript holds above
+    // are active migrations with explicit removal evidence; do not conflate them with
+    // the retired compatibility pins.
   ],
 
   // Vulnerability alerts

@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
@@ -171,9 +171,9 @@
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-node": "^0.217.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "ajv": "^8.18.0",
@@ -204,7 +204,7 @@
     "madge": "^8.0.0",
     "prettier": "^3.7.4",
     "ts-jest": "^29.1.2",
-    "ts-morph": "^27.0.2",
+    "ts-morph": "^28.0.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0"

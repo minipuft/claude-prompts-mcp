@@ -117,7 +117,7 @@ jobs:
       - name: Install Ruff
         if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
         working-directory: .
-        run: pip install ruff==0.16.0 --quiet
+        run: pip install ruff==0.16.1 --quiet
 
       - name: Install Pyrefly
         if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'

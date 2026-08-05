@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Structured gate verdicts are now hook-enforced:** `hooks/gate-enforce.py` crashed on the object form of `gate_verdict` (the schema-preferred shape); because hook failures are fail-open, object verdicts were never gate-enforced on any client. Surfaced by the codex-prompts port's live E2E.
 
+## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
+
+
+### Fixed
+
+* **deps:** defer CLI TypeScript 6 migration ([#193](https://github.com/minipuft/claude-prompts/issues/193)) ([aef8e5e](https://github.com/minipuft/claude-prompts/commit/aef8e5ef1b07654984feede76abe556e99e138ae))
+* **deps:** defer TypeScript 7 migration ([#190](https://github.com/minipuft/claude-prompts/issues/190)) ([04a9931](https://github.com/minipuft/claude-prompts/commit/04a9931d691214e8a0d6e0f47d60014495b58aff))
+* **deps:** update server runtime dependencies to ^0.221.0 ([#184](https://github.com/minipuft/claude-prompts/issues/184)) ([b848ae6](https://github.com/minipuft/claude-prompts/commit/b848ae68b0bf6f31c0d6aba66e780b474ba0382d))
+
 ## [3.1.0](https://github.com/minipuft/claude-prompts/compare/v3.0.2...v3.1.0) (2026-08-03)
 
 ### Added

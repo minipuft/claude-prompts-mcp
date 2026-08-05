@@ -38,7 +38,19 @@ const RULES = [
     },
   ],
   ['Isolate major updates for manual review', { groupName: null, automerge: false }],
-  ['TypeScript - require manual review', { groupName: 'TypeScript', automerge: false }],
+  [
+    'TypeScript - require manual review',
+    { groupName: 'TypeScript', allowedVersions: '<7.0.0', automerge: false },
+  ],
+  [
+    'CLI TypeScript 6 requires a dedicated migration',
+    {
+      groupName: 'CLI TypeScript',
+      matchFileNames: ['cli/package.json'],
+      allowedVersions: '<6.0.0',
+      automerge: false,
+    },
+  ],
   ['MCP SDK - critical dependency', { groupName: 'MCP SDK', automerge: false }],
   ['Testing frameworks - require validation', { automerge: false }],
   ['ESLint and Prettier - require validation', { automerge: false }],
@@ -111,6 +123,7 @@ function validateConfig(config, errors) {
   for (const description of [
     'Isolate major updates for manual review',
     'TypeScript - require manual review',
+    'CLI TypeScript 6 requires a dedicated migration',
     'MCP SDK - critical dependency',
     'Testing frameworks - require validation',
     'ESLint and Prettier - require validation',
@@ -276,6 +289,20 @@ function main() {
     );
     typescriptRule.automerge = true;
     if (!validateRows(missingExclusion).length) throw new Error('missing exclusion passed');
+    const missingTypescriptHold = fixtureRows();
+    const heldTypescriptRule = missingTypescriptHold[0].config.packageRules.find((rule) =>
+      rule.description.includes('TypeScript - require manual review')
+    );
+    delete heldTypescriptRule.allowedVersions;
+    if (!validateRows(missingTypescriptHold).length)
+      throw new Error('missing TypeScript 7 hold passed');
+    const missingCliTypescriptHold = fixtureRows();
+    const heldCliTypescriptRule = missingCliTypescriptHold[0].config.packageRules.find((rule) =>
+      rule.description.includes('CLI TypeScript 6 requires a dedicated migration')
+    );
+    delete heldCliTypescriptRule.allowedVersions;
+    if (!validateRows(missingCliTypescriptHold).length)
+      throw new Error('missing CLI TypeScript 6 hold passed');
     console.log('PASSED: Renovate extraction validator self-test');
     return;
   }

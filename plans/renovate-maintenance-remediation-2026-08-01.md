@@ -318,18 +318,20 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 
 ### Mandatory legacy-removal matrix
 
-| Superseded artifact                          | Delete when                                                | Proof                             | Final state |
-| -------------------------------------------- | ---------------------------------------------------------- | --------------------------------- | ----------- |
-| Global `chore(deps)` prefix                  | Semantic extraction assertions pass                        | Production `fix`, tooling `chore` | `removed`   |
-| Generic security patch/auto-merge rule       | Vulnerability alert policy resolves correctly              | Immediate manual alert extraction | `removed`   |
-| Nonexistent category labels                  | Minimal-label config validates against live labels         | Label comparison                  | `removed`   |
-| Broad MCPB/global npm regex path             | Root MCPB extraction passes                                | Exactly one npm extraction        | `removed`   |
-| Unpinned `npx @anthropic-ai/mcpb`            | Root local MCPB validates                                  | Root `npm ci` + MCPB validate     | `removed`   |
-| Staged `npm install`                         | Server-lock staging builds twice                           | Equivalent inventories            | `removed`   |
-| Mutable external Action tags                 | All pins/workflows pass                                    | Pin validator + CI                | `removed`   |
-| Two-check live protection                    | All four contexts have recent runs                         | Protection GET + canary           | `removed`   |
-| Collapsed Node 18–24 server claim            | Docs and matrix agree                                      | Stale-claim search                | `removed`   |
-| Rollout-only eligible-rule `automerge:false` | Maintainer accepts accelerated rollout and canary succeeds | Hosted canary                     | `removed`   |
+| Superseded artifact                          | Delete when                                                                                                         | Proof                                           | Final state |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------- |
+| Global `chore(deps)` prefix                  | Semantic extraction assertions pass                                                                                 | Production `fix`, tooling `chore`               | `removed`   |
+| Generic security patch/auto-merge rule       | Vulnerability alert policy resolves correctly                                                                       | Immediate manual alert extraction               | `removed`   |
+| Nonexistent category labels                  | Minimal-label config validates against live labels                                                                  | Label comparison                                | `removed`   |
+| Broad MCPB/global npm regex path             | Root MCPB extraction passes                                                                                         | Exactly one npm extraction                      | `removed`   |
+| Unpinned `npx @anthropic-ai/mcpb`            | Root local MCPB validates                                                                                           | Root `npm ci` + MCPB validate                   | `removed`   |
+| Staged `npm install`                         | Server-lock staging builds twice                                                                                    | Equivalent inventories                          | `removed`   |
+| Mutable external Action tags                 | All pins/workflows pass                                                                                             | Pin validator + CI                              | `removed`   |
+| Two-check live protection                    | All four contexts have recent runs                                                                                  | Protection GET + canary                         | `removed`   |
+| Collapsed Node 18–24 server claim            | Docs and matrix agree                                                                                               | Stale-claim search                              | `removed`   |
+| Rollout-only eligible-rule `automerge:false` | Maintainer accepts accelerated rollout and canary succeeds                                                          | Hosted canary                                   | `removed`   |
+| TypeScript 7 `allowedVersions` hold          | ts-jest and typescript-eslint admit 7, and architecture validation cruises a non-zero module graph under 7          | Peer-range evidence plus hosted full CI         | `canonical` |
+| CLI TypeScript 6 `allowedVersions` hold      | A dedicated CLI migration passes typecheck, build, integration tests, and the full protected matrix on TypeScript 6 | Hosted PR #192 failure plus future migration CI | `canonical` |
 
 ### Release convention
 
