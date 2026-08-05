@@ -254,23 +254,9 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
         closedBy: 'Tier 6.1',
       },
     ],
-    acceptedPhantomColumns: [
-      {
-        subject: 'organization_id',
-        reason:
-          'Neither writer names it: the service INSERT lists (tenant_id, resource_type, ' +
-          'resource_id, version, snapshot, diff_summary, description, created_at), and the ' +
-          'spawned-Python path does not declare the column at all.',
-        closedBy: 'Tier 6.1',
-      },
-      {
-        subject: 'workspace_id',
-        reason:
-          'Indexed by idx_version_history_workspace and never written, so rollback history is ' +
-          'global across every project sharing state.db.',
-        closedBy: 'Tier 6.1',
-      },
-    ],
+    // Phantom exceptions removed by Tier 4: saveVersion now binds organization_id and workspace_id
+    // from the service's injected scope. They were still listed after the writers landed, and the
+    // gate said nothing — an exception suppresses its finding whether or not it is still true.
   },
   {
     table: 'resource_changes',

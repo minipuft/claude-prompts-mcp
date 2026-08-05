@@ -100,6 +100,19 @@ const DURABLE_TABLES = DURABLE_TABLE_NAMES;
  */
 const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set(['version_history']);
 
+/**
+ * The SCHEMA_VERSION that `DROPPED_ON_THIS_BUMP` was declared for.
+ *
+ * Without this the exclusion has no retirement condition: it reads as a permanent property of the
+ * engine rather than a one-time act, and the next bump would silently discard a durable table on
+ * an unrelated schema change. `validate:table-contracts` compares the two — once SCHEMA_VERSION
+ * moves past this, a non-empty set is a hard failure naming each stale entry.
+ *
+ * Retiring the exclusion is therefore two edits that the gate forces to happen together: empty the
+ * set, and move this to the new version.
+ */
+const DROPPED_AT_VERSION = 18;
+
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
@@ -325,6 +338,19 @@ export class SqliteEngine implements DatabasePort {
    */
   private snapshotDurableTables(): DurableSnapshot {
     const snapshot: DurableSnapshot = new Map();
+
+    // A stale exclusion is imminent data loss, not a lint problem: the set names durable tables
+    // that will NOT be carried across the recreate about to happen. `validate:table-contracts`
+    // catches this before it ships; this throws if it somehow reaches a running server, because
+    // the alternative is silently discarding a table whose rows exist nowhere else.
+    if (DROPPED_ON_THIS_BUMP.size > 0 && SCHEMA_VERSION !== DROPPED_AT_VERSION) {
+      throw new Error(
+        `DROPPED_ON_THIS_BUMP still contains [${[...DROPPED_ON_THIS_BUMP].join(', ')}] but was ` +
+          `declared for schema v${DROPPED_AT_VERSION} and SCHEMA_VERSION is now ` +
+          `v${SCHEMA_VERSION}. Empty the set and move DROPPED_AT_VERSION, or these durable ` +
+          'tables are dropped by an unrelated schema change.'
+      );
+    }
 
     for (const table of DURABLE_TABLES) {
       if (DROPPED_ON_THIS_BUMP.has(table)) {
