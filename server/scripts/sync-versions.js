@@ -18,6 +18,7 @@ const repoRoot = join(serverDir, '..');
 
 // Files to sync (path relative to appropriate root, key to update)
 const manifests = [
+  { path: join(repoRoot, 'package.json'), key: 'version' },
   { path: join(repoRoot, 'manifest.json'), key: 'version' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), key: 'version' },
   { path: join(repoRoot, '.release-please-manifest.json'), key: '.' },

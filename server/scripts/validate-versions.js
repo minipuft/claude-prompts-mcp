@@ -11,6 +11,12 @@ const serverDir = join(__dirname, '..');
 const repoRoot = join(serverDir, '..');
 
 const files = [
+  // Root package.json is release-please's NATIVE bump target (component "."), not an
+  // extra-file — but manual flows (npm version → sync-versions) and merges can move it
+  // independently, so it participates in the consistency check. Its lockfile is
+  // deliberately excluded: release-please bumps package.json without the lock, so a
+  // lock check would fail after every release until the next npm install.
+  { path: join(repoRoot, 'package.json'), name: 'package.json (root)' },
   { path: join(serverDir, 'package.json'), name: 'server/package.json' },
   { path: join(repoRoot, 'manifest.json'), name: 'manifest.json' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), name: '.claude-plugin/plugin.json' },
