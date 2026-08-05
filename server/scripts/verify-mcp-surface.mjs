@@ -35,7 +35,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -147,6 +147,29 @@ const TOOL_CHECKS = [
       }
       if (listed.length !== viaResourceManager.length) {
         return `prompt_engine lists ${listed.length} but resource_manager lists ${viaResourceManager.length}`;
+      }
+      return true;
+    },
+  },
+  {
+    // The ledger's store is created lazily inside setDatabasePort, so an action registered
+    // before that runs still ROUTES correctly and answers "not available" forever. That
+    // response is well-formed, and an 11/11 run reported health against exactly it — the
+    // action was structurally dead while every other gate stayed green. This predicate
+    // rejects that specific answer rather than merely confirming the action responds.
+    label: 'system_control execution_history',
+    tool: 'system_control',
+    args: { action: 'execution_history', operation: 'list' },
+    expect: (text) => {
+      if (/not available|not initialized|not wired/i.test(text)) {
+        return 'ledger reports unavailable — the record store was not wired at registration time';
+      }
+      // An empty ledger is a healthy answer: this runs read-only against a server that may
+      // legitimately have no history. Both shapes pass; the unavailable shape above does not.
+      const emptyNotice = /no execution history/i.test(text);
+      const listing = /\*\*Execution History\*\*\s*\(\d+ record/i.test(text);
+      if (!emptyNotice && !listing) {
+        return 'response is neither an empty-ledger notice nor a record listing';
       }
       return true;
     },
@@ -426,7 +449,119 @@ const WRONG_BUT_WELL_FORMED = {
     '📚 **Prompts** (2)\n\n**analysis**: action_plan, deep_research\n\n_Use `detail:"full"`._',
   'system_control framework list':
     '📋 **Available Frameworks**\n\n**C.A.G.E.E.R.F Framework** 🟢 ACTIVE\n**ReACT Framework** ⚪ Available\n',
+  // The exact response the dead action returned. It routed, it was well-formed, and 11/11
+  // passed alongside it.
+  'system_control execution_history':
+    '⚠️ **Execution Ledger Not Available**\n\nThe execution record store is not wired. This occurs when the server started without a database.',
 };
+
+/** Where the action registry lives. Parsed, not imported — this file must stay dependency-free. */
+const SYSTEM_CONTROL_ACTIONS_SOURCE = path.join(
+  SERVER_ROOT,
+  'src',
+  'mcp',
+  'metadata',
+  'definitions',
+  'system-control.ts'
+);
+
+/**
+ * Actions deliberately without a TOOL_CHECKS entry, each naming what would close it.
+ *
+ * Mirrors the `acceptedPhantomColumns` + `closedBy` convention in table-contracts.ts: an
+ * exemption with no exit is a permanent bypass wearing a temporary label. These predate the
+ * registry cross-check; the point of listing them is that the backlog is *visible* and that a
+ * NEW action cannot join it silently.
+ */
+const UNCHECKED_ACTIONS = {
+  gates:
+    'Needs a check that distinguishes enabled from disabled rather than asserting the word "gates" appears.',
+  analytics: 'Needs a metric cross-checked against a second source, as the status check does.',
+  config: 'Read-only config dump; needs a value cross-checked against config.json on disk.',
+  maintenance: 'Restarts the server — cannot run inside a read-only surface check.',
+  guide: 'Returns free-text recommendations with no invariant a predicate could assert.',
+  injection: 'Needs a check comparing advertised injection state against the resolved config.',
+  session: 'Requires a live chain session; the surface check runs against an idle server.',
+  changes: 'Needs seeded resource churn; the run asserts afterwards that nothing was mutated.',
+};
+
+/** Read the registered action ids without importing TypeScript. */
+function readRegisteredActionIds() {
+  const source = readFileSync(SYSTEM_CONTROL_ACTIONS_SOURCE, 'utf8');
+  const block = source.match(
+    /export const SYSTEM_CONTROL_ACTION_IDS\s*=\s*\[([\s\S]*?)\]\s*as const/
+  );
+  if (!block) {
+    throw new Error(
+      `could not locate SYSTEM_CONTROL_ACTION_IDS in ${SYSTEM_CONTROL_ACTIONS_SOURCE} — ` +
+        'the registry moved or was renamed, and this cross-check is now blind'
+    );
+  }
+  return [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+}
+
+/**
+ * Every registered system_control action must be checked or explicitly exempted.
+ *
+ * The failure this closes: `execution_history` was registered, routed, and structurally dead,
+ * and `verify:mcp` reported 11/11 because TOOL_CHECKS was never extended. The registry grew;
+ * the gate did not. Coverage is DERIVED from each check's own `args.action` rather than
+ * maintained as a second list, so the two cannot drift apart.
+ *
+ * What this cannot catch, stated so a green run is not over-read:
+ *  - operations within an action (`execution_history:list` vs a future `:purge`) — it counts
+ *    actions, not operations;
+ *  - `prompt_engine` / `resource_manager`, which expose no comparable flat registry;
+ *  - an action whose check exists but asserts shape only — the counterexample requirement
+ *    above mitigates that, it does not eliminate it;
+ *  - any defect visible only with seeded state, since this runs against an idle server.
+ */
+function checkActionCoverage() {
+  const registered = readRegisteredActionIds();
+  const covered = new Set(
+    TOOL_CHECKS.filter((check) => check.tool === 'system_control')
+      .map((check) => check.args?.action)
+      .filter((action) => typeof action === 'string')
+  );
+
+  let failures = 0;
+
+  if (registered.length === 0) {
+    record('action registry — parsed', false, 'parsed zero actions; the regex matched nothing');
+    return 1;
+  }
+  record('action registry — parsed', true, `${registered.length} registered actions`);
+
+  for (const action of registered) {
+    if (covered.has(action)) continue;
+    const reason = UNCHECKED_ACTIONS[action];
+    const exempted = typeof reason === 'string' && reason.trim().length > 0;
+    record(
+      `system_control:${action} — checked or exempted`,
+      exempted,
+      exempted ? `exempt — ${reason}` : 'NO TOOL_CHECKS entry and no UNCHECKED_ACTIONS reason'
+    );
+    if (!exempted) failures += 1;
+  }
+
+  // Exemptions rot in both directions: an action that gained a check keeps a stale excuse, and
+  // an action that was deleted leaves one behind. Both mean the list stopped describing reality.
+  for (const action of Object.keys(UNCHECKED_ACTIONS)) {
+    if (!registered.includes(action)) {
+      record(`exemption for ${action} — still registered`, false, 'action no longer exists');
+      failures += 1;
+    } else if (covered.has(action)) {
+      record(
+        `exemption for ${action} — still needed`,
+        false,
+        'a TOOL_CHECKS entry now covers it; delete the exemption'
+      );
+      failures += 1;
+    }
+  }
+
+  return failures;
+}
 
 /**
  * Prove every predicate can fail before trusting any of them to pass. Runs offline — no server,
@@ -457,10 +592,17 @@ function runSelfTest() {
   }
 
   seen.clear();
+
+  // Falsifiability answers "can this check fail?"; coverage answers "is there a check at all?".
+  // A registry can grow past its gate while every existing predicate stays perfectly falsifiable,
+  // which is exactly how a dead action passed 11/11.
+  console.log('\nverify:mcp self-test — every registered action must be checked or exempted\n');
+  failures += checkActionCoverage();
+
   console.log(
     failures === 0
-      ? `\nOK: all ${TOOL_CHECKS.length} checks are falsifiable\n`
-      : `\nFAILED: ${failures} check(s) cannot detect a wrong response\n`
+      ? `\nOK: all ${TOOL_CHECKS.length} checks are falsifiable and every action is accounted for\n`
+      : `\nFAILED: ${failures} problem(s) — see lines above\n`
   );
   process.exit(failures === 0 ? 0 : 1);
 }

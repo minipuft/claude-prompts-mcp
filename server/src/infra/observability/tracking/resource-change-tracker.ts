@@ -33,7 +33,10 @@ import { SqliteEngine } from '../../database/sqlite-engine.js';
 import { SqliteStateStore } from '../../database/stores/sqlite-store.js';
 import { Logger } from '../../logging/index.js';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
+
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 export type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
 
@@ -87,10 +90,23 @@ export interface ResourceChangeTrackerConfig {
   maxEntries: number;
   /** Server root directory (for SqliteEngine singleton) */
   serverRoot: string;
+  /** Explicit writable SQLite path decided by the runtime composition root. */
+  dbPath?: string;
   /** Whether to track prompts */
   trackPrompts: boolean;
   /** Whether to track gates */
   trackGates: boolean;
+  /**
+   * Scope stamped on rows this tracker writes.
+   *
+   * Changes reach this tracker from a filesystem watcher, which fires with no request and
+   * therefore no request scope — there is nothing to thread through. The composition root
+   * supplies the process's own workspace instead, matching how `FrameworkStateStore` takes a
+   * `defaultScope`. Without it every row was written with a literal `'default'` tenant and
+   * NULL scope columns, which the startup migration then backfilled on the next boot — the
+   * treadmill, running against a writer that never stopped producing NULLs.
+   */
+  defaultScope?: StateStoreOptions;
 }
 
 const DEFAULT_CONFIG: ResourceChangeTrackerConfig = {
@@ -132,7 +148,9 @@ export class ResourceChangeTracker {
     this.logger.debug('ResourceChangeTracker: Initializing...');
 
     // Initialize SqliteEngine and hash store (idempotent — no-op if already initialized)
-    this.dbManager = await SqliteEngine.getInstance(this.config.serverRoot, this.logger);
+    this.dbManager = await SqliteEngine.getInstance(this.config.serverRoot, this.logger, {
+      ...(this.config.dbPath !== undefined ? { dbPath: this.config.dbPath } : {}),
+    });
     await this.dbManager.initialize();
 
     this.hashStore = new SqliteStateStore<Record<string, string>>(
@@ -239,11 +257,14 @@ export class ResourceChangeTracker {
 
     // INSERT change into resource_changes table
     const timestamp = new Date().toISOString();
+    const scope = this.config.defaultScope;
     this.dbManager!.run(
-      `INSERT INTO resource_changes (tenant_id, timestamp, source, operation, resource_type, resource_id, file_path, content_hash, previous_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO resource_changes (tenant_id, organization_id, workspace_id, timestamp, source, operation, resource_type, resource_id, file_path, content_hash, previous_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        'default',
+        resolveContinuityScopeId(scope),
+        scope?.organizationId ?? null,
+        scope?.workspaceId ?? null,
         timestamp,
         params.source,
         params.operation,

@@ -388,6 +388,9 @@ export class PipelineBuilder {
       metricsProvider: deps.getAnalyticsService,
       hookRegistry: deps.hookRegistry,
       gateEnforcement,
+      // Stages take `| null`; PipelinePorts is uniformly optional, so normalize here
+      // rather than admitting both empty representations into the ports interface.
+      executionRecordStore: deps.executionRecordStore ?? undefined,
     });
   }
 

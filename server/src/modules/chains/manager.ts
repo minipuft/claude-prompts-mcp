@@ -66,6 +66,15 @@ export interface ChainSessionStoreOptions {
   defaultSessionTimeoutMs?: number;
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
+  /**
+   * Workspace scope stamped on the `chain_sessions` hook projection.
+   *
+   * Distinct from `pidScope`: `chain_sessions.tenant_id` is the server PID, which isolates one
+   * running server's rows from another's but says nothing about which project they belong to.
+   * The scope columns answer that, and until this was supplied they were written NULL and
+   * repaired by a startup backfill on the next boot.
+   */
+  defaultScope?: StateStoreOptions;
 }
 
 const DEFAULT_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -98,6 +107,23 @@ export class ChainSessionStore implements ChainSessionService {
   private resolvedDbEngine?: DatabasePort;
   private readonly serverPid = String(process.pid);
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
+  private readonly workspaceScope: StateStoreOptions | undefined;
+
+  /**
+   * Scope for `chain_run_registry` rows.
+   *
+   * Merged, not chosen: the PID decides `tenant_id` (which server owns the run) while the
+   * workspace fills `workspace_id`/`organization_id` (which project it belongs to). They answer
+   * different questions, and the registry resolves `tenant_id` from `continuityScopeId` first,
+   * so adding the workspace keys cannot change run ownership. Passing `pidScope` alone — as this
+   * did — left the scope columns NULL for a startup backfill to repair on the next boot.
+   *
+   * A getter rather than a constructor-computed field because `pidScope` is a field initializer
+   * and `workspaceScope` is assigned in the constructor body.
+   */
+  private get runScope(): StateStoreOptions {
+    return { ...this.pidScope, ...(this.workspaceScope ?? {}) };
+  }
   private initPromise!: Promise<void>;
 
   constructor(
@@ -121,6 +147,7 @@ export class ChainSessionStore implements ChainSessionService {
     this.reviewSessionTimeoutMs =
       options.reviewSessionTimeoutMs ?? DEFAULT_REVIEW_SESSION_TIMEOUT_MS;
     this.cleanupIntervalMs = options.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
+    this.workspaceScope = options.defaultScope;
 
     // Store provided sessionStore or defer to initialize() for SQLite-backed default
     if (sessionStore) {
@@ -203,7 +230,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private async loadSessions(): Promise<void> {
     try {
-      const parsed = await this.runRegistry.load(this.pidScope);
+      const parsed = await this.runRegistry.load(this.runScope);
 
       const persistedSessions = parsed.runs ?? parsed.sessions ?? {};
       const persistedChainMapping = parsed.runMapping ?? parsed.chainMapping ?? {};
@@ -312,12 +339,12 @@ export class ChainSessionStore implements ChainSessionService {
       const data = this.serializeSessions();
       if (!db) {
         // No DB engine wired — fall back to non-transactional save (test contexts).
-        await this.runRegistry.save(data, this.pidScope);
+        await this.runRegistry.save(data, this.runScope);
         return;
       }
       db.beginTransaction();
       try {
-        await this.runRegistry.save(data, this.pidScope);
+        await this.runRegistry.save(data, this.runScope);
         this.projectToHookView(db);
         db.commit();
       } catch (txError) {
@@ -353,9 +380,17 @@ export class ChainSessionStore implements ChainSessionService {
     db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [this.serverPid]);
     for (const row of activeRows) {
       db.run(
-        `INSERT INTO chain_sessions (tenant_id, chain_id, run_number, state, run_status, run_completed_at)
-         VALUES (?, ?, 1, ?, ?, ?)`,
-        [this.serverPid, row.chainId, row.state, row.runStatus, row.runCompletedAt]
+        `INSERT INTO chain_sessions (tenant_id, organization_id, workspace_id, chain_id, run_number, state, run_status, run_completed_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
+        [
+          this.serverPid,
+          this.workspaceScope?.organizationId ?? null,
+          this.workspaceScope?.workspaceId ?? null,
+          row.chainId,
+          row.state,
+          row.runStatus,
+          row.runCompletedAt,
+        ]
       );
     }
   }

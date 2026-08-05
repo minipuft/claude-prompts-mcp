@@ -15,6 +15,7 @@ import { formatStageOrderViolations, validateStageOrder } from './validate-stage
 import { ExecutionContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type {
   MetricsCollector,
   PipelineStageStatus,
@@ -43,6 +44,12 @@ export interface PipelinePorts {
    * has no reason to be rebuilt per request.
    */
   gateEnforcement?: GateEnforcementAuthority;
+
+  /**
+   * Optional so the pipeline still runs where persistence is unavailable, matching how
+   * stages 18 and 21 receive it. Emission is best-effort by design — see `append`.
+   */
+  executionRecordStore?: ExecutionRecordStore;
 }
 
 export class PromptExecutionPipeline {
@@ -51,6 +58,7 @@ export class PromptExecutionPipeline {
   private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined;
   private readonly hookRegistry: HookRegistryPort | undefined;
   private readonly gateEnforcement: GateEnforcementAuthority | undefined;
+  private readonly executionRecordStore: ExecutionRecordStore | undefined;
 
   /**
    * @param stages Executed in array order. The caller owns the ordering and its
@@ -74,6 +82,32 @@ export class PromptExecutionPipeline {
     this.metricsProvider = ports.metricsProvider;
     this.hookRegistry = ports.hookRegistry;
     this.gateEnforcement = ports.gateEnforcement;
+    this.executionRecordStore = ports.executionRecordStore;
+  }
+
+  /**
+   * Close out the ledger series for a run that died inside any stage.
+   *
+   * Emitted here rather than from stages 18/21 because those are the renderer and the
+   * formatter: a throw in any of the other twenty stages never reaches either, and its
+   * last record would stay `working` forever. This catch is the pipeline's single error
+   * boundary, so it is the one place that sees every failure.
+   */
+  private emitFailureRecord(context: ExecutionContext, failure: Error): void {
+    const store = this.executionRecordStore;
+    const session = context.sessionContext;
+    if (store === undefined || session === undefined) return;
+
+    const failedAt = Date.now();
+    store.append({
+      sessionId: session.sessionId,
+      chainId: session.chainId,
+      status: 'failed',
+      errorMessage: failure.message,
+      startedAt: failedAt,
+      completedAt: failedAt,
+      scope: context.getScopeOptions(),
+    });
   }
 
   /**
@@ -144,6 +178,7 @@ export class PromptExecutionPipeline {
         error: failure.message,
         stages: stageMetrics,
       });
+      this.emitFailureRecord(context, failure);
       this.finishRootSpan(rootSpan, {
         context,
         stageMetrics,

@@ -20,6 +20,7 @@ import {
 import type { GateDefinitionProvider } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { ValidationContext } from '../types.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 
 export { GateLoader, createGateLoader, type GateDefinitionProvider } from './gate-loader.js';
 export { GateValidator, createGateValidator } from './gate-validator.js';
@@ -77,6 +78,9 @@ export class LightweightGateSystem {
   private gateStateStore: GateStateStore | undefined;
   private temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
+  /** Workspace scope for gate state reads and validation metric writes. */
+  private workspaceScope?: StateStoreOptions;
+
   constructor(
     public gateLoader: GateDefinitionProvider,
     public gateValidator: GateValidator,
@@ -88,7 +92,12 @@ export class LightweightGateSystem {
   /**
    * Set gate system manager for runtime state checking
    */
-  setGateStateStore(gateStateStore: GateStateStore): void {
+  setGateStateStore(gateStateStore: GateStateStore, scope?: StateStoreOptions): void {
+    // Scope arrives with the store rather than per call: both consumers below are internal
+    // decisions made mid-validation, with no request in hand. Without it they resolved to the
+    // default scope, so one workspace's gate toggle was read by every other, and validation
+    // metrics from every project pooled into a single row.
+    this.workspaceScope = scope;
     this.gateStateStore = gateStateStore;
   }
 
@@ -140,7 +149,7 @@ export class LightweightGateSystem {
     if (!this.gateStateStore) {
       return true;
     }
-    return this.gateStateStore.isGateSystemEnabled();
+    return this.gateStateStore.isGateSystemEnabled(this.workspaceScope);
   }
 
   /**
@@ -226,7 +235,7 @@ export class LightweightGateSystem {
     if (this.gateStateStore) {
       const executionTime = performance.now() - startTime;
       const success = results.every((r) => r.passed);
-      this.gateStateStore.recordValidation(success, executionTime);
+      this.gateStateStore.recordValidation(success, executionTime, this.workspaceScope);
     }
 
     return results;

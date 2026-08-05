@@ -26,7 +26,9 @@ import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.j
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { PromptData } from '#modules/prompts/types.js';
+import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { McpToolRequest } from '#shared/types/execution.js';
+import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import { createParsingSystem } from '#engine/execution/parsers/index.js';
@@ -118,6 +120,9 @@ export class PromptExecutor {
   /** Notification emitter for MCP client notifications */
   private notificationEmitter?: McpNotificationEmitterPort;
 
+  /** Launch workspace scope, shared by the chain stores and the argument history store. */
+  private readonly workspaceScope: StateStoreOptions | undefined;
+
   private convertedPrompts: ConvertedPrompt[] = [];
   private readonly serverRoot: string;
 
@@ -152,13 +157,28 @@ export class PromptExecutor {
     this.serverRoot = resolvedServerRoot;
 
     const sessionConfig = configManager.getChainSessionConfig?.();
-    const chainSessionOptions = sessionConfig
-      ? {
-          defaultSessionTimeoutMs: sessionConfig.sessionTimeoutMinutes * 60 * 1000,
-          reviewSessionTimeoutMs: sessionConfig.reviewTimeoutMinutes * 60 * 1000,
-          cleanupIntervalMs: sessionConfig.cleanupIntervalMinutes * 60 * 1000,
-        }
-      : undefined;
+    // Read before either store is constructed: `applyRuntimeIdentityOverrides` has already
+    // populated this during runtime bootstrap (deriving from cwd when nothing explicit was
+    // given), and a value read after construction never reaches the constructed store.
+    const launchWorkspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+    const workspaceScope =
+      launchWorkspaceId != null ? { workspaceId: launchWorkspaceId } : undefined;
+
+    // Built unconditionally rather than only when `sessionConfig` exists: the scope has to
+    // survive the no-session-config branch, which previously collapsed the whole object to
+    // undefined and would have dropped it.
+    this.workspaceScope = workspaceScope;
+
+    const chainSessionOptions = {
+      ...(sessionConfig
+        ? {
+            defaultSessionTimeoutMs: sessionConfig.sessionTimeoutMinutes * 60 * 1000,
+            reviewSessionTimeoutMs: sessionConfig.reviewTimeoutMinutes * 60 * 1000,
+            cleanupIntervalMs: sessionConfig.cleanupIntervalMinutes * 60 * 1000,
+          }
+        : {}),
+      ...(workspaceScope !== undefined ? { defaultScope: workspaceScope } : {}),
+    };
 
     this.argumentHistoryTracker = new ArgumentHistoryTracker(logger, 50);
     // Initialize async - will be ready when DatabasePort is set via setDatabasePort
@@ -276,8 +296,21 @@ export class PromptExecutor {
     this.analyticsService = analyticsService;
   }
 
-  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
-    this.argumentHistoryTracker.setDatabasePort(db);
+  setDatabasePort(
+    db: import('#shared/types/persistence.js').DatabasePort,
+    argHistoryStore?: StateStore<PersistedArgumentHistory>
+  ): void {
+    // The store arrives already built rather than being constructed here: `mcp/` (Layer 4) is
+    // barred from importing `infra/` by `mcp-no-infra-static`, exactly as `modules/` is by
+    // `modules-no-infra-static`. Only the composition root may name the concrete store, so it
+    // hands one down. Scope is applied here because this layer owns the launch workspace.
+    if (argHistoryStore !== undefined) {
+      this.argumentHistoryTracker.setStateStore(argHistoryStore, this.workspaceScope);
+    } else {
+      this.logger.warn(
+        'PromptExecutor.setDatabasePort called without an argument-history store; argument history will not persist.'
+      );
+    }
     if ('setDatabasePort' in this.chainSessionStore) {
       (this.chainSessionStore as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
     }
@@ -294,7 +327,7 @@ export class PromptExecutor {
   }
 
   setGateStateStore(gateStateStore: any): void {
-    this.lightweightGateSystem.setGateStateStore(gateStateStore);
+    this.lightweightGateSystem.setGateStateStore(gateStateStore, this.workspaceScope);
   }
 
   getLightweightGateSystem(): LightweightGateSystem {
@@ -311,6 +344,15 @@ export class PromptExecutor {
    */
   getChainSessionStore(): ChainSessionService {
     return this.chainSessionStore;
+  }
+
+  /**
+   * The execution ledger reader, for consumers outside the pipeline (currently the
+   * `execution_history` system_control action). Null until a database is wired — the
+   * ledger is optional, so callers check rather than assume.
+   */
+  getExecutionRecordStore(): ExecutionRecordStore | null {
+    return this.executionRecordStore;
   }
 
   async cleanup(): Promise<void> {

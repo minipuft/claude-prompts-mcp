@@ -109,8 +109,11 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
     );
   }
 
-  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
-    this.versionHistoryService.setDatabasePort(db);
+  setDatabasePort(
+    db: import('#shared/types/persistence.js').DatabasePort,
+    scope?: import('#shared/types/persistence.js').StateStoreOptions
+  ): void {
+    this.versionHistoryService.setDatabasePort(db, scope);
   }
 
   setFrameworkStateStore(frameworkStateStore: FrameworkStateStore): void {

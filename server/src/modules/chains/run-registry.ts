@@ -32,9 +32,13 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
   async save(store: PersistedChainRunRegistry, scope?: StateStoreOptions): Promise<void> {
     const tenantId =
       scope?.continuityScopeId ?? scope?.workspaceId ?? scope?.organizationId ?? 'default';
-    this.db.run('INSERT OR REPLACE INTO chain_run_registry (tenant_id, state) VALUES (?, ?)', [
-      tenantId,
-      JSON.stringify(store),
-    ]);
+    // The scope columns are bound separately from `tenant_id` rather than derived from it: for
+    // this table `tenant_id` is the run-owner key, not a workspace, so collapsing the two would
+    // state an isolation guarantee the row does not honor.
+    this.db.run(
+      `INSERT OR REPLACE INTO chain_run_registry (tenant_id, organization_id, workspace_id, state)
+       VALUES (?, ?, ?, ?)`,
+      [tenantId, scope?.organizationId ?? null, scope?.workspaceId ?? null, JSON.stringify(store)]
+    );
   }
 }

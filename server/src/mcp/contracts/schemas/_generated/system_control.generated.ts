@@ -35,9 +35,9 @@ export type system_controlParamName =
 export const system_controlParameters: ToolParameter[] = [
   {
     name: 'action',
-    type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session]',
+    type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session|changes|execution_history]',
     description:
-      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel).',
+      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel), changes (resource change audit log), execution_history (chain execution ledger, newest first).',
     required: true,
     status: 'working',
     compatibility: 'canonical',

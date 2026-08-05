@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, test, jest } from '@jest/globa
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+import type { StateStore } from '../../../src/shared/types/persistence.js';
+import type { PersistedArgumentHistory } from '../../../src/modules/text-refs/types.js';
 
 const createLogger = (): Logger =>
   ({
@@ -13,24 +14,20 @@ const createLogger = (): Logger =>
     error: jest.fn(),
   }) as unknown as Logger;
 
-const createMockDb = (): DatabasePort =>
-  ({
-    isInitialized: () => true,
-    initialize: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    queryOne: jest.fn().mockReturnValue(null),
-    query: jest.fn().mockReturnValue([]),
-    run: jest.fn(),
-    transaction: jest.fn(),
-    beginTransaction: jest.fn(),
-    commit: jest.fn(),
-    rollback: jest.fn(),
-  }) as unknown as DatabasePort;
+/** No-op StateStore stub: these cases exercise in-memory behavior, not persistence. */
+const createNoopStore = (): StateStore<PersistedArgumentHistory> => ({
+  ensureInitialized: async () => undefined,
+  load: async () => ({ version: '1.0.0', lastUpdated: 0, chains: {}, sessionToChain: {} }),
+  save: async () => undefined,
+  exists: async () => false,
+  delete: async () => undefined,
+});
 
 describe('ArgumentHistoryTracker', () => {
   let tracker: ArgumentHistoryTracker;
 
   beforeEach(() => {
-    tracker = new ArgumentHistoryTracker(createLogger(), 10, createMockDb());
+    tracker = new ArgumentHistoryTracker(createLogger(), 10, createNoopStore());
   });
 
   afterEach(async () => {
@@ -53,7 +50,7 @@ describe('ArgumentHistoryTracker', () => {
   });
 
   test('enforces max entries per chain with FIFO semantics', async () => {
-    tracker = new ArgumentHistoryTracker(createLogger(), 2, createMockDb());
+    tracker = new ArgumentHistoryTracker(createLogger(), 2, createNoopStore());
     await tracker.trackExecution({
       promptId: 'demo',
       sessionId: 'chain-a',

@@ -324,12 +324,29 @@ export class McpToolRouter {
   /**
    * Set database port for persistence (cascades to all sub-handlers that need DB access).
    */
-  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
-    this.promptExecutor.setDatabasePort(db);
-    this.promptResourceHandler.setDatabasePort(db);
-    this.gateManagerTool.setDatabasePort(db);
+  setDatabasePort(
+    db: import('#shared/types/persistence.js').DatabasePort,
+    argHistoryStore?: import('#shared/types/persistence.js').StateStore<
+      import('#modules/text-refs/types.js').PersistedArgumentHistory
+    >,
+    // Version history is scoped from here rather than inside each handler: all three handlers
+    // share one VersionHistoryService shape, and the launch workspace is known only at the
+    // composition root that calls this.
+    scope?: import('#shared/types/persistence.js').StateStoreOptions
+  ): void {
+    this.promptExecutor.setDatabasePort(db, argHistoryStore);
+    this.promptResourceHandler.setDatabasePort(db, scope);
+    this.gateManagerTool.setDatabasePort(db, scope);
     if (this.frameworkManagerTool) {
-      this.frameworkManagerTool.setDatabasePort(db);
+      this.frameworkManagerTool.setDatabasePort(db, scope);
+    }
+
+    // Wired here, not alongside the other systemControl setters above: the executor
+    // creates its ExecutionRecordStore inside setDatabasePort, so reading it any earlier
+    // returns null and the execution_history action silently reports "not wired".
+    const executionRecordStore = this.promptExecutor.getExecutionRecordStore();
+    if (executionRecordStore !== null) {
+      this.systemControl.setExecutionRecordStore(executionRecordStore);
     }
   }
 

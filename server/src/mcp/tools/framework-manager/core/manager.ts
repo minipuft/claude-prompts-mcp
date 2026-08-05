@@ -59,8 +59,11 @@ export class FrameworkToolHandler {
     deps.logger.debug('FrameworkToolHandler initialized');
   }
 
-  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
-    this.ctx.versionHistoryService.setDatabasePort(db);
+  setDatabasePort(
+    db: import('#shared/types/persistence.js').DatabasePort,
+    scope?: import('#shared/types/persistence.js').StateStoreOptions
+  ): void {
+    this.ctx.versionHistoryService.setDatabasePort(db, scope);
   }
 
   /**

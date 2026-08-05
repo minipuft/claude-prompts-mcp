@@ -53,7 +53,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(16);
+      expect(version).toBe(17);
     });
 
     it('should execute queries', async () => {
@@ -180,6 +180,264 @@ describe('SQLite State Backend', () => {
         tenant_id: 'workspace-canonical',
         organization_id: 'org-canonical',
         workspace_id: 'workspace-canonical',
+      });
+    });
+  });
+});
+
+describe('Schema version bump', () => {
+  const testDir = path.join(process.cwd(), 'tests/tmp/sqlite-schema-bump');
+  const dbPath = path.join(testDir, 'runtime-state', 'state.db');
+  let engine: SqliteEngine;
+
+  beforeAll(async () => {
+    await fs.rm(testDir, { recursive: true, force: true });
+    await fs.mkdir(testDir, { recursive: true });
+
+    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    await engine.initialize();
+
+    // A durable row: a resource snapshot backing rollback. Exists nowhere else.
+    engine.run(
+      `INSERT INTO version_history
+         (tenant_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'default',
+        'prompt',
+        'survives-bump',
+        1,
+        JSON.stringify({ content: 'original' }),
+        'initial',
+        'pre-bump snapshot',
+        new Date().toISOString(),
+      ]
+    );
+
+    // A durable row: the record of files exported to a client's filesystem.
+    engine.run(
+      `INSERT INTO skills_sync_manifests
+         (client, scope, resource_key, resource_id, resource_type, source_hash, output_hash,
+          output_files, exported_at, config_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'claude',
+        'project',
+        'prompt:survives-bump',
+        'survives-bump',
+        'prompt',
+        'src-hash',
+        'out-hash',
+        JSON.stringify(['skills/survives-bump/SKILL.md']),
+        new Date().toISOString(),
+        'cfg-hash',
+      ]
+    );
+
+    // A derived row: rebuilt from YAML on startup, so it is expected NOT to survive.
+    engine.run(`INSERT INTO resource_index (id, type, name) VALUES (?, ?, ?)`, [
+      'discarded-on-bump',
+      'prompt',
+      'Discarded',
+    ]);
+
+    // Simulate a DB written by an older server build, then reopen so ensureSchema
+    // takes the version-mismatch branch on the next initialize().
+    engine.run(`DELETE FROM schema_version`);
+    engine.run(`INSERT INTO schema_version (version) VALUES (?)`, [1]);
+    await engine.shutdown();
+
+    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    await engine.initialize();
+  });
+
+  afterAll(async () => {
+    if (engine) {
+      await engine.shutdown();
+    }
+    await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  it('recreates the schema at the current version', () => {
+    expect(engine.getSchemaVersion()).toBe(17);
+  });
+
+  it('preserves version_history rows across the recreate', () => {
+    const row = engine.queryOne<{ resource_id: string; version: number; snapshot: string }>(
+      `SELECT resource_id, version, snapshot FROM version_history WHERE resource_id = ?`,
+      ['survives-bump']
+    );
+
+    expect(row).not.toBeNull();
+    expect(row?.version).toBe(1);
+    expect(JSON.parse(row?.snapshot ?? '{}')).toEqual({ content: 'original' });
+  });
+
+  it('preserves skills_sync_manifests rows across the recreate', () => {
+    const row = engine.queryOne<{ resource_key: string; output_files: string }>(
+      `SELECT resource_key, output_files FROM skills_sync_manifests WHERE client = ? AND scope = ?`,
+      ['claude', 'project']
+    );
+
+    expect(row?.resource_key).toBe('prompt:survives-bump');
+    expect(JSON.parse(row?.output_files ?? '[]')).toEqual(['skills/survives-bump/SKILL.md']);
+  });
+
+  it('discards derived tables so they rebuild from YAML', () => {
+    const row = engine.queryOne<{ id: string }>(`SELECT id FROM resource_index WHERE id = ?`, [
+      'discarded-on-bump',
+    ]);
+
+    expect(row).toBeNull();
+  });
+
+  it('leaves AUTOINCREMENT able to allocate past the restored ids', () => {
+    // The restore carries explicit ids, so sqlite_sequence must be re-seeded from them
+    // or the next insert collides on the primary key.
+    engine.run(
+      `INSERT INTO version_history
+         (tenant_id, resource_type, resource_id, version, snapshot, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ['default', 'prompt', 'survives-bump', 2, JSON.stringify({ content: 'next' }), 'now']
+    );
+
+    const count = engine.queryOne<{ n: number }>(
+      `SELECT COUNT(*) as n FROM version_history WHERE resource_id = ?`,
+      ['survives-bump']
+    );
+    expect(count?.n).toBe(2);
+  });
+
+  it('writes the db file to the expected path', async () => {
+    const stat = await fs.stat(dbPath);
+    expect(stat.isFile()).toBe(true);
+  });
+
+  /**
+   * Tier 3.3 — v_execution_history reads execution_records directly.
+   *
+   * v_execution_status selects FROM chain_sessions, which is deleted per-PID at cleanup,
+   * so it reports 0 rows for a run that finished. These assert the new view does not
+   * inherit that blindness.
+   */
+  describe('v_execution_history', () => {
+    const seed = (sessionId: string, status: string, startedAt: number, step: number | null) => {
+      engine.run(
+        `INSERT INTO execution_records
+           (execution_id, tenant_id, session_id, chain_id, step_number, status, gate_verdicts_json, started_at, completed_at)
+         VALUES (?, 'default', ?, 'chain-hist', ?, ?, '[]', ?, ?)`,
+        [
+          `${sessionId}-${String(startedAt).padStart(6, '0')}`,
+          sessionId,
+          step,
+          status,
+          startedAt,
+          status === 'working' ? null : startedAt + 5,
+        ]
+      );
+    };
+
+    it('exists after the schema recreate', () => {
+      const view = engine.queryOne<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'v_execution_history'`
+      );
+      expect(view?.name).toBe('v_execution_history');
+    });
+
+    it('reports a completed run that v_execution_status cannot see', () => {
+      seed('sess-done', 'working', 100, 1);
+      seed('sess-done', 'completed', 200, null);
+
+      // chain_sessions is empty here, exactly as it is after PID cleanup in production.
+      const oldView = engine.queryOne<{ n: number }>(`SELECT COUNT(*) n FROM v_execution_status`);
+      expect(oldView?.n).toBe(0);
+
+      const row = engine.queryOne<{ current_status: string; record_count: number }>(
+        `SELECT current_status, record_count FROM v_execution_history WHERE session_id = ?`,
+        ['sess-done']
+      );
+      expect(row?.current_status).toBe('completed');
+      expect(row?.record_count).toBe(2);
+    });
+
+    it('collapses a session to its newest record by ULID order, not by timestamp', () => {
+      // Both rows share started_at; only execution_id disambiguates them.
+      engine.run(
+        `INSERT INTO execution_records
+           (execution_id, tenant_id, session_id, step_number, status, gate_verdicts_json, started_at)
+         VALUES ('tie-000001', 'default', 'sess-tie', 1, 'working', '[]', 500)`
+      );
+      engine.run(
+        `INSERT INTO execution_records
+           (execution_id, tenant_id, session_id, step_number, status, gate_verdicts_json, started_at, completed_at)
+         VALUES ('tie-000002', 'default', 'sess-tie', 2, 'failed', '[]', 500, 505)`
+      );
+
+      const row = engine.queryOne<{ current_status: string; current_step: number }>(
+        `SELECT current_status, current_step FROM v_execution_history WHERE session_id = ?`,
+        ['sess-tie']
+      );
+      expect(row?.current_status).toBe('failed');
+      expect(row?.current_step).toBe(2);
+    });
+
+    it('covers every record — the per-session counts sum to the table count', () => {
+      const total = engine.queryOne<{ n: number }>(`SELECT COUNT(*) n FROM execution_records`);
+      const covered = engine.queryOne<{ n: number }>(
+        `SELECT SUM(record_count) n FROM v_execution_history`
+      );
+      expect(covered?.n).toBe(total?.n);
+    });
+
+    describe('identity scope migration removal (Tier 4.5)', () => {
+      /**
+       * `applyIdentityScopeMigration` did three jobs and was deleted once all three became dead:
+       * ALTER TABLE ADD COLUMN (applySchema declares both columns), a NULL backfill (every writer
+       * now emits scope), and CREATE INDEX (duplicated in applySchema).
+       *
+       * The backfill's death is proven by the per-writer tests in Tiers 4.1/4.3/4.6 and the
+       * version_history scoping tests. What no other test observes is the *indexes* — they existed
+       * in two places, and deleting one copy is only safe because the other covers it. These read
+       * sqlite_master directly, so they fail if applySchema's copy is ever removed or renamed.
+       */
+      const SCOPE_INDEXES = [
+        'idx_chain_sessions_workspace',
+        'idx_chain_sessions_organization',
+        'idx_kv_state_workspace',
+        'idx_kv_state_organization',
+        'idx_version_history_workspace',
+        'idx_version_history_organization',
+        'idx_resource_changes_workspace',
+        'idx_resource_changes_organization',
+      ];
+
+      it('creates every scope index from applySchema alone, with no migration running', () => {
+        const present = engine
+          .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+          .map((row) => row.name);
+
+        for (const indexName of SCOPE_INDEXES) {
+          expect(present).toContain(indexName);
+        }
+      });
+
+      it('declares both scope columns on every table the migration used to ALTER', () => {
+        // The ALTER was the compatibility path for databases predating these columns. It is dead
+        // only because applySchema declares them and any older database is recreated through it.
+        for (const table of [
+          'chain_sessions',
+          'kv_state',
+          'chain_run_registry',
+          'version_history',
+          'resource_changes',
+        ]) {
+          const columns = engine
+            .query<{ name: string }>(`PRAGMA table_info(${table})`)
+            .map((row) => row.name);
+
+          expect(columns).toContain('organization_id');
+          expect(columns).toContain('workspace_id');
+        }
       });
     });
   });

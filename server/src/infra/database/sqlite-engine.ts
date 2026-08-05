@@ -15,16 +15,29 @@
  * The complete schema is embedded in this file (SSOT). On startup:
  * - Fresh DB: create all tables from embedded schema
  * - Matching version: skip (fast path)
- * - Version mismatch: drop all tables, recreate from embedded schema
+ * - Version mismatch: snapshot durable tables, drop all, recreate, restore
  *
- * This is safe because state.db is ephemeral — resource_index (including tools)
- * and skills_sync_manifests are regenerated from YAML on startup. Chain sessions
- * and framework state are interrupted by the restart that triggers schema changes.
+ * Most of state.db is reconstructible: resource_index (including tools) is rebuilt
+ * from YAML on startup, chain sessions and framework state are interrupted by the
+ * restart that triggers a schema change anyway.
+ *
+ * DURABLE_TABLES are the exception and must survive the recreate. Their rows exist
+ * nowhere else — version_history holds the pre-update snapshots that back resource
+ * rollback, and skills_sync_manifests is the record of which files were exported to
+ * which client, without which already-exported files can no longer be detected as
+ * orphans or pruned. Dropping either is unrecoverable user-visible data loss.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import {
+  CONTRACTED_TABLE_NAMES,
+  DURABLE_TABLE_NAMES,
+  SQLITE_INTERNAL_TABLES,
+  VIEW_CONTRACTS,
+} from './table-contracts.js';
 
 import type { DatabasePort } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
@@ -32,13 +45,40 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v17: added the `v_execution_history` view. A view is only created by `applySchema()`, which
+ * runs only on a version mismatch, so adding one to the DDL without bumping leaves every existing
+ * database without it — and `assertSchemaMatchesContracts()` then fails startup, because the
+ * contract declares a view the live schema does not have. Any DDL addition implies a bump.
+ *
+ * Consequence, stated rather than discovered: this bump drops `execution_records`, whose declared
+ * posture is `ephemeral`. Existing rows do not survive. That is the intended trade here — 35 of
+ * the 64 rows present at the time were stuck in `working` because nothing emitted a terminal
+ * record on the failure and abort paths (fixed in the same tier), so preserving them would carry
+ * a majority of unterminated entries into the history feature that reads them. `version_history`
+ * and `skills_sync_manifests` are `durable` and are snapshot/restored across this bump.
+ *
  * v16: retired the `StepState` enum. Persisted step `state` values `rendered` and
  * `response_captured` no longer exist — both are now lifecycle `working`, distinguished by the
  * `renderedAt` / `respondedAt` substate timestamps. `StepSubstate.responseAt` was also renamed to
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
+
+/**
+ * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
+ *
+ * Declared in `table-contracts.ts` as `posture: 'durable'` rather than listed here, so the
+ * classification lives with the rest of the table's contract and the validation gates read
+ * the same source. Marking a table durable is a commitment: its rows are carried across the
+ * drop-and-recreate by column intersection, so a column removed from the DDL drops silently
+ * and a new NOT NULL column without a default fails the restore loudly rather than discarding
+ * rows.
+ */
+const DURABLE_TABLES = DURABLE_TABLE_NAMES;
+
+/** Rows carried across a schema recreate, keyed by table name. */
+type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
 /**
  * Database configuration options
@@ -56,6 +96,9 @@ export interface DatabaseConfig {
  * Replaces the former sql.js WASM-based DatabaseManager with node:sqlite.
  * All state writes go directly to the file — no persist() step needed.
  */
+/** kv_state discriminator recording that the one-time version_history purge has run. */
+const VERSION_HISTORY_PURGE_KEY = 'version_history_scope_purge';
+
 export class SqliteEngine implements DatabasePort {
   private static instance: SqliteEngine | null = null;
 
@@ -116,8 +159,9 @@ export class SqliteEngine implements DatabasePort {
       this.db.exec('PRAGMA journal_mode=WAL');
 
       // Ensure schema is current (creates or recreates if version mismatch)
-      this.ensureSchema();
-      this.applyIdentityScopeMigration();
+      const schemaWasRecreated = this.ensureSchema();
+      this.purgeUnattributableVersionHistory(schemaWasRecreated);
+      this.assertSchemaMatchesContracts();
 
       this.initialized = true;
       this.logger.info('SQLite database initialized successfully');
@@ -221,27 +265,103 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Ensure database schema is current.
    *
-   * Strategy: embedded schema is the SSOT. On version mismatch,
-   * drop all tables and recreate. Safe because state.db is ephemeral —
-   * all indexed data is regenerated from YAML resources on startup.
+   * Strategy: embedded schema is the SSOT. On version mismatch, snapshot DURABLE_TABLES,
+   * drop everything, recreate from the embedded schema, then restore the snapshot. The
+   * snapshot/restore round-trip is what lets durable rows survive while still letting
+   * their DDL evolve — preserving the table in place instead would freeze its shape,
+   * because applySchema uses CREATE TABLE IF NOT EXISTS.
    */
-  private ensureSchema(): void {
+  private ensureSchema(): boolean {
     const currentVersion = this.getCurrentSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
       this.logger.info(`Database schema is up to date (version ${currentVersion})`);
-      return;
+      return false;
     }
 
-    if (currentVersion > 0) {
-      this.logger.info(
-        `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
-      );
-      this.dropAllTables();
+    if (currentVersion === 0) {
+      this.applySchema();
+      this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
+      // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
+      // as a no-op and records its marker.
+      return false;
     }
 
+    this.logger.info(
+      `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
+    );
+    const preserved = this.snapshotDurableTables();
+    this.dropAllTables();
     this.applySchema();
+    this.restoreDurableTables(preserved);
     this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
+    return true;
+  }
+
+  /**
+   * Read every row of each durable table that exists in the outgoing schema.
+   *
+   * Absent tables and empty tables are skipped, so a fresh install and a bump that
+   * predates a durable table both produce an empty snapshot.
+   */
+  private snapshotDurableTables(): DurableSnapshot {
+    const snapshot: DurableSnapshot = new Map();
+
+    for (const table of DURABLE_TABLES) {
+      if (this.getTableColumns(table).size === 0) {
+        continue;
+      }
+      const rows = this.query<Record<string, unknown>>(`SELECT * FROM "${table}"`);
+      if (rows.length > 0) {
+        snapshot.set(table, rows);
+      }
+    }
+
+    return snapshot;
+  }
+
+  /**
+   * Re-insert snapshotted rows into the freshly created schema.
+   *
+   * Only columns present in BOTH the snapshot and the new table are carried: a column
+   * dropped from the DDL is discarded, and a column added to it takes its default. A
+   * restore failure rethrows with the table named rather than losing the rows quietly —
+   * the schema change needs a real migration at that point.
+   */
+  private restoreDurableTables(snapshot: DurableSnapshot): void {
+    for (const [table, rows] of snapshot) {
+      const newColumns = this.getTableColumns(table);
+      const carried = Object.keys(rows[0] ?? {}).filter((column) => newColumns.has(column));
+
+      if (carried.length === 0) {
+        this.logger.warn(
+          `Durable table ${table}: no columns survived the schema change, ${rows.length} row(s) discarded`
+        );
+        continue;
+      }
+
+      const columnList = carried.map((column) => `"${column}"`).join(', ');
+      const placeholders = carried.map(() => '?').join(', ');
+      const sql = `INSERT INTO "${table}" (${columnList}) VALUES (${placeholders})`;
+
+      try {
+        for (const row of rows) {
+          this.run(
+            sql,
+            carried.map((column) => row[column] ?? null)
+          );
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to restore ${rows.length} durable row(s) into ${table} after schema recreate: ${msg}. ` +
+            `This schema change needs an explicit migration for ${table}.`,
+          { cause: error }
+        );
+      }
+
+      this.logger.info(`Preserved ${rows.length} row(s) in durable table ${table}`);
+    }
   }
 
   private getCurrentSchemaVersion(): number {
@@ -255,6 +375,11 @@ export class SqliteEngine implements DatabasePort {
     }
   }
 
+  /**
+   * Drop every table, durable ones included. Callers that need durable rows to survive
+   * must bracket this with snapshotDurableTables/restoreDurableTables — ensureSchema is
+   * the only such caller today.
+   */
   private dropAllTables(): void {
     const tables = this.query<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
@@ -463,8 +588,103 @@ export class SqliteEngine implements DatabasePort {
         cs.updated_at
       FROM chain_sessions cs;
 
+      -- Companion to v_execution_status, reading the ledger DIRECTLY.
+      --
+      -- v_execution_status selects FROM chain_sessions, which is DELETEd per-PID at
+      -- cleanup, so it structurally cannot report a run that finished: it returned 0 rows
+      -- against 64 live execution_records when this view was added. Widening that view
+      -- could not fix it -- its FROM clause is the defect -- so history gets its own view.
+      --
+      -- One row per session, carrying the latest record's state plus a count of the whole
+      -- series. MAX(execution_id) identifies the newest record because execution ids are
+      -- monotonic ULIDs (see ExecutionRecordStore), so lexical order IS creation order.
+      CREATE VIEW IF NOT EXISTS v_execution_history AS
+      SELECT
+        latest.session_id,
+        latest.chain_id,
+        latest.prompt_id,
+        latest.status              AS current_status,
+        latest.step_number         AS current_step,
+        latest.error_message,
+        agg.record_count,
+        agg.first_started_at,
+        latest.started_at          AS last_started_at,
+        latest.completed_at        AS last_completed_at,
+        latest.tenant_id,
+        latest.organization_id,
+        latest.workspace_id
+      FROM (
+        SELECT session_id,
+               COUNT(*)          AS record_count,
+               MIN(started_at)   AS first_started_at,
+               MAX(execution_id) AS latest_execution_id
+        FROM execution_records
+        GROUP BY session_id
+      ) agg
+      JOIN execution_records latest ON latest.execution_id = agg.latest_execution_id;
+
       INSERT OR IGNORE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
     `);
+  }
+
+  /**
+   * Fail startup when the live schema and TABLE_CONTRACTS disagree.
+   *
+   * A contract is worth what it is checked against. Without this, a table added to
+   * applySchema() with no contract entry — or an entry for a table that was removed — stays
+   * invisible until something downstream depends on a table nobody declared the ownership,
+   * posture, or retention of. That is how all eleven audited findings accumulated.
+   *
+   * sqlite_master also lists tables SQLite creates for itself: sqlite_sequence materializes
+   * as soon as any table declares AUTOINCREMENT. Those are excluded, not declared, because
+   * their existence depends on unrelated DDL details.
+   */
+  private assertSchemaMatchesContracts(): void {
+    const liveTables = this.listSchemaObjects('table').filter(
+      (name) => !SQLITE_INTERNAL_TABLES.includes(name)
+    );
+    const liveViews = this.listSchemaObjects('view');
+
+    const declaredTables = new Set(CONTRACTED_TABLE_NAMES);
+    const declaredViews = new Set(VIEW_CONTRACTS.map((contract) => contract.view));
+
+    const problems: string[] = [];
+    const report = (label: string, names: string[]): void => {
+      if (names.length > 0) {
+        problems.push(`${label}: ${names.join(', ')}`);
+      }
+    };
+
+    report(
+      'tables present with no contract',
+      liveTables.filter((name) => !declaredTables.has(name))
+    );
+    report(
+      'contracted tables absent from the database',
+      [...declaredTables].filter((name) => !liveTables.includes(name))
+    );
+    report(
+      'views present with no contract',
+      liveViews.filter((name) => !declaredViews.has(name))
+    );
+    report(
+      'contracted views absent from the database',
+      [...declaredViews].filter((name) => !liveViews.includes(name))
+    );
+
+    if (problems.length > 0) {
+      throw new Error(
+        `state.db does not match table-contracts.ts — ${problems.join('; ')}. ` +
+          'Declare the change in src/infra/database/table-contracts.ts, including owner, ' +
+          'posture, scope, and retention.'
+      );
+    }
+  }
+
+  private listSchemaObjects(type: 'table' | 'view'): string[] {
+    return this.query<{ name: string }>('SELECT name FROM sqlite_master WHERE type = ?', [
+      type,
+    ]).map((row) => row.name);
   }
 
   private getTableColumns(tableName: string): Set<string> {
@@ -476,75 +696,64 @@ export class SqliteEngine implements DatabasePort {
     );
   }
 
-  private applyIdentityScopeMigration(): void {
-    const scopeTables = [
-      'chain_sessions',
-      'kv_state',
-      'chain_run_registry',
-      'version_history',
-      'resource_changes',
-    ];
-    let didMutateSchema = false;
-
-    for (const tableName of scopeTables) {
-      const columns = this.getTableColumns(tableName);
-      if (columns.size === 0) {
-        continue;
-      }
-
-      if (!columns.has('organization_id')) {
-        this.run(`ALTER TABLE ${tableName} ADD COLUMN organization_id TEXT`);
-        didMutateSchema = true;
-      }
-      if (!columns.has('workspace_id')) {
-        this.run(`ALTER TABLE ${tableName} ADD COLUMN workspace_id TEXT`);
-        didMutateSchema = true;
-      }
-
-      const refreshed = this.getTableColumns(tableName);
-      if (!refreshed.has('tenant_id')) {
-        continue;
-      }
-      if (refreshed.has('organization_id')) {
-        this.run(
-          `UPDATE ${tableName}
-           SET organization_id = tenant_id
-           WHERE organization_id IS NULL OR TRIM(organization_id) = ''`
-        );
-      }
-      if (refreshed.has('workspace_id')) {
-        this.run(
-          `UPDATE ${tableName}
-           SET workspace_id = COALESCE(NULLIF(TRIM(workspace_id), ''), organization_id, tenant_id)
-           WHERE workspace_id IS NULL OR TRIM(workspace_id) = ''`
-        );
-      }
+  /**
+   * One-time purge of pre-Tier-4 `version_history` rows.
+   *
+   * Every row written before Tier 4 carried the literal `tenant_id = 'default'`, and many
+   * projects sharing one state.db wrote into it. Nothing distinguishes which workspace produced
+   * which row, so they cannot be retroactively attributed — and once reads are scoped they are
+   * unreachable anyway. They are deleted rather than left as permanently invisible rows.
+   *
+   * **This destroys rollback history predating the upgrade. That is the intended, operator-chosen
+   * behavior**, not a side effect: `version_history` is declared `durable`, so the deletion is
+   * explicit, marker-guarded, and happens exactly once.
+   *
+   * The marker is what makes it safe to run on every boot. Without it, an unscoped deployment —
+   * where `resolveContinuityScopeId` legitimately falls back to `'default'` — would have its own
+   * fresh rows deleted on the next start, which is the failure mode a blanket
+   * `DELETE ... WHERE tenant_id = 'default'` would introduce.
+   */
+  private purgeUnattributableVersionHistory(schemaWasRecreated: boolean): void {
+    // A recreate has just restored the durable tables on purpose, and it also dropped kv_state —
+    // which is `ephemeral`, so the marker went with it. Purging now would delete exactly the rows
+    // ensureSchema worked to carry across, on every future bump. The marker alone cannot express
+    // this, because the marker cannot outlive the table it lives in.
+    if (schemaWasRecreated) {
+      this.run(
+        `INSERT OR REPLACE INTO kv_state (tenant_id, key, state, updated_at) VALUES (?, ?, ?, ?)`,
+        [
+          'default',
+          VERSION_HISTORY_PURGE_KEY,
+          JSON.stringify({ purged: 0, reason: 'schema recreate — durable rows just restored' }),
+          new Date().toISOString(),
+        ]
+      );
+      return;
     }
 
-    // Ensure indexes are present for migrated columns.
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_chain_sessions_workspace ON chain_sessions(workspace_id)`
+    const marker = this.queryOne<{ state: string }>(
+      `SELECT state FROM kv_state WHERE key = ? LIMIT 1`,
+      [VERSION_HISTORY_PURGE_KEY]
     );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id)`
-    );
-    this.run(`CREATE INDEX IF NOT EXISTS idx_kv_state_workspace ON kv_state(workspace_id)`);
-    this.run(`CREATE INDEX IF NOT EXISTS idx_kv_state_organization ON kv_state(organization_id)`);
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_resource_changes_organization ON resource_changes(organization_id)`
-    );
-    if (didMutateSchema) {
-      this.logger.info('Applied identity scope column migration (organization_id/workspace_id)');
+    if (marker !== null) {
+      return;
     }
+
+    const before = this.queryOne<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM version_history`);
+    const purged = before?.cnt ?? 0;
+
+    if (purged > 0) {
+      this.run(`DELETE FROM version_history`);
+      this.logger.info(
+        `Purged ${purged} unattributable version_history row(s) predating workspace scoping. ` +
+          'Rollback history from before this upgrade is not recoverable.'
+      );
+    }
+
+    this.run(
+      `INSERT OR REPLACE INTO kv_state (tenant_id, key, state, updated_at) VALUES (?, ?, ?, ?)`,
+      ['default', VERSION_HISTORY_PURGE_KEY, JSON.stringify({ purged }), new Date().toISOString()]
+    );
   }
 
   /**
