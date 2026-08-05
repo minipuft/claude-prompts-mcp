@@ -16,7 +16,7 @@ tags: []
 **Successor**: [`pipeline-followup-2026-08-03.md`](./pipeline-followup-2026-08-03.md) (Tiers 15-16 — the eight baselined fields, and the predicates Tier 12 left in the stage)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
-**Retention**: `reference`, not `done` — [`docs/adr/0001-gate-resolution-precedence.md`](../../docs/adr/0001-gate-resolution-precedence.md)
+**Retention**: `reference`, not `done` — [`docs/adr/0001-gate-resolution-precedence.md`](../../../docs/adr/0001-gate-resolution-precedence.md)
 cites this plan, so it is load-bearing for an architectural record and cannot be retired with the
 work it tracked.
 
