@@ -7,11 +7,11 @@ tags: [persistence, sqlite, validation-gates, technical-debt]
 
 # SQLite Persistence Layer — Boundaries, Validation, and Remediation
 
-## Status 2026-08-06 — COMPLETE. 13 of 14 subtiers landed. Schema v20.
+## Status 2026-08-06 — COMPLETE. All 14 subtiers landed. Schema v20.
 
-**All twelve findings are closed.** Tiers 0–5 complete; Tier 6 is 6.1/6.3/6.4/6.5a/6.5b/6.5/6.6
-done. **6.2 alone remains, and its premise was measured false** — it is carved out below, not
-pending.
+**All twelve findings are closed, and every tier has landed.** Tiers 0–5 complete; Tier 6 is
+6.1/6.2/6.3/6.4/6.5a/6.5b/6.5/6.6 done. 6.2 was resolved differently from either option the plan
+offered — **both were measured false** — see its execution record.
 
 `status: reference` rather than `done`: `plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md`
 cites this plan, so archiving it would break an inbound link from active work. The release
@@ -610,7 +610,7 @@ the Tier 1 gate note (C2). Not attributable here.
 | #      | File                                    | Change                                                                                                                                     | ~Lines | Depends | Verify                                                                                                                            |
 | ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | 6.1 ✅ | `cli-shared/version-history.ts`         | Replace `spawnSync(python3)` + duplicate `ensure_schema` with `node:sqlite`                                                                | **+6** | T1      | ✅ Versioning integration + unit suites 40 pass, `cli-shared` 80 pass; 3 new regression tests, each guard falsified independently |
-| 6.2 ⛔ | `verify-active-state-store.ts:55`       | Fold `verify_active_state` into `state.db` via `DatabasePort`; delete the private `DatabaseSync`                                           | ~-45   | 6.1     | **BLOCKED — premise false, see below**                                                                                            |
+| 6.2 ✅ | `verify-active-state-store.ts` + `hooks/lib/verify_active_store.py` | **Resolved differently — BOTH proposed fixes were measured false.** Neither folded into `state.db` nor deleted a DDL copy: this table has two legitimate first-writers and therefore no owner. The drift risk is closed by a cross-language parity gate instead | +100   | 6.1     | ✅ `hooks/tests/test_verify_state_schema_parity.py` — 3 tests, falsified 3 ways (added column · dropped PK · renamed column) |
 | 6.3 ✅ | `sqlite-engine.ts:457`                  | Delete `tenants` + seed; update the 3 tests that insert into it                                                                            | -33    | T1      | ✅ `validate:table-contracts` — 9 tables; live v19 bump verified on the real `state.db`                                           |
 | 6.4 ✅ | `sqlite-engine.ts` + new `retention.ts` | One startup pass driven by `TABLE_CONTRACTS.retention`; remove inline trim at `resource-change-tracker.ts:281`                             | +96    | T1, 6.3 | ✅ 6 tests in `retention.test.ts`, falsified two ways                                                                             |
 | 6.5a ✅ | **NEW** `hooks/tests/test_db_reader.py`    | Cover `db_reader.py` against the CURRENT schema before renaming anything. The fixture executes DDL **extracted from `applySchema()`**, so it cannot drift from the server                          | +531   | 6.4     | ✅ `validate:python` green — 220 pytest (was 197); 4 mutations falsified, incl. a simulated F3 rename failing 10 tests                    |
@@ -731,7 +731,35 @@ Gates: `validate:all` exit 0 · 1968 unit tests · 220 pytest (25 in `test_db_re
 database integration tests · `verify:mcp` 12/12. Falsified two further ways: reverting the view's
 json path fails 2 tests, removing the terminal boundary fails 3.
 
-**6.2 needs a decision before it needs an implementation.** The plan assumed consolidation is
+#### Execution record — 6.2 (2026-08-06): both proposed fixes falsified
+
+The plan offered two options and this execution measured **both** false. That is the finding.
+
+| Option | Premise | Measured |
+| --- | --- | --- |
+| Fold into `state.db` (original row) | `verify-state.db` is "code-only, never written" | False — a live cross-language channel with a Python reader AND writer, 3 consumers, 2 pytest files |
+| Delete the duplicate DDL (cheaper option, recorded 2026-08-05) | One side can own the schema, as `SqliteEngine` owns `state.db` | **False — deleting the Python copy fails 3 tests** in `test_integration_ralph_delegation.py` |
+
+**Why the 6.1 fix does not transfer, which is the reusable part.** In `state.db`, `SqliteEngine` is
+a genuine owner and the CLI is a guest, so one side could be told to stop creating tables. In
+`verify-state.db` there is **no owner**: `save_verify_active_state()` is part of the `hooks/lib/*`
+module API that downstream plugins import — declared public surface in CLAUDE.md — so it has to
+work when nothing else has run. In the hook runtime the TypeScript store does write first, and
+reasoning from that alone would have produced a plausible, wrong deletion. The pytest suite creates
+the database cold with no TypeScript process at all, and that is what settled it.
+
+**What the finding actually was**: not "a redundant DDL", but "two identical DDLs free to drift
+with nothing watching". Deletion was one way to close that; a parity gate is another, and it is the
+one available when neither writer can be removed. `test_verify_state_schema_parity.py` executes
+each DDL into its own in-memory database and compares `PRAGMA table_info`, so formatting and clause
+order stay free while a real divergence fails. Falsified three ways: a column added on one side, a
+dropped primary key, a renamed column.
+
+**Generalizable**: "delete the duplicate" presumes an owner exists. Check that first. Where two
+writers are both legitimate, the equivalent close is a gate that compares them — the same shape as
+6.5a's DDL-extraction fixture, one file over.
+
+**6.2's original decision framing, kept for the reasoning trail:** The plan assumed consolidation is
 obviously right because "consolidate access paths" was the tier's title. With a live Python
 writer, the trade is real in both directions:
 
