@@ -170,7 +170,7 @@ discards the design.
 
 ---
 
-## F14 — Nine dead types in `shared/types/index.ts` (**corrected 2026-08-06**)
+## F14 — Nine dead types in `shared/types/index.ts` ✓ DONE 2026-08-06 (**corrected twice first**)
 
 **This entry was wrong twice and is now measured properly. Read the corrections before acting.**
 
@@ -225,21 +225,33 @@ shared-layer port rather than reach into `infra/` — that is an architecture qu
 direction, and it should be decided on its own merits, not by whichever duplicate happened to
 survive a cleanup.
 
-### What I actually need from you
+### Executed — and the layering question dissolved on measurement
 
-Nothing blocking. Eight of the nine are unambiguous deletions. The one judgment call is the
-`TelemetryRuntimePort` layering question above, and the conservative default (delete the duplicate,
-keep `TelemetryRuntime`) preserves today's behaviour exactly.
+Operator ruled: _engine should rely on shared rather than reaching into infra, unless engine counts
+as infra._ Measured before applying it, and the caveat is what holds:
 
-Worth confirming rather than assuming: whether any **downstream plugin** imports these from the
-published package. `src/index.ts` exports only the four server-lifecycle functions and this package
-is declared a binary distribution, so the expected answer is no — but that is the only way these
-types could have a consumer this repo cannot see.
+- **`infra` is Layer 1, `engine` is Layer 2.** `.dependency-cruiser.cjs` forbids the _reverse_
+  (`infra-no-cross-layer-value`) and forbids engine→modules/mcp — there is no engine→infra rule,
+  because that is the downward direction. 70 `engine/` files already import `#infra/` for logging.
+- **No `engine/` file ever consumed `TelemetryRuntime` or `TelemetryRuntimePort`** — zero hits. The
+  port was declared _"for engine/ layers that don't need tracer access"_ and no such layer ever
+  appeared. The principle never bound here because there was no consumer to protect.
+
+So the duplicate went and `TelemetryRuntime` stays canonical. **If an engine consumer is ever
+written, the operator's rule is the guidance** — add a shared-layer port then, deliberately, rather
+than inheriting one that survived a cleanup by accident.
+
+Operator also confirmed no downstream plugin relies on these (consistent with `src/index.ts`
+exporting only the four lifecycle functions, this package being a declared binary distribution).
+
+**Result**: nine types deleted; `GateRetryInfo` deliberately kept. A transitive re-scan of
+`shared/types/index.ts` now returns **zero** unreachable types. Gates: typecheck · lint:ratchet ·
+typecheck:tests:ratchet · validate:arch · validate:no-llm-client all 0; 1968 unit · 486 integration;
+build clean; `verify:mcp` 12/12.
 
 ---
 
 ## Sequencing
 
-F9 ✓, F11 ✓, F13 ✓ — all done. F14 is the remainder: **nine** types (not ten — `GateRetryInfo` is
-live), eight of them unambiguous deletions, one a layering question whose conservative default
-preserves current behaviour. Nothing blocks it.
+F9 ✓, F11 ✓, F13 ✓, F14 ✓ — **this sweep is complete.** `shared/types/index.ts` has no unreachable
+type left by transitive scan. The plan can move to `reference` once nothing new cites it.

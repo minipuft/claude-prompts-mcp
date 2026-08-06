@@ -166,13 +166,6 @@ export interface ConversationHistoryItem {
   isProcessedTemplate?: boolean; // Flag to indicate if this is a processed template rather than original user input
 }
 
-// API Response Types
-export interface ApiResponse {
-  success: boolean;
-  message: string;
-  data?: unknown;
-}
-
 export interface ToolResponse {
   content: Array<{
     type: 'text';
@@ -216,59 +209,6 @@ export interface ToolDescriptionsConfig {
   activeFrameworkType?: string;
   generatedFrom?: 'fallback' | 'legacy' | 'defaults' | string;
   generatedAt?: string;
-}
-
-// Server Management Types
-export interface ServerRefreshOptions {
-  restart?: boolean;
-  reason?: string;
-}
-
-export interface ServerState {
-  isStarted: boolean;
-  transport: string;
-  port?: number;
-  startTime: number;
-}
-
-// File Operation Types
-export interface FileOperation {
-  (): Promise<boolean>;
-}
-
-export interface ModificationResult {
-  success: boolean;
-  message: string;
-}
-
-// Express and Transport Types
-export interface ExpressRequest {
-  body: any;
-  params: Record<string, string>;
-  headers: Record<string, string>;
-  ip: string;
-  method: string;
-  url: string;
-}
-
-export interface ExpressResponse {
-  json: (data: any) => void;
-  status: (code: number) => ExpressResponse;
-  send: (data: any) => void;
-  setHeader: (name: string, value: string) => void;
-  end: () => void;
-  sendStatus: (code: number) => void;
-  on: (event: string, callback: () => void) => void;
-}
-
-// Auto-execution configuration for chains
-export interface AutoExecutionConfig {
-  enabled: boolean;
-  stepConfirmation: boolean;
-  gateValidation: boolean;
-  pauseOnError: boolean;
-  maxRetries: number;
-  retryDelay: number; // milliseconds
 }
 
 // ===== Logger Interface =====
@@ -508,18 +448,6 @@ export interface ResponseFormatterPort {
  */
 export interface ChainSessionRouterPort {
   tryHandleCommand(command: string, scope?: StateStoreOptions): Promise<ToolResponse | null>;
-}
-
-/**
- * Telemetry runtime interface (engine/ contract).
- * Provides read-only telemetry status for layers that don't need tracer access.
- * Concrete: infra/observability/telemetry/runtime.ts TelemetryRuntimeImpl
- */
-export interface TelemetryRuntimePort {
-  /** Whether telemetry is active and collecting. */
-  isEnabled(): boolean;
-  /** Get runtime status snapshot (enabled, mode, endpoint, sampling). */
-  getStatus(): { enabled: boolean; mode: string; exporterEndpoint: string; samplingRate: number };
 }
 
 /**
