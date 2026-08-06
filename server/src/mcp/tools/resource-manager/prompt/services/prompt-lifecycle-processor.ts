@@ -249,10 +249,10 @@ export class PromptLifecycleProcessor {
         promptData[dataKey] = args[argKey];
       }
     }
-    // gate_configuration has alias handling (special case)
-    if (args.gate_configuration !== undefined || args.gates !== undefined) {
-      promptData.gateConfiguration = args.gate_configuration ?? args.gates;
-    }
+    // `gate_configuration` flows through UPDATE_FIELDS like every other field. It carried a
+    // hand-written special case here until 2026-08-06 (row 1.6) whose only purpose was accepting
+    // the [Framework] `gates` parameter as an alias — accepted on update, silently ignored on
+    // create. That asymmetry is what settled it as unintended rather than designed.
 
     // Chain step-level operations (add/remove/reorder)
     if (args.chain_step_operation && args.chain_step_operation !== 'replace') {

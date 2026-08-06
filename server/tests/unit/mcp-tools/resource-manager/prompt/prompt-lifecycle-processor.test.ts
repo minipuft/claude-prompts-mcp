@@ -3,6 +3,8 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
+import { ComparisonEngine } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
+import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
@@ -129,5 +131,89 @@ describe('PromptLifecycleProcessor.createPrompt gate recommendations', () => {
 
     expect(text).toContain('✅ **Prompt Created**');
     expect(text).toContain('review_code');
+  });
+});
+
+/**
+ * Row 1.6: `gate_configuration` moved out of a hand-written special case in `updatePrompt` and into
+ * `UPDATE_FIELDS`. The special case existed only to fold the [Framework] `gates` parameter in as an
+ * alias, which was accepted on update but silently ignored on create.
+ *
+ * Two behaviours, so two tests. The first is the regression risk of the change — moving the field
+ * into the map must not stop it updating. The second is the change itself.
+ *
+ * Both assert on what reaches the file boundary rather than on response prose, because the prose
+ * for these fields is rendered from `promptData` and would pass on a value that never persisted.
+ */
+describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', () => {
+  const existingPrompt = {
+    id: 'review_code',
+    name: 'Review Code',
+    category: 'general',
+    description: 'Reviews a code function for defects',
+    userMessageTemplate: 'Review: {{snippet}}',
+    arguments: [],
+    chainSteps: [],
+    gateConfiguration: { include: ['pre-existing'] },
+  };
+
+  /**
+   * The update path reaches four collaborators the create path does not: `getData` must return the
+   * stored prompt, `versionHistoryService.isAutoVersionEnabled()` gates the versioning branch, and
+   * `textDiffService` / `comparisonEngine` render the change summary. Versioning is stubbed to
+   * `false` so the assertions stay on field mapping; the diff generator and comparison engine are
+   * real, since stubbing them would assert only their own return values.
+   */
+  function createUpdateProcessor() {
+    const logger = createLogger();
+    const dependencies = {
+      logger,
+      semanticAnalyzer: createSemanticAnalyzer(),
+      onRefresh: jest.fn(async () => {}),
+      onRestart: jest.fn(async () => {}),
+    };
+    const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
+      message: 'written',
+    }));
+
+    const context = {
+      dependencies,
+      promptAnalyzer: new PromptAnalyzer(dependencies),
+      gateAnalyzer: new GateAnalyzer(dependencies as never),
+      fileOperations: { updatePromptImplementation },
+      getData: () => ({ convertedPrompts: [existingPrompt] }),
+      versionHistoryService: { isAutoVersionEnabled: () => false },
+      textDiffService: new ObjectDiffGenerator(),
+      comparisonEngine: new ComparisonEngine(logger),
+    } as unknown as PromptResourceContext;
+
+    return { processor: new PromptLifecycleProcessor(context), updatePromptImplementation };
+  }
+
+  test('gate_configuration still updates through UPDATE_FIELDS', async () => {
+    const { processor, updatePromptImplementation } = createUpdateProcessor();
+
+    await processor.updatePrompt({
+      id: 'review_code',
+      gate_configuration: { include: ['code-quality'] },
+    } as never);
+
+    const written = updatePromptImplementation.mock.calls[0][0];
+    expect(written.gateConfiguration).toEqual({ include: ['code-quality'] });
+  });
+
+  test('the [Framework] gates parameter is no longer accepted on a prompt update', async () => {
+    const { processor, updatePromptImplementation } = createUpdateProcessor();
+
+    await processor.updatePrompt({
+      id: 'review_code',
+      gates: { include: ['smuggled-via-framework-param'] },
+    } as never);
+
+    const written = updatePromptImplementation.mock.calls[0][0];
+    // Falls back to the stored configuration, exactly as `create` has always behaved when handed
+    // `gates`. Asserting the fallback rather than `toBeUndefined()` distinguishes "alias ignored"
+    // from "field wiped", which are different defects.
+    expect(written.gateConfiguration).toEqual({ include: ['pre-existing'] });
   });
 });

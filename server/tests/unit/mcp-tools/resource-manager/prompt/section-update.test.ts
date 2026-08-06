@@ -14,6 +14,7 @@ describe('UPDATE_FIELDS map', () => {
       user_message_template: 'userMessageTemplate',
       arguments: 'arguments',
       chain_steps: 'chainSteps',
+      gate_configuration: 'gateConfiguration',
     });
   });
 
@@ -37,8 +38,19 @@ describe('UPDATE_FIELDS map', () => {
     }
   });
 
-  it('does not include gate_configuration (has alias handling)', () => {
-    expect(UPDATE_FIELDS).not.toHaveProperty('gate_configuration');
+  /**
+   * Inverted 2026-08-06 (plan row 1.6). This previously asserted the ABSENCE of
+   * `gate_configuration`, reasoned as "(has alias handling)" — the hand-written special case in
+   * `updatePrompt` that also accepted the [Framework] `gates` parameter. That alias was accepted on
+   * update and silently ignored on create, which settled it as unintended; removing it left the
+   * field with no reason to be special-cased.
+   *
+   * Worth noting how this test read before the change: it documented the implementation as though
+   * it were a decision, so the alias looked deliberate to anyone who started here. A test asserting
+   * that something is excluded should say what would make it includable.
+   */
+  it('includes gate_configuration, which no longer has special-case alias handling', () => {
+    expect(UPDATE_FIELDS).toHaveProperty('gate_configuration', 'gateConfiguration');
   });
 
   it('does not include tools (always full replacement)', () => {
