@@ -7,9 +7,9 @@ tags: []
 
 # Downstream Standards Federation Implementation Plan
 
-**Status:** In progress — implementation landed through guarded external hold points  
-**Date:** 2026-08-02 (America/Denver)  
-**Risk:** High — cross-repository CI, publishing, protection, credential, and dependency-writer changes  
+**Status:** In progress — implementation landed through guarded external hold points
+**Date:** 2026-08-02 (America/Denver)
+**Risk:** High — cross-repository CI, publishing, protection, credential, and dependency-writer changes
 **Lifecycle:** upstream release synchronization = canonical product writer; downstream Dependabot automation = legacy; shared standards = proposed; local downstream adapters = canonical after shadow validation
 
 ## Intent
@@ -199,7 +199,7 @@ interface FleetRepositoryV1 {
 | 1.2 | `opencode-prompts/package-lock.json` | Refresh only the same subtree to 3.1.1                                                          | none    | `npm ci`; installed version 3.1.1; typecheck/build/test/plugin checks pass                       |
 | 1.3 | Both PR descriptions                 | State that v3.1.1 downstream profiles consume server/hooks; CLI equality remains upstream-owned | 1.1/1.2 | Lock diffs contain only attributable dependency changes                                          |
 
-**Parallelism:** Gemini and OpenCode PRs may proceed independently.  
+**Parallelism:** Gemini and OpenCode PRs may proceed independently.
 **Exit gate:** Both default branches resolve 3.1.1 through `npm ci`.
 
 ### Step 2 — Close superseded downstream dependency PRs
@@ -226,7 +226,7 @@ interface FleetRepositoryV1 {
 | 3.8 | `package.json` + fixtures                     | Private validation command registry                                    | Clean install, format/schema/self-tests/action pins                   |
 | 3.9 | Release/tag `v1.0.0`                          | Publish reviewed contract and record immutable SHA                     | Tag and SHA resolve to the same commit                                |
 
-**New-file justification:** This is a new cross-repository API with no existing owner. Schema, registry, executable verifier, reusable workflow, and presets have different consumers and validation lifecycles; combining them would obscure contracts.  
+**New-file justification:** This is a new cross-repository API with no existing owner. Schema, registry, executable verifier, reusable workflow, and presets have different consumers and validation lifecycles; combining them would obscure contracts.
 **Exit gate:** Standards v1.0.0 passes its fixtures and exposes a reviewed immutable SHA.
 
 ### Step 4 — Adopt standards in Gemini, shadow first

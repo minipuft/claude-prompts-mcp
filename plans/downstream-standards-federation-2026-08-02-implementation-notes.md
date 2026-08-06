@@ -7,8 +7,8 @@ tags: []
 
 # Downstream Standards Federation — Implementation Notes
 
-**Date:** 2026-08-02 (America/Denver)  
-**Status:** In progress at external evidence guards  
+**Date:** 2026-08-02 (America/Denver)
+**Status:** In progress at external evidence guards
 **Plan:** `plans/downstream-standards-federation-2026-08-02.md`
 
 ## Worktree decision

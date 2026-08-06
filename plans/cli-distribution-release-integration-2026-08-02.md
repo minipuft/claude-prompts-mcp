@@ -7,9 +7,9 @@ tags: []
 
 # CLI Distribution and Release Integration Plan
 
-**Status:** Implemented; deployment evidence pending the next Release Please version  
-**Lifecycle:** `cli/` source = canonical; `server/package.json` publication contract = canonical; incidental CLI copies in MCP/plugin archives = removed  
-**Date:** 2026-08-02 (America/Denver)  
+**Status:** Implemented; deployment evidence pending the next Release Please version
+**Lifecycle:** `cli/` source = canonical; `server/package.json` publication contract = canonical; incidental CLI copies in MCP/plugin archives = removed
+**Date:** 2026-08-02 (America/Denver)
 **Scope:** npm package, GitHub Release assets, MCPB/plugin contents, CI validation, downstream release synchronization
 
 ## Intent
