@@ -212,6 +212,21 @@ export function collectSourceFiles(root: string): string[] {
  * here. That is acceptable for this gate's purpose: the store abstraction takes its table
  * name from config, and the violations this exists to catch are hand-written SQL.
  */
+/**
+ * Exactly the files `findSqlSites` reads, as contract-relative paths.
+ *
+ * Exists so an exception audit can tell "this module no longer writes the table" from "this scan
+ * never looked at the module". The two are opposite findings — the first says delete the entry,
+ * the second says the gate is blind — and they are indistinguishable from the outside. Derived
+ * from the same walk the scan uses rather than restated, so the two cannot drift apart.
+ */
+export function sqlScanFileSet(): ReadonlySet<string> {
+  const files = collectSourceFiles(path.join(SERVER_DIR, 'src'))
+    .map((absolute) => path.relative(SERVER_DIR, absolute).split(path.sep).join('/'))
+    .filter((relative) => !SQL_SCAN_EXEMPT.has(relative));
+  return new Set(files);
+}
+
 export function findSqlSites(contractedTables: ReadonlySet<string>): SqlSite[] {
   const sites: SqlSite[] = [];
   const srcRoot = path.join(SERVER_DIR, 'src');

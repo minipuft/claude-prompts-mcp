@@ -9,6 +9,8 @@
  * is a natural thing to do when you want to persist something and have not yet found the state
  * store. Delete it when persistence can no longer be added outside `SqliteStateStore`, i.e. when
  * a write to disk from outside that module fails a stronger structural check than this grep.
+ *
+ * MECHANISM: script — reach — scans `../cli/src`, `../hooks`, `../docs/guides` and `../docs/reference`, all outside the ESLint root
  */
 
 import { execSync } from 'node:child_process';

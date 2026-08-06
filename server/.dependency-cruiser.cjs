@@ -163,6 +163,35 @@ module.exports = {
     // DOMAIN ACCESS PATTERNS
     // ============================================
     {
+      // Replaces scripts/validate-no-tool-layer-validator-imports.js, deleted 2026-08-06 on its
+      // own retirement condition ("delete this guard when validate:arch expresses the same edge as
+      // a dependency-cruiser layer rule. That is strictly the better home").
+      //
+      // Stronger than the script on SPECIFIER FORM, which is why the move is not lateral. The
+      // script matched `^import … from '…<module>.js'` textually. Measured 2026-08-06 against
+      // planted files, two forms reached the same module and the script reported "check passed":
+      // an `export … from` re-export placed in the tool layer, and `await import(…)`.
+      // dependency-cruiser resolves the edge and reported both.
+      //
+      // Equal to the script on RENAME fragility, not better — the guard's header claimed a
+      // path-based rule "follows the move", but this `to.path` is also a literal list and a
+      // renamed schema module empties it just as silently. Recorded rather than inherited.
+      //
+      // `src/mcp/tools/schemas/` is exempt: .claude/rules/mcp-contracts.md assigns MCP PARAMETER
+      // validation to exactly that directory, and this rule defends a different boundary — the
+      // tool layer must not run RESOURCE-CONTENT validation instead of delegating to
+      // ResourceVerificationService. Type-only imports are excluded because they pull no logic in.
+      name: 'tool-layer-no-validator-value-imports',
+      comment:
+        'mcp/tools/ must not value-import resource validators or schemas. Use ResourceVerificationService from modules/resources/services instead.',
+      severity: 'error',
+      from: { path: '^src/mcp/tools/', pathNot: '^src/mcp/tools/schemas/' },
+      to: {
+        path: '^src/(cli-shared/resource-validation|modules/prompts/prompt-schema|engine/gates/core/gate-schema|engine/frameworks/definitions/framework-schema|modules/formatting/core/style-schema|modules/automation/core/script-schema)',
+        dependencyTypesNot: ['type-only'],
+      },
+    },
+    {
       name: 'methodology-via-loader-only',
       comment: 'Methodology YAML files should only be accessed via RuntimeMethodologyLoader.',
       severity: 'warn',

@@ -24,6 +24,8 @@
  *
  * RETIREMENT CONDITION: delete when no contributor could plausibly write a cross-layer
  * relative import, i.e. when the subpath form has been the only one for a full release.
+ *
+ * MECHANISM: script — resolution — decides layer crossing from the RESOLVED path; a textual `../../*` ban was measured to flag 197 legitimate intra-layer imports and zero real violations
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';

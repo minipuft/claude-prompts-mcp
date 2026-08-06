@@ -12,9 +12,13 @@
  * a deletion waiting to happen, not a permanent exemption.
  *
  * Exit 0 when every hit is allowlisted; exit 1 with the offending lines otherwise.
+ *
+ * MECHANISM: script — reach — ripgreps the whole repo including `.md`, `.json` and `.yaml` under `resources/`, which no linter parses
  */
 
 import { execSync } from 'node:child_process';
+
+import { VERDICT, auditExceptions, reportExceptionAudit } from './lib/exception-hygiene.js';
 
 /** Paths excluded wholesale, with why. */
 const EXCLUDED_PATHS = [
@@ -92,8 +96,21 @@ const ALLOWLIST = [
 
   // --- Prose explaining what was renamed and why. RETIREMENT: when the fold it documents goes.
   { file: 'resources/gates/framework-compliance/gate.yaml', match: 'methodology' },
-  { file: 'docs/', match: 'methodolog' },
-  { file: 'CLAUDE.md', match: 'methodolog' },
+  //
+  // Two entries removed here 2026-08-06 (row 0.7), for DIFFERENT reasons — worth distinguishing:
+  //
+  //   { file: 'docs/', match: 'methodolog' }      — genuinely dead. `docs/` is scanned and now
+  //                                                 contains zero hits; the prose it exempted is gone.
+  //   { file: 'CLAUDE.md', match: 'methodolog' }  — inert, but NOT because the file is clean. It
+  //                                                 holds 3 hits this scan cannot see: `.gitignore`
+  //                                                 lists CLAUDE.md, and ripgrep honours that. The
+  //                                                 entry suppressed nothing only because nothing
+  //                                                 reached it.
+  //
+  // Deleting an entry that is inert for the second reason hides a reach gap. It is recorded as plan
+  // row 0.8 instead: 57 git-tracked files are invisible to this scan (dot-paths, which rg skips
+  // without `--hidden`, plus gitignored-but-tracked CLAUDE.md), and 4 of them contain the
+  // vocabulary. Restore a CLAUDE.md entry if 0.8 widens the scan and its hits prove legitimate.
 
   // --- Banned-path regexes that keep the pre-rename directory name unusable. RETIREMENT: never
   // --- while the ban is wanted; the old path must stay named to stay banned.
@@ -109,16 +126,27 @@ const ALLOWLIST = [
   // --- This guard names the vocabulary it forbids, and package.json names the guard.
   // --- RETIREMENT: when the guard itself is deleted.
   { file: 'validate-no-methodology-vocab.js', match: 'methodolog' },
+  // The second package.json entry (`match: 'validate-no-methodology-vocab.js'`) was removed
+  // 2026-08-06 (row 0.7): the one line it covered is the same line the entry above already covers,
+  // since a script value contains both the npm name and the filename. Redundant rather than stale —
+  // it suppressed a real hit, just never one that needed it.
   { file: 'package.json', match: 'validate:no-methodology-vocab' },
-  { file: 'package.json', match: 'validate-no-methodology-vocab.js' },
+  // Same cause as the package.json entry above, and added 2026-08-06 for the same reason: the
+  // suite declaration has to name every step it runs, and one of the steps is this guard. It
+  // moved out of `validate:all`'s `&&` string into `run-validation-suite.js` (row 3.1), so the
+  // hit moved with it. RETIREMENT: when the guard itself is deleted — identical to the entry
+  // above, and both retire in the same commit.
+  { file: 'run-validation-suite.js', match: 'validate:no-methodology-vocab' },
 ];
 
-function collectHits() {
-  const globArgs = EXCLUDED_PATHS.map((p) => `--glob '!${p.glob}'`).join(' ');
+const REPO_ROOT = new URL('../..', import.meta.url).pathname;
+const GLOB_ARGS = EXCLUDED_PATHS.map((p) => `--glob '!${p.glob}'`).join(' ');
+
+function ripgrep(command) {
   try {
-    return execSync(`rg -n -i --no-heading ${globArgs} 'methodolog' .`, {
+    return execSync(command, {
       encoding: 'utf8',
-      cwd: new URL('../..', import.meta.url).pathname,
+      cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 16 * 1024 * 1024,
     })
@@ -131,19 +159,84 @@ function collectHits() {
   }
 }
 
-function isAllowlisted(hitLine) {
-  const firstColon = hitLine.indexOf(':');
-  const file = hitLine.slice(0, firstColon);
-  const secondColon = hitLine.indexOf(':', firstColon + 1);
-  const text = hitLine.slice(secondColon + 1);
+function collectHits() {
+  return ripgrep(`rg -n -i --no-heading ${GLOB_ARGS} 'methodolog' .`);
+}
 
-  const haystack = text.toLowerCase();
-  return ALLOWLIST.some(
-    (entry) => file.includes(entry.file) && haystack.includes(entry.match.toLowerCase())
+/**
+ * Exactly the files this scan visits. `rg --files` applies the same ignore rules and the same
+ * globs as the search itself, so the two sets cannot disagree — which is the whole point. Compared
+ * against `git ls-files`, it separates "the file is clean" from "the scan never reached the file".
+ */
+function scannedFiles() {
+  return ripgrep(`rg --files ${GLOB_ARGS} .`);
+}
+
+function trackedFiles() {
+  return execSync('git ls-files', { encoding: 'utf8', cwd: REPO_ROOT, maxBuffer: 16 * 1024 * 1024 })
+    .split('\n')
+    .filter((line) => line.trim() !== '');
+}
+
+function hitFile(hitLine) {
+  return hitLine.slice(0, hitLine.indexOf(':'));
+}
+
+function hitText(hitLine) {
+  const firstColon = hitLine.indexOf(':');
+  return hitLine.slice(hitLine.indexOf(':', firstColon + 1) + 1);
+}
+
+function entryMatches(entry, hitLine) {
+  return (
+    hitFile(hitLine).includes(entry.file) &&
+    hitText(hitLine).toLowerCase().includes(entry.match.toLowerCase())
   );
 }
 
-const violations = collectHits().filter((line) => !isAllowlisted(line));
+function isAllowlisted(hitLine) {
+  return ALLOWLIST.some((entry) => entryMatches(entry, hitLine));
+}
+
+/**
+ * Classifies one allowlist entry against the run's own hits.
+ *
+ * The order matters. An entry that matches nothing is NOT automatically stale: it is stale only if
+ * the file it names was actually looked at. `.gitignore` lists `CLAUDE.md` and ripgrep skips
+ * dot-paths, so a tracked file can be invisible to this scan while holding live hits — deleting
+ * the entry then re-arms the finding the moment the scan is widened (plan row 0.8).
+ */
+function classifyEntry(entry, hits, scanned, tracked) {
+  const matched = hits.filter((hit) => entryMatches(entry, hit));
+
+  if (matched.length > 0) {
+    const others = ALLOWLIST.filter((candidate) => candidate !== entry);
+    const covered = matched.every((hit) => others.some((other) => entryMatches(other, hit)));
+    return covered
+      ? {
+          verdict: VERDICT.REDUNDANT,
+          detail: `all ${matched.length} hit(s) also matched elsewhere`,
+        }
+      : { verdict: VERDICT.LOAD_BEARING };
+  }
+
+  if (scanned.some((file) => file.includes(entry.file))) {
+    return {
+      verdict: VERDICT.SATISFIED,
+      detail: `no line in ${entry.file} matches '${entry.match}'`,
+    };
+  }
+  if (tracked.some((file) => file.includes(entry.file))) {
+    return {
+      verdict: VERDICT.UNREACHABLE,
+      detail: `${entry.file} is tracked but outside the scan`,
+    };
+  }
+  return { verdict: VERDICT.SUBJECT_MISSING, detail: `no file matches '${entry.file}'` };
+}
+
+const hits = collectHits();
+const violations = hits.filter((line) => !isAllowlisted(line));
 
 if (violations.length > 0) {
   console.error(`Found ${violations.length} non-allowlisted 'methodology' vocabulary hit(s).`);
@@ -154,5 +247,19 @@ if (violations.length > 0) {
   if (violations.length > 40) console.error(`  ... and ${violations.length - 40} more`);
   process.exit(1);
 }
+
+// The allowlist is audited on every run, not on request. An entry that stopped suppressing
+// anything is a finding of the same weight as an unsuppressed hit: both mean this file has
+// stopped describing the repository.
+const scanned = scannedFiles();
+const tracked = trackedFiles();
+const audit = auditExceptions({
+  gate: 'no-methodology-vocab',
+  entries: ALLOWLIST,
+  describe: (entry) => `${entry.file} :: ${entry.match}`,
+  classify: (entry) => classifyEntry(entry, hits, scanned, tracked),
+});
+
+if (reportExceptionAudit('no-methodology-vocab', audit) > 0) process.exit(1);
 
 console.log('No non-allowlisted methodology vocabulary found.');

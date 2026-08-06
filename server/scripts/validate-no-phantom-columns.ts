@@ -50,6 +50,7 @@ import {
   readEngineSource,
   type DdlTable,
 } from './table-contracts-reader.js';
+import { VERDICT, auditExceptions } from './lib/exception-hygiene.js';
 
 const LABEL = '[no-phantom-columns]';
 
@@ -156,16 +157,19 @@ function main(): void {
   const ddl = parseSchemaDdl(readEngineSource());
   const findings: Finding[] = [];
   const acknowledged: string[] = [];
+  const exceptionProblems: string[] = [];
 
   for (const contract of TABLE_CONTRACTS) {
     const table = ddl.get(contract.table);
     if (!table) continue; // set-equality is validate:table-contracts' job, not this gate's
 
+    const stillPhantom = new Set<string>();
     for (const finding of phantomColumnsFor(contract, table)) {
       const accepted = contract.acceptedPhantomColumns?.find(
         (exception) => exception.subject === finding.column
       );
       if (accepted) {
+        stillPhantom.add(finding.column);
         acknowledged.push(
           `${finding.table}.${finding.column} — accepted, closed by ${accepted.closedBy}`
         );
@@ -173,6 +177,33 @@ function main(): void {
       }
       findings.push(finding);
     }
+
+    // An accepted phantom column is an exception like any other: it must still suppress a finding.
+    // A column that GAINED a writer is the success case for the tier that owned it — and is
+    // exactly the moment nothing was reporting that the entry had become unnecessary.
+    const audit = auditExceptions({
+      gate: 'no-phantom-columns',
+      entries: contract.acceptedPhantomColumns ?? [],
+      describe: (exception) => `${contract.table}.${exception.subject}`,
+      closedBy: (exception) => exception.closedBy,
+      classify: (exception) => {
+        if (stillPhantom.has(exception.subject)) return { verdict: VERDICT.LOAD_BEARING };
+        if (!table.columns.some((column) => column.name === exception.subject)) {
+          return { verdict: VERDICT.SUBJECT_MISSING, detail: 'the column is no longer declared' };
+        }
+        return { verdict: VERDICT.SATISFIED, detail: 'the column now has a writer' };
+      },
+    });
+    exceptionProblems.push(
+      ...audit.problems.map((problem) => `${problem.subject}: ${problem.message}`)
+    );
+  }
+
+  if (exceptionProblems.length > 0) {
+    console.error(`${LABEL} FAIL: ${exceptionProblems.length} stale accepted exception(s).`);
+    for (const problem of exceptionProblems) console.error(`  - ${problem}`);
+    process.exitCode = 1;
+    return;
   }
 
   if (findings.length > 0) {

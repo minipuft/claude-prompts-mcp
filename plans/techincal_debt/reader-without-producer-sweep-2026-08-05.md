@@ -1,7 +1,7 @@
 ---
 title: "Reader-without-producer sweep — gate retry API and analyzer config"
 date: 2026-08-05
-status: backlog
+status: reference
 tags: [technical-debt, gates, config, dead-code]
 ---
 

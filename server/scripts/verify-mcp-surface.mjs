@@ -40,6 +40,8 @@ import net from 'node:net';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+import { VERDICT, auditExceptions } from './lib/exception-hygiene.js';
+
 const SERVER_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
@@ -546,21 +548,32 @@ function checkActionCoverage() {
 
   // Exemptions rot in both directions: an action that gained a check keeps a stale excuse, and
   // an action that was deleted leaves one behind. Both mean the list stopped describing reality.
-  for (const action of Object.keys(UNCHECKED_ACTIONS)) {
-    if (!registered.includes(action)) {
-      record(`exemption for ${action} — still registered`, false, 'action no longer exists');
-      failures += 1;
-    } else if (covered.has(action)) {
-      record(
-        `exemption for ${action} — still needed`,
-        false,
-        'a TOOL_CHECKS entry now covers it; delete the exemption'
-      );
-      failures += 1;
-    }
+  //
+  // This check was the only working instance of exception hygiene in the repo, and it now states
+  // its verdicts through the shared definition rather than in its own words. Nothing about its
+  // behaviour changed; what changed is that "still true" means the same thing here as it does in
+  // the two guards that grew the same check independently.
+  const audit = auditExceptions({
+    gate: 'verify-mcp-surface',
+    entries: Object.entries(UNCHECKED_ACTIONS).map(([action, reason]) => ({ action, reason })),
+    describe: (entry) => `system_control:${entry.action}`,
+    closedBy: (entry) => entry.reason,
+    classify: (entry) => {
+      if (!registered.includes(entry.action)) {
+        return { verdict: VERDICT.SUBJECT_MISSING, detail: 'action no longer exists' };
+      }
+      if (covered.has(entry.action)) {
+        return { verdict: VERDICT.SATISFIED, detail: 'a TOOL_CHECKS entry now covers it' };
+      }
+      return { verdict: VERDICT.LOAD_BEARING };
+    },
+  });
+
+  for (const problem of audit.problems) {
+    record(`exemption ${problem.subject}`, false, problem.message);
   }
 
-  return failures;
+  return failures + audit.problems.length;
 }
 
 /**

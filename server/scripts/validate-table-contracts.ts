@@ -48,7 +48,9 @@ import {
   parseSchemaDdl,
   parseSchemaViews,
   readEngineSource,
+  sqlScanFileSet,
 } from './table-contracts-reader.js';
+import { VERDICT, auditExceptions } from './lib/exception-hygiene.js';
 
 const LABEL = '[table-contracts]';
 
@@ -134,6 +136,47 @@ function checkBumpExclusionRetired(engineSource: string, problems: Problem[]): v
         `for v${declaredAt} and SCHEMA_VERSION is now v${schemaVersion}. Empty the set and move ` +
         'DROPPED_AT_VERSION, or these durable tables are dropped by an unrelated schema change.',
     });
+  }
+}
+
+/**
+ * The truth half of exception hygiene, as opposed to the form half below.
+ *
+ * `checkExceptionHygiene` asks whether an entry NAMES what retires it. This asks whether the entry
+ * is still describing reality — whether the foreign write it excuses still happens. Both are
+ * required and neither implies the other: an entry with an impeccable `closedBy` can be excusing a
+ * write that was removed two tiers ago, and nothing said so. That is the blind spot
+ * `.claude/rules/sqlite-persistence.md` names, measured 6× in one initiative.
+ */
+function checkForeignWriterTruth(used: ReadonlySet<string>, problems: Problem[]): void {
+  const scanned = sqlScanFileSet();
+
+  for (const contract of TABLE_CONTRACTS) {
+    const audit = auditExceptions({
+      gate: 'table-contracts',
+      entries: contract.acceptedForeignWriters ?? [],
+      describe: (exception) => `${contract.table} <- ${exception.subject}`,
+      closedBy: (exception) => exception.closedBy,
+      classify: (exception) => {
+        if (used.has(foreignWriterKey(contract.table, exception.subject))) {
+          return { verdict: VERDICT.LOAD_BEARING };
+        }
+        if (!contractPathExists(exception.subject)) {
+          return { verdict: VERDICT.SUBJECT_MISSING, detail: 'the module no longer exists' };
+        }
+        if (!scanned.has(exception.subject)) {
+          return {
+            verdict: VERDICT.UNREACHABLE,
+            detail: 'outside the SQL scan, which reads server/src/**/*.ts only',
+          };
+        }
+        return { verdict: VERDICT.SATISFIED, detail: 'the module no longer writes this table' };
+      },
+    });
+
+    for (const problem of audit.problems) {
+      problems.push({ subject: problem.subject, message: problem.message });
+    }
   }
 }
 
@@ -251,7 +294,12 @@ function checkSetEquality(problems: Problem[]): void {
   }
 }
 
-function checkSingleWriter(problems: Problem[]): string[] {
+/** Identity of one accepted foreign writer, stable across the scan and the audit. */
+function foreignWriterKey(table: string, subject: string): string {
+  return `${table}::${subject}`;
+}
+
+function checkSingleWriter(problems: Problem[], used: Set<string>): string[] {
   const byTable = new Map(TABLE_CONTRACTS.map((contract) => [contract.table, contract]));
   const sites = findSqlSites(new Set(byTable.keys()));
   const acknowledged: string[] = [];
@@ -272,6 +320,7 @@ function checkSingleWriter(problems: Problem[]): string[] {
     );
 
     if (accepted) {
+      used.add(foreignWriterKey(site.table, accepted.subject));
       acknowledged.push(
         `${site.table}: ${site.file}:${site.line} (${site.kind}) — accepted, closed by ${accepted.closedBy}`
       );
@@ -430,7 +479,9 @@ function main(): void {
     checkReaders(contract, problems);
     checkExceptionHygiene(contract, problems);
   }
-  const acknowledged = checkSingleWriter(problems);
+  const usedForeignWriters = new Set<string>();
+  const acknowledged = checkSingleWriter(problems, usedForeignWriters);
+  checkForeignWriterTruth(usedForeignWriters, problems);
 
   if (problems.length > 0) {
     console.error(`${LABEL} FAIL: ${problems.length} contract problem(s).`);
@@ -442,7 +493,12 @@ function main(): void {
   }
 
   if (acknowledged.length > 0) {
-    console.log(`${LABEL} ${acknowledged.length} accepted foreign writer(s) pending removal:`);
+    // Sites, not entries — 2 declared exceptions cover these 5 writes. Saying "5 accepted foreign
+    // writers" reads as 5 declarations and is how a count gets quoted wrong somewhere else.
+    console.log(
+      `${LABEL} ${acknowledged.length} accepted foreign write site(s) pending removal ` +
+        `(from ${usedForeignWriters.size} declared exception(s)):`
+    );
     acknowledged.forEach((entry) => console.log(`  - ${entry}`));
   }
 

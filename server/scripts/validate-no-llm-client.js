@@ -13,9 +13,9 @@
  * NOT the same thing as `validate:no-legacy-sidecars`, despite the plan that commissioned this
  * guard proposing the filename `validate-no-llm-sidecar.js`. In this repo "sidecar" already means
  * a JSON state file that SQLite replaced, and that guard forbids file-path shapes. Two guards
- * whose names differ by one word while forbidding unrelated things is the homonym trap
- * `validate-no-execution-mode.js` documents avoiding, so this one is named for what it forbids:
- * an LLM client.
+ * whose names differ by one word while forbidding unrelated things is the homonym trap that
+ * `claude/no-deprecated-automation-mode` documents avoiding (it scopes narrowly because `mode` is
+ * one of this repo's heaviest homonyms), so this one is named for what it forbids: an LLM client.
  *
  * SCOPE is the shipping surface (`src/`, `../cli/src`) — not `tests/`. Several tests name the
  * retired symbols deliberately, in assertions that pin their ABSENCE
@@ -35,11 +35,15 @@
  * `--self-test` proves each rule can still fail.
  *
  * Exit 0 when nothing is forbidden and no allowlist entry has gone stale; exit 1 otherwise.
+ *
+ * MECHANISM: script — reach — scans `../cli/src` alongside `src/`, outside the ESLint root
  */
 
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+
+import { VERDICT, auditExceptions, reportExceptionAudit } from './lib/exception-hygiene.js';
 
 const SERVER = new URL('..', import.meta.url).pathname;
 
@@ -85,11 +89,6 @@ const ALLOWLIST = [
   },
   {
     file: 'src/shared/types/index.ts',
-    why: 're-exports those types',
-    closedBy: 'removal of the `analysis` config section in the next major',
-  },
-  {
-    file: 'src/types.ts',
     why: 're-exports those types',
     closedBy: 'removal of the `analysis` config section in the next major',
   },
@@ -145,28 +144,28 @@ function splitHit(hit) {
 }
 
 /**
- * Reports allowlist entries whose justification no longer holds.
+ * Classifies one allowlist entry against the definition in `lib/exception-hygiene.js`.
  *
- * A gate's exception list suppresses its finding whether or not the finding is still true, and
- * nothing reports that an exception became unnecessary — so the list only ever grows and a green
- * run stops meaning what it says. An entry naming a file that no longer contains the term is a
- * finding, not a silent pass.
+ * This guard grew its own stale-entry detector before that module existed, and it was one of only
+ * two in the repo that had one. It now supplies the predicate and the shared module owns the
+ * verdict vocabulary, the `closedBy` requirement and the report — because three gates each having
+ * their own idea of "still true" is how the definition drifts.
+ *
+ * `unreachable` cannot occur here: every entry is ripgrepped by its own path rather than found
+ * inside a scan, so a tracked file is always reached. That is a property of this guard, not a
+ * general one — the vocab guard scans a tree and can miss a tracked file entirely.
  */
-function staleAllowlistEntries() {
-  const stale = [];
-  for (const entry of ALLOWLIST) {
-    if (!existsSync(path.join(SERVER, entry.file))) {
-      // A deleted file is the loudest form of stale, and the likeliest one: when the config
-      // section goes, its plumbing goes with it. Reporting it beats crashing on rg's exit 2,
-      // which is what this did before the stale-detection path was itself exercised.
-      stale.push({ ...entry, how: 'file no longer exists' });
-      continue;
-    }
-    if (ripgrep(SCOPED.join('|'), [entry.file]).length === 0) {
-      stale.push({ ...entry, how: 'file no longer names the term' });
-    }
+function classifyEntry(entry) {
+  if (!existsSync(path.join(SERVER, entry.file))) {
+    // A deleted file is the loudest form of stale, and the likeliest one: when the config
+    // section goes, its plumbing goes with it. Reporting it beats crashing on rg's exit 2,
+    // which is what this did before the stale-detection path was itself exercised.
+    return { verdict: VERDICT.SUBJECT_MISSING, detail: 'file no longer exists' };
   }
-  return stale;
+  if (ripgrep(SCOPED.join('|'), [entry.file]).length === 0) {
+    return { verdict: VERDICT.SATISFIED, detail: 'file no longer names the term' };
+  }
+  return { verdict: VERDICT.LOAD_BEARING };
 }
 
 const SELF_TEST_CASES = [
@@ -253,7 +252,13 @@ function main() {
     if (reason !== null) violations.push(`  ${file}\n    ${text.trim()}\n    ${reason}`);
   }
 
-  const stale = staleAllowlistEntries();
+  const audit = auditExceptions({
+    gate: 'no-llm-client',
+    entries: ALLOWLIST,
+    describe: (entry) => entry.file,
+    closedBy: (entry) => entry.closedBy,
+    classify: classifyEntry,
+  });
 
   if (violations.length > 0) {
     console.error(`Found ${violations.length} LLM side-client reference(s).\n`);
@@ -264,20 +269,11 @@ function main() {
     if (violations.length > 40) console.error(`  ... and ${violations.length - 40} more`);
   }
 
-  if (stale.length > 0) {
-    console.error(`\n${stale.length} allowlist entry/entries are no longer needed:\n`);
-    for (const entry of stale) {
-      console.error(`  ${entry.file} — ${entry.how}; delete this entry`);
-    }
-    console.error('\nAn exception that outlives what it excused makes a green run a lie.');
-  }
+  const exceptionProblems = reportExceptionAudit('no-llm-client', audit);
 
-  if (violations.length > 0 || stale.length > 0) process.exit(1);
+  if (violations.length > 0 || exceptionProblems > 0) process.exit(1);
 
-  console.log(
-    `No LLM side-client references outside the deprecated config plumbing ` +
-      `(${ALLOWLIST.length} allowlisted files, all still needed).`
-  );
+  console.log('No LLM side-client references outside the deprecated config plumbing.');
 }
 
 main();

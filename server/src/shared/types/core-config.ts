@@ -1,13 +1,15 @@
-// @lifecycle canonical - Core configuration and protocol types extracted from src/types.ts.
+// @lifecycle canonical - Core configuration and protocol types.
 /**
  * Core Config Types
  *
  * Contains configuration types, message types, and API/tool types
- * that are consumed across all architectural layers. Extracted from the
- * top-level src/types.ts to break the bilateral dependency between
- * src/types.ts ↔ shared/types/index.ts.
+ * that are consumed across all architectural layers.
  *
- * IMPORTANT: This file must NOT import from ./index.js to avoid barrel cycles.
+ * IMPORTANT: This file must NOT import from ./index.js to avoid barrel cycles. That constraint is
+ * the whole reason this module exists separately from the barrel: these types were split out of a
+ * top-level aggregate so the aggregate and the barrel stopped importing each other. The aggregate
+ * itself was deleted 2026-08-06 once it had no consumers left; the cycle it created is what this
+ * file's independence still prevents.
  */
 
 // ===== Prompt Configuration =====
