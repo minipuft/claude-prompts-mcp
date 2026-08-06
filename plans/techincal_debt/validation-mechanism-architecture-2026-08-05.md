@@ -173,6 +173,8 @@ branch. It was blocked by 0.2, which predated this plan; closing that removed th
 Earlier tiers had been verified by running all 32 non-format steps individually, which is recorded
 in their execution records rather than retro-labelled as a clean pass.
 
+**Committed 2026-08-06** on `release-3.1.0-final`, unpushed: `26fc516d` (0.2, the prettier blocker), `0e7f8576` (1.6), `c4b920ba` (everything else — 0.3, 0.5, 0.6, 0.7, 1.1–1.5, 2.1, 3.1, 4.1, plus these plan records). Three commits, not one per tier: the tiers **cannot** be split further without producing commits that fail their own gates — see the implementation notes. That is a property of the gates, not of the history.
+
 ## Iterated approach (2026-08-06) — what execution changed
 
 The original thesis was **mechanism mismatch**: guards hand-roll regex, ESLint has the AST, so move

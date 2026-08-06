@@ -17,6 +17,8 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-06 17:27 · `python3 - <<'PY' p='/home/minipuft/Applications/claude-prompts-mcp/plans/techincal_debt/validation-mechanism-architectur` · ran
+
 - 2026-08-06 17:24 · `git commit -q -m "$(cat <<'EOF' refactor(scripts): retire four guards, re-home them, and share one definition of a live ` · ran
 
 - 2026-08-06 17:22 · `git add server/scripts/ server/eslint-rules/ server/eslint.config.js server/.dependency-cruiser.cjs server/package.json ` · ran
@@ -549,3 +551,29 @@ number after its subject changed shape is worse than one that errors, because no
 Worth pairing with the existing rule that a count states its probe alongside it: **the probe should
 also state what shape it assumes.** `split(' && ')` assumed a shell chain; `ls | wc -l` assumed a
 flat directory. Neither said so, so neither could be checked when the assumption broke.
+
+### Commit boundary — two findings, one of them structural
+
+**The tiers are not separably committable, and that is a fact about the gates.** Splitting one
+commit per tier was attempted and abandoned, because every candidate split produced a commit that
+fails its own validation:
+
+| Coupling                                          | Why it cannot be split                                                                                                                                                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `run-validation-suite.js` ← vocab allowlist entry | 3.1's suite declaration names `validate:no-methodology-vocab`, so the guard flags the runner unless the allowlist entry lands in the same commit — and the entry is `subject-missing` unless the runner does |
+| `MECHANISM:` markers ← `eslint.config.js`         | 1.2's markers are required by the rule 0.3 wires in; either half alone is red                                                                                                                                |
+| `server/package.json`                             | five adjacent lines carry both the guard-script removals (1.2–1.5) and the `validate:all` swap (3.1)                                                                                                         |
+
+Each of those couplings is a gate doing its job. The cost is that history granularity is bounded by
+gate granularity — a repo with this many cross-checking gates cannot have finer commits than its
+gates have scope. Worth knowing before anyone asks for one-commit-per-tier again; the answer is not
+discipline, it is that the intermediate states do not exist.
+
+**A staged deletion from an earlier tier rode into an unrelated commit.** `git rm` during tier 1.2
+left four deletions in the index. A later `git add <specific paths> && git commit` picked them up,
+because commit takes the whole index and not the paths just added. Caught by reading `--stat` after
+the fact, fixed by `git reset --mixed` back to the pre-session commit and redoing both commits.
+
+The habit that prevents it is cheap: **print `git diff --cached --name-only` and read it before every
+commit**, not `git add` carefully and trust it. Staging is durable across commits and across
+sessions; "I only added these files" is a statement about one command, not about the index.
