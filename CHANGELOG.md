@@ -31,11 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The `tenants` table is gone** (schema v19). It held one seeded row, had no reader outside tests that inserted into it to prove it existed, and nothing referenced it — `tenant_id` elsewhere is a plain column, never a foreign key.
 - **The `cpm` CLI could leave the MCP server unable to start.** Version-history commands reached `state.db` through an embedded Python sqlite3 helper carrying its own `CREATE TABLE`, whose shape predated the workspace-isolation columns. Running the CLI before the server's first start created `version_history` without those columns, and the server then failed to boot with `no such column: workspace_id`. The CLI now uses `node:sqlite` directly, resolves the same workspace scope the server does — they previously wrote history under different tenants and could not see each other's versions — and no longer creates any schema.
 - **Database initialization failures now fail startup instead of degrading silently.** A configured database that failed to open was logged at `warn` and swallowed at three startup wiring sites, so the server reported a clean start while running with no audit trail, no argument history, and an inert version-rollback feature. A failed resource-index resync during hot-reload likewise no longer reports "completed successfully".
-
-## [3.1.2] - 2026-08-03
-
-### Fixed
-
 - **Codex plugin runtime:** plugin launch no longer depends on Claude root interpolation, and mutable SQLite/log output can be routed to a sandbox-writable runtime root without moving bundled resources.
 
 ## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
