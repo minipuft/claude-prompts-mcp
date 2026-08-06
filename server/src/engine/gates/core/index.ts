@@ -242,36 +242,6 @@ export class LightweightGateSystem {
   }
 
   /**
-   * Check if content should be retried based on validation results
-   */
-  shouldRetry(
-    validationResults: ValidationResult[],
-    currentAttempt: number,
-    maxAttempts: number = 3
-  ): boolean {
-    return this.gateValidator.shouldRetry(validationResults, currentAttempt, maxAttempts);
-  }
-
-  /**
-   * Get combined retry hints from all failed validations
-   */
-  getRetryHints(validationResults: ValidationResult[]): string[] {
-    const allHints: string[] = [];
-
-    for (const result of validationResults) {
-      if (!result.passed) {
-        allHints.push(`**${result.gateId}:**`);
-        if (result.retryHints) {
-          allHints.push(...result.retryHints);
-        }
-        allHints.push(''); // Empty line for separation
-      }
-    }
-
-    return allHints;
-  }
-
-  /**
    * Get system statistics
    */
   getStatistics() {

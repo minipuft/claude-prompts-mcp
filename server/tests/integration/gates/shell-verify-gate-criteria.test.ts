@@ -340,6 +340,57 @@ describe('Shell Verify Gate Criteria Integration', () => {
   });
 
   /**
+   * Retry hints survive the removal of the retry API.
+   *
+   * `shouldRetry` and `getRetryHints` were public methods with no callers, and deleting them is a
+   * surface removal — but `generateRetryHints` is private, live, and reached from `validateGate`,
+   * so hints are still produced and returned on every failing gate. Nothing asserted that before;
+   * without it the deletion is unobserved, and a green suite would say nothing about whether the
+   * surviving path still works.
+   *
+   * These pass identically before and after the removal. That invariance IS the property.
+   */
+  describe('retry hints on a failing gate', () => {
+    const failingGate: LightweightGateDefinition = {
+      id: 'hint-gate',
+      name: 'Hint Gate',
+      type: 'validation',
+      description: 'Fails so the hint path runs',
+      guidance: 'Keep the response structured and cite sources.',
+      pass_criteria: [{ type: 'shell_verify', shell_command: 'exit 1', shell_timeout: 5000 }],
+    };
+
+    test('validateGate still returns hints when a gate fails', async () => {
+      const loader = createMockLoader({ 'hint-gate': failingGate });
+      validator = createGateValidator(mockLogger, loader);
+
+      const result = await validator.validateGate('hint-gate', { content: 'anything' });
+
+      expect(result?.passed).toBe(false);
+      // The hints ship inside ValidationResult — this is the channel that survives, and the only
+      // one that ever reached a caller.
+      expect(result?.retryHints?.length).toBeGreaterThan(0);
+      expect(result?.retryHints?.join('\n')).toContain('Keep the response structured');
+    });
+
+    test('a passing gate carries no hints', async () => {
+      const loader = createMockLoader({
+        'ok-gate': {
+          ...failingGate,
+          id: 'ok-gate',
+          pass_criteria: [{ type: 'shell_verify', shell_command: 'exit 0', shell_timeout: 5000 }],
+        },
+      });
+      validator = createGateValidator(mockLogger, loader);
+
+      const result = await validator.validateGate('ok-gate', { content: 'anything' });
+
+      expect(result?.passed).toBe(true);
+      expect(result?.retryHints).toEqual([]);
+    });
+  });
+
+  /**
    * `llm_self_check` is a reserved criteria type: declared in gate YAML (contract surface per
    * CLAUDE.md §Public API Contract) and documented as having no runner. It used to branch on
    * `config.analysis.semanticAnalysis.llmIntegration`, whose readers have all been retired —

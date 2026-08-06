@@ -17,9 +17,11 @@
  *
  * What's preserved:
  * - Validation framework and gate loading
- * - Statistics tracking and retry logic
+ * - Statistics tracking
  * - `llm_self_check` acceptance (reserved type, unconditional skip — see runLLMSelfCheck)
- * - Retry hints generation
+ * - Retry hint GENERATION — hints ship inside each failing `ValidationResult`. The public
+ *   `shouldRetry` re-entry API is gone; it had no callers, and the decision of whether to retry
+ *   belongs to the caller holding the attempt count, not to the validator.
  */
 
 import { getShellPreset } from '../config/index.js';
@@ -45,7 +47,6 @@ export interface GateValidationStatistics {
   successfulValidations: number;
   failedValidations: number;
   averageValidationTime: number;
-  retryRequests: number;
 }
 
 /**
@@ -59,7 +60,6 @@ export class GateValidator {
     successfulValidations: 0,
     failedValidations: 0,
     averageValidationTime: 0,
-    retryRequests: 0,
   };
   private validationTimes: number[] = [];
 
@@ -513,39 +513,6 @@ export class GateValidator {
   }
 
   /**
-   * Check if content should be retried based on validation results
-   *
-   * @param validationResults - Results from gate validation
-   * @param currentAttempt - Current attempt number
-   * @param maxAttempts - Maximum allowed attempts
-   * @returns true if retry should be attempted
-   */
-  shouldRetry(
-    validationResults: ValidationResult[],
-    currentAttempt: number,
-    maxAttempts: number = 3
-  ): boolean {
-    if (currentAttempt >= maxAttempts) {
-      this.logger.debug('[GATE VALIDATOR] Max attempts reached, no retry');
-      return false;
-    }
-
-    // Retry if any validation gate failed
-    const shouldRetry = validationResults.some((result) => !result.valid);
-
-    if (shouldRetry) {
-      this.validationStats.retryRequests++;
-      this.logger.debug('[GATE VALIDATOR] Retry recommended:', {
-        currentAttempt,
-        maxAttempts,
-        failedGates: validationResults.filter((r) => !r.valid).map((r) => r.gateId),
-      });
-    }
-
-    return shouldRetry;
-  }
-
-  /**
    * Update average validation time
    */
   private updateAverageValidationTime(): void {
@@ -576,7 +543,6 @@ export class GateValidator {
       successfulValidations: 0,
       failedValidations: 0,
       averageValidationTime: 0,
-      retryRequests: 0,
     };
     this.validationTimes = [];
     this.logger.debug('[GATE VALIDATOR] Statistics reset');
