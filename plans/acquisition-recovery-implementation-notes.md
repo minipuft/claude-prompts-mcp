@@ -28,6 +28,14 @@ executing the plan. Conservative option taken, logged, work continued.
   server) after the 3.1.1 reset — `sync-versions.js` does not touch lockfiles (deliberately, per
   the validate-versions comment), so a manual reset like this leaves them stale unless done.
 
+- **2026-08-06 · G4 blocker fixed in the CLI package's test fixtures**: `2d838276` (CLI stops
+  creating state.db schema) updated the server-side tests but not `cli/tests/integration/`
+  — whose python seeder still created the pre-scope-column `version_history` shape with
+  `tenant_id='default'`. The scoped CLI reads returned empty ("No version history") and CI's
+  CLI job failed 7 tests; pre-push never sees it (CLI tests are CI-only). Seeder now mirrors
+  the engine DDL and pins the scope via `identity.launchDefaults.workspaceId` in the fixture
+  workspace's config.json. CLI suite 75/75 locally.
+
 ## Unknowns / gaps found during execution
 
 - **RP behavior with a never-released manifest version** (the trap G2 closed): a manifest stating a
@@ -39,5 +47,11 @@ executing the plan. Conservative option taken, logged, work continued.
   accept the server package in the manifest list when a CLI version is passed.
 
 ## Validation runs
+
+- 2026-08-06 17:49 · `npm run build >/dev/null 2>&1 && NODE_OPTIONS="--experimental-vm-modules" npx jest --config jest.config.cjs 2>&1 | tail ` · ran
+- 2026-08-06 17:48 · `cd cli && NODE_OPTIONS="--experimental-vm-modules" npx jest --config jest.config.cjs tests/integration/new-commands.test` · ran
+- 2026-08-06 17:45 · `npm test 2>&1 | grep -E "✕|FAIL|● " | head -20` · ran
+- 2026-08-06 17:45 · `grep -A6 '"scripts"' package.json && npm test 2>&1 | tail -12` · ran
+- 2026-08-06 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/cli && npx jest tests/integration/new-commands.test.ts 2>&1 | tail -15` · ran
 
 - 2026-08-06 17:42 · `for f in plans/cli-distribution-release-integration-2026-08-02.md plans/downstream-standards-federation-2026-08-02-imple` · ran
