@@ -170,32 +170,76 @@ discards the design.
 
 ---
 
-## F14 — Ten more orphans in `shared/types/index.ts`, unrelated lineages
+## F14 — Nine dead types in `shared/types/index.ts` (**corrected 2026-08-06**)
 
-The scan that measured F13 also enumerated every exported type in the file. Ten more have zero
-consumers repo-wide and none belongs to chain execution or gate contracts:
+**This entry was wrong twice and is now measured properly. Read the corrections before acting.**
 
-`ApiResponse` · `ServerRefreshOptions` · `ServerState` · `FileOperation` · `ModificationResult` ·
-`ExpressRequest` · `ExpressResponse` · `AutoExecutionConfig` · `GateRetryInfo` ·
-`TelemetryRuntimePort`
+### Correction 1 — it is nine, not ten. `GateRetryInfo` is LIVE.
 
-**Not folded into F13** — different subsystems, different review unit. Two need a decision rather
-than a deletion:
+`GateRetryInfo` is consumed by `GateValidationInfo`, which has **10 external consumers**. It read as
+orphaned only because the scan counted hits _outside_ `shared/types/index.ts`, and its sole consumer
+lives inside that file. Deleting it would have broken a live structured-response contract.
 
-- **`ExpressRequest` / `ExpressResponse`** are hand-rolled shims for a framework this server no
-  longer uses. The question is whether anything still expects to serve HTTP through that shape, not
-  whether the types have consumers.
-- **`TelemetryRuntimePort`** is a _port_ — a name that usually marks a deliberate seam. A port with
-  no implementor is either a missing implementation or an abandoned design, and the two want
-  opposite treatment. Resolve before deleting.
+The scan errs in **both** directions, which is the reusable lesson:
 
-**Caveat on the measurement**: the scan counts a duplicate definition elsewhere as a consumer, which
-is how `GateStatus` initially read as live. Re-verify each individually before acting — the count is
-a starting point, not a verdict.
+| Error                  | Cause                                                         | Instance               |
+| ---------------------- | ------------------------------------------------------------- | ---------------------- |
+| over-reports liveness  | a duplicate definition elsewhere counts as a consumer         | `GateStatus` (F13)     |
+| under-reports liveness | a type consumed only intra-file by a live type looks orphaned | `GateRetryInfo` (here) |
+
+**The correct test is transitive reachability**, not a hit count: mark every type with external
+consumers live, then propagate liveness to everything they reference, to a fixpoint. What remains
+unreachable is dead. The nine below are the fixpoint result.
+
+### Correction 2 — Express is NOT retired; these are duplicates of its real types
+
+The earlier text called `ExpressRequest`/`ExpressResponse` "hand-rolled shims for a framework this
+server no longer uses." **False.** `express@^5.2.1` is a live dependency, imported at
+`infra/http/index.ts:14` and `infra/http/transport/index.ts:24`, and `@types/express` is installed.
+These two are hand-rolled _duplicates_ of types Express already ships, and the real ones are what
+the HTTP layer actually uses. That makes them ordinary dead code, not a design question.
+
+### The nine
+
+| Type                                                                                            | Verdict                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ApiResponse` · `ServerRefreshOptions` · `ServerState` · `FileOperation` · `ModificationResult` | plainly dead                                                                                                                                                                                                                                 |
+| `ExpressRequest` · `ExpressResponse`                                                            | dead duplicates of `@types/express` — see Correction 2                                                                                                                                                                                       |
+| `AutoExecutionConfig`                                                                           | dead; its fields (`stepConfirmation`, `gateValidation`, `pauseOnError`) match the abandoned chain-execution family F13 deleted. Script auto-execution (`09-script-auto-execute-stage.ts`) is a different, live concept — do not confuse them |
+| `TelemetryRuntimePort`                                                                          | **duplicate seam**, not an abandoned one — see below                                                                                                                                                                                         |
+
+### `TelemetryRuntimePort` — the only one that was a real question, and it is answered
+
+Not "a port with no implementor." It is a **second declaration of a seam that is already
+implemented under another name**: `TelemetryRuntime` lives at
+`infra/observability/telemetry/types.ts:20`, is implemented by `TelemetryRuntimeImpl`
+(`runtime.ts:73`), and is consumed across `hook-observer.ts` and `observability-resources.ts`.
+
+The Port's own doc comment says _"Concrete: infra/observability/telemetry/runtime.ts
+TelemetryRuntimeImpl"_ — and that class implements `TelemetryRuntime`, not the Port. The comment
+describes a relationship that does not exist.
+
+**Decision required**: none, if the goal is to remove dead code — `TelemetryRuntime` is canonical,
+so delete the Port. A decision IS required only if someone wants the _engine layer_ to depend on a
+shared-layer port rather than reach into `infra/` — that is an architecture question about layer
+direction, and it should be decided on its own merits, not by whichever duplicate happened to
+survive a cleanup.
+
+### What I actually need from you
+
+Nothing blocking. Eight of the nine are unambiguous deletions. The one judgment call is the
+`TelemetryRuntimePort` layering question above, and the conservative default (delete the duplicate,
+keep `TelemetryRuntime`) preserves today's behaviour exactly.
+
+Worth confirming rather than assuming: whether any **downstream plugin** imports these from the
+published package. `src/index.ts` exports only the four server-lifecycle functions and this package
+is declared a binary distribution, so the expected answer is no — but that is the only way these
+types could have a consumer this repo cannot see.
 
 ---
 
 ## Sequencing
 
-F9 ✓, F11 ✓, F13 ✓ — all done. F14 is the remainder, and two of its ten want a design call rather
-than a deletion.
+F9 ✓, F11 ✓, F13 ✓ — all done. F14 is the remainder: **nine** types (not ten — `GateRetryInfo` is
+live), eight of them unambiguous deletions, one a layering question whose conservative default
+preserves current behaviour. Nothing blocks it.

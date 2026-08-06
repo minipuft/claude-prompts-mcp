@@ -116,7 +116,7 @@ Config surface to retire: `AnalysisConfig`, `SemanticAnalysisConfig`, `LLMIntegr
 
 ---
 
-## T0 — Boundary decisions (no code)
+## T0 ✅ COMPLETE 2026-08-05 — Boundary decisions (no code)
 
 | ID  | Status | Decision                                                                      | Resolution                                                                                                                                                                                                                                                                |
 | --- | ------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,7 +131,7 @@ Config surface to retire: `AnalysisConfig`, `SemanticAnalysisConfig`, `LLMIntegr
 
 ---
 
-## T1 — Delete the LLM side client · depends T0.1
+## T1 ✅ COMPLETE 2026-08-05 — Delete the LLM side client · depends T0.1 · in `b4171ca8`
 
 | ID  | Status      | Step                                                                                                                      | Files                                                                            | Verification                                              |
 | --- | ----------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -168,7 +168,7 @@ structurally unreachable. Compiles clean; removed in T3 with the dual-mode colla
 
 ---
 
-## T2 — Delete `SemanticGateService` · depends T1
+## T2 ✅ COMPLETE 2026-08-05 — Delete `SemanticGateService` · depends T1 · in `b4171ca8`
 
 | ID  | Status | Step                                                                                               | Files                                                | Verification                                    |
 | --- | ------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------- |
@@ -205,7 +205,7 @@ a future reader needs, and which makes the check pass honestly rather than by ex
 
 ---
 
-## T2.5 — Retire the orphaned validation channel · discovered at T2 · depends T2
+## T2.5 ✅ COMPLETE 2026-08-05 — Retire the orphaned validation channel · discovered at T2 · in `b4171ca8`
 
 **F8 — `validationResults` is a redundant channel, not a missing producer.**
 
@@ -292,7 +292,7 @@ return failed exactly one test — the new one — and nothing else. Probe rever
 
 ---
 
-## T3 — Collapse the analyzer · depends T2, T0.2, T0.3
+## T3 ✅ COMPLETE 2026-08-05 — Collapse the analyzer · depends T2, T0.2, T0.3 · in `b4171ca8`
 
 | ID  | Status | Step                                                                 | Files                                                  | Verification                                         |
 | --- | ------ | -------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------- |
@@ -366,7 +366,7 @@ importers**; and `npx knip --include files` listed both files as unused. 869 lin
 
 ---
 
-## T3.5 — Retire `isLLMEnabled` and narrow `mode` · executed 2026-08-05 · depends T3
+## T3.5 ✅ COMPLETE 2026-08-05 — Retire `isLLMEnabled` and narrow `mode` · depends T3 · split across `b4171ca8` + `d219f8b7`
 
 Requested directly after T3 rather than deferred into T4, because the two questions are coupled:
 `mode` cannot narrow while F10 compares against `'semantic'`.
@@ -421,7 +421,7 @@ the prescribed mock boundary, not the mock-everything shape I assumed I'd be for
 
 ---
 
-## T3.6 — Close the icon and coverage debts · executed 2026-08-05 · depends T3.5
+## T3.6 ✅ COMPLETE 2026-08-05 — Close the icon and coverage debts · depends T3.5 · in `d219f8b7`
 
 Two follow-ups requested directly, both deferrals this plan had recorded rather than resolved.
 
@@ -490,7 +490,7 @@ icon the `default` already produced, so intent is stated without altering behavi
 
 ---
 
-## T4 — Retire the config surface · depends T3, T0.1
+## T4 ✅ COMPLETE 2026-08-05 — Retire the config surface · depends T3, T0.1 · in `d219f8b7`
 
 Shape depends on T0.1. Under the default (b):
 
@@ -631,7 +631,7 @@ failing without anyone's change causing it, which is the failure mode that makes
 
 ---
 
-## T5 — Docs and a guard · depends T4
+## T5 ✅ COMPLETE 2026-08-06 — Docs and a guard · depends T4 · in `d219f8b7` + `ff0273d9`
 
 | ID  | Status | Step                                                                                                          | Files                                                                             | Verification                                         |
 | --- | ------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
