@@ -13,7 +13,7 @@
  *               binary ("ephemeral or not") is what silently destroyed resource rollback history:
  *               `resource_index` and `version_history` are both "not ephemeral" yet need opposite
  *               handling.
- *   scope     — what the identity columns mean HERE. `tenant_id` currently carries a server PID
+ *   scope     — what the identity columns mean HERE. Until v20 `tenant_id` carried a server PID
  *               in some tables, a workspace id in others, and the literal 'default' in the rest.
  *   retention — an append-only table with no declared bound grows until the disk does. `state.db`
  *               is shared across every project on the machine, so "small in my repo" is not a bound.
@@ -38,13 +38,13 @@
  */
 export type Posture = 'derived' | 'ephemeral' | 'durable';
 
-/** What the identity columns (`tenant_id`, `workspace_id`, `organization_id`) mean in a table. */
+/** What the identity columns (`run_owner_pid`/`tenant_id`, `workspace_id`, `organization_id`) mean in a table. */
 export type ScopeKind =
   /** No meaningful scope — the table is global to the file. */
   | 'none'
   /** Rows are partitioned per workspace, resolved via `resolveContinuityScopeId`. */
   | 'workspace'
-  /** `tenant_id` holds the OS process id of the server that owns the run. */
+  /** `run_owner_pid` holds the OS process id of the server that owns the run. */
   | 'run-owner-pid'
   /** Rows are partitioned by export client + scope (skills sync). */
   | 'client-scope';
@@ -140,12 +140,10 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     retentionRationale:
       'Holds only live runs; rows are DELETEd per-PID by cleanupStalePidRows when a server exits.',
     readers: ['hooks/lib/db_reader.py', 'src/infra/database/sqlite-engine.ts'],
-    finding:
-      'F3 — tenant_id holds a server PID here while carrying a workspace id in kv_state. ' +
-      'Closed by Tier 6.5 (add run_owner_pid) and 6.6 (hook reads it with fallback).',
-    // Phantom exceptions removed by Tier 4: projectToHookView now binds organization_id and
-    // workspace_id from the store's defaultScope. tenant_id still holds the PID, so F3 above
-    // stands — 6.5/6.6 remain the fix for run ownership, which is a separate question to scope.
+    // F3 closed at v20: the PID column is now named `run_owner_pid`, so no column name means both
+    // a run owner and a workspace. Scope columns remain `workspace_id`/`organization_id`, bound by
+    // projectToHookView from the store's defaultScope (Tier 4) — run ownership and workspace scope
+    // are separate questions and now have separate names.
   },
   {
     table: 'kv_state',
@@ -291,8 +289,8 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       },
     ],
     // Phantom exceptions removed by Tier 4: the INSERT now names both scope columns, and the
-    // caller passes a merged scope (PID for tenant_id, workspace for the scope columns) rather
-    // than the pid-only scope that left them NULL.
+    // caller passes a merged scope (PID for run_owner_pid, workspace for the scope columns)
+    // rather than the pid-only scope that left them NULL.
   },
   {
     table: 'execution_records',

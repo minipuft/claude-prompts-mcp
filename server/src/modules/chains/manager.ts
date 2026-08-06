@@ -69,7 +69,7 @@ export interface ChainSessionStoreOptions {
   /**
    * Workspace scope stamped on the `chain_sessions` hook projection.
    *
-   * Distinct from `pidScope`: `chain_sessions.tenant_id` is the server PID, which isolates one
+   * Distinct from `pidScope`: `chain_sessions.run_owner_pid` is the server PID, which isolates one
    * running server's rows from another's but says nothing about which project they belong to.
    * The scope columns answer that, and until this was supplied they were written NULL and
    * repaired by a startup backfill on the next boot.
@@ -112,9 +112,9 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Scope for `chain_run_registry` rows.
    *
-   * Merged, not chosen: the PID decides `tenant_id` (which server owns the run) while the
+   * Merged, not chosen: the PID decides `run_owner_pid` (which server owns the run) while the
    * workspace fills `workspace_id`/`organization_id` (which project it belongs to). They answer
-   * different questions, and the registry resolves `tenant_id` from `continuityScopeId` first,
+   * different questions, and the registry resolves `run_owner_pid` from `continuityScopeId` first,
    * so adding the workspace keys cannot change run ownership. Passing `pidScope` alone — as this
    * did — left the scope columns NULL for a startup backfill to repair on the next boot.
    *
@@ -369,7 +369,7 @@ export class ChainSessionStore implements ChainSessionService {
    *
    * Filter rule: a session is "active for hooks" if it has steps remaining or
    * a pending gate review / shell verification (see `isSessionActiveForHooks`).
-   * `tenant_id` is the server PID for cross-client isolation.
+   * `run_owner_pid` is the server PID for cross-client isolation.
    *
    * Must be called inside an active transaction. The caller (`persistSessions`)
    * owns the transaction boundary so blob save and projection succeed or fail
@@ -377,10 +377,10 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private projectToHookView(db: DatabasePort): void {
     const activeRows = this.collectActiveSessionRows();
-    db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [this.serverPid]);
+    db.run('DELETE FROM chain_sessions WHERE run_owner_pid = ?', [this.serverPid]);
     for (const row of activeRows) {
       db.run(
-        `INSERT INTO chain_sessions (tenant_id, organization_id, workspace_id, chain_id, run_number, state, run_status, run_completed_at)
+        `INSERT INTO chain_sessions (run_owner_pid, organization_id, workspace_id, chain_id, run_number, state, run_status, run_completed_at)
          VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
         [
           this.serverPid,
@@ -448,22 +448,22 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Collect tenant_id values from a table where the PID is dead (not alive).
+   * Collect run_owner_pid values from a table where the PID is dead (not alive).
    * Skips non-numeric IDs and optionally skips the current process PID.
    */
   // DB engine accessed via this.resolvedDbEngine (set in initialize or setDatabasePort)
 
-  private collectDeadPidTenants(db: DatabasePort, query: string, skipOwnPid: boolean): string[] {
-    const rows = db.query<{ tenant_id: string }>(query);
+  private collectDeadRunOwnerPids(db: DatabasePort, query: string, skipOwnPid: boolean): string[] {
+    const rows = db.query<{ run_owner_pid: string }>(query);
     const dead: string[] = [];
     for (const row of rows) {
-      const pid = parseInt(row.tenant_id, 10);
+      const pid = parseInt(row.run_owner_pid, 10);
       if (isNaN(pid)) continue;
-      if (skipOwnPid && row.tenant_id === this.serverPid) continue;
+      if (skipOwnPid && row.run_owner_pid === this.serverPid) continue;
       try {
         process.kill(pid, 0);
       } catch {
-        dead.push(row.tenant_id);
+        dead.push(row.run_owner_pid);
       }
     }
     return dead;
@@ -480,24 +480,25 @@ export class ChainSessionStore implements ChainSessionService {
 
     try {
       // Clean chain_sessions (per-row PID table for hooks)
-      const staleSessions = this.collectDeadPidTenants(
+      const staleSessions = this.collectDeadRunOwnerPids(
         db,
-        'SELECT DISTINCT tenant_id FROM chain_sessions',
+        'SELECT DISTINCT run_owner_pid FROM chain_sessions',
         false
       );
       for (const pid of staleSessions) {
-        db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [pid]);
+        db.run('DELETE FROM chain_sessions WHERE run_owner_pid = ?', [pid]);
       }
 
-      // Clean chain_run_registry (PID-scoped blob rows) + legacy 'default' row
-      db.run("DELETE FROM chain_run_registry WHERE tenant_id = 'default'");
-      const staleRegistry = this.collectDeadPidTenants(
+      // Clean chain_run_registry (PID-scoped blob rows). The former
+      // `WHERE tenant_id = 'default'` sweep is gone with the v20 rename: the column carries no
+      // DEFAULT, so nothing can mint a non-PID owner, and the bump drops the table outright.
+      const staleRegistry = this.collectDeadRunOwnerPids(
         db,
-        'SELECT tenant_id FROM chain_run_registry',
+        'SELECT run_owner_pid FROM chain_run_registry',
         true
       );
       for (const pid of staleRegistry) {
-        db.run('DELETE FROM chain_run_registry WHERE tenant_id = ?', [pid]);
+        db.run('DELETE FROM chain_run_registry WHERE run_owner_pid = ?', [pid]);
       }
 
       const totalCleaned = staleSessions.length + staleRegistry.length;

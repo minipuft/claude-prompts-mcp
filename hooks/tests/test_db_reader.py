@@ -20,6 +20,7 @@ CRITERIA UNDER TEST (enumerated — a behaviour not listed here is not covered)
   A. schema parity      : the extracted DDL is real, current, and creates every object read below
   B. resource_index     : prompts, gates, styles, frameworks — including the resource-type spelling
   C. chain liveness     : PID filtering, terminal-run exclusion, and both documented fallbacks
+  D. view repair (v20)  : the primary read path returns rows, and terminal runs stay out of both
 """
 
 import json
@@ -98,10 +99,9 @@ def _chain_session_state(
     """Serialize a ChainSession exactly as the only writer emits it.
 
     Ground truth is `ChainManager.collectActiveSessionRows()` (server/src/modules/chains/manager.ts),
-    which puts `currentStep`/`totalSteps` at the TOP level. Do not "fix" this to the nested shape
-    `v_execution_status` json_extracts — the mismatch between the two is a finding this file pins
-    (see TestExecutionViewIsStructurallyDead), and a fixture written to the view's expectation
-    hides it.
+    which puts `currentStep`/`totalSteps` at the TOP level. `v_execution_status` extracted the
+    nested `$.state.currentStep` until schema v20 and therefore read NULL from every row it had
+    (F12); the paths agree now, and this fixture is what proves they still do.
     """
     return json.dumps(
         {
@@ -173,11 +173,11 @@ def _insert_resource(conn: sqlite3.Connection, **kwargs) -> None:
     conn.commit()
 
 
-def _insert_session(conn: sqlite3.Connection, tenant_id: str, state: str, *, run_status: str = "working") -> None:
+def _insert_session(conn: sqlite3.Connection, run_owner_pid: str, state: str, *, run_status: str = "working") -> None:
     conn.execute(
-        "INSERT INTO chain_sessions (tenant_id, chain_id, run_number, state, run_status) "
+        "INSERT INTO chain_sessions (run_owner_pid, chain_id, run_number, state, run_status) "
         "VALUES (?, 'chain-demo', 1, ?, ?)",
-        (tenant_id, state, run_status),
+        (run_owner_pid, state, run_status),
     )
     conn.commit()
 
@@ -306,60 +306,6 @@ class TestResourceIndexReads:
 # ── C. Chain liveness ─────────────────────────────────────────────────────────
 
 
-class TestExecutionViewIsStructurallyDead:
-    """`v_execution_status` cannot observe the rows its only writer produces.
-
-    The view json_extracts `$.state.currentStep`; `collectActiveSessionRows()` writes
-    `currentStep` at the top level. Every row therefore projects NULL steps, and
-    `_view_row_to_hook_state` rejects NULL as 0 — so `_load_from_execution_view` returns None for
-    every input and the documented "highest-fidelity first" read order collapses to its fallback.
-
-    Consequence: the Tier-2 terminal-run exclusion lives ONLY in this view's WHERE clause, so it
-    never runs either. Terminal runs are kept out of the hooks solely by `isSessionActiveForHooks`
-    on the writer side.
-
-    These tests pin the defect so the fix is detected rather than assumed. They fail when the JSON
-    path and the writer are reconciled — which is the signal to delete them.
-    """
-
-    def test_the_view_projects_null_steps_for_a_writer_shaped_row(self, state_db):
-        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
-
-        row = state_db.execute("SELECT current_step, total_steps FROM v_execution_status").fetchone()
-
-        assert row is not None, "the row exists; only its step columns are unreadable"
-        assert row[0] is None
-        assert row[1] is None
-
-    def test_the_view_path_returns_none_even_for_a_live_in_progress_run(self, state_db):
-        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
-        conn = db_reader._connect_readonly()
-        try:
-            assert db_reader._load_from_execution_view(conn) is None
-        finally:
-            conn.close()
-
-    def test_the_terminal_filter_exists_only_on_the_dead_view_path(self, state_db):
-        """Reads that reach live data apply no run_status filter at all.
-
-        The view excludes terminal runs and cannot be reached; the session-table query that IS
-        reached selects every row regardless of run_status. Asserting both halves keeps the gap
-        visible while writer-side filtering is the only thing closing it.
-        """
-        _insert_session(state_db, str(LIVE_PID), _chain_session_state(), run_status="cancelled")
-
-        survives_view_filter = state_db.execute(
-            "SELECT COUNT(*) FROM v_execution_status WHERE run_status NOT IN ('completed', 'failed', 'cancelled')"
-        ).fetchone()[0]
-        reached_by_fallback = state_db.execute("SELECT COUNT(*) FROM chain_sessions").fetchone()[0]
-
-        assert survives_view_filter == 0
-        assert reached_by_fallback == 1
-
-        # The reached path serves the cancelled run because it never inspects run_status.
-        assert db_reader.load_active_chain_state() is not None
-
-
 class TestActiveChainState:
     def test_returns_state_for_a_live_owner(self, state_db):
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
@@ -377,9 +323,11 @@ class TestActiveChainState:
         assert db_reader.load_active_chain_state() is None
 
     def test_a_non_numeric_owner_is_skipped(self, state_db):
-        """The trisemy trap: `tenant_id` holds a server PID here and a workspace id elsewhere.
+        """A non-PID value must not be coerced into a liveness check.
 
-        A workspace id landing in this column must not be coerced into a liveness check.
+        `run_owner_pid` was named `tenant_id` until v20, when the same name also meant a workspace
+        id in `kv_state`. The name no longer invites the confusion; this guards the value anyway,
+        because a bad write is still a bad write.
         """
         _insert_session(state_db, "claude-prompts-mcp", _chain_session_state())
 
@@ -427,7 +375,7 @@ class TestActiveChainState:
         """The documented fallback: "environments where the view query fails".
 
         Dropping the view reproduces exactly that — and it is the shape a column rename takes,
-        since `v_execution_status` projects `cs.tenant_id` by name.
+        since `v_execution_status` projects `cs.run_owner_pid` by name.
         """
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=1, total=2))
         state_db.execute("DROP VIEW v_execution_status")
@@ -442,7 +390,7 @@ class TestActiveChainState:
     def test_run_registry_serves_when_view_and_session_table_yield_nothing(self, state_db):
         state_db.execute("DROP VIEW v_execution_status")
         state_db.execute(
-            "INSERT INTO chain_run_registry (tenant_id, state) VALUES (?, ?)",
+            "INSERT INTO chain_run_registry (run_owner_pid, state) VALUES (?, ?)",
             (
                 str(LIVE_PID),
                 json.dumps(
@@ -470,7 +418,7 @@ class TestActiveChainState:
     def test_run_registry_prefers_the_most_recent_run_and_skips_dormant_ones(self, state_db):
         state_db.execute("DROP VIEW v_execution_status")
         state_db.execute(
-            "INSERT INTO chain_run_registry (tenant_id, state) VALUES (?, ?)",
+            "INSERT INTO chain_run_registry (run_owner_pid, state) VALUES (?, ?)",
             (
                 str(LIVE_PID),
                 json.dumps(
@@ -509,7 +457,7 @@ class TestActiveChainState:
     def test_registry_blobs_owned_by_a_dead_process_are_skipped(self, state_db):
         state_db.execute("DROP VIEW v_execution_status")
         state_db.execute(
-            "INSERT INTO chain_run_registry (tenant_id, state) VALUES (?, ?)",
+            "INSERT INTO chain_run_registry (run_owner_pid, state) VALUES (?, ?)",
             (
                 str(_dead_pid()),
                 json.dumps(
@@ -528,4 +476,53 @@ class TestActiveChainState:
         )
         state_db.commit()
 
+        assert db_reader.load_active_chain_state() is None
+
+
+# ── D. View repair (schema v20) ───────────────────────────────────────────────
+
+
+class TestExecutionViewIsLive:
+    """Until v20 `v_execution_status` json_extracted a path no writer produced, so the primary
+    read path returned None for every input and every call fell through to the session table.
+    These assert the repair and would fail if the json paths drift from the writer again.
+    """
+
+    def test_the_view_projects_the_steps_its_writer_wrote(self, state_db):
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+
+        row = state_db.execute("SELECT current_step, total_steps FROM v_execution_status").fetchone()
+
+        assert row == (2, 5)
+
+    def test_the_primary_path_serves_without_falling_back(self, state_db):
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+        conn = db_reader._connect_readonly()
+        try:
+            state = db_reader._load_from_execution_view(conn)
+        finally:
+            conn.close()
+
+        assert state is not None
+        assert state["current_step"] == 2
+
+    @pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled"])
+    def test_terminal_runs_are_excluded_on_every_path(self, state_db, terminal):
+        """The view filters these in SQL; the fallbacks converge on `_session_to_hook_state`.
+
+        Seeded with a mid-chain step so the run looks active on every signal except run_status —
+        a fixture at the final step would pass without the boundary check being consulted.
+        """
+        _insert_session(
+            state_db,
+            str(LIVE_PID),
+            _chain_session_state(current=1, total=3, run_status=terminal),
+            run_status=terminal,
+        )
+
+        assert db_reader.load_active_chain_state() is None
+
+        # And again with the view removed, so the session-table fallback is the path under test.
+        state_db.execute("DROP VIEW v_execution_status")
+        state_db.commit()
         assert db_reader.load_active_chain_state() is None

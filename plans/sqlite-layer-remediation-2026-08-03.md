@@ -1,23 +1,27 @@
 ---
 title: "SQLite Persistence Layer — Boundaries, Validation, and Remediation"
 date: 2026-08-03
-status: active
+status: reference
 tags: [persistence, sqlite, validation-gates, technical-debt]
 ---
 
 # SQLite Persistence Layer — Boundaries, Validation, and Remediation
 
-## Status 2026-08-06 — 10 of 13 subtiers landed. Schema v19.
+## Status 2026-08-06 — COMPLETE. 13 of 14 subtiers landed. Schema v20.
 
-**All eleven original findings are closed except the three named below — and execution has since
-added a twelfth.** Tiers 0–5 complete; Tier 6 is 6.1/6.3/6.4/**6.5a** done, 6.2 blocked,
-6.5b/6.5/6.6 open.
+**All twelve findings are closed.** Tiers 0–5 complete; Tier 6 is 6.1/6.3/6.4/6.5a/6.5b/6.5/6.6
+done. **6.2 alone remains, and its premise was measured false** — it is carved out below, not
+pending.
+
+`status: reference` rather than `done`: `plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md`
+cites this plan, so archiving it would break an inbound link from active work. The release
+workflow moves it to `plans/reference/` (tracked) on the next run of `plans:retire --apply`.
 
 | Finding                              | State                                                                       |
 | ------------------------------------ | --------------------------------------------------------------------------- |
 | F1 write-only ledger                 | ✅ T3 — reader, direct view, terminal records on failure and abort          |
 | F2 phantom scope columns             | ✅ T4.1                                                                     |
-| F3 `tenant_id` trisemy               | ⏳ **6.5/6.6** — decided (clean break), covered by 6.5a, not yet renamed    |
+| F3 `tenant_id` trisemy               | ✅ 6.5/6.6 — v20 renamed it `run_owner_pid`; clean break, no dual-write     |
 | F4 shutdown never called             | ✅ T5 — WAL 4.2 MB → 0 across a real SIGTERM                                |
 | F5 migration treadmill               | ✅ T4.5 — writers conformed first, then the backfill was deleted            |
 | F6 duplicate `version_history` DDL   | ✅ T6.1 — and it was a live startup failure, not the cleanup it looked like |
@@ -26,7 +30,7 @@ added a twelfth.** Tiers 0–5 complete; Tier 6 is 6.1/6.3/6.4/**6.5a** done, 6.
 | F9 isolation claimed, delivered once | ✅ T4 — all five writers conform                                            |
 | F10 dead `tenants` table             | ✅ T6.3                                                                     |
 | F11 bump destroys durable rows       | ✅ T0 — found during pre-flight, not by the audit                           |
-| F12 dead `v_execution_status` path   | ⏳ **6.5b** — found 2026-08-06 writing 6.5a's tests; the view reads a json path no writer emits |
+| F12 dead `v_execution_status` path   | ✅ 6.5b — json paths now match the writer; verified live, not just in fixtures |
 
 **Remaining work is carved out, not abandoned** — see _Successor scope_ at the end of Tier 6.
 6.2's premise was measured false and needs re-deciding, not just re-scheduling; 6.5/6.6 is a
@@ -610,9 +614,9 @@ the Tier 1 gate note (C2). Not attributable here.
 | 6.3 ✅ | `sqlite-engine.ts:457`                  | Delete `tenants` + seed; update the 3 tests that insert into it                                                                            | -33    | T1      | ✅ `validate:table-contracts` — 9 tables; live v19 bump verified on the real `state.db`                                           |
 | 6.4 ✅ | `sqlite-engine.ts` + new `retention.ts` | One startup pass driven by `TABLE_CONTRACTS.retention`; remove inline trim at `resource-change-tracker.ts:281`                             | +96    | T1, 6.3 | ✅ 6 tests in `retention.test.ts`, falsified two ways                                                                             |
 | 6.5a ✅ | **NEW** `hooks/tests/test_db_reader.py`    | Cover `db_reader.py` against the CURRENT schema before renaming anything. The fixture executes DDL **extracted from `applySchema()`**, so it cannot drift from the server                          | +531   | 6.4     | ✅ `validate:python` green — 220 pytest (was 197); 4 mutations falsified, incl. a simulated F3 rename failing 10 tests                    |
-| 6.5b ⚠  | `sqlite-engine.ts` view + `manager.ts:422` | **NEW — F12.** Reconcile `v_execution_status`'s `$.state.currentStep` json path with the flat `currentStep` its only writer emits. Either side may move; the view is already being altered by 6.5 | ~10    | 6.5a    | A `chain_sessions` row projects non-NULL `current_step`; the 3 pinning tests in `TestExecutionViewIsStructurallyDead` fail and get deleted |
-| 6.5     | `manager.ts` + schema + **both views**     | **CLEAN BREAK (operator decision 2026-08-05)** — rename `tenant_id` → `run_owner_pid`, move PK/UNIQUE/index onto it. **No dual-write, no fallback**: 0 downstream readers measured, and no old-format row can survive a bump (both tables ephemeral/derived, rows PID-DELETEd) | ~55    | 6.5a    | `validate:table-contracts` + `validate:python` + `verify:mcp` + live hook probe                                                           |
-| 6.6     | `hooks/lib/db_reader.py`                   | Read `run_owner_pid`. **No `tenant_id` fallback** — see 6.5                                                                                                                                       | ~30    | 6.5     | `python3 -m pytest hooks/tests` — 6.5a's suite is the before/after signal                                                                 |
+| 6.5b ✅ | `sqlite-engine.ts` view + `manager.ts:422` | **NEW — F12.** Reconcile `v_execution_status`'s `$.state.currentStep` json path with the flat `currentStep` its only writer emits. Either side may move; the view is already being altered by 6.5 | ~10    | 6.5a    | A `chain_sessions` row projects non-NULL `current_step`; the 3 pinning tests in `TestExecutionViewIsStructurallyDead` fail and get deleted |
+| 6.5 ✅  | `manager.ts` + schema + `v_execution_status`  | **CLEAN BREAK (operator decision 2026-08-05)** — rename `tenant_id` → `run_owner_pid`, move PK/UNIQUE/index onto it. **No dual-write, no fallback**: 0 downstream readers measured, and no old-format row can survive a bump (both tables ephemeral/derived, rows PID-DELETEd) | ~55    | 6.5a    | `validate:table-contracts` + `validate:python` + `verify:mcp` + live hook probe                                                           |
+| 6.6 ✅  | `hooks/lib/db_reader.py`                   | Read `run_owner_pid`. **No `tenant_id` fallback** — see 6.5                                                                                                                                       | ~30    | 6.5     | `python3 -m pytest hooks/tests` — 6.5a's suite is the before/after signal                                                                 |
 
 **Gate**: `npm run validate:all && npm run validate:python && npm run verify:mcp`
 
@@ -669,6 +673,63 @@ correct. They are written to fail once 6.5b lands, and their docstring says to d
 reverted at 00:40 by a concurrent session in the same worktree (no stash, no commit, working tree
 back at HEAD). The untracked test file survived; only the tracked plan edits were discarded. Commit
 plan realignments promptly rather than holding them until the tier's own commit boundary.
+
+#### Execution record — 6.5b + 6.5 + 6.6, landed atomically (2026-08-06)
+
+**Schema v19 → v20.** One commit, both languages, no dual-write window.
+
+**Measured vs authored — the task text understated the blast radius, and one claim was simply
+wrong:**
+
+| Claim                                        | Authored                       | Measured                                                                                                 |
+| -------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| TS sites                                     | 3, in one file                 | **12 across two files** — `run-registry.ts` was never named                                              |
+| Views projecting the renamed column          | "**both** views"               | **One.** `v_execution_history` selects `latest.tenant_id` from `execution_records`, which is NOT renamed |
+| `db_reader.py` sites                         | 4                              | **7**                                                                                                    |
+| `chain_run_registry` `'default'` row         | "decide its fate"              | Deleted with its sweep — see below                                                                       |
+
+The "both views" error is the more instructive one: it would have caused a *wasted* edit rather
+than a missed one, but the reasoning behind it — "both views read `chain_sessions`" — was false,
+and acting on it would have renamed a column in a table the tier never touched.
+
+**Three decisions worth keeping:**
+
+1. **`DEFAULT 'default'` removed, and the `WHERE tenant_id = 'default'` sweep in
+   `cleanupStalePidRows` deleted with it.** A default producing the literal `'default'` under a
+   column named `run_owner_pid` makes the name a lie for exactly the rows hardest to explain. The
+   bump drops both tables, so no legacy row reaches v20, and with no default nothing mints a new
+   one. This is what "decide the `'default'` row's fate first" resolved to.
+2. **F12's fix moves the view, not the writer.** The Python fallback `_session_to_hook_state` reads
+   the flat shape, and the registry-blob path depends on it, so nesting the writer would have
+   required a second cross-language change to fix a one-line json path.
+3. **`DROPPED_AT_VERSION` needed a `number` annotation.** With SCHEMA_VERSION at 20 and the
+   constant at 19, TypeScript narrowed both to literal types and rejected the runtime retirement
+   guard as impossible (TS2367). The guard is not impossible — it is what fires when someone adds
+   an entry and forgets to move the constant. Annotating keeps the check alive.
+
+**A defect the repair exposed, fixed in the same commit**: with the view live, terminal runs were
+still served by the fallback, which selects every `chain_sessions` row regardless of `run_status`.
+The boundary now lives in `_session_to_hook_state`, where both fallback paths converge, so the
+reader honors the rule its own docstring claimed.
+
+**Verification — `verify:mcp` was treated as insufficient on purpose.** It passed 12/12 against the
+build, and this initiative has now seen three cases where a green surface check sat on top of a
+structurally dead path. A live cross-language probe was run instead: real `ChainSessionStore` wrote
+a session, and `db_reader.load_active_chain_state()` read it back in a separate Python process
+while the writer was still alive.
+
+```
+ROW  = {"run_owner_pid":"2117133","chain_id":"chain-probe#1","run_status":"working"}
+VIEW = {"run_owner_pid":"2117133","current_step":2,"total_steps":4}
+PYTHON_READS = {"chain_id":"chain-probe#1","current_step":2,"total_steps":4, ...}
+```
+
+`VIEW.current_step` being 2 rather than NULL is the F12 proof against the real writer — the
+fixture in `test_db_reader.py` could only ever have proven it against itself.
+
+Gates: `validate:all` exit 0 · 1968 unit tests · 220 pytest (25 in `test_db_reader.py`) · 72
+database integration tests · `verify:mcp` 12/12. Falsified two further ways: reverting the view's
+json path fails 2 tests, removing the terminal boundary fails 3.
 
 **6.2 needs a decision before it needs an implementation.** The plan assumed consolidation is
 obviously right because "consolidate access paths" was the tier's title. With a live Python

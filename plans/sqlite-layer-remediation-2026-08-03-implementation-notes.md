@@ -2,7 +2,7 @@
 title: "SQLite Layer Remediation — Implementation Notes"
 plan: plans/sqlite-layer-remediation-2026-08-03.md
 date: 2026-08-03
-status: active
+status: reference
 tags: []
 ---
 

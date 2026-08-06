@@ -175,7 +175,8 @@ What IS protected on the hook side: the **module API** of `hooks/lib/*` that plu
 and the JSON payload contract hooks exchange with Claude Code. Those persist across restarts and
 have no other source.
 
-Renaming `chain_sessions.tenant_id` -> `run_owner_pid` is therefore **in-contract**, provided the
+Renaming `chain_sessions.tenant_id` -> `run_owner_pid` was therefore **in-contract** — done at
+schema v20, both sides in one commit, no dual-write. It is kept here as the worked example, provided the
 reader lands in the same PR (verified 2026-08-05: zero readers of these columns exist across
 `minipuft-plugins`, `gemini-prompts`, and `opencode-prompts`). A change here still requires the
 Python side to move with it -- the constraint is atomicity, not a version bump.
@@ -214,7 +215,7 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 - **Environment**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 
 -> `.claude/rules/mcp-contracts.md` for full contract protocol (auto-loaded)
--> `.claude/rules/sqlite-persistence.md` for the table map, `tenant_id` trisemy, and durable-table rules (glob-loaded)
+-> `.claude/rules/sqlite-persistence.md` for the table map, `tenant_id`/`run_owner_pid` split, and durable-table rules (glob-loaded)
 -> `docs/architecture/overview.md` for architecture, pipeline stages, subsystems
 -> `docs/reference/mcp-tools.md` for MCP tool workflows, symbolic command language
 -> `docs/guides/injection-control.md` for injection types, frequency, hierarchy

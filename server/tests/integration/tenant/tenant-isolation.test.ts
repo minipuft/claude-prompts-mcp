@@ -207,8 +207,8 @@ describe('Tenant Isolation', () => {
     });
 
     /**
-     * Tier 4 writer conformance. `chain_sessions.tenant_id` is the server PID and
-     * `chain_run_registry.tenant_id` is the run owner — neither is a workspace, so the scope
+     * Tier 4 writer conformance. `chain_sessions.run_owner_pid` is the server PID and
+     * `chain_run_registry.run_owner_pid` is the run owner — neither is a workspace, so the scope
      * columns are the only thing that says which project a row belongs to. Both were written
      * NULL until a startup backfill repaired them on the next boot; these assert the writers
      * now emit scope themselves, which is what lets that backfill be deleted.
@@ -225,21 +225,22 @@ describe('Tenant Isolation', () => {
         await scopedStore.createSession('scoped-session', 'chain-scoped#1', 2, {}, {});
 
         const sessionRows = dbManager.query<{
-          tenant_id: string;
+          run_owner_pid: string;
           workspace_id: string | null;
           organization_id: string | null;
-        }>(`SELECT tenant_id, workspace_id, organization_id FROM chain_sessions`);
+        }>(`SELECT run_owner_pid, workspace_id, organization_id FROM chain_sessions`);
 
         expect(sessionRows.length).toBeGreaterThan(0);
         expect(sessionRows.every((row) => row.workspace_id === 'ws-alpha')).toBe(true);
-        // tenant_id stays the PID: the workspace fills the scope columns without displacing
-        // run ownership, which the Python hooks query by.
-        expect(sessionRows.every((row) => row.tenant_id === String(process.pid))).toBe(true);
+        // run_owner_pid stays the PID: the workspace fills the scope columns without displacing
+        // run ownership, which the Python hooks query by. Renamed from tenant_id at v20 so the
+        // two meanings no longer share a name.
+        expect(sessionRows.every((row) => row.run_owner_pid === String(process.pid))).toBe(true);
 
         const registryRows = dbManager.query<{
-          tenant_id: string;
+          run_owner_pid: string;
           workspace_id: string | null;
-        }>(`SELECT tenant_id, workspace_id FROM chain_run_registry`);
+        }>(`SELECT run_owner_pid, workspace_id FROM chain_run_registry`);
 
         expect(registryRows.length).toBeGreaterThan(0);
         expect(registryRows.every((row) => row.workspace_id === 'ws-alpha')).toBe(true);

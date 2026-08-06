@@ -14,16 +14,15 @@ globs:
 retention. This file is the orientation map and the traps — when the two disagree, the contract
 module wins and this file is stale.
 
-## The Map (10 declared tables + 2 views)
+## The Map (9 declared tables + 2 views)
 
-Not 11. SQLite auto-creates `sqlite_sequence` for any table declaring `AUTOINCREMENT`; it is never
+Not 10, and not 11. `tenants` was deleted at v19 (F10). SQLite auto-creates `sqlite_sequence` for any table declaring `AUTOINCREMENT`; it is never
 declared in `applySchema()` and is excluded via `SQLITE_INTERNAL_TABLES`. A startup assert written
 against a raw `sqlite_master` count throws on every boot.
 
 | Table                   | Owner                                               | Posture     | Scope         |
 | ----------------------- | --------------------------------------------------- | ----------- | ------------- |
 | `schema_version`        | `sqlite-engine.ts`                                  | derived     | none          |
-| `tenants`               | `sqlite-engine.ts`                                  | derived     | none          |
 | `chain_sessions`        | `modules/chains/manager.ts`                         | derived     | run-owner-pid |
 | `kv_state`              | `stores/sqlite-store.ts`                            | ephemeral   | workspace     |
 | `resource_index`        | `resource-indexer.ts`                               | derived     | none          |
@@ -34,7 +33,10 @@ against a raw `sqlite_master` count throws on every boot.
 | `execution_records`     | `modules/chains/execution-record-store.ts`          | ephemeral   | workspace     |
 
 Views: `v_execution_status` selects `FROM chain_sessions`, which is PID-deleted at cleanup, so it
-structurally cannot observe a completed run. `v_execution_history` (added v17) reads
+structurally cannot observe a completed run. Until v20 it could not observe an in-progress one
+either — it json_extracted `$.state.currentStep` while its only writer emitted `currentStep` at the
+top level, so both step columns read NULL on every row and the hook's primary read path returned
+nothing for every input (F12). `v_execution_history` (added v17) reads
 `execution_records` directly and can — it is what the `system_control execution_history` action
 projects.
 
@@ -52,18 +54,24 @@ recreated and its DDL freezes permanently.
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
 
-## `tenant_id` Means Three Different Things
+## `tenant_id` Means Two Things — It Used to Mean Three
 
-Same column name, three semantics. A filter written against the wrong one is not type-detectable.
+The PID meaning got its own name at v20. `chain_sessions` and `chain_run_registry` now declare
+`run_owner_pid`, so no column name carries both a run owner and a workspace.
 
-| Value               | Tables                                                          | Consequence                                             |
-| ------------------- | --------------------------------------------------------------- | ------------------------------------------------------- |
-| Server PID          | `chain_sessions`, `chain_run_registry`                          | Row dies with the process — a session key, not a tenant |
-| Workspace id        | `kv_state`, `version_history`, `resource_changes`               | Genuine isolation (Tier 4)                              |
-| Literal `'default'` | `execution_records`, and any table with no workspace configured | No isolation                                            |
+| Value               | Column          | Tables                                                          | Consequence                                             |
+| ------------------- | --------------- | --------------------------------------------------------------- | ------------------------------------------------------- |
+| Server PID          | `run_owner_pid` | `chain_sessions`, `chain_run_registry`                          | Row dies with the process — a session key, not a tenant |
+| Workspace id        | `tenant_id`     | `kv_state`, `version_history`, `resource_changes`               | Genuine isolation (Tier 4)                              |
+| Literal `'default'` | `tenant_id`     | `execution_records`, and any table with no workspace configured | No isolation                                            |
 
-`tenant_id` still means three things, so a filter written against the wrong one is still not
-type-detectable. What changed in Tier 4 is only which tables sit in which row.
+Two meanings still share `tenant_id`, and a filter written against the wrong one is still not
+type-detectable — but the two that were furthest apart no longer collide. The rename was a clean
+break with no dual-write: zero downstream readers were measured across `minipuft-plugins`,
+`gemini-prompts` and `opencode-prompts`, and both tables are `derived`/`ephemeral` with rows
+DELETEd per-PID, so no old-format row could survive the bump that renamed them. `run_owner_pid`
+also carries **no `DEFAULT`** — a run owner is known at every write site, and a default of
+`'default'` would make the column name a lie for exactly the rows hardest to explain.
 
 ## Workspace Isolation (Tier 4 — writers now conform)
 
@@ -71,13 +79,13 @@ Every table that declares scope columns also populates them. Until Tier 4 only `
 a startup migration backfilled the rest on the next boot — a treadmill against writers that never
 stopped emitting NULLs. `applyIdentityScopeMigration` was deleted once each writer conformed:
 
-| Table                | How its scope arrives                                                          |
-| -------------------- | ------------------------------------------------------------------------------ |
-| `kv_state`           | `SqliteStateStore` — PRAGMA-derived column list                                |
-| `resource_changes`   | `defaultScope` on the tracker; the watcher fires with no request to thread     |
-| `chain_sessions`     | `defaultScope` on `ChainSessionStoreOptions`, bound in `projectToHookView`     |
-| `chain_run_registry` | merged `runScope` — PID decides `tenant_id`, workspace fills the scope columns |
-| `version_history`    | scope injected into the service; all nine query sites bind it together         |
+| Table                | How its scope arrives                                                              |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `kv_state`           | `SqliteStateStore` — PRAGMA-derived column list                                    |
+| `resource_changes`   | `defaultScope` on the tracker; the watcher fires with no request to thread         |
+| `chain_sessions`     | `defaultScope` on `ChainSessionStoreOptions`, bound in `projectToHookView`         |
+| `chain_run_registry` | merged `runScope` — PID decides `run_owner_pid`, workspace fills the scope columns |
+| `version_history`    | scope injected into the service; all nine query sites bind it together             |
 
 **`version_history` had to move reads and writes together.** Scoping the writes alone would have
 broken version numbering, because `MAX(version)` would read a different set than the INSERT wrote

@@ -46,6 +46,31 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v20: renamed `tenant_id` → `run_owner_pid` on `chain_sessions` and `chain_run_registry`, and
+ * repaired `v_execution_status`, which had never been able to read its own rows.
+ *
+ * The rename closes F3: one column name carried a server PID here and a workspace id in
+ * `kv_state`, so a filter written against the wrong meaning was not type-detectable. It is a clean
+ * break with no dual-write window, because both premises for one were measured false — zero
+ * downstream readers of the column across `minipuft-plugins`, `gemini-prompts` and
+ * `opencode-prompts`, and no old-format row can survive a bump anyway, since both tables are
+ * `derived`/`ephemeral` and their rows are DELETEd per-PID at cleanup. A parity gate protecting
+ * data that cannot exist and readers that do not exist is a parallel code path with a nicer name.
+ *
+ * `DEFAULT 'default'` was dropped in the same move. A run owner is known at every write site, and
+ * a default that produced the string `'default'` under a column named `run_owner_pid` would make
+ * the name a lie for exactly the rows hardest to explain. The `WHERE tenant_id = 'default'` sweep
+ * in `cleanupStalePidRows` went with it: this bump drops the table, so no legacy row reaches v20,
+ * and with no default nothing can mint a new one.
+ *
+ * The view repair (F12) is folded in because it alters the same object. `v_execution_status`
+ * extracted `$.state.currentStep` and `$.state.totalSteps`, but its only writer —
+ * `ChainManager.collectActiveSessionRows()` — serializes `currentStep` at the top level, so both
+ * columns resolved NULL on every row and the hook's primary read path returned nothing for every
+ * input. The paths now match the writer. `lifecycle` was dropped from the projection: the writer
+ * never emitted it either, and every projected row is canonical by construction, so the column
+ * could only ever have been NULL.
+ *
  * v19: deletes the `tenants` table and its seeded default row (F10). It held exactly one row,
  * had no reader outside tests that inserted into it to prove it existed, and nothing referenced
  * it — `tenant_id` elsewhere is a bare TEXT column, never a `REFERENCES tenants(id)`. Removing a
@@ -86,7 +111,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 19;
+const SCHEMA_VERSION = 20;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -126,7 +151,11 @@ const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set([]);
  * Retiring the exclusion is therefore two edits that the gate forces to happen together: empty the
  * set, and move this to the new version.
  */
-const DROPPED_AT_VERSION = 19;
+// Annotated `number` rather than left as a literal: once SCHEMA_VERSION moves past it, TypeScript
+// narrows both to non-overlapping literal types and rejects the runtime guard below as impossible.
+// The guard is not impossible — it is the check that fires when someone adds an entry to
+// DROPPED_ON_THIS_BUMP and forgets to move this constant with it.
+const DROPPED_AT_VERSION: number = 19;
 
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
@@ -482,7 +511,7 @@ export class SqliteEngine implements DatabasePort {
       -- this table is rebuilt atomically inside the same transaction.
       CREATE TABLE IF NOT EXISTS chain_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tenant_id TEXT NOT NULL DEFAULT 'default',
+        run_owner_pid TEXT NOT NULL,
         organization_id TEXT,
         workspace_id TEXT,
         chain_id TEXT NOT NULL,
@@ -492,7 +521,7 @@ export class SqliteEngine implements DatabasePort {
         run_completed_at INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE (tenant_id, chain_id, run_number)
+        UNIQUE (run_owner_pid, chain_id, run_number)
       );
 
       -- Shared key-value blob store for scoped state with a discriminator.
@@ -572,7 +601,7 @@ export class SqliteEngine implements DatabasePort {
       );
 
       CREATE TABLE IF NOT EXISTS chain_run_registry (
-        tenant_id TEXT PRIMARY KEY DEFAULT 'default',
+        run_owner_pid TEXT NOT NULL PRIMARY KEY,
         organization_id TEXT,
         workspace_id TEXT,
         state TEXT NOT NULL DEFAULT '{}',
@@ -603,7 +632,7 @@ export class SqliteEngine implements DatabasePort {
         created_at TEXT DEFAULT (datetime('now'))
       );
 
-      CREATE INDEX IF NOT EXISTS idx_chain_sessions_tenant ON chain_sessions(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_sessions_run_owner ON chain_sessions(run_owner_pid);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_workspace ON chain_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_chain ON chain_sessions(chain_id);
@@ -635,13 +664,12 @@ export class SqliteEngine implements DatabasePort {
         cs.run_number,
         cs.run_status,
         cs.run_completed_at,
-        json_extract(cs.state, '$.state.currentStep') AS current_step,
-        json_extract(cs.state, '$.state.totalSteps') AS total_steps,
+        json_extract(cs.state, '$.currentStep') AS current_step,
+        json_extract(cs.state, '$.totalSteps') AS total_steps,
         json_extract(cs.state, '$.lastActivity') AS last_activity,
-        json_extract(cs.state, '$.lifecycle') AS lifecycle,
         json_extract(cs.state, '$.pendingGateReview') AS pending_gate_review,
         json_extract(cs.state, '$.pendingShellVerification') AS pending_shell_verification,
-        cs.tenant_id,
+        cs.run_owner_pid,
         cs.organization_id,
         cs.workspace_id,
         (SELECT MAX(started_at) FROM execution_records er
