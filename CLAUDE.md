@@ -158,8 +158,27 @@ breaking and major versions inflate until they carry no information.
 | MCP tool surface: `prompt_engine`, `resource_manager`, `system_control` names, parameters, and response shape | Internal TypeScript exports, including `src/index.ts` |
 | CLI surface: `claude-prompts` and `cpm` commands and flags | `package.json` packaging fields (`types`, `exports`, `files`) |
 | Resource formats: prompt/gate/methodology YAML schema, `config.json` | `src/` layer structure, module layout, import style |
-| Python hook contract consumed by downstream plugins | Which files land in the published tarball |
+| Python hook contract consumed by downstream plugins -- **durable surface only**, see below | Which files land in the published tarball |
+| | **PID-scoped derived projections**: `chain_sessions`, `chain_run_registry` column names |
 | Symbolic command language (`>>`, `==>`) | Build tooling, validation scripts, CI |
+
+**The Python hook contract covers the durable surface, not every table a hook can open.**
+`chain_sessions` and `chain_run_registry` are `derived` and `ephemeral` respectively: their rows are
+`DELETE`d per-PID at cleanup, cleared when the owning process exits, and dropped outright by any
+`SCHEMA_VERSION` bump. Nothing a hook reads there survives a restart -- they are a live-process
+projection, closer to a cache than to an interface. Listing them as major-version-protected was a
+mis-classification: it priced a rename of a column nobody can hold a durable reference to at the
+same rate as breaking `prompt_engine`.
+
+What IS protected on the hook side: the **module API** of `hooks/lib/*` that plugins import
+(`load_active_chain_state`, `load_prompts`, and their return shapes), the `hooks-state.db` schema,
+and the JSON payload contract hooks exchange with Claude Code. Those persist across restarts and
+have no other source.
+
+Renaming `chain_sessions.tenant_id` -> `run_owner_pid` is therefore **in-contract**, provided the
+reader lands in the same PR (verified 2026-08-05: zero readers of these columns exist across
+`minipuft-plugins`, `gemini-prompts`, and `opencode-prompts`). A change here still requires the
+Python side to move with it -- the constraint is atomicity, not a version bump.
 
 **The tool surface is a union, not a snapshot.** `prompt_engine` builds its `inputSchema` from
 runtime state: the three gate parameters (`gates`, `gate_verdict`, `gate_action`) are advertised
