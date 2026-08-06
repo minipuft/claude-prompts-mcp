@@ -305,20 +305,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Get analysis configuration
-   */
-  getAnalysisConfig(): AnalysisConfig {
-    return this.config.analysis || DEFAULT_ANALYSIS_CONFIG;
-  }
-
-  /**
-   * Get semantic analysis configuration
-   */
-  getSemanticAnalysisConfig(): SemanticAnalysisConfig {
-    return this.getAnalysisConfig().semanticAnalysis;
-  }
-
-  /**
    * Get logging configuration with environment variable override
    * Supports LOG_LEVEL env var to override configured log level
    */

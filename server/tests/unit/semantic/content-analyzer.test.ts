@@ -11,17 +11,8 @@ const mockLogger = {
   error: jest.fn(),
 } as any;
 
-function createAnalyzer(llmEnabled = false) {
-  return new ContentAnalyzer(mockLogger, {
-    llmIntegration: {
-      enabled: llmEnabled,
-      apiKey: null,
-      endpoint: null,
-      model: 'gpt-4',
-      maxTokens: 1000,
-      temperature: 0.1,
-    },
-  });
+function createAnalyzer() {
+  return new ContentAnalyzer(mockLogger);
 }
 
 function createPrompt(partial: Partial<ConvertedPrompt>): ConvertedPrompt {
@@ -83,27 +74,17 @@ describe('ContentAnalyzer', () => {
   // Pins the T3 collapse: there is one analysis path, so the metadata cannot advertise that a
   // model was consulted. A reappearing `llmUsed` would mean a second path was reintroduced.
   test('emits no llmUsed metadata, because there is only one analysis path', async () => {
-    const analyzer = createAnalyzer(true);
+    const analyzer = createAnalyzer();
     const result = await analyzer.analyzePrompt(createPrompt({ id: 'no-llm-flag' }));
 
     expect(result.analysisMetadata).not.toHaveProperty('llmUsed');
     expect(result.analysisMetadata.mode).toBe('minimal');
   });
 
-  // The llm flag no longer participates in the cache key, because the result no longer depends
-  // on it. Two analyzers differing only in that flag must agree on everything but timing.
-  test('produces identical analysis regardless of the llm config flag', async () => {
-    const prompt = createPrompt({ id: 'flag-invariant' });
-
-    const off = await createAnalyzer(false).analyzePrompt(prompt);
-    const on = await createAnalyzer(true).analyzePrompt(prompt);
-
-    const strip = (r: typeof off) => ({
-      ...r,
-      analysisMetadata: { ...r.analysisMetadata, analysisTime: 0 },
-    });
-    expect(strip(on)).toEqual(strip(off));
-  });
+  // The flag-invariance test that stood here is gone, and its property is now structural rather
+  // than asserted: the analyzer takes no configuration at all, so two analyzers CANNOT differ by a
+  // config flag. Arity is checked in the configuration describe below — a stronger guarantee than
+  // comparing two results, because it removes the input instead of proving it is ignored.
 
   test('caches analysis results', async () => {
     const analyzer = createAnalyzer();
@@ -133,34 +114,20 @@ describe('ContentAnalyzer', () => {
 });
 
 describe('ContentAnalyzer configuration', () => {
-  test('getConfig returns current configuration', () => {
-    const config = createAnalyzer().getConfig();
-
-    expect(config.llmIntegration.enabled).toBe(false);
-    expect(config.llmIntegration.model).toBe('gpt-4');
-  });
-
-  test('updateConfig merges new configuration', () => {
-    const analyzer = createAnalyzer();
-
-    analyzer.updateConfig({
-      llmIntegration: {
-        enabled: true,
-        apiKey: 'test-key',
-        endpoint: 'http://localhost:8080',
-        model: 'gpt-3.5-turbo',
-        maxTokens: 500,
-        temperature: 0.5,
-      },
-    });
-
-    expect(analyzer.getConfig().llmIntegration.model).toBe('gpt-3.5-turbo');
-  });
-
   // The analyzer exposes no method named for a removed capability. `isLLMEnabled` used to report
   // the config flag and gated user-visible output in two callers; both now run unconditionally
   // because the work behind them never needed a model.
   test('exposes no LLM-capability method', () => {
     expect(createAnalyzer()).not.toHaveProperty('isLLMEnabled');
+  });
+
+  // The analyzer stored a SemanticAnalysisConfig and read no field from it; `getConfig` and
+  // `updateConfig` had zero callers outside this file. Taking no config is what makes the
+  // deprecated `analysis.semanticAnalysis` section unreachable from here — the section itself is
+  // still parsed and still warns at startup, which `legacy-key-migration.test.ts` pins.
+  test('accepts no configuration, and exposes no accessor for one', () => {
+    expect(ContentAnalyzer).toHaveLength(1);
+    expect(createAnalyzer()).not.toHaveProperty('getConfig');
+    expect(createAnalyzer()).not.toHaveProperty('updateConfig');
   });
 });

@@ -148,86 +148,9 @@ export interface PromptArgument {
   };
 }
 
-// ===== Chain Step Result Contract Type =====
-// Moved from engine/execution/types.ts — consumed by shared/types/index.ts (ExecutionState).
-
-/**
- * Chain step execution result (cross-layer contract type).
- */
-export interface ChainStepResult {
-  result: string;
-  metadata: {
-    startTime: number;
-    endTime: number;
-    duration: number;
-    status: 'completed' | 'failed' | 'skipped';
-    error?: string;
-  };
-}
-
-// ===== Gate Contract Types =====
-// Moved from engine/gates/types.ts — these are configuration/contract types
-// consumed by shared/, infra/, and engine/. Re-exported from engine/gates/types.ts
-// for backward compatibility.
-
 // GatesConfig (shared-layer) re-exported from core-config as GateSystemSettings.
 // Aliased here for backward compatibility.
 export { type GateSystemSettings as GatesConfig } from './core-config.js';
-
-/**
- * Gate evaluation result (lightweight contract type for cross-layer use)
- */
-export interface GateEvaluationResultContract {
-  requirementId: string;
-  passed: boolean;
-  score?: number;
-  message?: string;
-  details?: unknown;
-}
-
-/**
- * Gate requirement (lightweight contract type for cross-layer use)
- */
-export interface GateRequirementContract {
-  type: string;
-  criteria: unknown;
-  weight?: number;
-  required?: boolean;
-}
-
-/**
- * Gate status information
- */
-export interface GateStatus {
-  gateId: string;
-  passed: boolean;
-  requirements: GateRequirementContract[];
-  evaluationResults: GateEvaluationResultContract[];
-  timestamp: number;
-  retryCount?: number;
-}
-
-/**
- * Validation result (lightweight contract type for cross-layer use)
- */
-export interface ValidationResultContract {
-  valid: boolean;
-  passed?: boolean;
-  gateId?: string;
-  errors?: Array<{ field: string; message: string; code: string; suggestion?: string }>;
-}
-
-/**
- * Step result with gate information
- */
-export interface StepResult {
-  content: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  timestamp: number;
-  validationResults?: ValidationResultContract[];
-  gateResults?: GateStatus[];
-  metadata?: Record<string, string | number | boolean | null>;
-}
 
 // ContentAnalysisResult is now exported from ./core-config.js above.
 
@@ -336,66 +259,6 @@ export interface ExpressResponse {
   end: () => void;
   sendStatus: (code: number) => void;
   on: (event: string, callback: () => void) => void;
-}
-
-// Execution State Types
-export interface ExecutionState {
-  type: 'single' | 'chain';
-  promptId: string;
-  status: 'pending' | 'running' | 'waiting_gate' | 'completed' | 'failed' | 'retrying';
-  currentStep?: number;
-  totalSteps?: number;
-  gates: GateStatus[];
-  results: Record<string, string | ChainStepResult>;
-  metadata: {
-    startTime: number;
-    endTime?: number;
-    stepConfirmation?: boolean;
-    gateValidation?: boolean;
-    sessionId?: string; // For chain session management
-  };
-}
-
-// Enhanced Chain Execution Types
-export interface EnhancedChainExecutionState {
-  chainId: string;
-  currentStepIndex: number;
-  totalSteps: number;
-  startTime: number;
-  status: 'pending' | 'running' | 'waiting_gate' | 'completed' | 'failed';
-  stepResults: Record<string, StepResult>;
-  gates: Record<string, GateStatus>;
-  executionMode: 'auto' | 'chain';
-  gateValidation: boolean;
-  stepConfirmation: boolean;
-}
-
-// Chain execution progress tracking
-export interface ChainExecutionProgress {
-  chainId: string;
-  chainName: string;
-  currentStep: number;
-  totalSteps: number;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'paused';
-  steps: ChainStepProgress[];
-  startTime: number;
-  endTime?: number;
-  duration?: number;
-  errorCount: number;
-  autoExecute: boolean;
-}
-
-export interface ChainStepProgress {
-  stepIndex: number;
-  stepName: string;
-  promptId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  startTime?: number;
-  endTime?: number;
-  duration?: number;
-  result?: string;
-  error?: string;
-  gateResults?: GateStatus[];
 }
 
 // Auto-execution configuration for chains
@@ -676,9 +539,8 @@ export interface PipelineHookContext {
 /**
  * Outcome passed to gate hook callbacks.
  *
- * Distinct from `GateEvaluationResultContract` (per-requirement scoring) and
- * `engine/gates` `GateEvaluationResult` (requirement-level detail): this is the
- * whole-gate verdict a hook observer sees.
+ * Distinct from `engine/gates` `GateEvaluationResult` (requirement-level detail):
+ * this is the whole-gate verdict a hook observer sees.
  */
 export interface GateHookEvaluationResult {
   /** Whether the gate passed */

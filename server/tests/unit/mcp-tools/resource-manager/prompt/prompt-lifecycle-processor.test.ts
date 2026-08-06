@@ -16,17 +16,7 @@ const createLogger = () =>
     error: jest.fn(),
   }) as unknown as Logger;
 
-const createSemanticAnalyzer = () =>
-  new ContentAnalyzer(createLogger(), {
-    llmIntegration: {
-      enabled: false,
-      apiKey: null,
-      endpoint: null,
-      model: 'gpt-4',
-      maxTokens: 1000,
-      temperature: 0.1,
-    },
-  } as unknown as ConstructorParameters<typeof ContentAnalyzer>[1]);
+const createSemanticAnalyzer = () => new ContentAnalyzer(createLogger());
 
 /**
  * Builds the processor with real analysis collaborators and exactly one stub.

@@ -21,16 +21,7 @@ const createLogger = () =>
 const createAnalyzer = () =>
   new PromptAnalyzer({
     logger: createLogger(),
-    semanticAnalyzer: new ContentAnalyzer(createLogger(), {
-      llmIntegration: {
-        enabled: false,
-        apiKey: null,
-        endpoint: null,
-        model: 'gpt-4',
-        maxTokens: 1000,
-        temperature: 0.1,
-      },
-    } as unknown as ConstructorParameters<typeof ContentAnalyzer>[1]),
+    semanticAnalyzer: new ContentAnalyzer(createLogger()),
   });
 
 const promptData = {

@@ -159,18 +159,6 @@ export interface GateEvaluationResult {
 }
 
 /**
- * Gate status information
- */
-export interface GateStatus {
-  gateId: string;
-  passed: boolean;
-  requirements: GateRequirement[];
-  evaluationResults: GateEvaluationResult[];
-  timestamp: number;
-  retryCount?: number;
-}
-
-/**
  * Context for validation
  */
 export interface ValidationContext {

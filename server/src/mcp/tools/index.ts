@@ -212,9 +212,7 @@ export class McpToolRouter {
     // Store callback references
     this.onRestart = onRestart;
 
-    // Initialize shared components with configurable analysis
-    const analysisConfig = this.configManager.getSemanticAnalysisConfig();
-    this.semanticAnalyzer = createContentAnalyzer(this.logger, analysisConfig);
+    this.semanticAnalyzer = createContentAnalyzer(this.logger);
     this.analyticsService = metricsCollector;
 
     // Initialize gate system manager for runtime gate control

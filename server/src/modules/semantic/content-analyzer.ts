@@ -16,8 +16,6 @@
  * Results are cached per prompt shape for five minutes.
  */
 
-import { SemanticAnalysisConfig } from '../../types.js';
-
 import type { ContentAnalysisResult, ContentAnalyzerPort, Logger } from '#shared/types/index.js';
 
 import { ConvertedPrompt } from '#engine/execution/types.js';
@@ -26,29 +24,21 @@ import { ConvertedPrompt } from '#engine/execution/types.js';
 const CACHE_ANALYSIS = true;
 const CACHE_EXPIRY_MS = 300000; // 5 minutes
 
+/**
+ * Analyzes prompt content. Takes no configuration.
+ *
+ * It used to be constructed with `SemanticAnalysisConfig`, stored it, and exposed it through
+ * `getConfig`/`updateConfig` — but read no field from it. The last real read (a model-integration
+ * term in the cache key) went with the LLM side client, and both accessors had zero callers
+ * outside tests. The `analysis.semanticAnalysis` config section is still parsed and still warns at
+ * startup; it simply no longer reaches this class, because it never fed a decision here.
+ */
 export class ContentAnalyzer implements ContentAnalyzerPort {
   private logger: Logger;
-  private config: SemanticAnalysisConfig;
   private analysisCache = new Map<string, { analysis: ContentAnalysisResult; timestamp: number }>();
 
-  constructor(logger: Logger, config: SemanticAnalysisConfig) {
+  constructor(logger: Logger) {
     this.logger = logger;
-    this.config = config;
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): SemanticAnalysisConfig {
-    return this.config;
-  }
-
-  /**
-   * Update configuration
-   */
-  updateConfig(newConfig: Partial<SemanticAnalysisConfig>): void {
-    this.config = { ...this.config, ...newConfig };
-    this.logger.info('Content analyzer configuration updated');
   }
 
   /**
@@ -197,9 +187,6 @@ export type { ContentAnalysisResult } from '#shared/types/index.js';
 /**
  * Create content analyzer
  */
-export function createContentAnalyzer(
-  logger: Logger,
-  config: SemanticAnalysisConfig
-): ContentAnalyzer {
-  return new ContentAnalyzer(logger, config);
+export function createContentAnalyzer(logger: Logger): ContentAnalyzer {
+  return new ContentAnalyzer(logger);
 }

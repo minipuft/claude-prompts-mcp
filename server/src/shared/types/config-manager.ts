@@ -38,8 +38,9 @@ export interface ConfigManager {
 
   // ── Domain config getters ────────────────────────────────────────────
 
-  getAnalysisConfig(): AnalysisConfig;
-  getSemanticAnalysisConfig(): SemanticAnalysisConfig;
+  // No `getAnalysisConfig` / `getSemanticAnalysisConfig`: the deprecated
+  // `analysis.semanticAnalysis` section is still parsed and defaulted at load (and warns once),
+  // but nothing reads the parsed value any more — the analyzer that took it never read a field.
   getLoggingConfig(): LoggingConfig;
   getFrameworksConfig(): ResolvedFrameworkConfig;
   getGatesConfig(): GatesConfig;

@@ -87,7 +87,7 @@ externally-callable wrappers are orphaned. **Verify that before deleting anythin
 **Do not** absorb this into an unrelated tier. It changes `ValidationResult`/`StepResult` shape,
 which is a different unit of review from deleting two methods.
 
-## F11 — `ContentAnalyzer` is handed a config it never reads
+## F11 — `ContentAnalyzer` is handed a config it never reads ✓ DONE 2026-08-05
 
 `ContentAnalyzer` stores `SemanticAnalysisConfig` and exposes `getConfig` / `updateConfig`, and
 reads no field from it — the last one (the `llmIntegration` cache-key term) went with the sidecar
@@ -95,20 +95,32 @@ retirement. Both accessors have **zero `src/` callers**; only tests call them. S
 `mcp/tools/index.ts:216 → configManager.getSemanticAnalysisConfig()` is a live wire into a dead
 terminal.
 
-**Blocked by design, not by scope.** The `analysis` config section is deprecated-in-place and stays
-parsed for one cycle (that plan's T0.1), so this plumbing has to survive until the removal major
-regardless. Executing it early would delete the thing the deprecation warning describes.
+**Executed in a non-major, because this entry over-bundled.** It claimed everything below shared one
+retirement trigger. It does not — the list mixes two different risk classes:
 
-**Retirement trigger**: the same major that removes the `analysis` section. At that point
-`getAnalysisConfig`, `getSemanticAnalysisConfig`, `AnalysisConfig`, `SemanticAnalysisConfig`,
-`LLMIntegrationConfig`, the `ContentAnalyzer` constructor parameter, and
-`server/scripts/validate-no-llm-client.js` (whose allowlist exists only for this plumbing) all go
-together. The guard's own satisfied-exception check will report its allowlist entries as stale when
-that happens, which is the intended signal.
+| Removed now (internal TypeScript, outside the declared contract)        | Retained until the major (contract)                                                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `ContentAnalyzer` config field, ctor param, `getConfig`, `updateConfig` | the `analysis.semanticAnalysis` section itself                                                        |
+| `createContentAnalyzer`'s config parameter                              | its parsing, defaulting and startup warning                                                           |
+| the `mcp/tools/index.ts` fetch that existed only to pass it in          | `AnalysisConfig`, `SemanticAnalysisConfig`, `LLMIntegrationConfig` — the parser still reads all three |
+| `ConfigManager.getAnalysisConfig` / `getSemanticAnalysisConfig`         | `validate-no-llm-client.js` and its allowlist                                                         |
+
+**Why the split rather than the whole list.** One commit earlier (`d219f8b7`) we published — in
+`CHANGELOG.md`, in `config.schema.json` as `"deprecated": true`, and in a warning users see at
+startup — that the section is removed _in the next major_. Deleting it now would falsify a notice
+shipped the same week, and it is the only part of this work a user could observe. F11's actual
+finding never required it: "handed a config it never reads" is entirely about the plumbing.
+
+**The retained half is proven, not asserted.** `legacy-key-migration.test.ts` is byte-unchanged and
+its four T4 tests pass; removing the warning call failed exactly the two warning cases and left the
+other two green, so the guard discriminates.
+
+**Retirement trigger for what remains**: the major that removes the section. The guard's
+satisfied-exception check will then report its allowlist entries as stale — the intended signal.
 
 ---
 
-## F13 — A second `StepResult`, in a closed dead loop of three types
+## F13 — A second `StepResult`, in a closed dead loop ✓ DONE 2026-08-05 (**10 types, not 3**)
 
 Found while executing F9. `shared/types/index.ts` holds a **duplicate** `StepResult` — near-identical
 to the one F9 deleted, differing only in using `ValidationResultContract[]` where the gates copy used
@@ -125,6 +137,25 @@ Three types, each justified only by the next, and the last justified by nothing.
 `rg` looks like a live consumer; only walking the chain to its end shows the loop is unreachable.
 That is why a per-symbol dead-code check would pass all three.
 
+**Executed — and the island was 10 types, not 3.** The three above were simply the ones I walked
+first. Also dead, each referenced only by another member: `ChainStepResult`,
+`GateEvaluationResultContract`, `GateRequirementContract`, `GateStatus` (the shared copy),
+`ExecutionState`, `ChainExecutionProgress`, `ChainStepProgress`. An **11th** went with them —
+`engine/gates/types.ts`'s own `GateStatus`, orphaned by F9 when it deleted the `StepResult` that
+referenced it, and missed at the time.
+
+**`GateStatus` nearly escaped, for the third time in this initiative.** It looked live to the first
+scan because a _second_ `GateStatus` exists in `engine/gates/types.ts` — a duplicate name, not a
+consumer. Same trap as `GateValidationResult` (excluded from the guard's forbidden list for this
+reason) and `validationResults` (live in `argument-parser.ts`). A name-keyed dead-code check is
+wrong three times out of three here; only walking edges works.
+
+**The unbuilt-vs-superseded question, answered.** This entry warned that deleting an unbuilt design
+discards it silently. It is superseded, not unbuilt: live chain state ships elsewhere —
+`sqlite-engine.ts:639` runs `json_extract(cs.state, '$.state.totalSteps')` and
+`observability-resources.ts` reads `session.state.totalSteps` / `currentStep` / `pendingReview`.
+`EnhancedChainExecutionState` is the abandoned earlier shape of a concept that does exist.
+
 **Deliberately not folded into F9.** F9 named `engine/gates/types.ts`; this is a different file and a
 different lineage — chain-execution contract types, not gate validation. Same shape, different
 subsystem, so it gets its own review.
@@ -139,7 +170,32 @@ discards the design.
 
 ---
 
+## F14 — Ten more orphans in `shared/types/index.ts`, unrelated lineages
+
+The scan that measured F13 also enumerated every exported type in the file. Ten more have zero
+consumers repo-wide and none belongs to chain execution or gate contracts:
+
+`ApiResponse` · `ServerRefreshOptions` · `ServerState` · `FileOperation` · `ModificationResult` ·
+`ExpressRequest` · `ExpressResponse` · `AutoExecutionConfig` · `GateRetryInfo` ·
+`TelemetryRuntimePort`
+
+**Not folded into F13** — different subsystems, different review unit. Two need a decision rather
+than a deletion:
+
+- **`ExpressRequest` / `ExpressResponse`** are hand-rolled shims for a framework this server no
+  longer uses. The question is whether anything still expects to serve HTTP through that shape, not
+  whether the types have consumers.
+- **`TelemetryRuntimePort`** is a _port_ — a name that usually marks a deliberate seam. A port with
+  no implementor is either a missing implementation or an abandoned design, and the two want
+  opposite treatment. Resolve before deleting.
+
+**Caveat on the measurement**: the scan counts a duplicate definition elsewhere as a consumer, which
+is how `GateStatus` initially read as live. Re-verify each individually before acting — the count is
+a starting point, not a verdict.
+
+---
+
 ## Sequencing
 
-F9 ✓ done. F13 is independently actionable now. F11 is not — it waits on the major. Do not bundle
-them into one tier just because they were measured together; they share a shape, not a trigger.
+F9 ✓, F11 ✓, F13 ✓ — all done. F14 is the remainder, and two of its ten want a design call rather
+than a deletion.

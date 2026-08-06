@@ -99,9 +99,6 @@ export interface BaseExecutionContext {
   options: Record<string, string | number | boolean | null | unknown[]>;
 }
 
-// ChainStepResult canonical definition lives in shared/types/index.ts (cross-layer contract type).
-// Import directly from shared/types/index.js — no re-export shim.
-
 /**
  * Chain execution result structure
  */
