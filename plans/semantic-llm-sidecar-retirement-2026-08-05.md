@@ -1,13 +1,13 @@
 ---
 title: "Semantic LLM Side-Client Retirement"
 date: 2026-08-05
-status: active
+status: reference
 tags: [cleanup, gates, config, breaking-candidate]
 ---
 
 # Semantic LLM Side-Client Retirement
 
-**Status**: **COMPLETE** — T0 decided; T1, T2, T2.5, T3, T3.5, T3.6, T4, T5 all landed · F9, F11 filed for follow-up · F10, F12 resolved
+**Status**: **COMPLETE** (`reference` — cited by the follow-up sweep, so it stays in the tree rather than archiving) — T0 decided; T1, T2, T2.5, T3, T3.5, T3.6, T4, T5 all landed · F10, F12 resolved · F9, F11 carried to [reader-without-producer-sweep](techincal_debt/reader-without-producer-sweep-2026-08-05.md) so they survive archival
 **Created**: 2026-08-05
 **Supersedes nothing.** Follows the `llmIntegration.mode` fix (same session), which made the config
 surface honest enough for this removal to be scoped.
