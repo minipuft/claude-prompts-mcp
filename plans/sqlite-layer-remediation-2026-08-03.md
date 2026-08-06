@@ -761,10 +761,40 @@ before execution that execution proved unmeasurable, contradictory, or already f
       break its test usually means it was never reached — an earlier early-return short-circuited.
       Caught live at 6.1. → memory `feedback_mutation_never_reached`, 2 sightings, formalize on a
       third.
-- [ ] **Prompt defect**: `implementation_plan` fires the visual/creative design-enrichment block on
-      persistence work, and its Phase-2.5 guard checks `## Context`/`## Analysis`/`## Goals` while
-      the prompt body specifies `context_establishment`/`systematic_analysis`/`goal_definition`.
-      Both are worth fixing in the prompt. **Still open** — belongs to the prompt, not this repo.
+- [x] **Prompt defect — half fixed 2026-08-05, and the original note was imprecise.**
+
+      _Correction to my own finding_: "fires design-enrichment on persistence work" did **not**
+              reproduce. The parent already had a `design_mode` argument (`auto|on|off`) with Nunjucks
+              gating; both persistence phrasings render silent. But a worse defect sat underneath it —
+              Nunjucks `in` on a string is a **substring** test, so bare `'ui'` matched b·ui·ld / q·ui·ck /
+              g·ui·de / req·ui·re and bare `'art'` matched st·art / p·art / ch·art. Measured: _"Start the
+              quick guide for part two"_ fired the visual-research path with zero design intent.
+
+              **Fixed** in `implementation_plan` (v2): pad the haystack with spaces, flatten `- / , .` to
+              spaces, then require whole-word matches (`' ui '`, `' ux '`, `' css '`, `' art '`) for the
+              short ambiguous keywords while keeping substring matching for unambiguous ones. Validated
+              against a 9-case fire/silent table run through real Nunjucks against the **stored** template
+              — 9/9, including forced `on` and `off`. The silent cases are the ones that matter; a
+              too-greedy matcher is invisible in the fire cases alone.
+
+              **The header mismatch is REAL and remains open**, blocked by a tooling defect, not by effort.
+              `resources/frameworks/cageerf/phases.yaml` declares `section_header: '## Context' |
+              '## Analysis' | '## Goals'`; `implementation_plan/verification` instructs the agent to emit
+              the phase *ids* (`## context_establishment` etc.), so `splitBySectionHeaders` matches nothing
+              and the guard checks nothing — while the prompt text asserts it "**enforces**" them. A guard
+              that silently checks nothing is worse than an absent one.
+
+              **New finding — `resource_manager update` cannot write slash-namespaced chain steps.**
+              `action:update` on `implementation_plan/verification` fails with _"Mutation produced invalid
+              resource state; restored previous files"_ even for a description-only change, while the same
+              call on the parent `implementation_plan` succeeds and versions correctly. Rollback works, so
+              nothing was damaged. Until that is fixed, chain-step prompts are read-only through the MCP
+              surface — and manual edits under `server/prompts/**` are forbidden by CLAUDE.md, so there is
+              no sanctioned path to edit them at all. Worth its own plan entry.
+
+              Interim mitigation landed: the parent system message now carries a **Phase 2.5 section
+              headers** block naming the correct headers and the failure mode, so the instruction reaches
+              the agent through the parent even though the step prompt still says otherwise.
 
 ---
 
