@@ -36,6 +36,14 @@ executing the plan. Conservative option taken, logged, work continued.
   the engine DDL and pins the scope via `identity.launchDefaults.workspaceId` in the fixture
   workspace's config.json. CLI suite 75/75 locally.
 
+- **2026-08-06 · Second G4 blocker: stale MCP tool-schema snapshot** (`validate:tool-schemas`,
+  Build job). The branch's SDK/zod-4 upgrade moved all three tools' published inputSchemas from
+  draft-07 to 2020-12 and added the structured `gate_verdict` object + chain `agentType`; the
+  committed snapshot predated them. Re-captured against a fresh build with repo runtime-state
+  moved aside (snapshot-environment lesson: the schema union depends on gate/framework state),
+  verified green, committed `1d4f2e29`. Pre-commit prettier reformats the generated snapshot but
+  the check compares structure, not bytes — no `.prettierignore` entry needed.
+
 ## Unknowns / gaps found during execution
 
 - **RP behavior with a never-released manifest version** (the trap G2 closed): a manifest stating a
