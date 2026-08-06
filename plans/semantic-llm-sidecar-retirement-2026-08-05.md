@@ -268,7 +268,12 @@ Both were **created by** 2.5.3, not merely adjacent to it — removing the write
 
 **Not extended into**: F9 below. Those are a different lineage.
 
-### F9 — Two more reader-without-producer surfaces, different lineage (found while verifying 2.5)
+### F9 — Two more reader-without-producer surfaces, different lineage — CARRIED, then RESOLVED
+
+**Moved to [reader-without-producer-sweep](techincal_debt/reader-without-producer-sweep-2026-08-05.md#f9)
+and executed there 2026-08-05 (`7a43f996`).** Original text below; note it names a
+`GateValidator.getRetryHints` that does not exist, and `StepResult.validationResults` when the
+whole interface was dead.
 
 - **`GateValidator.shouldRetry` / `getRetryHints`** have **no callers**. `gates/core/index.ts:252`
   delegates to `shouldRetry`, and that wrapper is itself called by nothing —
@@ -591,7 +596,13 @@ reverted; `rg FALSIFICATION src/ tests/ ../cli/src` → 0.
 `ValidationResult`, and I indexed it without `?.` while the surrounding file already used `?.[0]`.
 `typecheck` cannot see `tests/`, so this would have reached CI green.
 
-### F11 — `ContentAnalyzer` is handed a config it never reads
+### F11 — `ContentAnalyzer` is handed a config it never reads — CARRIED, then RESOLVED
+
+**Moved to [reader-without-producer-sweep](techincal_debt/reader-without-producer-sweep-2026-08-05.md#f11)
+and executed there 2026-08-06 (`558e4dc8`)** — the plumbing only. The prediction below that it
+"has to survive until the removal major" was **wrong**: it bundled the internal plumbing with the
+config types the parser still reads. Only the section itself waits for the major. Original text
+kept below for the record.
 
 `ContentAnalyzer` stores `SemanticAnalysisConfig` and exposes `getConfig`/`updateConfig`, and reads
 no field from it: T3 removed the last one (the `llmIntegration` cache-key term). Both accessors have
