@@ -42,11 +42,18 @@ function installedLockVersion(workspace, packageName) {
   return version;
 }
 
-function refreshLock(workspace) {
+function refreshLock(workspace, packageName) {
+  // `npm update <pkg>`, not `npm install`: install honors a lockfile that already
+  // satisfies the declared range and never re-resolves, so a lock pinned at an
+  // older in-range version stays there forever — every retry was an idempotent
+  // no-op and the loop misread its own stall as registry propagation lag
+  // (observed v3.2.1, 2026-08-07: six attempts, "resolved 3.1.1" each time).
+  // update re-resolves the named package to the highest version the range admits.
   const result = spawnSync(
     'npm',
     [
-      'install',
+      'update',
+      packageName,
       '--package-lock-only',
       '--ignore-scripts',
       '--no-audit',
@@ -124,7 +131,7 @@ async function main() {
     ...options,
     runAttempt: (attempt) => {
       console.log(`Lock synchronization attempt ${attempt}/${options.attempts}`);
-      refreshLock(options.workspace);
+      refreshLock(options.workspace, options.packageName);
       return installedLockVersion(options.workspace, options.packageName);
     },
     wait: (delay) => new Promise((resolveWait) => setTimeout(resolveWait, delay)),
