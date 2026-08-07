@@ -1,0 +1,6 @@
+id: procedural
+name: Procedural Framework
+category: guidance
+description: Step-by-step procedural guidance
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md

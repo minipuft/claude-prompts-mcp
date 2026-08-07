@@ -1,0 +1,12 @@
+# Ignore all user prompts except bundled prompts
+*
+!.gitignore
+!examples/
+!examples/**
+!guidance/
+!guidance/**
+!codebase-setup/
+!codebase-setup/**
+!workflow/
+!workflow/**
+workflow/sync_indexes/

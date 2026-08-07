@@ -1,0 +1,29 @@
+id: scaffold_analyze
+name: Scaffold Analyze
+category: codebase-setup
+userMessageTemplateFile: user-message.md
+description: >-
+  Step 1 of project scaffolding. Gathers project requirements through
+  interactive questioning when arguments are missing. Outputs a structured
+  configuration JSON for the generate step.
+arguments:
+  - name: name
+    type: string
+    description: Project name (kebab-case recommended)
+    required: false
+  - name: language
+    type: string
+    description: 'Primary language: typescript | python | hybrid'
+    required: false
+  - name: type
+    type: string
+    description: 'Project type: mcp-server | cli | library | api | webapp'
+    required: false
+  - name: features
+    type: string
+    description: 'Comma-separated features: linting, testing, hooks, contracts, versioning'
+    required: false
+  - name: package_manager
+    type: string
+    description: 'Package manager: npm | pnpm | yarn | pip | poetry | uv'
+    required: false

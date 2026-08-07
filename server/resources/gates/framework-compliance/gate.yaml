@@ -1,0 +1,44 @@
+id: framework-compliance
+name: Framework Compliance
+type: validation
+gate_type: framework
+description: >-
+  Ensures responses follow the active framework (CAGEERF, ReACT, 5W1H, SCAMPER).
+  Requires BOTH a matching framework context AND a relevant prompt category to activate.
+  This prevents framework gates from applying to simple prompts like greetings.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    min_length: 300
+    required_patterns:
+      - context
+      - analysis
+      - systematic
+  # `inline_guidance` is display-only (never auto-enforced), so these are words the agent is
+  # asked to self-assess for. A second entry requiring the word "methodology" was dropped with the
+  # framework vocabulary rename: the guidance the agent now reads no longer uses that word, so
+  # asking it to echo one was stale.
+  - type: inline_guidance
+    keyword_count:
+      framework: 1
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - development
+    - analysis
+    - research
+    - architecture
+    - debugging
+    - documentation
+    - planning
+  explicit_request: false
+  framework_context:
+    - CAGEERF
+    - ReACT
+    - 5W1H
+    - SCAMPER

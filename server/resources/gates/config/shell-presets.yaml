@@ -1,0 +1,37 @@
+# Shell Verification Presets Configuration
+#
+# Defines verification presets for common use cases.
+# Users apply these with :fast, :full, or :extended syntax.
+#
+# Example usage:
+#   :: verify:"npm test" :fast      # Quick feedback during development
+#   :: verify:"npm test" :full      # CI-style validation (default-like)
+#   :: verify:"npm test" :extended  # Long-running test suites
+
+presets:
+  # :fast - Quick feedback during development
+  # Single attempt with short timeout for rapid iteration
+  fast:
+    maxIterations: 1
+    timeout: 30000  # 30 seconds
+    description: "Quick feedback during development"
+
+  # :full - CI-style validation (recommended for most cases)
+  # Multiple attempts with standard timeout
+  full:
+    maxIterations: 5
+    timeout: 300000  # 5 minutes
+    description: "CI-style validation with multiple attempts"
+
+  # :extended - Long-running test suites
+  # More attempts with extended timeout for comprehensive testing
+  extended:
+    maxIterations: 10
+    timeout: 600000  # 10 minutes
+    description: "Extended validation for long-running tests"
+
+# Default values when no preset is specified
+defaults:
+  maxAttempts: 5
+  defaultTimeout: 300000  # 5 minutes
+  maxTimeout: 600000      # 10 minutes

@@ -1,0 +1,19 @@
+{
+  "name": "claude-prompts",
+  "description": "Model Context Protocol (MCP) server for versioned prompt templates, multi-step workflow chains, and quality gates. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+  "author": {
+    "name": "minipuft"
+  },
+  "homepage": "https://github.com/minipuft/claude-prompts",
+  "repository": "https://github.com/minipuft/claude-prompts",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "prompts",
+    "templates",
+    "gates",
+    "chains",
+    "workflows"
+  ],
+  "version": "3.2.1"
+}

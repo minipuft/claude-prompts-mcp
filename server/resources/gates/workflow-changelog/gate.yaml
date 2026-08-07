@@ -1,0 +1,27 @@
+id: workflow-changelog
+name: Changelog Entry Verification
+type: validation
+severity: medium
+description: >-
+  Validates that CHANGELOG.md [Unreleased] section was updated during
+  implementation. Changes should be documented as they happen, not at release.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    required_patterns:
+      - Unreleased
+  - type: inline_guidance
+    regex_patterns:
+      - 'Added|Fixed|Changed|Removed|Deprecated'
+      - 'CHANGELOG|changelog'
+
+retry_config:
+  max_attempts: 1
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - workflow
+    - implementation
+  explicit_request: false

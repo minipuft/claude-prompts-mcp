@@ -1,0 +1,16 @@
+id: reference_demo
+name: Reference Syntax Demo
+description: Demonstrates template reference features - {{ref:id}} for prompt inclusion and {{script:id}} for inline script execution
+userMessageTemplateFile: user-message.md
+# Declare script tools available to this prompt
+tools:
+  - word_count
+arguments:
+  - name: text
+    description: The text to analyze with the word_count script tool
+    required: true
+    type: string
+  - name: topic
+    description: Optional topic name for the introduction (demonstrates reference feature)
+    required: false
+    type: string

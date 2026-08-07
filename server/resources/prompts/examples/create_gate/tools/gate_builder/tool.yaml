@@ -1,0 +1,19 @@
+# Gate Builder Script Tool Configuration
+# Validates and transforms gate definitions for resource_manager
+
+id: gate_builder
+name: Gate Builder
+description: Validates gate definitions and prepares them for resource_manager execution
+runtime: python
+script: script.py
+timeout: 30000
+enabled: true
+
+# Execution configuration:
+# - trigger: schema_match (auto-detect when schema fields present)
+# - strict: false (allow partial matches to show validation errors)
+# - autoApproveOnValid: true (auto-execute when validation passes)
+execution:
+  trigger: schema_match
+  strict: false
+  autoApproveOnValid: true
