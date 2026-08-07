@@ -54,6 +54,14 @@ executing the plan. Conservative option taken, logged, work continued.
   file; a full reset needs `npm pkg set version=X --prefix server` first. Candidate small fix:
   accept the server package in the manifest list when a CLI version is passed.
 
+## G4 run log
+
+- 2026-08-06 · run 1: classify failed (PR-range trailing whitespace) → fixed `e0d32557`
+- 2026-08-06 · run 2: CLI job failed (stale history fixtures) → fixed `3e7b7306`; classify/lint green
+- 2026-08-06 · run 3: Build failed (stale tool-schema snapshot) → fixed `1d4f2e29`; CLI green
+- 2026-08-06 · run 4 (head `a2db54cf`): in flight — first run with all three fixes; Test Suite matrix
+  has not yet completed on any run of this PR
+
 ## Validation runs
 
 - 2026-08-06 17:49 · `npm run build >/dev/null 2>&1 && NODE_OPTIONS="--experimental-vm-modules" npx jest --config jest.config.cjs 2>&1 | tail ` · ran
