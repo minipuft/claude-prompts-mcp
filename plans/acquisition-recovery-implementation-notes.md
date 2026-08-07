@@ -154,6 +154,31 @@ executing the plan. Conservative option taken, logged, work continued.
 - Gates G1-G7 ✓ (see plan table); G8 ✓ pending only raw.githubusercontent cache expiry after
   marketplace sync PR #8 merged with all downstream mains at 3.2.1.
 
+## Smithery + registry findings (2026-08-07)
+
+- **Smithery publish requires per-tool `inputSchema` objects** in the bundle manifest (validates
+  against MCP wire `Tool`), which the MCPB format legitimately omits — the raw release bundle 400s
+  with one "expected object, received undefined" per tool. Shipped a patched variant carrying the
+  real snapshot schemas. **Queued follow-up**: teach `build-extension.sh` to inject the snapshot
+  inputSchemas into manifest.json tools at pack time (check `mcpb validate` accepts the extra
+  field), so the release artifact publishes to Smithery unpatched.
+- Old npm name `claude-prompts-mcp` is E404 (fully absent, no history) — nothing to migrate to;
+  relaunch rejection stands.
+
+## Glama deep-dive (2026-08-07, post-claim)
+
+- Score model (from the live /score page): Quality = 70% Tool Definition Quality (per-tool: purpose
+  clarity 25 · usage guidelines 20 · behavioral transparency 20 · parameter semantics 15 ·
+  conciseness 10 · contextual completeness 10; server-level = 60% mean + 40% MINIMUM — one weak
+  tool drags hard) + 30% Server Coherence (disambiguation · naming · tool count · completeness).
+  Both compute only after a RELEASE (their container runs tools/list). Plan: release first, read
+  per-tool grades, tune the tool-description CONTRACTS against the actual rubric.
+- Glama build panel trap: the CMD field stores the typed install line as a single argv element
+  (`spawn "npx -y claude-prompts@latest" ENOENT`). Immune form: bake the package in a build step,
+  spawn a single-token binary. stdio is the server's default transport, so bare `claude-prompts`
+  suffices.
+- Second failure was Glama-side (docker hub metadata resolution timeout) — retry, don't reconfigure.
+
 ## Validation runs
 
 - 2026-08-06 20:23 · `python3 - <<'EOF' p = 'plans/acquisition-recovery.md' s = open(p).read() s = s.replace("""| G8 | **Distribution check gr` · ran
