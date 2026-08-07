@@ -69,9 +69,13 @@ executing the plan. Conservative option taken, logged, work continued.
 - RP opened #197 titled `chore(main): release 3.2.0` — the Release-As pin held; every version
   surface bumps 3.1.1→3.2.0 including BOTH server.json fields (G3 wiring proven live). RP merged
   its generated commit list into the hand-written Unreleased sections and retitled the block.
-- **Trap: RP's PR gets no CI.** The PR is created with GITHUB_TOKEN, which never triggers
-  workflows; only Renovate (a different trigger path) registered, so the four required contexts
-  stayed absent and the PR sat BLOCKED. Fix: close/reopen under my token re-fires pull_request.
+- **Retracted trap (2026-08-07): "RP's PR gets no CI" was a misdiagnosis.** The
+  `RELEASE_PLEASE_TOKEN` PAT (set 2026-01-14) already makes RP's PRs trigger workflows — #197 was
+  authored by minipuft and its CI run started 4s after open. What looked like "no CI" was the
+  window before the classify job registered the four check contexts: `gh pr checks` lists only
+  REGISTERED check runs, and BLOCKED means "required checks pending", not "never coming". The
+  close/reopen was unnecessary churn that cancelled a healthy run. Real lesson: before declaring
+  a workflow untriggered, check `gh run list` for the head branch — not `gh pr checks`.
 - **Trap: `gh pr merge` on a BLOCKED PR exits 0** while printing an --auto/--admin hint — it
   no-ops without failing, so any merge automation must verify `state == MERGED` afterward, not
   trust the exit code. Bit twice before the loop verified state.
