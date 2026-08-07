@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.1...v3.3.0) (2026-08-07)
+
+
+### Added
+
+* **ci:** publish server.json to the official MCP registry on every release ([5b9ca4b](https://github.com/minipuft/claude-prompts-mcp/commit/5b9ca4b394f6e807777671aeac08bccdffae4edd))
+
+
+### Fixed
+
+* **ci:** make registry publish idempotent and fix the verify jq path ([b845930](https://github.com/minipuft/claude-prompts-mcp/commit/b84593084b727a3cc9d02648e2fb51567f8fae7e))
+* **ci:** ship package.json in the claude-code-plugin staging too ([edb037c](https://github.com/minipuft/claude-prompts-mcp/commit/edb037c727652e3b92f9cb55ef4dca170fa2cb69))
+* **scripts:** re-resolve the downstream lock with npm update, not npm install ([a6bfef8](https://github.com/minipuft/claude-prompts-mcp/commit/a6bfef88dd0f31590a03c0e9c051f98cc2ccb8d2))
+
+
+### Documentation
+
+* **docs:** close all release gates — v3.2.1 finalized across every surface ([009d952](https://github.com/minipuft/claude-prompts-mcp/commit/009d952107e8ea3d0980cbf2126b48adbe3cf14a))
+
 ## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 
 
