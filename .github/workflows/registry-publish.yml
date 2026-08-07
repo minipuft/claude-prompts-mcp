@@ -23,9 +23,14 @@ env:
 
 jobs:
   registry-publish:
+    # The repository guard is fork courtesy, not security: a fork's OIDC token
+    # carries its own owner, so the registry would reject its attempt to publish
+    # io.github.minipuft/* anyway — this just skips cleanly instead of failing
+    # with a confusing namespace error in someone else's Actions tab.
     if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      || github.event_name == 'workflow_dispatch'
+      github.repository == 'minipuft/claude-prompts-mcp'
+      && ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
