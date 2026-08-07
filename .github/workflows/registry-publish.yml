@@ -1,0 +1,69 @@
+name: Publish to MCP Registry
+
+# Publishes root server.json to the official MCP registry after every successful
+# npm publish, authenticating via GitHub Actions OIDC — the runner's identity
+# proves ownership of the io.github.minipuft/* namespace, so no stored secret
+# and no interactive login. The registry validates that the npm package named
+# in server.json carries a matching mcpName, which is why this runs strictly
+# after "Publish to npm" (the tarball must exist on the registry first).
+on:
+  workflow_run:
+    workflows: ["Publish to npm"]
+    types: [completed]
+  # Manual recovery path — same reasoning as extension-publish: the job that
+  # talks to an external service is the one that most often needs re-running.
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC token for mcp-publisher login github-oidc
+  contents: read
+
+env:
+  MCP_PUBLISHER_VERSION: v1.8.1
+
+jobs:
+  registry-publish:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Install mcp-publisher (pinned)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$MCP_PUBLISHER_VERSION" \
+            --repo modelcontextprotocol/registry \
+            --pattern 'mcp-publisher_linux_amd64.tar.gz'
+          tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+          sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
+          mcp-publisher --version
+
+      - name: Authenticate via OIDC
+        run: mcp-publisher login github-oidc
+
+      - name: Publish server.json
+        run: mcp-publisher publish
+
+      - name: Verify the listing serves this version
+        run: |
+          set -euo pipefail
+          expected=$(jq -r .version server.json)
+          name=$(jq -r .name server.json)
+          for attempt in 1 2 3 4 5; do
+            got=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
+              | jq -r --arg n "$name" '[.servers[]? | select(.name == $n)][0].version // empty') || got=""
+            if [ "$got" = "$expected" ]; then
+              echo "Registry serves ${name}@${got}"
+              exit 0
+            fi
+            echo "attempt ${attempt}/5: registry serves '${got:-nothing}', want ${expected}"
+            sleep 30
+          done
+          echo "ERROR: registry never served ${name}@${expected}"
+          exit 1
