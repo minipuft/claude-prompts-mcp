@@ -350,6 +350,39 @@ believing the label — the hono alert's `runtime` scope was wrong about what we
 
 ---
 
+## Tier 5 — Codex Marketplace Integration + Downstream Consistency Validation (DEFERRED — after Tier 2b closes)
+
+Claude-side listings are effectively exhausted: with the official registry, Smithery, Glama, and
+the punkpeye PR in flight, the only remaining Claude-ecosystem target is
+`hesreallyhim/awesome-claude-code` (step 10, owner-manual). The next acquisition surface is the
+**Codex ecosystem** — `codex-prompts` was ported 2026-08-03 (measured divergences: encrypted
+subagent payloads, no `.mcp.json` interpolation, sandboxed MCP children) but has never been
+listed anywhere or wired into the release train.
+
+**Scope when activated:**
+
+1. **Codex marketplace/plugin listing** — research Codex's actual distribution mechanism first
+   (`/codex-plugins` skill, then their current docs; requirements were not captured during the
+   port). Draft any external submission for owner pass per the standing external-submissions rule.
+2. **Downstream consistency for codex-prompts** — extend the same automation the other three
+   downstreams get: `synchronize-downstream-lock` coverage, a `downstream-contract.json`
+   equivalent, and membership in the distribution version check (`validate:versions
+--distribution`). Evidence this matters: minipuft-plugins marketplace sat at 3.1.1 against a
+   3.2.1 release today until marketplace-sync merged — codex-prompts currently has **no** such
+   self-heal and would drift silently.
+3. **Workflow parity audit** — every hardening added this cycle (auto-merge with state
+   verification, BEHIND self-heal, contract URL pins) exists only where it was written. Enumerate
+   which downstream repos carry which guards; close the gaps or record the intentional asymmetry.
+
+**Decision item (owner call, affects how #2 is built): distribution-repo architecture.**
+Question raised 2026-08-06: should the four client repos (minipuft-plugins, gemini-prompts,
+opencode-prompts, codex-prompts) collapse into the main repo behind a launch flag?
+Recommendation recorded below the fold — short form: keep the repos, demote them to **rendered
+artifacts** (skills-sync/dist-branch pattern); flags can't solve this because storefronts bind to
+repo _shape_ at install time, not to runtime behavior.
+
+---
+
 ## Sequencing Summary
 
 ```
@@ -359,6 +392,7 @@ Aug 2–~28    → MIT observation window: no README/metadata changes
 Window close → record signal → discuss Tier 1 open questions → execute Tier 1
              → Tier 2b integrations (registry-first order)
              → Tier 3a capability research → 3b README pass if warranted
+After 2b     → Tier 5 Codex integration + downstream consistency (deferred 2026-08-06)
 ```
 
 Each executed change gets a date recorded in this file — one variable at a time is the whole lesson of the AGPL episode.

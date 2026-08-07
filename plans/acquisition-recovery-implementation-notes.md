@@ -200,3 +200,37 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-07 · Not plan-tracked: plan-sync hook message compressed to dynamic-facts + one-line action (owner: stable protocol text should not re-print per firing).
 
 - 2026-08-07 · QUEUED (post-3.2.1, owner-agreed direction): retire the standalone CLI release asset + Node ≥18.18 surface. Evidence: bundled cpm.js crashes on Node 20 at startup (ERR_UNKNOWN_BUILTIN_MODULE, node:sqlite — proven in docker node:20-slim); the surface has shipped broken since the node:sqlite migration with zero reports. Plan: align cli floor to >=22.13, drop release-asset steps + prepare:release-artifacts + curl docs section + CLAUDE.md boundary row; cpm stays as the npm-delivered scripting/CI layer (validate, history/rollback, rename/move — things direct YAML edits cannot do).
+
+## Distribution-repo architecture — mono-repo + launch flag vs per-client repos (assessed 2026-08-06, feeds Tier 5)
+
+Owner question: should minipuft-plugins / gemini-prompts / opencode-prompts / codex-prompts
+collapse into this repo, with a launch flag selecting the client, to avoid maintaining N repos
+and N storefront integrations?
+
+**Finding: the split was forced by the storefronts, not chosen for neatness — but the
+maintenance cost is real and has a cheaper fix than merging.**
+
+- **A launch flag operates at the wrong layer.** The server is ALREADY centralized and
+  client-agnostic (one npm package, runtime config, workspace flags). What differs per client is
+  install-time repo _shape_: Claude Code's marketplace reads `.claude-plugin/marketplace.json` at
+  a repo root, Gemini installs a repo whose root is the extension manifest, opencode likewise.
+  Four storefronts cannot all own the same root, and no runtime flag is consulted at clone time.
+- **Hooks are the same story**: each client reads its own hook config format from its own
+  location. The _client_ decides what file to read — our code can't flag that away.
+- **The real, evidenced cost of multi-repo is drift, not effort**: marketplace served 3.1.1
+  against the 3.2.1 release for hours today until marketplace-sync merged; the rename broke
+  downstream-contract sourceUrl; workflow hardening lands unevenly. All are sync failures, not
+  organization failures.
+- **Recommended shape: single source, rendered distributions.** Keep the per-client repos as
+  storefront-facing **build artifacts** (the dist-branch / skills-sync pattern already proven
+  here): client adapters + hooks live in one source tree, a render/export workflow regenerates
+  each client repo, hand edits there become forbidden the way `_generated/` is. This gets
+  mono-repo economics (one edit, one review, N renders) without fighting storefront constraints,
+  and makes "workflow parity" a property of the generator instead of an audit.
+- **"Cramped" is not a real concern at this size** — the main repo already carries TS server +
+  Python hooks + CLI; a `clients/<name>/` tree is less heterogeneity than it already holds. The
+  cost that IS real: rendered repos need the never-hand-edit discipline, and issues/stars/release
+  history stay fragmented per repo (that fragmentation is also what makes each listing legible to
+  its own store, so it is not purely a loss).
+- **Migration is incremental**: codex-prompts (newest, least history) is the pilot — build the
+  renderer for it in Tier 5, then fold the other three in one at a time.
