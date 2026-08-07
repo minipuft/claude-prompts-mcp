@@ -82,6 +82,14 @@ executing the plan. Conservative option taken, logged, work continued.
 - Release PR merged as SQUASH to match the 3.1.1 precedent (`chore(main): release 3.1.1 (#191)`,
   single parent).
 
+## Token audit (2026-08-07, on owner question)
+
+- `RELEASE_PLEASE_TOKEN` proven live today (#197 authored under it, CI triggered);
+  `NPM_TOKEN` proven live 2026-08-03 (v3.1.1/v3.1.0 publishes). Both set 2026-01-14 → no 30/90-day
+  expiry, long-lived. Repo side cannot see future expiry — only the owner's token settings pages
+  can. Failure mode to watch: an expired PAT makes release-please silently fall back to
+  `github.token`, and THEN release PRs genuinely get no CI (the thing 2026-08-06 misdiagnosed).
+
 ## Validation runs
 
 - 2026-08-06 17:49 · `npm run build >/dev/null 2>&1 && NODE_OPTIONS="--experimental-vm-modules" npx jest --config jest.config.cjs 2>&1 | tail ` · ran
