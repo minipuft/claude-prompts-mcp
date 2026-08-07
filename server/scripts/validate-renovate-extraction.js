@@ -9,11 +9,12 @@ const ACTION_FILES = [
   '.github/workflows/downstream-sync.yml',
   '.github/workflows/extension-publish.yml',
   '.github/workflows/npm-publish.yml',
+  '.github/workflows/registry-publish.yml',
   '.github/workflows/release-please.yml',
   '.github/workflows/renovate-config-validator.yml',
 ];
 const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'];
-const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, regex: 5 };
+const EXPECTED_COUNTS = { 'github-actions': 8, nodenv: 1, npm: 3, regex: 5 };
 const EXPECTED_REGEX_IDENTITIES = [
   ['PyYAML', '.github/workflows/ci.yml'],
   ['pyrefly', '.github/workflows/ci.yml'],
