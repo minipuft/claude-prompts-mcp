@@ -7,15 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.2.0](https://github.com/minipuft/claude-prompts-mcp/compare/v3.1.1...v3.2.0) (2026-08-07)
 
-
-### ⚠ BREAKING CHANGES
-
-* **chains:** schema v20 renames chain_sessions.tenant_id and chain_run_registry.tenant_id to run_owner_pid, and drops `lifecycle` from v_execution_status. Both tables are derived/ephemeral and are dropped by the bump, so no data migrates.
-* **runtime:** `--transport=sse` and `transport: "sse"` in config.json are rejected at startup rather than silently resolved to another transport. Use `streamable-http`.
-* **runtime:** The deprecated HTTP+SSE transport is removed; use `--transport=streamable-http`. The Streamable HTTP transport no longer issues or requires an `Mcp-Session-Id` header.
-
 ### Added
 
+- **Codex CLI support seams:** generic `PLUGIN_ROOT` workspace resolution, a `codex exec` spawn strategy (`SpawnConfig.client` + `CodexModelStrategy`), and a codex skills-sync registration — consumed by the new [codex-prompts](https://github.com/minipuft/codex-prompts) downstream plugin.
 * **chains:** let a prompt choose which subagent its delegated steps spawn ([8a4c066](https://github.com/minipuft/claude-prompts-mcp/commit/8a4c0660aabd728af0f72ccb67ef49a2c7a4646f))
 * **ci:** retire finished plans at release and gate the misclassification ([15a71d4](https://github.com/minipuft/claude-prompts-mcp/commit/15a71d404d4d53420802c66b73eb5a030f0c85dc))
 * **hooks:** add the codex client seams to the shared hook library ([98e7f4e](https://github.com/minipuft/claude-prompts-mcp/commit/98e7f4e8871a4c3b31ef40f437a7735e914bf30d))
@@ -28,27 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **scripts:** give the one-time durable exclusion a retirement condition ([36ff257](https://github.com/minipuft/claude-prompts-mcp/commit/36ff2576fd1d11425d94f9fdd29e69c745c59dfd))
 * **scripts:** sort finished plans out of the working set by status ([8504088](https://github.com/minipuft/claude-prompts-mcp/commit/850408899c9b69b9da456abfff1fade12f6139e0))
 
-
-### Fixed
-
-* **ci:** make plan retirement self-contained and record why it runs on the PR ([cbdfeae](https://github.com/minipuft/claude-prompts-mcp/commit/cbdfeae1c09279e7e53c39770874f8e9213661d2))
-* **ci:** point downstream sync PR bodies at the renamed upstream repo ([410acb7](https://github.com/minipuft/claude-prompts-mcp/commit/410acb7b5e039ef21eb0ebac5f8367c8e13648c7))
-* **ci:** re-add formatted staged files with -f in pre-commit ([59dc266](https://github.com/minipuft/claude-prompts-mcp/commit/59dc266e3c4a832e8830fa190c8afe6da56ea237))
-* **config:** stop gitignoring the project rules the comment says to track ([7dc9b15](https://github.com/minipuft/claude-prompts-mcp/commit/7dc9b15d598458d948eedf5e29e0a234f32fd95f))
-* **deps:** close the Dependabot set — override tmp to 0.2.x, plan Tier 4 triage ([8381c0a](https://github.com/minipuft/claude-prompts-mcp/commit/8381c0a655614d217a992e91b9759985be411495))
-* **gates:** correct the workflow-preflight source, not its compiled output ([163a58a](https://github.com/minipuft/claude-prompts-mcp/commit/163a58afb3809994e7a421096637b32641ce5603))
-* **hooks:** enforce the structured gate_verdict shape gate-enforce claims to check ([a5d1b60](https://github.com/minipuft/claude-prompts-mcp/commit/a5d1b60f6b49011dc111a4f1e007c400b492c16a))
-* **prompts:** drop the undocumented gates alias on prompt update ([0e7f857](https://github.com/minipuft/claude-prompts-mcp/commit/0e7f857640f10e30655f17012712d31a3ecc1384))
-* **runtime:** scope every state.db writer, then delete the backfill migration ([378b0bf](https://github.com/minipuft/claude-prompts-mcp/commit/378b0bf8c77e99a4a2a95afad44c014cee4f7f8f))
-* **scripts:** close the root package.json version drift channel ([b753038](https://github.com/minipuft/claude-prompts-mcp/commit/b75303894e4e51a20e9a4d021b22e08345a20747))
-* **scripts:** read script flags as ground truth, not just the two parser tables ([6ebc998](https://github.com/minipuft/claude-prompts-mcp/commit/6ebc998d9aaef3ec1fe94cca776b6c661a639fde))
-* **server:** bound the execution ledger and drop the dead tenants table ([821e2af](https://github.com/minipuft/claude-prompts-mcp/commit/821e2af336006bf0ce0d14b5038e6ce146d252f5))
-* **server:** close the database on shutdown and fail loudly on init failure ([fae1f55](https://github.com/minipuft/claude-prompts-mcp/commit/fae1f55af2df584ab57faee4b929344f027a4d25))
-* **server:** stop the CLI creating state.db schema, which blocked server startup ([2d83827](https://github.com/minipuft/claude-prompts-mcp/commit/2d83827675e5667fedd654d7a188cdb39d2e133a))
-
-
 ### Changed
 
+- **The `analysis` config section is deprecated, and no longer settable from either tool surface.** A `config.json` carrying it **still loads with its values intact** — the section is parsed and ignored for one deprecation cycle, and the server now warns once at startup naming the replacement. What is withdrawn is the ability to _set_ it: `cpm enable analysis` reports `Unknown subsystem`, and both `cpm config set` and `system_control config` reject the five `analysis.semanticAnalysis.…` keys. Scripts that set them were previously writing values no runtime path read; they now receive a non-zero exit instead of a silent no-op. Delete the `analysis` section to silence the warning. The section itself is removed in the next major.
+- **`llm_self_check` gate criteria no longer consult configuration.** The reserved type is unchanged in the gate YAML schema and still auto-passes, so gates declaring it are unaffected. Its skip message previously told the reader to enable a config key that no longer exists; it now names `%judge` and `shell_verify`.
+- **Prompt analysis feedback is no longer suppressed by a disabled flag.** `resource_manager` prompt create/update responses previously printed `⚠️ API Analysis Disabled` and withheld gate suggestions whenever the LLM flag was off — which was every installation, since it defaults off. The underlying analysis is rule-based and needs no model, and a sibling code path already ran it ungated, so the suggestions now always appear.
 * **chains:** give the chain run-identifier format one owner ([f4ad2a1](https://github.com/minipuft/claude-prompts-mcp/commit/f4ad2a182e60001f44cf88a509ae60819a25433e))
 * **chains:** rename tenant_id to run_owner_pid and repair the view that never read it ([a0dc36f](https://github.com/minipuft/claude-prompts-mcp/commit/a0dc36f261763efa2ad23a7264d5534aa3745b76))
 * **execution:** drop six ConvertedPrompt fields no producer ever set ([d66356a](https://github.com/minipuft/claude-prompts-mcp/commit/d66356aece725569627b536eaaafb55a0a82de07))
@@ -69,6 +47,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **server:** remove the 76 dead symbols the unused-locals sweep reported ([31dd755](https://github.com/minipuft/claude-prompts-mcp/commit/31dd7555f39c1d72e675ad7ec3410ac172c38798))
 * **server:** retire the semantic LLM side client, which never ran here ([d219f8b](https://github.com/minipuft/claude-prompts-mcp/commit/d219f8b75a982669142d301cae0512c272415ce3))
 
+### Removed
+
+- **The semantic LLM side client is gone** — roughly 2,200 lines across an outbound provider client (`LLMClient` + factory), the gate service that consumed it, the dual-mode analyzer's model branch, and an 863-line framework-integration module that was never constructed. None of it ever ran: it was reachable only when `analysis.semanticAnalysis.llmIntegration.enabled` was true, that flag defaults to `false`, and the only spelling the CLI ever wrote (`…llmIntegration.mode`) reached no reader. Model-graded gate review is served by [judge mode](docs/guides/judge-mode.md) — the `%judge` modifier and `gates.evaluation.defaultMode` — which delegates to the client's own sub-agent and returns through `gate_verdict`, so no API key is configured, stored, or sent anywhere.
+- **The undocumented `MCP_LLM_*` environment variables** (`MCP_LLM_ENABLED`, `_API_KEY`, `_ENDPOINT`, `_MODEL`, `_MAX_TOKENS`, `_TEMPERATURE`). They were never listed in the declared environment surface.
+
+### Fixed
+
+- **Codex prompt resource activation:** the downstream launcher now reads a persistent user-level resource path while keeping mutable MCP state under the OS temporary runtime root; the curated 26-prompt package catalog remains the default.
+- **Structured gate verdicts are now hook-enforced:** `hooks/gate-enforce.py` crashed on the object form of `gate_verdict` (the schema-preferred shape); because hook failures are fail-open, object verdicts were never gate-enforced on any client. Surfaced by the codex-prompts port's live E2E.
+- **The state database is now closed on shutdown, and its write-ahead log checkpointed.** Nothing ever called `SqliteEngine.shutdown()`, so the WAL was never checkpointed and grew across every restart — measured at 4.2 MB against a 598 KB database, truncated to 0 by a clean shutdown. The close runs last, after every subsystem that may still write on its way down.
+- **The execution ledger grew without bound.** `execution_records` had no `DELETE` anywhere and declared its retention as "unbounded-justified" with a rationale reading `PLACEHOLDER`, while `state.db` is shared across every project on the machine. Row caps are now declared per table and enforced at startup, and the resource-change log trims through the same shared implementation instead of its own inlined `DELETE` against a config value that could disagree with the declared cap.
+- **The `tenants` table is gone** (schema v19). It held one seeded row, had no reader outside tests that inserted into it to prove it existed, and nothing referenced it — `tenant_id` elsewhere is a plain column, never a foreign key.
+- **The `cpm` CLI could leave the MCP server unable to start.** Version-history commands reached `state.db` through an embedded Python sqlite3 helper carrying its own `CREATE TABLE`, whose shape predated the workspace-isolation columns. Running the CLI before the server's first start created `version_history` without those columns, and the server then failed to boot with `no such column: workspace_id`. The CLI now uses `node:sqlite` directly, resolves the same workspace scope the server does — they previously wrote history under different tenants and could not see each other's versions — and no longer creates any schema.
+- **Database initialization failures now fail startup instead of degrading silently.** A configured database that failed to open was logged at `warn` and swallowed at three startup wiring sites, so the server reported a clean start while running with no audit trail, no argument history, and an inert version-rollback feature. A failed resource-index resync during hot-reload likewise no longer reports "completed successfully".
+- **Codex plugin runtime:** plugin launch no longer depends on Claude root interpolation, and mutable SQLite/log output can be routed to a sandbox-writable runtime root without moving bundled resources.
+* **ci:** make plan retirement self-contained and record why it runs on the PR ([cbdfeae](https://github.com/minipuft/claude-prompts-mcp/commit/cbdfeae1c09279e7e53c39770874f8e9213661d2))
+* **ci:** point downstream sync PR bodies at the renamed upstream repo ([410acb7](https://github.com/minipuft/claude-prompts-mcp/commit/410acb7b5e039ef21eb0ebac5f8367c8e13648c7))
+* **ci:** re-add formatted staged files with -f in pre-commit ([59dc266](https://github.com/minipuft/claude-prompts-mcp/commit/59dc266e3c4a832e8830fa190c8afe6da56ea237))
+* **config:** stop gitignoring the project rules the comment says to track ([7dc9b15](https://github.com/minipuft/claude-prompts-mcp/commit/7dc9b15d598458d948eedf5e29e0a234f32fd95f))
+* **deps:** close the Dependabot set — override tmp to 0.2.x, plan Tier 4 triage ([8381c0a](https://github.com/minipuft/claude-prompts-mcp/commit/8381c0a655614d217a992e91b9759985be411495))
+* **gates:** correct the workflow-preflight source, not its compiled output ([163a58a](https://github.com/minipuft/claude-prompts-mcp/commit/163a58afb3809994e7a421096637b32641ce5603))
+* **hooks:** enforce the structured gate_verdict shape gate-enforce claims to check ([a5d1b60](https://github.com/minipuft/claude-prompts-mcp/commit/a5d1b60f6b49011dc111a4f1e007c400b492c16a))
+* **prompts:** drop the undocumented gates alias on prompt update ([0e7f857](https://github.com/minipuft/claude-prompts-mcp/commit/0e7f857640f10e30655f17012712d31a3ecc1384))
+* **runtime:** scope every state.db writer, then delete the backfill migration ([378b0bf](https://github.com/minipuft/claude-prompts-mcp/commit/378b0bf8c77e99a4a2a95afad44c014cee4f7f8f))
+* **scripts:** close the root package.json version drift channel ([b753038](https://github.com/minipuft/claude-prompts-mcp/commit/b75303894e4e51a20e9a4d021b22e08345a20747))
+* **scripts:** read script flags as ground truth, not just the two parser tables ([6ebc998](https://github.com/minipuft/claude-prompts-mcp/commit/6ebc998d9aaef3ec1fe94cca776b6c661a639fde))
+* **server:** bound the execution ledger and drop the dead tenants table ([821e2af](https://github.com/minipuft/claude-prompts-mcp/commit/821e2af336006bf0ce0d14b5038e6ce146d252f5))
+* **server:** close the database on shutdown and fail loudly on init failure ([fae1f55](https://github.com/minipuft/claude-prompts-mcp/commit/fae1f55af2df584ab57faee4b929344f027a4d25))
+* **server:** stop the CLI creating state.db schema, which blocked server startup ([2d83827](https://github.com/minipuft/claude-prompts-mcp/commit/2d83827675e5667fedd654d7a188cdb39d2e133a))
 
 ### Documentation
 
@@ -103,6 +110,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **mcp-tools:** use the framework vocabulary in the gate-veto comment ([9133654](https://github.com/minipuft/claude-prompts-mcp/commit/91336540a1195b9cd7bfbb9ec162bd9b407ebd3b))
 * **scripts:** cite the plan convention at a path every consumer can reach ([06ef228](https://github.com/minipuft/claude-prompts-mcp/commit/06ef228e6389a2828b287f770cc6922744dbabf8))
 
+### ⚠ BREAKING CHANGES
+
+* **chains:** schema v20 renames chain_sessions.tenant_id and chain_run_registry.tenant_id to run_owner_pid, and drops `lifecycle` from v_execution_status. Both tables are derived/ephemeral and are dropped by the bump, so no data migrates.
+* **runtime:** `--transport=sse` and `transport: "sse"` in config.json are rejected at startup rather than silently resolved to another transport. Use `streamable-http`.
+* **runtime:** The deprecated HTTP+SSE transport is removed; use `--transport=streamable-http`. The Streamable HTTP transport no longer issues or requires an `Mcp-Session-Id` header.
 
 ### Maintenance
 
@@ -110,31 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
 
-- **The semantic LLM side client is gone** — roughly 2,200 lines across an outbound provider client (`LLMClient` + factory), the gate service that consumed it, the dual-mode analyzer's model branch, and an 863-line framework-integration module that was never constructed. None of it ever ran: it was reachable only when `analysis.semanticAnalysis.llmIntegration.enabled` was true, that flag defaults to `false`, and the only spelling the CLI ever wrote (`…llmIntegration.mode`) reached no reader. Model-graded gate review is served by [judge mode](docs/guides/judge-mode.md) — the `%judge` modifier and `gates.evaluation.defaultMode` — which delegates to the client's own sub-agent and returns through `gate_verdict`, so no API key is configured, stored, or sent anywhere.
-- **The undocumented `MCP_LLM_*` environment variables** (`MCP_LLM_ENABLED`, `_API_KEY`, `_ENDPOINT`, `_MODEL`, `_MAX_TOKENS`, `_TEMPERATURE`). They were never listed in the declared environment surface.
-
-### Changed
-
-- **The `analysis` config section is deprecated, and no longer settable from either tool surface.** A `config.json` carrying it **still loads with its values intact** — the section is parsed and ignored for one deprecation cycle, and the server now warns once at startup naming the replacement. What is withdrawn is the ability to _set_ it: `cpm enable analysis` reports `Unknown subsystem`, and both `cpm config set` and `system_control config` reject the five `analysis.semanticAnalysis.…` keys. Scripts that set them were previously writing values no runtime path read; they now receive a non-zero exit instead of a silent no-op. Delete the `analysis` section to silence the warning. The section itself is removed in the next major.
-- **`llm_self_check` gate criteria no longer consult configuration.** The reserved type is unchanged in the gate YAML schema and still auto-passes, so gates declaring it are unaffected. Its skip message previously told the reader to enable a config key that no longer exists; it now names `%judge` and `shell_verify`.
-- **Prompt analysis feedback is no longer suppressed by a disabled flag.** `resource_manager` prompt create/update responses previously printed `⚠️ API Analysis Disabled` and withheld gate suggestions whenever the LLM flag was off — which was every installation, since it defaults off. The underlying analysis is rule-based and needs no model, and a sibling code path already ran it ungated, so the suggestions now always appear.
-
-### Added
-
-- **Codex CLI support seams:** generic `PLUGIN_ROOT` workspace resolution, a `codex exec` spawn strategy (`SpawnConfig.client` + `CodexModelStrategy`), and a codex skills-sync registration — consumed by the new [codex-prompts](https://github.com/minipuft/codex-prompts) downstream plugin.
-
-### Fixed
-
-- **Codex prompt resource activation:** the downstream launcher now reads a persistent user-level resource path while keeping mutable MCP state under the OS temporary runtime root; the curated 26-prompt package catalog remains the default.
-- **Structured gate verdicts are now hook-enforced:** `hooks/gate-enforce.py` crashed on the object form of `gate_verdict` (the schema-preferred shape); because hook failures are fail-open, object verdicts were never gate-enforced on any client. Surfaced by the codex-prompts port's live E2E.
-- **The state database is now closed on shutdown, and its write-ahead log checkpointed.** Nothing ever called `SqliteEngine.shutdown()`, so the WAL was never checkpointed and grew across every restart — measured at 4.2 MB against a 598 KB database, truncated to 0 by a clean shutdown. The close runs last, after every subsystem that may still write on its way down.
-- **The execution ledger grew without bound.** `execution_records` had no `DELETE` anywhere and declared its retention as "unbounded-justified" with a rationale reading `PLACEHOLDER`, while `state.db` is shared across every project on the machine. Row caps are now declared per table and enforced at startup, and the resource-change log trims through the same shared implementation instead of its own inlined `DELETE` against a config value that could disagree with the declared cap.
-- **The `tenants` table is gone** (schema v19). It held one seeded row, had no reader outside tests that inserted into it to prove it existed, and nothing referenced it — `tenant_id` elsewhere is a plain column, never a foreign key.
-- **The `cpm` CLI could leave the MCP server unable to start.** Version-history commands reached `state.db` through an embedded Python sqlite3 helper carrying its own `CREATE TABLE`, whose shape predated the workspace-isolation columns. Running the CLI before the server's first start created `version_history` without those columns, and the server then failed to boot with `no such column: workspace_id`. The CLI now uses `node:sqlite` directly, resolves the same workspace scope the server does — they previously wrote history under different tenants and could not see each other's versions — and no longer creates any schema.
-- **Database initialization failures now fail startup instead of degrading silently.** A configured database that failed to open was logged at `warn` and swallowed at three startup wiring sites, so the server reported a clean start while running with no audit trail, no argument history, and an inert version-rollback feature. A failed resource-index resync during hot-reload likewise no longer reports "completed successfully".
-- **Codex plugin runtime:** plugin launch no longer depends on Claude root interpolation, and mutable SQLite/log output can be routed to a sandbox-writable runtime root without moving bundled resources.
 
 ## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
 
