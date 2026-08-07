@@ -8,7 +8,12 @@ on:
 # Setup required on npmjs.com:
 #   1. Go to https://www.npmjs.com/package/claude-prompts/access
 #   2. Add Trusted Publisher → GitHub Actions
-#   3. Configure: minipuft / claude-prompts / npm-publish.yml / npm
+#   3. Configure: minipuft / claude-prompts-mcp / npm-publish.yml / npm
+#
+# The repository field must track the repo's CURRENT name: npm matches the OIDC
+# claim exactly and answers a mismatch with 404 on PUT — a rename here without
+# updating npmjs.com breaks every release publish (bit the v3.2.0 release,
+# 2026-08-07, after the claude-prompts → claude-prompts-mcp rename).
 
 permissions:
   contents: read

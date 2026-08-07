@@ -62,6 +62,34 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 · run 4 (head `a2db54cf`): in flight — first run with all three fixes; Test Suite matrix
   has not yet completed on any run of this PR
 
+## Release-PR phase (post-merge, 2026-08-06/07)
+
+- Merge `9029fb4d` landed as a MERGE COMMIT deliberately — release-please reads conventional
+  commits and the `Release-As: 3.2.0` footer from main history; a squash would have collapsed both.
+- RP opened #197 titled `chore(main): release 3.2.0` — the Release-As pin held; every version
+  surface bumps 3.1.1→3.2.0 including BOTH server.json fields (G3 wiring proven live). RP merged
+  its generated commit list into the hand-written Unreleased sections and retitled the block.
+- **Retracted trap (2026-08-07): "RP's PR gets no CI" was a misdiagnosis.** The
+  `RELEASE_PLEASE_TOKEN` PAT (set 2026-01-14) already makes RP's PRs trigger workflows — #197 was
+  authored by minipuft and its CI run started 4s after open. What looked like "no CI" was the
+  window before the classify job registered the four check contexts: `gh pr checks` lists only
+  REGISTERED check runs, and BLOCKED means "required checks pending", not "never coming". The
+  close/reopen was unnecessary churn that cancelled a healthy run. Real lesson: before declaring
+  a workflow untriggered, check `gh run list` for the head branch — not `gh pr checks`.
+- **Trap: `gh pr merge` on a BLOCKED PR exits 0** while printing an --auto/--admin hint — it
+  no-ops without failing, so any merge automation must verify `state == MERGED` afterward, not
+  trust the exit code. Bit twice before the loop verified state.
+- Release PR merged as SQUASH to match the 3.1.1 precedent (`chore(main): release 3.1.1 (#191)`,
+  single parent).
+
+## Token audit (2026-08-07, on owner question)
+
+- `RELEASE_PLEASE_TOKEN` proven live today (#197 authored under it, CI triggered);
+  `NPM_TOKEN` proven live 2026-08-03 (v3.1.1/v3.1.0 publishes). Both set 2026-01-14 → no 30/90-day
+  expiry, long-lived. Repo side cannot see future expiry — only the owner's token settings pages
+  can. Failure mode to watch: an expired PAT makes release-please silently fall back to
+  `github.token`, and THEN release PRs genuinely get no CI (the thing 2026-08-06 misdiagnosed).
+
 ## Validation runs
 
 - 2026-08-06 17:49 · `npm run build >/dev/null 2>&1 && NODE_OPTIONS="--experimental-vm-modules" npx jest --config jest.config.cjs 2>&1 | tail ` · ran
@@ -71,3 +99,6 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/cli && npx jest tests/integration/new-commands.test.ts 2>&1 | tail -15` · ran
 
 - 2026-08-06 17:42 · `for f in plans/cli-distribution-release-integration-2026-08-02.md plans/downstream-standards-federation-2026-08-02-imple` · ran
+
+- 2026-08-07 · Plan-sync marker: the `cli/tests/integration/new-commands.test.ts` edit is fully
+  flushed (logged above, committed `3e7b7306`); no further chat-only state pends against it.

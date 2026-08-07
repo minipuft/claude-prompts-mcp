@@ -290,6 +290,25 @@ function applyMoves(moves) {
   }
   for (const move of moves) fs.unlinkSync(move.from);
 
+  // .prettierignore entries are inbound path references too, just not markdown links.
+  // The oscillating-file exemptions there are pinned to exact paths; moving a plan
+  // without following its entry un-ignores it and validate:format blocks the release
+  // PR (observed 2026-08-07, sqlite remediation plan).
+  const ignorePath = path.join(REPO_ROOT, ".prettierignore");
+  if (fs.existsSync(ignorePath)) {
+    const original = fs.readFileSync(ignorePath, "utf8");
+    let updated = original;
+    for (const [from, to] of moveMap) {
+      const fromRel = path.relative(REPO_ROOT, from);
+      const toRel = path.relative(REPO_ROOT, to);
+      updated = updated
+        .split("\n")
+        .map((line) => (line.trim() === fromRel ? toRel : line))
+        .join("\n");
+    }
+    if (updated !== original) fs.writeFileSync(ignorePath, updated);
+  }
+
   return moves.map((move) => ({
     from: path.relative(REPO_ROOT, move.from),
     to: path.relative(REPO_ROOT, move.to),
