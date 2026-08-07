@@ -28,8 +28,22 @@ export class PromptRegistry {
   private mcpServer: PromptRegistryServer;
   private conversationStore: ConversationStore;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
-  private registeredPromptIds = new Set<string>(); // Track registered prompt IDs to prevent duplicates
+  // Dedup is per serving unit: `createMcpServerFactory` builds one `McpServer`
+  // shell per STDIO connection / HTTP request, so the same prompt legitimately
+  // registers once on each. A single flat Set would let the first unit's IDs
+  // suppress registration on every later one.
+  private registeredPromptIds = new WeakMap<object, Set<string>>();
   private exportedPromptIds = new Set<string>(); // Prompt IDs exported as skills (auto-deregistered)
+
+  /** Registered-ID set for one serving unit, created on first sight. */
+  private registeredIdsFor(target: PromptRegistryServer): Set<string> {
+    let ids = this.registeredPromptIds.get(target);
+    if (!ids) {
+      ids = new Set<string>();
+      this.registeredPromptIds.set(target, ids);
+    }
+    return ids;
+  }
 
   /**
    * Direct template processing method (minimal implementation)
@@ -68,9 +82,13 @@ export class PromptRegistry {
    * Register individual prompts using MCP SDK registerPrompt API
    * This implements the standard MCP prompts protocol using the high-level API
    */
-  private registerIndividualPrompts(prompts: ConvertedPrompt[]): void {
+  private registerIndividualPrompts(
+    prompts: ConvertedPrompt[],
+    target: PromptRegistryServer = this.mcpServer
+  ): void {
     try {
       this.logger.info('Registering individual prompts with MCP SDK...');
+      const registeredIds = this.registeredIdsFor(target);
       let registeredCount = 0;
 
       for (const prompt of prompts) {
@@ -88,7 +106,7 @@ export class PromptRegistry {
         }
 
         // Skip if already registered (deduplication guard)
-        if (this.registeredPromptIds.has(prompt.id)) {
+        if (registeredIds.has(prompt.id)) {
           this.logger.debug(`Skipping already registered prompt: ${prompt.id}`);
           continue;
         }
@@ -105,7 +123,7 @@ export class PromptRegistry {
         // Register the prompt using the correct MCP SDK API with error recovery
         // Use prompt.id for all MCP registration (slug-based, no spaces)
         try {
-          this.mcpServer.registerPrompt(
+          target.registerPrompt(
             prompt.id,
             {
               title: prompt.id,
@@ -119,7 +137,7 @@ export class PromptRegistry {
           );
 
           // Track the registered prompt
-          this.registeredPromptIds.add(prompt.id);
+          registeredIds.add(prompt.id);
           registeredCount++;
           this.logger.debug(`Registered prompt: ${prompt.id}`);
         } catch (error: any) {
@@ -128,7 +146,7 @@ export class PromptRegistry {
             this.logger.warn(
               `Prompt '${prompt.id}' already registered in MCP SDK, skipping re-registration`
             );
-            this.registeredPromptIds.add(prompt.id); // Track it anyway
+            registeredIds.add(prompt.id); // Track it anyway
             continue;
           } else {
             // Re-throw other errors
@@ -224,12 +242,15 @@ export class PromptRegistry {
   /**
    * Register all prompts with the MCP server using proper MCP protocol
    */
-  async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
+  async registerAllPrompts(
+    prompts: ConvertedPrompt[],
+    target: PromptRegistryServer = this.mcpServer
+  ): Promise<number> {
     try {
       this.logger.info(`Registering ${prompts.length} prompts with MCP SDK registerPrompt API...`);
 
       // Register individual prompts using the correct MCP SDK API
-      this.registerIndividualPrompts(prompts);
+      this.registerIndividualPrompts(prompts, target);
 
       this.logger.info(`Successfully registered ${prompts.length} prompts with MCP SDK`);
       return prompts.length;

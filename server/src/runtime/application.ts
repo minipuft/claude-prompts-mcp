@@ -409,6 +409,13 @@ export class Application {
       // per-call `extra` the rest of the server reads does not exist yet.
       await this.mcpToolsManager.registerAllTools(server, resolveServingUnitScope(ctx));
       this.registerMcpResources(server);
+      // Prompts are a per-unit binding too. The registry otherwise only ever
+      // touches the shell built during module init, which no client connects
+      // to — that is what made `prompts/list` come back empty on a live STDIO
+      // connection while the log reported the prompts as registered.
+      if (this.promptManager && this._convertedPrompts.length > 0) {
+        await this.promptManager.registerAllPrompts(this._convertedPrompts, server);
+      }
       return server;
     };
   }
@@ -925,7 +932,12 @@ export class Application {
         }
 
         if (this.mcpServer) {
-          const count = await this.promptManager.registerAllPrompts(this._convertedPrompts);
+          // Same reason as the factory: re-register onto the serving shell, not
+          // the module-init one, or a reload silently drops the new prompts.
+          const count = await this.promptManager.registerAllPrompts(
+            this._convertedPrompts,
+            this.mcpServer
+          );
           this.logger.info(`🔁 Re-registered ${count} prompts after hot reload.`);
           await this.promptManager.notifyPromptsListChanged();
         }
