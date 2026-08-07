@@ -49,20 +49,38 @@ jobs:
           sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
           mcp-publisher --version
 
+      - name: Skip if the registry already serves this version
+        id: precheck
+        run: |
+          set -euo pipefail
+          expected=$(jq -r .version server.json)
+          name=$(jq -r .name server.json)
+          got=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
+            | jq -r --arg n "$name" '[.servers[]?.server | select(.name == $n)][0].version // empty') || got=""
+          if [ "$got" = "$expected" ]; then
+            echo "Registry already serves ${name}@${expected} — nothing to publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Authenticate via OIDC
+        if: steps.precheck.outputs.skip != 'true'
         run: mcp-publisher login github-oidc
 
       - name: Publish server.json
+        if: steps.precheck.outputs.skip != 'true'
         run: mcp-publisher publish
 
       - name: Verify the listing serves this version
+        if: steps.precheck.outputs.skip != 'true'
         run: |
           set -euo pipefail
           expected=$(jq -r .version server.json)
           name=$(jq -r .name server.json)
           for attempt in 1 2 3 4 5; do
             got=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
-              | jq -r --arg n "$name" '[.servers[]? | select(.name == $n)][0].version // empty') || got=""
+              | jq -r --arg n "$name" '[.servers[]?.server | select(.name == $n)][0].version // empty') || got=""
             if [ "$got" = "$expected" ]; then
               echo "Registry serves ${name}@${got}"
               exit 0
