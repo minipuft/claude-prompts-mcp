@@ -119,11 +119,14 @@ export class PromptAssetManager {
   /**
    * Register prompts with MCP server
    */
-  async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
+  async registerAllPrompts(
+    prompts: ConvertedPrompt[],
+    target?: Parameters<PromptRegistry['registerAllPrompts']>[1]
+  ): Promise<number> {
     if (!this.registry) {
       throw new Error('MCP server not provided - cannot register prompts');
     }
-    return this.registry.registerAllPrompts(prompts);
+    return this.registry.registerAllPrompts(prompts, target);
   }
 
   /**
