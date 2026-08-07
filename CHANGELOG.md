@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
+
+
+### Fixed
+
+* **ci:** ship package.json in the plugin dist layout; patch protobufjs to 8.7.1 ([655f324](https://github.com/minipuft/claude-prompts-mcp/commit/655f324b7a002778237aac2a706b4c79fe3e1249))
+
 ## [3.2.0](https://github.com/minipuft/claude-prompts-mcp/compare/v3.1.1...v3.2.0) (2026-08-07)
 
 ### Added
