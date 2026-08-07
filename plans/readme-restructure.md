@@ -1,3 +1,10 @@
+---
+title: "README Restructure & License Migration Plan"
+date: 2026-05-13
+status: backlog
+tags: []
+---
+
 # README Restructure & License Migration Plan
 
 **Status**: Draft
@@ -262,6 +269,8 @@ Spawn a fresh Maya agent against the post-B3.5 README, compare verdict against t
 ## Adoption Signal (Track A8)
 
 **Baseline recorded 2026-08-02** — two days after MIT restore (2026-07-31). Observation window: ~2026-08-14 to 08-28. No README/metadata changes until it closes. Follow-up work: `plans/acquisition-recovery.md`.
+
+**Window paused 2026-08-02**: capability research (`acquisition-recovery.md` §3a) found 9 factually wrong README claims (a documented modifier that throws, a claimed-but-unimplemented feature). Owner approved a defect carve-out — accuracy fixes only, no restructuring. **The window restarts from the day the fixes ship**; recompute the close date from that commit's date. Baseline metrics above remain valid (metadata/listings unchanged).
 
 **Timeline correction**: Track A/B order inverted in practice — README rework shipped ~2026-05-15 under AGPL; MIT restored 2026-07-31. Variables still isolated, opposite order: May 15–Jul 31 = new README + AGPL · Aug 1+ = new README + MIT.
 

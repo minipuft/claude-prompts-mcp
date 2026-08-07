@@ -7,7 +7,7 @@ import { PromptClassification, AnalysisResult, PromptResourceDependencies } from
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 
-import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { type Logger } from '#shared/types/index.js';
 
 /**
@@ -40,16 +40,13 @@ export class PromptAnalyzer {
 
     const classification = await this.analyzePrompt(tempPrompt);
 
-    // When API Analysis is disabled, show minimal message with no gate suggestions
-    if (!this.semanticAnalyzer.isLLMEnabled()) {
-      return {
-        classification,
-        feedback: `⚠️ API Analysis Disabled\n`,
-        suggestions: [],
-      };
-    }
-
-    // Normal mode: show concise single-line format with type and suggested gates
+    // Concise single-line format: type plus suggested gates.
+    //
+    // This used to be suppressed behind an LLM-integration flag that defaulted off, so the
+    // common case emitted "API Analysis Disabled" and dropped the gate suggestions. Nothing
+    // downstream needed a model: the classification comes from `ContentAnalyzer` and the gate
+    // recommendations from the rule-based `GateAnalyzer`, which `prompt-discovery-processor`
+    // already calls with no such gate.
     const analysisIcon = this.getAnalysisIcon(
       classification.analysisMode || classification.framework
     );
@@ -119,97 +116,15 @@ export class PromptAnalyzer {
   }
 
   /**
-   * Create fallback analysis when semantic analysis is disabled
-   */
-  createDisabledAnalysisFallback(prompt: ConvertedPrompt): PromptClassification {
-    const hasChainSteps = Boolean(prompt.chainSteps?.length);
-    const hasComplexArgs = (prompt.arguments?.length || 0) > 2;
-    const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
-
-    // Basic execution type detection without semantic analysis
-    let executionType: 'single' | 'chain' = 'single';
-    if (hasChainSteps) {
-      executionType = 'chain';
-    }
-
-    return {
-      executionType,
-      requiresExecution: true,
-      requiresFramework: false, // Conservative - don't assume framework needed
-      confidence: 0.7, // High confidence in basic structural facts
-      reasoning: [
-        'Semantic analysis unavailable - using basic structural detection',
-        `Detected ${executionType} type from file structure`,
-        'Framework recommendation unavailable',
-      ],
-      suggestedGates: ['basic_validation'],
-      framework: 'disabled',
-      // Analysis metadata
-      analysisMode: 'disabled',
-      capabilities: {
-        canDetectStructure: true,
-        canAnalyzeComplexity: false,
-        canRecommendFramework: false,
-        hasSemanticUnderstanding: false,
-      },
-      limitations: [
-        'Semantic analysis unavailable (no LLM integration)',
-        'No intelligent framework recommendations available',
-        'Limited complexity analysis capabilities',
-      ],
-      warnings: [
-        '⚠️ Semantic analysis unavailable',
-        '💡 Configure LLM integration in config for semantic analysis',
-        '🔧 Using basic structural detection only',
-      ],
-    };
-  }
-
-  /**
-   * Get analysis icon based on analysis mode/framework
+   * Icon for the analysis feedback line.
+   *
+   * Two inputs are reachable: `'minimal'` from the normal path (`ContentAnalyzer` sets that mode
+   * unconditionally) and `'fallback'` from the catch in `analyzePrompt`. Everything else falls to
+   * the default, which is the same icon `'minimal'` would pick — so callers get 🧠 unless analysis
+   * actually failed.
    */
   private getAnalysisIcon(mode: string | undefined): string {
-    switch (mode) {
-      case 'disabled':
-        return '🔧'; // Basic structural detection
-      case 'structural':
-        return '🔬'; // Structural analysis
-      case 'hybrid':
-        return '🔍'; // Enhanced structural
-      case 'semantic':
-        return '🧠'; // Full semantic analysis
-      case 'fallback':
-        return '🚨'; // Error fallback
-      case 'configurable':
-        return '🧠'; // Configured semantic analysis
-      default:
-        return '🧠'; // Default intelligent analysis
-    }
-  }
-
-  /**
-   * Generate capability-aware suggestions
-   */
-  private generateSuggestions(classification: PromptClassification): string[] {
-    const suggestions: string[] = [];
-
-    if (!this.semanticAnalyzer.isLLMEnabled()) {
-      suggestions.push('💡 Enable semantic analysis for enhanced capabilities');
-      suggestions.push('🎯 Framework recommendation unavailable');
-    } else if (classification.analysisMode === 'structural') {
-      suggestions.push('💡 Configure LLM integration for intelligent analysis');
-    } else if (
-      classification.analysisMode === 'fallback' ||
-      classification.framework === 'fallback'
-    ) {
-      suggestions.push('🚨 Fix analysis configuration');
-    }
-
-    if (!classification.capabilities?.canRecommendFramework) {
-      suggestions.push('🎯 Framework recommendation unavailable');
-    }
-
-    return suggestions;
+    return mode === 'fallback' ? '🚨' : '🧠';
   }
 
   /**

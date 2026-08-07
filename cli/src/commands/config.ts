@@ -86,7 +86,7 @@ function configGet(options: ConfigOptions): number {
   const key = options.positionals[0];
   if (!key) {
     console.error('Usage: cpm config get <key>');
-    console.error('Example: cpm config get gates.mode');
+    console.error('Example: cpm config get gates.enabled');
     return 1;
   }
 
@@ -133,7 +133,7 @@ function configSet(options: ConfigOptions): number {
   if (!key || value === undefined) {
     console.error('Usage: cpm config set <key> <value>');
     console.error('   or: cpm config set <key> --value <value>');
-    console.error('Example: cpm config set gates.mode on');
+    console.error('Example: cpm config set gates.enabled true');
     return 1;
   }
 

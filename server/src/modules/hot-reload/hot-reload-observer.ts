@@ -111,7 +111,6 @@ export class HotReloadObserver {
   private fileObserver: FileObserver;
   private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private onFrameworkReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
-  private onGateReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
@@ -224,15 +223,6 @@ export class HotReloadObserver {
   setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
     this.onFrameworkReloadCallback = callback;
     this.logger.debug('HotReloadObserver: Framework reload callback registered');
-  }
-
-  /**
-   * Set the callback for gate reload events
-   * This callback is invoked when gate YAML files change
-   */
-  setGateReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
-    this.onGateReloadCallback = callback;
-    this.logger.debug('HotReloadObserver: Gate reload callback registered');
   }
 
   /**
@@ -653,7 +643,7 @@ export class HotReloadObserver {
    * Framework post-reload processing
    *  Basic performance optimization and cache warming
    */
-  private async processFrameworkPostReload(event: HotReloadEvent): Promise<void> {
+  private async processFrameworkPostReload(_event: HotReloadEvent): Promise<void> {
     const startTime = performance.now();
 
     this.logger.debug('Processing framework post-reload optimizations...');

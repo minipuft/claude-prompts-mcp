@@ -1,3 +1,10 @@
+---
+title: "Renovate and Dependency-Maintenance Remediation Plan"
+date: 2026-08-01
+status: active
+tags: []
+---
+
 # Renovate and Dependency-Maintenance Remediation Plan
 
 **Status:** in progress  

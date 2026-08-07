@@ -29,7 +29,7 @@ export class StatusActionHandler extends ActionHandler {
     include_history?: boolean;
     include_metrics?: boolean;
   }): Promise<ToolResponse> {
-    const { include_history = false, include_metrics = true } = args;
+    const { include_metrics = true } = args;
 
     if (!this.frameworkStateStore) {
       throw new Error('Framework state manager not initialized');

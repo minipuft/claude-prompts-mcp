@@ -306,7 +306,7 @@ prompt_engine(command:"%judge analysis_report")
 
 ### Chain Execution
 
-For step schemas, input mapping, and retries, see the [Chain Schema Reference](../reference/chain-schema.md).
+For step schemas, input mapping, and retries, see the [Chain Schema Reference](./chain-schema.md).
 
 **Start a chain:**
 
@@ -350,7 +350,7 @@ Notes:
 
 ### Gates: Four Ways to Validate
 
-For gate configuration, enforcement modes, and custom definitions, see the [Gate Configuration Reference](../reference/gate-configuration.md).
+For gate configuration, enforcement modes, and custom definitions, see the [Gate Configuration Reference](./gate-configuration.md).
 
 ```bash
 # 1. Anonymous inline criteria (simplest)
@@ -670,15 +670,36 @@ system_control(action:"gates", operation:"list")
 
 ### Actions
 
-| Action      | Operations                            | Purpose                   |
-| ----------- | ------------------------------------- | ------------------------- |
-| `status`    | —                                     | Runtime overview          |
-| `framework` | `list`, `switch`, `enable`, `disable` | Framework management      |
-| `gates`     | `list`, `enable`, `disable`, `status` | Gate management           |
-| `analytics` | —                                     | Execution metrics         |
-| `config`    | —                                     | View config overlays      |
-| `changes`   | `list`                                | Resource change audit log |
-| `session`   | `list`, `inspect`, `clear`, `cancel`  | Chain session lifecycle   |
+| Action              | Operations                            | Purpose                   |
+| ------------------- | ------------------------------------- | ------------------------- |
+| `status`            | —                                     | Runtime overview          |
+| `framework`         | `list`, `switch`, `enable`, `disable` | Framework management      |
+| `gates`             | `list`, `enable`, `disable`, `status` | Gate management           |
+| `analytics`         | —                                     | Execution metrics         |
+| `config`            | —                                     | View config overlays      |
+| `changes`           | `list`                                | Resource change audit log |
+| `session`           | `list`, `inspect`, `clear`, `cancel`  | Chain session lifecycle   |
+| `execution_history` | `list`                                | Chain execution ledger    |
+
+### Execution History
+
+Reads the append-only `execution_records` ledger, newest first, grouped by session.
+
+```bash
+# Most recent executions for the current workspace (default 50)
+system_control(action:"execution_history", operation:"list")
+
+# Narrow the page (clamped to 500)
+system_control(action:"execution_history", operation:"list", limit:10)
+```
+
+Distinct from `session`, which reports runs that are **currently live**: chain sessions are
+deleted per server PID at cleanup, so a finished run disappears from `session` but stays in
+`execution_history`.
+
+Records that never reached a terminal state are called out in the output. Terminal records are
+emitted on completion, on user abort, and on failure — a run that predates that emission may show
+as `working` permanently.
 
 ### Session Operations
 
@@ -1001,14 +1022,16 @@ There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `-
 
 ### Transport Options
 
-| Transport        | Flag                          | Use Case                                            |
-| ---------------- | ----------------------------- | --------------------------------------------------- |
-| STDIO            | `--transport=stdio`           | Claude Desktop, Claude Code                         |
-| Streamable HTTP  | `--transport=streamable-http` | Web dashboards, remote APIs (**use this for HTTP**) |
-| SSE (deprecated) | `--transport=sse`             | Legacy integrations                                 |
-| Dual mode        | `--transport=both`            | STDIO + SSE simultaneously                          |
+| Transport       | Flag                          | Use Case                               |
+| --------------- | ----------------------------- | -------------------------------------- |
+| STDIO           | `--transport=stdio`           | Claude Desktop, Claude Code            |
+| Streamable HTTP | `--transport=streamable-http` | Web dashboards, remote APIs            |
+| Dual mode       | `--transport=both`            | STDIO + Streamable HTTP simultaneously |
 
-For HTTP clients, use Streamable HTTP. It's the current MCP standard and replaces SSE.
+`--transport=sse` was removed with the SDK v2 upgrade and now **exits with an error** naming
+`streamable-http`. It does not fall back to another transport: a removed option that silently
+resolved to something else started the server on a transport nobody asked for and reported
+success. The same check applies to `transport` in `config.json`.
 
 ### Environment Variables
 
@@ -1072,8 +1095,8 @@ the two tiers previously documented above these (CLI flags and individual env va
 **Related docs:**
 
 - [Prompt Authoring](../tutorials/build-first-prompt.md) — Tutorial
-- [Prompt Schema](../reference/prompt-yaml-schema.md) — Configuration reference
-- [Chain Schema](../reference/chain-schema.md) — Chain configuration
-- [Gate Configuration](../reference/gate-configuration.md) — Gate configuration
+- [Prompt Schema](./prompt-yaml-schema.md) — Configuration reference
+- [Chain Schema](./chain-schema.md) — Chain configuration
+- [Gate Configuration](./gate-configuration.md) — Gate configuration
 - [Architecture](../architecture/overview.md) — System internals
 - [Script Tools](../guides/script-tools.md) — Prompt-scoped script tool configuration

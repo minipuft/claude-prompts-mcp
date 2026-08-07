@@ -37,6 +37,7 @@ import type { Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
+import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
@@ -65,6 +66,15 @@ export interface ChainSessionStoreOptions {
   defaultSessionTimeoutMs?: number;
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
+  /**
+   * Workspace scope stamped on the `chain_sessions` hook projection.
+   *
+   * Distinct from `pidScope`: `chain_sessions.run_owner_pid` is the server PID, which isolates one
+   * running server's rows from another's but says nothing about which project they belong to.
+   * The scope columns answer that, and until this was supplied they were written NULL and
+   * repaired by a startup backfill on the next boot.
+   */
+  defaultScope?: StateStoreOptions;
 }
 
 const DEFAULT_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -89,7 +99,6 @@ export class ChainSessionStore implements ChainSessionService {
   private runChainToBase: Map<string, string> = new Map(); // runChainId -> baseChainId
   private runRegistry!: ChainRunRegistry;
   private readonly sessionClearedCallbacks: SessionClearedCallback[] = [];
-  private readonly serverRoot: string;
   private readonly defaultSessionTimeoutMs: number;
   private readonly reviewSessionTimeoutMs: number;
   private readonly cleanupIntervalMs: number;
@@ -98,6 +107,23 @@ export class ChainSessionStore implements ChainSessionService {
   private resolvedDbEngine?: DatabasePort;
   private readonly serverPid = String(process.pid);
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
+  private readonly workspaceScope: StateStoreOptions | undefined;
+
+  /**
+   * Scope for `chain_run_registry` rows.
+   *
+   * Merged, not chosen: the PID decides `run_owner_pid` (which server owns the run) while the
+   * workspace fills `workspace_id`/`organization_id` (which project it belongs to). They answer
+   * different questions, and the registry resolves `run_owner_pid` from `continuityScopeId` first,
+   * so adding the workspace keys cannot change run ownership. Passing `pidScope` alone — as this
+   * did — left the scope columns NULL for a startup backfill to repair on the next boot.
+   *
+   * A getter rather than a constructor-computed field because `pidScope` is a field initializer
+   * and `workspaceScope` is assigned in the constructor body.
+   */
+  private get runScope(): StateStoreOptions {
+    return { ...this.pidScope, ...(this.workspaceScope ?? {}) };
+  }
   private initPromise!: Promise<void>;
 
   constructor(
@@ -117,11 +143,11 @@ export class ChainSessionStore implements ChainSessionService {
       this.injectedDbEngine = dbEngineOrTracker;
     }
 
-    this.serverRoot = options.serverRoot ?? '';
     this.defaultSessionTimeoutMs = options.defaultSessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
     this.reviewSessionTimeoutMs =
       options.reviewSessionTimeoutMs ?? DEFAULT_REVIEW_SESSION_TIMEOUT_MS;
     this.cleanupIntervalMs = options.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
+    this.workspaceScope = options.defaultScope;
 
     // Store provided sessionStore or defer to initialize() for SQLite-backed default
     if (sessionStore) {
@@ -204,7 +230,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private async loadSessions(): Promise<void> {
     try {
-      const parsed = await this.runRegistry.load(this.pidScope);
+      const parsed = await this.runRegistry.load(this.runScope);
 
       const persistedSessions = parsed.runs ?? parsed.sessions ?? {};
       const persistedChainMapping = parsed.runMapping ?? parsed.chainMapping ?? {};
@@ -313,12 +339,12 @@ export class ChainSessionStore implements ChainSessionService {
       const data = this.serializeSessions();
       if (!db) {
         // No DB engine wired — fall back to non-transactional save (test contexts).
-        await this.runRegistry.save(data, this.pidScope);
+        await this.runRegistry.save(data, this.runScope);
         return;
       }
       db.beginTransaction();
       try {
-        await this.runRegistry.save(data, this.pidScope);
+        await this.runRegistry.save(data, this.runScope);
         this.projectToHookView(db);
         db.commit();
       } catch (txError) {
@@ -343,7 +369,7 @@ export class ChainSessionStore implements ChainSessionService {
    *
    * Filter rule: a session is "active for hooks" if it has steps remaining or
    * a pending gate review / shell verification (see `isSessionActiveForHooks`).
-   * `tenant_id` is the server PID for cross-client isolation.
+   * `run_owner_pid` is the server PID for cross-client isolation.
    *
    * Must be called inside an active transaction. The caller (`persistSessions`)
    * owns the transaction boundary so blob save and projection succeed or fail
@@ -351,12 +377,20 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private projectToHookView(db: DatabasePort): void {
     const activeRows = this.collectActiveSessionRows();
-    db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [this.serverPid]);
+    db.run('DELETE FROM chain_sessions WHERE run_owner_pid = ?', [this.serverPid]);
     for (const row of activeRows) {
       db.run(
-        `INSERT INTO chain_sessions (tenant_id, chain_id, run_number, state, run_status, run_completed_at)
-         VALUES (?, ?, 1, ?, ?, ?)`,
-        [this.serverPid, row.chainId, row.state, row.runStatus, row.runCompletedAt]
+        `INSERT INTO chain_sessions (run_owner_pid, organization_id, workspace_id, chain_id, run_number, state, run_status, run_completed_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
+        [
+          this.serverPid,
+          this.workspaceScope?.organizationId ?? null,
+          this.workspaceScope?.workspaceId ?? null,
+          row.chainId,
+          row.state,
+          row.runStatus,
+          row.runCompletedAt,
+        ]
       );
     }
   }
@@ -414,22 +448,22 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Collect tenant_id values from a table where the PID is dead (not alive).
+   * Collect run_owner_pid values from a table where the PID is dead (not alive).
    * Skips non-numeric IDs and optionally skips the current process PID.
    */
   // DB engine accessed via this.resolvedDbEngine (set in initialize or setDatabasePort)
 
-  private collectDeadPidTenants(db: DatabasePort, query: string, skipOwnPid: boolean): string[] {
-    const rows = db.query<{ tenant_id: string }>(query);
+  private collectDeadRunOwnerPids(db: DatabasePort, query: string, skipOwnPid: boolean): string[] {
+    const rows = db.query<{ run_owner_pid: string }>(query);
     const dead: string[] = [];
     for (const row of rows) {
-      const pid = parseInt(row.tenant_id, 10);
+      const pid = parseInt(row.run_owner_pid, 10);
       if (isNaN(pid)) continue;
-      if (skipOwnPid && row.tenant_id === this.serverPid) continue;
+      if (skipOwnPid && row.run_owner_pid === this.serverPid) continue;
       try {
         process.kill(pid, 0);
       } catch {
-        dead.push(row.tenant_id);
+        dead.push(row.run_owner_pid);
       }
     }
     return dead;
@@ -446,24 +480,25 @@ export class ChainSessionStore implements ChainSessionService {
 
     try {
       // Clean chain_sessions (per-row PID table for hooks)
-      const staleSessions = this.collectDeadPidTenants(
+      const staleSessions = this.collectDeadRunOwnerPids(
         db,
-        'SELECT DISTINCT tenant_id FROM chain_sessions',
+        'SELECT DISTINCT run_owner_pid FROM chain_sessions',
         false
       );
       for (const pid of staleSessions) {
-        db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [pid]);
+        db.run('DELETE FROM chain_sessions WHERE run_owner_pid = ?', [pid]);
       }
 
-      // Clean chain_run_registry (PID-scoped blob rows) + legacy 'default' row
-      db.run("DELETE FROM chain_run_registry WHERE tenant_id = 'default'");
-      const staleRegistry = this.collectDeadPidTenants(
+      // Clean chain_run_registry (PID-scoped blob rows). The former
+      // `WHERE tenant_id = 'default'` sweep is gone with the v20 rename: the column carries no
+      // DEFAULT, so nothing can mint a non-PID owner, and the bump drops the table outright.
+      const staleRegistry = this.collectDeadRunOwnerPids(
         db,
-        'SELECT tenant_id FROM chain_run_registry',
+        'SELECT run_owner_pid FROM chain_run_registry',
         true
       );
       for (const pid of staleRegistry) {
-        db.run('DELETE FROM chain_run_registry WHERE tenant_id = ?', [pid]);
+        db.run('DELETE FROM chain_run_registry WHERE run_owner_pid = ?', [pid]);
       }
 
       const totalCleaned = staleSessions.length + staleRegistry.length;
@@ -1374,7 +1409,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   getRunHistory(baseChainId: string): string[] {
-    const normalized = this.extractBaseChainId(baseChainId);
+    const normalized = stripRunNumber(baseChainId);
     const history = this.baseChainMapping.get(normalized);
     if (history && history.length > 0) {
       return [...history];
@@ -1385,18 +1420,18 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const fallbackRuns = Array.from(this.chainSessionMapping.keys()).filter(
-      (chainId) => this.extractBaseChainId(chainId) === normalized
+      (chainId) => stripRunNumber(chainId) === normalized
     );
 
     return fallbackRuns.sort((a, b) => {
-      const runA = this.getRunNumber(a) ?? 0;
-      const runB = this.getRunNumber(b) ?? 0;
+      const runA = parseRunNumber(a) ?? 0;
+      const runB = parseRunNumber(b) ?? 0;
       return runA - runB;
     });
   }
 
   getLatestSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = this.extractBaseChainId(baseChainId);
+    const normalized = stripRunNumber(baseChainId);
     const history = this.baseChainMapping.get(normalized);
 
     if (history && history.length > 0) {
@@ -1438,7 +1473,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     // Try base chain fallback
-    const normalized = this.extractBaseChainId(chainId);
+    const normalized = stripRunNumber(chainId);
     const baseFallback = this.findScopedSessionForChain(normalized, scopeFilter, includeDormant);
     if (baseFallback) {
       if (baseFallback.lifecycle === 'dormant') {
@@ -1580,7 +1615,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void> {
     const scopeFilter = this.resolveScopeFilter(scope);
-    const baseChainId = this.extractBaseChainId(chainId);
+    const baseChainId = stripRunNumber(chainId);
     const runChainIds = chainId === baseChainId ? [...this.getRunHistory(baseChainId)] : [chainId];
 
     if (runChainIds.length === 0 && this.chainSessionMapping.has(chainId)) {
@@ -1642,7 +1677,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   private registerRunHistory(chainId: string): string {
-    const baseChainId = this.extractBaseChainId(chainId);
+    const baseChainId = stripRunNumber(chainId);
     const history = this.baseChainMapping.get(baseChainId) ?? [];
 
     const existingIndex = history.indexOf(chainId);
@@ -1730,7 +1765,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   private removeRunFromBaseTracking(chainId: string): void {
-    const baseChainId = this.runChainToBase.get(chainId) ?? this.extractBaseChainId(chainId);
+    const baseChainId = this.runChainToBase.get(chainId) ?? stripRunNumber(chainId);
     const history = this.baseChainMapping.get(baseChainId);
     if (history) {
       const filtered = history.filter((entry) => entry !== chainId);
@@ -1744,25 +1779,9 @@ export class ChainSessionStore implements ChainSessionService {
     this.runChainToBase.delete(chainId);
   }
 
-  private extractBaseChainId(chainId: string): string {
-    return chainId.replace(/#\d+$/, '');
-  }
-
-  private getRunNumber(chainId: string): number | undefined {
-    const match = chainId.match(/#(\d+)$/);
-    if (!match) {
-      return undefined;
-    }
-    const matchGroup = match[1];
-    if (matchGroup === undefined) {
-      return undefined;
-    }
-    return Number.parseInt(matchGroup, 10);
-  }
-
   private ensureRunMappingConsistency(): void {
     for (const chainId of this.chainSessionMapping.keys()) {
-      const baseChainId = this.extractBaseChainId(chainId);
+      const baseChainId = stripRunNumber(chainId);
       if (!this.baseChainMapping.has(baseChainId)) {
         this.baseChainMapping.set(baseChainId, []);
       }
@@ -1770,8 +1789,8 @@ export class ChainSessionStore implements ChainSessionService {
       if (!history.includes(chainId)) {
         history.push(chainId);
         history.sort((a, b) => {
-          const runA = this.getRunNumber(a) ?? 0;
-          const runB = this.getRunNumber(b) ?? 0;
+          const runA = parseRunNumber(a) ?? 0;
+          const runB = parseRunNumber(b) ?? 0;
           return runA - runB;
         });
       }
@@ -1899,38 +1918,6 @@ export class ChainSessionStore implements ChainSessionService {
       `[ChainSessionStore] Promoted session ${session.sessionId} to canonical (${reason})`
     );
     this.persistSessionsAsync('lifecycle-promotion');
-  }
-
-  private getDormantSessionForChain(chainId: string): ChainSession | undefined {
-    const sessionIds = this.chainSessionMapping.get(chainId);
-    if (!sessionIds) {
-      return undefined;
-    }
-
-    for (const sessionId of sessionIds) {
-      const session = this.activeSessions.get(sessionId);
-      if (session && this.isDormantSession(session)) {
-        return session;
-      }
-    }
-    return undefined;
-  }
-
-  private getDormantSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = this.extractBaseChainId(baseChainId);
-    const history = this.baseChainMapping.get(normalized) ?? [];
-    for (let idx = history.length - 1; idx >= 0; idx -= 1) {
-      const runChainId = history[idx];
-      if (runChainId === undefined) {
-        continue;
-      }
-      const dormantSession = this.getDormantSessionForChain(runChainId);
-      if (dormantSession) {
-        return dormantSession;
-      }
-    }
-
-    return this.getDormantSessionForChain(normalized);
   }
 
   private buildChainMetadata(session: ChainSession): Record<string, any> | undefined {

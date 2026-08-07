@@ -32,6 +32,33 @@ export class GateActionHandler extends ActionHandler {
     }
   }
 
+  /**
+   * Re-advertise the tool surface after the gate switch moved.
+   *
+   * `prompt_engine` exposes its three gate parameters only while the gate
+   * system is enabled, so a toggle changes the schema and clients need to be
+   * told — the same refresh a framework switch performs.
+   *
+   * Best-effort on purpose: the state change already succeeded and is
+   * authoritative. Failing the whole operation because clients could not be
+   * notified would report a toggle as failed after it had taken effect, and a
+   * client that misses the notification re-lists on its own schedule.
+   */
+  private async refreshToolSurface(): Promise<void> {
+    if (this.context.onToolSurfaceChanged == null) {
+      return;
+    }
+    try {
+      await this.context.onToolSurfaceChanged();
+    } catch (error) {
+      this.logger.warn(
+        `Gate system state changed but the tool surface could not be refreshed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
   private async enableGateSystem(args: {
     reason?: string;
     persist?: boolean;
@@ -52,6 +79,7 @@ export class GateActionHandler extends ActionHandler {
       args.reason || 'User requested to enable gate system',
       this.requestScope
     );
+    await this.refreshToolSurface();
 
     const persistenceNotes: string[] = [];
     if (args.persist) {
@@ -90,6 +118,7 @@ export class GateActionHandler extends ActionHandler {
       args.reason || 'User requested to disable gate system',
       this.requestScope
     );
+    await this.refreshToolSurface();
 
     const persistenceNotes: string[] = [];
     if (args.persist) {

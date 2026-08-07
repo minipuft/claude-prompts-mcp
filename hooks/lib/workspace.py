@@ -3,8 +3,11 @@ Workspace resolution for Claude Code hooks.
 
 Priority:
   1. MCP_WORKSPACE - User-defined workspace location
-  2. CLAUDE_PLUGIN_ROOT - Set by Claude Code plugin system
-  3. Self-resolution - Detect from script location (zero-config fallback)
+  2. CLAUDE_PLUGIN_ROOT - Set by Claude Code plugin system (Codex CLI also
+     provides it as a compatibility alias for plugin-bundled hooks)
+  3. PLUGIN_ROOT - Codex CLI plugin system's native root variable
+  4. GEMINI_EXTENSION_PATH / extensionPath - Gemini CLI extension root
+  5. Self-resolution - Detect from script location (zero-config fallback)
 """
 
 import os
@@ -17,8 +20,10 @@ def get_workspace_root() -> Path | None:
 
     Priority:
       1. MCP_WORKSPACE env var (user-defined)
-      2. CLAUDE_PLUGIN_ROOT env var (set by Claude Code plugin system)
-      3. Self-resolution from script location (fallback)
+      2. CLAUDE_PLUGIN_ROOT env var (Claude Code plugin system; Codex alias)
+      3. PLUGIN_ROOT env var (Codex CLI plugin system, native name)
+      4. GEMINI_EXTENSION_PATH / extensionPath env var (Gemini CLI)
+      5. Self-resolution from script location (fallback)
     """
     # 1. User-defined workspace (highest priority)
     mcp_workspace = os.environ.get("MCP_WORKSPACE")
@@ -34,14 +39,22 @@ def get_workspace_root() -> Path | None:
         if plugin_path.exists():
             return plugin_path
 
-    # 3. Gemini CLI extension root
+    # 3. Codex CLI plugin root (PLUGIN_ROOT is the native name; the
+    #    CLAUDE_PLUGIN_ROOT compatibility alias is already handled above)
+    generic_plugin_root = os.environ.get("PLUGIN_ROOT")
+    if generic_plugin_root:
+        generic_plugin_path = Path(generic_plugin_root)
+        if generic_plugin_path.exists():
+            return generic_plugin_path
+
+    # 4. Gemini CLI extension root
     gemini_root = os.environ.get("GEMINI_EXTENSION_PATH") or os.environ.get("extensionPath")
     if gemini_root:
         gemini_path = Path(gemini_root)
         if gemini_path.exists():
             return gemini_path
 
-    # 4. Self-resolution from script location
+    # 5. Self-resolution from script location
     # Supports both:
     #   - hooks/lib/workspace.py (development: lib -> hooks -> project_root)
     #   - .claude-plugin/hooks/lib/workspace.py (packaged: lib -> hooks -> .claude-plugin -> project_root)

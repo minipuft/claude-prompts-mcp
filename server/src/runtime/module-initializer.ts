@@ -17,6 +17,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { PromptAssetManager } from '#modules/prompts/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { TextReferenceStore } from '#modules/text-refs/index.js';
+import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type {
   ResolvedFrameworkConfig,
   HookRegistryPort,
@@ -24,7 +25,7 @@ import type {
 } from '#shared/types/index.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/runtime-framework-loader.js';
 import {
@@ -103,10 +104,22 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   // Initialize Resource Change Tracker early (for audit logging)
   let resourceChangeTracker: ResourceChangeTracker | undefined;
+  const runtimeDbPath =
+    pathResolver !== undefined
+      ? path.join(pathResolver.getRuntimeStatePath(), 'state.db')
+      : undefined;
   if (serverRoot !== undefined && serverRoot !== '') {
     if (isVerbose) logger.info('🔄 Initializing Resource Change Tracker...');
     try {
-      resourceChangeTracker = await initializeResourceChangeTracker(logger, serverRoot);
+      // Read here rather than at the FrameworkStateStore site below: the tracker is
+      // constructed first, and a value read after construction never reaches it.
+      const trackerWorkspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+      resourceChangeTracker = await initializeResourceChangeTracker(
+        logger,
+        serverRoot,
+        runtimeDbPath,
+        trackerWorkspaceId != null ? { workspaceId: trackerWorkspaceId } : undefined
+      );
       // Compare baseline to detect external changes
       const baselineResult = await compareResourceBaseline(
         resourceChangeTracker,
@@ -124,7 +137,14 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         }
       }
     } catch (error) {
-      logger.warn('Failed to initialize ResourceChangeTracker:', error);
+      // Loud, not degraded. The `serverRoot` guard above already expresses "persistence
+      // is not configured"; reaching this catch means it WAS configured and failed, and
+      // swallowing it started the server with no audit trail while reporting success.
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to initialize ResourceChangeTracker (state.db at ${runtimeDbPath ?? '<unresolved>'}): ${msg}`,
+        { cause: error }
+      );
     }
   }
 
@@ -214,12 +234,41 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
       const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+      const { SqliteStateStore } = await import('#infra/database/stores/sqlite-store.js');
       const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
       await dbManager.initialize();
-      mcpToolsManager.setDatabasePort(dbManager);
+      // Built here, not in the tracker or in mcp/: `modules-no-infra-static` and
+      // `mcp-no-infra-static` both bar those layers from naming a concrete infra store, so the
+      // composition root is the only place allowed to construct one. It is handed down as the
+      // `StateStore` interface. This replaces the tracker's own
+      // `INSERT ... kv_state ... 'default'`, which made it a second writer to a table
+      // `sqlite-store.ts` owns and pinned all argument history to one shared scope.
+      const argHistoryStore = new SqliteStateStore<PersistedArgumentHistory>(
+        dbManager,
+        {
+          tableName: 'kv_state',
+          key: 'arg_history',
+          defaultState: () => ({
+            version: '1.0.0',
+            lastUpdated: 0,
+            chains: {},
+            sessionToChain: {},
+          }),
+        },
+        logger
+      );
+      // Same launch workspace the tracker and chain stores use, so version_history rows land
+      // under the project that produced them instead of one shared 'default' tenant.
+      const versionHistoryScope = workspaceId != null ? { workspaceId } : undefined;
+      mcpToolsManager.setDatabasePort(dbManager, argHistoryStore, versionHistoryScope);
     } catch (error) {
-      logger.warn(
-        `Failed to wire DatabasePort to MCP tools: ${error instanceof Error ? error.message : String(error)}`
+      // This wiring owns argument history and version history. A swallow here left the
+      // rollback feature silently inert — `resource_manager` would report no versions
+      // rather than report that it could not reach them.
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to wire DatabasePort to MCP tools (serverRoot ${serverRoot}): ${msg}`,
+        { cause: error }
       );
     }
   }
@@ -247,7 +296,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   }
 
   if (isVerbose) logger.info('🔄 Registering all MCP tools...');
-  await mcpToolsManager.registerAllTools();
+  await mcpToolsManager.registerAllTools(mcpServer);
 
   // Index resources to SQLite for hook consumption (prompt-suggest, etc.)
   if (serverRoot !== undefined && serverRoot !== '') {
@@ -267,7 +316,19 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       await indexer.syncAll();
       if (isVerbose) logger.info('✅ ResourceIndexer synced to SQLite');
     } catch (error) {
-      logger.warn('Failed to sync resource index:', error);
+      // `resource_index` is what the Python hooks read; a stale one makes prompt-suggest
+      // recommend resources that no longer exist.
+      //
+      // Reachability note: `syncAll()` catches per resource type internally and reports
+      // failures through `SyncResult.errors` rather than throwing, so this catch fires
+      // only if the engine or the dynamic imports fail — the same root cause that would
+      // already have thrown at the DatabasePort site above. It is corrected for posture
+      // consistency, not because a test can currently reach it. The unchecked
+      // `SyncResult.errors` is a separate silent-failure channel, out of Tier 5's scope.
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to sync resource index (serverRoot ${serverRoot}): ${msg}`, {
+        cause: error,
+      });
     }
   }
 

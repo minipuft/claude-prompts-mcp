@@ -36,6 +36,8 @@ import type {
 } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 
+import { interpretScriptValidationOutput } from '#shared/utils/script-validation-output.js';
+
 /**
  * Pipeline Stage 08: Script Execution
  *
@@ -88,8 +90,10 @@ export class ScriptExecutionStage extends BasePipelineStage {
     // Build tool map for lookups
     const toolMap = new Map(prompt.scriptTools.map((t) => [t.id, t]));
 
-    // Separate autoApproveOnValid tools from normal confirmation flow
-    const { autoApproveMatches, normalMatches } = this.separateAutoApproveTools(matches, toolMap);
+    // Both partitions of this list belong to ToolTriggerFilter; only executing the
+    // auto-approve candidates to learn their verdict stays here, because it needs I/O.
+    const { autoApprove: autoApproveMatches, normal: normalMatches } =
+      this.toolTriggerFilter.partitionAutoApprove(matches, prompt.scriptTools);
 
     // Handle autoApproveOnValid tools: execute validation first, then decide
     const autoApproveReady: ToolDetectionMatch[] = [];
@@ -102,7 +106,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
       scriptResults.set(match.toolId, result);
 
       // Check validation output
-      const validationResult = this.checkValidationOutput(result);
+      const validationResult = interpretScriptValidationOutput(result);
 
       if (validationResult.valid) {
         // Auto-approved! Add warnings if any
@@ -197,68 +201,6 @@ export class ScriptExecutionStage extends BasePipelineStage {
   /**
    * Separate tools with autoApproveOnValid from normal confirmation flow.
    */
-  private separateAutoApproveTools(
-    matches: ToolDetectionMatch[],
-    toolMap: Map<string, LoadedScriptTool>
-  ): { autoApproveMatches: ToolDetectionMatch[]; normalMatches: ToolDetectionMatch[] } {
-    const autoApproveMatches: ToolDetectionMatch[] = [];
-    const normalMatches: ToolDetectionMatch[] = [];
-
-    for (const match of matches) {
-      const tool = toolMap.get(match.toolId);
-      if (tool?.execution?.autoApproveOnValid === true) {
-        autoApproveMatches.push(match);
-      } else {
-        normalMatches.push(match);
-      }
-    }
-
-    return { autoApproveMatches, normalMatches };
-  }
-
-  /**
-   * Check script output for validation result.
-   * Expected format: { valid: boolean, warnings?: string[], errors?: string[] }
-   *
-   * IMPORTANT: Scripts may exit with non-zero code when validation fails,
-   * but still output valid JSON with detailed error messages. We must check
-   * the output first before falling back to exit code errors.
-   */
-  private checkValidationOutput(result: ScriptExecutionResult): {
-    valid: boolean;
-    warnings: string[];
-    errors: string[];
-  } {
-    // Try to parse output for validation fields first, even on non-zero exit
-    // Validation scripts typically output JSON to stdout and exit with code 1 on failure
-    const output = result.output as Record<string, unknown> | null;
-
-    if (output !== null && typeof output === 'object') {
-      // We have valid JSON output - extract validation fields
-      const valid = output['valid'] === true;
-      const warnings = Array.isArray(output['warnings']) ? (output['warnings'] as string[]) : [];
-      const errors = Array.isArray(output['errors'])
-        ? (output['errors'] as string[])
-        : valid
-          ? []
-          : ['Validation failed'];
-
-      return { valid, warnings, errors };
-    }
-
-    // No valid JSON output - fall back to execution status
-    if (!result.success) {
-      return {
-        valid: false,
-        warnings: [],
-        errors: [result.error ?? `Script execution failed with exit code ${result.exitCode}`],
-      };
-    }
-
-    // Success but no JSON output
-    return { valid: false, warnings: [], errors: ['Script did not return valid JSON output'] };
-  }
-
   /**
    * Execute tools that are ready for execution.
    */

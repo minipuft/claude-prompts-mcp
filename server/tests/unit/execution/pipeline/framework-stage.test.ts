@@ -272,6 +272,197 @@ describe('FrameworkResolutionStage', () => {
     await expect(stage.execute(context)).rejects.toThrow('framework failure');
   });
 
+  /**
+   * Tier 12 removed a `requiresFramework` derivation that ran 11 lines above an identical
+   * one. The removed block was reachable only when `decision.shouldApply` was false, which
+   * makes the surviving block's extra `|| decision.shouldApply` term a no-op there — so both
+   * computed the same value and took the same branch, and the first was pure duplication.
+   *
+   * These cases enumerate that block's whole reachable state space (authority `disabled`
+   * with no modifier in the reason) plus the one state only the survivor covers. They are
+   * written to pass unchanged against the pre-Tier-12 stage; that is the point of them.
+   */
+  describe('requiresFramework derivation (Tier 12 differential)', () => {
+    const singleCommand = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+      promptId: 'demo',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 0.9,
+      commandType: 'single',
+      metadata: {
+        originalCommand: '>>demo',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      convertedPrompt: createConvertedPrompt(),
+      ...overrides,
+    });
+
+    test('no framework configured and nothing requires one — skips', async () => {
+      const context = new ExecutionContext({ command: '>>demo' } as any);
+      context.executionPlan = {
+        strategy: 'single',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: false,
+      };
+      context.parsedCommand = singleCommand() as any;
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).not.toHaveBeenCalled();
+      expect(context.frameworkContext).toBeUndefined();
+    });
+
+    test('no framework configured but the plan requires one — resolves', async () => {
+      const context = new ExecutionContext({ command: '>>demo' } as any);
+      context.executionPlan = {
+        strategy: 'single',
+        gates: [],
+        requiresFramework: true,
+        requiresSession: false,
+      };
+      context.parsedCommand = singleCommand() as any;
+      manager.generateExecutionContext.mockReturnValue(createFrameworkContext('CAGEERF'));
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).toHaveBeenCalledTimes(1);
+    });
+
+    test('no framework configured but an inline framework gate requires one — resolves', async () => {
+      const context = new ExecutionContext({ command: '>>demo' } as any);
+      context.executionPlan = {
+        strategy: 'single',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: false,
+      };
+      context.parsedCommand = singleCommand({
+        inlineGateIds: ['framework-compliance'],
+      }) as any;
+      manager.generateExecutionContext.mockReturnValue(createFrameworkContext('CAGEERF'));
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).toHaveBeenCalledTimes(1);
+    });
+
+    test('a non-framework inline gate does not require one — skips', async () => {
+      const context = new ExecutionContext({ command: '>>demo' } as any);
+      context.executionPlan = {
+        strategy: 'single',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: false,
+      };
+      context.parsedCommand = singleCommand({ inlineGateIds: ['code-quality'] }) as any;
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).not.toHaveBeenCalled();
+    });
+
+    test('chain whose steps require nothing — skips', async () => {
+      const context = new ExecutionContext({ command: '>>chain' } as any);
+      context.executionPlan = {
+        strategy: 'chain',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: true,
+      };
+      context.parsedCommand = {
+        promptId: 'chain-wrapper',
+        rawArgs: '',
+        format: 'symbolic',
+        confidence: 0.88,
+        commandType: 'chain',
+        metadata: {
+          originalCommand: '>>chain',
+          parseStrategy: 'symbolic',
+          detectedFormat: 'symbolic',
+          warnings: [],
+        },
+        steps: [
+          {
+            stepNumber: 1,
+            promptId: 'first',
+            args: {},
+            convertedPrompt: createConvertedPrompt({ id: 'first' }),
+            executionPlan: {
+              strategy: 'single',
+              gates: ['code-quality'],
+              requiresFramework: false,
+              requiresSession: false,
+            },
+          },
+        ],
+      } as any;
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The state the removed block could never reach: the authority applies a framework, so
+     * `decision.shouldApply` alone carries the derivation even though nothing else requires one.
+     */
+    test('@ operator applies a framework even when nothing requires one — resolves', async () => {
+      const context = new ExecutionContext({ command: '>>demo' } as any);
+      context.executionPlan = {
+        strategy: 'single',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: false,
+      };
+      context.parsedCommand = singleCommand({
+        executionPlan: {
+          strategy: 'single',
+          gates: [],
+          requiresFramework: false,
+          requiresSession: false,
+          frameworkOverride: 'ReACT',
+        },
+      }) as any;
+      manager.generateExecutionContext.mockReturnValue(createFrameworkContext('ReACT'));
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).toHaveBeenCalledWith(expect.anything(), {
+        userPreference: 'react',
+      });
+    });
+
+    /**
+     * GateEnhancementService (stage 11) calls `decide()` before this stage on the normal
+     * path, so the authority is already cached by the time the stage runs. Pinned because
+     * the stage's comment about why requirement-derivation cannot fold into the authority
+     * depends on it.
+     */
+    test('honours a decision already cached by an earlier stage', async () => {
+      const context = new ExecutionContext({ command: '>>demo' } as any);
+      context.executionPlan = {
+        strategy: 'single',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: false,
+      };
+      context.parsedCommand = singleCommand() as any;
+
+      // Stand in for stage 11, which supplies the global active framework this stage cannot.
+      context.frameworkAuthority.decide({ globalActiveFramework: 'CAGEERF' });
+      manager.generateExecutionContext.mockReturnValue(createFrameworkContext('CAGEERF'));
+
+      await stage.execute(context);
+
+      expect(manager.generateExecutionContext).toHaveBeenCalledWith(expect.anything(), {
+        userPreference: 'cageerf',
+      });
+    });
+  });
+
   describe('System prompt duplication prevention', () => {
     test('sets coordination flag after applying framework context for single prompts', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);

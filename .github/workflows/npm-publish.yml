@@ -72,19 +72,14 @@ jobs:
 
       - name: Build
         working-directory: server
-        run: npm run build
+        run: npm run build:prod
 
-      # package.json declares a `cpm` bin. Publishing without that file would ship a
-      # manifest whose bin points at nothing, so assert every declared bin exists rather
-      # than trusting the build to have emitted it.
-      - name: Verify both bins were emitted
+      - name: Verify packed npm consumer
         working-directory: server
         run: |
           set -euo pipefail
-          for bin in $(node -p "Object.values(require('./package.json').bin).join(' ')"); do
-            test -f "$bin" || { echo "::error::Declared bin missing from build output: $bin"; exit 1; }
-            echo "  ok $bin"
-          done
+          mkdir -p "$RUNNER_TEMP/npm-package"
+          npm run verify:package-artifact -- --pack-destination "$RUNNER_TEMP/npm-package"
 
       - name: Test
         working-directory: server
@@ -95,11 +90,14 @@ jobs:
         run: |
           echo "Publishing claude-prompts@${{ steps.version.outputs.version }} via OIDC"
           # OIDC trusted publishing - no token needed, provenance auto-enabled
-          npm publish --access public --provenance
+          npm publish "$RUNNER_TEMP/npm-package/claude-prompts-${{ steps.version.outputs.version }}.tgz" --access public --provenance
 
       # Downstream updates handled by Dependabot in each repo
       # - gemini-prompts: dependabot watches claude-prompts daily
       # - opencode-prompts: dependabot watches claude-prompts daily
+      # - codex-prompts: dependabot watches claude-prompts daily
+      # Lock refresh per downstream: server/scripts/synchronize-downstream-lock.js
+      #   --workspace ../<repo> --package claude-prompts --version <published>
 
       - name: Summary
         if: always()

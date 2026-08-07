@@ -389,7 +389,7 @@ export function getDefaultLoggerConfig(
 
   return {
     logFile: overrides.logFile,
-    transport: overrides.transport ?? TransportType.SSE,
+    transport: overrides.transport ?? TransportType.STDIO,
     enableDebug: overrides.enableDebug ?? false,
     configuredLevel: overrides.configuredLevel ?? 'info',
   };
@@ -399,7 +399,7 @@ export function getDefaultLoggerConfig(
  * Create a simple logger for areas that don't need the full enhanced logger
  * Now supports verbosity control via command-line flags
  */
-export function createSimpleLogger(transport: string = 'sse'): Logger {
+export function createSimpleLogger(transport: string = 'stdio'): Logger {
   const enableConsole = transport !== TransportType.STDIO;
 
   // Check command-line flags for verbosity control
@@ -437,9 +437,6 @@ export function createSimpleLogger(transport: string = 'sse'): Logger {
  * This prevents log messages from interfering with JSON MCP messages
  */
 export function setupConsoleRedirection(logger: Logger): void {
-  const originalConsoleLog = console.log;
-  const originalConsoleError = console.error;
-
   console.log = (...args) => {
     logger.debug('CONSOLE: ' + args.join(' '));
   };

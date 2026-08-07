@@ -9,20 +9,29 @@ interface EnableDisableOptions {
 }
 
 /**
- * Maps user-friendly subsystem names to their config mode key.
+ * Maps user-friendly subsystem names to the config key the runtime actually reads.
  * Each entry: [configKey, description]
+ *
+ * Every entry here used to name a `*.mode` key holding `"on"`/`"off"`. No reader consulted any of
+ * them — the runtime reads the boolean below — and the write path assigns dot-keys verbatim, so
+ * this command reported success and changed nothing for all ten subsystems. `resources` maps to
+ * `registerWithMcp` rather than `enabled` because `ResourcesConfig` has no top-level `enabled`;
+ * `registerWithMcp` is that section's master switch.
  */
 const SUBSYSTEM_MAP: Record<string, [string, string]> = {
-  gates: ['gates.mode', 'Quality gates'],
-  frameworks: ['frameworks.mode', 'Framework system'],
-  resources: ['resources.mode', 'MCP resource registration'],
-  'resources.prompts': ['resources.prompts.mode', 'Prompt resources'],
-  'resources.gates': ['resources.gates.mode', 'Gate resources'],
-  'resources.frameworks': ['resources.frameworks.mode', 'Framework resources'],
-  'resources.observability': ['resources.observability.mode', 'Observability resources'],
-  'resources.logs': ['resources.logs.mode', 'Log resources'],
-  verification: ['verification.isolation.mode', 'Verification isolation'],
-  analysis: ['analysis.semanticAnalysis.llmIntegration.mode', 'LLM semantic analysis'],
+  gates: ['gates.enabled', 'Quality gates'],
+  frameworks: ['frameworks.enabled', 'Framework system'],
+  resources: ['resources.registerWithMcp', 'MCP resource registration'],
+  'resources.prompts': ['resources.prompts.enabled', 'Prompt resources'],
+  'resources.gates': ['resources.gates.enabled', 'Gate resources'],
+  'resources.frameworks': ['resources.frameworks.enabled', 'Framework resources'],
+  'resources.observability': ['resources.observability.enabled', 'Observability resources'],
+  'resources.logs': ['resources.logs.enabled', 'Log resources'],
+  verification: ['verification.isolation.enabled', 'Verification isolation'],
+  // `analysis` is gone. It mapped into the deprecated `analysis.semanticAnalysis.*` section, whose
+  // readers were all retired; `CONFIG_VALID_KEYS` no longer accepts the key, so leaving the entry
+  // would make `cpm enable analysis` fail validation instead of doing nothing. Model-graded gate
+  // evaluation is the `%judge` modifier / `gates.evaluation.defaultMode`, not a subsystem toggle.
 };
 
 function resolveWorkspace(workspace?: string): string {
@@ -61,13 +70,16 @@ export async function enableDisable(options: EnableDisableOptions): Promise<numb
 
   const [configKey, description] = entry;
   const ws = resolveWorkspace(options.workspace);
-  const targetValue = action === 'enable' ? 'on' : 'off';
+  // These keys are booleans in config.json. `setConfigValue` takes the raw string a user would
+  // type and parses it, so 'true'/'false' is what goes in; `targetState` is what comes back out.
+  const targetState = action === 'enable';
+  const targetValue = String(targetState);
 
   // Check current value first
   const readResult = readConfig(ws);
   if (readResult.success && readResult.config) {
     const current = getConfigValue(readResult.config, configKey);
-    if (current === targetValue) {
+    if (current === targetState) {
       if (json) {
         output({ subsystem, key: configKey, value: targetValue, changed: false, message: `Already ${action}d` }, { json: true });
       } else {

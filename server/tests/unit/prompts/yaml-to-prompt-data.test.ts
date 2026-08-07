@@ -29,6 +29,25 @@ describe('yamlToPromptData', () => {
     expect(result.subagentModel).toBe('fast');
   });
 
+  it('carries agentType at both prompt and step level', () => {
+    // Two levels because the resolution is `step ?? prompt ?? 'chain-executor'`. If only one
+    // level survived the loader, the other would silently fall through to the default and the
+    // feature would look half-implemented rather than broken.
+    const result = yamlToPromptData(
+      makeMinimalYaml({
+        agentType: 'Explore',
+        chainSteps: [
+          { promptId: 'a', stepName: 'A' },
+          { promptId: 'b', stepName: 'B', agentType: 'code-reviewer' },
+        ],
+      } as Partial<PromptYaml>)
+    );
+
+    expect(result.agentType).toBe('Explore');
+    expect(result.chainSteps?.[0]?.agentType).toBeUndefined();
+    expect(result.chainSteps?.[1]?.agentType).toBe('code-reviewer');
+  });
+
   it('defaults category to general', () => {
     const result = yamlToPromptData(makeMinimalYaml());
     expect(result.category).toBe('general');

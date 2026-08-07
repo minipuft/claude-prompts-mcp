@@ -20,7 +20,6 @@ const DEFAULT_CONFIG: GateServiceConfig = {
  * GateInstructionInjector abstraction layer.
  */
 export class CompositionalGateService implements GateService {
-  readonly serviceType = 'compositional' as const;
   private readonly logger: Logger;
   private readonly gateGuidanceRenderer: GateGuidanceRenderer;
   private config: GateServiceConfig;

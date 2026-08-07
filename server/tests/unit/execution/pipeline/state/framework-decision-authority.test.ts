@@ -99,7 +99,6 @@ describe('FrameworkDecisionAuthority', () => {
       const input: FrameworkDecisionInput = {
         modifiers: { lean: true },
         operatorOverride: 'CAGEERF',
-        clientOverride: 'ReACT',
         globalActiveFramework: '5W1H',
       };
 
@@ -126,8 +125,7 @@ describe('FrameworkDecisionAuthority', () => {
     test('uses operator override when present', () => {
       const input: FrameworkDecisionInput = {
         operatorOverride: 'CAGEERF',
-        clientOverride: 'ReACT', // Lower priority
-        globalActiveFramework: '5W1H', // Lowest priority
+        globalActiveFramework: '5W1H', // Lower priority
       };
 
       const decision = authority.decide(input);
@@ -145,31 +143,6 @@ describe('FrameworkDecisionAuthority', () => {
 
       const decision = authority.decide(input);
       expect(decision.frameworkId).toBe('cageerf');
-    });
-  });
-
-  describe('priority: client selection', () => {
-    test('uses client selection when no operator override', () => {
-      const input: FrameworkDecisionInput = {
-        clientOverride: 'ReACT',
-        globalActiveFramework: 'SCAMPER', // Lower priority
-      };
-
-      const decision = authority.decide(input);
-
-      expect(decision.shouldApply).toBe(true);
-      expect(decision.frameworkId).toBe('react');
-      expect(decision.source).toBe('client-selection');
-      expect(decision.reason).toContain('judge phase');
-    });
-
-    test('normalizes client selection to lowercase', () => {
-      const input: FrameworkDecisionInput = {
-        clientOverride: 'SCAMPER',
-      };
-
-      const decision = authority.decide(input);
-      expect(decision.frameworkId).toBe('scamper');
     });
   });
 
@@ -297,41 +270,29 @@ describe('FrameworkDecisionAuthority', () => {
           input: {
             modifiers: { clean: true },
             operatorOverride: 'OP',
-            clientOverride: 'CLIENT',
             globalActiveFramework: 'GLOBAL',
           },
           expectedSource: 'disabled',
           expectedFramework: undefined,
         },
         {
-          description: '%lean beats operator/client/global',
+          description: '%lean beats operator/global',
           input: {
             modifiers: { lean: true },
             operatorOverride: 'OP',
-            clientOverride: 'CLIENT',
             globalActiveFramework: 'GLOBAL',
           },
           expectedSource: 'disabled',
           expectedFramework: undefined,
         },
         {
-          description: 'operator beats client/global',
+          description: 'operator beats global',
           input: {
             operatorOverride: 'OP',
-            clientOverride: 'CLIENT',
             globalActiveFramework: 'GLOBAL',
           },
           expectedSource: 'operator',
           expectedFramework: 'op',
-        },
-        {
-          description: 'client beats global',
-          input: {
-            clientOverride: 'CLIENT',
-            globalActiveFramework: 'GLOBAL',
-          },
-          expectedSource: 'client-selection',
-          expectedFramework: 'client',
         },
         {
           description: 'global is lowest priority',

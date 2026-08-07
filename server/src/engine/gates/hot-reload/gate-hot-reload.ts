@@ -81,14 +81,15 @@ export interface GateHotReloadRegistration {
  * Coordinates between the file watching system and gate registry to
  * enable seamless hot reload of gate definitions.
  *
+ * Wiring goes through the auxiliary-reload mechanism, not a dedicated setter:
+ * `buildGateAuxiliaryReloadConfig` (runtime) turns this coordinator into an
+ * `AuxiliaryReloadConfig` that `HotReloadObserver.setAuxiliaryReloads` accepts,
+ * alongside the framework and style registrations.
+ *
  * @example
  * ```typescript
- * const coordinator = new GateHotReloadCoordinator(logger, registry, loader);
- *
- * // Register with hot reload manager
- * hotReloadObserver.setGateReloadCallback(
- *   (event) => coordinator.handleGateChange(event)
- * );
+ * const gateAux = buildGateAuxiliaryReloadConfig(logger, gateManager);
+ * hotReloadObserver.setAuxiliaryReloads([gateAux].filter(Boolean));
  * ```
  */
 export class GateHotReloadCoordinator {

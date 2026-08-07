@@ -116,9 +116,11 @@ export class OperatorValidationStage extends BasePipelineStage {
   /**
    * Normalize delegation flags on chain steps.
    *
-   * Two sources of delegation:
-   * 1. Prompt-level `delegation: true` → all steps become delegated
-   * 2. Per-step `subagentModel` → that step becomes delegated (implies sub-agent execution)
+   * Delegation has one source: a step's own `subagentModel`, which implies sub-agent
+   * execution. A prompt-wide flag was read here until Tier 15B; the prompt YAML schema
+   * carried no key that could set it, so it was never anything but false. Reinstating
+   * prompt-wide delegation means adding the schema key and the converter that writes it,
+   * not restoring this read.
    *
    * Propagates to both parsedCommand.steps (ChainStepPrompt) and operator steps (ChainStep).
    */
@@ -126,20 +128,15 @@ export class OperatorValidationStage extends BasePipelineStage {
     parsedCommand: ExecutionContext['parsedCommand'],
     operators: SymbolicOperator[]
   ): void {
-    const promptWide = parsedCommand?.convertedPrompt?.delegation === true;
-
-    this.markDelegatedStepPrompts(parsedCommand, promptWide);
-    this.syncDelegationToOperators(parsedCommand, operators, promptWide);
+    this.markDelegatedStepPrompts(parsedCommand);
+    this.syncDelegationToOperators(parsedCommand, operators);
   }
 
-  /** Mark ChainStepPrompt[] entries as delegated based on prompt-level or per-step subagentModel. */
-  private markDelegatedStepPrompts(
-    parsedCommand: ExecutionContext['parsedCommand'],
-    promptWide: boolean
-  ): void {
+  /** Mark ChainStepPrompt[] entries as delegated based on per-step subagentModel. */
+  private markDelegatedStepPrompts(parsedCommand: ExecutionContext['parsedCommand']): void {
     if (parsedCommand?.steps == null) return;
     for (const step of parsedCommand.steps) {
-      if (promptWide || step.subagentModel != null) {
+      if (step.subagentModel != null) {
         step.delegated = true;
       }
     }
@@ -148,25 +145,23 @@ export class OperatorValidationStage extends BasePipelineStage {
   /** Propagate delegation from ChainStepPrompt[] to positionally-aligned operator ChainStep[]. */
   private syncDelegationToOperators(
     parsedCommand: ExecutionContext['parsedCommand'],
-    operators: SymbolicOperator[],
-    promptWide: boolean
+    operators: SymbolicOperator[]
   ): void {
     const stepPrompts = parsedCommand?.steps;
     for (const operator of operators) {
       if (operator.type !== 'chain') continue;
-      this.applyDelegationToChainOp(operator, stepPrompts, promptWide);
+      this.applyDelegationToChainOp(operator, stepPrompts);
     }
   }
 
   private applyDelegationToChainOp(
     operator: ChainOperator,
-    stepPrompts: ChainStepPrompt[] | undefined,
-    promptWide: boolean
+    stepPrompts: ChainStepPrompt[] | undefined
   ): void {
     for (let i = 0; i < operator.steps.length; i++) {
       const step = operator.steps[i];
       if (!step) continue;
-      if (promptWide || stepPrompts?.[i]?.delegated === true) {
+      if (stepPrompts?.[i]?.delegated === true) {
         step.delegated = true;
       }
     }

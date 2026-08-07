@@ -53,8 +53,11 @@ export class GateToolHandler {
     deps.logger.debug('GateToolHandler initialized');
   }
 
-  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
-    this.versionHistoryService.setDatabasePort(db);
+  setDatabasePort(
+    db: import('#shared/types/persistence.js').DatabasePort,
+    scope?: import('#shared/types/persistence.js').StateStoreOptions
+  ): void {
+    this.versionHistoryService.setDatabasePort(db, scope);
   }
 
   async handleAction(args: GateManagerInput, _context: Record<string, any>): Promise<ToolResponse> {

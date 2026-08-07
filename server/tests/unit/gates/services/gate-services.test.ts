@@ -2,7 +2,6 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { CompositionalGateService } from '../../../../src/engine/gates/services/compositional-gate-service.js';
 import { GateServiceFactory } from '../../../../src/engine/gates/services/gate-service-factory.js';
-import { SemanticGateService } from '../../../../src/engine/gates/services/semantic-gate-service.js';
 
 import type { GateGuidanceRenderer } from '../../../../src/engine/gates/guidance/GateGuidanceRenderer.js';
 import type { GateService } from '../../../../src/engine/gates/services/gate-service-interface.js';
@@ -31,11 +30,6 @@ const fakeRenderer: GateGuidanceRenderer = {
   renderGuidance: jest.fn().mockResolvedValue('Guidance'),
 } as any;
 
-const fakeValidator: any = {
-  validateGates: jest.fn(),
-  shouldRetry: jest.fn(),
-};
-
 const samplePrompt: ConvertedPrompt = {
   id: 'prompt-',
   name: 'Sample',
@@ -46,26 +40,31 @@ const samplePrompt: ConvertedPrompt = {
 };
 
 describe('GateServiceFactory', () => {
-  test('creates compositional service when llm disabled', () => {
-    const factory = new GateServiceFactory(
-      createLogger(),
-      createConfigLoader(false),
-      fakeRenderer,
-      fakeValidator
-    );
-    const service = factory.createGateService();
-    expect(service).toBeInstanceOf(CompositionalGateService);
+  // Selection is unconditional. Both cases assert the same outcome on purpose: feeding the
+  // llm-enabled config shape is the point, because that is the input that would divert if a
+  // second service were ever wired back in, and this is the case that would fail.
+  test('returns the compositional service when the retired llm flag is off', () => {
+    const factory = new GateServiceFactory(createLogger(), createConfigLoader(false), fakeRenderer);
+
+    expect(factory.createGateService()).toBeInstanceOf(CompositionalGateService);
   });
 
-  test('creates semantic service when llm enabled', () => {
-    const factory = new GateServiceFactory(
-      createLogger(),
-      createConfigLoader(true),
-      fakeRenderer,
-      fakeValidator
-    );
-    const service = factory.createGateService();
-    expect(service).toBeInstanceOf(SemanticGateService);
+  test('returns the compositional service even when the retired llm flag is on', () => {
+    const factory = new GateServiceFactory(createLogger(), createConfigLoader(true), fakeRenderer);
+
+    expect(factory.createGateService()).toBeInstanceOf(CompositionalGateService);
+  });
+
+  test('hotReload rereads config and returns a fresh compositional service', async () => {
+    const configLoader = createConfigLoader(true);
+    const factory = new GateServiceFactory(createLogger(), configLoader, fakeRenderer);
+
+    const first = factory.createGateService();
+    const reloaded = await factory.hotReload();
+
+    expect(configLoader.loadConfig).toHaveBeenCalledTimes(1);
+    expect(reloaded).toBeInstanceOf(CompositionalGateService);
+    expect(reloaded).not.toBe(first);
   });
 });
 
@@ -81,22 +80,22 @@ describe('CompositionalGateService', () => {
     expect(result.gateInstructionsInjected).toBe(true);
     expect(service.supportsValidation()).toBe(false);
   });
-});
 
-describe('SemanticGateService', () => {
-  test('gracefully degrades when validation not implemented', async () => {
-    const service = new SemanticGateService(createLogger(), fakeRenderer, fakeValidator, {
-      llmIntegration: {
-        enabled: true,
-      },
-    });
+  // The enhancement result carries injection facts only — no verdict field. Pinning the exact
+  // key set is what catches a validation channel being reintroduced here instead of through
+  // `gate_verdict`, which is where evaluation results are supposed to arrive.
+  test('returns injection facts only, with no verdict channel', async () => {
+    const service: GateService = new CompositionalGateService(createLogger(), fakeRenderer);
 
     const result = await service.enhancePrompt(samplePrompt, ['gate'], {
       promptId: 'prompt-',
     });
 
-    expect(result.validationResults).toBeUndefined();
-    expect(result.injectedGateIds).toEqual(['gate']);
-    expect(service.supportsValidation()).toBe(true);
+    expect(Object.keys(result).sort()).toEqual([
+      'enhancedPrompt',
+      'gateInstructionsInjected',
+      'injectedGateIds',
+      'instructionLength',
+    ]);
   });
 });

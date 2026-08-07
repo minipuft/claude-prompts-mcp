@@ -1,3 +1,10 @@
+---
+title: "Shim & Compat-Alias Debt Sweep"
+date: 2026-07-29
+status: active
+tags: []
+---
+
 # Shim & Compat-Alias Debt Sweep
 
 **Date**: 2026-07-29
@@ -850,7 +857,7 @@ session holds uncommitted edits to `execution-planner.ts` (-265 lines), `categor
 
 | ID | Status | Step | Files | Depends | Verification |
 | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | --- | ------------------------------------------------------------------------- |
-| 3.1 | ✓ | `StepState` → `StepLifecycle` — **DONE 2026-07-30** (deferred, then executed same day on operator request). Not a rename — enum→union+substate-flags data-model migration touching persisted `chain_run_registry` shape. Full context, site inventory and execution order: [`stepstate-lifecycle-migration.md`](./stepstate-lifecycle-migration.md) | `shared/types/`, `modules/chains/manager.ts`, `engine/execution/capture/`, `infra/database/` | 0.5 | **DONE** — typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0 |
+| 3.1 | ✓ | `StepState` → `StepLifecycle` — **DONE 2026-07-30** (deferred, then executed same day on operator request). Not a rename — enum→union+substate-flags data-model migration touching persisted `chain_run_registry` shape. Full context, site inventory and execution order: [`stepstate-lifecycle-migration.md`](../reference/techincal_debt/stepstate-lifecycle-migration.md) | `shared/types/`, `modules/chains/manager.ts`, `engine/execution/capture/`, `infra/database/` | 0.5 | **DONE** — typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0 |
 | 3.2 | ✓ | **DONE** — `scripts/validate-no-stepstate.js` added + registered; `validate:all` now **17** members; negative-tested both directions | `scripts/validate-no-stepstate.js`, `package.json` | 3.1 | **DONE** — `validate:all` 17 members, exits 0 |
 | 3.3 | ✓ | `ChainSessionManager` → `ChainSessionStore` (**177**→0, not 143) incl. lowercase `chainSessionManager`. 33 files + test file renamed `chain-session-manager.test.ts` → `chain-session-store.test.ts` | `src/`, `tests/`, `docs/` (no `hooks/` hits) | 3.2 | **DONE** — residual 0; typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0 |
 | 3.4 | ✓ | **NEW** guard + registration | `scripts/validate-no-chainsessionmanager.js`, `package.json` | 3.3 | **DONE** — `validate:all` **16 members**, exits 0; guard negative-tested (reintroduce → exit 1) |

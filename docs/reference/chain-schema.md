@@ -24,6 +24,7 @@ A chain is a list of steps defined in `chainSteps`.
 | `outputMapping` | `object` | No       | Renames this step's output for downstream use.                                       |
 | `retries`       | `number` | No       | Retry attempts on failure (default 0).                                               |
 | `subagentModel` | `enum`   | No       | Model tier for delegation: `heavy`, `standard`, `fast`. Overrides prompt-level hint. |
+| `agentType`     | `string` | No       | Which agent to spawn for this step. Overrides the prompt-level default.              |
 
 ### Subagent Model
 
@@ -37,6 +38,19 @@ Controls which model tier a delegated step uses. The hint is client-agnostic —
 
 **Resolution priority**: step-level `subagentModel` > prompt-level `subagentModel` > strategy default.
 
+### Agent Type
+
+`subagentModel` picks how capable the sub-agent is; `agentType` picks _which_ agent it is. Set it
+when a step needs a specific specialist rather than the generic chain runner.
+
+**Resolution priority**: step-level `agentType` > prompt-level `agentType` > `chain-executor`.
+
+Agent names are host-defined — whatever the client exposes (`Explore`, `general-purpose`, a
+plugin-provided type). Bare names are namespaced to this plugin at render time; a name already
+containing `:` is passed through unchanged. The server does not validate the name against the
+host's registry, because it cannot see one: an unknown agent surfaces as an error from the client,
+naming the agent it could not find.
+
 ### Example
 
 ```yaml
@@ -49,6 +63,7 @@ chainSteps:
   - promptId: summarize_data
     stepName: "Summarize (2/2)"
     subagentModel: heavy # heavy model for synthesis
+    agentType: general-purpose # and a specific agent, not the chain runner
     inputMapping:
       content: steps.Fetch (1/2).result
 ```

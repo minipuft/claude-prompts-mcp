@@ -50,7 +50,7 @@ What changes after this decision?
 How do we prove this decision works?
 
 - Commands to run (typecheck/lint/tests/validate:all)
-- Runtime checks (STDIO/SSE smoke)
+- Runtime checks (STDIO/Streamable HTTP smoke)
 - Compatibility notes (CI matrix)
 
 ## References

@@ -56,28 +56,6 @@ export interface VerdictParseInput {
 }
 
 /**
- * Input for enforcement decision.
- * Decouples authority from ExecutionContext.
- */
-export interface GateEnforcementInput {
-  readonly sessionId: string;
-  readonly gateIds: string[];
-  readonly gateInstructions?: string;
-  readonly enforcementMode?: EnforcementMode;
-}
-
-/**
- * Gate enforcement decision result.
- */
-export interface GateEnforcementDecision {
-  readonly shouldEnforce: boolean;
-  readonly enforcementMode: EnforcementMode;
-  readonly gateIds: string[];
-  readonly reason: string;
-  readonly decidedAt: number;
-}
-
-/**
  * Per-gate verdict from a gate review response.
  * Parsed from GATE_VERDICTS blocks for granular delivery tracking.
  */
@@ -95,6 +73,42 @@ export interface CreateReviewOptions {
   readonly instructions: string;
   readonly maxAttempts?: number;
   readonly metadata?: Record<string, unknown>;
+}
+
+/**
+ * One gate's shell-verification result, reduced to what the coverage decision reads.
+ *
+ * Structurally a subset of `GateShellVerifyResult` from the shell-verify runner, declared
+ * here so the authority does not depend on the gates/shell module to answer a question
+ * about its own domain.
+ */
+export interface ShellVerificationOutcome {
+  readonly gateId: string;
+  readonly passed: boolean;
+}
+
+/**
+ * Inputs to the shell-verification coverage decision.
+ */
+export interface ShellVerificationCoverageInput {
+  /** Gate ids the pending review is still waiting on. */
+  readonly requiredGateIds: readonly string[];
+  /** Results produced by running this request's `shell_verify` criteria. */
+  readonly results: readonly ShellVerificationOutcome[];
+  /** Gate ids an earlier stage in this same request already shell-verified. */
+  readonly priorVerifiedGateIds?: readonly string[];
+}
+
+/**
+ * Whether shell verification alone clears a pending gate review.
+ */
+export interface ShellVerificationCoverage {
+  /** True when every required gate is covered by a passing verification. */
+  readonly satisfied: boolean;
+  /** This request's and earlier stages' verified gate ids, deduplicated. */
+  readonly verifiedGateIds: readonly string[];
+  /** Why the review was or was not cleared, for diagnostics. */
+  readonly reason: string;
 }
 
 /**

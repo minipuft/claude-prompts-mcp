@@ -7,8 +7,11 @@ Validates that the mandatory pre-flight checklist was completed before any imple
 The response must demonstrate that these pre-flight steps were evaluated:
 
 1. **Domain ownership** — What module/service owns this code?
-2. **Complexity check** — Cognitive complexity ≤15, cyclomatic ≤10
-3. **Size check** — File within layer advisory range
+2. **Complexity check** — Cognitive complexity ≤15 per function. No cyclomatic gate: it counts
+   every `??` and `?.` as a branch, so idiomatic optional chaining inflated it without costing a
+   reader anything (removed 2026-08-02). `~/.claude/rules/refactoring.md` owns the thresholds.
+3. **Size check** — How many responsibilities does the file hold? Size is a diagnostic, never a
+   write-block; there are no per-layer line ranges. >1000 lines is the one surviving Critical.
 4. **Layer identification** — Orchestration, service, or utility?
 5. **Naming smell test** — No vague suffixes (Manager, Handler, Helper, Utils)
 6. **Service existence** — Extend existing, don't create new

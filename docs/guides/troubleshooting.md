@@ -222,7 +222,7 @@ When reporting bugs, include:
 1. Output of `system_control(action: "status")`
 2. Relevant logs from `server/logs/*.log`
 3. Prompt IDs and chain_ids involved
-4. Transport type (STDIO/SSE/Streamable HTTP)
+4. Transport type (STDIO/Streamable HTTP)
 5. Node.js version: `node -v`
 6. Steps to reproduce
 

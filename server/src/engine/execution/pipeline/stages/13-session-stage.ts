@@ -9,6 +9,8 @@ import type { ExecutionContext, ParsedCommand, SessionContext } from '../../cont
 import type { ExecutionPlan } from '../../types.js';
 import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';
 
+import { formatChainId, nextRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
+
 /**
  * Pipeline Stage 13: Session Management
  *
@@ -21,6 +23,7 @@ import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-ty
  */
 export class SessionManagementStage extends BasePipelineStage {
   readonly name = 'SessionManagement';
+  readonly provides = ['sessionContext.currentStep'] as const;
 
   constructor(
     private readonly chainSessionStore: ChainSessionService,
@@ -221,12 +224,12 @@ export class SessionManagementStage extends BasePipelineStage {
   private getBaseChainId(context: ExecutionContext): string {
     const requestedChainId = context.mcpRequest.chain_id ?? context.state.session.resumeChainId;
     if (typeof requestedChainId === 'string' && requestedChainId.length > 0) {
-      return this.stripRunCounter(requestedChainId);
+      return stripRunNumber(requestedChainId);
     }
 
     const parsedChainId = context.parsedCommand?.chainId;
     if (typeof parsedChainId === 'string' && parsedChainId.length > 0) {
-      return this.stripRunCounter(parsedChainId);
+      return stripRunNumber(parsedChainId);
     }
 
     if (context.parsedCommand?.promptId) {
@@ -236,9 +239,8 @@ export class SessionManagementStage extends BasePipelineStage {
   }
 
   private buildChainId(baseChainId: string, isRestart: boolean): string {
-    const normalizedBase = this.stripRunCounter(baseChainId);
-    const runNumber = this.getNextRunNumber(normalizedBase);
-    const chainId = `${normalizedBase}#${runNumber}`;
+    const normalizedBase = stripRunNumber(baseChainId);
+    const chainId = formatChainId(normalizedBase, this.getNextRunNumber(normalizedBase));
     this.logger.debug(
       `[SessionManagement] ${isRestart ? 'Restarting' : 'Starting'} run ${chainId}`
     );
@@ -257,33 +259,7 @@ export class SessionManagementStage extends BasePipelineStage {
   }
 
   private getNextRunNumber(baseChainId: string): number {
-    const normalized = this.stripRunCounter(baseChainId);
-    const runHistory = this.chainSessionStore.getRunHistory(normalized);
-    if (runHistory.length === 0) {
-      return 1;
-    }
-
-    const lastRunId = runHistory[runHistory.length - 1];
-    if (!lastRunId) {
-      return runHistory.length + 1;
-    }
-    const lastRunNumber = this.extractRunNumber(lastRunId);
-    if (typeof lastRunNumber === 'number') {
-      return lastRunNumber + 1;
-    }
-    return runHistory.length + 1;
-  }
-
-  private stripRunCounter(chainId: string): string {
-    return chainId.replace(/#\d+$/, '');
-  }
-
-  private extractRunNumber(chainId: string): number | undefined {
-    const match = chainId.match(/#(\d+)$/);
-    if (match?.[1] === undefined) {
-      return undefined;
-    }
-    return Number.parseInt(match[1], 10);
+    return nextRunNumber(this.chainSessionStore.getRunHistory(stripRunNumber(baseChainId)));
   }
 
   private isChainComplete(session?: ChainSession): boolean {

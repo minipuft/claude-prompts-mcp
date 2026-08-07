@@ -39,7 +39,17 @@ export interface InlineGateProcessingResult {
   readonly namedCount: number;
 }
 
-type InlineGateTarget = { inlineGateIds?: string[] };
+/**
+ * What `applyGateResult` writes onto: the parsed command itself, or one of its chain steps.
+ *
+ * Named as a union of the two real types rather than the structural shape
+ * `{ inlineGateIds?: string[] }`. Both spellings typecheck, but the structural one makes the
+ * assignment below resolve to its own declaration instead of to `ChainStepPrompt.inlineGateIds`
+ * and `ParsedCommand.inlineGateIds` -- so a type-aware reference search finds no writer for
+ * either, and `validate:state-field-writers` reported a live field as unwritten. Keeping the
+ * concrete types keeps the write traceable from the declaration.
+ */
+type InlineGateTarget = ChainStepPrompt | ParsedCommand;
 
 /**
  * Type guard for validating gate criteria.

@@ -5,6 +5,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import type { StateStore } from '../../../src/shared/types/persistence.js';
+import type { PersistedArgumentHistory } from '../../../src/modules/text-refs/types.js';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -92,6 +94,30 @@ const createMockDb = (): DatabasePort => {
   } as unknown as DatabasePort;
 };
 
+/**
+ * In-memory StateStore standing in for SqliteStateStore.
+ *
+ * It genuinely round-trips: this file asserts that a second tracker restores what the first
+ * one wrote, so a no-op stub would make the assertion vacuous rather than passing.
+ */
+const createInMemoryStore = (): StateStore<PersistedArgumentHistory> => {
+  let saved: PersistedArgumentHistory = {
+    version: '1.0.0',
+    lastUpdated: 0,
+    chains: {},
+    sessionToChain: {},
+  };
+  return {
+    ensureInitialized: async () => undefined,
+    load: async () => JSON.parse(JSON.stringify(saved)) as PersistedArgumentHistory,
+    save: async (state: PersistedArgumentHistory) => {
+      saved = JSON.parse(JSON.stringify(state)) as PersistedArgumentHistory;
+    },
+    exists: async () => true,
+    delete: async () => undefined,
+  };
+};
+
 describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
   let tmpRoot: string;
 
@@ -110,8 +136,10 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
     const logger = createLogger();
     const textReference = new StubTextReferenceStore();
     const mockDb = createMockDb();
+    // One store across both trackers: the round-trip is the assertion.
+    const sharedArgStore = createInMemoryStore();
 
-    const tracker = new ArgumentHistoryTracker(logger, 10, mockDb);
+    const tracker = new ArgumentHistoryTracker(logger, 10, sharedArgStore);
     await tracker.initialize();
 
     const manager = new ChainSessionStore(
@@ -138,7 +166,7 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
     expect(context.previous_step_results['1']).toBe('REAL-OUTPUT-1');
 
     // Verify persistence: new tracker instance should see the data
-    const tracker2 = new ArgumentHistoryTracker(logger, 10, mockDb);
+    const tracker2 = new ArgumentHistoryTracker(logger, 10, sharedArgStore);
     await tracker2.initialize();
     const history = tracker2.getSessionHistory('sess-1');
     expect(history.length).toBeGreaterThan(0);

@@ -2,38 +2,23 @@
 import type { ConvertedPrompt } from '../../execution/types.js';
 import type { GateContext } from '../core/gate-definitions.js';
 
-export interface GateValidationResult {
-  gateId: string;
-  passed: boolean;
-  score?: number;
-  feedback?: string;
-  validatedBy: 'compositional' | 'semantic';
-  timestamp: number;
-}
-
 export interface GateEnhancementResult {
   enhancedPrompt: ConvertedPrompt;
   gateInstructionsInjected: boolean;
   injectedGateIds: string[];
   instructionLength?: number;
-  validationResults?: GateValidationResult[];
 }
 
 export interface GateServiceConfig {
   enabled: boolean;
-  llmIntegration?: {
-    enabled: boolean;
-    apiKey?: string;
-    endpoint?: string;
-    model?: string;
-    maxTokens?: number;
-    temperature?: number;
-  };
 }
 
+/**
+ * Gate services render guidance into a prompt. They do not evaluate it — evaluation is the
+ * `%judge` path, which returns a verdict through `gate_verdict` rather than through this result.
+ * `supportsValidation()` is retained because callers branch on it, and it reports `false`.
+ */
 export interface GateService {
-  readonly serviceType: 'compositional' | 'semantic';
-
   enhancePrompt(
     prompt: ConvertedPrompt,
     gateIds: string[],

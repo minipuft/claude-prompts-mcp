@@ -21,6 +21,9 @@ cd server && npm run validate:versions
 # Run full validation (includes README charter check)
 cd server && npm run validate:all
 
+# Build and verify the npm tarball from a temporary consumer
+cd server && npm run build:prod && npm run verify:package-artifact
+
 # Trigger a release
 gh workflow run release-please.yml
 
@@ -55,6 +58,17 @@ Before merging a Release PR, walk the README as a first-time reader. Log violati
 
 The `dist` branch is **force-pushed** after each release for the desktop extension.
 
+### Distribution Surfaces
+
+| Surface                 | Includes                                                                       | Excludes                                                      |
+| ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| npm `claude-prompts`    | `claude-prompts` + `cpm` bins, resources, hooks                                | external source maps                                          |
+| GitHub Release          | MCPB, versioned `cpm` bundle, SHA-256 checksum, source-map archive             | source and development dependencies                           |
+| MCPB                    | self-contained registered MCP server entry and public resources                | `cpm`, source maps, generated state, duplicate `node_modules` |
+| `dist` / plugin archive | registered MCP server entry, server map, resources, hooks/agents as applicable | unregistered `cpm` bundle and duplicate `node_modules`        |
+
+`server/package.json#version` is the sole release identity. The npm workflow verifies and publishes the same packed tarball; the extension workflow asserts that every named asset reports that version.
+
 ### Downstream Consumers
 
 Both extension projects use `claude-prompts` as an **npm dependency**:
@@ -69,7 +83,7 @@ Both extension projects use `claude-prompts` as an **npm dependency**:
 { "dependencies": { "claude-prompts": "^1.x" } }
 ```
 
-Dependabot creates PRs daily when new versions are published. Auto-merge handles patch/minor updates.
+Dependabot creates PRs daily when new versions are published. Centralized release synchronization also opens validated PRs. Protected downstream repositories use GitHub auto-merge; the unprotected marketplace repository merges its validated PR immediately. No workflow pushes directly to a downstream default branch.
 
 ---
 
@@ -87,6 +101,8 @@ Push to main
 │  • .claude-plugin/plugin.json      │
 │  Changelog: conventional commits   │
 │  → Keep a Changelog sections       │
+│  Merges manual [Unreleased] notes  │
+│  Retires finished plans → archive  │
 └────────────────────────────────────┘
      │ (merge PR)
      ▼
@@ -99,13 +115,15 @@ Push to main
      ▼                      ▼
 ┌──────────────────┐  ┌──────────────────┐
 │  npm-publish.yml │  │ extension-publish│
-│  • npm publish   │  │ • Desktop ext    │
-│  • Provenance    │  │ • dist branch    │
+│  • pack + verify │  │ • Desktop ext    │
+│  • publish tgz   │  │ • cpm + checksum │
+│  • Provenance    │  │ • maps + dist    │
 └──────────────────┘  └──────────────────┘
      │
      ▼
 ┌────────────────────────────────────┐
 │  Downstream (daily Dependabot)     │
+│  • marketplace: validated merge    │
 │  • gemini-prompts: auto-merge PR   │
 │  • opencode-prompts: auto-merge PR │
 │    + dispatches downstream-release │
@@ -113,6 +131,65 @@ Push to main
 ```
 
 ---
+
+### Plan retirement
+
+The release PR retires finished plans. `status: done` is the tag meaning "retire at the next
+release" — there is no separate queue file, and no fifth frontmatter field (the convention is
+exactly four).
+
+The frontmatter schema, the status vocabulary, and the `done` vs `reference` test are defined
+once, publicly, at
+[`repository-standards/conventions/plan-frontmatter.md`](https://github.com/minipuft/repository-standards/blob/main/conventions/plan-frontmatter.md).
+This guide owns only how **this** repository runs the retirement — the workflow step, its
+placement on the release PR, and the local commands. Restating the convention here is what let it
+drift the last time it had two homes.
+
+`scripts/retire-done-plans.js --apply` clears finished work out of the working set by **two
+different doors**, because the two kinds of finished plan have different obligations:
+
+| Status      | Destination        | Tracked?        | Why                                                                                           |
+| ----------- | ------------------ | --------------- | --------------------------------------------------------------------------------------------- |
+| `done`      | `plans/archive/`   | no — gitignored | Nothing cites it. Git history is the archive.                                                 |
+| `reference` | `plans/reference/` | **yes**         | Something still cites it (an ADR, a successor plan, a doc), so its citers need it to resolve. |
+
+Both preserve the subpath (`plans/techincal_debt/x.md` → `plans/<dest>/techincal_debt/x.md`) and
+re-base relative links for the added depth. Relocating a `reference` plan additionally rewrites
+every **inbound** link to it, across `docs/` and the other link sources — which is why the workflow
+step stages those paths too, not just `plans/`.
+
+**A plan must be committed before it is retired.** `plans/archive/` is gitignored, so archiving an
+untracked plan deletes it outright; a tracked one survives in history. `plans/future/` is likewise
+gitignored and is left alone entirely — relocating out of it would silently commit a file the repo
+had chosen not to carry.
+
+It runs on the **release PR**, not on the created release. No workflow in this repo pushes to
+`main` — the release doc states that as a principle, and `main` is protected — so retirement that
+fired on `release_created` would need a new push-to-main path. On the PR the moves are reviewable
+before merge, and the step is idempotent: if Release Please updates the PR branch and drops the
+archive commit, the next update re-runs it. That is the same property the changelog merge relies on.
+
+The check half runs in `validate:all` on every CI run. It does **not** fail because the queue is
+non-empty; `done` plans exist legitimately between releases, and a gate that fired on their
+existence would be red almost always and therefore ignored. It fails on exactly two things:
+
+1. **A `done` plan that something still cites** — a misclassification that would break the citing
+   document if archived. Citations from plans that are archiving in the _same_ run do not count:
+   a plan and its implementation-notes companion cite each other by convention, and counting that
+   would deadlock every such pair permanently.
+2. **A plan whose frontmatter is missing, incomplete, or carries a status outside the four.** Such a
+   plan is invisible to retirement — never queued, never checked, never archived — so it
+   accumulates in the working set looking live. Eight plans had drifted into that state before this
+   became an error rather than a silent skip.
+
+A `reference` plan that _nothing_ cites is reported as an advisory, not a failure: it is
+misclassified in the opposite direction and is probably `done`, but whether the work is finished is
+a judgement the frontmatter author owns.
+
+```bash
+npm run plans:retire:check   # report the queue; fail on misclassification
+node scripts/retire-done-plans.js --apply   # what the release PR runs
+```
 
 ## Configuration
 
@@ -209,3 +286,14 @@ Files that must match:
 - `server/package.json`
 - `manifest.json`
 - `.claude-plugin/plugin.json`
+
+### Release artifact mismatch
+
+```bash
+cd server
+npm run build:prod
+npm run verify:package-artifact
+npm run prepare:release-artifacts -- --output-dir /tmp/claude-prompts-release
+```
+
+The npm tarball must contain both declared bins and no `.map` files. GitHub Release diagnostics are the versioned `claude-prompts-<version>-sourcemaps.tar.gz` asset.

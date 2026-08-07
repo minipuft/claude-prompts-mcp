@@ -44,7 +44,7 @@ export class ComparisonEngine {
   compareAnalyses(
     before: PromptClassification,
     after: PromptClassification,
-    promptId: string
+    _promptId: string
   ): ComparisonResult {
     const changes: ComparisonChange[] = [];
 
@@ -206,8 +206,8 @@ export class ComparisonEngine {
    */
   private generateRecommendations(
     changes: ComparisonChange[],
-    before: PromptClassification,
-    after: PromptClassification
+    _before: PromptClassification,
+    _after: PromptClassification
   ): string[] {
     const recommendations: string[] = [];
 

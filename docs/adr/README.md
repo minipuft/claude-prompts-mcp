@@ -10,7 +10,7 @@ context loss and prevent architecture drift.
 
 Write an ADR when you make a change that is hard to reverse or has cross-cutting impact, for example:
 
-- Changes to transports (STDIO/SSE parity), lifecycle, or runtime state handling.
+- Changes to transports (STDIO/Streamable HTTP parity), lifecycle, or runtime state handling.
 - Changes to tool contracts, contract generation, or schema validation approach.
 - Changes to gate precedence/activation rules or framework injection behavior.
 - New architectural boundaries (dependency-cruiser rules, module ownership, public APIs).

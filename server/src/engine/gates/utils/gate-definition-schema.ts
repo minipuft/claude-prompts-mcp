@@ -8,12 +8,7 @@
 
 import { z } from 'zod/v4';
 
-import type {
-  GateDefinitionYaml,
-  GatePassCriteria,
-  GateRetryConfig,
-  LightweightGateDefinition,
-} from '../types.js';
+import type { GateDefinitionYaml, GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 import { validateWithSchema, type SchemaValidationResult } from '#shared/utils/schema-validator.js';
 

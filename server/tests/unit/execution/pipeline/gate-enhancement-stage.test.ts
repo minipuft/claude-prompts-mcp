@@ -94,7 +94,6 @@ const baseGatesConfig = {
 
 const createGateService = (): GateService => {
   return {
-    serviceType: 'compositional',
     supportsValidation: jest.fn().mockReturnValue(false) as unknown as () => boolean,
     updateConfig: jest.fn() as unknown as GateService['updateConfig'],
     enhancePrompt: jest.fn(async (prompt: ConvertedPrompt, gateIds: string[]) => ({
@@ -104,7 +103,6 @@ const createGateService = (): GateService => {
       },
       gateInstructionsInjected: true,
       injectedGateIds: gateIds,
-      validationResults: [],
       instructionLength: gateIds.join(',').length,
     })) as unknown as GateService['enhancePrompt'],
   };
@@ -742,9 +740,6 @@ describe('GateEnhancementStage', () => {
 
     const context = new ExecutionContext({ command: '>>demo' });
 
-    // Set up client-selected gates from judge phase
-    context.state.framework.clientSelectedGates = ['client-gate'];
-
     // Set up normalized gates in metadata
     context.state.gates.requestedOverrides = {
       gates: [{ name: 'Custom', criteria: ['test'] }],
@@ -768,7 +763,6 @@ describe('GateEnhancementStage', () => {
     // Verify all sources are tracked
     const sourceCounts = context.gates.getSourceCounts();
     expect(sourceCounts['inline-operator']).toBeGreaterThanOrEqual(1);
-    expect(sourceCounts['client-selection']).toBeGreaterThanOrEqual(1);
     expect(sourceCounts['prompt-config']).toBeGreaterThanOrEqual(1);
     // registry-auto source: gates selected from GateManager.selectGates() activation rules
     expect(sourceCounts['registry-auto']).toBeGreaterThanOrEqual(1);

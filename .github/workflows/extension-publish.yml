@@ -81,13 +81,25 @@ jobs:
 
       - name: Rename with version
         run: |
+          package_version=$(node -p "require('./server/package.json').version")
+          [ "$package_version" = "${{ steps.version.outputs.version }}" ] || {
+            echo "::error::Requested version ${{ steps.version.outputs.version }} does not match package $package_version"
+            exit 1
+          }
           mv claude-prompts.mcpb claude-prompts-${{ steps.version.outputs.version }}.mcpb
+
+      - name: Prepare CLI and source-map assets
+        run: npm --prefix server run prepare:release-artifacts -- --output-dir "$RUNNER_TEMP/release-assets"
 
       - name: Upload to Release
         if: github.event_name == 'workflow_run'
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          files: claude-prompts-${{ steps.version.outputs.version }}.mcpb
+          files: |
+            claude-prompts-${{ steps.version.outputs.version }}.mcpb
+            ${{ runner.temp }}/release-assets/cpm-${{ steps.version.outputs.version }}.js
+            ${{ runner.temp }}/release-assets/cpm-${{ steps.version.outputs.version }}.js.sha256
+            ${{ runner.temp }}/release-assets/claude-prompts-${{ steps.version.outputs.version }}-sourcemaps.tar.gz
           # Match Release Please tag format (include-component-in-tag: false)
           tag_name: v${{ steps.version.outputs.version }}
 
@@ -95,8 +107,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: claude-prompts-${{ steps.version.outputs.version }}.mcpb
-          path: claude-prompts-${{ steps.version.outputs.version }}.mcpb
+          name: claude-prompts-${{ steps.version.outputs.version }}-release-assets
+          path: |
+            claude-prompts-${{ steps.version.outputs.version }}.mcpb
+            ${{ runner.temp }}/release-assets/cpm-${{ steps.version.outputs.version }}.js
+            ${{ runner.temp }}/release-assets/cpm-${{ steps.version.outputs.version }}.js.sha256
+            ${{ runner.temp }}/release-assets/claude-prompts-${{ steps.version.outputs.version }}-sourcemaps.tar.gz
+          if-no-files-found: error
 
   plugin-dist:
     if: >-
@@ -151,7 +168,7 @@ jobs:
         working-directory: server
         run: |
           npm ci
-          npm run build
+          npm run build:prod
 
       - name: Stage dist plugin tree
         run: |
@@ -166,7 +183,7 @@ jobs:
           # staged for months after the directory was deleted, with nothing failing.
           cp -r hooks "$STAGING_DIR/"
           cp -r agents "$STAGING_DIR/"
-          cp -r server/dist "$STAGING_DIR/server/"
+          bash scripts/stage-server-runtime.sh server/dist "$STAGING_DIR/server/dist"
           cp -r server/resources "$STAGING_DIR/server/"
           cp server/config.json "$STAGING_DIR/server/"
           tar -czf "$RUNNER_TEMP/dist-runtime.tar.gz" -C "$STAGING_DIR" .
@@ -179,6 +196,9 @@ jobs:
           mkdir -p "$VERIFY_DIR"
           tar -xzf "$RUNNER_TEMP/dist-runtime.tar.gz" -C "$VERIFY_DIR"
           test -f "$VERIFY_DIR/server/dist/index.js"
+          test -f "$VERIFY_DIR/server/dist/index.js.map"
+          test ! -e "$VERIFY_DIR/server/dist/cpm.js"
+          test ! -e "$VERIFY_DIR/server/dist/cpm.js.map"
           test -f "$VERIFY_DIR/server/config.json"
           test -d "$VERIFY_DIR/server/resources"
           test -f "$VERIFY_DIR/.mcp.json"
@@ -188,6 +208,7 @@ jobs:
           # so a dist branch without it breaks delegated chains for every installer.
           test -f "$VERIFY_DIR/hooks/hooks.json"
           test -f "$VERIFY_DIR/agents/chain-executor.md"
+          MCP_WORKSPACE="$RUNNER_TEMP/dist-smoke-workspace" node "$VERIFY_DIR/server/dist/index.js" --startup-test
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -265,15 +286,18 @@ jobs:
         include:
           - repo: minipuft/minipuft-plugins
             name: marketplace
+            merge_mode: auto
           - repo: minipuft/gemini-prompts
             name: gemini
+            merge_mode: auto
           - repo: minipuft/opencode-prompts
             name: opencode
+            merge_mode: auto
     steps:
       - name: Checkout upstream (for version)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
           path: upstream
 
       - name: Extract version
@@ -346,11 +370,13 @@ jobs:
           # npm-publish workflow for months. The repo's own CI used `bun install` (which migrates
           # the lockfile) so nothing surfaced it.
           #
-          # --package-lock-only: resolve and rewrite the tree without installing or running
-          # scripts, which is all this job needs and keeps it fast.
+          # The registry can lag a new publication. Retry a bounded number of fresh lock
+          # resolutions and fail rather than opening a PR whose lock points at another version.
           if [ -f package-lock.json ]; then
-            echo "Regenerating package-lock.json to match package.json..."
-            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+            node ../upstream/server/scripts/synchronize-downstream-lock.js \
+              --workspace . \
+              --package claude-prompts \
+              --version "$VERSION"
           fi
 
       - name: Validate update
@@ -400,10 +426,10 @@ jobs:
             fi
             installed=$(node -p "require('./node_modules/claude-prompts/package.json').version")
             echo "Lockfile resolves claude-prompts@$installed (upstream released $VERSION)"
-            # Reported, not asserted. npm registry propagation can lag a freshly published
-            # version by minutes, and failing the release for that would trade the bug this
-            # step fixes for a flaky one. The `npm ci` exit code above is the real gate.
-            [ "$installed" = "$VERSION" ] || echo "::warning::${{ matrix.name }}: resolved $installed, not $VERSION — likely registry propagation lag; verify the sync PR before merging."
+            [ "$installed" = "$VERSION" ] || {
+              echo "::error::${{ matrix.name }}: resolved $installed, not released version $VERSION"
+              exit 1
+            }
             rm -rf node_modules
           fi
 
@@ -417,21 +443,27 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           title: "chore: sync claude-prompts to v${{ steps.version.outputs.version }}"
           body: |
-            Automated version sync from [claude-prompts v${{ steps.version.outputs.version }}](https://github.com/minipuft/claude-prompts/releases/tag/v${{ steps.version.outputs.version }}).
+            Automated version sync from [claude-prompts v${{ steps.version.outputs.version }}](https://github.com/minipuft/claude-prompts-mcp/releases/tag/v${{ steps.version.outputs.version }}).
 
             **Validated**: JSON parseable, version matches, upstream dist branch published.
           branch: upstream-sync/v${{ steps.version.outputs.version }}
           commit-message: "chore: sync claude-prompts to v${{ steps.version.outputs.version }}"
 
-      - name: Auto-merge PR
+      - name: Merge validated PR
         if: steps.create-pr.outputs.pull-request-number
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
         run: |
-          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
-            --repo ${{ matrix.repo }} \
-            --merge \
-            --auto
+          case "${{ matrix.merge_mode }}" in
+            auto)
+              gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
+                --repo ${{ matrix.repo }} --merge --auto
+              ;;
+            *)
+              echo "::error::Unknown merge mode: ${{ matrix.merge_mode }}"
+              exit 1
+              ;;
+          esac
 
   # Build Claude Code plugin archive (manual only)
   claude-code-plugin:
@@ -480,7 +512,7 @@ jobs:
         working-directory: server
         run: |
           npm ci
-          npm run build
+          npm run build:prod
 
       - name: Create plugin archive
         run: |
@@ -497,16 +529,20 @@ jobs:
 
           # Copy server (bundled - no node_modules needed)
           mkdir -p .plugin-staging/server
-          cp -r server/dist .plugin-staging/server/
+          bash scripts/stage-server-runtime.sh server/dist .plugin-staging/server/dist
           cp -r server/resources .plugin-staging/server/
           cp server/config.json .plugin-staging/server/
 
           # Validate staged runtime
           test -f .plugin-staging/server/dist/index.js
+          test -f .plugin-staging/server/dist/index.js.map
+          test ! -e .plugin-staging/server/dist/cpm.js
+          test ! -e .plugin-staging/server/dist/cpm.js.map
           test -f .plugin-staging/server/config.json
           test -d .plugin-staging/server/resources
           test -f .plugin-staging/hooks/hooks.json
           test -f .plugin-staging/agents/chain-executor.md
+          MCP_WORKSPACE="$RUNNER_TEMP/plugin-smoke-workspace" node .plugin-staging/server/dist/index.js --startup-test
 
           # Create archive
           cd .plugin-staging
@@ -533,4 +569,4 @@ jobs:
   # - minipuft/gemini-prompts (package.json dependency range + lockfile)
   # - minipuft/opencode-prompts (package.json dependency range + lockfile)
   # gemini-extension.json's own version is NOT synced — release-please owns it downstream.
-  # PRs are created and auto-merged — no downstream workflow config needed.
+  # Every downstream has a required consumer contract, so PRs use protected auto-merge.

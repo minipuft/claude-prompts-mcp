@@ -155,6 +155,7 @@ async function build() {
       const cliOptions = createCliBuildOptions({
         outfile: join(__dirname, 'dist', 'cpm.js'),
         minify: isProduction,
+        version: pkg.version,
       });
       await esbuild.build(cliOptions);
       // Pass the minify flag: the shipped (minified) artifact and the dev one are held

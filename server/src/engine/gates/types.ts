@@ -9,7 +9,6 @@
  * Registry-based gate guide types are exported from ./types/ subfolder.
  */
 
-import type { ValidationResult } from '../execution/types.js';
 import type { JudgeEvaluationConfig } from './judge/types.js';
 import type { GatePassCriteria } from './types/gate-primitives.js';
 import type { GateGuide, GateActivationContext, GateRegistryStats } from './types/index.js';
@@ -159,20 +158,6 @@ export interface GateEvaluationResult {
   details?: any;
 }
 
-// ValidationResult now imported from execution/types.js - provides unified validation interface
-
-/**
- * Gate status information
- */
-export interface GateStatus {
-  gateId: string;
-  passed: boolean;
-  requirements: GateRequirement[];
-  evaluationResults: GateEvaluationResult[];
-  timestamp: number;
-  retryCount?: number;
-}
-
 /**
  * Context for validation
  */
@@ -286,18 +271,6 @@ export interface GatesConfig {
    *   baked value is a parallel system with a nicer name.
    */
   executeInlineGateDefinitions?: boolean;
-}
-
-/**
- * Step result with gate information
- */
-export interface StepResult {
-  content: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  timestamp: number;
-  validationResults?: ValidationResult[];
-  gateResults?: GateStatus[];
-  metadata?: Record<string, string | number | boolean | null>;
 }
 
 /**

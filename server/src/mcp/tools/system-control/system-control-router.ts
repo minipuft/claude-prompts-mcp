@@ -10,6 +10,7 @@ import { createStructuredResponse } from './core/response-utils.js';
 import { AnalyticsActionHandler } from './handlers/analytics-action-handler.js';
 import { ChangesActionHandler } from './handlers/changes-action-handler.js';
 import { ConfigActionHandler } from './handlers/config-action-handler.js';
+import { ExecutionHistoryActionHandler } from './handlers/execution-history-action-handler.js';
 import { FrameworkActionHandler } from './handlers/framework-action-handler.js';
 import { GateActionHandler } from './handlers/gate-action-handler.js';
 import { GuideActionHandler } from './handlers/guide-action-handler.js';
@@ -21,6 +22,7 @@ import { ResponseFormatter } from '../prompt-engine/processors/response-formatte
 
 import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/index.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
 
@@ -60,9 +62,11 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   gateStateStore?: GateStateStore;
   gateGuidanceRenderer?: GateGuidanceRenderer;
   chainSessionStore?: ChainSessionService;
+  executionRecordStore?: ExecutionRecordStore;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
+  onToolSurfaceChanged?: () => Promise<void>;
   mcpToolsManager?: any;
   analyticsService?: MetricsCollector;
   promptGuidanceService?: PromptGuidanceService;
@@ -122,6 +126,10 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     this.logger.debug('Restart callback configured for system control');
   }
 
+  setToolSurfaceChangedHandler(handler: () => Promise<void>): void {
+    this.onToolSurfaceChanged = handler;
+  }
+
   setMCPToolsManager(mcpToolsManager: any): void {
     this.mcpToolsManager = mcpToolsManager;
     this.logger.debug('MCPToolsManager reference configured for dynamic tool updates');
@@ -135,6 +143,11 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   setChainSessionStore(chainSessionStore: ChainSessionService): void {
     this.chainSessionStore = chainSessionStore;
     this.logger.debug('Chain session manager configured for session control');
+  }
+
+  setExecutionRecordStore(executionRecordStore: ExecutionRecordStore): void {
+    this.executionRecordStore = executionRecordStore;
+    this.logger.debug('Execution record store configured for execution history');
   }
 
   setGateGuidanceRenderer(renderer: GateGuidanceRenderer): void {
@@ -371,6 +384,8 @@ export class ConsolidatedSystemControl implements SystemControlContext {
         return new SessionActionHandler(this);
       case 'changes':
         return new ChangesActionHandler(this);
+      case 'execution_history':
+        return new ExecutionHistoryActionHandler(this);
       default:
         throw new Error(
           `Unknown action: ${action}. Valid actions: ${SYSTEM_CONTROL_ACTION_IDS.join(', ')}`

@@ -6,9 +6,9 @@
 
 1. **MCP Tooling Only** -- Prompts, templates, chains flow through MCP tools. Manual edits under `server/prompts/**` forbidden.
 2. **Contracts as SSOT** -- Schemas generated from `tooling/contracts/*.json`. Run `npm run generate:contracts`, never edit `_generated/`.
-3. **Transport Parity** -- Runtime changes must work in STDIO and SSE.
+3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
-5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries.
+5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran.
 
 ## Node.js Support Boundaries
 
@@ -25,8 +25,9 @@ The server floor is where `node:sqlite` is available without an experimental fla
 **CI is the contract; every other gate is a documented strict subset of it.**
 
 The three gates once ran three different suites with no subset relation, so a green
-`pre-push` did not predict CI and `validate:full` did not either -- that is how a pyrefly
-failure reached `main` from a clean local push.
+`pre-push` did not predict CI, and neither did the local full-validation wrapper that
+existed at the time -- that is how a pyrefly failure reached `main` from a clean local
+push. That wrapper was deleted once the subset relation made it redundant.
 
 `scripts/classify-validation-scope.js` is the changed-path SSOT for local push and CI.
 It recognizes two narrow safe scopes and sends every empty, mixed, executable,
@@ -101,14 +102,14 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Gate normalization | GateService (`gates/services/`) | Call `gateService.normalize()` |
 | Gate enhancement | GateEnhancementService | Call `enhancementService.enhance*()` |
 | Gate selection | GateManager (`gates/gate-manager.ts`) | Call `gateManager.selectGates()` |
-| Gate enforcement | GateEnforcementAuthority (`execution/pipeline/decisions/gates/`) | Call `authority.resolveEnforcementMode()` |
+| Gate enforcement mode | `resolveEnforcementMode` (`execution/pipeline/decisions/gates/`) | Call `resolveEnforcementMode(mode)` -- a pure import, because `context.gateEnforcement` is optional and `?.` would silently relax enforcement |
 | Gate verdict processing | GateVerdictProcessor (`gates/services/`) | Call `processor.handleGateAction()` |
 | Inline gate parsing | InlineGateProcessor (`gates/services/`) | Call `processor.processInlineGates()` |
 | Prompt resolution | PromptRegistry (`prompts/registry.ts`) | Call `registry.get()` |
-| Command parsing | CommandParser (`execution/parsers/`) | Call `parser.parse()` |
+| Command parsing | CommandParser (`execution/parsers/`) | Call `parser.parseCommand()` |
 | Step capture | StepCaptureService (`execution/capture/`) | Call `captureService.captureStep()` |
 | Response assembly | ResponseAssembler (`execution/formatting/`) | Call `assembler.format*()` |
-| Framework selection | FrameworkManager (`frameworks/`) | Call `frameworkManager.select()` |
+| Framework selection | FrameworkManager (`frameworks/`) | Call `frameworkManager.selectFramework()` |
 | Framework validity | FrameworkManager | Call `frameworkManager.getFramework(id)` -- never hardcode |
 | Injection decisions | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()` |
 | Style resolution | StyleManager (`styles/style-manager.ts`) | Call `styleManager.getStyle()` |
@@ -141,9 +142,9 @@ system_control → SystemControl Router → 10 action handlers
 | `execution_records` | SEP-1686 append-only per-step execution log (ULID-sorted); source for `v_execution_status` view |
 | `resource_index` | Resource discovery cache |
 
-State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. `SCHEMA_VERSION` bump triggers drop-and-recreate; no migration code since `state.db` is ephemeral.
+State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates, but `version_history` and `skills_sync_manifests` are durable: `ensureSchema()` snapshots their rows, recreates, and restores by column intersection. Adding a `NOT NULL` column with no default to either makes the restore throw by design -- that change needs a real migration. Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 
-**Rows are workspace-scoped, and `state.db` is shared across projects.** One file serves every project, so isolation comes from `workspace_id`, not from separate databases. A scope with no row falls back to `frameworks.defaultFramework`; the scope id itself is derived from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing `kv_state` without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
+**`state.db` is shared across projects, but workspace isolation is delivered by `kv_state` alone.** One file serves every project, so isolation would have to come from `workspace_id` -- and `kv_state` is the only table that writes it. Four others declare **and index** scope columns no writer populates, so their rows are global; for `version_history` that means rollback history is shared across every project on the machine. Which four, and what closes each: `.claude/rules/sqlite-persistence.md`. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
 
 ## Public API Contract (what a major version protects)
 
@@ -157,8 +158,43 @@ breaking and major versions inflate until they carry no information.
 | MCP tool surface: `prompt_engine`, `resource_manager`, `system_control` names, parameters, and response shape | Internal TypeScript exports, including `src/index.ts` |
 | CLI surface: `claude-prompts` and `cpm` commands and flags | `package.json` packaging fields (`types`, `exports`, `files`) |
 | Resource formats: prompt/gate/methodology YAML schema, `config.json` | `src/` layer structure, module layout, import style |
-| Python hook contract consumed by downstream plugins | Which files land in the published tarball |
+| Python hook contract consumed by downstream plugins -- **durable surface only**, see below | Which files land in the published tarball |
+| | **PID-scoped derived projections**: `chain_sessions`, `chain_run_registry` column names |
 | Symbolic command language (`>>`, `==>`) | Build tooling, validation scripts, CI |
+
+**The Python hook contract covers the durable surface, not every table a hook can open.**
+`chain_sessions` and `chain_run_registry` are `derived` and `ephemeral` respectively: their rows are
+`DELETE`d per-PID at cleanup, cleared when the owning process exits, and dropped outright by any
+`SCHEMA_VERSION` bump. Nothing a hook reads there survives a restart -- they are a live-process
+projection, closer to a cache than to an interface. Listing them as major-version-protected was a
+mis-classification: it priced a rename of a column nobody can hold a durable reference to at the
+same rate as breaking `prompt_engine`.
+
+What IS protected on the hook side: the **module API** of `hooks/lib/*` that plugins import
+(`load_active_chain_state`, `load_prompts`, and their return shapes), the `hooks-state.db` schema,
+and the JSON payload contract hooks exchange with Claude Code. Those persist across restarts and
+have no other source.
+
+Renaming `chain_sessions.tenant_id` -> `run_owner_pid` was therefore **in-contract** — done at
+schema v20, both sides in one commit, no dual-write. It is kept here as the worked example, provided the
+reader lands in the same PR (verified 2026-08-05: zero readers of these columns exist across
+`minipuft-plugins`, `gemini-prompts`, and `opencode-prompts`). A change here still requires the
+Python side to move with it -- the constraint is atomicity, not a version bump.
+
+**The tool surface is a union, not a snapshot.** `prompt_engine` builds its `inputSchema` from
+runtime state: the three gate parameters (`gates`, `gate_verdict`, `gate_action`) are advertised
+only while the gate system is enabled. The contract is the **union of every reachable shape** --
+`tooling/contracts/prompt-engine.json`. Narrowing within that union is not breaking; adding or
+removing a union member is. The alternative reading (contract = shape at current state) makes
+every state change a major bump, which drains the major version of meaning.
+
+**`gate_verdict` accepts two shapes, and one of them is retiring.** The structured object
+(`{overall, rationale, per_gate[]}`) is schema-validated and cannot be malformed; the legacy
+`"GATE_REVIEW: PASS - reason"` string is read back by five regexes and can fail to parse. Both are
+in the union, so accepting the object was not breaking. **Retirement**: the string branch and the
+four non-primary patterns in `resources/gates/config/verdict-patterns.yaml` are deleted once no
+client has submitted a string verdict for one release cycle -- measurable via the `source` field
+already on `ParsedGateVerdict`. That deletion IS breaking and needs a major bump.
 
 **This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
 It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,
@@ -179,6 +215,7 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 - **Environment**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 
 -> `.claude/rules/mcp-contracts.md` for full contract protocol (auto-loaded)
+-> `.claude/rules/sqlite-persistence.md` for the table map, `tenant_id`/`run_owner_pid` split, and durable-table rules (glob-loaded)
 -> `docs/architecture/overview.md` for architecture, pipeline stages, subsystems
 -> `docs/reference/mcp-tools.md` for MCP tool workflows, symbolic command language
 -> `docs/guides/injection-control.md` for injection types, frequency, hierarchy

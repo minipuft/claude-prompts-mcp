@@ -26,15 +26,16 @@ The system is an **unopinionated engine for composability**:
 | **Language**      | TypeScript (strict mode) | Enables contract-driven development. Zod schemas bridge deterministic runtime ↔ probabilistic LLM. |
 | **Module System** | ESM                      | Modern, tree-shakeable, better tooling support.                                                    |
 
-### Transport: STDIO, SSE & Streamable HTTP
+### Transport: STDIO & Streamable HTTP
 
-| Transport           | Protocol                       | Use Case                                                                | Status          |
-| ------------------- | ------------------------------ | ----------------------------------------------------------------------- | --------------- |
-| **STDIO**           | Line-based JSON                | Claude Desktop, Cursor, CLI tools. Server feels like a local extension. | Active          |
-| **Streamable HTTP** | HTTP POST/GET with SSE streams | Web dashboards, remote APIs. One `/mcp` endpoint.                       | **Recommended** |
-| **SSE**             | HTTP Server-Sent Events        | Legacy integrations.                                                    | Deprecated      |
+| Transport           | Protocol                       | Use Case                                                                | Status |
+| ------------------- | ------------------------------ | ----------------------------------------------------------------------- | ------ |
+| **STDIO**           | Line-based JSON                | Claude Desktop, Cursor, CLI tools. Server feels like a local extension. | Active |
+| **Streamable HTTP** | HTTP POST/GET with SSE streams | Web dashboards, remote APIs. One `/mcp` endpoint.                       | Active |
 
-Transport auto-detects at startup. For HTTP, use Streamable HTTP—SSE is deprecated.
+Transport is selected at startup. The separate HTTP+SSE transport was removed in the SDK v2
+upgrade — keeping it would have meant hand-maintaining a transport upstream had deleted. The
+`SSE streams` above are `text/event-stream` framing inside Streamable HTTP, which remains.
 
 ### Data Storage: File-Based Persistence (Intentional)
 

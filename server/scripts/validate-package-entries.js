@@ -22,8 +22,8 @@
  *
  * `--self-test` proves each rule can still fail.
  *
- * RETIREMENT CONDITION: delete when the published package is verified end-to-end by a consumer
- * smoke test in CI (pack, install into a fixture, typecheck it) — that subsumes this.
+ * This remains a build-free source-contract check. verify-package-artifact.js complements it by
+ * packing, installing, and executing the consumer artifact after a production build.
  */
 
 import { existsSync, readFileSync } from 'node:fs';

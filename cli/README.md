@@ -3,6 +3,7 @@
 Standalone workspace management tool for [Claude Prompts MCP](../README.md). Validates, lists, inspects, and initializes workspaces without starting the server.
 
 Published as the `cpm` bin of the [`claude-prompts`](https://www.npmjs.com/package/claude-prompts) npm package — this directory is its source, not a separately published package.
+The released CLI version comes from `server/package.json`; the private workspace version is not a distribution identity.
 
 ## Quick Start
 

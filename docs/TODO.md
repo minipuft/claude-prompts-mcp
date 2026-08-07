@@ -14,7 +14,7 @@ What's next for Claude Prompts MCP.
 
 **Expect**: Open `localhost:3000`, build a prompt visually, test it—Claude sees it immediately. Zero file editing.
 
-**Foundation**: `prompts/hot-reload-manager.ts`, SSE transport, `resource_manager` CRUD.
+**Foundation**: `prompts/hot-reload-manager.ts`, HTTP transport, `resource_manager` CRUD.
 
 ---
 
@@ -91,7 +91,7 @@ resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")
 
 Found 2026-07-28 while authoring a prompt with `inline_gate_definitions`. All reproduced against v2.1.0.
 
-**Tier-gated plan**: [arg-gate-pipeline-fixes.md](../plans/techincal_debt/arg-gate-pipeline-fixes.md) — T0 ✓ and T1 ✓ complete ([ADR 0001](adr/0001-gate-resolution-precedence.md) accepted). **T1.5 (one owner for gate resolution) now blocks T2/T3** — discovery found gate selection split across three places, two of them unreachable. Resume with `>>tier_execute plan_file:"plans/techincal_debt/arg-gate-pipeline-fixes.md" tier_id:"T1.5"`.
+**Tier-gated plan**: [arg-gate-pipeline-fixes.md](../plans/reference/techincal_debt/arg-gate-pipeline-fixes.md) — T0 ✓ and T1 ✓ complete ([ADR 0001](adr/0001-gate-resolution-precedence.md) accepted). **T1.5 (one owner for gate resolution) now blocks T2/T3** — discovery found gate selection split across three places, two of them unreachable. Resume with `>>tier_execute plan_file:"plans/techincal_debt/arg-gate-pipeline-fixes.md" tier_id:"T1.5"`.
 
 - [x] **Single-quoted option baking corrupts values containing apostrophes.** _(FIXED 2026-07-28, T0 — `serializeOptionValue`/`parseQuotedValue` in `jsonUtils.ts`; both `argument-parser.ts` regexes now share one escape-aware convention. Uncommitted.)_ `mergeOptionsIntoCommand` ([`00-request-normalization-stage.ts:216`](../server/src/engine/execution/pipeline/stages/00-request-normalization-stage.ts)) serializes MCP `options` string values as `` `'${value}'` `` with no escaping; the key/value regex ([`argument-parser.ts:249`](../server/src/engine/execution/parsers/argument-parser.ts)) then matches `'([^']*)'` and stops at the first embedded `'`. The value is silently truncated **and** trailing prose is re-parsed into phantom arguments — `theme:'… the creed line 'the void' … Target: dark ground.'` yields `theme` truncated plus a spurious `Target` argument. Fix: escape embedded quotes, or select a quote character not present in the value. Severity: silent data corruption + argument injection.
 
@@ -121,13 +121,13 @@ See [test-modernization-roadmap.md](../plans/techincal_debt/test-modernization-r
 - [ ] **Phase 2**: Test classification audit & migration (8 sub-phases analyzing all 67 test files)
 - [ ] **Phase 3**: Missing unit test coverage (8 subsystems without tests)
 - [ ] **Phase 4**: Integration test suite (MCP protocol, chains, hot-reload, pipeline)
-- [ ] **Phase 5**: E2E test suite (STDIO/SSE transports, MCP compliance)
+- [ ] **Phase 5**: E2E test suite (STDIO/Streamable HTTP transports, MCP compliance)
 - [ ] **Phase 6**: Test quality improvements (remove implementation detail tests, consolidation)
 
 ---
 
 ## Contributing
 
-Ideas welcome. [Open an issue](https://github.com/minipuft/claude-prompts/issues) with the `enhancement` label.
+Ideas welcome. [Open an issue](https://github.com/minipuft/claude-prompts-mcp/issues) with the `enhancement` label.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for dev setup.

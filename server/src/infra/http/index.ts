@@ -21,7 +21,6 @@ export { TransportRouter, createTransportRouter, TransportType };
  */
 export class ServerLifecycle {
   private logger: Logger;
-  private configManager: ConfigLoader;
   private transportRouter: TransportRouter;
   private apiRouter: ApiRouterPort | undefined;
   private httpServer?: Server;
@@ -34,7 +33,6 @@ export class ServerLifecycle {
     apiRouter?: ApiRouterPort
   ) {
     this.logger = logger;
-    this.configManager = configManager;
     this.transportRouter = transportRouter;
     this.apiRouter = apiRouter;
     this.port = configManager.getPort();
@@ -42,7 +40,7 @@ export class ServerLifecycle {
 
   /**
    * Start the server based on transport mode
-   * Supports 'stdio', 'sse', 'streamable-http', or 'both' modes
+   * Supports 'stdio', 'streamable-http', or 'both' modes
    */
   async startServer(): Promise<void> {
     try {
@@ -52,14 +50,11 @@ export class ServerLifecycle {
       this.logSystemInfo();
 
       if (this.transportRouter.isBoth()) {
-        // Dual transport mode: start both STDIO and SSE
+        // Dual transport mode: start both STDIO and Streamable HTTP
         await this.startBothTransports();
       } else if (mode === 'stdio') {
         // STDIO only
         await this.startStdioServer();
-      } else if (mode === 'sse') {
-        // SSE only (deprecated, use streamable-http)
-        await this.startSseServer();
       } else if (mode === 'streamable-http') {
         // Streamable HTTP (MCP standard since 2025-03-26)
         await this.startStreamableHttpServer();
@@ -75,19 +70,19 @@ export class ServerLifecycle {
   }
 
   /**
-   * Start server with both STDIO and SSE transports
+   * Start server with both STDIO and Streamable HTTP transports
    */
   private async startBothTransports(): Promise<void> {
-    this.logger.info('Starting dual transport mode (STDIO + SSE)');
+    this.logger.info('Starting dual transport mode (STDIO + Streamable HTTP)');
 
     // Start STDIO transport first
-    await this.transportRouter.setupStdioTransport();
+    this.transportRouter.setupStdioTransport();
     this.logger.info('STDIO transport ready');
 
-    // Then start SSE transport if API manager is available
+    // Then start Streamable HTTP if API manager is available
     if (this.apiRouter !== undefined) {
       const app = this.apiRouter.createApp() as Application;
-      this.transportRouter.setupSseTransport(app);
+      this.transportRouter.setupStreamableHttpTransport(app);
       this.httpServer = createServer(app);
       this.setupHttpServerEventHandlers();
 
@@ -99,14 +94,14 @@ export class ServerLifecycle {
         }
 
         httpServer.listen(this.port, () => {
-          this.logger.info(`SSE transport running on http://localhost:${this.port}`);
-          this.logger.info(`Connect to http://localhost:${this.port}/mcp for SSE MCP connections`);
+          this.logger.info(`Streamable HTTP running on http://localhost:${this.port}`);
+          this.logger.info(`Connect to http://localhost:${this.port}/mcp for MCP connections`);
           resolve();
         });
 
         httpServer.on('error', (error: NodeJS.ErrnoException) => {
           if (error.code === 'EADDRINUSE') {
-            this.logger.error(`Port ${this.port} is already in use. SSE transport disabled.`);
+            this.logger.error(`Port ${this.port} is already in use. HTTP transport disabled.`);
             // Don't reject - STDIO is still working
             resolve();
           } else {
@@ -115,7 +110,7 @@ export class ServerLifecycle {
         });
       });
     } else {
-      this.logger.warn('API Manager not available - SSE transport disabled in dual mode');
+      this.logger.warn('API Manager not available - HTTP transport disabled in dual mode');
     }
   }
 
@@ -124,59 +119,12 @@ export class ServerLifecycle {
    */
   private async startStdioServer(): Promise<void> {
     // For STDIO, we don't need an HTTP server
-    await this.transportRouter.setupStdioTransport();
-  }
-
-  /**
-   * Start server with SSE transport
-   */
-  private async startSseServer(): Promise<void> {
-    if (this.apiRouter === undefined) {
-      throw new Error('API Manager is required for SSE transport');
-    }
-
-    // Create Express app
-    const app = this.apiRouter.createApp() as Application;
-
-    // Setup SSE transport endpoints
-    this.transportRouter.setupSseTransport(app);
-
-    // Create HTTP server
-    this.httpServer = createServer(app);
-
-    // Setup HTTP server event handlers
-    this.setupHttpServerEventHandlers();
-
-    // Start listening
-    await new Promise<void>((resolve, reject) => {
-      const httpServer = this.httpServer;
-      if (httpServer === undefined) {
-        reject(new Error('HTTP server not initialized'));
-        return;
-      }
-
-      httpServer.listen(this.port, () => {
-        this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
-        this.logger.info(`Connect to http://localhost:${this.port}/mcp for MCP connections`);
-        resolve();
-      });
-
-      httpServer.on('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'EADDRINUSE') {
-          this.logger.error(
-            `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
-          );
-        } else {
-          this.logger.error('Server error:', error);
-        }
-        reject(error);
-      });
-    });
+    this.transportRouter.setupStdioTransport();
   }
 
   /**
    * Start server with Streamable HTTP transport (MCP standard since 2025-03-26)
-   * This is the preferred HTTP transport, replacing deprecated SSE
+   * This is the MCP standard HTTP transport
    */
   private async startStreamableHttpServer(): Promise<void> {
     if (this.apiRouter === undefined) {
@@ -206,9 +154,6 @@ export class ServerLifecycle {
       httpServer.listen(this.port, () => {
         this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
         this.logger.info(`Streamable HTTP transport ready at http://localhost:${this.port}/mcp`);
-        this.logger.info(
-          `Sessions: ${this.transportRouter.getActiveStreamableHttpSessionsCount()}`
-        );
         resolve();
       });
 
@@ -284,9 +229,9 @@ export class ServerLifecycle {
    * Finalize shutdown process
    */
   private async finalizeShutdown(exitCode: number): Promise<void> {
-    // Close transport connections (SSE and Streamable HTTP)
+    // Close transport connections
     const mode = this.transportRouter.getTransportType();
-    if (mode === 'sse' || mode === 'streamable-http' || mode === 'both') {
+    if (mode === 'streamable-http' || mode === 'both') {
       await this.transportRouter.closeAllConnections();
     }
 
@@ -335,7 +280,6 @@ export class ServerLifecycle {
       case 'stdio':
         // For STDIO only, we consider it running if the process is alive
         return true;
-      case 'sse':
       case 'streamable-http':
         // For HTTP transports, check if HTTP server is listening
         return this.httpServer?.listening ?? false;
@@ -357,13 +301,11 @@ export class ServerLifecycle {
     connections?: number;
     sessions?: number;
     uptime: number;
-    transports?: { stdio: boolean; sse: boolean; streamableHttp: boolean };
+    transports?: { stdio: boolean; streamableHttp: boolean };
   } {
     const mode = this.transportRouter.getTransportType();
     const isHttpActive =
-      mode === 'sse' ||
-      mode === 'streamable-http' ||
-      (mode === 'both' && this.httpServer?.listening === true);
+      mode === 'streamable-http' || (mode === 'both' && this.httpServer?.listening === true);
 
     const status: {
       running: boolean;
@@ -372,7 +314,7 @@ export class ServerLifecycle {
       connections?: number;
       sessions?: number;
       uptime: number;
-      transports?: { stdio: boolean; sse: boolean; streamableHttp: boolean };
+      transports?: { stdio: boolean; streamableHttp: boolean };
     } = {
       running: this.isRunning(),
       transport: mode,
@@ -381,18 +323,12 @@ export class ServerLifecycle {
 
     if (isHttpActive) {
       status.port = this.port;
-      status.connections = this.transportRouter.getActiveConnectionsCount();
-    }
-
-    if (mode === 'streamable-http') {
-      status.sessions = this.transportRouter.getActiveStreamableHttpSessionsCount();
     }
 
     if (mode === 'both') {
       status.transports = {
         stdio: true,
-        sse: this.httpServer?.listening ?? false,
-        streamableHttp: false, // 'both' mode currently only supports STDIO + SSE
+        streamableHttp: this.httpServer?.listening ?? false,
       };
     }
 
@@ -400,7 +336,7 @@ export class ServerLifecycle {
   }
 
   /**
-   * Get the HTTP server instance (for SSE transport)
+   * Get the HTTP server instance
    */
   getHttpServer(): Server | undefined {
     return this.httpServer;

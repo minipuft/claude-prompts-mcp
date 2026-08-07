@@ -23,5 +23,9 @@
   },
   "dependencies": {
     "graphviz": "^0.0.9"
+  },
+  "//overrides": "tmp: GHSA-ph9p-34f9-6g65/GHSA-52f5-9888-hmc6 — @anthropic-ai/mcpb (latest) pins @inquirer→external-editor→tmp@0.0.33; drop when mcpb's chain moves past tmp 0.2.6",
+  "overrides": {
+    "tmp": "^0.2.6"
   }
 }

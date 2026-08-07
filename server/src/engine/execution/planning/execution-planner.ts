@@ -5,7 +5,6 @@ import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ContentAnalysisResult, ContentAnalyzerPort } from '#shared/types/index.js';
-import type { FrameworkManager } from '../../frameworks/framework-manager.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
 import type { GateManager } from '../../gates/gate-manager.js';
 import type { ParsedCommand } from '../context/index.js';
@@ -52,7 +51,6 @@ type StrategyResolution = {
  * Extracted from PromptExecutor to make planning reusable across the pipeline.
  */
 export class ExecutionPlanner {
-  private frameworkManager: FrameworkManager | undefined;
   private gateLoader: GateDefinitionProvider | undefined;
   private gateManager: GateManager | undefined;
   private readonly categoryExtractor: CategoryExtractor;
@@ -62,10 +60,6 @@ export class ExecutionPlanner {
     private readonly logger: Logger
   ) {
     this.categoryExtractor = new CategoryExtractor(logger);
-  }
-
-  setFrameworkManager(manager?: FrameworkManager): void {
-    this.frameworkManager = manager;
   }
 
   setGateLoader(loader?: GateDefinitionProvider): void {
@@ -114,9 +108,7 @@ export class ExecutionPlanner {
     }
     const strategyInfo = this.resolveStrategy(strategyInput);
 
-    const modifierResolution = this.normalizeModifiers(
-      parsedCommand?.modifiers ?? convertedPrompt.executionModifiers
-    );
+    const modifierResolution = this.normalizeModifiers(parsedCommand?.modifiers);
 
     // Apply script-tools default: clean mode if prompt has script tools and no explicit overrides
     this.applyScriptToolDefaults(modifierResolution, convertedPrompt, parsedCommand, gateOverrides);
@@ -140,14 +132,7 @@ export class ExecutionPlanner {
       parsedCommand?.executionPlan?.frameworkOverride ?? parsedCommand?.executionPlan
     );
 
-    const baseRequiresFramework = this.requiresFramework(
-      strategyInfo.strategy,
-      convertedPrompt,
-      analysis,
-      new Set(resolution.gateIds),
-      frameworkEnabled,
-      hasFrameworkOverride
-    );
+    const baseRequiresFramework = this.requiresFramework(frameworkEnabled, hasFrameworkOverride);
     const requiresFramework = resolveFrameworkRequirement(
       modifierResolution.modifiers,
       baseRequiresFramework
@@ -298,10 +283,6 @@ export class ExecutionPlanner {
       return { strategy: 'chain' };
     }
 
-    const hasSystemMessage = Boolean(prompt.systemMessage?.trim());
-    const hasTemplateVars = /\{\{.*?\}\}/.test(prompt.userMessageTemplate ?? '');
-    const hasComplexLogic = /{%-|{%\s*if|{%\s*for/.test(prompt.userMessageTemplate ?? '');
-
     // All single prompts resolve to 'single' strategy (formerly 'prompt' or 'template')
     return { strategy: 'single' };
   }
@@ -423,18 +404,23 @@ export class ExecutionPlanner {
     });
   }
 
-  private requiresFramework(
-    strategy: ExecutionStrategyType,
-    prompt: ConvertedPrompt,
-    analysis: ContentAnalysisResult | null,
-    gates: Set<string>,
-    frameworkEnabled: boolean,
-    hasFrameworkOverride: boolean
-  ): boolean {
-    // Framework context required when:
-    // . Enabled in config (normal framework resolution)
-    // . Framework override detected from symbolic operator (@)
-    // This supports BOTH system prompt injection AND gate filtering
+  /**
+   * The base framework requirement, before execution modifiers are applied.
+   *
+   * This took `strategy`, `prompt`, `analysis` and `gates` and read none of
+   * them — a signature advertising four dependencies the body did not have.
+   * That is worse than noise: it invites a caller to believe the answer varies
+   * with the prompt or the gate set, and it made the function look expensive to
+   * move. It depends on exactly two things, so it now says so.
+   *
+   * `resolveFrameworkRequirement` layers `%clean`/`%lean`/`%framework`/`%judge`
+   * on top of this; the two together are one derivation in two steps, not the
+   * duplicate pair that `a25aaf25` removed from the stage.
+   */
+  private requiresFramework(frameworkEnabled: boolean, hasFrameworkOverride: boolean): boolean {
+    // Framework context required when enabled in config (normal resolution), or
+    // when a symbolic `@` override was detected. This supports BOTH system
+    // prompt injection AND gate filtering.
     return frameworkEnabled || hasFrameworkOverride;
   }
 

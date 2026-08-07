@@ -57,6 +57,32 @@ jobs:
             git push
           fi
 
+      - name: Retire finished plans
+        if: steps.release.outputs.pr && steps.release.outputs.release_created != 'true'
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          # Check out the PR branch explicitly rather than inheriting the checkout a
+          # sibling step happens to have done. Reordering or removing that step would
+          # otherwise leave this one archiving on whatever branch was current.
+          git checkout "$(echo "$PR_JSON" | jq -r '.headBranchName')"
+          node scripts/retire-done-plans.js --apply
+          # Retirement writes OUTSIDE plans/: relocating a `reference` plan re-bases every
+          # inbound link to it, and those live in docs/ (and anywhere else in LINK_SOURCES).
+          # Staging only plans/ would commit the move and drop the link fixes, leaving the
+          # citing document pointing at a path the same commit emptied. These paths mirror
+          # LINK_SOURCES in scripts/retire-done-plans.js — they change together.
+          RETIRE_PATHS="plans docs server/src server/scripts .github"
+          if [ -z "$(git status --porcelain -- $RETIRE_PATHS)" ]; then
+            echo "No plans to retire"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- $RETIRE_PATHS
+            git commit -m "chore(docs): retire finished plans to plans/archive/ and plans/reference/"
+            git push
+          fi
+
       - name: Summary
         if: always()
         env:

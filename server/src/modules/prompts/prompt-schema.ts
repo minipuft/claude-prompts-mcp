@@ -85,6 +85,8 @@ export const ChainStepSchema = z.object({
   retries: z.number().int().nonnegative().optional(),
   /** Client-agnostic capability hint for delegation model selection */
   subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
+  /** Host agent to spawn for this step, overriding the prompt-level default */
+  agentType: z.string().min(1).optional(),
 });
 
 export type ChainStepYaml = z.infer<typeof ChainStepSchema>;
@@ -252,6 +254,8 @@ export const PromptDataSchema = z
     tools: z.array(z.string().min(1)).optional(),
     /** Client-agnostic capability hint for delegation model selection */
     subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
+    /** Default host agent for this prompt's delegated steps (a step may override it) */
+    agentType: z.string().min(1).optional(),
   })
   .passthrough(); // Allow additional fields for extensibility
 
@@ -360,6 +364,8 @@ export const PromptYamlSchema = z
     // Delegation
     /** Client-agnostic capability hint for delegation model selection */
     subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
+    /** Default host agent for this prompt's delegated steps (a step may override it) */
+    agentType: z.string().min(1).optional(),
   })
   .passthrough() // Allow additional fields for extensibility
   .refine(

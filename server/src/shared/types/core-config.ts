@@ -1,13 +1,15 @@
-// @lifecycle canonical - Core configuration and protocol types extracted from src/types.ts.
+// @lifecycle canonical - Core configuration and protocol types.
 /**
  * Core Config Types
  *
  * Contains configuration types, message types, and API/tool types
- * that are consumed across all architectural layers. Extracted from the
- * top-level src/types.ts to break the bilateral dependency between
- * src/types.ts ↔ shared/types/index.ts.
+ * that are consumed across all architectural layers.
  *
- * IMPORTANT: This file must NOT import from ./index.js to avoid barrel cycles.
+ * IMPORTANT: This file must NOT import from ./index.js to avoid barrel cycles. That constraint is
+ * the whole reason this module exists separately from the barrel: these types were split out of a
+ * top-level aggregate so the aggregate and the barrel stopped importing each other. The aggregate
+ * itself was deleted 2026-08-06 once it had no consumers left; the cycle it created is what this
+ * file's independence still prevents.
  */
 
 // ===== Prompt Configuration =====
@@ -40,11 +42,10 @@ export interface ServerConfig {
 /**
  * Transport mode options
  * - 'stdio': Standard I/O transport for Claude Desktop/CLI (default)
- * - 'sse': Server-sent events over HTTP for web clients (deprecated, use streamable-http)
  * - 'streamable-http': Streamable HTTP transport (MCP standard since 2025-03-26)
- * - 'both': Run both STDIO and SSE transports simultaneously
+ * - 'both': Run STDIO and Streamable HTTP simultaneously
  */
-export type TransportMode = 'stdio' | 'sse' | 'streamable-http' | 'both';
+export type TransportMode = 'stdio' | 'streamable-http' | 'both';
 
 /**
  * LLM provider for semantic analysis
@@ -440,8 +441,8 @@ export interface Config {
   /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
   /**
-   * Transport mode: 'stdio' (default), 'sse', or 'both'
-   * STDIO is used by Claude Desktop/CLI, SSE for web clients
+   * Transport mode: 'stdio' (default), 'streamable-http', or 'both'
+   * STDIO is used by Claude Desktop/CLI, Streamable HTTP for web clients
    */
   transport?: TransportMode;
   /** Logging configuration */
@@ -565,13 +566,17 @@ export interface ContentAnalysisResult {
   };
   analysisMetadata: {
     version: string;
-    /** Analysis mode - 'semantic' when LLM used, 'minimal' otherwise */
-    mode?: 'semantic' | 'minimal';
+    /**
+     * Analysis mode. `ContentAnalyzer` is the sole producer and emits only `'minimal'`, so the
+     * union has one member. This is narrower than the consumer-facing `analysisMode` string in
+     * `resource-manager/prompt/core/types.ts`, which additionally carries `'fallback'` and
+     * `'disabled'` from paths that never set this field.
+     */
+    mode?: 'minimal';
     analysisTime: number;
     analyzer: 'content';
     cacheHit: boolean;
     fallbackUsed?: boolean;
-    llmUsed?: boolean;
     hooksUsed?: boolean;
   };
 }

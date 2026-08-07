@@ -5,6 +5,7 @@ import { PromptExecutionPipeline } from '../../../../src/engine/execution/pipeli
 import type { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
+import type { ExecutionRecordStore } from '../../../../src/modules/chains/execution-record-store.js';
 
 // Stage order matches the array PipelineBuilder.build() hands the constructor.
 // Optional stages (ScriptExecution, ScriptAutoExecute, ShellVerification,
@@ -20,7 +21,7 @@ const stageOrder = [
   'ExecutionPlanning',
   'JudgeSelection', // before framework/gate stages, for the two-phase judge flow
   'GateEnhancement', // after the judge decision
-  'FrameworkResolution', // reads clientFrameworkOverride set by the judge flow
+  'FrameworkResolution', // after the judge decision, so %judge returns an uninjected menu
   'SessionManagement', // populates currentStep
   'InjectionControl', // needs currentStep; writes state.injection
   'PromptGuidance', // reads state.injection
@@ -52,7 +53,8 @@ const createStage = (
 });
 
 const createPipeline = (
-  overrides: Partial<Record<StageName, PipelineStage>> = {}
+  overrides: Partial<Record<StageName, PipelineStage>> = {},
+  ports: { executionRecordStore?: ExecutionRecordStore } = {}
 ): { pipeline: PromptExecutionPipeline; tracker: string[] } => {
   const tracker: string[] = [];
 
@@ -80,6 +82,7 @@ const createPipeline = (
   const pipeline = new PromptExecutionPipeline(stageInstances, {
     logger: createLogger(),
     metricsProvider: () => undefined,
+    ...ports,
   });
 
   return { pipeline, tracker };
@@ -186,5 +189,164 @@ describe('PromptExecutionPipeline orchestration', () => {
       frameworkStage.execute.mock.invocationCallOrder[0]
     );
     expect(contentText(response)).toBe('framework:CAGEERF');
+  });
+});
+
+describe('PromptExecutionPipeline stage-order enforcement', () => {
+  const declared = (
+    name: string,
+    declarations: Pick<PipelineStage, 'provides' | 'requires'>
+  ): PipelineStage => ({
+    name,
+    ...declarations,
+    execute: async () => undefined,
+  });
+
+  const session = declared('SessionManagement', { provides: ['sessionContext.currentStep'] });
+  const injection = declared('InjectionControl', { requires: ['sessionContext.currentStep'] });
+
+  test('constructs when a declared requirement is met by an earlier stage', () => {
+    expect(
+      () => new PromptExecutionPipeline([session, injection], { logger: createLogger() })
+    ).not.toThrow();
+  });
+
+  test('throws when a declared requirement is produced by a later stage', () => {
+    expect(
+      () => new PromptExecutionPipeline([injection, session], { logger: createLogger() })
+    ).toThrow(/InjectionControl requires "sessionContext\.currentStep"/);
+  });
+
+  test('the throw names the count and the producing stage, so the fix is the message', () => {
+    expect(
+      () => new PromptExecutionPipeline([injection, session], { logger: createLogger() })
+    ).toThrow(/1 declared ordering constraint\(s\)[\s\S]*SessionManagement at index 1/);
+  });
+});
+
+/**
+ * Tier 3.4 — terminal records on the failure path.
+ *
+ * Before this, stage 18 appended `working` on every step render and only stage 21
+ * appended a terminal record, and only when the chain completed. A throw anywhere in
+ * the pipeline left the session's last record at `working` permanently: 35 of the 64
+ * rows present when this was written were stuck that way.
+ *
+ * Emission lives on the pipeline's catch rather than in stages 18/21 because those are
+ * the renderer and the formatter — a throw in any of the other stages reaches neither.
+ */
+describe('PromptExecutionPipeline failure records', () => {
+  const createRecordStore = (): {
+    store: ExecutionRecordStore;
+    appended: Array<Record<string, unknown>>;
+  } => {
+    const appended: Array<Record<string, unknown>> = [];
+    const store = {
+      append: (input: Record<string, unknown>) => {
+        appended.push(input);
+        return 'exec-id';
+      },
+    } as unknown as ExecutionRecordStore;
+    return { store, appended };
+  };
+
+  /** A stage that establishes a session, so the failure record has something to attach to. */
+  const sessionStage = (): PipelineStage =>
+    createStage('SessionManagement', (context) => {
+      (context as unknown as { sessionContext: unknown }).sessionContext = {
+        sessionId: 'sess-doomed',
+        chainId: 'chain-doomed',
+        currentStep: 2,
+        totalSteps: 5,
+      };
+    });
+
+  test('emits a failed record when a stage throws', async () => {
+    const { store, appended } = createRecordStore();
+    const { pipeline } = createPipeline(
+      {
+        SessionManagement: sessionStage(),
+        StepExecution: createStage('StepExecution', () => {
+          throw new Error('render exploded');
+        }),
+      },
+      { executionRecordStore: store }
+    );
+
+    await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow('render exploded');
+
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({
+      sessionId: 'sess-doomed',
+      chainId: 'chain-doomed',
+      status: 'failed',
+      errorMessage: 'render exploded',
+    });
+  });
+
+  test('the failed record is terminal — completedAt is set, not left open', async () => {
+    const { store, appended } = createRecordStore();
+    const { pipeline } = createPipeline(
+      {
+        SessionManagement: sessionStage(),
+        GateReview: createStage('GateReview', () => {
+          throw new Error('gate exploded');
+        }),
+      },
+      { executionRecordStore: store }
+    );
+
+    await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow('gate exploded');
+
+    // A record with no completedAt reads as still-running, which is the exact defect
+    // this tier closes — asserting the status alone would not catch it.
+    expect(appended[0]?.['completedAt']).toEqual(expect.any(Number));
+  });
+
+  test('catches a throw from a stage neither 18 nor 21 would observe', async () => {
+    const { store, appended } = createRecordStore();
+    const { pipeline } = createPipeline(
+      {
+        SessionManagement: sessionStage(),
+        // CommandParsing runs long before StepExecution (18) and ResponseFormatting (21).
+        InjectionControl: createStage('InjectionControl', () => {
+          throw new Error('injection exploded');
+        }),
+      },
+      { executionRecordStore: store }
+    );
+
+    await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow('injection exploded');
+
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({ status: 'failed' });
+  });
+
+  test('emits nothing when no session was established', async () => {
+    const { store, appended } = createRecordStore();
+    const { pipeline } = createPipeline(
+      {
+        StepExecution: createStage('StepExecution', () => {
+          throw new Error('no session here');
+        }),
+      },
+      { executionRecordStore: store }
+    );
+
+    await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow('no session here');
+
+    expect(appended).toEqual([]);
+  });
+
+  test('a successful run produces no failure record', async () => {
+    const { store, appended } = createRecordStore();
+    const { pipeline } = createPipeline(
+      { SessionManagement: sessionStage() },
+      { executionRecordStore: store }
+    );
+
+    await pipeline.execute({ command: '>>demo' });
+
+    expect(appended).toEqual([]);
   });
 });

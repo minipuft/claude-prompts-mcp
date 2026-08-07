@@ -150,7 +150,7 @@ jobs:
       # guards, whose entire purpose is to make a retirement permanent. A PR reintroducing
       # `ChainSessionManager` or `StepState` merged green.
       # Members already covered elsewhere were removed from this job rather than run twice:
-      # lint:ratchet, validate:contracts, validate:metadata, validate:versions, validate:arch.
+      # lint:ratchet, validate:contracts, verify:action-metadata, validate:versions, validate:arch.
       # Includes the Python gate: `validate:python` runs Ruff, Pyrefly, and the hook
       # Pytest suite. There is no separate pyrefly/test step here on purpose — one
       # command is the local and hosted contract.
@@ -267,11 +267,15 @@ jobs:
 
       - name: Build bundled distribution
         if: needs.classify.outputs.scope == 'full'
-        run: npm run build
+        run: npm run build:prod
 
       - name: Startup smoke test
         if: needs.classify.outputs.scope == 'full'
         run: npm run start:test
+
+      - name: Verify packed npm consumer
+        if: needs.classify.outputs.scope == 'full'
+        run: npm run verify:package-artifact
 
       # Guards the published MCP tool surface, which CLAUDE.md places inside the Public
       # API Contract. The SDK selects its JSON Schema converter from the installed zod
@@ -282,6 +286,22 @@ jobs:
       - name: MCP tool schema snapshot
         if: needs.classify.outputs.scope == 'full'
         run: npm run validate:tool-schemas
+
+      # The snapshot above proves the tool schemas did not change shape; this proves the
+      # tools still answer. Different failures: a schema can stay byte-identical while the
+      # server fails to start, and a working server can advertise a rewritten schema.
+      #
+      # Wired 2026-08-04. Before that, verify:mcp was registered, documented in CLAUDE.md as
+      # the way to check a build, and invoked by no workflow — while verify:mcp:self-test ran
+      # inside validate:all on every run. CI proved the verifier worked and never verified the
+      # surface. A self-test proves the check runs; it does not run the check.
+      #
+      # Here rather than in validate:all for the same reason as the step above: it spawns the
+      # built server, and validate:all runs before the build. The verifier refuses a stale
+      # dist/ rather than reporting green against one.
+      - name: Verify MCP surface
+        if: needs.classify.outputs.scope == 'full'
+        run: npm run verify:mcp
 
       - name: Upload build artifact
         if: needs.classify.outputs.scope == 'full'

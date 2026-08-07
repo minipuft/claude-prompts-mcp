@@ -4,7 +4,7 @@ import { ExecutionPlanner } from '../../../../src/engine/execution/planning/exec
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/execution-context.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { ContentAnalyzer } from '../../../../src/modules/semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
 import type { ContentAnalysisResult } from '../../../../src/modules/semantic/types.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
 
@@ -68,7 +68,7 @@ const baseAnalysis: ContentAnalysisResult = {
 
 const createAnalyzer = (
   overrides: Partial<ContentAnalysisResult> = {}
-): Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEnabled'> => {
+): Pick<ContentAnalyzer, 'analyzePrompt'> => {
   const merged: ContentAnalysisResult = {
     ...baseAnalysis,
     ...overrides,
@@ -88,8 +88,7 @@ const createAnalyzer = (
   };
 
   const analyzePrompt = jest.fn().mockResolvedValue(merged);
-  const isLLMEnabled = jest.fn().mockReturnValue(true);
-  return { analyzePrompt, isLLMEnabled };
+  return { analyzePrompt };
 };
 
 describe('ExecutionPlanner', () => {

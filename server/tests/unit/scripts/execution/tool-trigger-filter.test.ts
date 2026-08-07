@@ -340,3 +340,54 @@ describe('ToolTriggerFilter', () => {
     });
   });
 });
+
+describe('partitionAutoApprove', () => {
+  const match = (toolId: string): ToolDetectionMatch =>
+    ({ toolId, confidence: 1, extractedInputs: {} }) as unknown as ToolDetectionMatch;
+  const tool = (id: string, autoApproveOnValid?: boolean): LoadedScriptTool =>
+    ({
+      id,
+      ...(autoApproveOnValid === undefined ? {} : { execution: { autoApproveOnValid } }),
+    }) as unknown as LoadedScriptTool;
+
+  test('routes tools declaring autoApproveOnValid away from the confirmation flow', () => {
+    const filter = new ToolTriggerFilter();
+
+    const partition = filter.partitionAutoApprove(
+      [match('validator'), match('formatter')],
+      [tool('validator', true), tool('formatter', false)]
+    );
+
+    expect(partition.autoApprove.map((m) => m.toolId)).toEqual(['validator']);
+    expect(partition.normal.map((m) => m.toolId)).toEqual(['formatter']);
+  });
+
+  test('a tool with no execution block is normal, not auto-approve', () => {
+    const filter = new ToolTriggerFilter();
+
+    const partition = filter.partitionAutoApprove([match('plain')], [tool('plain', undefined)]);
+
+    expect(partition.autoApprove).toEqual([]);
+    expect(partition.normal.map((m) => m.toolId)).toEqual(['plain']);
+  });
+
+  test('an unknown tool goes to normal rather than being granted the fast path', () => {
+    // filterByTrigger skips unknown tools; granting one auto-approval would be the more
+    // dangerous divergence, so the unknown case defaults to the path that asks.
+    const filter = new ToolTriggerFilter();
+
+    const partition = filter.partitionAutoApprove([match('ghost')], []);
+
+    expect(partition.autoApprove).toEqual([]);
+    expect(partition.normal.map((m) => m.toolId)).toEqual(['ghost']);
+  });
+
+  test('an empty match list partitions to two empty lists', () => {
+    const filter = new ToolTriggerFilter();
+
+    expect(filter.partitionAutoApprove([], [tool('validator', true)])).toEqual({
+      autoApprove: [],
+      normal: [],
+    });
+  });
+});

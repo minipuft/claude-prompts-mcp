@@ -179,7 +179,7 @@ export class ArgumentParser {
       process: (
         rawArgs: string,
         promptData: PromptDefinition,
-        context: ExecutionContext
+        _context: ExecutionContext
       ): ArgumentParsingResult => {
         const parseResult = safeJsonParse(rawArgs);
         if (!parseResult.success || !parseResult.data) {
@@ -708,7 +708,7 @@ export class ArgumentParser {
   private async enrichResult(
     result: ArgumentParsingResult,
     promptData: PromptDefinition,
-    context: ExecutionContext
+    _context: ExecutionContext
   ): Promise<ArgumentParsingResult> {
     // Check if prompt has validation rules that need enforcement
     const hasValidationRules = promptData.arguments.some(

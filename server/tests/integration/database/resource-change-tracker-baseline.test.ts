@@ -72,8 +72,10 @@ describe('ResourceChangeTracker baseline comparison', () => {
     logger.warn.mockClear();
     logger.error.mockClear();
     logger.debug.mockClear();
-    dbManager.run(`DELETE FROM kv_state WHERE tenant_id = 'default' AND key = 'resource_hashes'`);
-    dbManager.run(`DELETE FROM resource_changes WHERE tenant_id = 'default'`);
+    dbManager.run(`DELETE FROM kv_state WHERE key = 'resource_hashes'`);
+    // Unscoped delete, not `tenant_id = 'default'`: the scope-stamping cases below write rows
+    // under a workspace tenant, and a filtered cleanup would leave them to leak into the next test.
+    dbManager.run(`DELETE FROM resource_changes`);
     await fs.rm(RESOURCE_DIR, { recursive: true, force: true });
     await fs.mkdir(RESOURCE_DIR, { recursive: true });
   });
@@ -146,5 +148,96 @@ describe('ResourceChangeTracker baseline comparison', () => {
     expect(removal).toBeDefined();
     expect(removal?.resourceType).toBe('prompt');
     expect(removal?.resourceId).toBe('examples/create_prompt');
+  });
+
+  /**
+   * Scope stamping (Tier 4.3).
+   *
+   * `resource_changes` declares `workspace_id` and `organization_id`, and until this tier no
+   * writer bound either — every row landed NULL and a startup migration backfilled them on the
+   * next boot, forever. These cases assert the writer now emits scope itself, which is the
+   * precondition for deleting that migration in 4.5.
+   *
+   * They read the table directly rather than through `getChanges()`, because the projection
+   * `getChanges()` returns does not carry the scope columns: asserting through it would pass
+   * whatever the columns held.
+   */
+  describe('scope stamping', () => {
+    interface ScopeRow {
+      tenant_id: string;
+      workspace_id: string | null;
+      organization_id: string | null;
+    }
+
+    const readScopeRows = (): ScopeRow[] =>
+      dbManager.query<ScopeRow>(
+        `SELECT tenant_id, workspace_id, organization_id FROM resource_changes`
+      );
+
+    it('stamps the configured defaultScope onto rows it writes', async () => {
+      const tracker = createResourceChangeTracker(logger as any, {
+        maxEntries: 1000,
+        serverRoot: TEST_DIR,
+        defaultScope: { workspaceId: 'ws-alpha', organizationId: 'org-alpha' },
+      });
+      await tracker.initialize();
+
+      const resource = await writeResource('prompt', 'scoped-prompt', 'name: scoped\n');
+      await tracker.logChange({ ...resource, operation: 'added', source: 'mcp-tool' });
+
+      const rows = readScopeRows();
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.workspace_id).toBe('ws-alpha');
+      expect(rows[0]?.organization_id).toBe('org-alpha');
+      // tenant_id derives from the same scope rather than staying the literal 'default' that
+      // made every project's rows indistinguishable in a shared state.db.
+      expect(rows[0]?.tenant_id).toBe('ws-alpha');
+    });
+
+    it('falls back to the default tenant and NULL scope when no defaultScope is configured', async () => {
+      const tracker = createResourceChangeTracker(logger as any, {
+        maxEntries: 1000,
+        serverRoot: TEST_DIR,
+      });
+      await tracker.initialize();
+
+      const resource = await writeResource('gate', 'unscoped-gate', 'id: unscoped\n');
+      await tracker.logChange({ ...resource, operation: 'added', source: 'mcp-tool' });
+
+      const rows = readScopeRows();
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.tenant_id).toBe('default');
+      // Documented, not aspirational: a tracker built without a workspace still writes NULLs.
+      // 4.5 deletes the migration that repaired these, so this row shape becomes permanent —
+      // the composition root supplying defaultScope is what keeps it from occurring in practice.
+      expect(rows[0]?.workspace_id).toBeNull();
+      expect(rows[0]?.organization_id).toBeNull();
+    });
+
+    it('stamps scope on removals, which take a different branch to the same insert', async () => {
+      const tracker = createResourceChangeTracker(logger as any, {
+        maxEntries: 1000,
+        serverRoot: TEST_DIR,
+        defaultScope: { workspaceId: 'ws-beta' },
+      });
+      await tracker.initialize();
+
+      const resource = await writeResource('prompt', 'removed-prompt', 'name: removed\n');
+      await tracker.compareBaseline([resource]);
+      await fs.rm(resource.filePath, { force: true });
+      await tracker.compareBaseline([]);
+
+      const removalRows = dbManager.query<ScopeRow & { operation: string }>(
+        `SELECT tenant_id, workspace_id, organization_id, operation FROM resource_changes WHERE operation = 'removed'`
+      );
+
+      expect(removalRows).toHaveLength(1);
+      expect(removalRows[0]?.workspace_id).toBe('ws-beta');
+      // organizationId was never supplied, so it stays NULL rather than echoing the workspace.
+      expect(removalRows[0]?.organization_id).toBeNull();
+      expect(removalRows[0]?.tenant_id).toBe('ws-beta');
+    });
   });
 });

@@ -12,7 +12,8 @@ import { isValidGateVerdict } from '../../gates/core/gate-verdict-contract.js';
 
 import type { McpToolRequest } from '#shared/types/execution.js';
 
-import { CHAIN_ID_PATTERN, recordParameterIssue } from '#shared/utils/index.js';
+import { CHAIN_ID_FORMAT_MESSAGE, isChainId } from '#shared/utils/chain-id-codec.js';
+import { recordParameterIssue } from '#shared/utils/index.js';
 
 /**
  * Validator for McpToolRequest with comprehensive error handling
@@ -70,7 +71,7 @@ export class McpToolRequestValidator {
    * @returns True if chain ID matches required pattern
    */
   static isValidChainId(chainId: unknown): chainId is string {
-    return typeof chainId === 'string' && CHAIN_ID_PATTERN.test(chainId);
+    return isChainId(chainId);
   }
 
   /**
@@ -106,7 +107,7 @@ export class McpToolRequestValidator {
    */
   static validateChainId(chainId: unknown): string {
     if (!this.isValidChainId(chainId)) {
-      throw new Error('Chain ID must follow format: chain-{prompt} or chain-{prompt}#runNumber');
+      throw new Error(CHAIN_ID_FORMAT_MESSAGE);
     }
     return chainId;
   }

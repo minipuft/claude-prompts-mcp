@@ -717,7 +717,7 @@ Apply this framework systematically to ensure comprehensive and structured respo
    * Get selection reason for context metadata
    */
   private getSelectionReason(
-    framework: FrameworkDefinition,
+    _framework: FrameworkDefinition,
     criteria: FrameworkSelectionCriteria
   ): string {
     if (criteria.userPreference && criteria.userPreference !== 'AUTO') {

@@ -70,6 +70,18 @@ export interface ExecutionRecordAppendInput {
   scope?: StateStoreOptions;
 }
 
+/** Default page size for `queryRecent` when a caller does not specify one. */
+const DEFAULT_RECENT_LIMIT = 50;
+
+/** Ceiling for `queryRecent`, so a caller cannot request the entire ledger in one call. */
+const MAX_RECENT_LIMIT = 500;
+
+/** Coerce an untrusted limit into `[1, MAX_RECENT_LIMIT]`; non-finite input falls back to default. */
+function clampRecentLimit(limit: number): number {
+  if (!Number.isFinite(limit)) return DEFAULT_RECENT_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_RECENT_LIMIT);
+}
+
 export class ExecutionRecordStore {
   constructor(
     private readonly db: DatabasePort,
@@ -114,6 +126,29 @@ export class ExecutionRecordStore {
        WHERE session_id = ? AND tenant_id = ?
        ORDER BY execution_id ASC`,
       [sessionId, tenantId]
+    );
+    return rows.map((row) => this.fromRow(row));
+  }
+
+  /**
+   * Return the most recent records for the resolved scope, newest first.
+   *
+   * Ordering is by `execution_id` rather than by `started_at` because ULIDs are
+   * monotonic (see the factory above): they sort lexicographically by creation even
+   * for records written inside the same millisecond, which a timestamp sort does not.
+   *
+   * `limit` is clamped rather than trusted — this backs an MCP-facing action, and an
+   * unbounded LIMIT against an append-only table with no retention (see the
+   * `execution_records` contract) would let one call read the whole ledger.
+   */
+  queryRecent(limit: number = DEFAULT_RECENT_LIMIT, scope?: StateStoreOptions): ExecutionRecord[] {
+    const tenantId = this.resolveTenantId(scope);
+    const rows = this.db.query<ExecutionRecordRow>(
+      `SELECT * FROM execution_records
+       WHERE tenant_id = ?
+       ORDER BY execution_id DESC
+       LIMIT ?`,
+      [tenantId, clampRecentLimit(limit)]
     );
     return rows.map((row) => this.fromRow(row));
   }

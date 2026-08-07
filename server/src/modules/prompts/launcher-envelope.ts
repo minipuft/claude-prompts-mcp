@@ -32,11 +32,9 @@ function renderArgumentHints(args: PromptArgument[]): string[] {
   });
 }
 
-/** Hint lines for gates that will be enforced: prompt-declared gates + config includes. */
+/** Hint lines for gates that will be enforced, from the prompt's `gateConfiguration.include`. */
 function renderGateHints(prompt: ConvertedPrompt): string[] {
-  const declared = (prompt.gates ?? []).map((gate) => `  • ${gate.name || gate.id} (${gate.type})`);
-  const included = (prompt.gateConfiguration?.include ?? []).map((gateId) => `  • ${gateId}`);
-  return [...declared, ...included];
+  return (prompt.gateConfiguration?.include ?? []).map((gateId) => `  • ${gateId}`);
 }
 
 /** Serialize provided slash-command args into the prompt_engine `options` channel. */

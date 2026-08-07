@@ -331,7 +331,7 @@ function resolveTransportKind(
     return 'stdio';
   }
 
-  if (transportMode === 'streamable-http' || transportMode === 'sse') {
+  if (transportMode === 'streamable-http') {
     return 'http';
   }
 

@@ -17,7 +17,8 @@ import { afterEach, describe, expect, test, jest } from '@jest/globals';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+import type { StateStore, StateStoreOptions } from '../../../src/shared/types/persistence.js';
+import type { PersistedArgumentHistory } from '../../../src/modules/text-refs/types.js';
 
 const createLogger = (): Logger =>
   ({
@@ -28,38 +29,38 @@ const createLogger = (): Logger =>
   }) as unknown as Logger;
 
 /**
- * Creates a mock DatabasePort that captures data written via run() and
- * returns it from queryOne(), simulating SQLite round-trip persistence.
+ * Creates an in-memory StateStore keyed by scope, standing in for SqliteStateStore.
+ *
+ * The tracker no longer owns SQL: `modules/` may not import `infra/`, so the composition root
+ * builds the concrete store and injects this interface. Keying by scope is what lets these
+ * tests observe per-workspace isolation, which the previous mock — a DatabasePort whose SQL
+ * hardcoded `tenant_id = 'default'` — structurally could not.
  */
-const createPersistentMockDb = (): DatabasePort & { _storage: Map<string, string> } => {
-  const storage = new Map<string, string>();
+const createInMemoryStore = (): StateStore<PersistedArgumentHistory> & {
+  _storage: Map<string, PersistedArgumentHistory>;
+} => {
+  const storage = new Map<string, PersistedArgumentHistory>();
+  const keyFor = (options?: StateStoreOptions): string =>
+    options?.workspaceId ?? options?.continuityScopeId ?? options?.organizationId ?? 'default';
 
   return {
     _storage: storage,
-    isInitialized: () => true,
-    initialize: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    queryOne: jest.fn().mockImplementation((...args: unknown[]) => {
-      const params = args[1] as unknown[] | undefined;
-      const tenantId = (params?.[0] as string) ?? 'default';
-      const state = storage.get(tenantId);
-      return state ? { state } : null;
-    }),
-    query: jest.fn().mockReturnValue([]),
-    run: jest.fn().mockImplementation((...args: unknown[]) => {
-      const sql = args[0] as string;
-      const params = args[1] as unknown[] | undefined;
-      if (sql.includes('INSERT OR REPLACE INTO kv_state')) {
-        const tenantId = (params?.[0] as string) ?? 'default';
-        // params: [tenant_id, key, state]
-        const state = (params?.[2] as string) ?? '{}';
-        storage.set(tenantId, state);
-      }
-    }),
-    transaction: jest.fn(),
-    beginTransaction: jest.fn(),
-    commit: jest.fn(),
-    rollback: jest.fn(),
-  } as unknown as DatabasePort & { _storage: Map<string, string> };
+    ensureInitialized: async () => undefined,
+    load: async (options?: StateStoreOptions) =>
+      storage.get(keyFor(options)) ?? {
+        version: '1.0.0',
+        lastUpdated: 0,
+        chains: {},
+        sessionToChain: {},
+      },
+    save: async (state: PersistedArgumentHistory, options?: StateStoreOptions) => {
+      storage.set(keyFor(options), JSON.parse(JSON.stringify(state)) as PersistedArgumentHistory);
+    },
+    exists: async (options?: StateStoreOptions) => storage.has(keyFor(options)),
+    delete: async (options?: StateStoreOptions) => {
+      storage.delete(keyFor(options));
+    },
+  };
 };
 
 describe('ArgumentHistoryTracker (race condition)', () => {
@@ -69,10 +70,10 @@ describe('ArgumentHistoryTracker (race condition)', () => {
 
   test('trackExecution auto-initializes when called before initialize()', async () => {
     const logger = createLogger();
-    const mockDb = createPersistentMockDb();
+    const store = createInMemoryStore();
 
     // Create tracker but do NOT call initialize()
-    const tracker = new ArgumentHistoryTracker(logger, 10, mockDb);
+    const tracker = new ArgumentHistoryTracker(logger, 10, store);
 
     // Call trackExecution directly — before the fix, this silently dropped data
     const entryId = await tracker.trackExecution({
@@ -96,10 +97,10 @@ describe('ArgumentHistoryTracker (race condition)', () => {
 
   test('trackExecution data persists to SQLite even without prior initialize()', async () => {
     const logger = createLogger();
-    const mockDb = createPersistentMockDb();
+    const store = createInMemoryStore();
 
     // Tracker A: write without prior initialize()
-    const trackerA = new ArgumentHistoryTracker(logger, 10, mockDb);
+    const trackerA = new ArgumentHistoryTracker(logger, 10, store);
     await trackerA.trackExecution({
       promptId: 'chain-race',
       sessionId: 'sess-race-2',
@@ -110,7 +111,7 @@ describe('ArgumentHistoryTracker (race condition)', () => {
     await trackerA.shutdown();
 
     // Tracker B: should restore data from the same mock db
-    const trackerB = new ArgumentHistoryTracker(logger, 10, mockDb);
+    const trackerB = new ArgumentHistoryTracker(logger, 10, store);
     await trackerB.initialize();
 
     const history = trackerB.getSessionHistory('sess-race-2');
@@ -123,9 +124,9 @@ describe('ArgumentHistoryTracker (race condition)', () => {
 
   test('multiple trackExecution calls without initialize() are idempotent', async () => {
     const logger = createLogger();
-    const mockDb = createPersistentMockDb();
+    const store = createInMemoryStore();
 
-    const tracker = new ArgumentHistoryTracker(logger, 10, mockDb);
+    const tracker = new ArgumentHistoryTracker(logger, 10, store);
 
     // Call trackExecution multiple times without initialize() — each should work
     await tracker.trackExecution({

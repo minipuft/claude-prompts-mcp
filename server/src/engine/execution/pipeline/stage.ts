@@ -12,6 +12,22 @@ export interface PipelineStage {
   readonly name: string;
 
   /**
+   * Context keys this stage writes, as dotted paths (`state.injection`).
+   *
+   * Optional and declarative: the key is a label matched against `requires`, not a path
+   * anything dereferences. Declaring it does not make the write happen.
+   */
+  readonly provides?: readonly string[];
+
+  /**
+   * Context keys this stage reads that an earlier stage must have written.
+   *
+   * Checked by `validateStageOrder` when the pipeline is constructed. Omit it for a
+   * stage whose inputs no ordering constraint depends on.
+   */
+  readonly requires?: readonly string[];
+
+  /**
    * Execute the stage using the shared ExecutionContext.
    */
   execute(context: ExecutionContext): Promise<void>;

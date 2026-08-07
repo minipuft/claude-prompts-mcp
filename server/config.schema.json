@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/minipuft/claude-prompts/server/config.schema.json",
+  "$id": "https://github.com/minipuft/claude-prompts-mcp/server/config.schema.json",
   "title": "Claude Prompts MCP Configuration",
   "description": "Configuration for the Claude Prompts MCP server",
   "type": "object",
@@ -21,14 +21,14 @@
         },
         "transport": {
           "type": "string",
-          "enum": ["stdio", "sse"],
+          "enum": ["stdio", "streamable-http", "both"],
           "default": "stdio",
-          "description": "Transport protocol: 'stdio' for CLI tools (Claude Code), 'sse' for web clients"
+          "description": "Transport protocol: 'stdio' for CLI tools (Claude Code), 'streamable-http' for web clients, 'both' for either"
         },
         "port": {
           "type": "integer",
           "default": 9090,
-          "description": "Port for SSE transport (ignored for stdio)"
+          "description": "Port for the Streamable HTTP transport (ignored for stdio)"
         }
       }
     },
@@ -385,6 +385,58 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Custom attribute names to explicitly include in traces"
+            }
+          }
+        }
+      }
+    },
+
+    "analysis": {
+      "type": "object",
+      "deprecated": true,
+      "description": "DEPRECATED - no runtime path reads this section. It is still parsed so an existing config.json keeps loading, and is scheduled for removal in the next major. The gate service that consumed it and the LLM side client behind it were both deleted; for model-graded gate evaluation use the '%judge' modifier or gates.evaluation.defaultMode. ConfigManager.getAnalysisConfig() still returns the parsed value and ConfigManager warns once at load when the section is present.",
+      "properties": {
+        "semanticAnalysis": {
+          "type": "object",
+          "properties": {
+            "llmIntegration": {
+              "type": "object",
+              "deprecated": true,
+              "description": "DEPRECATED with its parent section - every member is parsed and defaulted, and none is consulted. Modelled on LLMIntegrationConfig in src/shared/types/core-config.ts. There is deliberately no 'mode' member: the CLI used to accept a 'mode' of 'on'|'off' here that no reader consulted. That spelling is gone from both tool surfaces, and ConfigManager still adopts it into 'enabled' for configs already carrying one so the deprecation notice names a single spelling.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Enable LLM-backed semantic analysis. Changing this requires a restart."
+                },
+                "apiKey": {
+                  "type": ["string", "null"],
+                  "default": null,
+                  "description": "API key for the LLM provider"
+                },
+                "endpoint": {
+                  "type": ["string", "null"],
+                  "default": null,
+                  "description": "Custom endpoint URL; the provider is auto-detected from the URL"
+                },
+                "model": {
+                  "type": "string",
+                  "default": "gpt-4",
+                  "description": "Model name used for analysis requests"
+                },
+                "maxTokens": {
+                  "type": "integer",
+                  "default": 1000,
+                  "minimum": 100,
+                  "description": "Maximum tokens per analysis request"
+                },
+                "temperature": {
+                  "type": "number",
+                  "default": 0.1,
+                  "minimum": 0,
+                  "description": "Temperature for analysis requests"
+                }
+              }
             }
           }
         }

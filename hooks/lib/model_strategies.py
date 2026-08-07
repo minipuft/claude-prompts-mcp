@@ -55,6 +55,33 @@ class ClaudeModelStrategy(ModelStrategy):
         return "sonnet"
 
 
+class CodexModelStrategy(ModelStrategy):
+    """Maps delegation context to Codex CLI model hints.
+
+    Codex differentiates capability primarily via model_reasoning_effort on a
+    single model rather than a wide model lineup, so only tiers with a slug
+    verified against a live install resolve to an explicit model; other tiers
+    return None so the client's configured default model applies.
+    Slug verified against codex-cli 0.146.0 local config (2026-08-03).
+    """
+
+    CAPABILITY_MAP: Final[dict[str, str]] = {
+        "high-capability": "gpt-5.6-sol",
+    }
+
+    def resolve(self, context: DelegationContext) -> str | None:
+        # 1. Server-declared capability hint takes precedence
+        if context.capability_hint and context.capability_hint in self.CAPABILITY_MAP:
+            return self.CAPABILITY_MAP[context.capability_hint]
+
+        # 2. Heuristic fallback: gate-heavy steps get the high-capability slug
+        if context.gate_count >= 3:
+            return self.CAPABILITY_MAP["high-capability"]
+
+        # 3. Default: no override — the client's configured model applies
+        return None
+
+
 class ModelStrategyRegistry:
     """Registry of model hint strategies, keyed by client name."""
 
@@ -74,9 +101,10 @@ class ModelStrategyRegistry:
         return name in self._strategies
 
 
-# Singleton registry with Claude strategy pre-registered
+# Singleton registry with built-in client strategies pre-registered
 _registry = ModelStrategyRegistry()
 _registry.register("claude", ClaudeModelStrategy())
+_registry.register("codex", CodexModelStrategy())
 
 
 def get_model_hint(context: DelegationContext, client: str = "claude") -> str | None:

@@ -1,7 +1,7 @@
 // @lifecycle canonical - Core service for managing resource version history
 
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
-import type { DatabasePort } from '#shared/types/persistence.js';
+import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
   VersionEntry,
   HistoryFile,
@@ -27,6 +27,8 @@ interface VersionRow {
  * Interface for config provider - allows ConfigManager or test doubles.
  * Requires both versioning config and serverRoot for SQLite access.
  */
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+
 export interface VersioningConfigProvider {
   getVersioningConfig(): VersioningConfig;
   getServerRoot(): string;
@@ -45,19 +47,39 @@ export class VersionHistoryService {
   private configProvider: VersioningConfigProvider;
   private dbManager: DatabasePort | null;
 
+  /**
+   * Workspace scope for every read, write, and prune in this service.
+   *
+   * Until Tier 4, all nine query sites filtered a hardcoded `tenant_id = ?` literal, so
+   * every project sharing one state.db read and pruned the same rollback history. Scoping the
+   * writes alone would break version numbering, because `MAX(version)` would read a different
+   * set than the INSERT writes into — so the scope is applied uniformly or not at all.
+   */
+  private scope?: StateStoreOptions;
+
   constructor(deps: {
     logger: Logger;
     configManager: VersioningConfigProvider;
     dbManager?: DatabasePort;
+    scope?: StateStoreOptions;
   }) {
     this.logger = deps.logger;
     this.configProvider = deps.configManager;
     this.dbManager = deps.dbManager ?? null;
+    this.scope = deps.scope;
   }
 
-  /** Late-bind DatabasePort (setter injection, matching codebase convention). */
-  setDatabasePort(db: DatabasePort): void {
+  /** Late-bind DatabasePort and its scope (setter injection, matching codebase convention). */
+  setDatabasePort(db: DatabasePort, scope?: StateStoreOptions): void {
     this.dbManager = db;
+    if (scope !== undefined) {
+      this.scope = scope;
+    }
+  }
+
+  /** Tenant key for this service's rows — the workspace, falling back to the shared default. */
+  private resolveTenantId(): string {
+    return resolveContinuityScopeId(this.scope);
   }
 
   /**
@@ -103,21 +125,25 @@ export class VersionHistoryService {
 
     try {
       const db = this.getDb();
+      const tenantId = this.resolveTenantId();
 
       // Get current max version
       const row = db.queryOne<{ max_version: number | null }>(
         `SELECT MAX(version) as max_version FROM version_history
-         WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?`,
-        [resourceType, resourceId]
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+        [tenantId, resourceType, resourceId]
       );
       const currentVersion = row?.max_version ?? 0;
       const newVersion = currentVersion + 1;
 
       // Insert new version
       db.run(
-        `INSERT INTO version_history (tenant_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
-         VALUES ('default', ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          tenantId,
+          this.scope?.organizationId ?? null,
+          this.scope?.workspaceId ?? null,
           resourceType,
           resourceId,
           newVersion,
@@ -131,18 +157,26 @@ export class VersionHistoryService {
       // Prune old versions if exceeding max
       const count = db.queryOne<{ cnt: number }>(
         `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?`,
-        [resourceType, resourceId]
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+        [tenantId, resourceType, resourceId]
       );
 
       if (count && count.cnt > config.max_versions) {
         db.run(
           `DELETE FROM version_history WHERE id NOT IN (
             SELECT id FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
+            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
             ORDER BY version DESC LIMIT ?
-          ) AND tenant_id = 'default' AND resource_type = ? AND resource_id = ?`,
-          [resourceType, resourceId, config.max_versions, resourceType, resourceId]
+          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+          [
+            tenantId,
+            resourceType,
+            resourceId,
+            config.max_versions,
+            tenantId,
+            resourceType,
+            resourceId,
+          ]
         );
         this.logger.debug(`Pruned history for ${resourceId} to ${config.max_versions} versions`);
       }
@@ -162,13 +196,14 @@ export class VersionHistoryService {
   async loadHistory(resourceType: ResourceType, resourceId: string): Promise<HistoryFile | null> {
     try {
       const db = this.getDb();
+      const tenantId = this.resolveTenantId();
 
       const rows = db.query<VersionRow>(
         `SELECT version, snapshot, diff_summary, description, created_at
          FROM version_history
-         WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
          ORDER BY version DESC`,
-        [resourceType, resourceId]
+        [tenantId, resourceType, resourceId]
       );
 
       if (rows.length === 0) {
@@ -207,12 +242,13 @@ export class VersionHistoryService {
   ): Promise<VersionEntry | null> {
     try {
       const db = this.getDb();
+      const tenantId = this.resolveTenantId();
 
       const row = db.queryOne<VersionRow>(
         `SELECT version, snapshot, diff_summary, description, created_at
          FROM version_history
-         WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ? AND version = ?`,
-        [resourceType, resourceId, version]
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`,
+        [tenantId, resourceType, resourceId, version]
       );
 
       if (!row) {
@@ -240,11 +276,12 @@ export class VersionHistoryService {
   async getLatestVersion(resourceType: ResourceType, resourceId: string): Promise<number> {
     try {
       const db = this.getDb();
+      const tenantId = this.resolveTenantId();
 
       const row = db.queryOne<{ max_version: number | null }>(
         `SELECT MAX(version) as max_version FROM version_history
-         WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?`,
-        [resourceType, resourceId]
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+        [tenantId, resourceType, resourceId]
       );
 
       return row?.max_version ?? 0;
@@ -336,11 +373,12 @@ export class VersionHistoryService {
   async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<boolean> {
     try {
       const db = this.getDb();
+      const tenantId = this.resolveTenantId();
 
       db.run(
         `DELETE FROM version_history
-         WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?`,
-        [resourceType, resourceId]
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+        [tenantId, resourceType, resourceId]
       );
 
       this.logger.debug(`Deleted history for ${resourceType}/${resourceId}`);

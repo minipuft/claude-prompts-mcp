@@ -1,8 +1,12 @@
 /**
  * HTTP MCP Client
  *
- * Test utilities for E2E testing via HTTP/SSE transport.
+ * Test utilities for E2E testing over the Streamable HTTP transport.
  * Avoids Jest/ESM/spawn STDIO capture issues by using HTTP endpoints.
+ *
+ * "SSE" below refers to `text/event-stream` *framing*, which Streamable HTTP
+ * still uses for responses — not to the HTTP+SSE transport, which was removed
+ * with the SDK v2 upgrade along with the two client helpers that drove it.
  */
 
 import { spawn, ChildProcess } from 'child_process';
@@ -43,7 +47,8 @@ export function startServerWithHttp(
   port: number,
   options: { transport?: string; quiet?: boolean; debug?: boolean } = {}
 ): ChildProcess {
-  const transport = options.transport || 'sse';
+  // 'sse' was the default until the HTTP+SSE transport was removed with SDK v2.
+  const transport = options.transport || 'streamable-http';
   const args = [SERVER_PATH, `--transport=${transport}`];
 
   if (options.quiet !== false) {
@@ -259,258 +264,6 @@ export async function sendMcpRequestViaHttp(
 }
 
 /**
- * Establish SSE connection and send MCP request, wait for response
- *
- * MCP SSE Protocol:
- * 1. Client connects to /mcp via GET (SSE stream)
- * 2. Server sends 'endpoint' event with URL to POST messages to
- * 3. Client POSTs JSON-RPC requests to that endpoint
- * 4. Server sends responses via the SSE stream
- */
-export async function sendMcpRequestWithSse(
-  baseUrl: string,
-  method: string,
-  params: Record<string, unknown> = {},
-  requestId: number = 1,
-  options: { timeout?: number } = {}
-): Promise<unknown> {
-  const timeout = options.timeout || 10000;
-
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      sseReq.destroy();
-      reject(new Error(`MCP request timed out after ${timeout}ms`));
-    }, timeout);
-
-    let messagesEndpoint: string | null = null;
-    let currentEvent: string | null = null;
-
-    // Open SSE connection
-    const sseUrl = new URL(`${baseUrl}/mcp`);
-    const sseReq = http.get(sseUrl, (sseRes) => {
-      let buffer = '';
-
-      sseRes.on('data', (chunk: Buffer) => {
-        buffer += chunk.toString();
-
-        // Parse SSE events line by line
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-
-          // Track event type
-          if (trimmed.startsWith('event:')) {
-            currentEvent = trimmed.slice(6).trim();
-            continue;
-          }
-
-          // Handle data lines
-          if (trimmed.startsWith('data:')) {
-            const data = trimmed.slice(5).trim();
-
-            // Handle 'endpoint' event - tells us where to POST messages
-            if (currentEvent === 'endpoint') {
-              messagesEndpoint = data;
-              currentEvent = null;
-
-              // Now that we have the endpoint, send the request
-              const request = {
-                jsonrpc: '2.0',
-                id: requestId,
-                method,
-                params,
-              };
-
-              // Use the provided endpoint URL (may include session info)
-              const postUrl = messagesEndpoint.startsWith('http')
-                ? messagesEndpoint
-                : `${baseUrl}${messagesEndpoint}`;
-
-              httpPost(postUrl, request).catch((err) => {
-                clearTimeout(timer);
-                sseReq.destroy();
-                reject(err);
-              });
-              continue;
-            }
-
-            // Handle 'message' event - contains the response
-            if (currentEvent === 'message') {
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.id === requestId) {
-                  clearTimeout(timer);
-                  sseReq.destroy();
-
-                  if (parsed.error) {
-                    reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
-                  } else {
-                    resolve(parsed.result);
-                  }
-                  return;
-                }
-              } catch {
-                // Not valid JSON, continue
-              }
-              currentEvent = null;
-              continue;
-            }
-
-            // Also check for response without explicit event type (fallback)
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.id === requestId) {
-                clearTimeout(timer);
-                sseReq.destroy();
-
-                if (parsed.error) {
-                  reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
-                } else {
-                  resolve(parsed.result);
-                }
-                return;
-              }
-            } catch {
-              // Not our response, continue
-            }
-          }
-
-          // Empty line resets event type
-          if (trimmed === '') {
-            currentEvent = null;
-          }
-        }
-      });
-
-      sseRes.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
-
-    sseReq.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
-}
-
-/**
- * Send several MCP requests over ONE SSE session, in order.
- *
- * `sendMcpRequestWithSse` opens a fresh `GET /mcp` per call, and the server issues a new session
- * per connection — so two of those calls are two independent sessions, not a conversation. The
- * server attaches one transport to the shared MCP server at a time, so whether the second session
- * can attach depends on whether the first connection's `close` has propagated yet. That is timing,
- * and timing tracks machine load: measured green on an idle machine and red immediately after
- * `test:integration`, which is why this read as a mysterious transport hang for so long.
- *
- * A real MCP client holds one stream open and sends many messages over it. This does the same, so
- * an `initialize` followed by another request is one conversation rather than a race.
- */
-export async function sendMcpRequestsOverSseSession(
-  baseUrl: string,
-  requests: Array<{ method: string; params?: Record<string, unknown> }>,
-  options: { timeout?: number } = {}
-): Promise<unknown[]> {
-  const timeout = options.timeout || 15000;
-
-  return new Promise((resolve, reject) => {
-    const results: unknown[] = [];
-    const pending = new Map<number, (message: Record<string, any>) => void>();
-    let settled = false;
-    let messagesEndpoint: string | null = null;
-    let currentEvent: string | null = null;
-    let buffer = '';
-
-    const finish = (err?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      sseReq.destroy();
-      err ? reject(err) : resolve(results);
-    };
-
-    const timer = setTimeout(
-      () => finish(new Error(`MCP session timed out after ${timeout}ms`)),
-      timeout
-    );
-
-    /** Dispatch request `index` and wait for the matching id before sending the next. */
-    const sendNext = (index: number) => {
-      if (index >= requests.length) return finish();
-      const id = index + 1;
-      const { method, params = {} } = requests[index];
-
-      pending.set(id, (message) => {
-        if (message.error) {
-          return finish(new Error(message.error.message || JSON.stringify(message.error)));
-        }
-        results.push(message.result);
-        sendNext(index + 1);
-      });
-
-      const postUrl = messagesEndpoint!.startsWith('http')
-        ? messagesEndpoint!
-        : `${baseUrl}${messagesEndpoint}`;
-      httpPost(postUrl, { jsonrpc: '2.0', id, method, params }).catch((err) => finish(err));
-    };
-
-    const sseReq = http.get(new URL(`${baseUrl}/mcp`), (sseRes) => {
-      sseRes.on('data', (chunk: Buffer) => {
-        buffer += chunk.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed === '') {
-            currentEvent = null;
-            continue;
-          }
-          if (trimmed.startsWith('event:')) {
-            currentEvent = trimmed.slice(6).trim();
-            continue;
-          }
-          if (!trimmed.startsWith('data:')) continue;
-          const data = trimmed.slice(5).trim();
-
-          if (currentEvent === 'endpoint') {
-            currentEvent = null;
-            messagesEndpoint = data;
-            sendNext(0);
-            continue;
-          }
-
-          // The server emits an `error` event when it cannot attach this connection; without this
-          // the stream would simply stay silent and the client would blame its own timeout.
-          if (currentEvent === 'error') {
-            currentEvent = null;
-            return finish(new Error(`server refused the SSE session: ${data}`));
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            const resolvePending = pending.get(parsed.id);
-            if (resolvePending) {
-              pending.delete(parsed.id);
-              resolvePending(parsed);
-            }
-          } catch {
-            // Keepalive or non-JSON frame.
-          }
-        }
-      });
-      sseRes.on('error', (err) => finish(err));
-    });
-
-    sseReq.on('error', (err) => finish(err));
-  });
-}
-
-/**
  * Helper to sleep for a duration
  */
 function sleep(ms: number): Promise<void> {
@@ -520,7 +273,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * Parse response body that may be JSON or SSE format
  */
-function parseJsonOrSse(body: string, expectedId?: number): { result?: unknown; error?: unknown } {
+export function parseJsonOrSse(
+  body: string,
+  expectedId?: number
+): { result?: unknown; error?: unknown } {
   const trimmed = body.trim();
 
   // Try direct JSON parse first
@@ -579,7 +335,7 @@ export class StreamableHttpMcpClient {
   /**
    * Initialize the session by sending an initialize request
    */
-  async initialize(): Promise<{ sessionId: string; capabilities: unknown }> {
+  async initialize(): Promise<{ sessionId: string | null; capabilities: unknown }> {
     const request = {
       jsonrpc: '2.0',
       id: 1,
@@ -616,23 +372,23 @@ export class StreamableHttpMcpClient {
     }
 
     return {
-      sessionId: this.sessionId || '',
+      sessionId: this.sessionId,
       capabilities: parsed.result,
     };
   }
 
   /**
-   * Send a request using the established session
+   * Send a request.
+   *
+   * Protocol revision 2026-07-28 removed protocol sessions, so a session id is
+   * no longer required and the server issues none. The header is still sent
+   * when one exists, which keeps this client usable against a 2025-era server.
    */
   async request(
     method: string,
     params: Record<string, unknown> = {},
     requestId: number = 1
   ): Promise<unknown> {
-    if (!this.sessionId) {
-      throw new Error('Session not initialized. Call initialize() first.');
-    }
-
     const request = {
       jsonrpc: '2.0',
       id: requestId,
@@ -640,10 +396,14 @@ export class StreamableHttpMcpClient {
       params,
     };
 
-    const response = await httpPost(`${this.baseUrl}/mcp`, request, {
-      'mcp-session-id': this.sessionId,
+    const headers: Record<string, string> = {
       Accept: 'application/json, text/event-stream',
-    });
+    };
+    if (this.sessionId) {
+      headers['mcp-session-id'] = this.sessionId;
+    }
+
+    const response = await httpPost(`${this.baseUrl}/mcp`, request, headers);
 
     if (response.status !== 200) {
       throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
@@ -758,3 +518,124 @@ export async function killServer(proc: ChildProcess, timeout = 5000): Promise<vo
 }
 
 export { PROJECT_ROOT, SERVER_PATH };
+
+// ─── Protocol revision 2026-07-28 ───────────────────────────────────────────
+
+/** Protocol revision that removed the `initialize` handshake and sessions. */
+export const MODERN_PROTOCOL_VERSION = '2026-07-28';
+
+/**
+ * `_meta` envelope keys the revision requires on every request.
+ *
+ * Duplicated from `@modelcontextprotocol/server` rather than imported: this
+ * fixture exists to prove the wire contract, so it has to state the strings a
+ * third-party client would send. Importing the SDK's constants would make the
+ * test agree with the server by construction even if both drifted from spec.
+ */
+export const MODERN_META_KEYS = {
+  clientInfo: 'io.modelcontextprotocol/clientInfo',
+  clientCapabilities: 'io.modelcontextprotocol/clientCapabilities',
+  protocolVersion: 'io.modelcontextprotocol/protocolVersion',
+} as const;
+
+/**
+ * A 2026-07-28 client.
+ *
+ * Two things separate it from {@link StreamableHttpMcpClient}: there is no
+ * `initialize` handshake and no session, and the edge rejects any request whose
+ * headers and body disagree — so `Mcp-Method` accompanies every call and
+ * `Mcp-Name` accompanies `tools/call`.
+ */
+export class ModernMcpClient {
+  private baseUrl: string;
+  private clientName: string;
+
+  constructor(baseUrl: string, clientName = 'e2e-modern-client') {
+    this.baseUrl = baseUrl;
+    this.clientName = clientName;
+  }
+
+  private envelope(): Record<string, unknown> {
+    return {
+      [MODERN_META_KEYS.clientInfo]: { name: this.clientName, version: '1.0.0' },
+      [MODERN_META_KEYS.clientCapabilities]: {},
+      [MODERN_META_KEYS.protocolVersion]: MODERN_PROTOCOL_VERSION,
+    };
+  }
+
+  /**
+   * `partialMeta` drops `clientCapabilities` while keeping the rest. That is a
+   * request declaring modern intent but violating the envelope contract — a
+   * distinct case from omitting `_meta` entirely, which is simply a 2025-era
+   * request and is served by the stateless fallback.
+   */
+  private metaFor(options: { partialMeta?: boolean }): Record<string, unknown> {
+    const meta = this.envelope();
+    if (options.partialMeta) {
+      delete meta[MODERN_META_KEYS.clientCapabilities];
+    }
+    return meta;
+  }
+
+  /**
+   * Send a request, returning the raw HTTP response so callers can assert on
+   * status and error bodies as well as results.
+   */
+  async send(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId = 1,
+    options: {
+      toolName?: string;
+      omitMethodHeader?: boolean;
+      omitMeta?: boolean;
+      partialMeta?: boolean;
+    } = {}
+  ): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json, text/event-stream',
+    };
+    if (!options.omitMethodHeader) {
+      headers['Mcp-Method'] = method;
+    }
+    if (options.toolName) {
+      headers['Mcp-Name'] = options.toolName;
+    }
+
+    const body = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method,
+      params: options.omitMeta ? params : { ...params, _meta: this.metaFor(options) },
+    };
+
+    return httpPost(`${this.baseUrl}/mcp`, body, headers);
+  }
+
+  /** Send a request and unwrap its JSON-RPC result, throwing on error. */
+  async request(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId = 1,
+    options: { toolName?: string } = {}
+  ): Promise<unknown> {
+    const response = await this.send(method, params, requestId, options);
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+    const parsed = parseJsonOrSse(response.body, requestId);
+    if (parsed.error) {
+      throw new Error(JSON.stringify(parsed.error));
+    }
+    return parsed.result;
+  }
+
+  /** `tools/call`, which additionally requires the `Mcp-Name` header. */
+  async callTool(
+    name: string,
+    args: Record<string, unknown> = {},
+    requestId = 1
+  ): Promise<unknown> {
+    return this.request('tools/call', { name, arguments: args }, requestId, { toolName: name });
+  }
+}

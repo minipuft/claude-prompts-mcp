@@ -7,7 +7,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
-import type { FormatterExecutionContext } from '#shared/types/chain-execution.js';
+import type { FormatterExecutionContext, StepLifecycle } from '#shared/types/chain-execution.js';
 import type { ResponseFormatterPort } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { SinglePromptFormattingContext } from '../../formatting/formatting-context.js';
@@ -41,12 +41,16 @@ export class ResponseFormattingStage extends BasePipelineStage {
   private emitChainTerminalRecord(context: ExecutionContext): void {
     if (this.executionRecordStore === null) return;
     const session = context.sessionContext;
-    if (session === undefined || !context.state.session.chainComplete) return;
+    if (session === undefined) return;
+
+    const status = resolveTerminalStatus(context);
+    if (status === undefined) return;
+
     const completedAt = Date.now();
     this.executionRecordStore.append({
       sessionId: session.sessionId,
       chainId: session.chainId,
-      status: 'completed',
+      status,
       startedAt: completedAt,
       completedAt,
       scope: context.getScopeOptions(),
@@ -174,4 +178,22 @@ export class ResponseFormattingStage extends BasePipelineStage {
 
     return formatterContext;
   }
+}
+
+/**
+ * Which terminal record, if any, this run has earned.
+ *
+ * Abort was previously unobservable in the ledger: `state.session.aborted` is written by
+ * GateVerdictProcessor and the shell-verification stage, and was read by nothing — so a
+ * user-aborted chain left its last record at `working` permanently. Aborted is checked
+ * first because a run can be flagged complete and aborted in the same pass, and the abort
+ * is the more specific outcome.
+ *
+ * Returns undefined for a run still in progress, which is not a terminal state and must
+ * not produce a record.
+ */
+function resolveTerminalStatus(context: ExecutionContext): StepLifecycle | undefined {
+  if (context.state.session.aborted === true) return 'cancelled';
+  if (context.state.session.chainComplete) return 'completed';
+  return undefined;
 }

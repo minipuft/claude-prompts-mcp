@@ -48,6 +48,14 @@ class MockVersioningConfigProvider implements VersioningConfigProvider {
     return this.config;
   }
 
+  /**
+   * Required by VersioningConfigProvider. Absent since this file was written, which left three
+   * standing type errors in the ratchet baseline; every new construction surfaced the same one.
+   */
+  getServerRoot(): string {
+    return process.cwd();
+  }
+
   setConfig(config: Partial<VersioningConfig>): void {
     this.config = { ...this.config, ...config };
   }
@@ -284,6 +292,83 @@ describe('Version History Workflow Integration', () => {
       const limitedHistory = await manager.history(3);
       expect(limitedHistory!.versions).toHaveLength(3);
       expect(limitedHistory!.versions[0].version).toBe(6); // Still newest first
+    });
+  });
+
+  /**
+   * Tier 4 — version_history workspace scoping.
+   *
+   * All nine query sites filtered a hardcoded `tenant_id = 'default'` literal, so every project
+   * sharing one state.db read, wrote, and pruned the same rollback history. These read the table
+   * directly: `getHistory()` projects rows without the scope columns, so asserting through it
+   * would pass whatever those columns held.
+   */
+  describe('workspace scoping', () => {
+    it('stamps the configured workspace on rows it writes', async () => {
+      const scoped = new VersionHistoryService({
+        logger: mockLogger as unknown as Logger,
+        configManager: mockConfigProvider,
+        dbManager,
+        scope: { workspaceId: 'ws-alpha', organizationId: 'org-alpha' },
+      });
+
+      await scoped.saveVersion(
+        'prompt',
+        'scoped-resource',
+        { id: 'scoped-resource' },
+        {
+          description: 'scoped write',
+        }
+      );
+
+      const rows = dbManager.query<{
+        tenant_id: string;
+        workspace_id: string | null;
+        organization_id: string | null;
+      }>(`SELECT tenant_id, workspace_id, organization_id FROM version_history`);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.workspace_id).toBe('ws-alpha');
+      expect(rows[0]?.organization_id).toBe('org-alpha');
+      // tenant_id derives from the same scope rather than staying the literal 'default' that
+      // made every project's rollback history indistinguishable.
+      expect(rows[0]?.tenant_id).toBe('ws-alpha');
+    });
+
+    it('does not let one workspace read or version over another', async () => {
+      const alpha = new VersionHistoryService({
+        logger: mockLogger as unknown as Logger,
+        configManager: mockConfigProvider,
+        dbManager,
+        scope: { workspaceId: 'ws-alpha' },
+      });
+      const beta = new VersionHistoryService({
+        logger: mockLogger as unknown as Logger,
+        configManager: mockConfigProvider,
+        dbManager,
+        scope: { workspaceId: 'ws-beta' },
+      });
+
+      await alpha.saveVersion('prompt', 'shared-id', { v: 'a1' }, { description: 'a1' });
+      await alpha.saveVersion('prompt', 'shared-id', { v: 'a2' }, { description: 'a2' });
+
+      // Same resource id in another workspace must start at version 1, not continue alpha's
+      // sequence — MAX(version) is scoped, which is why writes and reads had to move together.
+      await beta.saveVersion('prompt', 'shared-id', { v: 'b1' }, { description: 'b1' });
+
+      const betaRows = dbManager.query<{ version: number }>(
+        `SELECT version FROM version_history WHERE tenant_id = 'ws-beta' ORDER BY version`
+      );
+      const alphaRows = dbManager.query<{ version: number }>(
+        `SELECT version FROM version_history WHERE tenant_id = 'ws-alpha' ORDER BY version`
+      );
+
+      expect(betaRows.map((r) => r.version)).toEqual([1]);
+      expect(alphaRows.map((r) => r.version)).toEqual([1, 2]);
+
+      // Reads are scoped too, not just writes: alpha sees its own two versions and none of beta's.
+      expect(await alpha.getLatestVersion('prompt', 'shared-id')).toBe(2);
+      expect(await beta.getLatestVersion('prompt', 'shared-id')).toBe(1);
     });
   });
 

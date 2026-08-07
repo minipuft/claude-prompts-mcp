@@ -43,6 +43,8 @@ type InjectionConfigProvider = () => InjectionConfig;
  */
 export class InjectionControlStage extends BasePipelineStage {
   readonly name = 'InjectionControl';
+  readonly provides = ['state.injection'] as const;
+  readonly requires = ['sessionContext.currentStep'] as const;
 
   private injectionService: InjectionDecisionService | null = null;
 

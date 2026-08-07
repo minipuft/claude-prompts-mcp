@@ -25,9 +25,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type {
   ScriptExecutorPort,
   ToolDetectionServicePort,
-  LoadedScriptTool,
   ScriptExecutionResult,
-  ToolDetectionMatch,
 } from '#shared/types/index.js';
 import type {
   DetectedReference,

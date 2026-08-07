@@ -2,12 +2,17 @@
  * Standalone version-history functions for CLI consumption.
  *
  * SQLite-backed implementation (runtime-state/state.db), replacing legacy sidecar history files.
- * Uses a small embedded Python sqlite3 helper so APIs remain synchronous.
+ * Reads and writes `state.db` through `node:sqlite`, whose `DatabaseSync` is synchronous,
+ * so the exported API stays synchronous.
+ *
+ * This module is a READER and WRITER of `version_history` but never its schema owner —
+ * `SqliteEngine.applySchema()` holds that exclusively. See `runSqlite` for why that
+ * matters: a second `ensure_schema` here used to leave the server unable to boot.
  */
 
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import type {
   VersionEntry,
@@ -16,6 +21,9 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
+
+import { deriveProjectScopeId } from '#shared/utils/project-scope.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 const DEFAULT_MAX_VERSIONS = 50;
 
@@ -26,7 +34,7 @@ interface ResourceRef {
   resourceId: string;
 }
 
-interface PythonRequest {
+interface HistoryRequest {
   action:
     | 'load_history'
     | 'get_version'
@@ -51,7 +59,7 @@ interface PythonRequest {
   new_resource_id?: string;
 }
 
-interface PythonResponse {
+interface HistoryResponse {
   success: boolean;
   error?: string;
   history?: HistoryFile | null;
@@ -63,269 +71,6 @@ interface PythonResponse {
   restored_version?: number;
   snapshot?: Record<string, unknown>;
 }
-
-const PYTHON_DB_HELPER = `
-import json
-import sqlite3
-import sys
-
-def respond(payload):
-    print(json.dumps(payload))
-    sys.exit(0)
-
-def load_rows(conn, resource_type, resource_id):
-    cursor = conn.execute(
-        """
-        SELECT version, snapshot, diff_summary, description, created_at
-        FROM version_history
-        WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
-        ORDER BY version DESC
-        """,
-        (resource_type, resource_id),
-    )
-    rows = cursor.fetchall()
-    versions = []
-    for row in rows:
-        versions.append(
-            {
-                "version": int(row[0]),
-                "date": row[4],
-                "snapshot": json.loads(row[1]),
-                "diff_summary": row[2] or "",
-                "description": row[3] or "",
-            }
-        )
-    current_version = versions[0]["version"] if len(versions) > 0 else 0
-    return {
-        "resource_type": resource_type,
-        "resource_id": resource_id,
-        "current_version": current_version,
-        "versions": versions,
-    }
-
-def ensure_schema(conn):
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS version_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tenant_id TEXT NOT NULL DEFAULT 'default',
-            resource_type TEXT NOT NULL,
-            resource_id TEXT NOT NULL,
-            version INTEGER NOT NULL,
-            snapshot TEXT NOT NULL,
-            diff_summary TEXT DEFAULT '',
-            description TEXT DEFAULT '',
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.commit()
-
-def latest_version(conn, resource_type, resource_id):
-    row = conn.execute(
-        """
-        SELECT MAX(version)
-        FROM version_history
-        WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
-        """,
-        (resource_type, resource_id),
-    ).fetchone()
-    return int(row[0] or 0)
-
-def prune(conn, resource_type, resource_id, max_versions):
-    conn.execute(
-        """
-        DELETE FROM version_history
-        WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
-          AND id NOT IN (
-            SELECT id
-            FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
-            ORDER BY version DESC
-            LIMIT ?
-          )
-        """,
-        (resource_type, resource_id, resource_type, resource_id, max_versions),
-    )
-
-try:
-    payload = json.loads(sys.argv[1])
-    conn = sqlite3.connect(payload["db_path"])
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.row_factory = sqlite3.Row
-    ensure_schema(conn)
-
-    action = payload["action"]
-    resource_type = payload["resource_type"]
-    resource_id = payload["resource_id"]
-
-    if action == "load_history":
-        history = load_rows(conn, resource_type, resource_id)
-        if len(history["versions"]) == 0:
-            respond({"success": True, "history": None})
-        respond({"success": True, "history": history})
-
-    if action == "get_version":
-        version = int(payload["version"])
-        row = conn.execute(
-            """
-            SELECT version, snapshot, diff_summary, description, created_at
-            FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ? AND version = ?
-            """,
-            (resource_type, resource_id, version),
-        ).fetchone()
-        if row is None:
-            respond({"success": True, "entry": None})
-        entry = {
-            "version": int(row["version"]),
-            "date": row["created_at"],
-            "snapshot": json.loads(row["snapshot"]),
-            "diff_summary": row["diff_summary"] or "",
-            "description": row["description"] or "",
-        }
-        respond({"success": True, "entry": entry})
-
-    if action == "save_version":
-        current = latest_version(conn, resource_type, resource_id)
-        new_version = current + 1
-        conn.execute(
-            """
-            INSERT INTO version_history (
-                tenant_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "default",
-                resource_type,
-                resource_id,
-                new_version,
-                json.dumps(payload["snapshot"]),
-                payload.get("diff_summary") or "",
-                payload.get("description") or f"Version {new_version}",
-                payload.get("created_at"),
-            ),
-        )
-        prune(conn, resource_type, resource_id, int(payload.get("max_versions") or 50))
-        conn.commit()
-        respond({"success": True, "version": new_version})
-
-    if action == "compare_versions":
-        from_version = int(payload["from_version"])
-        to_version = int(payload["to_version"])
-        from_row = conn.execute(
-            """
-            SELECT version, snapshot, diff_summary, description, created_at
-            FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ? AND version = ?
-            """,
-            (resource_type, resource_id, from_version),
-        ).fetchone()
-        to_row = conn.execute(
-            """
-            SELECT version, snapshot, diff_summary, description, created_at
-            FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ? AND version = ?
-            """,
-            (resource_type, resource_id, to_version),
-        ).fetchone()
-        if from_row is None:
-            respond({"success": False, "error": f"Version {from_version} not found"})
-        if to_row is None:
-            respond({"success": False, "error": f"Version {to_version} not found"})
-        respond(
-            {
-                "success": True,
-                "from": {
-                    "version": int(from_row["version"]),
-                    "date": from_row["created_at"],
-                    "snapshot": json.loads(from_row["snapshot"]),
-                    "diff_summary": from_row["diff_summary"] or "",
-                    "description": from_row["description"] or "",
-                },
-                "to": {
-                    "version": int(to_row["version"]),
-                    "date": to_row["created_at"],
-                    "snapshot": json.loads(to_row["snapshot"]),
-                    "diff_summary": to_row["diff_summary"] or "",
-                    "description": to_row["description"] or "",
-                },
-            }
-        )
-
-    if action == "rollback":
-        target = int(payload["target_version"])
-        target_row = conn.execute(
-            """
-            SELECT version, snapshot
-            FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ? AND version = ?
-            """,
-            (resource_type, resource_id, target),
-        ).fetchone()
-        if target_row is None:
-            respond({"success": False, "error": f"Version {target} not found"})
-
-        current = latest_version(conn, resource_type, resource_id)
-        saved = current + 1
-        conn.execute(
-            """
-            INSERT INTO version_history (
-                tenant_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "default",
-                resource_type,
-                resource_id,
-                saved,
-                json.dumps(payload["current_snapshot"]),
-                "",
-                f"Pre-rollback snapshot (before reverting to v{target})",
-                payload.get("created_at"),
-            ),
-        )
-        prune(conn, resource_type, resource_id, int(payload.get("max_versions") or 50))
-        conn.commit()
-        respond(
-            {
-                "success": True,
-                "saved_version": saved,
-                "restored_version": target,
-                "snapshot": json.loads(target_row["snapshot"]),
-            }
-        )
-
-    if action == "delete_history":
-        conn.execute(
-            """
-            DELETE FROM version_history
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
-            """,
-            (resource_type, resource_id),
-        )
-        conn.commit()
-        respond({"success": True})
-
-    if action == "rename_history":
-        new_resource_id = payload.get("new_resource_id")
-        if not new_resource_id:
-            respond({"success": False, "error": "new_resource_id is required"})
-        conn.execute(
-            """
-            UPDATE version_history
-            SET resource_id = ?
-            WHERE tenant_id = 'default' AND resource_type = ? AND resource_id = ?
-            """,
-            (new_resource_id, resource_type, resource_id),
-        )
-        conn.commit()
-        respond({"success": True})
-
-    respond({"success": False, "error": f"Unsupported action: {action}"})
-except Exception as error:
-    respond({"success": False, "error": str(error)})
-`;
 
 function resolveResourceRef(resourceDir: string): ResourceRef | null {
   const normalized = normalize(resourceDir).replace(/\\/g, '/');
@@ -370,36 +115,290 @@ function resolveStateDbPath(resourceDir: string): string | null {
   }
 }
 
-function runPython(request: PythonRequest): PythonResponse {
-  const pythonCandidates = ['python3', 'python'];
-  let lastError = 'No python runtime found';
+/**
+ * Resolve the tenant this process writes `version_history` under.
+ *
+ * Must agree with `VersionHistoryService.resolveTenantId()` on the server, which is
+ * `resolveContinuityScopeId(scope)` over the launch workspace. Same precedence applied
+ * here: an explicit `identity.launchDefaults.workspaceId` in config.json outranks the
+ * environment-derived id, which falls back to `'default'`.
+ *
+ * **Known limitation, stated rather than hidden**: a server launched with an explicit
+ * `--workspace-id` flag records that id, and nothing on disk tells the CLI what flag the
+ * server was started with. In that configuration the two still diverge. Closing it needs
+ * the server to persist its resolved scope where the CLI can read it — out of scope here,
+ * and narrower than the `'default'`-vs-workspace split this replaces.
+ */
+function resolveTenantId(dbPath: string): string {
+  const configured = readConfiguredWorkspaceId(dbPath);
+  const derived = deriveProjectScopeId()?.value;
+  return resolveContinuityScopeId({ workspaceId: configured ?? derived });
+}
 
-  for (const python of pythonCandidates) {
-    try {
-      const proc = spawnSync(python, ['-c', PYTHON_DB_HELPER, JSON.stringify(request)], {
-        encoding: 'utf8',
-      });
-      if (proc.error instanceof Error) {
-        lastError = proc.error.message;
-        continue;
-      }
-      if (proc.status !== 0) {
-        const stderr = proc.stderr.trim();
-        lastError = stderr !== '' ? stderr : `python exited with status ${proc.status}`;
-        continue;
-      }
-      const stdout = proc.stdout.trim();
-      if (stdout === '') {
-        lastError = 'python helper returned empty response';
-        continue;
-      }
-      return JSON.parse(stdout) as PythonResponse;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+/** Read `identity.launchDefaults.workspaceId` from the config.json beside runtime-state. */
+function readConfiguredWorkspaceId(dbPath: string): string | undefined {
+  const configPath = join(dirname(dirname(dbPath)), 'config.json');
+  try {
+    if (!existsSync(configPath)) {
+      return undefined;
     }
+    const parsed: unknown = JSON.parse(readFileSync(configPath, 'utf8'));
+    const workspaceId = (parsed as { identity?: { launchDefaults?: { workspaceId?: unknown } } })
+      ?.identity?.launchDefaults?.workspaceId;
+    return typeof workspaceId === 'string' && workspaceId.trim() !== ''
+      ? workspaceId.trim()
+      : undefined;
+  } catch {
+    // A malformed config is the server's problem to report, not the CLI's to crash on.
+    return undefined;
+  }
+}
+
+/**
+ * Run one history operation against `state.db` directly.
+ *
+ * Replaces a `spawnSync('python3', ...)` round-trip carrying an embedded sqlite3 script,
+ * from a Node process that already has `node:sqlite`. `DatabaseSync` is synchronous, so
+ * the exported API stays synchronous without the subprocess.
+ *
+ * **This deliberately does NOT create the schema.** The old helper carried its own
+ * `ensure_schema()` whose DDL predated the scope columns, so a CLI invocation on a fresh
+ * machine created `version_history` without `organization_id`/`workspace_id` and wrote no
+ * `schema_version` row. The engine then read version 0, took the "fresh" path, and
+ * `CREATE TABLE IF NOT EXISTS` silently no-opped against that table — leaving the column
+ * absent and the server unable to boot (`no such column: workspace_id`, thrown from
+ * `applySchema` while creating the scope index). `SqliteEngine.applySchema()` is the
+ * single owner of this DDL; the CLI reports a missing table instead of inventing one.
+ */
+function runSqlite(request: HistoryRequest): HistoryResponse {
+  if (!existsSync(request.db_path)) {
+    return { success: false, error: `state.db not found at ${request.db_path}` };
   }
 
-  return { success: false, error: lastError };
+  let db: DatabaseSync | undefined;
+  try {
+    db = new DatabaseSync(request.db_path);
+    db.exec('PRAGMA busy_timeout = 5000');
+    if (!versionHistoryExists(db)) {
+      return {
+        success: false,
+        error: 'version_history table is absent — start the MCP server once to create the schema',
+      };
+    }
+    return dispatch(db, request, resolveTenantId(request.db_path));
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    db?.close();
+  }
+}
+
+function versionHistoryExists(db: DatabaseSync): boolean {
+  const row = db
+    .prepare(`SELECT count(*) AS present FROM sqlite_master WHERE type='table' AND name=?`)
+    .get('version_history') as { present: number } | undefined;
+  return (row?.present ?? 0) > 0;
+}
+
+/** One persisted `version_history` row, before decoding the JSON snapshot. */
+interface HistoryRow {
+  version: number;
+  snapshot: string;
+  diff_summary: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
+
+function toEntry(row: HistoryRow): VersionEntry {
+  return {
+    version: Number(row.version),
+    date: row.created_at,
+    snapshot: JSON.parse(row.snapshot) as Record<string, unknown>,
+    diff_summary: row.diff_summary ?? '',
+    description: row.description ?? '',
+  };
+}
+
+function selectVersion(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  version: number
+): HistoryRow | undefined {
+  return db
+    .prepare(
+      `SELECT ${ENTRY_COLUMNS} FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`
+    )
+    .get(tenantId, request.resource_type, request.resource_id, version) as HistoryRow | undefined;
+}
+
+function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryRequest): number {
+  const row = db
+    .prepare(
+      `SELECT MAX(version) AS latest FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
+    )
+    .get(tenantId, request.resource_type, request.resource_id) as
+    { latest: number | null } | undefined;
+  return Number(row?.latest ?? 0);
+}
+
+/** Insert a snapshot at the next version and trim to `max_versions`. */
+function appendVersion(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  snapshot: Record<string, unknown>,
+  description: string,
+  diffSummary: string
+): number {
+  const version = latestVersion(db, tenantId, request) + 1;
+  db.prepare(
+    `INSERT INTO version_history
+       (tenant_id, organization_id, workspace_id, resource_type, resource_id,
+        version, snapshot, diff_summary, description, created_at)
+     VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    tenantId,
+    tenantId,
+    request.resource_type,
+    request.resource_id,
+    version,
+    JSON.stringify(snapshot),
+    diffSummary,
+    description,
+    request.created_at ?? new Date().toISOString()
+  );
+  prune(db, tenantId, request, request.max_versions ?? DEFAULT_MAX_VERSIONS);
+  return version;
+}
+
+function prune(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  maxVersions: number
+): void {
+  db.prepare(
+    `DELETE FROM version_history
+     WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+       AND id NOT IN (
+         SELECT id FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+         ORDER BY version DESC LIMIT ?
+       )`
+  ).run(
+    tenantId,
+    request.resource_type,
+    request.resource_id,
+    tenantId,
+    request.resource_type,
+    request.resource_id,
+    maxVersions
+  );
+}
+
+function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): HistoryFile {
+  const rows = db
+    .prepare(
+      `SELECT ${ENTRY_COLUMNS} FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+       ORDER BY version DESC`
+    )
+    .all(tenantId, request.resource_type, request.resource_id) as unknown as HistoryRow[];
+  const versions = rows.map(toEntry);
+  return {
+    resource_type: request.resource_type as HistoryFile['resource_type'],
+    resource_id: request.resource_id,
+    current_version: versions[0]?.version ?? 0,
+    versions,
+  };
+}
+
+/** Route one request to its SQL. Mirrors the action set the Python helper dispatched. */
+function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): HistoryResponse {
+  switch (request.action) {
+    case 'load_history': {
+      const history = loadRows(db, tenantId, request);
+      return { success: true, history: history.versions.length > 0 ? history : null };
+    }
+
+    case 'get_version': {
+      const row = selectVersion(db, tenantId, request, Number(request.version));
+      return { success: true, entry: row !== undefined ? toEntry(row) : null };
+    }
+
+    case 'save_version': {
+      const version = appendVersion(
+        db,
+        tenantId,
+        request,
+        request.snapshot ?? {},
+        request.description ?? '',
+        request.diff_summary ?? ''
+      );
+      return { success: true, version };
+    }
+
+    case 'compare_versions': {
+      const fromVersion = Number(request.from_version);
+      const toVersion = Number(request.to_version);
+      const fromRow = selectVersion(db, tenantId, request, fromVersion);
+      if (fromRow === undefined) {
+        return { success: false, error: `Version ${fromVersion} not found` };
+      }
+      const toRow = selectVersion(db, tenantId, request, toVersion);
+      if (toRow === undefined) {
+        return { success: false, error: `Version ${toVersion} not found` };
+      }
+      return { success: true, from: toEntry(fromRow), to: toEntry(toRow) };
+    }
+
+    case 'rollback': {
+      const target = Number(request.target_version);
+      const targetRow = selectVersion(db, tenantId, request, target);
+      if (targetRow === undefined) {
+        return { success: false, error: `Version ${target} not found` };
+      }
+      const saved = appendVersion(
+        db,
+        tenantId,
+        request,
+        request.current_snapshot ?? {},
+        `Pre-rollback snapshot (before reverting to v${target})`,
+        ''
+      );
+      return {
+        success: true,
+        saved_version: saved,
+        restored_version: target,
+        snapshot: JSON.parse(targetRow.snapshot) as Record<string, unknown>,
+      };
+    }
+
+    case 'delete_history': {
+      db.prepare(
+        `DELETE FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
+      ).run(tenantId, request.resource_type, request.resource_id);
+      return { success: true };
+    }
+
+    case 'rename_history': {
+      const newResourceId = request.new_resource_id;
+      if (newResourceId === undefined || newResourceId === '') {
+        return { success: false, error: 'new_resource_id is required' };
+      }
+      db.prepare(
+        `UPDATE version_history SET resource_id = ?
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
+      ).run(newResourceId, tenantId, request.resource_type, request.resource_id);
+      return { success: true };
+    }
+  }
 }
 
 function isNonEmptyString(value: string | undefined): value is string {
@@ -408,9 +407,9 @@ function isNonEmptyString(value: string | undefined): value is string {
 
 function createRequest(
   resourceDir: string,
-  action: PythonRequest['action'],
-  overrides?: Partial<Pick<PythonRequest, 'resource_type' | 'resource_id'>>
-): Partial<PythonRequest> | null {
+  action: HistoryRequest['action'],
+  overrides?: Partial<Pick<HistoryRequest, 'resource_type' | 'resource_id'>>
+): Partial<HistoryRequest> | null {
   const ref = resolveResourceRef(resourceDir);
   const dbPath = resolveStateDbPath(resourceDir);
   const resourceType = overrides?.resource_type ?? ref?.resourceType;
@@ -433,7 +432,7 @@ export function loadHistory(resourceDir: string): HistoryFile | null {
   if (request === null) {
     return null;
   }
-  const result = runPython(request as PythonRequest);
+  const result = runSqlite(request as HistoryRequest);
   if (!result.success) {
     return null;
   }
@@ -445,7 +444,7 @@ export function getVersion(resourceDir: string, version: number): VersionEntry |
   if (request === null) {
     return null;
   }
-  const result = runPython({ ...(request as PythonRequest), version });
+  const result = runSqlite({ ...(request as HistoryRequest), version });
   if (!result.success) {
     return null;
   }
@@ -466,8 +465,8 @@ export function compareVersions(
   if (request === null) {
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
-  const result = runPython({
-    ...(request as PythonRequest),
+  const result = runSqlite({
+    ...(request as HistoryRequest),
     from_version: fromVersion,
     to_version: toVersion,
   });
@@ -479,7 +478,6 @@ export function compareVersions(
 
 // ── Write operations ────────────────────────────────────────────────────────
 
-// eslint-disable-next-line max-params
 export function saveVersion(
   resourceDir: string,
   resourceType: ResourceType,
@@ -495,8 +493,8 @@ export function saveVersion(
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
 
-  const result = runPython({
-    ...(request as PythonRequest),
+  const result = runSqlite({
+    ...(request as HistoryRequest),
     snapshot,
     diff_summary: options?.diff_summary ?? '',
     description: options?.description,
@@ -509,7 +507,6 @@ export function saveVersion(
   return { success: true, version: result.version ?? 0 };
 }
 
-// eslint-disable-next-line max-params
 export function rollbackVersion(
   resourceDir: string,
   resourceType: ResourceType,
@@ -525,8 +522,8 @@ export function rollbackVersion(
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
 
-  const result = runPython({
-    ...(request as PythonRequest),
+  const result = runSqlite({
+    ...(request as HistoryRequest),
     target_version: targetVersion,
     current_snapshot: currentSnapshot,
     created_at: new Date().toISOString(),
@@ -548,7 +545,7 @@ export function deleteHistoryFile(resourceDir: string): boolean {
   if (request === null) {
     return false;
   }
-  const result = runPython(request as PythonRequest);
+  const result = runSqlite(request as HistoryRequest);
   return result.success;
 }
 
@@ -559,8 +556,8 @@ export function renameHistoryResource(resourceDir: string, oldId: string, newId:
   if (request === null) {
     return false;
   }
-  const result = runPython({
-    ...(request as PythonRequest),
+  const result = runSqlite({
+    ...(request as HistoryRequest),
     resource_id: oldId,
     new_resource_id: newId,
   });

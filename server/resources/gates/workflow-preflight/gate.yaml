@@ -17,7 +17,7 @@ pass_criteria:
   - type: inline_guidance
     regex_patterns:
       - 'step [0-9]|pre-flight|checklist'
-      - 'cognitive|cyclomatic'
+      - 'cognitive'
     keyword_count:
       layer: 1
       types: 1

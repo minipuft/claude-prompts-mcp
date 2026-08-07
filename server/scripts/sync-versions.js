@@ -18,6 +18,7 @@ const repoRoot = join(serverDir, '..');
 
 // Files to sync (path relative to appropriate root, key to update)
 const manifests = [
+  { path: join(repoRoot, 'package.json'), key: 'version' },
   { path: join(repoRoot, 'manifest.json'), key: 'version' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), key: 'version' },
   { path: join(repoRoot, '.release-please-manifest.json'), key: '.' },
@@ -51,6 +52,33 @@ for (const { path, key } of manifests) {
     console.error(`  ❌ ${path}: ${err.message}`);
     process.exit(1);
   }
+}
+
+// server.json (MCP registry manifest) carries the version twice: top-level and per package
+const serverJsonPath = join(repoRoot, 'server.json');
+try {
+  const data = readJson(serverJsonPath);
+  let changed = false;
+  if (data.version !== targetVersion) {
+    data.version = targetVersion;
+    changed = true;
+  }
+  for (const pkg of data.packages ?? []) {
+    if (pkg.version !== targetVersion) {
+      pkg.version = targetVersion;
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeJson(serverJsonPath, data);
+    console.log(`  ✅ server.json: → ${targetVersion} (top-level + packages)`);
+    updated++;
+  } else {
+    console.log(`  ⏭️  server.json: already ${targetVersion}`);
+  }
+} catch (err) {
+  console.error(`  ❌ ${serverJsonPath}: ${err.message}`);
+  process.exit(1);
 }
 
 console.log(`\n✅ Synced ${updated} file(s) to version ${targetVersion}`);

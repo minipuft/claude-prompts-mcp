@@ -15,7 +15,7 @@
 import { ArgumentHistoryEntry, ReviewContext, PersistedArgumentHistory } from './types.js';
 
 import type { Logger } from '#shared/types/index.js';
-import type { DatabasePort } from '#shared/types/persistence.js';
+import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 const DEFAULT_STATE: PersistedArgumentHistory = {
   version: '1.0.0',
@@ -40,8 +40,18 @@ export class ArgumentHistoryTracker {
   /** Maximum entries per chain (FIFO cleanup) */
   private readonly maxEntriesPerChain: number;
 
-  /** Database port for direct SQL persistence */
-  private db?: DatabasePort;
+  /**
+   * Scoped state store for persistence.
+   *
+   * Typed against the `shared/types` interface rather than `SqliteStateStore` itself: this file
+   * is Layer 3 (`modules/`) and `modules-no-infra-static` forbids reaching into `infra/` for the
+   * concrete store — static, dynamic, and type-only alike. The composition root builds the
+   * concrete store and injects it, which is what that rule's comment prescribes.
+   */
+  private store?: StateStore<PersistedArgumentHistory>;
+
+  /** Workspace scope stamped on every save and used to filter every load. */
+  private scope?: StateStoreOptions;
 
   /** Whether initialization has completed */
   private initialized: boolean = false;
@@ -51,24 +61,28 @@ export class ArgumentHistoryTracker {
    *
    * @param logger - Logger instance
    * @param maxEntriesPerChain - Maximum entries per chain (default: 50)
-   * @param dbManager - Optional DatabasePort for persistence (set later via setDatabasePort if not provided)
+   * @param store - Optional state store (set later via setStateStore if not provided)
+   * @param scope - Workspace scope for persistence
    */
   constructor(
     private logger: Logger,
     maxEntriesPerChain: number = 50,
-    dbManager?: DatabasePort
+    store?: StateStore<PersistedArgumentHistory>,
+    scope?: StateStoreOptions
   ) {
     this.maxEntriesPerChain = maxEntriesPerChain;
-    this.db = dbManager;
+    this.store = store;
+    this.scope = scope;
 
     this.logger.debug(
       `ArgumentHistoryTracker initialized (maxEntriesPerChain: ${this.maxEntriesPerChain})`
     );
   }
 
-  /** Late-bind DatabasePort (setter injection, matching codebase convention). */
-  setDatabasePort(db: DatabasePort): void {
-    this.db = db;
+  /** Late-bind the state store and its scope (setter injection, matching codebase convention). */
+  setStateStore(store: StateStore<PersistedArgumentHistory>, scope?: StateStoreOptions): void {
+    this.store = store;
+    this.scope = scope;
   }
 
   /**
@@ -80,7 +94,7 @@ export class ArgumentHistoryTracker {
       return;
     }
 
-    if (this.db) {
+    if (this.store) {
       await this.loadFromStore();
     }
     this.initialized = true;
@@ -336,7 +350,7 @@ export class ArgumentHistoryTracker {
    * Save argument history to SQLite via DatabasePort.
    */
   private async saveToStore(): Promise<void> {
-    if (!this.db) {
+    if (!this.store) {
       return;
     }
 
@@ -358,11 +372,7 @@ export class ArgumentHistoryTracker {
         sessionToChain,
       };
 
-      this.db.run('INSERT OR REPLACE INTO kv_state (tenant_id, key, state) VALUES (?, ?, ?)', [
-        'default',
-        'arg_history',
-        JSON.stringify(persistedData),
-      ]);
+      await this.store.save(persistedData, this.scope);
       this.logger.debug('Saved argument history to SQLite');
     } catch (error) {
       this.logger.error('Failed to save argument history:', error);
@@ -373,18 +383,16 @@ export class ArgumentHistoryTracker {
    * Load argument history from SQLite via DatabasePort.
    */
   private async loadFromStore(): Promise<void> {
-    if (!this.db) {
+    if (!this.store) {
       return;
     }
 
     try {
-      const row = this.db.queryOne<{ state: string }>(
-        'SELECT state FROM kv_state WHERE tenant_id = ? AND key = ?',
-        ['default', 'arg_history']
-      );
-      const persistedData: PersistedArgumentHistory = row
-        ? (JSON.parse(row.state) as PersistedArgumentHistory)
-        : DEFAULT_STATE;
+      // The store returns its configured default when no row matches this scope, so there is no
+      // separate not-found branch: a workspace with no history loads an empty map rather than
+      // another workspace's rows, which is the isolation the raw `tenant_id = 'default'` query
+      // could not express.
+      const persistedData: PersistedArgumentHistory = await this.store.load(this.scope);
 
       this.chainHistory.clear();
       Object.entries(persistedData.chains).forEach(([chainId, entries]) => {

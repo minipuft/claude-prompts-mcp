@@ -466,11 +466,256 @@ const noEmojiCharactersRule = {
   },
 };
 
+const DEFAULT_COMPAT_MARKER =
+  'backward[- ]compat|backwards compat|Kept for compat|Compatibility export';
+
+/**
+ * Forbids re-introducing pure re-export shim files.
+ *
+ * A shim here means a file whose entire body is import/export-from statements AND which carries a
+ * backward-compatibility marker. Such a file gives a symbol a second import path without owning
+ * anything: `rg` for the canonical path then misses every consumer using the alias path.
+ *
+ * Deliberately NOT flagged: a file that re-exports AND defines something of its own
+ * (`infra/logging/index.ts` re-exports `Logger` but is the 495-line logger implementation), and a
+ * barrel with no compat marker. The marker distinguishes "kept so old imports still resolve" from
+ * "this is the module's public surface".
+ *
+ * Ported from `scripts/validate-no-crosslayer-reexport.js`. The script decided "pure re-export" by
+ * testing each trimmed line against `/^(export\s|import\s|\}|\)|\{|type\s|[A-Za-z_$][\w$]*\s*,?$)/`
+ * — a shape that also accepts any bare identifier line, so a multi-line object literal or array of
+ * plain identifiers read as a re-export. The AST has no such ambiguity: a body node either is an
+ * import/export-from declaration or it is not. It also gets the comment/code split for free, which
+ * the script hand-rolled in `codeLines()`.
+ */
+const noCompatReexportShimRule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Forbids pure re-export files carrying a backward-compatibility marker, which give a symbol a second import path',
+    },
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          compatMarker: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      compatReexportShim:
+        'Pure re-export file with a backward-compatibility marker gives a symbol a second import path. Point consumers at the canonical module and delete the shim, or drop the compatibility wording if this is a real public surface.',
+    },
+  },
+  create(context) {
+    const options = context.options[0] ?? {};
+    const compatMarker = new RegExp(options.compatMarker ?? DEFAULT_COMPAT_MARKER, 'i');
+    const sourceCode = context.sourceCode ?? context.getSourceCode();
+
+    /** A re-export carries a source: `export … from '…'` / `export * from '…'` / `import … from '…'`. */
+    const isReExportNode = (node) =>
+      (node.type === 'ExportNamedDeclaration' && node.source !== null) ||
+      node.type === 'ExportAllDeclaration' ||
+      node.type === 'ImportDeclaration';
+
+    return {
+      Program(node) {
+        if (node.body.length === 0) {
+          return;
+        }
+        if (!node.body.every(isReExportNode)) {
+          return;
+        }
+        // An import-only file re-exports nothing; the script required at least one `from` clause
+        // reachable as an export, and a body of pure ImportDeclarations is not a shim.
+        const reExportsSomething = node.body.some(
+          (entry) =>
+            entry.type === 'ExportAllDeclaration' ||
+            (entry.type === 'ExportNamedDeclaration' && entry.source !== null)
+        );
+        if (!reExportsSomething) {
+          return;
+        }
+        const carriesMarker = sourceCode
+          .getAllComments()
+          .some((comment) => compatMarker.test(comment.value));
+        if (!carriesMarker) {
+          return;
+        }
+        context.report({ node, messageId: 'compatReexportShim' });
+      },
+    };
+  },
+};
+
+/**
+ * `MECHANISM: <disposition> — <qualifier> — <reason>`
+ *
+ * Both leading fields are lenient in the pattern and validated afterwards, so a marker naming an
+ * unrecognized disposition or qualifier reports which one is wrong rather than "no marker". The
+ * reason group is optional for the same purpose: an author who wrote half the marker is told which
+ * half is missing.
+ */
+const GUARD_MECHANISM_REGEX =
+  /MECHANISM:\s*([A-Za-z-]+)\s*[—–-]\s*([A-Za-z-]+)\s*(?:[—–-]\s*(.*))?/i;
+
+/**
+ * Two dispositions, each with its own closed qualifier vocabulary.
+ *
+ * `script` — the guard stays a standalone process, and the qualifier names the property that
+ * forces it. Anything outside these three belongs in a pass something already makes:
+ *
+ * - `reach`      — reads files the linter cannot see (`tests/`, `../cli/`, `../docs/`, non-TS
+ *                  artifacts). ESLint sees the lint root minus its ignores; nothing else.
+ * - `relation`   — compares two artifacts against each other. ESLint is single-file and cannot.
+ * - `resolution` — needs a resolved module path rather than a literal match — dependency-cruiser's
+ *                  job.
+ *
+ * `rehome` — the guard names none of the three and is pending a move; the qualifier is where it is
+ * going and the reason carries the plan row that owns the port.
+ *
+ * A pending guard declares this IN ITSELF rather than in a config allowlist. That is deliberate:
+ * an allowlist is a second place to update, and a rule only visits files that exist, so an entry
+ * naming a deleted guard is never reported (observed 2026-08-06 when a retired guard orphaned its
+ * entry). An in-file marker is deleted by the same `rm` that deletes the guard, so the stale-entry
+ * class cannot occur rather than being detected after the fact.
+ */
+const MECHANISM_QUALIFIERS = {
+  script: ['reach', 'relation', 'resolution'],
+  rehome: ['eslint', 'dependency-cruiser', 'jest'],
+};
+
+const findMechanismVerdict = (comments) => {
+  for (const comment of comments) {
+    const match = GUARD_MECHANISM_REGEX.exec(comment.value);
+    if (match) {
+      return { comment, disposition: match[1], qualifier: match[2], reason: match[3] ?? '' };
+    }
+  }
+  return undefined;
+};
+
+const requireGuardMechanismVerdictRule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Requires a validate-no-* guard script to state which property forces it to be a script rather than an ESLint or dependency-cruiser rule',
+    },
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          qualifiers: {
+            type: 'object',
+            additionalProperties: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      missingVerdict:
+        'This guard must declare "MECHANISM: <disposition> — <qualifier> — <reason>". Use "script" with one of ({{scriptQualifiers}}) when a linter structurally cannot do the job, or "rehome" with its destination when it is pending a move. A guard that can name neither belongs in a pass something already makes.',
+      unknownDisposition:
+        'Mechanism disposition "{{disposition}}" is not one of: {{dispositions}}.',
+      unknownQualifier:
+        'Mechanism qualifier "{{qualifier}}" is not valid for disposition "{{disposition}}" (expected one of: {{allowed}}).',
+      missingReason:
+        'Mechanism verdict names a disposition and qualifier but no reason. For "script", state what it reads or resolves that a linter cannot; for "rehome", name the plan row that owns the port.',
+    },
+  },
+  create(context) {
+    const qualifiers = context.options[0]?.qualifiers ?? MECHANISM_QUALIFIERS;
+    const dispositions = Object.keys(qualifiers);
+
+    return {
+      Program(node) {
+        const verdict = findMechanismVerdict(getSourceCode(context).getAllComments());
+
+        if (verdict === undefined) {
+          context.report({
+            node,
+            messageId: 'missingVerdict',
+            data: { scriptQualifiers: (qualifiers.script ?? []).join(', ') },
+          });
+          return;
+        }
+
+        const disposition = verdict.disposition.toLowerCase();
+        const allowedQualifiers = qualifiers[disposition];
+        if (allowedQualifiers === undefined) {
+          context.report({
+            node: verdict.comment,
+            messageId: 'unknownDisposition',
+            data: { disposition: verdict.disposition, dispositions: dispositions.join(', ') },
+          });
+          return;
+        }
+
+        if (!allowedQualifiers.includes(verdict.qualifier.toLowerCase())) {
+          context.report({
+            node: verdict.comment,
+            messageId: 'unknownQualifier',
+            data: {
+              qualifier: verdict.qualifier,
+              disposition,
+              allowed: allowedQualifiers.join(', '),
+            },
+          });
+          return;
+        }
+
+        if (verdict.reason.trim() === '') {
+          context.report({ node: verdict.comment, messageId: 'missingReason' });
+        }
+      },
+    };
+  },
+};
+
+/**
+ * `mode` reached as a property, in any of the four spellings a program can write it. Comments and
+ * string literals are deliberately absent: they are the reason the script this rule replaces
+ * carried ten allowlist entries, and prose describing the migration is not the migration.
+ */
+const AUTOMATION_MODE_SELECTORS = [
+  "Property[computed=false][key.name='mode']",
+  "Property[computed=true][key.value='mode']",
+  "MemberExpression[computed=false][property.name='mode']",
+  "MemberExpression[computed=true][property.value='mode']",
+  "TSPropertySignature[computed=false][key.name='mode']",
+];
+
+const noDeprecatedAutomationModeRule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Forbids reading or declaring the deprecated automation `mode` property; script tools are configured with `trigger` + `confirm`',
+    },
+    schema: [],
+    messages: {
+      deprecatedMode:
+        'Script tools are configured with `trigger` + `confirm`, not `mode`. The deprecated field is still parsed and folded forward in core/script-schema.ts and core/script-definition-loader.ts, which this rule does not visit; new code must not read it.',
+    },
+  },
+  create(context) {
+    const report = (node) => context.report({ node, messageId: 'deprecatedMode' });
+    return Object.fromEntries(AUTOMATION_MODE_SELECTORS.map((selector) => [selector, report]));
+  },
+};
+
 export const rules = {
   'no-context-deep-imports': noContextDeepImportsRule,
   'no-legacy-imports': noLegacyImportsRule,
   'require-file-lifecycle': requireLifecycleRule,
   'no-emojis': noEmojiCharactersRule,
+  'no-compat-reexport-shim': noCompatReexportShimRule,
+  'require-guard-mechanism-verdict': requireGuardMechanismVerdictRule,
+  'no-deprecated-automation-mode': noDeprecatedAutomationModeRule,
 };
 
 export default {

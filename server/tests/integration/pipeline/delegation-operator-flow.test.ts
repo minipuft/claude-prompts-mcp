@@ -234,69 +234,7 @@ describe('Delegation Operator (==>) Flow', () => {
   });
 
   describe('OperatorValidationStage silent normalization → CTA flow', () => {
-    test('prompt-level delegation:true normalizes all steps and propagates to step prompts', async () => {
-      // Parse a NORMAL chain (no ==>) for a prompt that has delegation:true
-      const parseResult = await parsingSystem.commandParser.parseCommand(
-        '>>research topic:"test" --> >>summarize --> >>review',
-        testPrompts
-      );
-
-      const symbolic = parseResult as SymbolicCommandParseResult;
-      const chainOp = symbolic.operators.operators.find(
-        (op): op is ChainOperator => op.type === 'chain'
-      );
-
-      // Before normalization: no delegation flags
-      expect(chainOp!.steps[0].delegated).not.toBe(true);
-      expect(chainOp!.steps[1].delegated).not.toBe(true);
-      expect(chainOp!.steps[2].delegated).not.toBe(true);
-
-      // Build step prompts (before normalization)
-      const stepPrompts: ChainStepPrompt[] = chainOp!.steps.map((step, index) => ({
-        stepNumber: index + 1,
-        promptId: step.promptId,
-        args: {},
-        convertedPrompt: testPrompts.find((p) => p.id === step.promptId),
-      }));
-
-      // Set up ExecutionContext with prompt-level delegation:true
-      const context = new ExecutionContext({
-        command: '>>research topic:"test" --> >>summarize --> >>review',
-      });
-      context.parsedCommand = {
-        ...symbolic,
-        commandType: 'chain',
-        convertedPrompt: { ...testPrompts[0], delegation: true },
-        steps: stepPrompts,
-      };
-
-      // Run OperatorValidationStage normalization (real stage, stub framework validator)
-      const stubValidator = { validateAndNormalize: jest.fn() } as unknown as FrameworkValidator;
-      const stage = new OperatorValidationStage(stubValidator, mockLogger);
-      await stage.execute(context);
-
-      // After normalization: chain operator steps are all delegated
-      expect(chainOp!.steps[0].delegated).toBe(true);
-      expect(chainOp!.steps[1].delegated).toBe(true);
-      expect(chainOp!.steps[2].delegated).toBe(true);
-      expect(chainOp!.hasDelegation).toBe(true);
-
-      // AND step prompts are also updated (critical for CTA rendering)
-      expect(context.parsedCommand!.steps![0].delegated).toBe(true);
-      expect(context.parsedCommand!.steps![1].delegated).toBe(true);
-      expect(context.parsedCommand!.steps![2].delegated).toBe(true);
-
-      // Render CTA with normalized step prompts
-      const result = await executor.renderStep({
-        executionType: 'normal',
-        stepPrompts: context.parsedCommand!.steps!,
-        currentStepIndex: 0,
-      });
-      expect(result.callToAction).toContain('HANDOFF');
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
-    });
-
-    test('prompt without delegation:true leaves steps unchanged', async () => {
+    test('a chain with no per-step subagentModel leaves steps unchanged', async () => {
       const parseResult = await parsingSystem.commandParser.parseCommand(
         '>>research topic:"test" --> >>summarize',
         testPrompts
@@ -314,7 +252,7 @@ describe('Delegation Operator (==>) Flow', () => {
       context.parsedCommand = {
         ...symbolic,
         commandType: 'chain',
-        convertedPrompt: testPrompts[0], // No delegation:true
+        convertedPrompt: testPrompts[0],
         steps: stepPrompts,
       };
 
@@ -400,48 +338,6 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
     });
 
-    test('subagentModel + prompt-level delegation:true are additive (not conflicting)', async () => {
-      const parseResult = await parsingSystem.commandParser.parseCommand(
-        '>>research topic:"test" --> >>summarize',
-        testPrompts
-      );
-
-      const symbolic = parseResult as SymbolicCommandParseResult;
-      const chainOp = symbolic.operators.operators.find(
-        (op): op is ChainOperator => op.type === 'chain'
-      );
-
-      // Step 2 has subagentModel, AND prompt has delegation:true
-      const stepPrompts: ChainStepPrompt[] = chainOp!.steps.map((step, index) => ({
-        stepNumber: index + 1,
-        promptId: step.promptId,
-        args: {},
-        convertedPrompt: testPrompts.find((p) => p.id === step.promptId),
-        ...(index === 1 ? { subagentModel: 'fast' as const } : {}),
-      }));
-
-      const context = new ExecutionContext({
-        command: '>>research topic:"test" --> >>summarize',
-      });
-      context.parsedCommand = {
-        ...symbolic,
-        commandType: 'chain',
-        convertedPrompt: { ...testPrompts[0], delegation: true },
-        steps: stepPrompts,
-      };
-
-      const stubValidator = { validateAndNormalize: jest.fn() } as unknown as FrameworkValidator;
-      const stage = new OperatorValidationStage(stubValidator, mockLogger);
-      await stage.execute(context);
-
-      // Both steps delegated (prompt-level delegation:true)
-      expect(context.parsedCommand!.steps![0].delegated).toBe(true);
-      expect(context.parsedCommand!.steps![1].delegated).toBe(true);
-
-      // subagentModel preserved on step 2
-      expect(context.parsedCommand!.steps![1].subagentModel).toBe('fast');
-    });
-
     test('step without subagentModel adjacent to step with subagentModel stays non-delegated', async () => {
       const parseResult = await parsingSystem.commandParser.parseCommand(
         '>>research topic:"test" --> >>summarize --> >>review',
@@ -491,7 +387,7 @@ describe('Delegation Operator (==>) Flow', () => {
   });
 
   describe('agent type resolution', () => {
-    test('step-level agentType takes priority over prompt delegationAgent', async () => {
+    test('step-level agentType takes priority over the chain-executor default', async () => {
       const stepPrompts: ChainStepPrompt[] = [
         { stepNumber: 1, promptId: 'research', args: {} },
         {
@@ -500,7 +396,7 @@ describe('Delegation Operator (==>) Flow', () => {
           args: {},
           delegated: true,
           agentType: 'Explore',
-          convertedPrompt: { ...testPrompts[1], delegationAgent: 'general-purpose' },
+          convertedPrompt: testPrompts[1],
         },
       ];
 
@@ -512,10 +408,10 @@ describe('Delegation Operator (==>) Flow', () => {
 
       // Step-level agentType wins (namespaced by strategy)
       expect(result.callToAction).toContain('subagent_type: "claude-prompts:Explore"');
-      expect(result.callToAction).not.toContain('general-purpose');
+      expect(result.callToAction).not.toContain('chain-executor');
     });
 
-    test('prompt delegationAgent used when no step-level agentType', async () => {
+    test('prompt-level agentType applies when the step declares none', async () => {
       const stepPrompts: ChainStepPrompt[] = [
         { stepNumber: 1, promptId: 'research', args: {} },
         {
@@ -523,7 +419,32 @@ describe('Delegation Operator (==>) Flow', () => {
           promptId: 'summarize',
           args: {},
           delegated: true,
-          convertedPrompt: { ...testPrompts[1], delegationAgent: 'code-reviewer' },
+          convertedPrompt: { ...testPrompts[1]!, agentType: 'Explore' },
+        },
+      ];
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts,
+        currentStepIndex: 0,
+      });
+
+      expect(result.callToAction).toContain('subagent_type: "claude-prompts:Explore"');
+      expect(result.callToAction).not.toContain('chain-executor');
+    });
+
+    test('a step agentType overrides the prompt-level default', async () => {
+      // The whole point of the two levels: a prompt sets the agent its steps usually want,
+      // and one step that needs a different one says so without restating the rest.
+      const stepPrompts: ChainStepPrompt[] = [
+        { stepNumber: 1, promptId: 'research', args: {} },
+        {
+          stepNumber: 2,
+          promptId: 'summarize',
+          args: {},
+          delegated: true,
+          agentType: 'code-reviewer',
+          convertedPrompt: { ...testPrompts[1]!, agentType: 'Explore' },
         },
       ];
 
@@ -534,6 +455,7 @@ describe('Delegation Operator (==>) Flow', () => {
       });
 
       expect(result.callToAction).toContain('subagent_type: "claude-prompts:code-reviewer"');
+      expect(result.callToAction).not.toContain('Explore');
     });
 
     test('defaults to namespaced chain-executor when no overrides', async () => {

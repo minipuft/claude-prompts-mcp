@@ -65,7 +65,10 @@ ROOT_FORMATTABLE=$(printf '%s\n' "$STAGED_FILES" | grep -v '^server/' | grep -E 
 if [ -n "$ROOT_FORMATTABLE" ]; then
   echo "📝 Formatting staged repo-level text files..."
   printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --write
-  printf '%s\n' "$ROOT_FORMATTABLE" | xargs git add --
+  # -f: every path here was already staged by the committer, and some tracked
+  # paths (.claude/rules/) are gitignored -- a plain re-add refuses those and
+  # fails the hook for files this repo deliberately tracks.
+  printf '%s\n' "$ROOT_FORMATTABLE" | xargs git add -f --
 fi
 
 # Restore local Python lint/format parity when hooks change

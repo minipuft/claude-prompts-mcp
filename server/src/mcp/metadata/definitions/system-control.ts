@@ -172,6 +172,15 @@ const operations: ActionDescriptor[] = [
     description:
       'Query resource change audit log with optional filters (source, resourceType, since, limit).',
   },
+  {
+    id: 'execution_history:list',
+    displayName: 'List Execution History',
+    category: 'execution_history',
+    status: 'working',
+    requiredArgs: [],
+    description:
+      'Read the chain execution ledger, newest first, grouped by session. Optional limit (default 50, max 500).',
+  },
 ];
 
 export const SYSTEM_CONTROL_ACTION_IDS = [
@@ -185,6 +194,7 @@ export const SYSTEM_CONTROL_ACTION_IDS = [
   'injection',
   'session',
   'changes',
+  'execution_history',
 ] as const;
 
 export type SystemControlActionId = (typeof SYSTEM_CONTROL_ACTION_IDS)[number];

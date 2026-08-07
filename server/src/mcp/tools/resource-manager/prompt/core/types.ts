@@ -8,7 +8,7 @@ import type { PromptData, Category } from '#modules/prompts/types.js';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
-import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
 
 export type { CategoryResult } from '#modules/prompts/category-maintenance.js';

@@ -8,6 +8,7 @@
 
 import * as path from 'node:path';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type {
   AuxiliaryReloadConfig,
@@ -33,7 +34,9 @@ let trackerInstance: ResourceChangeTracker | undefined;
  */
 export async function initializeResourceChangeTracker(
   logger: Logger,
-  serverRoot: string
+  serverRoot: string,
+  dbPath?: string,
+  defaultScope?: StateStoreOptions
 ): Promise<ResourceChangeTracker> {
   if (trackerInstance !== undefined) {
     logger.debug('ResourceChangeTracker already initialized, returning existing instance');
@@ -42,9 +45,11 @@ export async function initializeResourceChangeTracker(
 
   trackerInstance = createResourceChangeTracker(logger, {
     serverRoot,
+    ...(dbPath !== undefined ? { dbPath } : {}),
     maxEntries: 1000,
     trackPrompts: true,
     trackGates: true,
+    ...(defaultScope !== undefined ? { defaultScope } : {}),
   });
 
   await trackerInstance.initialize();

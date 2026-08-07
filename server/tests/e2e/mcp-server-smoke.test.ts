@@ -8,17 +8,19 @@
 import { describe, expect, it, afterEach, beforeAll } from '@jest/globals';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
+import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { promises as fs } from 'fs';
 import {
   getAvailablePort,
   startServerWithHttp,
   waitForHealth,
-  sendMcpRequestWithSse,
-  sendMcpRequestsOverSseSession,
   killServer,
   StreamableHttpMcpClient,
   httpPost,
+  parseJsonOrSse,
+  ModernMcpClient,
+  MODERN_PROTOCOL_VERSION,
   PROJECT_ROOT as HTTP_PROJECT_ROOT,
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
@@ -40,13 +42,14 @@ let streamableHttpServerPort: number | null = null;
 /**
  * Helper to spawn MCP server with proper env
  */
-function spawnServer(): ChildProcess {
+function spawnServer(runtimeRoot?: string): ChildProcess {
   return spawn('node', [SERVER_PATH, '--transport=stdio', '--quiet'], {
     cwd: path.join(PROJECT_ROOT, 'server'),
     env: {
       ...process.env,
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+      ...(runtimeRoot !== undefined ? { MCP_RUNTIME_ROOT: runtimeRoot } : {}),
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -165,6 +168,40 @@ describe('MCP Server Smoke Tests', () => {
       expect(result).toBe('running');
     }, 5000);
 
+    it('writes state and logs beneath an explicit runtime root', async () => {
+      const runtimeRoot = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-runtime-'));
+      const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
+        cwd: path.join(PROJECT_ROOT, 'server'),
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          NODE_OPTIONS: '',
+          JEST_WORKER_ID: undefined,
+          CI: 'false',
+          GITHUB_ACTIONS: 'false',
+          MCP_RUNTIME_ROOT: runtimeRoot,
+          MCP_WORKSPACE: PROJECT_ROOT,
+          MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      startup.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      const exitCode = await new Promise<number | null>((resolve, reject) => {
+        startup.once('error', reject);
+        startup.once('exit', resolve);
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`Startup test exited ${exitCode}: ${stderr}`);
+      }
+      await fs.access(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      await fs.access(path.join(runtimeRoot, 'logs', 'mcp-server.log'));
+      await fs.rm(runtimeRoot, { recursive: true, force: true });
+    }, 30000);
+
     // TODO: Jest ESM mode has issues with spawned process stdio capture
     // The server responds correctly when tested manually (see npm run start:test)
     // Skip for now until we can debug the Jest/ESM/spawn interaction
@@ -255,86 +292,16 @@ describe('MCP Server Smoke Tests', () => {
   /**
    * HTTP Transport Tests
    *
-   * These tests use HTTP/SSE transport instead of STDIO to avoid
+   * These tests use the Streamable HTTP transport instead of STDIO to avoid
    * Jest/ESM/spawn stdio capture issues.
    */
-  describe('MCP Protocol via HTTP Transport', () => {
-    it('server responds to MCP initialize request via HTTP', async () => {
-      // Get available port
-      httpServerPort = await getAvailablePort();
-      const baseUrl = `http://localhost:${httpServerPort}`;
-
-      // Start server with SSE transport
-      httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
-
-      // Wait for health endpoint (server takes ~5s to initialize)
-      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
-
-      // Send initialize request via SSE
-      const result = await sendMcpRequestWithSse(
-        baseUrl,
-        'initialize',
-        {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'e2e-test', version: '1.0.0' },
-        },
-        1,
-        { timeout: 10000 }
-      );
-
-      expect(result).toHaveProperty('protocolVersion');
-      expect(result).toHaveProperty('serverInfo');
-      expect((result as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
-    }, 20000);
-
-    it('server registers expected MCP tools via HTTP', async () => {
-      // Get available port
-      httpServerPort = await getAvailablePort();
-      const baseUrl = `http://localhost:${httpServerPort}`;
-
-      // Start server with SSE transport
-      httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
-
-      // Wait for health endpoint (server takes ~5s to initialize)
-      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
-
-      // Initialize and list tools over ONE session. Sending these as two separate SSE calls opens
-      // two independent sessions, and the server attaches one transport at a time — so the second
-      // one only connects if the first connection's close has already propagated. That race is
-      // load-dependent, which is what made this test fail after `test:integration` and pass alone.
-      const [, result] = (await sendMcpRequestsOverSseSession(
-        baseUrl,
-        [
-          {
-            method: 'initialize',
-            params: {
-              protocolVersion: '2024-11-05',
-              capabilities: {},
-              clientInfo: { name: 'e2e-test', version: '1.0.0' },
-            },
-          },
-          { method: 'tools/list' },
-        ],
-        { timeout: 15000 }
-      )) as [unknown, { tools: Array<{ name: string }> }];
-
-      expect(Array.isArray(result.tools)).toBe(true);
-
-      const toolNames = result.tools.map((t) => t.name);
-      expect(toolNames).toContain('prompt_engine');
-      expect(toolNames).toContain('resource_manager');
-      expect(toolNames).toContain('system_control');
-    }, 20000);
-  });
-
   /**
    * Streamable HTTP Transport Tests
    *
-   * Tests the new MCP standard transport (since 2025-03-26):
+   * Tests the MCP standard transport:
    * - Single /mcp endpoint for POST, GET, DELETE
-   * - Session management via mcp-session-id header
-   * - Stateful session mode with session ID generator
+   * - Stateless: revision 2026-07-28 removed protocol sessions, so the server
+   *   issues no session id and every request is served on its own instance
    */
   describe('MCP Protocol via Streamable HTTP Transport', () => {
     it('server starts with streamable-http transport', async () => {
@@ -373,9 +340,9 @@ describe('MCP Server Smoke Tests', () => {
       const client = new StreamableHttpMcpClient(baseUrl);
       const { sessionId, capabilities } = await client.initialize();
 
-      // Should have a session ID
-      expect(sessionId).toBeTruthy();
-      expect(typeof sessionId).toBe('string');
+      // No session id: the handler serves each request from its own instance,
+      // so there is nothing for an `Mcp-Session-Id` header to refer to.
+      expect(sessionId).toBeNull();
 
       // Should have MCP capabilities
       expect(capabilities).toHaveProperty('protocolVersion');
@@ -418,7 +385,7 @@ describe('MCP Server Smoke Tests', () => {
       await client.close();
     }, 20000);
 
-    it('session returns unique session ID via Streamable HTTP', async () => {
+    it('serves requests without a session id via Streamable HTTP', async () => {
       // Get available port
       streamableHttpServerPort = await getAvailablePort();
       const baseUrl = `http://localhost:${streamableHttpServerPort}`;
@@ -432,16 +399,13 @@ describe('MCP Server Smoke Tests', () => {
       // Wait for health endpoint (server initialization takes time)
       await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-      // Create client and verify session ID is returned
+      // Create client and verify no session id is minted
       const client = new StreamableHttpMcpClient(baseUrl);
       const { sessionId } = await client.initialize();
 
-      // Session ID should be a valid UUID format
-      expect(sessionId).toBeTruthy();
-      expect(typeof sessionId).toBe('string');
-      expect(sessionId.length).toBeGreaterThan(0);
+      expect(sessionId).toBeNull();
 
-      // Verify client can make requests with the session
+      // Verify follow-up requests are served anyway
       const result = (await client.request('tools/list', {}, 2)) as {
         tools: Array<{ name: string }>;
       };
@@ -451,11 +415,14 @@ describe('MCP Server Smoke Tests', () => {
     }, 25000);
 
     /**
-     * MCP Spec Compliance: 400 Bad Request without session ID
-     * Per spec: "Servers that require a session ID SHOULD respond to requests
-     * without an Mcp-Session-Id header (other than initialization) with HTTP 400"
+     * Statelessness: revision 2026-07-28 removed protocol sessions.
+     *
+     * These two cases previously asserted the session contract -- 400 without an
+     * `Mcp-Session-Id` and 404 for an unknown one. Both are now served normally:
+     * there is no registry to miss, so a request carrying no session, or a stale
+     * one from a 2025-era client, is answered on its own instance.
      */
-    it('returns 400 Bad Request for non-init request without session ID', async () => {
+    it('serves a non-init request that carries no session id', async () => {
       streamableHttpServerPort = await getAvailablePort();
       const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
@@ -466,58 +433,240 @@ describe('MCP Server Smoke Tests', () => {
 
       await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-      // Send a tools/list request WITHOUT session ID (not an init request)
-      const request = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      };
+      const response = await httpPost(
+        `${baseUrl}/mcp`,
+        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        { Accept: 'application/json, text/event-stream' }
+      );
 
-      const response = await httpPost(`${baseUrl}/mcp`, request, {
-        Accept: 'application/json, text/event-stream',
+      expect(response.status).toBe(200);
+      const result = parseJsonOrSse(response.body, 1);
+      expect(result.error).toBeUndefined();
+      expect(Array.isArray((result.result as { tools: unknown[] }).tools)).toBe(true);
+    }, 20000);
+
+    it('ignores a stale session id header instead of rejecting it', async () => {
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
       });
 
-      // Should return 400 Bad Request per MCP spec
-      expect(response.status).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBeDefined();
-      expect(body.error.message).toContain('session');
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+      const response = await httpPost(
+        `${baseUrl}/mcp`,
+        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        {
+          'mcp-session-id': 'invalid-session-id-12345',
+          Accept: 'application/json, text/event-stream',
+        }
+      );
+
+      expect(response.status).toBe(200);
+      const result = parseJsonOrSse(response.body, 1);
+      expect(result.error).toBeUndefined();
     }, 20000);
+  });
+
+  /**
+   * Protocol revision 2026-07-28 and dual-era serving.
+   *
+   * The revision removes the `initialize` handshake, so a modern client's first
+   * request is a real call carrying a `_meta` envelope. The edge also rejects
+   * any request whose headers and body disagree, which is why every call sends
+   * `Mcp-Method` and `tools/call` additionally sends `Mcp-Name`.
+   *
+   * The last test is the migration's actual gate: one build, both eras.
+   */
+  describe('MCP Protocol revision 2026-07-28', () => {
+    async function startModernServer(): Promise<string> {
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      return baseUrl;
+    }
+
+    it('lists tools with no initialize handshake', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.request('tools/list', {}, 1)) as {
+        tools: Array<{ name: string }>;
+      };
+
+      const toolNames = result.tools.map((t) => t.name);
+      expect(toolNames).toContain('prompt_engine');
+      expect(toolNames).toContain('resource_manager');
+      expect(toolNames).toContain('system_control');
+    }, 25000);
+
+    it('answers server/discover with the advertised surface and cache posture', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.request('server/discover', {}, 1)) as {
+        supportedVersions: string[];
+        capabilities: Record<string, unknown>;
+        ttlMs: number;
+        cacheScope: string;
+      };
+
+      expect(result.supportedVersions).toContain(MODERN_PROTOCOL_VERSION);
+      expect(Object.keys(result.capabilities).sort()).toEqual(['prompts', 'resources', 'tools']);
+      // Deliberate posture: a tool surface that varies with framework state must
+      // not be cached by clients. `ttlMs: 0` is the SDK default, asserted here so
+      // a future change to it is a visible decision rather than a silent one.
+      expect(result.ttlMs).toBe(0);
+      expect(result.cacheScope).toBe('private');
+    }, 25000);
+
+    it('executes a tool call', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.callTool('system_control', { action: 'status' }, 1)) as {
+        isError: boolean;
+        content: Array<{ type: string; text: string }>;
+      };
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]?.text).toContain('System Status');
+    }, 25000);
+
+    it('rejects a request whose headers omit the method', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const response = await client.send('tools/list', {}, 1, { omitMethodHeader: true });
+
+      // The edge classifies before dispatch, so this never reaches a handler.
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      const parsed = parseJsonOrSse(response.body, 1) as { error?: { message: string } };
+      expect(parsed.error?.message).toContain('Mcp-Method');
+    }, 25000);
+
+    it('rejects a request whose _meta envelope is incomplete', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const response = await client.send('tools/list', {}, 1, { partialMeta: true });
+
+      const parsed = parseJsonOrSse(response.body, 1) as { error?: { message: string } };
+      expect(parsed.error).toBeDefined();
+      expect(parsed.error?.message).toMatch(/envelope/i);
+      expect(parsed.error?.message).toContain('clientCapabilities');
+    }, 25000);
+
+    it('serves a request carrying no envelope as a 2025-era client', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      // No `_meta` is not an error: it is what a 2025-era client sends, and
+      // `legacy: 'stateless'` serves it per-request rather than rejecting it.
+      // This is the behavior that lets one build answer both revisions.
+      const response = await client.send('tools/list', {}, 1, { omitMeta: true });
+
+      expect(response.status).toBe(200);
+      const parsed = parseJsonOrSse(response.body, 1) as {
+        error?: unknown;
+        result?: { tools: Array<{ name: string }> };
+      };
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.result?.tools.map((t) => t.name)).toContain('prompt_engine');
+    }, 25000);
+
+    it('serves a 2026-07-28 client and a 2025-era client from one build', async () => {
+      const baseUrl = await startModernServer();
+
+      // 2025-era: handshake first, then a call.
+      const legacyClient = new StreamableHttpMcpClient(baseUrl);
+      const { capabilities } = await legacyClient.initialize();
+      expect(capabilities).toHaveProperty('protocolVersion');
+      const legacyTools = (await legacyClient.request('tools/list', {}, 2)) as {
+        tools: Array<{ name: string }>;
+      };
+
+      // 2026-07-28: no handshake, envelope on every call.
+      const modernClient = new ModernMcpClient(baseUrl);
+      const modernTools = (await modernClient.request('tools/list', {}, 3)) as {
+        tools: Array<{ name: string }>;
+      };
+
+      // Same surface, both eras, same process.
+      expect(modernTools.tools.map((t) => t.name).sort()).toEqual(
+        legacyTools.tools.map((t) => t.name).sort()
+      );
+
+      const legacyCall = (await legacyClient.request(
+        'tools/call',
+        { name: 'system_control', arguments: { action: 'status' } },
+        4
+      )) as { isError: boolean };
+      const modernCall = (await modernClient.callTool(
+        'system_control',
+        { action: 'status' },
+        5
+      )) as {
+        isError: boolean;
+      };
+
+      expect(legacyCall.isError).toBe(false);
+      expect(modernCall.isError).toBe(false);
+
+      await legacyClient.close();
+    }, 30000);
 
     /**
-     * MCP Spec Compliance: 404 for invalid session ID
-     * When a session ID is provided but not found, return 404
+     * The tool surface is a function of runtime state, not a constant.
+     *
+     * `prompt_engine` advertises its three gate parameters only while the gate
+     * system is enabled. Proving that end-to-end needs a live state change and
+     * two `tools/list` calls, because the property that matters is what reaches
+     * the wire: an in-process assertion cannot distinguish a schema that was
+     * rebuilt from one that was merely re-described.
+     *
+     * Over HTTP there is no long-lived instance — each request builds a fresh
+     * server from the factory — so this also proves the reshape is not a
+     * mutation that would have been lost with the request that made it.
      */
-    it('returns 404 for invalid session ID', async () => {
-      streamableHttpServerPort = await getAvailablePort();
-      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('reshapes the advertised inputSchema when gate state changes', async () => {
+      const client = new ModernMcpClient(await startModernServer());
 
-      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-        transport: 'streamable-http',
-        debug: true,
-      });
-
-      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
-
-      // Send a request with a fake session ID
-      const request = {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
+      const gateParamsFor = async (id: number): Promise<string[]> => {
+        const listed = (await client.request('tools/list', {}, id)) as {
+          tools: Array<{ name: string; inputSchema?: { properties?: Record<string, unknown> } }>;
+        };
+        const engine = listed.tools.find((t) => t.name === 'prompt_engine');
+        const props = Object.keys(engine?.inputSchema?.properties ?? {});
+        return props.filter((p) => p.startsWith('gate')).sort();
       };
 
-      const response = await httpPost(`${baseUrl}/mcp`, request, {
-        'mcp-session-id': 'invalid-session-id-12345',
-        Accept: 'application/json, text/event-stream',
-      });
+      const setGateSystem = async (operation: 'enable' | 'disable', id: number): Promise<void> => {
+        const response = (await client.callTool(
+          'system_control',
+          { action: 'gates', operation, reason: 'tool surface e2e' },
+          id
+        )) as { isError?: boolean };
+        expect(response.isError ?? false).toBe(false);
+      };
 
-      // Should return 404 Not Found for invalid session
-      expect(response.status).toBe(404);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBeDefined();
-      expect(body.error.message).toContain('Session not found');
-    }, 20000);
+      await setGateSystem('enable', 1);
+      const enabled = await gateParamsFor(2);
+      expect(enabled).toEqual(['gate_action', 'gate_verdict', 'gates']);
+
+      await setGateSystem('disable', 3);
+      const disabled = await gateParamsFor(4);
+
+      // The tier's gate criterion: the *shape* changed, not only description
+      // text. Asserting the parameter set rather than a deep-equality diff is
+      // what separates the two — a re-described schema keeps its keys.
+      expect(disabled).toEqual([]);
+      expect(disabled).not.toEqual(enabled);
+
+      // Restore, and confirm the narrowing is reversible rather than one-way.
+      await setGateSystem('enable', 5);
+      expect(await gateParamsFor(6)).toEqual(enabled);
+    }, 40000);
   });
 });

@@ -21,13 +21,15 @@ type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
  * using the centralized PromptGuidanceService. In the two-phase client-driven
  * judge flow, this stage applies style enhancement from client selections.
  *
- * Client selections (set by JudgeSelectionStage, checked by this stage):
- * - clientFrameworkOverride: Override framework (used by FrameworkResolutionStage)
- * - clientSelectedGates: Additional gates (used by GateEnhancementStage)
- * - clientSelectedStyle: Response style enhancement (applied by this stage)
+ * Client selection read by this stage: `context.state.framework.clientSelectedStyle`,
+ * written by JudgeSelectionStage from the `#style` operator. The framework and gate
+ * halves of a judge selection re-enter as `@framework` and `::`, which reach
+ * FrameworkResolutionStage and GateEnhancementStage through `parsedCommand` — this
+ * stage does not see them.
  */
 export class PromptGuidanceStage extends BasePipelineStage {
   readonly name = 'PromptGuidance';
+  readonly requires = ['state.injection', 'state.framework.clientSelectedStyle'] as const;
 
   constructor(
     private readonly promptGuidanceService: PromptGuidanceService | null,
@@ -96,18 +98,13 @@ export class PromptGuidanceStage extends BasePipelineStage {
   }
 
   /**
-   * Check if client has provided resource selections from judge phase or operator-based style.
-   * JudgeSelectionStage sets: clientFrameworkOverride, clientSelectedGates, clientSelectedStyle
-   * Symbolic operators set: context.parsedCommand.executionPlan.styleSelection
+   * Check whether a response style was selected, by either style channel.
+   * JudgeSelectionStage sets clientSelectedStyle from the `#style` operator;
+   * symbolic operators also set context.parsedCommand.executionPlan.styleSelection.
    */
   private hasClientSelections(context: ExecutionContext): boolean {
     const operatorStyle = context.parsedCommand?.executionPlan?.styleSelection;
-    return Boolean(
-      context.state.framework.clientOverride ||
-      context.state.framework.clientSelectedGates ||
-      context.state.framework.clientSelectedStyle ||
-      operatorStyle
-    );
+    return Boolean(context.state.framework.clientSelectedStyle || operatorStyle);
   }
 
   /**
@@ -120,8 +117,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * 2. Client-selected style (from judge phase)
    */
   private applyClientSelections(context: ExecutionContext): void {
-    const selectedFramework = context.state.framework.clientOverride;
-    const selectedGates = context.state.framework.clientSelectedGates;
     const clientStyle = context.state.framework.clientSelectedStyle;
     const operatorStyle = context.parsedCommand?.executionPlan?.styleSelection;
 
@@ -132,8 +127,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
     }
 
     this.logger.info('[PromptGuidanceStage] Client selections detected', {
-      framework: selectedFramework,
-      gates: selectedGates?.length ?? 0,
       style: selectedStyle,
       styleSource: operatorStyle ? 'operator' : clientStyle ? 'client' : 'none',
     });
@@ -328,11 +321,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
     const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
     if (operatorOverride) {
       decisionInput.operatorOverride = operatorOverride;
-    }
-
-    const clientOverride = context.state.framework.clientOverride;
-    if (clientOverride) {
-      decisionInput.clientOverride = clientOverride;
     }
 
     const globalActiveFramework = context.frameworkContext?.selectedFramework?.id;

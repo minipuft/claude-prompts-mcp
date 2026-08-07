@@ -4,7 +4,7 @@ End-to-end tests validate real user flows through the built server (CLI/transpor
 
 ## Target Flows
 
-- Start server (`dist/index.js`) in STDIO and SSE modes
+- Start server (`dist/index.js`) in STDIO and Streamable HTTP modes
 - Invoke MCP tools (`resource_manager`, `prompt_engine`, `system_control`) with representative payloads
 - Verify hot-reload behaviors (prompts/frameworks/gates) without manual steps
 

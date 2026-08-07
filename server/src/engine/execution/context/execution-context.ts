@@ -8,12 +8,7 @@ import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ToolResponse, McpToolRequest } from '#shared/types/index.js';
 import type { RequestIdentitySource } from '#shared/types/request-identity.js';
-import type {
-  NamedInlineGate,
-  ParsedCommand,
-  SessionContext,
-  ExecutionResults,
-} from './context-types.js';
+import type { ParsedCommand, SessionContext, ExecutionResults } from './context-types.js';
 import type { InitializedScriptState, PipelineInternalState } from './internal-state.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
@@ -234,11 +229,33 @@ export class ExecutionContext {
 
   /**
    * Builds StateStoreOptions from the resolved identity scope.
-   * Returns undefined for default scope (no isolation needed).
+   *
+   * Emits all three fields, not just the composite id. `StateStoreOptions` declares
+   * `workspaceId` and `organizationId`, and writers bind them directly — so returning only
+   * `continuityScopeId` meant every scope column those writers touch was NULL by
+   * construction rather than by accident. The values were already resolved and sitting on
+   * `identity.context`; this method was simply not reading them.
+   *
+   * Returns undefined when nothing is scoped, which keeps the default-scope contract callers
+   * already depend on. `'default'` is treated as absent for each field: it is the sentinel
+   * for "no scope", and writing it into a column that is supposed to name a workspace would
+   * trade a visible NULL for an invisible placeholder.
    */
   getScopeOptions(): StateStoreOptions | undefined {
-    const scopeId = this.state.identity.continuityScopeId;
-    return scopeId && scopeId !== 'default' ? { continuityScopeId: scopeId } : undefined;
+    const identity = this.state.identity.context;
+    const scopeId = meaningfulScope(this.state.identity.continuityScopeId);
+    const workspaceId = meaningfulScope(identity?.workspaceId);
+    const organizationId = meaningfulScope(identity?.organizationId);
+
+    if (scopeId === undefined && workspaceId === undefined && organizationId === undefined) {
+      return undefined;
+    }
+
+    return {
+      ...(scopeId !== undefined ? { continuityScopeId: scopeId } : {}),
+      ...(workspaceId !== undefined ? { workspaceId } : {}),
+      ...(organizationId !== undefined ? { organizationId } : {}),
+    };
   }
 
   hasExplicitChainId(): boolean {
@@ -254,7 +271,6 @@ export class ExecutionContext {
   isResponseOnlyMode(): boolean {
     const hasCommand =
       typeof this.mcpRequest.command === 'string' && this.mcpRequest.command.length > 0;
-    const response = this.mcpRequest.user_response?.trim();
     const hasResumeToken = Boolean(this.mcpRequest.chain_id);
     return !hasCommand && hasResumeToken;
   }
@@ -374,3 +390,17 @@ export class ExecutionContext {
 }
 
 // ExecutionPlan and ExecutionStrategyType are imported from ../types.js
+
+/**
+ * A scope value worth persisting, or undefined.
+ *
+ * `'default'` is the sentinel `resolveContinuityScopeId` returns when no workspace and no
+ * organization were resolved. Persisting it would make a column that means "which workspace"
+ * answer "none" in a way indistinguishable from a real workspace literally named `default`.
+ */
+function meaningfulScope(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed === 'default') return undefined;
+  return trimmed;
+}

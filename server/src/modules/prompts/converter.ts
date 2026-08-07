@@ -162,6 +162,9 @@ export class PromptConverter {
           mcpPromptMode: resolveMcpPromptMode(promptData),
         };
 
+        if (promptData.agentType != null) {
+          convertedPrompt.agentType = promptData.agentType;
+        }
         if (promptData.subagentModel != null) {
           convertedPrompt.subagentModel = promptData.subagentModel;
         }

@@ -10,9 +10,9 @@ import { buildLauncherMessages } from './launcher-envelope.js';
 import { ConversationStore } from '../text-refs/conversation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
-import { type ConfigManager, type Logger } from '#shared/types/index.js';
+import { type Logger } from '#shared/types/index.js';
 import { isChainPrompt } from '#shared/utils/chainUtils.js';
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
@@ -26,7 +26,6 @@ type PromptRegistryServer = Pick<McpServer, 'registerPrompt'> & {
 export class PromptRegistry {
   private logger: Logger;
   private mcpServer: PromptRegistryServer;
-  private configManager: ConfigManager;
   private conversationStore: ConversationStore;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   private registeredPromptIds = new Set<string>(); // Track registered prompt IDs to prevent duplicates
@@ -48,12 +47,10 @@ export class PromptRegistry {
   constructor(
     logger: Logger,
     mcpServer: PromptRegistryServer,
-    configManager: ConfigManager,
     conversationStore: ConversationStore
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
-    this.configManager = configManager;
     this.conversationStore = conversationStore;
     // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   }

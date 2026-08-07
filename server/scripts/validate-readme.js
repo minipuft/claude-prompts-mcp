@@ -14,6 +14,8 @@ const CHARTER_PATH = path.join(REPO_ROOT, 'docs/portfolio/readme-charter.md');
 
 // Budgets — charter §4 (sync manually when charter changes)
 const MAX_LINES = 400;
+const MAX_TAGLINE_TO_QUICKSTART = 40;
+const MAX_SECTION_LINES = 100;
 
 // Voice — charter §5 (sync manually when charter changes)
 const FORBIDDEN_WORDS = [
@@ -55,6 +57,53 @@ function checkLineBudget(lines) {
       detail: `README is ${lines.length} lines; charter §4 budget is ${MAX_LINES}`,
     },
   ];
+}
+
+function checkFlowBudget(lines) {
+  // Tagline = first bold line after the H1; Quick Start = its H2 heading (charter §4)
+  const taglineIdx = lines.findIndex((l) => /^\*\*.+\*\*/.test(l));
+  const quickStartIdx = lines.findIndex((l) => /^## Quick Start\b/.test(l));
+  if (taglineIdx === -1 || quickStartIdx === -1) {
+    return [
+      {
+        line: 1,
+        category: 'budget',
+        detail: `could not locate ${taglineIdx === -1 ? 'tagline (bold line)' : '"## Quick Start" heading'} — flow budget unmeasurable (charter §4)`,
+      },
+    ];
+  }
+  const distance = quickStartIdx - taglineIdx;
+  if (distance <= MAX_TAGLINE_TO_QUICKSTART) return [];
+  return [
+    {
+      line: quickStartIdx + 1,
+      category: 'budget',
+      detail: `tagline → Quick Start is ${distance} lines; charter §4 budget is ${MAX_TAGLINE_TO_QUICKSTART}`,
+    },
+  ];
+}
+
+function checkSectionBudgets(lines) {
+  // Section = H2 heading to the next H2, minus trailing blank/separator/comment furniture (charter §4)
+  const violations = [];
+  const headings = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (HEADING_H2.test(lines[i])) headings.push(i);
+  }
+  for (let h = 0; h < headings.length; h++) {
+    const start = headings[h];
+    let end = (h + 1 < headings.length ? headings[h + 1] : lines.length) - 1;
+    while (end > start && /^(\s*|---|<!--.*-->)$/.test(lines[end])) end--;
+    const length = end - start + 1;
+    if (length > MAX_SECTION_LINES) {
+      violations.push({
+        line: start + 1,
+        category: 'budget',
+        detail: `section "${lines[start].slice(3).trim()}" is ${length} lines; charter §4 per-section budget is ${MAX_SECTION_LINES}`,
+      });
+    }
+  }
+  return violations;
 }
 
 function collectAllowlist(lines) {
@@ -158,6 +207,8 @@ function main() {
 
   const violations = [
     ...checkLineBudget(lines),
+    ...checkFlowBudget(lines),
+    ...checkSectionBudgets(lines),
     ...checkForbiddenWords(lines),
     ...checkDiataxisMarkers(lines),
     ...checkInternalLinks(lines, readmeDir),

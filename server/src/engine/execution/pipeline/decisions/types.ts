@@ -7,7 +7,7 @@ export interface FrameworkDecision {
   readonly shouldApply: boolean;
   readonly frameworkId?: string;
   readonly reason: string;
-  readonly source: 'operator' | 'client-selection' | 'global-active' | 'disabled';
+  readonly source: 'operator' | 'global-active' | 'disabled';
   readonly decidedAt: number;
 }
 

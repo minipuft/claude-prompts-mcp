@@ -14,10 +14,12 @@ export interface FrameworkDecisionInput {
     lean?: boolean;
     judge?: boolean;
   };
-  /** Framework override from @ operator in command */
+  /**
+   * Framework override from the @ operator in the command. This is also how a
+   * judge-phase framework choice arrives — the judge menu instructs the client to
+   * re-invoke with `@<framework>`, so there is no separate client-selection input.
+   */
   operatorOverride?: string;
-  /** Client override from judge phase selection */
-  clientOverride?: string;
   /** Global active framework from framework context */
   globalActiveFramework?: string;
 }
@@ -31,9 +33,8 @@ export interface FrameworkDecisionInput {
  *
  * Resolution Priority:
  * 1. Modifiers (%clean, %lean) - disable framework
- * 2. @ operator override - explicit user intent
- * 3. Client selection from judge phase - user chose
- * 4. Global active framework - system default
+ * 2. @ operator override - explicit user intent, including a judge-phase choice
+ * 3. Global active framework - system default
  *
  * @example
  * ```typescript
@@ -41,7 +42,6 @@ export interface FrameworkDecisionInput {
  * const decision = frameworkAuthority.decide({
  *   modifiers: context.executionPlan?.modifiers,
  *   operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
- *   clientOverride: context.state.framework.clientOverride,
  *   globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
  * });
  *
@@ -130,7 +130,7 @@ export class FrameworkDecisionAuthority {
       };
     }
 
-    // Priority 2: @ operator override (explicit user intent)
+    // Priority 2: @ operator override (explicit user intent, incl. judge-phase choice)
     if (input.operatorOverride) {
       return {
         shouldApply: true,
@@ -141,18 +141,7 @@ export class FrameworkDecisionAuthority {
       };
     }
 
-    // Priority 3: Client selection from judge phase
-    if (input.clientOverride) {
-      return {
-        shouldApply: true,
-        frameworkId: input.clientOverride.toLowerCase(),
-        reason: 'Selected in judge phase',
-        source: 'client-selection',
-        decidedAt: timestamp,
-      };
-    }
-
-    // Priority 4: Global active framework
+    // Priority 3: Global active framework
     if (input.globalActiveFramework) {
       return {
         shouldApply: true,

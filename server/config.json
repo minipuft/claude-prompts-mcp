@@ -85,12 +85,5 @@
     "autoVersion": true,
     "enabled": true,
     "maxVersions": 50
-  },
-  "analysis": {
-    "semanticAnalysis": {
-      "llmIntegration": {
-        "mode": "on"
-      }
-    }
   }
 }

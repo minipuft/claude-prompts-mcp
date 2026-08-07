@@ -102,7 +102,7 @@ export interface McpToolRequest {
   /** Primary command to execute. Optional when providing chain-only responses. */
   readonly command?: string;
 
-  /** Chain identifier (chain-{promptId} or chain-{promptId}#runNumber) for resuming executions */
+  /** Chain identifier for resuming executions. Format owned by `shared/utils/chain-id-codec`. */
   readonly chain_id?: string;
 
   /** Gate review verdict for resuming from pending validation */

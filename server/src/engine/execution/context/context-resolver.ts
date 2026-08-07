@@ -204,7 +204,7 @@ export class ContextResolver {
       name: 'conversation_history',
       priority: 80,
       isAvailable: () => true,
-      resolve: async (key: string, hint?: any): Promise<ContextResolution | null> => {
+      resolve: async (_key: string, hint?: any): Promise<ContextResolution | null> => {
         if (hint?.conversationHistory && hint.conversationHistory.length > 0) {
           const lastMessage = hint.conversationHistory[hint.conversationHistory.length - 1];
           if (lastMessage?.content) {
@@ -459,7 +459,7 @@ export class ContextResolver {
    */
   private createFallbackResolution(
     key: string,
-    hint: any,
+    _hint: any,
     alternatives: Array<{ value: any; source: ContextSource; confidence: number }>
   ): ContextResolution {
     // If we have alternatives, use the best one

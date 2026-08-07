@@ -13,6 +13,7 @@ import {
   formatHistoryTable,
 } from '../../../src/cli-shared/version-history.js';
 import type { HistoryFile } from '../../../src/modules/versioning/types.js';
+import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 const SAMPLE_HISTORY: HistoryFile = {
   resource_type: 'prompt',
@@ -81,9 +82,11 @@ describe('version-history', () => {
   let promptDir: string;
   let gateDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'cpm-vh-'));
-    mkdirSync(join(tempDir, 'runtime-state'), { recursive: true });
+    // The engine owns this DDL. `version-history.ts` deliberately no longer creates it —
+    // its old `ensure_schema` predated the scope columns and broke server startup.
+    await seedStateDbSchema(tempDir);
     promptDir = join(tempDir, 'resources', 'prompts', 'general', 'test-prompt');
     gateDir = join(tempDir, 'resources', 'gates', 'my-gate');
     mkdirSync(promptDir, { recursive: true });

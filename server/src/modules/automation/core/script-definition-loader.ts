@@ -27,7 +27,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join, basename } from 'path';
+import { join } from 'path';
 
 import {
   validateScriptToolSchema,

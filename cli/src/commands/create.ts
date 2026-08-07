@@ -97,8 +97,8 @@ export async function create(options: CreateOptions): Promise<number> {
 
 function printSubsystemAdvisory(workspace: string, type: string): void {
   const configKeyMap: Record<string, string> = {
-    gates: 'gates.mode',
-    frameworks: 'frameworks.mode',
+    gates: 'gates.enabled',
+    frameworks: 'frameworks.enabled',
   };
   const configKey = configKeyMap[type];
   if (!configKey) return;
@@ -106,9 +106,13 @@ function printSubsystemAdvisory(workspace: string, type: string): void {
   const configResult = readConfig(workspace);
   if (!configResult.success || !configResult.config) return;
 
-  const mode = getConfigValue(configResult.config, configKey);
-  if (mode === 'off') {
-    console.log(`\nNote: ${configKey} is "off" in config.json. Resource won't be active until enabled:`);
-    console.log(`  cpm config set ${configKey} on`);
+  // Advisory only, so it reads the raw file rather than a loaded ConfigManager. A config written
+  // by the retired CLI still carries `mode: "off"` until something loads and folds it, so both
+  // spellings are recognised here; the advice printed always names the canonical key.
+  const value = getConfigValue(configResult.config, configKey);
+  const legacy = getConfigValue(configResult.config, configKey.replace(/\.enabled$/, '.mode'));
+  if (value === false || (value === undefined && legacy === 'off')) {
+    console.log(`\nNote: ${configKey} is false in config.json. Resource won't be active until enabled:`);
+    console.log(`  cpm enable ${type}`);
   }
 }

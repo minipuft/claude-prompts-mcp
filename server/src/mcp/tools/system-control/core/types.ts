@@ -5,6 +5,7 @@ import type { FrameworkStateStore } from '#engine/frameworks/framework-state-sto
 import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/index.js';
 import type { GateStateStore } from '#engine/gates/gate-state-store.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type {
   StateStoreOptions,
   ConfigManager,
@@ -55,9 +56,18 @@ export interface SystemControlContext {
   readonly gateStateStore?: GateStateStore;
   readonly gateGuidanceRenderer?: GateGuidanceRenderer;
   readonly chainSessionStore?: ChainSessionService;
+  readonly executionRecordStore?: ExecutionRecordStore;
   readonly configManager?: ConfigManager;
   readonly safeConfigWriter?: SafeConfigWriter;
   readonly onRestart?: (reason: string) => Promise<void>;
+  /**
+   * Rebuild and re-advertise the tool surface after a state change that alters
+   * it. The `prompt_engine` parameter shape is a function of the gate system
+   * switch, so toggling gates has to refresh the surface the same way a
+   * framework switch does — otherwise a long-lived STDIO connection keeps
+   * advertising parameters that no longer do anything.
+   */
+  readonly onToolSurfaceChanged?: () => Promise<void>;
   readonly mcpToolsManager?: any;
   readonly analyticsService?: MetricsCollector;
   readonly promptGuidanceService?: PromptGuidanceService;

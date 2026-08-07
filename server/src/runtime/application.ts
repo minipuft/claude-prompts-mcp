@@ -9,7 +9,7 @@
 
 import * as path from 'node:path';
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
@@ -17,10 +17,13 @@ import { loadPromptData } from './data-loader.js';
 import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
+import { publishResourcesChanged, publishToolsChanged } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
+import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
+import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
 
@@ -30,17 +33,18 @@ import type { ApiRouter } from '#mcp/http/api.js';
 import type { McpToolRouter } from '#mcp/tools/index.js';
 import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { ListChangeTargets } from './list-change-notifier.js';
 import type { PathResolver } from './paths.js';
+import type { McpServerFactory } from '@modelcontextprotocol/server';
 
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateManager } from '#engine/gates/gate-manager.js';
 import { ConfigLoader } from '#infra/config/index.js';
 import { HookRegistry } from '#infra/hooks/index.js';
-import { EnhancedLogger, Logger } from '#infra/logging/index.js';
+import { Logger } from '#infra/logging/index.js';
 import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
-import { registerResources } from '#modules/resources/index.js';
 import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
@@ -229,20 +233,7 @@ export class Application {
     this.textReferenceStore = new TextReferenceStore(this.logger);
     this.conversationStore = createConversationStore(this.logger);
 
-    const config = this.configManager.getConfig();
-    this.mcpServer = new McpServer(
-      {
-        name: config.server.name,
-        version: config.server.version,
-      },
-      {
-        capabilities: {
-          prompts: { listChanged: true },
-          tools: { listChanged: true },
-          resources: { listChanged: true },
-        },
-      }
-    );
+    this.mcpServer = this.constructMcpServer();
     this.debugLog('McpServer created successfully');
 
     // Initialize hook registry and notification emitter
@@ -257,13 +248,14 @@ export class Application {
     this.debugLog('HookRegistry and McpNotificationEmitter initialized');
 
     // Initialize telemetry lifecycle (creates runtime + hook observer, does not start SDK yet)
+    const serverConfig = this.configManager.getConfig().server;
     const telemetryConfig = this.configManager.getTelemetryConfig();
     this.telemetryLifecycle = new TelemetryLifecycle({
       config: telemetryConfig,
       logger: this.logger,
       hookRegistry: this.hookRegistry,
-      serviceName: config.server.name,
-      serviceVersion: config.server.version,
+      serviceName: serverConfig.name,
+      serviceVersion: serverConfig.version,
     });
     this.debugLog('TelemetryLifecycle initialized');
 
@@ -357,7 +349,16 @@ export class Application {
     await this.ensurePromptHotReload();
 
     // Register MCP resources for token-efficient read-only access
-    this.registerMcpResources();
+    this.registerMcpResources(this.mcpServer);
+
+    // Route tool-list-changed to whichever transport is serving. HTTP has no
+    // long-lived instance to push from, so it publishes through the handler's
+    // notifier; STDIO pushes from the instance `serveStdio` pinned.
+    // The notifier stays async so the routing can change without rippling into
+    // every caller, though both publish paths are synchronous today.
+    this.mcpToolsManager.setToolsChangedNotifier(async () => {
+      publishToolsChanged(this.listChangeTargets());
+    });
 
     this.logger.info('All modules initialized successfully');
   }
@@ -366,71 +367,104 @@ export class Application {
    * Register MCP resources for prompts, gates, frameworks, and observability.
    * Resources provide 5-16x more token-efficient discovery than tool-based list operations.
    */
-  private registerMcpResources(): void {
-    // Check if resources registration is enabled
-    const resourcesConfig = this.configManager.getResourcesConfig();
-    if (resourcesConfig.registerWithMcp === false) {
-      this.logger.info('[Resources] MCP resources registration disabled by config');
-      return;
-    }
+  /**
+   * Construct an unregistered `McpServer` shell.
+   *
+   * Capabilities are declared per instance, so every serving unit — the STDIO
+   * connection and each HTTP request — advertises the same surface.
+   */
+  private constructMcpServer(): McpServer {
+    const config = this.configManager.getConfig();
+    return new McpServer(
+      {
+        name: config.server.name,
+        version: config.server.version,
+      },
+      {
+        capabilities: {
+          prompts: { listChanged: true },
+          tools: { listChanged: true },
+          resources: { listChanged: true },
+        },
+      }
+    );
+  }
 
-    // Get optional dependencies from managers (members are definite-assigned at this point)
-    const fm = this.frameworkStateStore.getFrameworkManager();
-    const csm = this.mcpToolsManager.getChainSessionStore();
-    const mc = this.mcpToolsManager.getMetricsCollector();
+  /**
+   * Build the factory the SDK calls once per serving unit.
+   *
+   * Protocol revision 2026-07-28 removes protocol sessions: `createMcpHandler`
+   * constructs a fresh `McpServer` for each HTTP request, and `serveStdio` one
+   * per connection. Only the server shell and its tool/resource bindings are
+   * per-unit — the executors, managers, and stores those bindings close over
+   * stay the singletons built during module initialization, so this is a
+   * binding step rather than a second startup.
+   */
+  createMcpServerFactory(): McpServerFactory {
+    return async (ctx) => {
+      const server = this.constructMcpServer();
+      // The advertised tool surface is state-dependent, and that state is
+      // workspace-scoped. `ctx` is the only scope signal available here: the
+      // schema is built now, before any call has been dispatched, so the
+      // per-call `extra` the rest of the server reads does not exist yet.
+      await this.mcpToolsManager.registerAllTools(server, resolveServingUnitScope(ctx));
+      this.registerMcpResources(server);
+      return server;
+    };
+  }
 
-    registerResources(this.mcpServer, {
+  /**
+   * The same factory, wrapped to capture the instance STDIO pins.
+   *
+   * `serveStdio` builds exactly one server for the connection's lifetime, and
+   * the handle it returns exposes only `close()` — there is no notifier on it.
+   * The pinned instance is therefore the only thing that can push a
+   * notification over STDIO, so it is recorded as it is built.
+   *
+   * HTTP needs no equivalent: it has no long-lived instance to record, and
+   * publishes through the handler's own `notify` facade instead.
+   */
+  createStdioServerFactory(): McpServerFactory {
+    const build = this.createMcpServerFactory();
+    return async (ctx) => {
+      const server = (await build(ctx)) as McpServer;
+      this.mcpServer = server;
+      this.mcpToolsManager.setPinnedServer(server);
+      this.notificationEmitter.setServer(
+        server as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
+      );
+      return server;
+    };
+  }
+
+  /**
+   * Tell clients the resource list changed, through whichever transport serves.
+   *
+   * Resources are hot-reloaded, so without this a client holds a stale list
+   * until it re-lists on its own. The channel existed but had no producer; the
+   * prompt hot-reload completion below is it.
+   */
+  private notifyResourcesChanged(): void {
+    publishResourcesChanged(this.listChangeTargets());
+  }
+
+  /** Collaborators the list-change routing picks between. */
+  private listChangeTargets(): ListChangeTargets {
+    return {
+      httpPublisher: this.transportRouter?.getHttpHandler()?.notify,
+      pinnedServer: this.mcpServer,
       logger: this.logger,
-      // Wrap convertedPrompts array as a getter function for hot-reload compatibility
-      promptManager: {
-        getConvertedPrompts: () => this._convertedPrompts,
-      },
-      // Gate manager uses BaseResourceHandler public methods: list() and get()
-      gateManager: this.gateManager
-        ? {
-            list: (enabledOnly?: boolean) => this.gateManager!.list(enabledOnly),
-            get: (id: string) => this.gateManager!.get(id),
-          }
-        : undefined,
-      // Phase 2: Framework resources
-      frameworkManager:
-        fm != null
-          ? {
-              listFrameworks: (enabledOnly?: boolean) => fm.listFrameworks(enabledOnly),
-              getFramework: (id: string) => fm.getFramework(id),
-            }
-          : undefined,
-      // Phase 2: Observability resources
-      chainSessionStore:
-        csm != null
-          ? {
-              listActiveSessions: (limit?: number) => csm.listActiveSessions(limit),
-              getSession: (sessionId: string) => csm.getSession(sessionId),
-              getSessionByChainIdentifier: (chainId: string) =>
-                csm.getSessionByChainIdentifier(chainId),
-              getSessionStats: () => csm.getSessionStats(),
-            }
-          : undefined,
-      metricsCollector: {
-        getAnalyticsSummary: () => mc.getAnalyticsSummary(),
-      },
-      // Phase 3: Log resources (only if logger is EnhancedLogger with ring buffer)
-      logManager:
-        this.logger instanceof EnhancedLogger
-          ? {
-              getRecentLogs: (opts) => (this.logger as EnhancedLogger).getRecentLogs(opts),
-              getLogEntry: (id) => (this.logger as EnhancedLogger).getLogEntry(id),
-              getBufferStats: () => (this.logger as EnhancedLogger).getBufferStats(),
-            }
-          : undefined,
-      // Pass granular resource config for per-type enable/disable
-      resourcesConfig: {
-        prompts: resourcesConfig.prompts,
-        gates: resourcesConfig.gates,
-        frameworks: resourcesConfig.frameworks,
-        observability: resourcesConfig.observability,
-        logs: resourcesConfig.logs,
-      },
+    };
+  }
+
+  private registerMcpResources(target: McpServer): void {
+    registerMcpResourcesOn(target, {
+      logger: this.logger,
+      configManager: this.configManager,
+      frameworkStateStore: this.frameworkStateStore,
+      mcpToolsManager: this.mcpToolsManager,
+      ...(this.gateManager ? { gateManager: this.gateManager } : {}),
+      getConvertedPrompts: () => this._convertedPrompts,
     });
   }
 
@@ -445,7 +479,8 @@ export class Application {
       configManager: this.configManager,
       promptManager: this.promptManager,
       mcpToolsManager: this.mcpToolsManager,
-      mcpServer: this.mcpServer,
+      mcpServerFactory: this.createMcpServerFactory(),
+      stdioServerFactory: this.createStdioServerFactory(),
       runtimeOptions: this.runtimeOptions,
       promptsData: this._promptsData,
       categories: this._categories,
@@ -682,6 +717,14 @@ export class Application {
 
       this.cleanup();
 
+      // Close the database LAST. Every subsystem above may still write on its way down
+      // (state stores flush, the chain manager clears its PID-owned rows), so closing
+      // earlier would turn an orderly shutdown into a series of writes against a closed
+      // handle. This is also the only place the WAL gets checkpointed: nothing called
+      // `SqliteEngine.shutdown()` before, so the log grew unbounded across restarts.
+      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+      await SqliteEngine.shutdownInstance();
+
       if (this.logger) {
         this.logger.info('Application shutdown completed successfully');
       }
@@ -733,32 +776,33 @@ export class Application {
       }
 
       if (this.apiRouter) {
-        // The API manager is only available for the SSE transport.
+        // The API router only exists on the Streamable HTTP transport.
         this.apiRouter.updateData(this._promptsData, this._categories, this.convertedPrompts);
         this.logger.info('✅ ApiRouter updated with new data.');
       }
 
-      // Step 3.5: Re-sync resource index for hook consumption
+      // Step 3.5: Re-sync resource index for hook consumption.
+      //
+      // Deliberately uncaught. `fullServerRefresh` already has one error boundary at the
+      // bottom of this method, which logs and re-throws to the caller; an inner catch
+      // meant that boundary never fired while the refresh went on to report
+      // "completed successfully" over a stale index.
       if (this.serverRoot) {
-        try {
-          const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-          const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
-          const { ScriptToolDefinitionLoader } =
-            await import('#modules/automation/core/script-definition-loader.js');
-          const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
-          await dbManager.initialize();
-          const resourcesDir =
-            this.pathResolver?.getResourcesPath() ?? path.join(this.serverRoot, 'resources');
-          const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
-          const indexer = createResourceIndexer(dbManager, this.logger, {
-            resourcesDir,
-            toolLoader: (dir, id) => scriptLoader.loadAllToolsForPrompt(dir, id),
-          });
-          await indexer.syncAll();
-          this.logger.info('✅ Resource index re-synced after hot-reload.');
-        } catch (error) {
-          this.logger.warn('Failed to re-sync resource index:', error);
-        }
+        const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+        const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
+        const { ScriptToolDefinitionLoader } =
+          await import('#modules/automation/core/script-definition-loader.js');
+        const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
+        await dbManager.initialize();
+        const resourcesDir =
+          this.pathResolver?.getResourcesPath() ?? path.join(this.serverRoot, 'resources');
+        const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
+        const indexer = createResourceIndexer(dbManager, this.logger, {
+          resourcesDir,
+          toolLoader: (dir, id) => scriptLoader.loadAllToolsForPrompt(dir, id),
+        });
+        await indexer.syncAll();
+        this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 
       // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)
@@ -885,6 +929,11 @@ export class Application {
           this.logger.info(`🔁 Re-registered ${count} prompts after hot reload.`);
           await this.promptManager.notifyPromptsListChanged();
         }
+
+        // Prompt resources project `_convertedPrompts`, so a reload changes the
+        // resource list too. Prompts were already announced above; resources
+        // were the half that had no producer.
+        this.notifyResourcesChanged();
 
         this.logger.info('✅ Prompt data refreshed from filesystem changes.');
       } catch (error) {
@@ -1077,9 +1126,6 @@ export class Application {
       application: {
         promptsLoaded: this._promptsData.length,
         categoriesLoaded: this._categories.length,
-        ...(this.transportRouter?.isSse()
-          ? { serverConnections: this.transportRouter.getActiveConnectionsCount() }
-          : {}),
       },
       executionCoordinator: executionCoordinatorMetrics,
     };

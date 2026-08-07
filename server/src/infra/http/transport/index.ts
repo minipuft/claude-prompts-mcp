@@ -1,29 +1,60 @@
-// @lifecycle canonical - Sets up STDIO, SSE, and Streamable HTTP transports.
+// @lifecycle canonical - Sets up STDIO and Streamable HTTP transports.
 /**
  * Transport Management Module
- * Handles STDIO, SSE, and Streamable HTTP transport setup and lifecycle management
+ *
+ * Handles STDIO and Streamable HTTP transport setup and lifecycle.
+ *
+ * How long a server instance lives differs between the two paths, and that
+ * difference is the shape of this module under protocol revision 2026-07-28:
+ *
+ * - STDIO serves one long-lived `McpServer` for the life of the connection.
+ *   `serveStdio` selects the era on the opening exchange and pins one instance
+ *   from the factory for that connection.
+ * - HTTP has no protocol session. `createMcpHandler` constructs a fresh server
+ *   per request from the supplied factory, so nothing is retained between
+ *   exchanges and there is no session registry to keep.
+ *
+ * The deprecated HTTP+SSE transport was removed alongside the SDK v2 upgrade,
+ * which no longer ships `SSEServerTransport`.
  */
 
-import { randomUUID } from 'node:crypto';
-
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import express, { Request, Response } from 'express';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import express from 'express';
 
 import { ConfigLoader } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
 
 import type { TransportMode } from '#shared/types/index.js';
+import type { McpHttpHandler, McpServerFactory } from '@modelcontextprotocol/server';
+import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
+
+/**
+ * Reject a transport that was removed, rather than quietly substituting one.
+ *
+ * Falling back to the configured default here would start the server on a
+ * transport the operator did not ask for and report success — the `start:sse`
+ * script did exactly that after the HTTP+SSE transport was deleted. A removed
+ * option has to fail loudly enough to be fixed.
+ *
+ * `source` names where the value came from so the message points at the thing
+ * to edit: a CLI flag or the config file.
+ */
+function assertTransportSupported(value: string, source: string): void {
+  if (value === 'sse') {
+    throw new Error(
+      `${source}=sse is no longer supported: the HTTP+SSE transport was removed in the MCP SDK v2 ` +
+        `upgrade. Use streamable-http instead.`
+    );
+  }
+}
 
 /**
  * Transport types supported by the server
  */
 export enum TransportType {
   STDIO = 'stdio',
-  SSE = 'sse',
   STREAMABLE_HTTP = 'streamable-http',
   BOTH = 'both',
 }
@@ -33,21 +64,26 @@ export enum TransportType {
  */
 export class TransportRouter {
   private logger: Logger;
-  private configManager: ConfigLoader;
-  private mcpServer: McpServer;
+  private stdioServerFactory: McpServerFactory;
+  private mcpServerFactory: McpServerFactory;
   private transport: TransportMode;
-  private sseTransports: Map<string, SSEServerTransport> = new Map();
-  private streamableHttpTransports: Map<string, StreamableHTTPServerTransport> = new Map();
+  private httpHandler?: McpHttpHandler;
+  private stdioHandle?: StdioServerHandle;
 
+  /**
+   * Two factories, because the two transports pin instances differently:
+   * `stdioServerFactory` is called once for the connection and its instance is
+   * long-lived, while `mcpServerFactory` is called per HTTP request.
+   */
   constructor(
     logger: Logger,
-    configManager: ConfigLoader,
-    mcpServer: McpServer,
+    stdioServerFactory: McpServerFactory,
+    mcpServerFactory: McpServerFactory,
     transport: TransportMode
   ) {
     this.logger = logger;
-    this.configManager = configManager;
-    this.mcpServer = mcpServer;
+    this.stdioServerFactory = stdioServerFactory;
+    this.mcpServerFactory = mcpServerFactory;
     this.transport = transport;
   }
 
@@ -59,9 +95,9 @@ export class TransportRouter {
     // CLI argument takes highest priority
     const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
     if (transportArg) {
-      const value = transportArg.split('=')[1];
-      // Validate CLI arg - include streamable-http
-      if (value === 'stdio' || value === 'sse' || value === 'streamable-http' || value === 'both') {
+      const value = transportArg.split('=')[1] ?? '';
+      assertTransportSupported(value, '--transport');
+      if (value === 'stdio' || value === 'streamable-http' || value === 'both') {
         return value;
       }
       // Use stderr to avoid corrupting STDIO protocol
@@ -70,44 +106,42 @@ export class TransportRouter {
       );
     }
 
-    // Fall back to config value
-    return configManager.getTransportMode();
+    // Fall back to config value — which is a second way a removed transport can
+    // arrive, so it is checked too rather than trusted.
+    const configured = configManager.getTransportMode();
+    assertTransportSupported(String(configured), 'config.transport');
+    return configured;
   }
 
   /**
-   * Setup STDIO transport
+   * Setup STDIO transport.
+   *
+   * `serveStdio` owns the era decision for the connection: the opening exchange
+   * selects the era, one instance from the factory is pinned for the connection
+   * lifetime, and everything after passes through to it.
+   *
+   * Connecting an `McpServer` to a `StdioServerTransport` directly — the v1
+   * pattern this replaces — leaves the connection permanently 2025-era. It
+   * answers `tools/list` from a modern client because the protocol layer is
+   * permissive, but `server/discover` and `subscriptions/listen` return
+   * `-32601`, and the request `_meta` envelope is never lifted, so per-request
+   * client identity is invisible.
    */
-  async setupStdioTransport(): Promise<void> {
+  setupStdioTransport(): void {
     this.logger.info('Starting server with STDIO transport');
-
-    // Create the STDIO transport - aligned with MCP SDK pattern
-    const stdioTransport = new StdioServerTransport();
 
     // Setup STDIO event handlers
     this.setupStdioEventHandlers();
 
-    // Connect the server to the transport - standard MCP SDK pattern
-    try {
-      await this.mcpServer.connect(stdioTransport);
-      this.logger.info(
-        'STDIO transport connected successfully - server ready for MCP client connections'
-      );
+    this.stdioHandle = serveStdio(this.stdioServerFactory, {
+      onerror: (error: Error) => {
+        this.logger.error('STDIO transport error:', error);
+      },
+    });
 
-      // Setup console redirection AFTER successful connection to avoid deadlock
-      this.setupStdioConsoleRedirection();
-    } catch (error) {
-      this.logger.error('Error connecting to STDIO transport:', error);
-      process.exit(1);
-    }
-  }
-
-  /**
-   * Setup console redirection for STDIO transport
-   */
-  private setupStdioConsoleRedirection(): void {
-    // Ensure we don't mix log messages with JSON messages
-    // Note: Console redirection is removed - use logger directly
-    // This prevents interference with MCP JSON protocol
+    this.logger.info(
+      'STDIO transport connected successfully - server ready for MCP client connections'
+    );
   }
 
   /**
@@ -122,210 +156,50 @@ export class TransportRouter {
   }
 
   /**
-   * Setup SSE transport with Express integration
-   */
-  setupSseTransport(app: express.Application): void {
-    this.logger.info('Setting up SSE transport endpoints');
-
-    // SSE endpoint for MCP connections
-    app.get('/mcp', async (req: Request, res: Response) => {
-      this.logger.info('New SSE connection from ' + req.ip);
-
-      // Set headers for SSE
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no'); // Issues with certain proxies
-
-      // `Date.now()` was the connection id, so two connections opening in the same millisecond
-      // shared one key: the second overwrote the first in the map, and the first one's `close`
-      // handler then deleted the second's transport.
-      const connectionId = randomUUID();
-
-      // Create a new transport for this connection
-      const sseTransport = new SSEServerTransport('/messages', res);
-      this.sseTransports.set(connectionId, sseTransport);
-
-      // Log connection data for debugging
-      this.logger.debug('Connection headers:', req.headers);
-
-      // Remove the transport when the connection is closed
-      res.on('close', () => {
-        this.logger.info(`SSE connection ${connectionId} closed`);
-        this.sseTransports.delete(connectionId);
-      });
-
-      try {
-        await this.mcpServer.connect(sseTransport);
-        this.logger.info(`SSE transport ${connectionId} connected successfully`);
-      } catch (error) {
-        this.logger.error('Error connecting to SSE transport:', error);
-        this.sseTransports.delete(connectionId);
-        // Headers are already sent, so `res.status(500)` cannot apply. Emit an SSE error event and
-        // close the stream: a client that fails immediately can be diagnosed, one that hangs for
-        // its full timeout cannot.
-        const detail = error instanceof Error ? error.message : String(error);
-        res.write(`event: error\ndata: ${JSON.stringify({ message: detail })}\n\n`);
-        res.end();
-      }
-    });
-
-    // Messages endpoint for SSE transport
-    app.post('/messages', express.json(), async (req: Request, res: Response) => {
-      this.logger.debug('Received message:', req.body);
-
-      try {
-        // Try to handle the request with each transport
-        const transports = Array.from(this.sseTransports.values());
-
-        if (transports.length === 0) {
-          this.logger.error('No active SSE connections found');
-          return res.status(503).json({ error: 'No active SSE connections' });
-        }
-
-        let handled = false;
-        let lastError = null;
-
-        // Get sessionId from query params - SSEServerTransport includes it in the endpoint URL
-        const sessionIdParam = req.query['sessionId'];
-        const sessionId = Array.isArray(sessionIdParam) ? sessionIdParam[0] : sessionIdParam;
-
-        for (const transport of transports) {
-          try {
-            // Use any available method to process the request
-            const sseTransport = transport as any;
-
-            // SSEServerTransport (MCP SDK) uses handlePostMessage method
-            if (typeof sseTransport.handlePostMessage === 'function') {
-              // Check if this transport matches the session (if provided)
-              if (sessionId && sseTransport._sessionId && sseTransport._sessionId !== sessionId) {
-                continue; // Not the right transport for this session
-              }
-              this.logger.debug('Using handlePostMessage method');
-              await sseTransport.handlePostMessage(req, res, req.body);
-              handled = true;
-            } else if (typeof sseTransport.handleRequest === 'function') {
-              this.logger.debug('Using handleRequest method');
-              handled = await sseTransport.handleRequest(req, res);
-            } else if (typeof sseTransport.processRequest === 'function') {
-              this.logger.debug('Using processRequest method');
-              handled = await sseTransport.processRequest(req, res);
-            }
-
-            if (handled) {
-              this.logger.debug('Request handled successfully');
-              break;
-            }
-          } catch (e) {
-            lastError = e;
-            this.logger.error('Error processing request with transport:', e);
-          }
-        }
-
-        if (!handled) {
-          this.logger.error('No transport handled the request');
-          if (lastError) {
-            this.logger.error('Last error:', lastError);
-          }
-          return res.status(404).json({ error: 'No matching transport found' });
-        }
-        // Request was handled successfully by transport - response already sent
-        return;
-      } catch (error) {
-        this.logger.error('Error handling message:', error);
-        return res.status(500).json({
-          error: 'Internal server error',
-          details: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
-  }
-
-  /**
-   * Setup Streamable HTTP transport with Express integration
-   * This is the new MCP standard transport (replacing SSE)
+   * Setup Streamable HTTP transport with Express integration.
+   *
+   * `legacy: 'stateless'` keeps 2025-era clients working — they are served
+   * per-request through the stateless fallback rather than rejected, so one
+   * build answers both protocol revisions.
    */
   setupStreamableHttpTransport(app: express.Application): void {
     this.logger.info('Setting up Streamable HTTP transport endpoints');
 
-    // Single /mcp endpoint handles all HTTP methods (POST, GET, DELETE)
-    const mcpHandler = async (req: Request, res: Response) => {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    this.httpHandler = createMcpHandler(this.mcpServerFactory, { legacy: 'stateless' });
 
-      try {
-        let transport: StreamableHTTPServerTransport | undefined;
-
-        if (sessionId) {
-          // Reuse existing transport for this session
-          transport = this.streamableHttpTransports.get(sessionId);
-          if (!transport) {
-            this.logger.warn(`No transport found for session ${sessionId}`);
-            res.status(404).json({
-              jsonrpc: '2.0',
-              error: { code: -32000, message: 'Session not found' },
-              id: null,
-            });
-            return;
-          }
-        } else if (req.method === 'POST' && isInitializeRequest(req.body)) {
-          // New initialization request - create new transport
-          this.logger.info('New Streamable HTTP initialization request');
-
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: (newSessionId: string) => {
-              this.logger.info(`Streamable HTTP session initialized: ${newSessionId}`);
-              this.streamableHttpTransports.set(newSessionId, transport!);
-            },
-            onsessionclosed: (closedSessionId: string) => {
-              this.logger.info(`Streamable HTTP session closed: ${closedSessionId}`);
-              this.streamableHttpTransports.delete(closedSessionId);
-            },
-          });
-
-          // Set up cleanup handler
-          transport.onclose = () => {
-            const sid = (transport as any).sessionId;
-            if (sid) {
-              this.streamableHttpTransports.delete(sid);
-            }
-          };
-
-          // Connect to MCP server before handling request
-          await this.mcpServer.connect(transport);
-          await transport.handleRequest(req, res, req.body);
-          return;
-        } else {
-          // Invalid request - no session ID and not initialization
-          this.logger.warn('Invalid request: no session ID and not initialization');
-          res.status(400).json({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
-            id: null,
-          });
-          return;
-        }
-
-        // Handle request with existing transport
-        await transport.handleRequest(req, res, req.body);
-      } catch (error) {
+    // `toNodeHandler` converts the Node request to a web-standard Request, calls
+    // the handler, then writes the Response back, honoring SSE backpressure.
+    const nodeHandler = toNodeHandler(this.httpHandler, {
+      onerror: (error: unknown) => {
         this.logger.error('Error handling Streamable HTTP request:', error);
-        if (!res.headersSent) {
-          res.status(500).json({
-            jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
-            id: null,
-          });
-        }
-      }
+      },
+    });
+
+    // The API app installs `express.json()` globally, so the raw request stream
+    // is already drained by the time this runs and the adapter would parse an
+    // empty body. Hand it the parsed body instead. `toNodeHandler` ignores a
+    // function third argument, so Express's `next` cannot fill this slot for us.
+    // GET and DELETE carry no body, and express's `{}` placeholder would be read
+    // as an empty JSON-RPC message — pass undefined so the adapter sees none.
+    const mcpHandler = (req: express.Request, res: express.Response): void => {
+      void nodeHandler(req, res, req.method === 'POST' ? req.body : undefined);
     };
 
-    // Register routes for all HTTP methods on /mcp
-    app.post('/mcp', express.json(), mcpHandler);
+    // Single /mcp endpoint handles all HTTP methods (POST, GET, DELETE)
+    app.post('/mcp', mcpHandler);
     app.get('/mcp', mcpHandler);
     app.delete('/mcp', mcpHandler);
 
     this.logger.info('Streamable HTTP transport ready at /mcp');
+  }
+
+  /**
+   * Publish-side facade over `subscriptions/listen`, available once HTTP is set
+   * up. Undefined on the STDIO-only path, where clients are notified through
+   * the connected server instance instead.
+   */
+  getHttpHandler(): McpHttpHandler | undefined {
+    return this.httpHandler;
   }
 
   /**
@@ -344,19 +218,13 @@ export class TransportRouter {
   }
 
   /**
-   * Check if SSE transport should be active
-   * True for 'sse' or 'both' modes
-   * @deprecated SSE is deprecated, prefer streamable-http
-   */
-  isSse(): boolean {
-    return this.transport === TransportType.SSE || this.transport === TransportType.BOTH;
-  }
-
-  /**
    * Check if Streamable HTTP transport should be active
+   * True for 'streamable-http' or 'both' modes
    */
   isStreamableHttp(): boolean {
-    return this.transport === TransportType.STREAMABLE_HTTP;
+    return (
+      this.transport === TransportType.STREAMABLE_HTTP || this.transport === TransportType.BOTH
+    );
   }
 
   /**
@@ -367,37 +235,23 @@ export class TransportRouter {
   }
 
   /**
-   * Get active SSE connections count
-   */
-  getActiveConnectionsCount(): number {
-    return this.sseTransports.size + this.streamableHttpTransports.size;
-  }
-
-  /**
-   * Get active Streamable HTTP sessions count
-   */
-  getActiveStreamableHttpSessionsCount(): number {
-    return this.streamableHttpTransports.size;
-  }
-
-  /**
-   * Close all active connections (SSE and Streamable HTTP)
+   * Close the HTTP handler's modern leg — aborts in-flight exchanges and closes
+   * their per-request instances. Legacy serving needs no teardown; it is
+   * per-request by construction and holds nothing between exchanges.
    */
   async closeAllConnections(): Promise<void> {
-    this.logger.info(`Closing ${this.sseTransports.size} active SSE connections`);
-    this.sseTransports.clear();
-
-    this.logger.info(
-      `Closing ${this.streamableHttpTransports.size} active Streamable HTTP sessions`
-    );
-    for (const [sessionId, transport] of this.streamableHttpTransports) {
-      try {
-        await transport.close();
-      } catch (error) {
-        this.logger.error(`Error closing Streamable HTTP session ${sessionId}:`, error);
-      }
+    if (this.stdioHandle) {
+      this.logger.info('Closing STDIO connection');
+      await this.stdioHandle.close();
+      this.stdioHandle = undefined;
     }
-    this.streamableHttpTransports.clear();
+
+    if (!this.httpHandler) {
+      return;
+    }
+    this.logger.info('Closing Streamable HTTP handler');
+    await this.httpHandler.close();
+    this.httpHandler = undefined;
   }
 }
 
@@ -406,11 +260,9 @@ export class TransportRouter {
  */
 export function createTransportRouter(
   logger: Logger,
-  configManager: ConfigLoader,
-  mcpServer: McpServer,
+  stdioServerFactory: McpServerFactory,
+  mcpServerFactory: McpServerFactory,
   transport: TransportMode
 ): TransportRouter {
-  const transportRouter = new TransportRouter(logger, configManager, mcpServer, transport);
-
-  return transportRouter;
+  return new TransportRouter(logger, stdioServerFactory, mcpServerFactory, transport);
 }

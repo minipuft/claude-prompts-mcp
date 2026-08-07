@@ -297,4 +297,89 @@ describe('ExecutionRecordStore (integration)', () => {
 
     expect(warnLogger.warn).toHaveBeenCalled();
   });
+
+  /**
+   * Tier 3.1 — the reader half of the ledger. Before this, execution_records had a
+   * writer and no caller: queryBySession/queryByChain had zero call sites across
+   * src/, hooks/ and cli/.
+   */
+  describe('queryRecent', () => {
+    test('returns records newest-first by ULID order', () => {
+      store.append({ sessionId: 'sess-a', status: 'working', startedAt: 1 });
+      store.append({ sessionId: 'sess-b', status: 'working', startedAt: 2 });
+      store.append({ sessionId: 'sess-c', status: 'completed', startedAt: 3 });
+
+      const recent = store.queryRecent();
+
+      expect(recent).toHaveLength(3);
+      expect(recent.map((r) => r.sessionId)).toEqual(['sess-c', 'sess-b', 'sess-a']);
+    });
+
+    test('orders by execution_id, so records sharing a timestamp still sort deterministically', () => {
+      // All three share startedAt — a timestamp sort could return any permutation.
+      // ULIDs are monotonic, which is why queryRecent orders by execution_id instead.
+      const sharedTs = 42;
+      const ids = [
+        store.append({ sessionId: 's1', status: 'working', startedAt: sharedTs }),
+        store.append({ sessionId: 's2', status: 'working', startedAt: sharedTs }),
+        store.append({ sessionId: 's3', status: 'working', startedAt: sharedTs }),
+      ];
+
+      const recent = store.queryRecent();
+
+      expect(recent.map((r) => r.executionId)).toEqual([...ids].reverse());
+    });
+
+    test('honours an explicit limit', () => {
+      for (let i = 0; i < 10; i += 1) {
+        store.append({ sessionId: `sess-${i}`, status: 'working', startedAt: i });
+      }
+
+      expect(store.queryRecent(3)).toHaveLength(3);
+    });
+
+    test('clamps a limit above the ceiling instead of reading the whole ledger', () => {
+      // Seeded past MAX_RECENT_LIMIT (500) deliberately: with fewer rows than the
+      // ceiling this assertion would pass whether or not the clamp exists, and a
+      // test that cannot fail proves nothing. execution_records has no retention
+      // policy, so an unbounded read is a real risk rather than a hypothetical.
+      for (let i = 0; i < 520; i += 1) {
+        store.append({ sessionId: `sess-${i}`, status: 'working', startedAt: i });
+      }
+
+      expect(store.queryRecent(10_000)).toHaveLength(500);
+    });
+
+    test('coerces a non-positive or non-finite limit rather than emitting invalid SQL', () => {
+      store.append({ sessionId: 'sess-only', status: 'completed', startedAt: 1 });
+
+      expect(store.queryRecent(0)).toHaveLength(1);
+      expect(store.queryRecent(-5)).toHaveLength(1);
+      expect(store.queryRecent(Number.NaN)).toHaveLength(1);
+    });
+
+    test('excludes rows belonging to another scope', () => {
+      store.append({
+        sessionId: 'sess-mine',
+        status: 'working',
+        startedAt: 1,
+        scope: { continuityScopeId: 'workspace-a' },
+      });
+      store.append({
+        sessionId: 'sess-theirs',
+        status: 'working',
+        startedAt: 2,
+        scope: { continuityScopeId: 'workspace-b' },
+      });
+
+      const mine = store.queryRecent(50, { continuityScopeId: 'workspace-a' });
+
+      expect(mine).toHaveLength(1);
+      expect(mine[0]?.sessionId).toBe('sess-mine');
+    });
+
+    test('returns an empty array when the ledger holds nothing for the scope', () => {
+      expect(store.queryRecent()).toEqual([]);
+    });
+  });
 });

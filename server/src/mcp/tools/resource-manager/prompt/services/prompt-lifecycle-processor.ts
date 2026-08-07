@@ -131,7 +131,7 @@ export class PromptLifecycleProcessor {
       ).warnings;
     }
 
-    const result = await this.fileOperations.updatePromptImplementation(promptData);
+    await this.fileOperations.updatePromptImplementation(promptData);
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n`;
@@ -150,7 +150,10 @@ export class PromptLifecycleProcessor {
       if (promptData.gateConfiguration.inline_gate_definitions) {
         response += `- Inline Gate Definitions: ${promptData.gateConfiguration.inline_gate_definitions.length} defined\n`;
       }
-    } else if (this.context.dependencies.semanticAnalyzer.isLLMEnabled()) {
+      // No explicit gate configuration: offer rule-based recommendations. This was previously
+      // gated on an LLM-integration flag that defaulted off, which hid `GateAnalyzer` output
+      // that never depended on a model.
+    } else {
       try {
         const gateAnalysis = await this.context.gateAnalyzer.analyzePromptForGates({
           id: promptData.id,
@@ -246,10 +249,10 @@ export class PromptLifecycleProcessor {
         promptData[dataKey] = args[argKey];
       }
     }
-    // gate_configuration has alias handling (special case)
-    if (args.gate_configuration !== undefined || args.gates !== undefined) {
-      promptData.gateConfiguration = args.gate_configuration ?? args.gates;
-    }
+    // `gate_configuration` flows through UPDATE_FIELDS like every other field. It carried a
+    // hand-written special case here until 2026-08-06 (row 1.6) whose only purpose was accepting
+    // the [Framework] `gates` parameter as an alias — accepted on update, silently ignored on
+    // create. That asymmetry is what settled it as unintended rather than designed.
 
     // Chain step-level operations (add/remove/reorder)
     if (args.chain_step_operation && args.chain_step_operation !== 'replace') {

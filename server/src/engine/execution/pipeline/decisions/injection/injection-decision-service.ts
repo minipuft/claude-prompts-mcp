@@ -436,9 +436,9 @@ export class InjectionDecisionService {
    * Check if injection should happen based on frequency rules.
    */
   private checkFrequency(
-    type: InjectionType,
+    _type: InjectionType,
     currentStep: number,
-    totalSteps: number | undefined,
+    _totalSteps: number | undefined,
     frequency: InjectionFrequency,
     timestamp: number,
     source: InjectionDecision['source'],

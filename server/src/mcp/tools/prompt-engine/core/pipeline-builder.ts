@@ -243,7 +243,7 @@ export class PipelineBuilder {
       () => deps.frameworkManager?.selectFramework({})?.id,
       () => deps.gateManager,
       deps.lightweightGateSystem.gateLoader,
-      new GateMetricsRecorder(deps.getAnalyticsService, gateService?.serviceType),
+      new GateMetricsRecorder(deps.getAnalyticsService),
       deps.logger
     );
     const temporaryGateRegistrar = new TemporaryGateRegistrar(
@@ -340,11 +340,12 @@ export class PipelineBuilder {
     // Execution order. The array IS the contract — the pipeline runs it front to
     // back and does no reordering of its own.
     //
-    // Constraints this order encodes, each of which breaks something if inverted:
-    //   - JudgeSelection before GateEnhancement and FrameworkResolution, so the
-    //     judge phase (%judge) returns a clean resource menu with no framework or
-    //     gate injection, and so the execution phase has clientFrameworkOverride
-    //     set before FrameworkResolution reads it.
+    // Constraints this order encodes, each of which breaks something if inverted.
+    // The first three are also declared as `requires`/`provides` on the stages
+    // themselves, so inverting one throws from the pipeline constructor rather
+    // than failing at runtime; the last two are enforced by this comment only.
+    //   - JudgeSelection before PromptGuidance, which reads the
+    //     state.framework.clientSelectedStyle that JudgeSelection writes.
     //   - SessionManagement before InjectionControl, which needs currentStep.
     //   - InjectionControl before PromptGuidance, which reads the injection
     //     decisions InjectionControl writes to context.state.injection.
@@ -352,6 +353,11 @@ export class PipelineBuilder {
     //     is available to the template context that follows.
     //   - ShellVerification before StepExecution, enabling verify loops where a
     //     shell command grades the previous response.
+    //
+    // JudgeSelection also runs before GateEnhancement and FrameworkResolution so
+    // the judge phase (%judge) returns a clean resource menu with no framework or
+    // gate injection. That one is a property of the early return, not of a context
+    // key, so it has no `requires` declaration to carry it.
     const stages: readonly PipelineStage[] = [
       requestStage,
       lifecycleStage,
@@ -382,6 +388,9 @@ export class PipelineBuilder {
       metricsProvider: deps.getAnalyticsService,
       hookRegistry: deps.hookRegistry,
       gateEnforcement,
+      // Stages take `| null`; PipelinePorts is uniformly optional, so normalize here
+      // rather than admitting both empty representations into the ports interface.
+      executionRecordStore: deps.executionRecordStore ?? undefined,
     });
   }
 
@@ -421,8 +430,7 @@ export class PipelineBuilder {
     const factory = new GateServiceFactory(
       deps.logger,
       deps.configManager,
-      deps.gateGuidanceRenderer,
-      deps.lightweightGateSystem.gateValidator
+      deps.gateGuidanceRenderer
     );
     return factory.createGateService();
   }

@@ -193,7 +193,7 @@ export class ToolDetectionService implements ToolDetectionServicePort {
    * whether to ask for confirmation.
    */
   private matchToolWithTrigger(
-    input: string,
+    _input: string,
     args: Record<string, unknown>,
     tool: LoadedScriptTool,
     execution: ExecutionConfig,

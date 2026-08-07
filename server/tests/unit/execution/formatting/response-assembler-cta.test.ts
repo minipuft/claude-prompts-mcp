@@ -160,8 +160,14 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
 
       expect(result).toContain('**Review Required**');
       expect(result).toContain('chain_id="chain-test#1"');
-      expect(result).toContain('gate_verdict="GATE_REVIEW: PASS');
-      expect(result).toContain('GATE_VERDICTS:');
+      // The CTA advertises the structured form, which the tool schema validates
+      // and which therefore cannot be submitted malformed. It replaced the
+      // free-text `GATE_REVIEW:` template the server used to ask the model to
+      // reproduce and then read back with five fallback regexes.
+      expect(result).toContain('gate_verdict={');
+      expect(result).toContain('"overall": "PASS"');
+      expect(result).toContain('"per_gate"');
+      expect(result).not.toContain('gate_verdict="GATE_REVIEW:');
       expect(result).toContain('intent-quality');
       expect(result).toContain('code-quality');
     });

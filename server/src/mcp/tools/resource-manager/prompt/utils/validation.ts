@@ -23,6 +23,12 @@ export const UPDATE_FIELDS: Record<string, string> = {
   user_message_template: 'userMessageTemplate',
   arguments: 'arguments',
   chain_steps: 'chainSteps',
+  // Moved here 2026-08-06 (row 1.6) from a hand-written special case in updatePrompt() whose only
+  // reason to exist was folding the [Framework] `gates` parameter in as an alias. `gates` is no
+  // longer accepted on a prompt update — it was accepted here but silently ignored on create, and
+  // is declared `[Framework]` in tooling/contracts/resource-manager.json. With the alias gone the
+  // field needs no special handling and clears like every other one.
+  gate_configuration: 'gateConfiguration',
 };
 
 /**

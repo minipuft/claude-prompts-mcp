@@ -23,7 +23,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const tenantId =
       scope?.continuityScopeId ?? scope?.workspaceId ?? scope?.organizationId ?? 'default';
     const row = this.db.queryOne<{ state: string }>(
-      'SELECT state FROM chain_run_registry WHERE tenant_id = ?',
+      'SELECT state FROM chain_run_registry WHERE run_owner_pid = ?',
       [tenantId]
     );
     return row ? (JSON.parse(row.state) as PersistedChainRunRegistry) : {};
@@ -32,9 +32,13 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
   async save(store: PersistedChainRunRegistry, scope?: StateStoreOptions): Promise<void> {
     const tenantId =
       scope?.continuityScopeId ?? scope?.workspaceId ?? scope?.organizationId ?? 'default';
-    this.db.run('INSERT OR REPLACE INTO chain_run_registry (tenant_id, state) VALUES (?, ?)', [
-      tenantId,
-      JSON.stringify(store),
-    ]);
+    // The scope columns are bound separately from `run_owner_pid` rather than derived from it:
+    // this table's key is the run owner, not a workspace, so collapsing the two would
+    // state an isolation guarantee the row does not honor.
+    this.db.run(
+      `INSERT OR REPLACE INTO chain_run_registry (run_owner_pid, organization_id, workspace_id, state)
+       VALUES (?, ?, ?, ?)`,
+      [tenantId, scope?.organizationId ?? null, scope?.workspaceId ?? null, JSON.stringify(store)]
+    );
   }
 }

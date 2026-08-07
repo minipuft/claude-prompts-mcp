@@ -159,24 +159,20 @@ describe('Tenant Isolation', () => {
   });
 
   describe('Database-level tenant table', () => {
-    test('default scope exists after initialization', () => {
-      const result = dbManager.queryOne<{ id: string }>(
-        "SELECT id FROM tenants WHERE id = 'default'"
+    // Tier 6.3 deleted `tenants`. The two tests here inserted into it and read the row back,
+    // which proved the table existed and nothing more — it had no reader in src/, and no
+    // `tenant_id` column anywhere declared it as a foreign key. Isolation is delivered by the
+    // scope columns on each table, which the rest of this file covers.
+    test('is gone, and no table claims a foreign key into it', () => {
+      const present = dbManager.query<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='tenants'`
       );
+      expect(present).toHaveLength(0);
 
-      expect(result).not.toBeNull();
-      expect(result?.id).toBe('default');
-    });
-
-    test('can create additional scopes', () => {
-      dbManager.run("INSERT OR IGNORE INTO tenants (id, name) VALUES ('new-tenant', 'New Tenant')");
-
-      const result = dbManager.queryOne<{ id: string; name: string }>(
-        "SELECT id, name FROM tenants WHERE id = 'new-tenant'"
-      );
-
-      expect(result).not.toBeNull();
-      expect(result?.name).toBe('New Tenant');
+      const referencing = dbManager
+        .query<{ sql: string | null }>(`SELECT sql FROM sqlite_master WHERE type='table'`)
+        .filter((row) => /REFERENCES\s+tenants/i.test(row.sql ?? ''));
+      expect(referencing).toHaveLength(0);
     });
   });
 
@@ -208,6 +204,49 @@ describe('Tenant Isolation', () => {
 
     afterEach(async () => {
       await chainSessionStore.cleanup();
+    });
+
+    /**
+     * Tier 4 writer conformance. `chain_sessions.run_owner_pid` is the server PID and
+     * `chain_run_registry.run_owner_pid` is the run owner — neither is a workspace, so the scope
+     * columns are the only thing that says which project a row belongs to. Both were written
+     * NULL until a startup backfill repaired them on the next boot; these assert the writers
+     * now emit scope themselves, which is what lets that backfill be deleted.
+     */
+    test('stamps workspace scope on both the hook projection and the run registry', async () => {
+      const scopedStore = new ChainSessionStore(
+        logger,
+        textReferenceManagerStub as any,
+        { cleanupIntervalMs: 10_000, defaultScope: { workspaceId: 'ws-alpha' } },
+        dbManager
+      );
+
+      try {
+        await scopedStore.createSession('scoped-session', 'chain-scoped#1', 2, {}, {});
+
+        const sessionRows = dbManager.query<{
+          run_owner_pid: string;
+          workspace_id: string | null;
+          organization_id: string | null;
+        }>(`SELECT run_owner_pid, workspace_id, organization_id FROM chain_sessions`);
+
+        expect(sessionRows.length).toBeGreaterThan(0);
+        expect(sessionRows.every((row) => row.workspace_id === 'ws-alpha')).toBe(true);
+        // run_owner_pid stays the PID: the workspace fills the scope columns without displacing
+        // run ownership, which the Python hooks query by. Renamed from tenant_id at v20 so the
+        // two meanings no longer share a name.
+        expect(sessionRows.every((row) => row.run_owner_pid === String(process.pid))).toBe(true);
+
+        const registryRows = dbManager.query<{
+          run_owner_pid: string;
+          workspace_id: string | null;
+        }>(`SELECT run_owner_pid, workspace_id FROM chain_run_registry`);
+
+        expect(registryRows.length).toBeGreaterThan(0);
+        expect(registryRows.every((row) => row.workspace_id === 'ws-alpha')).toBe(true);
+      } finally {
+        await scopedStore.cleanup();
+      }
     });
 
     test('same chain_id can run independently across scopes', async () => {

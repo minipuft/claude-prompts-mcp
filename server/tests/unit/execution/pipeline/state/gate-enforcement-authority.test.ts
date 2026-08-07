@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { GateEnforcementAuthority } from '../../../../../src/engine/execution/pipeline/decisions/index.js';
 
 import type {
-  GateEnforcementInput,
   EnforcementMode,
   VerdictSource,
 } from '../../../../../src/engine/execution/pipeline/decisions/index.js';
@@ -254,18 +253,6 @@ GATE_REVIEW: FAIL - Tests missing`;
         { index: 1, passed: true, rationale: 'Code quality met' },
         { index: 2, passed: false, rationale: 'Missing tests' },
       ]);
-    });
-  });
-
-  describe('resolveEnforcementMode', () => {
-    test('returns configured mode when provided', () => {
-      expect(authority.resolveEnforcementMode('advisory')).toBe('advisory');
-      expect(authority.resolveEnforcementMode('informational')).toBe('informational');
-      expect(authority.resolveEnforcementMode('blocking')).toBe('blocking');
-    });
-
-    test('defaults to blocking when undefined', () => {
-      expect(authority.resolveEnforcementMode(undefined)).toBe('blocking');
     });
   });
 
@@ -638,146 +625,6 @@ GATE_REVIEW: FAIL - Tests missing`;
       await authority.clearPendingReview('session-1');
 
       expect(mockSessionManager.clearPendingGateReview).toHaveBeenCalledWith('session-1');
-    });
-  });
-
-  describe('decision caching (decide/hasDecided/getCachedDecision/reset)', () => {
-    test('hasDecided returns false initially', () => {
-      expect(authority.hasDecided()).toBe(false);
-    });
-
-    test('getCachedDecision returns null initially', () => {
-      expect(authority.getCachedDecision()).toBeNull();
-    });
-
-    test('decide caches the decision', () => {
-      const input: GateEnforcementInput = {
-        sessionId: 'session-1',
-        gateIds: ['gate-1', 'gate-2'],
-      };
-
-      const decision1 = authority.decide(input);
-      const decision2 = authority.decide(input);
-
-      expect(decision1).toBe(decision2); // Same reference
-      expect(authority.hasDecided()).toBe(true);
-    });
-
-    test('getCachedDecision returns decision after decide', () => {
-      const input: GateEnforcementInput = {
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-      };
-
-      authority.decide(input);
-      const cached = authority.getCachedDecision();
-
-      expect(cached).not.toBeNull();
-      expect(cached?.shouldEnforce).toBe(true);
-    });
-
-    test('reset clears the cached decision', () => {
-      authority.decide({
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-      });
-
-      expect(authority.hasDecided()).toBe(true);
-
-      authority.reset();
-
-      expect(authority.hasDecided()).toBe(false);
-      expect(authority.getCachedDecision()).toBeNull();
-    });
-
-    test('can recompute after reset', () => {
-      const input1: GateEnforcementInput = {
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-      };
-
-      const decision1 = authority.decide(input1);
-      expect(decision1.gateIds).toEqual(['gate-1']);
-
-      authority.reset();
-
-      const input2: GateEnforcementInput = {
-        sessionId: 'session-2',
-        gateIds: ['gate-2', 'gate-3'],
-      };
-
-      const decision2 = authority.decide(input2);
-      expect(decision2.gateIds).toEqual(['gate-2', 'gate-3']);
-    });
-  });
-
-  describe('decide - enforcement decision logic', () => {
-    test('shouldEnforce is false when no gates', () => {
-      const decision = authority.decide({
-        sessionId: 'session-1',
-        gateIds: [],
-      });
-
-      expect(decision.shouldEnforce).toBe(false);
-      expect(decision.reason).toContain('No gates');
-    });
-
-    test('shouldEnforce is true with gates', () => {
-      const decision = authority.decide({
-        sessionId: 'session-1',
-        gateIds: ['gate-1', 'gate-2'],
-      });
-
-      expect(decision.shouldEnforce).toBe(true);
-      expect(decision.gateIds).toEqual(['gate-1', 'gate-2']);
-      expect(decision.reason).toContain('Enforcing 2 gates');
-    });
-
-    test('uses configured enforcement mode', () => {
-      const decision = authority.decide({
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-        enforcementMode: 'advisory',
-      });
-
-      expect(decision.enforcementMode).toBe('advisory');
-    });
-
-    test('defaults to blocking mode', () => {
-      const decision = authority.decide({
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-      });
-
-      expect(decision.enforcementMode).toBe('blocking');
-    });
-
-    test('includes timestamp', () => {
-      const before = Date.now();
-      const decision = authority.decide({
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-      });
-      const after = Date.now();
-
-      expect(decision.decidedAt).toBeGreaterThanOrEqual(before);
-      expect(decision.decidedAt).toBeLessThanOrEqual(after);
-    });
-
-    test('logs decision details', () => {
-      authority.decide({
-        sessionId: 'session-1',
-        gateIds: ['gate-1'],
-      });
-
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        '[GateEnforcementAuthority] Decision made',
-        expect.objectContaining({
-          shouldEnforce: true,
-          enforcementMode: 'blocking',
-          gateCount: 1,
-        })
-      );
     });
   });
 });

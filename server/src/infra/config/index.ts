@@ -32,8 +32,6 @@ import {
   TransportMode,
   VersioningConfig,
   FrameworkSettings,
-  VerificationConfig,
-  AdvancedConfig,
   ResourcesConfig,
   TelemetryConfig,
   DEFAULT_VERSIONING_CONFIG,
@@ -46,6 +44,99 @@ import {
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
+
+/**
+ * Config keys the CLI accepted and no reader ever consulted.
+ *
+ * `cpm enable gates` wrote `gates.mode: "on"` and reported success; every runtime reader
+ * consulted `gates.enabled`. The write path (`config-operations.ts` `applyConfigChange`) assigns
+ * dot-keys verbatim, so there was never a translation step and the two spellings never met — the
+ * command silently changed nothing, for all ten subsystems it advertises. The camelCase versioning
+ * pair is the same failure on a different axis: the CLI took `maxVersions`, the runtime reads
+ * `max_versions`.
+ *
+ * The inert spelling is gone from the CLI surface, so nothing writes these any more. This fold
+ * exists only for `config.json` files already on disk carrying one.
+ *
+ * RETIREMENT CONDITION: delete this table and its call when no supported upgrade path starts from
+ * a config written before the CLI surface was corrected — i.e. one full major cycle. The three
+ * modes a reader *does* consult (`telemetry.mode`, `phaseGuards.mode`, `identity.mode`) are
+ * deliberately absent; folding those would destroy live settings.
+ */
+const INERT_SPELLINGS: ReadonlyArray<{
+  path: readonly string[];
+  from: string;
+  to: string;
+  /** `on`/`off` becomes a boolean; the camelCase pair carries its value across unchanged. */
+  coerce: 'onOff' | 'passthrough';
+}> = [
+  { path: ['gates'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['frameworks'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  // `resources` has no top-level `enabled` — `registerWithMcp` is that section's master switch.
+  { path: ['resources'], from: 'mode', to: 'registerWithMcp', coerce: 'onOff' },
+  { path: ['resources', 'prompts'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['resources', 'gates'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['resources', 'frameworks'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['resources', 'observability'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['resources', 'logs'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['verification', 'isolation'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  // This entry outlives its target on purpose. `analysis.semanticAnalysis` is deprecated and no
+  // longer settable from either tool surface, but it is still parsed for one cycle, so a config
+  // written with the inert `mode` spelling must still normalize to the one key the deprecation
+  // warning names — otherwise a user is told to remove a section whose spelling we refused to
+  // recognize. It retires WITH the section, not on the schedule above.
+  {
+    path: ['analysis', 'semanticAnalysis', 'llmIntegration'],
+    from: 'mode',
+    to: 'enabled',
+    coerce: 'onOff',
+  },
+  { path: ['versioning'], from: 'mode', to: 'enabled', coerce: 'onOff' },
+  { path: ['versioning'], from: 'maxVersions', to: 'max_versions', coerce: 'passthrough' },
+  { path: ['versioning'], from: 'autoVersion', to: 'auto_version', coerce: 'passthrough' },
+];
+
+/** Walks `path`, returning the containing object only if every segment is a live object. */
+function resolveContainer(
+  root: Record<string, unknown>,
+  segments: readonly string[]
+): Record<string, unknown> | undefined {
+  let current: Record<string, unknown> = root;
+  for (const segment of segments) {
+    const next = current[segment];
+    if (next === null || typeof next !== 'object' || Array.isArray(next)) return undefined;
+    current = next as Record<string, unknown>;
+  }
+  return current;
+}
+
+/**
+ * Adopts each inert spelling into its canonical key, then deletes the inert one so a config sees
+ * exactly one spelling per concept. The canonical key wins when both are present — an explicit
+ * canonical value is the newer intent, and the inert one never did anything anyway.
+ *
+ * Mutates in place: it runs against the loaded config before defaults, which is the only point
+ * where the distinction between "absent" and "defaulted" still exists.
+ */
+function adoptInertSpellings(root: Record<string, unknown>): void {
+  for (const { path: segments, from, to, coerce } of INERT_SPELLINGS) {
+    const container = resolveContainer(root, segments);
+    if (!container || !(from in container)) continue;
+
+    if (!(to in container) || container[to] === undefined) {
+      const raw = container[from];
+      if (coerce === 'onOff') {
+        // Anything that is not the literal 'on'/'off' the CLI validated is dropped rather than
+        // guessed at: a wrong boolean here silently flips a subsystem.
+        if (raw === 'on' || raw === 'off') container[to] = raw === 'on';
+      } else {
+        container[to] = raw;
+      }
+    }
+
+    delete container[from];
+  }
+}
 
 /**
  * Default configuration values
@@ -141,6 +232,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private frameworksConfigCache: ResolvedFrameworkConfig;
+  /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
+  private warnedAnalysisDeprecated = false;
 
   constructor(configPath: string) {
     super();
@@ -209,20 +302,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getTransportMode(): TransportMode {
     return this.config.transport ?? DEFAULT_TRANSPORT_MODE;
-  }
-
-  /**
-   * Get analysis configuration
-   */
-  getAnalysisConfig(): AnalysisConfig {
-    return this.config.analysis || DEFAULT_ANALYSIS_CONFIG;
-  }
-
-  /**
-   * Get semantic analysis configuration
-   */
-  getSemanticAnalysisConfig(): SemanticAnalysisConfig {
-    return this.getAnalysisConfig().semanticAnalysis;
   }
 
   /**
@@ -529,6 +608,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Validate configuration and set defaults for missing properties
    */
   private validateAndSetDefaults(): void {
+    // Runs first, before any default is applied: an adopted value must be visible to the
+    // defaulting below, or the default overwrites what the user actually asked for.
+    adoptInertSpellings(this.config as unknown as Record<string, unknown>);
+
     // Ensure server config exists
     if (!this.config.server) {
       this.config.server = DEFAULT_CONFIG.server;
@@ -549,10 +632,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       };
     }
 
-    // Ensure analysis config exists
+    // Ensure analysis config exists.
+    //
+    // DEPRECATED SECTION: `analysis` is parsed and defaulted, and nothing consults the result any
+    // more. It stays for one cycle because `config.json` is declared public API surface
+    // (CLAUDE.md §Public API Contract), so a config that sets it must keep loading rather than
+    // fail. The warning below is the deprecation notice; removal is the breaking act and carries
+    // the major bump.
     if (!this.config.analysis) {
       this.config.analysis = DEFAULT_ANALYSIS_CONFIG;
     } else {
+      this.warnAnalysisSectionDeprecated(this.config.analysis);
       this.config.analysis = this.validateAnalysisConfig(this.config.analysis);
     }
 
@@ -645,6 +735,25 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
         },
       };
     }
+  }
+
+  /**
+   * Emit the `analysis` deprecation notice at most once per process.
+   *
+   * Fires only when a config file actually carries the section — the defaulted case is silent,
+   * because a user who never wrote the key has nothing to act on. Names the replacement rather
+   * than only the removal: a warning that says "stop doing X" without saying what to do instead
+   * reads as breakage.
+   */
+  private warnAnalysisSectionDeprecated(analysisConfig: Partial<AnalysisConfig>): void {
+    if (this.warnedAnalysisDeprecated || !analysisConfig.semanticAnalysis) return;
+    this.warnedAnalysisDeprecated = true;
+    logger.warn(
+      '[CONFIG] `analysis.semanticAnalysis` is deprecated and no longer read by any runtime path. ' +
+        'It is still parsed so existing configs keep loading, and will be removed in the next major. ' +
+        'For model-graded gate evaluation use the `%judge` modifier or `gates.evaluation.defaultMode`. ' +
+        'Remove the `analysis` section from config.json to silence this notice.'
+    );
   }
 
   /**

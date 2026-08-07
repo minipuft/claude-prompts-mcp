@@ -11,22 +11,23 @@
  * LLM-generated content - an output can pass all string checks while being
  * semantically incorrect, or fail them while being excellent.
  *
- * The only validation that can meaningfully assess LLM output is LLM-based
- * evaluation (llm_self_check). The infrastructure remains in place for when
- * LLM integration is implemented.
+ * Model-graded evaluation of gate content is delivered by the `%judge` modifier
+ * (`src/engine/gates/judge/`), which routes a verdict back through `gate_verdict`.
+ * This validator owns the deterministic criteria types only.
  *
  * What's preserved:
  * - Validation framework and gate loading
- * - Statistics tracking and retry logic
- * - LLM self-check stub (TODO for implementation)
- * - Retry hints generation
+ * - Statistics tracking
+ * - `llm_self_check` acceptance (reserved type, unconditional skip — see runLLMSelfCheck)
+ * - Retry hint GENERATION — hints ship inside each failing `ValidationResult`. The public
+ *   `shouldRetry` re-entry API is gone; it had no callers, and the decision of whether to retry
+ *   belongs to the caller holding the attempt count, not to the validator.
  */
 
 import { getShellPreset } from '../config/index.js';
 import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 
 import type { GateDefinitionProvider } from './gate-loader.js';
-import type { LLMIntegrationConfig } from '../../../types.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { ShellVerifyGate } from '../shell/types.js';
 import type {
@@ -46,7 +47,6 @@ export interface GateValidationStatistics {
   successfulValidations: number;
   failedValidations: number;
   averageValidationTime: number;
-  retryRequests: number;
 }
 
 /**
@@ -55,24 +55,17 @@ export interface GateValidationStatistics {
 export class GateValidator {
   private logger: Logger;
   private gateLoader: GateDefinitionProvider;
-  private llmConfig: LLMIntegrationConfig | undefined;
   private validationStats: GateValidationStatistics = {
     totalValidations: 0,
     successfulValidations: 0,
     failedValidations: 0,
     averageValidationTime: 0,
-    retryRequests: 0,
   };
   private validationTimes: number[] = [];
 
-  constructor(
-    logger: Logger,
-    gateLoader: GateDefinitionProvider,
-    llmConfig?: LLMIntegrationConfig
-  ) {
+  constructor(logger: Logger, gateLoader: GateDefinitionProvider) {
     this.logger = logger;
     this.gateLoader = gateLoader;
-    this.llmConfig = llmConfig;
   }
 
   /**
@@ -207,11 +200,14 @@ export class GateValidator {
    * (length validation, substring matching, regex patterns) don't provide
    * meaningful signal for LLM-generated content.
    *
-   * The only valuable runtime validations for LLM output are:
-   * - LLM-based evaluation (llm_self_check) - semantic understanding (runner pending)
+   * The validations this class actually performs are:
    * - Shell verification (shell_verify) - ground truth via exit codes
+   * - Script tool verification (script_tool) - structured JSON pass/fail
    * - Framework phase guards - section presence + min_length
    *   + forbidden_terms per active framework's phases.yaml
+   *
+   * `llm_self_check` is accepted but reserved — it has no runner and always skips. Model-graded
+   * evaluation lives outside this class, in the `%judge` path.
    */
   private async runValidationCheck(
     criteria: GatePassCriteria,
@@ -243,13 +239,15 @@ export class GateValidator {
         type: criteria.type,
         passed: true,
         score: 1.0,
-        message: `Check type '${criteria.type}' skipped - string-based validation removed (use llm_self_check or shell_verify for meaningful validation)`,
+        message: `Check type '${criteria.type}' skipped - string-based validation removed (use shell_verify for ground truth, or the %judge modifier for model-graded review)`,
         details: {
           skipped: true,
           reason:
             'String-based checks removed as they do not provide meaningful signal for LLM content',
+          // Deliberately does not name `llm_self_check`: it is reserved with no runner, so
+          // recommending it would send a reader to a type that skips exactly like this one.
           recommendation:
-            'Use llm_self_check for semantic validation or shell_verify for ground truth',
+            'Use shell_verify or script_tool for ground truth, or the %judge modifier for model-graded review',
         },
       };
     } catch (error) {
@@ -433,80 +431,41 @@ export class GateValidator {
   }
 
   /**
-   * Run LLM self-check validation
+   * Handle the reserved `llm_self_check` criteria type.
    *
-   * TODO: IMPLEMENT LLM API INTEGRATION
+   * The type stays accepted by the gate schema — it is declared in gate YAML, which
+   * `CLAUDE.md` §Public API Contract names as contract surface, and it is documented as
+   * _Reserved — runner not yet implemented_ in `docs/guides/gates.md`. Removing the type would
+   * break existing gate files for no gain; this method is what keeps that promise cheap.
    *
-   * This is the ONLY validation type that can meaningfully assess LLM-generated content.
-   * String-based checks (length, patterns, keywords) have been intentionally removed
-   * because they don't correlate with output quality.
+   * It used to branch on the deprecated `analysis.semanticAnalysis` config section, and all three
+   * branches returned the same skip verdict. The config it consulted is deprecated and no longer
+   * settable from either tool surface, so the branches could only ever differ in their message —
+   * one of which instructed the reader to set a key that no longer exists. One skip, stated once.
    *
-   * Implementation requirements:
-   * - LLM client instance (from semantic analyzer or external API)
-   * - Validation prompt templates (quality rubrics, evaluation criteria)
-   * - Structured output parsing (pass/fail with confidence scores)
-   * - Confidence threshold enforcement
-   *
-   * Configuration path: config.analysis.semanticAnalysis.llmIntegration
-   *
-   * Example implementation approach:
-   * 1. Format validation prompt with content and criteria
-   * 2. Call LLM with structured output schema (JSON mode)
-   * 3. Parse response: { passed: boolean, score: number, feedback: string }
-   * 4. Apply confidence threshold from criteria.pass_threshold
-   *
-   * Current behavior: Gracefully skips when LLM not configured
+   * Model-graded evaluation is delivered by `%judge` (`src/engine/gates/judge/`), whose verdict
+   * arrives through `gate_verdict` rather than through this validator. A future in-process runner
+   * would replace this body; it would not restore the config branch.
    */
   private async runLLMSelfCheck(criteria: GatePassCriteria): Promise<ValidationCheck> {
-    // Check if LLM integration is configured and enabled
-    const llmConfig = this.llmConfig;
-    if (llmConfig?.enabled !== true) {
-      this.logger.debug('[LLM GATE] LLM self-check skipped - LLM integration disabled in config');
-      return {
-        type: 'llm_self_check',
-        passed: true, // Auto-pass when not configured
-        score: 1.0,
-        message:
-          'LLM validation skipped (not configured - set analysis.semanticAnalysis.llmIntegration.enabled=true)',
-        details: {
-          skipped: true,
-          reason: 'LLM integration disabled in config',
-          configPath: 'config.analysis.semanticAnalysis.llmIntegration.enabled',
-        },
-      };
-    }
-
-    if (llmConfig.endpoint === undefined || llmConfig.endpoint === '') {
-      this.logger.warn('[LLM GATE] LLM self-check skipped - no endpoint configured');
-      return {
-        type: 'llm_self_check',
-        passed: true,
-        score: 1.0,
-        message: 'LLM validation skipped (no endpoint configured)',
-        details: {
-          skipped: true,
-          reason: 'No LLM endpoint configured',
-          configPath: 'config.analysis.semanticAnalysis.llmIntegration.endpoint',
-        },
-      };
-    }
-
-    // TODO: Once LLM API client is available, implement actual validation here
-    this.logger.warn('[LLM GATE] LLM self-check requested but API client not yet implemented');
-    this.logger.debug(`[LLM GATE] Would validate with template: ${criteria.prompt_template}`);
+    this.logger.debug(
+      `[GATE VALIDATOR] llm_self_check skipped (reserved type, no runner); template: ${
+        criteria.prompt_template ?? 'default'
+      }`
+    );
 
     return {
       type: 'llm_self_check',
-      passed: true, // Auto-pass until implementation complete
+      // Auto-pass: a reserved type must not fail gates that declare it.
+      passed: true,
       score: 1.0,
-      message: 'LLM validation not yet implemented (API client integration pending)',
+      message:
+        'llm_self_check skipped - reserved type with no runner. Use the %judge modifier for model-graded evaluation, or shell_verify for ground truth.',
       details: {
         skipped: true,
-        reason: 'LLM API client not yet implemented',
-        configEnabled: llmConfig.enabled,
-        endpoint: llmConfig.endpoint,
+        reason: 'Reserved criteria type - runner not implemented',
+        replacement: '%judge modifier (gates.evaluation.defaultMode) or shell_verify',
         templateRequested: criteria.prompt_template || 'default',
-        implementation: 'TODO: Wire LLM client from semantic analyzer',
       },
     };
   }
@@ -554,39 +513,6 @@ export class GateValidator {
   }
 
   /**
-   * Check if content should be retried based on validation results
-   *
-   * @param validationResults - Results from gate validation
-   * @param currentAttempt - Current attempt number
-   * @param maxAttempts - Maximum allowed attempts
-   * @returns true if retry should be attempted
-   */
-  shouldRetry(
-    validationResults: ValidationResult[],
-    currentAttempt: number,
-    maxAttempts: number = 3
-  ): boolean {
-    if (currentAttempt >= maxAttempts) {
-      this.logger.debug('[GATE VALIDATOR] Max attempts reached, no retry');
-      return false;
-    }
-
-    // Retry if any validation gate failed
-    const shouldRetry = validationResults.some((result) => !result.valid);
-
-    if (shouldRetry) {
-      this.validationStats.retryRequests++;
-      this.logger.debug('[GATE VALIDATOR] Retry recommended:', {
-        currentAttempt,
-        maxAttempts,
-        failedGates: validationResults.filter((r) => !r.valid).map((r) => r.gateId),
-      });
-    }
-
-    return shouldRetry;
-  }
-
-  /**
    * Update average validation time
    */
   private updateAverageValidationTime(): void {
@@ -617,7 +543,6 @@ export class GateValidator {
       successfulValidations: 0,
       failedValidations: 0,
       averageValidationTime: 0,
-      retryRequests: 0,
     };
     this.validationTimes = [];
     this.logger.debug('[GATE VALIDATOR] Statistics reset');
@@ -629,8 +554,7 @@ export class GateValidator {
  */
 export function createGateValidator(
   logger: Logger,
-  gateLoader: GateDefinitionProvider,
-  llmConfig?: LLMIntegrationConfig
+  gateLoader: GateDefinitionProvider
 ): GateValidator {
-  return new GateValidator(logger, gateLoader, llmConfig);
+  return new GateValidator(logger, gateLoader);
 }

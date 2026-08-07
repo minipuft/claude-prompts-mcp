@@ -15,16 +15,30 @@
  * The complete schema is embedded in this file (SSOT). On startup:
  * - Fresh DB: create all tables from embedded schema
  * - Matching version: skip (fast path)
- * - Version mismatch: drop all tables, recreate from embedded schema
+ * - Version mismatch: snapshot durable tables, drop all, recreate, restore
  *
- * This is safe because state.db is ephemeral — resource_index (including tools)
- * and skills_sync_manifests are regenerated from YAML on startup. Chain sessions
- * and framework state are interrupted by the restart that triggers schema changes.
+ * Most of state.db is reconstructible: resource_index (including tools) is rebuilt
+ * from YAML on startup, chain sessions and framework state are interrupted by the
+ * restart that triggers a schema change anyway.
+ *
+ * DURABLE_TABLES are the exception and must survive the recreate. Their rows exist
+ * nowhere else — version_history holds the pre-update snapshots that back resource
+ * rollback, and skills_sync_manifests is the record of which files were exported to
+ * which client, without which already-exported files can no longer be detected as
+ * orphans or pruned. Dropping either is unrecoverable user-visible data loss.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { enforceRetention } from './retention.js';
+import {
+  CONTRACTED_TABLE_NAMES,
+  DURABLE_TABLE_NAMES,
+  SQLITE_INTERNAL_TABLES,
+  VIEW_CONTRACTS,
+} from './table-contracts.js';
 
 import type { DatabasePort } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
@@ -32,13 +46,119 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v20: renamed `tenant_id` → `run_owner_pid` on `chain_sessions` and `chain_run_registry`, and
+ * repaired `v_execution_status`, which had never been able to read its own rows.
+ *
+ * The rename closes F3: one column name carried a server PID here and a workspace id in
+ * `kv_state`, so a filter written against the wrong meaning was not type-detectable. It is a clean
+ * break with no dual-write window, because both premises for one were measured false — zero
+ * downstream readers of the column across `minipuft-plugins`, `gemini-prompts` and
+ * `opencode-prompts`, and no old-format row can survive a bump anyway, since both tables are
+ * `derived`/`ephemeral` and their rows are DELETEd per-PID at cleanup. A parity gate protecting
+ * data that cannot exist and readers that do not exist is a parallel code path with a nicer name.
+ *
+ * `DEFAULT 'default'` was dropped in the same move. A run owner is known at every write site, and
+ * a default that produced the string `'default'` under a column named `run_owner_pid` would make
+ * the name a lie for exactly the rows hardest to explain. The `WHERE tenant_id = 'default'` sweep
+ * in `cleanupStalePidRows` went with it: this bump drops the table, so no legacy row reaches v20,
+ * and with no default nothing can mint a new one.
+ *
+ * The view repair (F12) is folded in because it alters the same object. `v_execution_status`
+ * extracted `$.state.currentStep` and `$.state.totalSteps`, but its only writer —
+ * `ChainManager.collectActiveSessionRows()` — serializes `currentStep` at the top level, so both
+ * columns resolved NULL on every row and the hook's primary read path returned nothing for every
+ * input. The paths now match the writer. `lifecycle` was dropped from the projection: the writer
+ * never emitted it either, and every projected row is canonical by construction, so the column
+ * could only ever have been NULL.
+ *
+ * v19: deletes the `tenants` table and its seeded default row (F10). It held exactly one row,
+ * had no reader outside tests that inserted into it to prove it existed, and nothing referenced
+ * it — `tenant_id` elsewhere is a bare TEXT column, never a `REFERENCES tenants(id)`. Removing a
+ * table from `applySchema()` requires a bump: existing databases still carry it, and
+ * `assertSchemaMatchesContracts()` rejects a live table with no contract.
+ *
+ * This bump also **retires `DROPPED_ON_THIS_BUMP`**, which is why the set below is empty and
+ * `DROPPED_AT_VERSION` moved to 19. `version_history` is therefore preserved across this bump, as
+ * a durable table should be — the v18 drop was the one-time act and has already run.
+ *
+ * v18: drops pre-scoping `version_history` rows via `DROPPED_ON_THIS_BUMP`. Every row written
+ * before Tier 4 carried the literal `tenant_id = 'default'`, and many projects sharing one
+ * state.db wrote into it, so nothing distinguishes which workspace produced which row. Once reads
+ * are workspace-scoped those rows are unreachable regardless; carrying them across would preserve
+ * data no query can return. **This destroys rollback history predating the upgrade** — intended and
+ * operator-approved, not incidental.
+ *
+ * The drop is expressed as a bump rather than as engine-resident purge code on purpose: F5 in the
+ * remediation plan was migration logic that ran on every startup forever, and a one-time step
+ * guarded by a marker in `kv_state` — an `ephemeral` table — would have been the same shape, since
+ * anything clearing that table would re-arm the deletion against legitimately scoped rows.
+ *
+ * v17: added the `v_execution_history` view. A view is only created by `applySchema()`, which
+ * runs only on a version mismatch, so adding one to the DDL without bumping leaves every existing
+ * database without it — and `assertSchemaMatchesContracts()` then fails startup, because the
+ * contract declares a view the live schema does not have. Any DDL addition implies a bump.
+ *
+ * Consequence, stated rather than discovered: this bump drops `execution_records`, whose declared
+ * posture is `ephemeral`. Existing rows do not survive. That is the intended trade here — 35 of
+ * the 64 rows present at the time were stuck in `working` because nothing emitted a terminal
+ * record on the failure and abort paths (fixed in the same tier), so preserving them would carry
+ * a majority of unterminated entries into the history feature that reads them. `version_history`
+ * and `skills_sync_manifests` are `durable` and are snapshot/restored across this bump.
+ *
  * v16: retired the `StepState` enum. Persisted step `state` values `rendered` and
  * `response_captured` no longer exist — both are now lifecycle `working`, distinguished by the
  * `renderedAt` / `respondedAt` substate timestamps. `StepSubstate.responseAt` was also renamed to
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 20;
+
+/**
+ * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
+ *
+ * Declared in `table-contracts.ts` as `posture: 'durable'` rather than listed here, so the
+ * classification lives with the rest of the table's contract and the validation gates read
+ * the same source. Marking a table durable is a commitment: its rows are carried across the
+ * drop-and-recreate by column intersection, so a column removed from the DDL drops silently
+ * and a new NOT NULL column without a default fails the restore loudly rather than discarding
+ * rows.
+ */
+const DURABLE_TABLES = DURABLE_TABLE_NAMES;
+
+/**
+ * Durable tables deliberately NOT carried across the current bump.
+ *
+ * **Currently empty, and that is the resting state.** It held `version_history` for v18 and was
+ * retired at v19 — the retirement this file's gate was built to force.
+ *
+ * This is the escape hatch for a one-time data migration that a recreate can express: rather than
+ * shipping migration code that lives in the engine forever — the F5 anti-pattern this schema was
+ * cleaned of — the drop IS the migration, and this set plus the SCHEMA_VERSION docblock are its
+ * record. If you add an entry, **empty it again at the next bump**; an entry left behind silently
+ * discards a durable table on an unrelated schema change. `DROPPED_AT_VERSION` below is what makes
+ * that forgetting impossible rather than merely discouraged.
+ */
+const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set([]);
+
+/**
+ * The SCHEMA_VERSION that `DROPPED_ON_THIS_BUMP` was declared for.
+ *
+ * Without this the exclusion has no retirement condition: it reads as a permanent property of the
+ * engine rather than a one-time act, and the next bump would silently discard a durable table on
+ * an unrelated schema change. `validate:table-contracts` compares the two — once SCHEMA_VERSION
+ * moves past this, a non-empty set is a hard failure naming each stale entry.
+ *
+ * Retiring the exclusion is therefore two edits that the gate forces to happen together: empty the
+ * set, and move this to the new version.
+ */
+// Annotated `number` rather than left as a literal: once SCHEMA_VERSION moves past it, TypeScript
+// narrows both to non-overlapping literal types and rejects the runtime guard below as impossible.
+// The guard is not impossible — it is the check that fires when someone adds an entry to
+// DROPPED_ON_THIS_BUMP and forgets to move this constant with it.
+const DROPPED_AT_VERSION: number = 19;
+
+/** Rows carried across a schema recreate, keyed by table name. */
+type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
 /**
  * Database configuration options
@@ -117,9 +237,15 @@ export class SqliteEngine implements DatabasePort {
 
       // Ensure schema is current (creates or recreates if version mismatch)
       this.ensureSchema();
-      this.applyIdentityScopeMigration();
+      this.assertSchemaMatchesContracts();
 
       this.initialized = true;
+
+      // Trim to the caps declared in table-contracts.ts. Runs after `initialized` is set because
+      // it goes back through this instance's own query/run methods, which refuse an uninitialized
+      // engine. Startup is the right moment: it is the one point where every table is reachable
+      // and nothing is mid-write.
+      enforceRetention(this, this.logger);
       this.logger.info('SQLite database initialized successfully');
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -221,27 +347,123 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Ensure database schema is current.
    *
-   * Strategy: embedded schema is the SSOT. On version mismatch,
-   * drop all tables and recreate. Safe because state.db is ephemeral —
-   * all indexed data is regenerated from YAML resources on startup.
+   * Strategy: embedded schema is the SSOT. On version mismatch, snapshot DURABLE_TABLES,
+   * drop everything, recreate from the embedded schema, then restore the snapshot. The
+   * snapshot/restore round-trip is what lets durable rows survive while still letting
+   * their DDL evolve — preserving the table in place instead would freeze its shape,
+   * because applySchema uses CREATE TABLE IF NOT EXISTS.
    */
-  private ensureSchema(): void {
+  private ensureSchema(): boolean {
     const currentVersion = this.getCurrentSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
       this.logger.info(`Database schema is up to date (version ${currentVersion})`);
-      return;
+      return false;
     }
 
-    if (currentVersion > 0) {
-      this.logger.info(
-        `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
-      );
-      this.dropAllTables();
+    if (currentVersion === 0) {
+      this.applySchema();
+      this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
+      // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
+      // as a no-op and records its marker.
+      return false;
     }
 
+    this.logger.info(
+      `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
+    );
+    const preserved = this.snapshotDurableTables();
+    this.dropAllTables();
     this.applySchema();
+    this.restoreDurableTables(preserved);
     this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
+    return true;
+  }
+
+  /**
+   * Read every row of each durable table that exists in the outgoing schema.
+   *
+   * Absent tables and empty tables are skipped, so a fresh install and a bump that
+   * predates a durable table both produce an empty snapshot.
+   */
+  private snapshotDurableTables(): DurableSnapshot {
+    const snapshot: DurableSnapshot = new Map();
+
+    // A stale exclusion is imminent data loss, not a lint problem: the set names durable tables
+    // that will NOT be carried across the recreate about to happen. `validate:table-contracts`
+    // catches this before it ships; this throws if it somehow reaches a running server, because
+    // the alternative is silently discarding a table whose rows exist nowhere else.
+    if (DROPPED_ON_THIS_BUMP.size > 0 && SCHEMA_VERSION !== DROPPED_AT_VERSION) {
+      throw new Error(
+        `DROPPED_ON_THIS_BUMP still contains [${[...DROPPED_ON_THIS_BUMP].join(', ')}] but was ` +
+          `declared for schema v${DROPPED_AT_VERSION} and SCHEMA_VERSION is now ` +
+          `v${SCHEMA_VERSION}. Empty the set and move DROPPED_AT_VERSION, or these durable ` +
+          'tables are dropped by an unrelated schema change.'
+      );
+    }
+
+    for (const table of DURABLE_TABLES) {
+      if (DROPPED_ON_THIS_BUMP.has(table)) {
+        this.logger.info(
+          `Durable table ${table}: intentionally NOT carried across the v${SCHEMA_VERSION} recreate ` +
+            '(see the SCHEMA_VERSION docblock for why).'
+        );
+        continue;
+      }
+      if (this.getTableColumns(table).size === 0) {
+        continue;
+      }
+      const rows = this.query<Record<string, unknown>>(`SELECT * FROM "${table}"`);
+      if (rows.length > 0) {
+        snapshot.set(table, rows);
+      }
+    }
+
+    return snapshot;
+  }
+
+  /**
+   * Re-insert snapshotted rows into the freshly created schema.
+   *
+   * Only columns present in BOTH the snapshot and the new table are carried: a column
+   * dropped from the DDL is discarded, and a column added to it takes its default. A
+   * restore failure rethrows with the table named rather than losing the rows quietly —
+   * the schema change needs a real migration at that point.
+   */
+  private restoreDurableTables(snapshot: DurableSnapshot): void {
+    for (const [table, rows] of snapshot) {
+      const newColumns = this.getTableColumns(table);
+      const carried = Object.keys(rows[0] ?? {}).filter((column) => newColumns.has(column));
+
+      if (carried.length === 0) {
+        this.logger.warn(
+          `Durable table ${table}: no columns survived the schema change, ${rows.length} row(s) discarded`
+        );
+        continue;
+      }
+
+      const columnList = carried.map((column) => `"${column}"`).join(', ');
+      const placeholders = carried.map(() => '?').join(', ');
+      const sql = `INSERT INTO "${table}" (${columnList}) VALUES (${placeholders})`;
+
+      try {
+        for (const row of rows) {
+          this.run(
+            sql,
+            carried.map((column) => row[column] ?? null)
+          );
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to restore ${rows.length} durable row(s) into ${table} after schema recreate: ${msg}. ` +
+            `This schema change needs an explicit migration for ${table}.`,
+          { cause: error }
+        );
+      }
+
+      this.logger.info(`Preserved ${rows.length} row(s) in durable table ${table}`);
+    }
   }
 
   private getCurrentSchemaVersion(): number {
@@ -255,6 +477,11 @@ export class SqliteEngine implements DatabasePort {
     }
   }
 
+  /**
+   * Drop every table, durable ones included. Callers that need durable rows to survive
+   * must bracket this with snapshotDurableTables/restoreDurableTables — ensureSchema is
+   * the only such caller today.
+   */
   private dropAllTables(): void {
     const tables = this.query<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
@@ -277,14 +504,6 @@ export class SqliteEngine implements DatabasePort {
         applied_at TEXT DEFAULT (datetime('now'))
       );
 
-      CREATE TABLE IF NOT EXISTS tenants (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        created_at TEXT DEFAULT (datetime('now'))
-      );
-
-      INSERT OR IGNORE INTO tenants (id, name) VALUES ('default', 'Default Tenant');
-
       -- Derived hook-read view of chain_run_registry (the SSOT blob).
       -- Holds only the active subset of sessions for indexed PID-scoped queries
       -- by Python hooks. Writers MUST go through ChainSessionStore.projectToHookView,
@@ -292,7 +511,7 @@ export class SqliteEngine implements DatabasePort {
       -- this table is rebuilt atomically inside the same transaction.
       CREATE TABLE IF NOT EXISTS chain_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tenant_id TEXT NOT NULL DEFAULT 'default',
+        run_owner_pid TEXT NOT NULL,
         organization_id TEXT,
         workspace_id TEXT,
         chain_id TEXT NOT NULL,
@@ -302,7 +521,7 @@ export class SqliteEngine implements DatabasePort {
         run_completed_at INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE (tenant_id, chain_id, run_number)
+        UNIQUE (run_owner_pid, chain_id, run_number)
       );
 
       -- Shared key-value blob store for scoped state with a discriminator.
@@ -382,7 +601,7 @@ export class SqliteEngine implements DatabasePort {
       );
 
       CREATE TABLE IF NOT EXISTS chain_run_registry (
-        tenant_id TEXT PRIMARY KEY DEFAULT 'default',
+        run_owner_pid TEXT NOT NULL PRIMARY KEY,
         organization_id TEXT,
         workspace_id TEXT,
         state TEXT NOT NULL DEFAULT '{}',
@@ -413,7 +632,7 @@ export class SqliteEngine implements DatabasePort {
         created_at TEXT DEFAULT (datetime('now'))
       );
 
-      CREATE INDEX IF NOT EXISTS idx_chain_sessions_tenant ON chain_sessions(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_sessions_run_owner ON chain_sessions(run_owner_pid);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_workspace ON chain_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_chain ON chain_sessions(chain_id);
@@ -445,13 +664,12 @@ export class SqliteEngine implements DatabasePort {
         cs.run_number,
         cs.run_status,
         cs.run_completed_at,
-        json_extract(cs.state, '$.state.currentStep') AS current_step,
-        json_extract(cs.state, '$.state.totalSteps') AS total_steps,
+        json_extract(cs.state, '$.currentStep') AS current_step,
+        json_extract(cs.state, '$.totalSteps') AS total_steps,
         json_extract(cs.state, '$.lastActivity') AS last_activity,
-        json_extract(cs.state, '$.lifecycle') AS lifecycle,
         json_extract(cs.state, '$.pendingGateReview') AS pending_gate_review,
         json_extract(cs.state, '$.pendingShellVerification') AS pending_shell_verification,
-        cs.tenant_id,
+        cs.run_owner_pid,
         cs.organization_id,
         cs.workspace_id,
         (SELECT MAX(started_at) FROM execution_records er
@@ -463,8 +681,103 @@ export class SqliteEngine implements DatabasePort {
         cs.updated_at
       FROM chain_sessions cs;
 
+      -- Companion to v_execution_status, reading the ledger DIRECTLY.
+      --
+      -- v_execution_status selects FROM chain_sessions, which is DELETEd per-PID at
+      -- cleanup, so it structurally cannot report a run that finished: it returned 0 rows
+      -- against 64 live execution_records when this view was added. Widening that view
+      -- could not fix it -- its FROM clause is the defect -- so history gets its own view.
+      --
+      -- One row per session, carrying the latest record's state plus a count of the whole
+      -- series. MAX(execution_id) identifies the newest record because execution ids are
+      -- monotonic ULIDs (see ExecutionRecordStore), so lexical order IS creation order.
+      CREATE VIEW IF NOT EXISTS v_execution_history AS
+      SELECT
+        latest.session_id,
+        latest.chain_id,
+        latest.prompt_id,
+        latest.status              AS current_status,
+        latest.step_number         AS current_step,
+        latest.error_message,
+        agg.record_count,
+        agg.first_started_at,
+        latest.started_at          AS last_started_at,
+        latest.completed_at        AS last_completed_at,
+        latest.tenant_id,
+        latest.organization_id,
+        latest.workspace_id
+      FROM (
+        SELECT session_id,
+               COUNT(*)          AS record_count,
+               MIN(started_at)   AS first_started_at,
+               MAX(execution_id) AS latest_execution_id
+        FROM execution_records
+        GROUP BY session_id
+      ) agg
+      JOIN execution_records latest ON latest.execution_id = agg.latest_execution_id;
+
       INSERT OR IGNORE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
     `);
+  }
+
+  /**
+   * Fail startup when the live schema and TABLE_CONTRACTS disagree.
+   *
+   * A contract is worth what it is checked against. Without this, a table added to
+   * applySchema() with no contract entry — or an entry for a table that was removed — stays
+   * invisible until something downstream depends on a table nobody declared the ownership,
+   * posture, or retention of. That is how all eleven audited findings accumulated.
+   *
+   * sqlite_master also lists tables SQLite creates for itself: sqlite_sequence materializes
+   * as soon as any table declares AUTOINCREMENT. Those are excluded, not declared, because
+   * their existence depends on unrelated DDL details.
+   */
+  private assertSchemaMatchesContracts(): void {
+    const liveTables = this.listSchemaObjects('table').filter(
+      (name) => !SQLITE_INTERNAL_TABLES.includes(name)
+    );
+    const liveViews = this.listSchemaObjects('view');
+
+    const declaredTables = new Set(CONTRACTED_TABLE_NAMES);
+    const declaredViews = new Set(VIEW_CONTRACTS.map((contract) => contract.view));
+
+    const problems: string[] = [];
+    const report = (label: string, names: string[]): void => {
+      if (names.length > 0) {
+        problems.push(`${label}: ${names.join(', ')}`);
+      }
+    };
+
+    report(
+      'tables present with no contract',
+      liveTables.filter((name) => !declaredTables.has(name))
+    );
+    report(
+      'contracted tables absent from the database',
+      [...declaredTables].filter((name) => !liveTables.includes(name))
+    );
+    report(
+      'views present with no contract',
+      liveViews.filter((name) => !declaredViews.has(name))
+    );
+    report(
+      'contracted views absent from the database',
+      [...declaredViews].filter((name) => !liveViews.includes(name))
+    );
+
+    if (problems.length > 0) {
+      throw new Error(
+        `state.db does not match table-contracts.ts — ${problems.join('; ')}. ` +
+          'Declare the change in src/infra/database/table-contracts.ts, including owner, ' +
+          'posture, scope, and retention.'
+      );
+    }
+  }
+
+  private listSchemaObjects(type: 'table' | 'view'): string[] {
+    return this.query<{ name: string }>('SELECT name FROM sqlite_master WHERE type = ?', [
+      type,
+    ]).map((row) => row.name);
   }
 
   private getTableColumns(tableName: string): Set<string> {
@@ -476,74 +789,16 @@ export class SqliteEngine implements DatabasePort {
     );
   }
 
-  private applyIdentityScopeMigration(): void {
-    const scopeTables = [
-      'chain_sessions',
-      'kv_state',
-      'chain_run_registry',
-      'version_history',
-      'resource_changes',
-    ];
-    let didMutateSchema = false;
-
-    for (const tableName of scopeTables) {
-      const columns = this.getTableColumns(tableName);
-      if (columns.size === 0) {
-        continue;
-      }
-
-      if (!columns.has('organization_id')) {
-        this.run(`ALTER TABLE ${tableName} ADD COLUMN organization_id TEXT`);
-        didMutateSchema = true;
-      }
-      if (!columns.has('workspace_id')) {
-        this.run(`ALTER TABLE ${tableName} ADD COLUMN workspace_id TEXT`);
-        didMutateSchema = true;
-      }
-
-      const refreshed = this.getTableColumns(tableName);
-      if (!refreshed.has('tenant_id')) {
-        continue;
-      }
-      if (refreshed.has('organization_id')) {
-        this.run(
-          `UPDATE ${tableName}
-           SET organization_id = tenant_id
-           WHERE organization_id IS NULL OR TRIM(organization_id) = ''`
-        );
-      }
-      if (refreshed.has('workspace_id')) {
-        this.run(
-          `UPDATE ${tableName}
-           SET workspace_id = COALESCE(NULLIF(TRIM(workspace_id), ''), organization_id, tenant_id)
-           WHERE workspace_id IS NULL OR TRIM(workspace_id) = ''`
-        );
-      }
-    }
-
-    // Ensure indexes are present for migrated columns.
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_chain_sessions_workspace ON chain_sessions(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id)`
-    );
-    this.run(`CREATE INDEX IF NOT EXISTS idx_kv_state_workspace ON kv_state(workspace_id)`);
-    this.run(`CREATE INDEX IF NOT EXISTS idx_kv_state_organization ON kv_state(organization_id)`);
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_resource_changes_organization ON resource_changes(organization_id)`
-    );
-    if (didMutateSchema) {
-      this.logger.info('Applied identity scope column migration (organization_id/workspace_id)');
+  /**
+   * Shut down the process-wide instance, if one was ever opened.
+   *
+   * Shutdown must not route through `getInstance()`, which CREATES an engine when none
+   * exists — a teardown path that constructs the thing it is tearing down would open a
+   * database handle during shutdown and log a checkpoint for a file nobody wrote.
+   */
+  static async shutdownInstance(): Promise<void> {
+    if (SqliteEngine.instance) {
+      await SqliteEngine.instance.shutdown();
     }
   }
 
@@ -554,6 +809,7 @@ export class SqliteEngine implements DatabasePort {
     this.logger.info('Shutting down SqliteEngine...');
 
     if (this.db) {
+      this.checkpointWal();
       this.db.close();
       this.db = null;
     }
@@ -562,6 +818,29 @@ export class SqliteEngine implements DatabasePort {
     SqliteEngine.instance = null;
 
     this.logger.info('SqliteEngine shutdown complete');
+  }
+
+  /**
+   * Truncate the write-ahead log so the next process opens a small file.
+   *
+   * SQLite checkpoints on its own when the LAST connection closes, which is why this
+   * looks redundant. It is not: `state.db` typically has concurrent readers (Python
+   * hooks, the skills-sync CLI), so this connection is often not the last one and that
+   * automatic pass is skipped. Measured 2026-08-05 — a 4.2 MB WAL against a 598 KB
+   * database, because shutdown never ran at all.
+   *
+   * A checkpoint may return SQLITE_BUSY while a reader holds the file. That is not a
+   * shutdown failure: the WAL stays valid and replayable, and the next clean close
+   * retries. So this logs and returns rather than throwing — a throw here would skip
+   * `db.close()` below and leak the handle, trading a large file for a lost one.
+   */
+  private checkpointWal(): void {
+    try {
+      this.db?.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`WAL checkpoint skipped during shutdown: ${msg}`);
+    }
   }
 
   /**

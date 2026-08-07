@@ -2,7 +2,7 @@
   "name": "cpm-cli",
   "version": "0.1.0",
   "private": true,
-  "description": "CLI tool for Claude Prompts MCP workspace management",
+  "description": "Workspace management CLI (cpm) for the claude-prompts MCP server",
   "type": "module",
   "bin": {
     "cpm": "dist/cpm.js"

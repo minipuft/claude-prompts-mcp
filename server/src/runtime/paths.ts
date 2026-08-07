@@ -11,6 +11,7 @@
  *
  * Environment Variables:
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
+ * - MCP_RUNTIME_ROOT: Writable directory for state and logs
  * - MCP_RESOURCES_PATH: Custom resources base directory (replaces package default)
  *
  * User Customization:
@@ -48,6 +49,8 @@ export interface PathResolverConfig {
  */
 export interface ResolvedPaths {
   workspace: string;
+  runtimeRoot: string;
+  runtimeState: string;
   resources: string;
   config: string;
   prompts: string;
@@ -55,6 +58,7 @@ export interface ResolvedPaths {
   gates: string;
   scripts: string;
   styles: string;
+  logs: string;
 }
 
 /**
@@ -120,6 +124,35 @@ export class PathResolver {
     this.cache.workspace = resolved;
     this.logResolution('workspace', resolved, source);
     return resolved;
+  }
+
+  /** Resolve the writable root independently from package-owned resources. */
+  getRuntimeRoot(): string {
+    if (this.cache.runtimeRoot !== undefined) return this.cache.runtimeRoot;
+
+    const configured = process.env['MCP_RUNTIME_ROOT'];
+    const hasConfiguredRoot = configured !== undefined && configured.trim() !== '';
+    const resolved = hasConfiguredRoot ? this.resolvePath(configured) : this.getWorkspace();
+    this.cache.runtimeRoot = resolved;
+    this.logResolution(
+      'runtime root',
+      resolved,
+      hasConfiguredRoot ? 'MCP_RUNTIME_ROOT env var' : 'effective workspace'
+    );
+    return resolved;
+  }
+
+  /** Directory containing SQLite and other mutable runtime state. */
+  getRuntimeStatePath(): string {
+    this.cache.runtimeState ??= join(this.getRuntimeRoot(), 'runtime-state');
+    return this.cache.runtimeState;
+  }
+
+  /** Resolve a configured log directory beneath the writable runtime root. */
+  getLogsPath(configuredDirectory = './logs'): string {
+    if (isAbsolute(configuredDirectory)) return configuredDirectory;
+    this.cache.logs ??= resolve(this.getRuntimeRoot(), configuredDirectory);
+    return this.cache.logs;
   }
 
   /**
@@ -295,6 +328,8 @@ export class PathResolver {
   getAllPaths(): ResolvedPaths {
     return {
       workspace: this.getWorkspace(),
+      runtimeRoot: this.getRuntimeRoot(),
+      runtimeState: this.getRuntimeStatePath(),
       resources: this.getResourcesPath(),
       config: this.getConfigPath(),
       prompts: this.getPromptsPath(),
@@ -302,6 +337,7 @@ export class PathResolver {
       gates: this.getGatesPath(),
       scripts: this.getScriptsPath(),
       styles: this.getStylesPath(),
+      logs: this.getLogsPath(),
     };
   }
 

@@ -1,4 +1,5 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
+import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -160,7 +161,7 @@ export class GateVerdictProcessor {
       context.state.gates.perGateVerdicts = gateVerdicts;
     }
 
-    const enforcementMode = context.state.gates.enforcementMode ?? 'blocking';
+    const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
     const outcome = await authority.recordOutcome(sessionId, verdictPayload, enforcementMode);
 
     this.recordVerdictDetection(
@@ -299,7 +300,7 @@ export class GateVerdictProcessor {
       delete sessionContext.pendingReview;
     }
 
-    const enforcementMode = context.state.gates.enforcementMode ?? 'blocking';
+    const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
 
     if (verdictPayload.verdict !== 'FAIL') return;
 

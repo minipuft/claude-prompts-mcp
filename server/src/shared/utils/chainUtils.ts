@@ -9,18 +9,17 @@
  *  of Chain System Migration (2025-01-30)
  */
 
-import * as path from 'node:path';
-
 import { ValidationError } from './errorHandling.js';
 // REMOVED: All types from deleted chain-scaffolding.ts
 // Modular chain system has been completely deprecated
 
-const CHAIN_ID_PATTERN = /^[a-z0-9_-]+$/i;
-
-function isPathInside(basePath: string, targetPath: string): boolean {
-  const relative = path.relative(basePath, targetPath);
-  return !relative.startsWith('..') && !path.isAbsolute(relative);
-}
+/**
+ * Characters allowed in a chain *slug* — the prompt-id segment, used for filesystem
+ * paths. Distinct from `CHAIN_ID_PATTERN` in `chain-id-codec`, which matches a whole
+ * run identifier including the `chain-` prefix and `#runNumber` suffix. The two were
+ * both named `CHAIN_ID_PATTERN` in this directory until 2026-08-02.
+ */
+const CHAIN_SLUG_PATTERN = /^[a-z0-9_-]+$/i;
 
 export function normalizeChainId(chainId: string): string {
   if (typeof chainId !== 'string') {
@@ -33,7 +32,7 @@ export function normalizeChainId(chainId: string): string {
     throw new ValidationError('Chain ID is required');
   }
 
-  if (!CHAIN_ID_PATTERN.test(normalized)) {
+  if (!CHAIN_SLUG_PATTERN.test(normalized)) {
     throw new ValidationError(
       `Invalid chain ID "${normalized}": only letters, numbers, hyphen, and underscore are allowed`
     );

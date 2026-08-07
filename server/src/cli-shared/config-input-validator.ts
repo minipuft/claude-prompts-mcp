@@ -3,6 +3,25 @@
  *
  * Extracted from mcp/tools/config-utils.ts to satisfy cli-shared isolation
  * (no runtime dependencies). SafeConfigWriter re-imports from here.
+ *
+ * WHY THERE ARE NO on/off `mode` KEYS FOR SUBSYSTEM TOGGLES
+ * This list used to carry both `gates.mode` and `gates.enabled`, and nine such pairs. Only the
+ * `enabled` half was ever read: the write path assigns dot-keys verbatim, so `cpm enable gates`
+ * wrote `gates.mode: "on"`, reported success, and changed nothing. The inert half is gone; every
+ * dropped key has its canonical twin below, and `ConfigManager` folds configs already written
+ * with the old spelling. `telemetry.mode`, `phaseGuards.mode` and `identity.mode` remain because
+ * a reader consults each of them — the first two are `off`/`warn`/`enforce`, the third is
+ * `permissive`/`strict`/`locked`. None is an on/off toggle.
+ *
+ * WHY THE `analysis.semanticAnalysis.*` KEYS ARE GONE — A DIFFERENT LINEAGE
+ * The five keys dropped here are not inert spellings. Each had a real reader and worked exactly
+ * as documented; what changed is that the reader was retired. The LLM side client, the gate
+ * service that consumed it, and the validator branch that read the flag are all deleted, so a
+ * setter for them would now write a value nothing consults — which is what the paragraph above
+ * exists to prevent. Unlike the `*.mode` keys, these have no canonical twin to fold into: the
+ * replacement is a different mechanism, the `%judge` modifier / `gates.evaluation.defaultMode`.
+ * The config section itself is still parsed for one deprecation cycle, so an existing config.json
+ * keeps loading; only the ability to set it from a tool surface is withdrawn.
  */
 
 export const CONFIG_VALID_KEYS = [
@@ -11,24 +30,16 @@ export const CONFIG_VALID_KEYS = [
   'server.transport',
   'logging.level',
   'logging.directory',
-  'gates.mode',
   'gates.frameworkGates',
   /** @deprecated Pre-rename spelling of `gates.frameworkGates`; ConfigManager folds it forward. */
   'gates.methodologyGates',
   'execution.judge',
-  'frameworks.mode',
   'frameworks.dynamicToolDescriptions',
   'frameworks.systemPromptFrequency',
   'frameworks.styleGuidance',
-  'resources.mode',
-  'resources.prompts.mode',
   'resources.prompts.defaultRegistration',
-  'resources.gates.mode',
-  'resources.frameworks.mode',
-  'resources.observability.mode',
   'resources.observability.sessions',
   'resources.observability.metrics',
-  'resources.logs.mode',
   'resources.logs.maxEntries',
   'resources.logs.defaultLevel',
   'identity.mode',
@@ -40,15 +51,7 @@ export const CONFIG_VALID_KEYS = [
   'identity.launchDefaults.delegationProfile',
   'identity.allowPerRequestOverride',
   'verification.inContextAttempts',
-  'verification.isolation.mode',
   'verification.isolation.timeout',
-  'analysis.semanticAnalysis.llmIntegration.mode',
-  'analysis.semanticAnalysis.llmIntegration.endpoint',
-  'analysis.semanticAnalysis.llmIntegration.model',
-  'analysis.semanticAnalysis.llmIntegration.maxTokens',
-  'analysis.semanticAnalysis.llmIntegration.temperature',
-  'versioning.mode',
-  'versioning.maxVersions',
   'prompts.directory',
   'gates.directory',
   'gates.enforcePendingVerdict',
@@ -71,7 +74,10 @@ export const CONFIG_VALID_KEYS = [
   'verification.isolation.maxBudget',
   'verification.isolation.permissionMode',
   'versioning.enabled',
-  'versioning.autoVersion',
+  // snake_case because that is what `VersioningConfig` declares and what the runtime reads. The
+  // camelCase spellings this list used to carry reached no reader.
+  'versioning.max_versions',
+  'versioning.auto_version',
   'telemetry.enabled',
   'telemetry.mode',
   'telemetry.exporterEndpoint',
@@ -86,7 +92,6 @@ export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
 export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = [
   'server.port',
   'server.transport',
-  'analysis.semanticAnalysis.llmIntegration.mode',
   'telemetry.mode',
   'telemetry.exporterEndpoint',
 ];
@@ -126,37 +131,13 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
 
     case 'server.transport': {
       const normalized = value.trim().toLowerCase();
-      if (!['stdio', 'streamable-http', 'sse', 'both'].includes(normalized)) {
+      if (!['stdio', 'streamable-http', 'both'].includes(normalized)) {
         return {
           valid: false,
-          error: "Transport mode must be 'stdio', 'streamable-http', 'sse', or 'both'",
+          error: "Transport mode must be 'stdio', 'streamable-http', or 'both'",
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'gates.mode':
-    case 'frameworks.mode':
-    case 'resources.mode':
-    case 'resources.prompts.mode':
-    case 'resources.gates.mode':
-    case 'resources.frameworks.mode':
-    case 'resources.observability.mode':
-    case 'resources.logs.mode':
-    case 'verification.isolation.mode':
-    case 'analysis.semanticAnalysis.llmIntegration.mode': {
-      const normalized = value.trim().toLowerCase();
-      if (!['on', 'off'].includes(normalized)) {
-        return {
-          valid: false,
-          error: "Value must be 'on' or 'off'",
-        };
-      }
-      return {
-        valid: true,
-        convertedValue: normalized,
-        valueType: 'string',
-      };
     }
 
     case 'identity.mode': {
@@ -192,7 +173,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     case 'hooks.expandedOutput':
     case 'verification.isolation.enabled':
     case 'versioning.enabled':
-    case 'versioning.autoVersion': {
+    case 'versioning.auto_version': {
       const boolValue = value.trim().toLowerCase();
       if (!['true', 'false'].includes(boolValue)) {
         return {
@@ -311,23 +292,12 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       return { valid: true, convertedValue: normalized, valueType: 'string' };
     }
 
-    case 'versioning.mode': {
-      const normalized = value.trim().toLowerCase();
-      if (!['off', 'manual', 'auto'].includes(normalized)) {
-        return {
-          valid: false,
-          error: "Versioning mode must be 'off', 'manual', or 'auto'",
-        };
-      }
-      return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'versioning.maxVersions': {
+    case 'versioning.max_versions': {
       const maxVersions = parseInt(value, 10);
       if (isNaN(maxVersions) || maxVersions < 1 || maxVersions > 500) {
         return {
           valid: false,
-          error: 'maxVersions must be a number between 1-500',
+          error: 'max_versions must be a number between 1-500',
         };
       }
       return { valid: true, convertedValue: maxVersions, valueType: 'number' };
@@ -364,48 +334,6 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.model': {
-      const trimmed = value.trim();
-      if (trimmed.length === 0) {
-        return {
-          valid: false,
-          error: 'Model name cannot be empty',
-        };
-      }
-      return { valid: true, convertedValue: trimmed, valueType: 'string' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.endpoint': {
-      const trimmed = value.trim();
-      return {
-        valid: true,
-        convertedValue: trimmed.length > 0 ? trimmed : null,
-        valueType: 'string',
-      };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.maxTokens': {
-      const tokens = parseInt(value, 10);
-      if (isNaN(tokens) || tokens < 1 || tokens > 4000) {
-        return {
-          valid: false,
-          error: 'Max tokens must be a number between 1-4000',
-        };
-      }
-      return { valid: true, convertedValue: tokens, valueType: 'number' };
-    }
-
-    case 'analysis.semanticAnalysis.llmIntegration.temperature': {
-      const temp = parseFloat(value);
-      if (isNaN(temp) || temp < 0 || temp > 2) {
-        return {
-          valid: false,
-          error: 'Temperature must be a number between 0-2',
-        };
-      }
-      return { valid: true, convertedValue: temp, valueType: 'number' };
     }
 
     case 'prompts.directory':

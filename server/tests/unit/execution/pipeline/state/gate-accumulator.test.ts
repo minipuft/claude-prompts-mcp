@@ -129,7 +129,6 @@ describe('GateAccumulator', () => {
         'chain-level', // 50
         'prompt-config', // 60
         'temporary-request', // 80
-        'client-selection', // 90
         'inline-operator', // 100
       ];
 

@@ -14,3 +14,19 @@ manifest.json
 # trailing newline, which prettier requires — so the file oscillates between the two
 # tools and fails validate:format whenever pyrefly last touched it.
 hooks/.pyrefly-baseline.json
+
+# Prettier does not converge on this file: `--write` followed by `--check` fails, and
+# writing prettier's own stdout output back into the file still fails `--check` — measured
+# 2026-08-06, reproduced across three write/check cycles. The same byte-identical content
+# passes `--check` outside the repository, so the instability comes from option resolution
+# under the root `.editorconfig` (no prettier config file resolves for `plans/**`), not
+# from the content alone. Normalizing the one pathological construct — a `- [x]` item whose
+# continuation paragraphs sit at 14 spaces while its sibling sits at 6 — did not fix it.
+#
+# Same class as the pyrefly baseline above: the file oscillates and fails `validate:format`,
+# which is inside `validate:all` and therefore a required CI check, so nothing can merge.
+#
+# RETIREMENT CONDITION: delete this entry when `npx prettier --write` on the file makes
+# `--check` pass. Re-test on any prettier major upgrade — this is an upstream instability,
+# not a property of the prose.
+plans/sqlite-layer-remediation-2026-08-03.md

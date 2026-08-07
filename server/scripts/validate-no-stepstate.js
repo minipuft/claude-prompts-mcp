@@ -17,6 +17,8 @@
  *
  * RETIREMENT CONDITION: delete this guard once no contributor could plausibly reach for the enum,
  * i.e. when `StepLifecycle` + `StepMilestone` have been the only vocabulary for a full release.
+ *
+ * MECHANISM: script — reach — scans `tests/` as well as `src/`, and ESLint globally ignores `tests/` — an AST port would silently halve the scope
  */
 
 import { execSync } from 'node:child_process';

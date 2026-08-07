@@ -206,8 +206,11 @@ def load_active_chain_state() -> dict | None:
       3. chain_run_registry blob — legacy fallback retained for one release;
          Tier 10 removes both this method and the blob table.
 
-    All paths perform a PID liveness check on tenant_id so the hook only
-    returns sessions belonging to a live server process.
+    All paths perform a PID liveness check on run_owner_pid so the hook only
+    returns sessions belonging to a live server process. The column was named
+    tenant_id until schema v20, when it was renamed because the same name held a
+    workspace id in kv_state; there is deliberately no fallback to the old name,
+    since both tables are dropped by the bump that renames them.
     """
     conn = _connect_readonly()
     if not conn:
@@ -239,7 +242,7 @@ def _load_from_execution_view(conn: sqlite3.Connection) -> dict | None:
     """
     try:
         cursor = conn.execute(
-            "SELECT tenant_id, chain_id, run_status, current_step, total_steps, "
+            "SELECT run_owner_pid, chain_id, run_status, current_step, total_steps, "
             "last_activity, pending_gate_review, pending_shell_verification "
             "FROM v_execution_status "
             "WHERE run_status IS NULL "
@@ -254,7 +257,7 @@ def _load_from_execution_view(conn: sqlite3.Connection) -> dict | None:
         return None
 
     for row in rows:
-        pid_str = row["tenant_id"]
+        pid_str = row["run_owner_pid"]
         try:
             pid = int(pid_str)
         except (ValueError, TypeError):
@@ -329,7 +332,7 @@ def _parse_json_field(raw: object) -> object:
 def _load_from_session_table(conn: sqlite3.Connection) -> dict | None:
     """Query chain_sessions per-row table. Returns session for a live PID, or None."""
     try:
-        cursor = conn.execute("SELECT tenant_id, chain_id, state FROM chain_sessions ORDER BY updated_at DESC")
+        cursor = conn.execute("SELECT run_owner_pid, chain_id, state FROM chain_sessions ORDER BY updated_at DESC")
         rows = cursor.fetchall()
     except sqlite3.OperationalError:
         return None
@@ -338,7 +341,7 @@ def _load_from_session_table(conn: sqlite3.Connection) -> dict | None:
         return None
 
     for row in rows:
-        pid_str = row["tenant_id"]
+        pid_str = row["run_owner_pid"]
         try:
             pid = int(pid_str)
         except (ValueError, TypeError):
@@ -359,7 +362,7 @@ def _load_from_session_table(conn: sqlite3.Connection) -> dict | None:
 def _load_from_run_registry(conn: sqlite3.Connection) -> dict | None:
     """Fallback: read from PID-scoped chain_run_registry blob rows."""
     try:
-        cursor = conn.execute("SELECT tenant_id, state FROM chain_run_registry")
+        cursor = conn.execute("SELECT run_owner_pid, state FROM chain_run_registry")
         rows = cursor.fetchall()
     except sqlite3.OperationalError:
         return None
@@ -371,10 +374,10 @@ def _load_from_run_registry(conn: sqlite3.Connection) -> dict | None:
     best_activity = 0
 
     for row in rows:
-        tenant_id = row["tenant_id"]
+        run_owner_pid = row["run_owner_pid"]
         # Only read blobs from live server processes
         try:
-            pid = int(tenant_id)
+            pid = int(run_owner_pid)
         except (ValueError, TypeError):
             continue
         if not _is_pid_alive(pid):
@@ -403,8 +406,21 @@ def _load_from_run_registry(conn: sqlite3.Connection) -> dict | None:
     return _session_to_hook_state(best)
 
 
+# Run statuses that mean the run is over. Kept next to the reader that enforces them so the
+# constant and its check cannot drift; mirrors isTerminalRunStatus() on the TypeScript side.
+TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
+
+
 def _session_to_hook_state(session: dict) -> dict | None:
-    """Convert a chain session dict to the hook ChainState shape."""
+    """Convert a chain session dict to the hook ChainState shape.
+
+    Applies the terminal-run boundary that `v_execution_status` applies in SQL. Both fallback
+    paths converge here, so without this check a run excluded by the view was served straight back
+    by the session-table query, which selects every row regardless of run_status.
+    """
+    if session.get("runStatus") in TERMINAL_RUN_STATUSES:
+        return None
+
     current = session.get("currentStep", 0)
     total = session.get("totalSteps", 0)
 

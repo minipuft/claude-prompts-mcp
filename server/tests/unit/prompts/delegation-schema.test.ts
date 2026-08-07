@@ -42,12 +42,17 @@ describe('Delegation field in prompt schemas', () => {
       }
     });
 
-    test('accepts agentType as a string', () => {
+    test('carries agentType through as a string', () => {
       const result = ChainStepSchema.safeParse({ ...baseStep, agentType: 'code-reviewer' });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.agentType).toBeUndefined();
+        expect(result.data.agentType).toBe('code-reviewer');
       }
+    });
+
+    test('rejects an empty agentType rather than carrying a blank agent name', () => {
+      const result = ChainStepSchema.safeParse({ ...baseStep, agentType: '' });
+      expect(result.success).toBe(false);
     });
 
     test('accepts delegation with agentType together', () => {
@@ -59,7 +64,7 @@ describe('Delegation field in prompt schemas', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.delegation).toBeUndefined();
-        expect(result.data.agentType).toBeUndefined();
+        expect(result.data.agentType).toBe('Explore');
       }
     });
 
@@ -209,7 +214,7 @@ describe('Delegation field in prompt schemas', () => {
       if (result.success) {
         expect(result.data.delegation).toBe(true);
         expect(result.data.delegationAgent).toBe('general-purpose');
-        expect(result.data.chainSteps?.[1].agentType).toBeUndefined();
+        expect(result.data.chainSteps?.[1].agentType).toBe('code-reviewer');
         expect(result.data.chainSteps?.[2].delegation).toBeUndefined();
       }
     });

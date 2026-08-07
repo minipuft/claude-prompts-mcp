@@ -58,6 +58,7 @@ export interface LoadedPromptFile {
     outputMapping?: Record<string, string>;
     retries?: number;
     subagentModel?: 'heavy' | 'standard' | 'fast';
+    agentType?: string;
   }>;
 }
 
@@ -374,6 +375,7 @@ function normalizeChainSteps(
     if (step.outputMapping) normalized.outputMapping = step.outputMapping;
     if (typeof step.retries === 'number') normalized.retries = step.retries;
     if (step.subagentModel != null) normalized.subagentModel = step.subagentModel;
+    if (step.agentType != null) normalized.agentType = step.agentType;
     return normalized;
   });
 }

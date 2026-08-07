@@ -9,7 +9,7 @@
  */
 
 import { GateStateStore } from '../gate-state-store.js';
-import { GateLoader, createGateLoader } from './gate-loader.js';
+import { createGateLoader } from './gate-loader.js';
 import { GateValidator, createGateValidator } from './gate-validator.js';
 import {
   TemporaryGateRegistry,
@@ -20,6 +20,7 @@ import {
 import type { GateDefinitionProvider } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { ValidationContext } from '../types.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 
 export { GateLoader, createGateLoader, type GateDefinitionProvider } from './gate-loader.js';
 export { GateValidator, createGateValidator } from './gate-validator.js';
@@ -77,6 +78,9 @@ export class LightweightGateSystem {
   private gateStateStore: GateStateStore | undefined;
   private temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
+  /** Workspace scope for gate state reads and validation metric writes. */
+  private workspaceScope?: StateStoreOptions;
+
   constructor(
     public gateLoader: GateDefinitionProvider,
     public gateValidator: GateValidator,
@@ -88,7 +92,12 @@ export class LightweightGateSystem {
   /**
    * Set gate system manager for runtime state checking
    */
-  setGateStateStore(gateStateStore: GateStateStore): void {
+  setGateStateStore(gateStateStore: GateStateStore, scope?: StateStoreOptions): void {
+    // Scope arrives with the store rather than per call: both consumers below are internal
+    // decisions made mid-validation, with no request in hand. Without it they resolved to the
+    // default scope, so one workspace's gate toggle was read by every other, and validation
+    // metrics from every project pooled into a single row.
+    this.workspaceScope = scope;
     this.gateStateStore = gateStateStore;
   }
 
@@ -140,7 +149,7 @@ export class LightweightGateSystem {
     if (!this.gateStateStore) {
       return true;
     }
-    return this.gateStateStore.isGateSystemEnabled();
+    return this.gateStateStore.isGateSystemEnabled(this.workspaceScope);
   }
 
   /**
@@ -226,40 +235,10 @@ export class LightweightGateSystem {
     if (this.gateStateStore) {
       const executionTime = performance.now() - startTime;
       const success = results.every((r) => r.passed);
-      this.gateStateStore.recordValidation(success, executionTime);
+      this.gateStateStore.recordValidation(success, executionTime, this.workspaceScope);
     }
 
     return results;
-  }
-
-  /**
-   * Check if content should be retried based on validation results
-   */
-  shouldRetry(
-    validationResults: ValidationResult[],
-    currentAttempt: number,
-    maxAttempts: number = 3
-  ): boolean {
-    return this.gateValidator.shouldRetry(validationResults, currentAttempt, maxAttempts);
-  }
-
-  /**
-   * Get combined retry hints from all failed validations
-   */
-  getRetryHints(validationResults: ValidationResult[]): string[] {
-    const allHints: string[] = [];
-
-    for (const result of validationResults) {
-      if (!result.passed) {
-        allHints.push(`**${result.gateId}:**`);
-        if (result.retryHints) {
-          allHints.push(...result.retryHints);
-        }
-        allHints.push(''); // Empty line for separation
-      }
-    }
-
-    return allHints;
   }
 
   /**
@@ -324,7 +303,6 @@ export function createLightweightGateSystem(
     enableTemporaryGates?: boolean;
     maxMemoryGates?: number;
     defaultExpirationMs?: number;
-    llmConfig?: any; // LLMIntegrationConfig from types
   }
 ): LightweightGateSystem {
   // Create temporary gate registry if enabled
@@ -342,7 +320,7 @@ export function createLightweightGateSystem(
 
   const gateLoader =
     options?.provider ?? createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
-  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
+  const gateValidator = createGateValidator(logger, gateLoader);
 
   const gateSystem = new LightweightGateSystem(gateLoader, gateValidator, temporaryGateRegistry);
 

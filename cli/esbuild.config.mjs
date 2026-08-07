@@ -21,7 +21,9 @@ import { fileURLToPath } from 'node:url';
 import { zodLocalesTrimPlugin } from './esbuild-plugins/zod-locales-trim.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
+const releasePkg = JSON.parse(
+  readFileSync(join(__dirname, '..', 'server', 'package.json'), 'utf8')
+);
 
 /**
  * Size budgets for the `cpm` bundle. Two numbers because two artifacts exist.
@@ -46,13 +48,14 @@ const SERVER_SRC = join(__dirname, '..', 'server', 'src');
 /**
  * Build options for the cpm bundle.
  *
- * @param {{ outfile?: string, minify?: boolean }} [overrides]
+ * @param {{ outfile?: string, minify?: boolean, version?: string }} [overrides]
  * @returns {import('esbuild').BuildOptions}
  */
 export function createCliBuildOptions(overrides = {}) {
   const {
     outfile = join(__dirname, 'dist', 'cpm.js'),
     minify = process.env.NODE_ENV === 'production',
+    version = releasePkg.version,
   } = overrides;
 
   return {
@@ -89,7 +92,7 @@ const require = __createRequire(import.meta.url);`,
     },
 
     define: {
-      'process.env.CPM_VERSION': JSON.stringify(pkg.version),
+      'process.env.CPM_VERSION': JSON.stringify(version),
     },
 
     // Resolve @cli-shared to server source; esbuild bundles transitive deps
@@ -118,7 +121,7 @@ const require = __createRequire(import.meta.url);`,
  * the metafile keys outputs by a path relative to `absWorkingDir` and the two
  * consumers emit to different directories.
  *
- * @param {{ outfile?: string, minify?: boolean }} [overrides]
+ * @param {{ outfile?: string, minify?: boolean, version?: string }} [overrides]
  * @returns {Promise<string>} absolute path to the emitted bundle
  */
 export function checkCliBundleSize(outfile, minified = false) {

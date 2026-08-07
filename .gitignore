@@ -99,11 +99,20 @@ CLAUDE.md
 .clinerules
 
 # Claude Code project config - track rules, ignore personal settings
+#
+# The blanket `.claude/` below used to sit here alone, which contradicted the line above it:
+# project rules are shared context, not personal settings. It only looked correct because
+# `.claude/rules/mcp-contracts.md` and `extension-alignment.md` were already tracked when it
+# landed, and git does not retroactively ignore tracked files. Every rule written since was
+# silently untrackable -- including one CLAUDE.md points at as auto-loaded.
 .claude/settings.local.json
 .claude/settings.json
 server/.claude/
 server/.opencode/
-.claude/
+.claude/*
+!.claude/rules/
+.claude/rules/*
+!.claude/rules/*.md
 
 .agent/
 # Temporary test files

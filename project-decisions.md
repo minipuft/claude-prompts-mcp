@@ -140,20 +140,28 @@ This prevents the common drift problem where tool descriptions, parameter types,
 
 ---
 
-### 7. Transport Parity (STDIO + SSE + Streamable HTTP)
+### 7. Transport Parity (STDIO + Streamable HTTP)
 
-**Decision**: Support three MCP transport modes with the same tool handlers.
+**Decision**: Support two MCP transport modes with the same tool handlers.
 
 **Rationale**: Different clients need different transports:
 
 - **STDIO**: Claude Code, Claude Desktop (local process communication)
-- **SSE**: Legacy browser/HTTP clients
-- **Streamable HTTP**: MCP standard since 2025-03-26 (replacing SSE)
+- **Streamable HTTP**: the MCP standard since 2025-03-26
 - **Both**: STDIO + HTTP simultaneously for development
+
+The deprecated **HTTP+SSE** transport was removed in the SDK v2 upgrade: the TypeScript SDK
+stopped shipping `SSEServerTransport`, so keeping it would have meant hand-maintaining a
+transport upstream had deleted. `--transport=sse` now fails loudly rather than falling back to
+another transport.
 
 All transports route to the same `PromptExecutor`, `ResourceManager`, and `SystemControl` handlers — zero transport-specific logic in tool implementations.
 
-**Evidence**: `server/src/infra/http/transport/index.ts` — transport setup with enum at lines 23-28, STDIO at 79-101, SSE at 126-234, Streamable HTTP at 240-300+.
+**Parity is not sameness.** The two differ in how long a server instance lives — STDIO pins one
+per connection, HTTP builds one per request — and that difference decides whether a change can be
+expressed as a mutation at all. See `CLAUDE.md` Core Principle 3.
+
+**Evidence**: `server/src/infra/http/transport/index.ts` — `TransportType` enum, `setupStdioTransport`, `setupStreamableHttpTransport`, and `assertTransportSupported` for the removed value.
 
 ---
 
@@ -322,6 +330,6 @@ Gates are defined as YAML resources, hot-reloaded, and enforced by `GateEnforcem
 
 6. **WSL2 filesystem reliability**: Auto-detecting WSL2 and falling back to polling prevents missed file change events.
 
-7. **Transport-agnostic tool handlers**: Single tool implementation serves STDIO, SSE, and Streamable HTTP without transport-specific code.
+7. **Transport-agnostic tool handlers**: Single tool implementation serves STDIO and Streamable HTTP without transport-specific code.
 
 8. **Incremental resource indexing**: Content-hash diffing avoids re-indexing unchanged files while maintaining search accuracy.

@@ -223,22 +223,26 @@ export function generateDefaultConfig(): Record<string, unknown> {
       port: 9090,
     },
     frameworks: {
-      mode: 'on',
+      enabled: true,
       dynamicToolDescriptions: true,
       systemPromptFrequency: 3,
       styleGuidance: true,
     },
     gates: {
-      mode: 'on',
+      enabled: true,
       frameworkGates: true,
     },
     logging: {
       level: 'info',
       directory: './logs',
     },
+    // `mode: 'auto'` / `maxVersions` here previously produced a fresh workspace whose versioning
+    // block no reader consulted — this generator was the upstream producer of the inert spelling,
+    // so every `cpm init` seeded it. `auto` meant enabled with auto-versioning on.
     versioning: {
-      mode: 'auto',
-      maxVersions: 50,
+      enabled: true,
+      auto_version: true,
+      max_versions: 50,
     },
     execution: {
       judge: true,
@@ -365,23 +369,17 @@ function getKeyTypeInfo(key: string): {
   type: 'string' | 'number' | 'boolean';
   description: string;
 } {
-  // Mode keys (on/off)
-  if (
-    key.endsWith('.mode') &&
-    !key.includes('identity') &&
-    !key.includes('versioning') &&
-    !key.includes('phaseGuards')
-  ) {
-    return { type: 'string', description: "'on' or 'off'" };
-  }
+  // The three `.mode` keys a reader actually consults. The on/off `.mode` family this function
+  // used to describe by suffix is gone from CONFIG_VALID_KEYS — those subsystems are booleans.
   if (key === 'identity.mode')
     return { type: 'string', description: "'permissive', 'strict', or 'locked'" };
-  if (key === 'versioning.mode')
-    return { type: 'string', description: "'off', 'manual', or 'auto'" };
+  if (key === 'phaseGuards.mode')
+    return { type: 'string', description: "'enforce', 'warn', or 'off'" };
+  if (key === 'telemetry.mode') return { type: 'string', description: "'on', 'off', or 'auto'" };
 
   // Transport
   if (key === 'server.transport')
-    return { type: 'string', description: "'stdio', 'streamable-http', 'sse', or 'both'" };
+    return { type: 'string', description: "'stdio', 'streamable-http', or 'both'" };
 
   // Ports and numbers
   if (key === 'server.port') return { type: 'number', description: '1024-65535' };
@@ -393,7 +391,7 @@ function getKeyTypeInfo(key: string): {
     return { type: 'number', description: '>= 0.01 USD' };
   if (key === 'verification.isolation.permissionMode')
     return { type: 'string', description: "'delegate', 'ask', or 'deny'" };
-  if (key === 'versioning.maxVersions') return { type: 'number', description: '1-500' };
+  if (key === 'versioning.max_versions') return { type: 'number', description: '1-500' };
   if (key === 'resources.logs.maxEntries') return { type: 'number', description: '50-5000' };
   if (key.endsWith('.maxTokens')) return { type: 'number', description: '1-4000' };
   if (key.endsWith('.temperature')) return { type: 'number', description: '0-2' };
@@ -424,10 +422,6 @@ function getKeyTypeInfo(key: string): {
     return { type: 'string', description: 'organization identifier' };
   if (key === 'identity.launchDefaults.workspaceId')
     return { type: 'string', description: 'workspace identifier' };
-  if (key === 'analysis.semanticAnalysis.llmIntegration.endpoint')
-    return { type: 'string', description: 'API endpoint URL (or empty)' };
-  if (key === 'analysis.semanticAnalysis.llmIntegration.model')
-    return { type: 'string', description: 'model name' };
 
   // Booleans
   const boolKeys = [
@@ -453,7 +447,7 @@ function getKeyTypeInfo(key: string): {
     'hooks.expandedOutput',
     'verification.isolation.enabled',
     'versioning.enabled',
-    'versioning.autoVersion',
+    'versioning.auto_version',
   ];
   if (boolKeys.includes(key)) return { type: 'boolean', description: 'true or false' };
 
