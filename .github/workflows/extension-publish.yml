@@ -186,6 +186,12 @@ jobs:
           bash scripts/stage-server-runtime.sh server/dist "$STAGING_DIR/server/dist"
           cp -r server/resources "$STAGING_DIR/server/"
           cp server/config.json "$STAGING_DIR/server/"
+          # resolvePackageRoot() (startup.ts) verifies package identity by reading
+          # package.json beside dist/ — a layout without it fails startup on every
+          # plugin install. The old ServerRootDetector tolerated its absence, which
+          # is why this staging predates the requirement (caught by the smoke test
+          # on the v3.2.0 release, 2026-08-07).
+          cp server/package.json "$STAGING_DIR/server/"
           tar -czf "$RUNNER_TEMP/dist-runtime.tar.gz" -C "$STAGING_DIR" .
 
       - name: Validate dist artifact
@@ -200,6 +206,7 @@ jobs:
           test ! -e "$VERIFY_DIR/server/dist/cpm.js"
           test ! -e "$VERIFY_DIR/server/dist/cpm.js.map"
           test -f "$VERIFY_DIR/server/config.json"
+          test -f "$VERIFY_DIR/server/package.json"
           test -d "$VERIFY_DIR/server/resources"
           test -f "$VERIFY_DIR/.mcp.json"
           test -f "$VERIFY_DIR/.claude-plugin/plugin.json"
@@ -251,6 +258,7 @@ jobs:
 
           test -f server/dist/index.js
           test -f server/config.json
+          test -f server/package.json
           test -d server/resources
           test -f .mcp.json
           test -f .claude-plugin/plugin.json
