@@ -62,6 +62,22 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 · run 4 (head `a2db54cf`): in flight — first run with all three fixes; Test Suite matrix
   has not yet completed on any run of this PR
 
+## Release-PR phase (post-merge, 2026-08-06/07)
+
+- Merge `9029fb4d` landed as a MERGE COMMIT deliberately — release-please reads conventional
+  commits and the `Release-As: 3.2.0` footer from main history; a squash would have collapsed both.
+- RP opened #197 titled `chore(main): release 3.2.0` — the Release-As pin held; every version
+  surface bumps 3.1.1→3.2.0 including BOTH server.json fields (G3 wiring proven live). RP merged
+  its generated commit list into the hand-written Unreleased sections and retitled the block.
+- **Trap: RP's PR gets no CI.** The PR is created with GITHUB_TOKEN, which never triggers
+  workflows; only Renovate (a different trigger path) registered, so the four required contexts
+  stayed absent and the PR sat BLOCKED. Fix: close/reopen under my token re-fires pull_request.
+- **Trap: `gh pr merge` on a BLOCKED PR exits 0** while printing an --auto/--admin hint — it
+  no-ops without failing, so any merge automation must verify `state == MERGED` afterward, not
+  trust the exit code. Bit twice before the loop verified state.
+- Release PR merged as SQUASH to match the 3.1.1 precedent (`chore(main): release 3.1.1 (#191)`,
+  single parent).
+
 ## Validation runs
 
 - 2026-08-06 17:49 · `npm run build >/dev/null 2>&1 && NODE_OPTIONS="--experimental-vm-modules" npx jest --config jest.config.cjs 2>&1 | tail ` · ran
