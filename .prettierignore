@@ -29,4 +29,4 @@ hooks/.pyrefly-baseline.json
 # RETIREMENT CONDITION: delete this entry when `npx prettier --write` on the file makes
 # `--check` pass. Re-test on any prettier major upgrade — this is an upstream instability,
 # not a property of the prose.
-plans/sqlite-layer-remediation-2026-08-03.md
+plans/reference/sqlite-layer-remediation-2026-08-03.md
