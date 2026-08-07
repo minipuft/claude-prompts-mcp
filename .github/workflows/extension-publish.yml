@@ -540,6 +540,10 @@ jobs:
           bash scripts/stage-server-runtime.sh server/dist .plugin-staging/server/dist
           cp -r server/resources .plugin-staging/server/
           cp server/config.json .plugin-staging/server/
+          # Same requirement as the dist staging above: resolvePackageRoot() reads
+          # package.json beside dist/ for identity. This job is skipped on release
+          # runs, so the v3.2.1 dispatch was the first time the gap fired here.
+          cp server/package.json .plugin-staging/server/
 
           # Validate staged runtime
           test -f .plugin-staging/server/dist/index.js
@@ -547,6 +551,7 @@ jobs:
           test ! -e .plugin-staging/server/dist/cpm.js
           test ! -e .plugin-staging/server/dist/cpm.js.map
           test -f .plugin-staging/server/config.json
+          test -f .plugin-staging/server/package.json
           test -d .plugin-staging/server/resources
           test -f .plugin-staging/hooks/hooks.json
           test -f .plugin-staging/agents/chain-executor.md
