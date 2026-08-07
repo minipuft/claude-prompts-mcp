@@ -91,3 +91,6 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/cli && npx jest tests/integration/new-commands.test.ts 2>&1 | tail -15` · ran
 
 - 2026-08-06 17:42 · `for f in plans/cli-distribution-release-integration-2026-08-02.md plans/downstream-standards-federation-2026-08-02-imple` · ran
+
+- 2026-08-07 · Plan-sync marker: the `cli/tests/integration/new-commands.test.ts` edit is fully
+  flushed (logged above, committed `3e7b7306`); no further chat-only state pends against it.
