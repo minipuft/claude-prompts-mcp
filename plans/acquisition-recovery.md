@@ -361,9 +361,9 @@ listed anywhere or wired into the release train.
 
 **Scope when activated:**
 
-1. **Codex marketplace/plugin listing** — research Codex's actual distribution mechanism first
-   (`/codex-plugins` skill, then their current docs; requirements were not captured during the
-   port). Draft any external submission for owner pass per the standing external-submissions rule.
+1. **Codex marketplace/plugin listing** — SUBSUMED by Tier 6 (2026-08-08): Codex is a launch
+   client of the Agent Plugins 1.0 standard, so its distribution path is the native plugin
+   render, not a bespoke submission. Any interim manual listing still gets per-item owner pass.
 2. **Downstream consistency for codex-prompts** — extend the same automation the other three
    downstreams get: `synchronize-downstream-lock` coverage, a `downstream-contract.json`
    equivalent, and membership in the distribution version check (`validate:versions
@@ -383,6 +383,23 @@ repo _shape_ at install time, not to runtime behavior.
 
 ---
 
+## Tier 6 — Agent Plugins Migration: Single Source Tree, Rendered Distributions (DEFERRED — own plan)
+
+The distribution-repo decision (Tier 5) resolved 2026-08-08 with a forcing function: **Agent
+Plugins 1.0.0** (agent-plugins.org, announced 2026-08-06 by OpenAI with AWS, Cursor, GitHub,
+Microsoft, Vercel) standardizes exactly the rendered-distribution shape — `plugin.json` +
+`skills/` + `mcp.json`, with client-specific hooks in reverse-domain namespace dirs. Launch
+clients (Codex, ChatGPT, Cursor, GitHub Copilot, Kiro, VS Code) are net-new acquisition surfaces;
+Anthropic is absent, so the Claude Code marketplace render stays a permanent legacy target.
+
+Scope, alignment matrix (npm package / hooks / marketplaces / workflows), phases P0–P6, and
+risks: **`plans/agent-plugins-migration-2026-08-08.md`**. Key gates: pin the schemas before
+building anything (spec is days old); fix the packaged-server MCP_WORKSPACE defect first (it
+violates the standard's `PLUGIN_DATA` model and already breaks under Codex's sandbox); pilot on
+codex-prompts; migrate minipuft-plugins LAST; owner manually validates every client per phase.
+
+---
+
 ## Sequencing Summary
 
 ```
@@ -392,7 +409,8 @@ Aug 2–~28    → MIT observation window: no README/metadata changes
 Window close → record signal → discuss Tier 1 open questions → execute Tier 1
              → Tier 2b integrations (registry-first order)
              → Tier 3a capability research → 3b README pass if warranted
-After 2b     → Tier 5 Codex integration + downstream consistency (deferred 2026-08-06)
+After 2b     → Tier 5 downstream consistency (deferred 2026-08-06; Codex listing → Tier 6)
+             → Tier 6 Agent Plugins migration (own plan, 2026-08-08)
 ```
 
 Each executed change gets a date recorded in this file — one variable at a time is the whole lesson of the AGPL episode.
