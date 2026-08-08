@@ -181,6 +181,9 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-08 15:27 · `npm run verify:mcp 2>&1 | tail -5 && npm run lint:ratchet 2>&1 | tail -2 && npm run typecheck:tests:ratchet 2>&1 | tail ` · ran
+- 2026-08-08 15:26 · `npm run typecheck 2>&1 | tail -3 && npm run build 2>&1 | tail -2 && NODE_OPTIONS="--experimental-vm-modules" npx jest --` · ran
+
 - 2026-08-06 20:23 · `python3 - <<'EOF' p = 'plans/acquisition-recovery.md' s = open(p).read() s = s.replace("""| G8 | **Distribution check gr` · ran
 - 2026-08-06 19:14 · `cd ~/.claude/hooks && python3 -m pytest tests/ -q 2>&1 | tail -2; echo '{"session_id": "1618e512-748b-4fd2-8c06-097a2513` · ran
 - 2026-08-06 18:40 · `WT=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1618e512-748b-4fd2-8c06-097a25130316/scratchpad/rp-wt` · ran
