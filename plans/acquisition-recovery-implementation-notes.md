@@ -237,3 +237,41 @@ maintenance cost is real and has a cheaper fix than merging.**
   its own store, so it is not purely a loss).
 - **Migration is incremental**: codex-prompts (newest, least history) is the pilot — build the
   renderer for it in Tier 5, then fold the other three in one at a time.
+
+## QUEUED (owner-raised 2026-08-09): claims-conformance suite — token-free functional validation at release boundaries
+
+**Problem named by owner**: no cheap way to validate the functionality we CLAIM (README/docs) and
+catch breakage at releases/big changes — current options are either code-level tests (don't test
+claims) or live client sessions (burn tokens). Process must NOT run on every commit.
+
+**Key insight**: the server needs no LLM to be exercised — the LLM is the client, and
+`verify-mcp-surface.mjs` already proves a script can play that role (spawns dist/, calls all 3
+tools over stdio). Token cost of full functional coverage is zero.
+
+**What exists / the gap** (probed 2026-08-09):
+
+- unit 2,538 + integration + e2e (mcp-server-smoke, plugin-validation, shell-verify) — test CODE
+  paths, not documented claims; verify:mcp is 12 surface checks with a known blind spot
+  (surface ≠ end-to-end, memory feedback_surface_check_vs_end_to_end).
+- Tier 3a found 9 OVERSTATED README claims **by hand** — the exact class a claims-keyed suite
+  makes mechanical (`%guided` threw a parse error for anyone who typed it; nothing caught it).
+
+**Design (proposed)**:
+
+1. **Scenario corpus keyed to claims**: `server/tests/conformance/*.yaml` — each scenario =
+   {claim source (README section / doc page), command over MCP stdio, expected observable
+   response shape}. Every symbolic-syntax form the docs advertise gets a row (`>>`, `-->`, `::`,
+   `%modifiers` incl. rejection cases, `@framework`, `#style`, built-ins, resource:// reads,
+   chain resume, gate verdict round-trip).
+2. **Runner**: extend the verify-mcp-surface.mjs spawn harness into a scenario driver (or a
+   4th e2e file) — deterministic, offline, zero tokens.
+3. **Cadence** (the "not always" requirement): NOT in per-commit hooks. Runs in the release
+   workflow (pre-publish gate) + on-demand before merges touching engine/parsers/pipeline.
+   classify-validation-scope stays untouched.
+4. **Token-bearing judgment stays rare**: Maya-style roleplay / gate-quality grading only at
+   README reworks (3b) — scripted conformance replaces it everywhere else.
+5. **Drift coupling**: validate:readme gains a cross-check that every syntax example in README
+   has a conformance scenario — new claims cannot ship untested.
+
+**Payoff**: the 3a defect class (claims the server cannot back) becomes a CI failure instead of a
+research pass; releases like 3.2.1 get functional proof beyond verify:mcp's surface pass.
