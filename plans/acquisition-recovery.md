@@ -227,6 +227,22 @@ Incidental sightings (unaudited): LobeHub, Playbooks.
 
 Retired: modelcontextprotocol/servers community list (no longer exists; #1 replaces it).
 
+### Step 10 draft — awesome-claude-code issue form (READY 2026-08-09; owner files by hand)
+
+Form fields verified against `recommend-resource.yml` the same day. Eligibility met on both
+prongs (≥100★ AND ≥14 days active). The form ends with five required checkboxes **plus one
+deliberate trap checkbox that must stay unchecked** — read each one when filing; agent
+submissions are banned, which is exactly why this draft stops at drafting.
+
+| Field        | Value                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Display Name | `Claude Prompts MCP`                                                                                                                                                                                                                                                                                                                                                   |
+| Category     | `Agent Orchestration` (best fit: chains, gates, framework injection; `Skills` is the narrower alternate if the maintainer recategorizes)                                                                                                                                                                                                                               |
+| Link         | `https://github.com/minipuft/claude-prompts-mcp`                                                                                                                                                                                                                                                                                                                       |
+| Author Name  | `minipuft`                                                                                                                                                                                                                                                                                                                                                             |
+| Author Link  | `https://github.com/minipuft`                                                                                                                                                                                                                                                                                                                                          |
+| Description  | `MCP server for reusable prompt templates, multi-step chains, and quality gates. Prompts compose through an operator syntax (>>prompt --> chain :: gate), gates can be shell-verified rather than self-reported, and prompts export as native skills to Claude Code and other clients.` (343 chars — inside the 10–500 bound; descriptive register, no reader address) |
+
 **The single gate in front of steps 1–9: the `release-3.1.0-final` → `main` merge**, refined 2026-08-06 into the gate table below. Every repo-file-based integration reads the DEFAULT branch — the registry publish needs `server.json` on main, Glama's claim flow reads `glama.json` from main, and every scraper correction re-fetches main's README (still the old pre-restructure one). Sequence: gates G1–G3 → PR + merge → release-please release PR → publish → G5–G8 → steps 1–9 same day → owner files step 10 by hand. The observation window restarts from the merge-publish date.
 
 **Release gates (added 2026-08-06 — each verifiable, checked in order):**
@@ -350,36 +366,21 @@ believing the label — the hono alert's `runtime` scope was wrong about what we
 
 ---
 
-## Tier 5 — Codex Marketplace Integration + Downstream Consistency Validation (DEFERRED — after Tier 2b closes)
+## Tier 5 — RETIRED 2026-08-09: fully subsumed by Tier 6
 
-Claude-side listings are effectively exhausted: with the official registry, Smithery, Glama, and
-the punkpeye PR in flight, the only remaining Claude-ecosystem target is
-`hesreallyhim/awesome-claude-code` (step 10, owner-manual). The next acquisition surface is the
-**Codex ecosystem** — `codex-prompts` was ported 2026-08-03 (measured divergences: encrypted
-subagent payloads, no `.mcp.json` interpolation, sandboxed MCP children) but has never been
-listed anywhere or wired into the release train.
+All three scope items collapsed into the Agent Plugins migration once the standard resolved them
+structurally (owner confirmed 2026-08-09):
 
-**Scope when activated:**
+1. **Codex listing** → the native Agent Plugin render IS the Codex distribution path
+   (migration plan Tier 4 pilot; codex-prompts retires after it passes).
+2. **Downstream consistency** → the renderer + drift check own it (migration plan Tiers 2–3);
+   per-repo sync automation is retired, not extended.
+3. **Workflow parity audit** → moot — hardening lives once in the render workflow instead of
+   being replicated per repo (migration plan Tier 3.1).
 
-1. **Codex marketplace/plugin listing** — SUBSUMED by Tier 6 (2026-08-08): Codex is a launch
-   client of the Agent Plugins 1.0 standard, so its distribution path is the native plugin
-   render, not a bespoke submission. Any interim manual listing still gets per-item owner pass.
-2. **Downstream consistency for codex-prompts** — extend the same automation the other three
-   downstreams get: `synchronize-downstream-lock` coverage, a `downstream-contract.json`
-   equivalent, and membership in the distribution version check (`validate:versions
---distribution`). Evidence this matters: minipuft-plugins marketplace sat at 3.1.1 against a
-   3.2.1 release today until marketplace-sync merged — codex-prompts currently has **no** such
-   self-heal and would drift silently.
-3. **Workflow parity audit** — every hardening added this cycle (auto-merge with state
-   verification, BEHIND self-heal, contract URL pins) exists only where it was written. Enumerate
-   which downstream repos carry which guards; close the gaps or record the intentional asymmetry.
-
-**Decision item (owner call, affects how #2 is built): distribution-repo architecture.**
-Question raised 2026-08-06: should the four client repos (minipuft-plugins, gemini-prompts,
-opencode-prompts, codex-prompts) collapse into the main repo behind a launch flag?
-Recommendation recorded below the fold — short form: keep the repos, demote them to **rendered
-artifacts** (skills-sync/dist-branch pattern); flags can't solve this because storefronts bind to
-repo _shape_ at install time, not to runtime behavior.
+The distribution-repo decision item is RESOLVED in the migration plan's retirement matrix:
+codex-prompts retires, gemini/opencode demote to rendered artifacts, minipuft-plugins freezes as
+the marketplace index. Rationale archive: implementation notes §Distribution-repo architecture.
 
 ---
 
@@ -409,8 +410,8 @@ Aug 2–~28    → MIT observation window: no README/metadata changes
 Window close → record signal → discuss Tier 1 open questions → execute Tier 1
              → Tier 2b integrations (registry-first order)
              → Tier 3a capability research → 3b README pass if warranted
-After 2b     → Tier 5 downstream consistency (deferred 2026-08-06; Codex listing → Tier 6)
-             → Tier 6 Agent Plugins migration (own plan, 2026-08-08)
+After 2b     → Tier 6 Agent Plugins migration (own plan; Tier 5 retired into it 2026-08-09)
+Window close → Tier 3b README content pass (gaps confirmed by 3a; window restarted at 3.2.1 ship)
 ```
 
 Each executed change gets a date recorded in this file — one variable at a time is the whole lesson of the AGPL episode.
