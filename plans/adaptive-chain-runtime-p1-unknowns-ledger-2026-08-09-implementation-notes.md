@@ -91,4 +91,6 @@ Chain quick_decision, 3 steps: step-1 resume declared 2 unknowns (one blocking) 
 
 All done criteria satisfied: success signal (live), full suite green (minus the 2 documented foreign failures), SQLite gates untouched, docs lockstep, scope check passed. Code remains UNCOMMITTED pending user's go-ahead.
 
-Still open (operator decision, not P1-blocking): delete the 3 sub_agent_functionality_chain orphans (parent chain references flat sub_agent_step_* prompts instead).
+## Orphan cleanup (2026-08-09, post-P1, user-directed)
+
+Deleting the 3 sub_agent_functionality_chain orphans surfaced the **delete-path sibling of the P0 nested-id writer defect**: `findYamlPromptInCategory` used the one-level category scan, so nested prompts were invisible to `deletePromptFiles` ("Prompt not found" while inspect resolved the same id). Fix: qualified ids now resolve by direct path in `src/modules/prompts/category-maintenance.ts` (traversal segments rejected); regression test `tests/unit/prompts/category-maintenance-nested.test.ts` (4 tests). Deletions executed via MCP tooling against a throwaway streamable-http server from fresh dist (verify:mcp pattern), then live-server hot reload; parent chain verified intact (3 steps, flat sub_agent_step_* refs); children gone from disk and live registry. Ratchet clean. These 2 files join the P0 `fix` commit set.
