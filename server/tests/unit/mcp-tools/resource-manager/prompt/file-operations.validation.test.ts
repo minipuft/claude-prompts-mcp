@@ -3,7 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { FileOperations } from '../../../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
+import {
+  FileOperations,
+  toYamlPromptId,
+} from '../../../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import {
   normalizePromptId,
   validatePromptId,
@@ -60,6 +63,37 @@ describe('FileOperations canonical prompt writes', () => {
     );
     expect(yamlContent).toContain('id: sample_prompt');
     expect(yamlContent).toContain('name: Sample Prompt');
+  });
+
+  // Regression: the writer used to emit the path-qualified id into the YAML `id` field, which
+  // violates the id regex. The write failed validation and rolled back; when it had already
+  // landed (older builds), the loader dropped the prompt at startup with only a log line.
+  it('writes a nested chain-step prompt under its qualified path with a basename id', async () => {
+    const operations = new FileOperations({ logger, configManager });
+    const result = await operations.updatePromptImplementation({
+      id: 'parent_chain/verification',
+      name: 'Verification',
+      category: 'planning',
+      description: 'Nested chain step used to verify path-qualified id handling',
+      userMessageTemplate: 'verify {{feature}}',
+      arguments: [],
+      tools: [],
+    });
+
+    const nestedYamlPath = join(promptsDir, 'planning', 'parent_chain', 'verification');
+    expect(result.message).toContain('Created prompt: parent_chain/verification');
+    expect(existsSync(join(nestedYamlPath, 'prompt.yaml'))).toBe(true);
+    expect(existsSync(join(nestedYamlPath, 'user-message.md'))).toBe(true);
+
+    // Directory keeps the qualified path; the YAML id is the last segment only.
+    const yamlContent = readFileSync(join(nestedYamlPath, 'prompt.yaml'), 'utf8');
+    expect(yamlContent).toContain('id: verification');
+    expect(yamlContent).not.toContain('parent_chain/verification');
+  });
+
+  it('leaves an unqualified id untouched', () => {
+    expect(toYamlPromptId('sample_prompt')).toBe('sample_prompt');
+    expect(toYamlPromptId('parent_chain/verification')).toBe('verification');
   });
 });
 

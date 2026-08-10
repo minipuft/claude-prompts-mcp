@@ -185,7 +185,7 @@ export class JudgeMenuFormatter {
     }
 
     if (!operatorContext.hasFrameworkOperator && resources.frameworks.length > 0) {
-      sections.push('\n#### Framework Frameworks');
+      sections.push('\n#### Frameworks');
       sections.push(
         resources.frameworks.map((r) => `- **${r.id}**: ${r.description || r.name}`).join('\n')
       );

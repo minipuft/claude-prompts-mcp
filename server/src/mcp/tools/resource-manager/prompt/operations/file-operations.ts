@@ -34,6 +34,19 @@ export interface FileOperationsDependencies extends Pick<
 }
 
 /**
+ * Reduce a possibly path-qualified prompt id to the value the YAML `id` field takes.
+ *
+ * Nested chain steps are addressed as `{parent}/{step}` ("implementation_plan/verification"),
+ * which is derived from the directory path at load time — `yaml-prompt-loader` then validates
+ * the file against the LAST segment only. Writing the qualified form violates the id regex, so
+ * the prompt fails validation and the loader drops it with nothing but a log line.
+ */
+export function toYamlPromptId(promptId: string): string {
+  const segments = String(promptId).split('/');
+  return segments[segments.length - 1] ?? String(promptId);
+}
+
+/**
  * File system operations for prompt management
  */
 export class FileOperations {
@@ -61,6 +74,12 @@ export class FileOperations {
     const effectiveCategory = promptData.category.toLowerCase().replace(/\s+/g, '-');
     const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
     const yamlPath = path.join(promptDir, 'prompt.yaml');
+    // Nested chain steps carry a path-qualified id ("implementation_plan/verification"): the
+    // directory needs the full path, but the YAML `id` field and its validation take the
+    // basename. That is the loader's contract (yaml-prompt-loader derives the qualified id from
+    // the path and validates the file against the last segment) — writing the qualified form
+    // fails the id regex, and the prompt is dropped at load with only a log line.
+    const yamlId = toYamlPromptId(promptData.id);
 
     const txResult = await this.mutationTransaction.run({
       targets: [{ path: promptDir, kind: 'directory' }],
@@ -111,7 +130,7 @@ export class FileOperations {
 
         return { messages, affectedFiles };
       },
-      validate: () => this.verificationService.validateFile('prompts', promptData.id, yamlPath),
+      validate: () => this.verificationService.validateFile('prompts', yamlId, yamlPath),
     });
 
     if (!txResult.success) {
@@ -260,7 +279,8 @@ export class FileOperations {
 
     // Build prompt.yaml metadata
     const promptYamlData: Record<string, unknown> = {
-      id: promptData.id,
+      // Basename, not the qualified id — see toYamlPromptId
+      id: toYamlPromptId(promptData.id),
       name: promptData.name,
       category: effectiveCategory,
       description: promptData.description,

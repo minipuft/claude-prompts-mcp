@@ -58,11 +58,13 @@ export class InjectionControlStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // Skip if session blueprint was restored (decisions already made)
-    if (context.state.session.isBlueprintRestored) {
-      this.logExit({ skipped: 'Session blueprint restored' });
-      return;
-    }
+    // NO blueprint-restored skip. The sibling stages that skip on restore cache a one-time
+    // resolution the blueprint carries (parsedCommand, executionPlan, gateInstructions); this
+    // one decides per step from `sessionContext.currentStep`, and `SessionBlueprint` has no
+    // injection field, so skipping left `context.state.injection` undefined on every chain
+    // continuation. Its consumers read `?.inject === false` / `?? true`, so undefined means
+    // INJECT — the configured frequency (`frameworks.systemPromptFrequency`) and target were
+    // silently bypassed for steps 2..N and every gate-review retry.
 
     // Create authority if not already created
     if (!this.injectionService) {
