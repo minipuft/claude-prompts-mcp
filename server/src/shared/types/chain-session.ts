@@ -67,6 +67,33 @@ export interface ParsedCommandSnapshot {
 
 export type ChainSessionLifecycle = 'dormant' | 'canonical';
 
+/**
+ * A single typed observation a chain step declares about a run-scoped unknown.
+ * `unknown_discovered` opens a ledger entry; `unknown_resolved` closes one.
+ */
+export interface UnknownObservation {
+  type: 'unknown_discovered' | 'unknown_resolved';
+  /** Stable kebab-case slug identifying the unknown within the run. */
+  id: string;
+  statement: string;
+  /** Required iff type === 'unknown_resolved'. */
+  resolution?: 'answered' | 'irrelevant';
+  /** Discovered-only. Defaults to false. */
+  blocking?: boolean;
+}
+
+/** A ledger row tracking one unknown's lifecycle across a chain run. */
+export interface UnknownLedgerEntry {
+  id: string;
+  statement: string;
+  state: 'active' | 'resolved';
+  resolution?: 'answered' | 'irrelevant';
+  resolutionStatement?: string;
+  blocking: boolean;
+  discoveredAtStep: number;
+  resolvedAtStep?: number;
+}
+
 export interface SessionBlueprint {
   parsedCommand: ParsedCommandSnapshot;
   executionPlan: ExecutionPlan;
@@ -102,6 +129,8 @@ export interface ChainSession {
   runStatus?: ChainRunStatus;
   /** Timestamp set when runStatus transitions to 'completed' (or other terminal). */
   runCompletedAt?: number;
+  /** Run-scoped unknowns ledger, populated via applyUnknownObservations. */
+  unknownsLedger?: UnknownLedgerEntry[];
 }
 
 /** Terminal run-status values — sticky once entered. */
@@ -251,5 +280,21 @@ export interface ChainSessionService {
   onSessionCleared(
     callback: (sessionId: string, session: ChainSession) => void | Promise<void>
   ): void;
+  /**
+   * Apply a batch of typed unknown observations to the session's ledger.
+   *
+   * Validates transitions: resolving requires an existing active id; a
+   * re-discover of an existing id is an idempotent statement update rather
+   * than a duplicate entry. Mutates the session's `unknownsLedger`, awaits
+   * persistence, and throws on persist failure. Invalid transitions surface
+   * as tool-result validation errors rather than being silently dropped.
+   *
+   * Returns the full updated ledger.
+   */
+  applyUnknownObservations(
+    sessionId: string,
+    stepNumber: number,
+    observations: UnknownObservation[]
+  ): Promise<UnknownLedgerEntry[]>;
   cleanup(): Promise<void>;
 }

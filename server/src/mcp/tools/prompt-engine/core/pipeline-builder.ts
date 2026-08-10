@@ -19,6 +19,7 @@ import type { GateService } from '#engine/gates/services/gate-service-interface.
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
+import { UnknownObservationProcessor } from '#engine/execution/capture/unknown-observation-processor.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
 import { ChainBlueprintResolver, SymbolicCommandBuilder } from '#engine/execution/parsers/index.js';
 import { GateEnforcementAuthority } from '#engine/execution/pipeline/decisions/index.js';
@@ -273,10 +274,15 @@ export class PipelineBuilder {
       deps.notificationEmitter
     );
     const stepCaptureService = new StepCaptureService(deps.chainSessionStore, deps.logger);
+    const unknownObservationProcessor = new UnknownObservationProcessor(
+      deps.chainSessionStore,
+      deps.logger
+    );
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
       stepCaptureService,
       deps.chainSessionStore,
+      unknownObservationProcessor,
       deps.logger
     );
 

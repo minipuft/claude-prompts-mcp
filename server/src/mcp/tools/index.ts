@@ -784,6 +784,7 @@ export class McpToolRouter {
                 : {}),
               ...(args.force_restart !== undefined ? { force_restart: args.force_restart } : {}),
               ...(args.options != null ? { options: args.options } : {}),
+              ...(args.observations != null ? { observations: args.observations } : {}),
             };
 
             if (args.gates != null) {

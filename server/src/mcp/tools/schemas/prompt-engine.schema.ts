@@ -63,6 +63,38 @@ export const gateSpecUnionSchema = z.union([
 ]);
 
 // ---------------------------------------------------------------------------
+// Unknowns ledger observations (Tier 1 — types + validation only, no runtime yet)
+// ---------------------------------------------------------------------------
+
+/** Kebab-case slug, stable within a run. */
+const unknownIdSchema = z
+  .string()
+  .min(1, 'Unknown id cannot be empty')
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Unknown id must be kebab-case (e.g. "cache-ttl-unknown")');
+
+/** Opens a ledger entry for a newly-surfaced unknown. */
+export const unknownDiscoveredSchema = z.object({
+  type: z.literal('unknown_discovered'),
+  id: unknownIdSchema,
+  statement: z.string().min(1, 'Unknown statement cannot be empty'),
+  blocking: z.boolean().optional(),
+});
+
+/** Closes an existing ledger entry. `statement` carries the resolution statement. */
+export const unknownResolvedSchema = z.object({
+  type: z.literal('unknown_resolved'),
+  id: unknownIdSchema,
+  statement: z.string().min(1, 'Unknown statement cannot be empty'),
+  resolution: z.enum(['answered', 'irrelevant']),
+});
+
+/** One typed observation about a run-scoped unknown. */
+export const unknownObservationSchema = z.discriminatedUnion('type', [
+  unknownDiscoveredSchema,
+  unknownResolvedSchema,
+]);
+
+// ---------------------------------------------------------------------------
 // Gate verdict submission (structured alternative to the formatted string)
 // ---------------------------------------------------------------------------
 
@@ -183,6 +215,8 @@ const PARAM_DEFAULTS = {
   gates:
     'Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).',
   options: 'Additional execution options (key-value pairs) passed through to execution.',
+  observations:
+    'Declare typed unknowns discovered/resolved this step. Each entry: {type:"unknown_discovered"|"unknown_resolved", id:"kebab-case-slug", statement:"...", blocking?:true|false, resolution?:"answered"|"irrelevant"} (resolution required when type is unknown_resolved). Example: [{type:"unknown_discovered", id:"cache-ttl-unknown", statement:"TTL for the new cache layer is undecided", blocking:false}]',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -226,6 +260,11 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .record(z.string(), z.any())
       .optional()
       .describe(resolve('options', PARAM_DEFAULTS.options)),
+
+    observations: z
+      .array(unknownObservationSchema)
+      .optional()
+      .describe(resolve('observations', PARAM_DEFAULTS.observations)),
   };
 }
 

@@ -364,3 +364,136 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(session.lifecycle).toBe('dormant');
   });
 });
+
+describe('ChainSessionStore — unknowns ledger', () => {
+  let manager: ChainSessionStore;
+  let saveSpy: jest.SpiedFunction<() => Promise<void>>;
+  let loadSpy: jest.SpiedFunction<() => Promise<void>>;
+  let schedulerSpy: jest.SpiedFunction<() => void>;
+
+  const newManager = (suffix: string): ChainSessionStore =>
+    new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
+      serverRoot: `/tmp/test-unknowns-${suffix}`,
+      cleanupIntervalMs: 1000,
+    });
+
+  beforeEach(() => {
+    saveSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
+    loadSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
+    schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+    }
+    saveSpy.mockRestore();
+    loadSpy.mockRestore();
+    schedulerSpy.mockRestore();
+  });
+
+  test('applyUnknownObservations mutates the ledger and persists before returning', async () => {
+    manager = newManager('apply');
+    await manager.createSession('s1', 'chain-a', 3);
+    saveSpy.mockClear();
+
+    const ledger = await manager.applyUnknownObservations('s1', 2, [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided', blocking: true },
+    ]);
+
+    expect(ledger).toEqual([
+      {
+        id: 'cache-ttl',
+        statement: 'TTL undecided',
+        state: 'active',
+        blocking: true,
+        discoveredAtStep: 2,
+      },
+    ]);
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    expect(manager.getSession('s1')?.unknownsLedger).toEqual(ledger);
+  });
+
+  test('applyUnknownObservations returns copies, not live ledger rows', async () => {
+    manager = newManager('copies');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    const ledger = await manager.applyUnknownObservations('s1', 1, [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
+    ]);
+    ledger[0]!.statement = 'mutated by a caller';
+
+    expect(manager.getSession('s1')?.unknownsLedger?.[0]?.statement).toBe('TTL undecided');
+  });
+
+  test('applyUnknownObservations rejects an invalid batch without mutating or persisting', async () => {
+    manager = newManager('invalid');
+    await manager.createSession('s1', 'chain-a', 3);
+    saveSpy.mockClear();
+
+    await expect(
+      manager.applyUnknownObservations('s1', 2, [
+        { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
+        { type: 'unknown_resolved', id: 'never-seen', statement: 'done', resolution: 'answered' },
+      ])
+    ).rejects.toThrow(/never-seen/);
+
+    expect(saveSpy).not.toHaveBeenCalled();
+    expect(manager.getSession('s1')?.unknownsLedger).toBeUndefined();
+  });
+
+  test('applyUnknownObservations throws when the session is gone', async () => {
+    manager = newManager('missing');
+
+    await expect(
+      manager.applyUnknownObservations('nope', 1, [
+        { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
+      ])
+    ).rejects.toThrow(/session not found/);
+  });
+
+  test('applyUnknownObservations propagates a persist failure rather than reporting success', async () => {
+    manager = newManager('persist-fail');
+    await manager.createSession('s1', 'chain-a', 3);
+    saveSpy.mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      manager.applyUnknownObservations('s1', 1, [
+        { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
+      ])
+    ).rejects.toThrow('disk full');
+  });
+
+  test('getChainContext omits unknowns_ledger while the ledger is empty', async () => {
+    manager = newManager('context-empty');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    expect(manager.getChainContext('s1')).not.toHaveProperty('unknowns_ledger');
+  });
+
+  test('getChainContext exposes unknowns_ledger once entries exist', async () => {
+    manager = newManager('context-populated');
+    await manager.createSession('s1', 'chain-a', 3);
+    await manager.applyUnknownObservations('s1', 2, [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
+    ]);
+
+    const contextData = manager.getChainContext('s1');
+
+    expect(contextData['unknowns_ledger']).toEqual([
+      {
+        id: 'cache-ttl',
+        statement: 'TTL undecided',
+        state: 'active',
+        blocking: false,
+        discoveredAtStep: 2,
+      },
+    ]);
+  });
+});

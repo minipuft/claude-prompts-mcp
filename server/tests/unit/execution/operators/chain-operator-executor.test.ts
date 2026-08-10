@@ -178,7 +178,8 @@ describe('ChainOperatorExecutor', () => {
       currentStepIndex: 0,
     });
 
-    expect(result.content).toContain('Framework Framework Active');
+    expect(result.content).toContain('## 🎯 CAGEERF Framework Active');
+    expect(result.content).not.toContain('Framework Framework');
     expect(result.content).toContain('Apply the CAGEERF framework with rigor.');
   });
 
@@ -230,7 +231,7 @@ describe('ChainOperatorExecutor', () => {
     });
 
     expect(frameworkResolver).not.toHaveBeenCalled();
-    expect(result.content).not.toContain('Framework Framework Active');
+    expect(result.content).not.toContain('Framework Active');
     expect(result.content).toContain(
       'You are operating under the C.A.G.E.E.R.F framework for prompts.'
     );

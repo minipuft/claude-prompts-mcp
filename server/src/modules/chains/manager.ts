@@ -32,10 +32,15 @@ import type {
   ParsedCommandSnapshot,
   PersistedChainRunRegistry,
   SessionBlueprint,
+  UnknownLedgerEntry,
+  UnknownObservation,
 } from '#shared/types/chain-session.js';
 import type { Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
+// Single owner of unknowns-ledger transition rules. Imported rather than restated here so
+// the rules cannot drift between the capture seam that validates and the store that persists.
+import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -1126,6 +1131,14 @@ export class ChainSessionStore implements ChainSessionService {
       contextData['previous_step_results'] = { ...reviewContext.previousResults };
     }
 
+    // Omitted entirely while empty so a template can branch on presence, matching
+    // previous_step_results above. Entries are copies: template consumers must not be
+    // able to mutate live session state through the rendering context.
+    const unknownsLedger = session.unknownsLedger;
+    if (unknownsLedger !== undefined && unknownsLedger.length > 0) {
+      contextData['unknowns_ledger'] = unknownsLedger.map((entry) => ({ ...entry }));
+    }
+
     const currentStepArgs = this.getCurrentStepArgs(session);
     if (currentStepArgs && Object.keys(currentStepArgs).length > 0) {
       contextData['currentStepArgs'] = currentStepArgs;
@@ -1865,6 +1878,38 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     return { valid: issues.length === 0, issues };
+  }
+
+  /**
+   * Apply a batch of typed unknown observations to the session's ledger.
+   *
+   * Transition rules are NOT restated here — `computeUnknownLedger` is their single
+   * owner. This method owns only lookup, in-memory mutation and persistence, in that
+   * order: an invalid batch throws before `session.unknownsLedger` is touched, and a
+   * persist failure throws rather than reporting a success the disk does not back.
+   */
+  async applyUnknownObservations(
+    sessionId: string,
+    stepNumber: number,
+    observations: UnknownObservation[]
+  ): Promise<UnknownLedgerEntry[]> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      throw new Error(
+        `Cannot apply unknown observations: session not found: ${sessionId}. The chain run may have been cleared.`
+      );
+    }
+
+    // Throws on an invalid transition or cap overflow — before any mutation below.
+    const nextLedger = computeUnknownLedger(session.unknownsLedger ?? [], observations, stepNumber);
+
+    session.unknownsLedger = nextLedger;
+    session.state.lastUpdated = Date.now();
+    session.lastActivity = Date.now();
+
+    await this.saveSessions();
+
+    return nextLedger.map((entry) => ({ ...entry }));
   }
 
   /**

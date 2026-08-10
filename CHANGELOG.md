@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `prompt_engine` accepts an optional `observations` parameter — chain steps declare typed unknowns (discovered/resolved) that accumulate in a per-run ledger and surface in subsequent step context.
+
 ## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 
 
@@ -126,10 +132,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Maintenance
 
 * **server:** pin the next release to 3.2.0 ([e709a1c](https://github.com/minipuft/claude-prompts-mcp/commit/e709a1cd9f8eb97ce4ae7b1eab9a31b43a65d6ae))
-
-## [Unreleased]
-
-
 
 ## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
 
@@ -366,8 +368,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **server:** re-license from AGPL-3.0-only to MIT ([07f2f0a](https://github.com/minipuft/claude-prompts/commit/07f2f0ab1afe07f6f6d020aefd79ab20248dc2b1))
 
-## [Unreleased]
-
 ## [2.1.0](https://github.com/minipuft/claude-prompts/compare/v2.0.0...v2.1.0) (2026-03-19)
 
 ### Added
@@ -468,8 +468,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ⚠ BREAKING CHANGES
 
 - **runtime:** Individual per-resource env vars and CLI flags removed. Use MCP_WORKSPACE with resources/ subdirectory structure instead.
-
-## [Unreleased]
 
 ## [2.0.0](https://github.com/minipuft/claude-prompts/compare/v1.7.0...v2.0.0) (2026-03-11)
 

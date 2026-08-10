@@ -6,6 +6,8 @@
  * MCP tool requests, validation, and execution context types.
  */
 
+import type { UnknownObservation } from './chain-session.js';
+
 /** Scope for gate validation application */
 export type GateScope = 'execution' | 'session' | 'chain' | 'step';
 
@@ -138,6 +140,13 @@ export interface McpToolRequest {
 
   /** Additional execution options forwarded to downstream stages */
   readonly options?: Record<string, unknown>;
+
+  /**
+   * Typed unknowns discovered/resolved by the current step, feeding the
+   * per-run unknowns ledger. Tier 1/2: threaded through unchanged; not yet
+   * consumed by the pipeline (lands in Tier 3).
+   */
+  readonly observations?: readonly UnknownObservation[];
 
   /** Raw MCP SDK extra payload (authInfo, headers, sessionId) captured at tool boundary */
   readonly _extra?: Record<string, unknown>;

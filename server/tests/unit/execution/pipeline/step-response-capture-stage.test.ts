@@ -2,10 +2,18 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
+import {
+  UnknownObservationProcessor,
+  UnknownObservationValidationError,
+} from '../../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { StepResponseCaptureStage } from '../../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
 
 import type { ChainSessionService } from '../../../../src/modules/chains/types.js';
+import type {
+  UnknownLedgerEntry,
+  UnknownObservation,
+} from '../../../../src/shared/types/chain-session.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 
 const createLogger = (): Logger => ({
@@ -27,9 +35,19 @@ const createSessionManager = () => {
   const clearPendingGateReview = jest.fn().mockResolvedValue(true);
   const recordGateReviewOutcome = jest.fn().mockResolvedValue('cleared');
   const getPendingGateReview = jest.fn();
+  const applyUnknownObservations =
+    jest.fn<
+      (
+        sessionId: string,
+        stepNumber: number,
+        observations: UnknownObservation[]
+      ) => Promise<UnknownLedgerEntry[]>
+    >();
+  applyUnknownObservations.mockResolvedValue([]);
 
   return {
     manager: {
+      applyUnknownObservations,
       getSession,
       getChainContext,
       getStepState,
@@ -42,6 +60,7 @@ const createSessionManager = () => {
       recordGateReviewOutcome,
       getPendingGateReview,
     } as unknown as ChainSessionService,
+    applyUnknownObservations,
     getSession,
     getChainContext,
     getStepState,
@@ -60,7 +79,14 @@ const createStage = (manager: ChainSessionService): StepResponseCaptureStage => 
   const logger = createLogger();
   const verdictProcessor = new GateVerdictProcessor(manager, logger);
   const stepCaptureService = new StepCaptureService(manager, logger);
-  return new StepResponseCaptureStage(verdictProcessor, stepCaptureService, manager, logger);
+  const unknownObservationProcessor = new UnknownObservationProcessor(manager, logger);
+  return new StepResponseCaptureStage(
+    verdictProcessor,
+    stepCaptureService,
+    manager,
+    unknownObservationProcessor,
+    logger
+  );
 };
 
 describe('StepResponseCaptureStage', () => {
@@ -274,5 +300,80 @@ describe('StepResponseCaptureStage', () => {
     );
     expect(context.sessionContext?.currentStep).toBe(3);
     expect(getChainContext).toHaveBeenCalledTimes(2);
+  });
+
+  test('applies declared observations at the step being reported on, before capture', async () => {
+    const { manager, getSession, applyUnknownObservations, getStepState } = createSessionManager();
+    getStepState.mockReturnValue(undefined);
+    const stage = createStage(manager);
+
+    getSession.mockReturnValue({
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      state: { currentStep: 2, totalSteps: 3 },
+    });
+
+    const observations = [
+      { type: 'unknown_discovered' as const, id: 'cache-ttl', statement: 'TTL undecided' },
+    ];
+    const context = new ExecutionContext({
+      command: '>>chain',
+      user_response: 'step two output',
+      observations,
+    });
+    context.sessionContext = {
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      isChainExecution: true,
+      currentStep: 2,
+      totalSteps: 3,
+    };
+
+    await stage.execute(context);
+
+    // Stamped with currentStepAtStart (2), not the step this call advances to.
+    expect(applyUnknownObservations).toHaveBeenCalledWith('sess-1', 2, observations);
+    expect(context.response).toBeUndefined();
+  });
+
+  test('surfaces an invalid observation batch as a tool-result error and stops the stage', async () => {
+    const { manager, getSession, applyUnknownObservations, updateSessionState } =
+      createSessionManager();
+    applyUnknownObservations.mockRejectedValue(
+      new UnknownObservationValidationError('Cannot resolve unknown "never-seen"')
+    );
+    const stage = createStage(manager);
+
+    getSession.mockReturnValue({
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      state: { currentStep: 2, totalSteps: 3 },
+    });
+
+    const context = new ExecutionContext({
+      command: '>>chain',
+      user_response: 'step two output',
+      observations: [
+        {
+          type: 'unknown_resolved' as const,
+          id: 'never-seen',
+          statement: 'done',
+          resolution: 'answered' as const,
+        },
+      ],
+    });
+    context.sessionContext = {
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      isChainExecution: true,
+      currentStep: 2,
+      totalSteps: 3,
+    };
+
+    await stage.execute(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(context.response?.content?.[0]?.text).toContain('never-seen');
+    expect(updateSessionState).not.toHaveBeenCalled();
   });
 });

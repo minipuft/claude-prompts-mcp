@@ -63,6 +63,36 @@ The MCP server recognizes active sessions. If you reply to a chain step, it auto
 
 ---
 
+## Unknowns Ledger
+
+Steps declare typed unknowns via the `observations` parameter on `prompt_engine`. The server
+accumulates them into a per-run ledger — a two-state machine (`active` <-> `resolved`) keyed by
+a stable `id` — and surfaces it back into every later step's rendered context.
+
+| Transition                       | Effect                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| Discover, new id                 | Appends an active entry stamped at the current step                              |
+| Discover, active id              | Idempotent refresh — statement/blocking update, `discoveredAtStep` unchanged     |
+| Discover, resolved id            | **Re-open** — the unknown returned; re-stamps `discoveredAtStep`                 |
+| Resolve, active id               | Closes the entry — records `resolution`, `resolutionStatement`, `resolvedAtStep` |
+| Resolve, resolved id             | Idempotent refresh — original `resolvedAtStep` is kept, not overwritten          |
+| Resolve, id with no ledger entry | Rejected — surfaces as a tool-result error, not a thrown exception               |
+
+A batch is all-or-nothing: the first invalid observation rejects the whole call before any entry
+is mutated. Observations within one batch apply in order, so a discover immediately followed by a
+resolve for the same `id` in a single call closes that entry right away. The ledger is capped at
+200 entries per run.
+
+**Context surfacing**: the ledger is exposed to templates as `unknowns_ledger` on the chain
+context — present only while non-empty. Each subsequent step's rendered instructions include an
+"Unknowns Ledger" section (blocking-active entries first, then active, then resolved in compact
+one-line form), so later steps see what remains open without re-reading prior step output.
+
+See the [MCP Tools Reference](../reference/mcp-tools.md#unknowns-ledger) for the `observations`
+parameter shape and validation rules.
+
+---
+
 ## Delegation
 
 Steps can be handed off to sub-agents using the `==>` operator. Delegated steps run in isolated context, keeping the main conversation clean.

@@ -301,6 +301,7 @@ prompt_engine(command:"%judge analysis_report")
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                            |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                         |
 | `options`       | object  | Optional execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) to help delegation strategy selection when transport metadata is unavailable.                              |
+| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                       |
 
 </details>
 
@@ -826,6 +827,40 @@ prompt_engine(
 
 - Rationale is always required
 - `gate_verdict` takes precedence over parsed `user_response`
+
+---
+
+## Unknowns Ledger
+
+Chain steps declare typed unknowns via the `observations` parameter. The server accumulates
+them into a per-run ledger and surfaces it back into every subsequent step's context — see
+[Unknowns Ledger lifecycle](../concepts/chains-lifecycle.md#unknowns-ledger) for the full
+transition table.
+
+```bash
+prompt_engine(
+  chain_id:"chain-research#2",
+  user_response:"Step 2 output...",
+  observations:[
+    {"type":"unknown_discovered", "id":"cache-ttl-unknown", "statement":"TTL for the new cache layer is undecided", "blocking":true}
+  ]
+)
+```
+
+**Observation shapes:**
+
+| Type                 | Required fields                 | Optional fields | Effect                             |
+| -------------------- | ------------------------------- | --------------- | ---------------------------------- |
+| `unknown_discovered` | `id`, `statement`               | `blocking`      | Opens (or re-opens) a ledger entry |
+| `unknown_resolved`   | `id`, `statement`, `resolution` | —               | Closes a ledger entry              |
+
+- `id` — stable **kebab-case** slug, unique within the run (e.g. `cache-ttl-unknown`).
+- `resolution` — `"answered"` or `"irrelevant"`, required when `type` is `unknown_resolved`.
+- `blocking` — discovered-only, defaults to `false`; blocking entries render first.
+- **Cap:** 200 entries per run. A batch that would open a 201st unknown is rejected — an
+  observation on an unknown id that doesn't exist in the ledger, or resolving without
+  `resolution`, is a validation error surfaced as a tool-result error (`isError: true`), never a
+  thrown exception. A rejected batch is all-or-nothing: nothing in it is applied.
 
 ---
 

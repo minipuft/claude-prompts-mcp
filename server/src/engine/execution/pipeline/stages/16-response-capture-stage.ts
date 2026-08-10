@@ -1,10 +1,12 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
+import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ChainSessionService } from '#shared/types/index.js';
+import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
+import type { UnknownObservationProcessor } from '../../capture/unknown-observation-processor.js';
 import type { ExecutionContext, SessionContext } from '../../context/index.js';
 
 /**
@@ -23,6 +25,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     private readonly verdictProcessor: GateVerdictProcessor,
     private readonly stepCaptureService: StepCaptureService,
     private readonly chainSessionStore: ChainSessionService,
+    private readonly unknownObservationProcessor: UnknownObservationProcessor,
     logger: Logger
   ) {
     super(logger);
@@ -59,6 +62,23 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
+
+    // Declared unknowns are applied here — ahead of the chain-context refresh below, so
+    // this call's rendering sees the ledger it just wrote, and ahead of gate-action and
+    // verdict handling because every one of those paths can exit early. A resume that
+    // carries a gate verdict is exactly where an unknown tends to surface, so dropping
+    // the batch there would be silent loss. Entries stamp `currentStepAtStart` — the step
+    // being reported on, not the one this call advances to. Re-submitting the same batch
+    // on a gate retry is idempotent by construction (see `computeUnknownLedger`).
+    const observationsRejected = await this.applyObservations(
+      context,
+      sessionId,
+      currentStepAtStart
+    );
+    if (observationsRejected) {
+      this.logExit({ observations: 'rejected' });
+      return;
+    }
 
     // Refresh chain variables for downstream template rendering
     context.state.session.chainContext = this.chainSessionStore.getChainContext(
@@ -141,6 +161,46 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     );
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Hand any declared unknown observations to the processor.
+   *
+   * @returns true when the batch was rejected and a tool-result error was set, meaning
+   *   the stage must stop. Non-validation failures (persistence) propagate untouched.
+   */
+  private async applyObservations(
+    context: ExecutionContext,
+    sessionId: string,
+    stepNumber: number
+  ): Promise<boolean> {
+    const observations = context.mcpRequest.observations;
+    if (observations === undefined || observations.length === 0) {
+      return false;
+    }
+
+    try {
+      await this.unknownObservationProcessor.applyObservations(
+        context,
+        sessionId,
+        stepNumber,
+        observations
+      );
+      return false;
+    } catch (error) {
+      if (error instanceof UnknownObservationValidationError) {
+        context.setResponse(this.buildErrorResponse(`❌ Error: ${error.message}`));
+        return true;
+      }
+      throw error;
+    }
+  }
+
+  private buildErrorResponse(message: string): ToolResponse {
+    return {
+      content: [{ type: 'text', text: message }],
+      isError: true,
+    };
   }
 
   /**

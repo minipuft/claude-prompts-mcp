@@ -4,6 +4,7 @@ import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 
 import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type {
@@ -142,10 +143,12 @@ export class ChainOperatorExecutor {
         );
 
         const intentForReview = this.buildOriginalIntentSection(chainContext);
+        const unknownsForReview = this.buildUnknownsSection(chainContext);
         originalContent = [
           '## Original Task Instructions',
           '',
           ...(intentForReview ? [intentForReview, ''] : []),
+          ...(unknownsForReview ? [unknownsForReview, ''] : []),
           renderedTemplate,
           '',
           '---',
@@ -398,6 +401,12 @@ export class ChainOperatorExecutor {
       lines.push(intentSection);
     }
 
+    // Unknowns Ledger — surfaces run-scoped unknowns declared by prior steps
+    const unknownsSection = this.buildUnknownsSection(chainContext);
+    if (unknownsSection) {
+      lines.push(unknownsSection);
+    }
+
     // Use target-aware helper to determine if framework should be suppressed on steps
     const suppressFrameworkInjection = this.shouldSuppressFrameworkForSteps(chainContext);
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
@@ -555,18 +564,17 @@ export class ChainOperatorExecutor {
       return null;
     }
 
-    return [
-      '---',
-      '',
-      '## 🎯 Framework Framework Active',
-      '',
-      `**${frameworkName}**`,
-      '',
-      systemPrompt,
-      '',
-      '---',
-      '',
-    ].join('\n');
+    // Framework display names are inconsistent about the word: "C.A.G.E.E.R.F Framework" and
+    // "SCAMPER Framework" carry it, "LIQUESCENT Creative Flow" does not. Appending it
+    // unconditionally reads "… Framework Framework Active"; the previous literal hardcoded that
+    // doubling with no name at all.
+    const heading = /\bframeworks?\b/i.test(frameworkName)
+      ? `## 🎯 ${frameworkName} Active`
+      : `## 🎯 ${frameworkName} Framework Active`;
+
+    return ['---', '', heading, '', `**${frameworkName}**`, '', systemPrompt, '', '---', ''].join(
+      '\n'
+    );
   }
 
   private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
@@ -701,6 +709,48 @@ export class ChainOperatorExecutor {
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Build Unknowns Ledger section from chainContext unknowns_ledger.
+   * Surfaces run-scoped unknowns declared via the `observations` parameter so each
+   * step sees what remains open. Absent entirely when the ledger is missing or empty —
+   * `getChainContext` only sets `unknowns_ledger` on the context while non-empty.
+   */
+  private buildUnknownsSection(chainContext: Record<string, unknown>): string | null {
+    const ledger = chainContext['unknowns_ledger'] as UnknownLedgerEntry[] | undefined;
+    if (!ledger || ledger.length === 0) {
+      return null;
+    }
+
+    const blocking = ledger.filter((entry) => entry.state === 'active' && entry.blocking);
+    const active = ledger.filter((entry) => entry.state === 'active' && !entry.blocking);
+    const resolved = ledger.filter((entry) => entry.state === 'resolved');
+
+    const lines: string[] = [
+      '### Unknowns Ledger',
+      '',
+      'Unknowns declared so far in this run. Resolve blocking unknowns before proceeding where possible:',
+      '',
+    ];
+
+    for (const entry of [...blocking, ...active]) {
+      const flag = entry.blocking ? ' **[BLOCKING]**' : '';
+      lines.push(`- **${entry.id}**${flag}: ${this.truncateForLedger(entry.statement)}`);
+    }
+
+    for (const entry of resolved) {
+      const resolution = entry.resolution ?? 'resolved';
+      const resolutionText = entry.resolutionStatement ?? entry.statement;
+      lines.push(`- ~~${entry.id}~~ (${resolution}): ${this.truncateForLedger(resolutionText)}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /** Matches buildOriginalIntentSection's 200-char truncation convention. */
+  private truncateForLedger(value: string): string {
+    return value.length > 200 ? value.substring(0, 200) + '...' : value;
   }
 
   /**

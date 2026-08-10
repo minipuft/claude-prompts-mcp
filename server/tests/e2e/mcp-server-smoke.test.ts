@@ -668,5 +668,21 @@ describe('MCP Server Smoke Tests', () => {
       await setGateSystem('enable', 5);
       expect(await gateParamsFor(6)).toEqual(enabled);
     }, 40000);
+
+    /**
+     * `observations` (unknowns-ledger declarations) is not gated on runtime state
+     * the way the three gate parameters above are — it must always be advertised.
+     */
+    it('advertises the observations parameter on prompt_engine', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const listed = (await client.request('tools/list', {}, 1)) as {
+        tools: Array<{ name: string; inputSchema?: { properties?: Record<string, unknown> } }>;
+      };
+      const engine = listed.tools.find((t) => t.name === 'prompt_engine');
+      const props = Object.keys(engine?.inputSchema?.properties ?? {});
+
+      expect(props).toContain('observations');
+    }, 20000);
   });
 });

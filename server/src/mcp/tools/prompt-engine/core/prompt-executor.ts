@@ -27,6 +27,7 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
+import type { UnknownObservation } from '#shared/types/chain-session.js';
 import type { McpToolRequest } from '#shared/types/execution.js';
 import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
@@ -408,6 +409,8 @@ export class PromptExecutor {
       /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
       gates?: import('#shared/types/execution.js').GateSpecification[];
       options?: Record<string, unknown>;
+      /** Typed unknowns discovered/resolved by the current step. Threaded through unchanged (Tier 3 consumes it). */
+      observations?: UnknownObservation[];
     },
     extra: any
   ): Promise<ToolResponse> {
@@ -443,6 +446,7 @@ export class PromptExecutor {
       ...(args.force_restart !== undefined && { force_restart: args.force_restart }),
       ...(args.gates && { gates: args.gates }),
       ...(args.options && { options: args.options }),
+      ...(args.observations != null ? { observations: args.observations } : {}),
       ...(sdkExtra != null ? { _extra: sdkExtra as Record<string, unknown> } : {}),
     } as McpToolRequest;
 
