@@ -70,8 +70,25 @@ Note: sonnet's T6 deviation 4 mis-attributed `chain-operator-executor.test.ts` t
 
 CHANGELOG.md carried FOUR stale empty `## [Unreleased]` headers from past release tooling (lines 136/371/474 + the section the worker correctly created at top). Removed the three stale ones; exactly one real section remains.
 
-## Remaining (blocked on operator reconnect of the MCP server)
+## Live drive (2026-08-09, after first operator reconnect)
 
-1. Apply staged verification template (P0 close-out) → delete staged file.
-2. Optional: delete 3 orphaned sub_agent_functionality_chain nested prompts.
-3. Final live drive: real chain run submitting observations — discover → visible active → resolve → visible resolved in returned context text.
+- **P0 CLOSED**: staged verification template applied via resource_manager (version 3 saved; on-disk `id: verification` basename confirms the writer fix live); staged file deleted. The three formerly-orphaned sub_agent_functionality_chain nested prompts load again.
+- **Positive drive** (chain-quick_decision#1): step-1 resume submitted `unknown_discovered` (blocking) — accepted; step-2 resume submitted `unknown_resolved` for the SAME id — accepted, which requires the persisted active entry to validate against. Proves persistence across steps.
+- **Negative probe** (chain-quick_decision#2): `unknown_resolved` on a never-declared id → exact designed validation error ("no entry with that id exists in this run's ledger. Declare it with unknown_discovered first"). Discriminates processing from silent param-drop. **T1-T4 proven live.**
+- **Gap found in drive**: rendered Unknowns section absent from step context — the live dist was built at the Tier-4 gate (01:39), BEFORE Tier 5 landed. Not a defect; a stale-build window. Rebuilt dist 21:19 with T5/T6 included.
+
+## Deviation D8
+
+| #   | Tier  | What forced it                                                                                                             | Conservative option taken                                                                                       |
+| --- | ----- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| D8  | drive | Tier-5/6 gates ran no build, so the reconnected server carried a T4-era dist; rendered section unverifiable on first drive | Proved T1-T4 via positive drive + negative probe; rebuilt dist; final render check deferred to second reconnect |
+
+## Final live drive (second reconnect, 21:19 dist) — SUCCESS SIGNAL OBSERVED
+
+Chain quick_decision, 3 steps: step-1 resume declared 2 unknowns (one blocking) → **step-2 context rendered `### Unknowns Ledger` with the blocking entry first ([BLOCKING] tag) and non-blocking after** → step-2 resume resolved both → **step-3 context rendered both in compact resolved form (`~~id~~ (answered): statement`)**. The plan's named done criterion ("Observed in returned context text") is met.
+
+## P1 STATUS: COMPLETE 2026-08-09
+
+All done criteria satisfied: success signal (live), full suite green (minus the 2 documented foreign failures), SQLite gates untouched, docs lockstep, scope check passed. Code remains UNCOMMITTED pending user's go-ahead.
+
+Still open (operator decision, not P1-blocking): delete the 3 sub_agent_functionality_chain orphans (parent chain references flat sub_agent_step_* prompts instead).
