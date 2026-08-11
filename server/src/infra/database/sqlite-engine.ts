@@ -46,6 +46,22 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v21: adds five nullable INTEGER columns to `execution_records` — `steps_planned`,
+ * `gates_fired`, `gate_retries`, `unknowns_opened`, `unknowns_closed`. They are run-level
+ * facts, so they are bound ONLY on terminal records (the `completed`/`cancelled` path in
+ * `21-formatting-stage.ts` and the `failed` path in `prompt-execution-pipeline.ts`) and are
+ * left NULL on per-step `working` rows. That partial population is intentional by row type,
+ * not the value-dead pattern `workspace_id` exhibited: every column has a writer that binds a
+ * real number, on the rows where the number exists.
+ *
+ * Record-only by master decision D4 — nothing reads these to score, weight, or route.
+ *
+ * Consequence, stated rather than discovered: `execution_records` is `ephemeral`, so this bump
+ * drops it and existing rows do not survive, exactly as at v17. `v_execution_history` is
+ * deliberately NOT widened to project the new columns — it has zero code readers today (its
+ * declared reader queries the raw table via `ExecutionRecordStore.queryRecent()`), and adding
+ * columns to a reader-less view is how this table produced value-dead columns twice already.
+ *
  * v20: renamed `tenant_id` → `run_owner_pid` on `chain_sessions` and `chain_run_registry`, and
  * repaired `v_execution_status`, which had never been able to read its own rows.
  *
@@ -111,7 +127,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 20;
+const SCHEMA_VERSION = 21;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -629,6 +645,14 @@ export class SqliteEngine implements DatabasePort {
         error_message TEXT,
         started_at INTEGER NOT NULL,
         completed_at INTEGER,
+        -- Run-level telemetry (record-only, D4). Bound on terminal records only; NULL on
+        -- per-step 'working' rows by design. Nullable because the fact does not exist yet
+        -- on a non-terminal row, not because nothing writes them.
+        steps_planned INTEGER,
+        gates_fired INTEGER,
+        gate_retries INTEGER,
+        unknowns_opened INTEGER,
+        unknowns_closed INTEGER,
         created_at TEXT DEFAULT (datetime('now'))
       );
 

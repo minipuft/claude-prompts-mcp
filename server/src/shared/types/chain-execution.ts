@@ -112,6 +112,23 @@ export interface EvidencePayload {
 }
 
 /**
+ * Run-level complexity facts observed by the server at the moment a chain run reaches
+ * a terminal state. Record-only: nothing derives a score, weight, or routing decision
+ * from these numbers (master decision D4). They exist so a future consumer has real
+ * history to reason about, not so the runtime can react to them.
+ *
+ * `gatesFired` counts gate VERDICT SUBMISSIONS (not distinct gate ids); `gateRetries`
+ * counts the subset of those submissions whose verdict was FAIL.
+ */
+export interface RunTelemetry {
+  stepsPlanned: number;
+  gatesFired: number;
+  gateRetries: number;
+  unknownsOpened: number;
+  unknownsClosed: number;
+}
+
+/**
  * Durable per-step (or per-chain when `stepNumber` is null) execution record.
  * One record is appended for each significant lifecycle transition; the resulting
  * series forms the queryable execution log.
@@ -135,6 +152,16 @@ export interface ExecutionRecord {
   errorMessage?: string;
   organizationId?: string;
   workspaceId?: string;
+  /**
+   * Run-level telemetry ({@link RunTelemetry}), populated ONLY on terminal records
+   * (`completed` / `failed` / `cancelled`). Per-step `working` rows leave these
+   * undefined by design — they are run summaries, not per-step facts.
+   */
+  stepsPlanned?: number;
+  gatesFired?: number;
+  gateRetries?: number;
+  unknownsOpened?: number;
+  unknownsClosed?: number;
 }
 
 /**

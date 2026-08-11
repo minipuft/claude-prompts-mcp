@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `prompt_engine` accepts an optional `observations` parameter — chain steps declare typed unknowns (discovered/resolved) that accumulate in a per-run ledger and surface in subsequent step context.
+- `execution_records` now records per-run telemetry (steps planned/executed, gate verdict submissions, the FAIL subset of those submissions, unknowns opened/closed) as record-only facts on terminal rows, surfaced as one plain-text line per session by `system_control execution_history`. No scoring, weighting, or routing decision is derived from these fields. Schema v21 — `execution_records` is `ephemeral`, so existing rows do not survive the bump.
 
 ## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 

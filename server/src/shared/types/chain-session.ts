@@ -17,6 +17,7 @@ import type {
   ChainState,
   PendingGateReview,
   PendingShellVerificationSnapshot,
+  RunTelemetry,
   StepMetadata,
 } from './chain-execution.js';
 import type { ExecutionModifiers, ExecutionPlan } from './core-config.js';
@@ -36,6 +37,7 @@ export type {
   ExecutionStatusBlock,
   GateVerdictSummary,
   InputRequiredReason,
+  RunTelemetry,
   StepLifecycle,
   StepSubstate,
 } from './chain-execution.js';
@@ -131,6 +133,15 @@ export interface ChainSession {
   runCompletedAt?: number;
   /** Run-scoped unknowns ledger, populated via applyUnknownObservations. */
   unknownsLedger?: UnknownLedgerEntry[];
+  /**
+   * Cumulative count of gate verdict submissions this run, incremented in
+   * recordGateReviewOutcome. Distinct from `pendingGateReview.attemptCount`, which is
+   * destroyed whenever the pending review clears on PASS and so cannot answer
+   * "how many across the whole run".
+   */
+  gatesFiredCount?: number;
+  /** Cumulative count of the subset of those submissions whose verdict was FAIL. */
+  gateRetriesCount?: number;
 }
 
 /** Terminal run-status values — sticky once entered. */
@@ -198,6 +209,12 @@ export interface ChainSessionService {
   getLatestSessionForBaseChain(chainId: string): ChainSession | undefined;
   getRunHistory(baseChainId: string): string[];
   getChainContext(sessionId: string, scope?: StateStoreOptions): Record<string, unknown>;
+  /**
+   * Pure read projection of the run's record-only complexity facts. Returns undefined
+   * when the session is not found (mirrors getSession). Performs no scoring — see
+   * {@link RunTelemetry}.
+   */
+  getRunTelemetry(sessionId: string, scope?: StateStoreOptions): RunTelemetry | undefined;
   getOriginalArgs(sessionId: string): Record<string, unknown>;
   getSessionBlueprint(sessionId: string, scope?: StateStoreOptions): SessionBlueprint | undefined;
   updateSessionBlueprint(sessionId: string, blueprint: SessionBlueprint): Promise<void>;

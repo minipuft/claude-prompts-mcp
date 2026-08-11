@@ -702,6 +702,28 @@ Records that never reached a terminal state are called out in the output. Termin
 emitted on completion, on user abort, and on failure — a run that predates that emission may show
 as `working` permanently.
 
+#### Run telemetry line
+
+A session whose newest record is terminal also renders one line of run-level facts:
+
+```
+planned 3 / executed 3 · gates fired 2 (retries 1) · unknowns opened 1 / closed 1
+```
+
+| Fact              | Means                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `planned`         | `totalSteps` the run was created with                                              |
+| `executed`        | Distinct step numbers present in the returned page — a clamped page reports fewer  |
+| `gates fired`     | **Gate verdict submissions**, not distinct gate ids: two verdicts on one gate is 2 |
+| `retries`         | The subset of those submissions whose verdict was `FAIL`                           |
+| `unknowns opened` | Entries in the run's unknowns ledger (cumulative — resolving does not decrement)   |
+| `unknowns closed` | Ledger entries in state `resolved`                                                 |
+
+**These are recorded, never modeled.** Nothing in the server scores, weights, ranks, or routes on
+them; they exist so history is available to reason about later. The line is omitted entirely for a
+session with no terminal record yet, and for records written before these fields existed — an
+absent line means "not measured", never "zero".
+
 ### Session Operations
 
 ```bash

@@ -100,6 +100,11 @@ function formatRecords(records: readonly ExecutionRecord[]): string {
     const chainLabel = newest.chainId !== undefined ? ` \`${newest.chainId}\`` : '';
     lines.push(`### ${statusIcon(newest.status)} ${sessionId}${chainLabel}`);
 
+    const telemetryLine = formatTelemetryLine(newest, sessionRecords);
+    if (telemetryLine !== undefined) {
+      lines.push(telemetryLine);
+    }
+
     for (const record of sessionRecords) {
       const step = record.stepNumber !== undefined ? `step ${record.stepNumber}` : 'chain';
       const prompt = record.promptId !== undefined ? ` · ${record.promptId}` : '';
@@ -114,6 +119,48 @@ function formatRecords(records: readonly ExecutionRecord[]): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Render the run's record-only telemetry for one session group, or `undefined` when the
+ * newest record carries none — non-terminal runs and rows written before these columns
+ * existed both land there, and both should degrade to the previous output rather than to a
+ * line of zeroes.
+ *
+ * `executed` is counted here rather than read from a column or from `v_execution_history`:
+ * it is fully reconstructible from the rows already returned, and that view has no code
+ * readers, so a column on it would be a second implementation nothing consumes. The count is
+ * over the page `queryRecent` returned, so a truncated page reports what it can see.
+ *
+ * Display formatting only — no weighting, no score, nothing downstream branches on
+ * these numbers (master decision D4).
+ */
+function formatTelemetryLine(
+  newest: ExecutionRecord,
+  sessionRecords: readonly ExecutionRecord[]
+): string | undefined {
+  const { stepsPlanned, gatesFired, gateRetries, unknownsOpened, unknownsClosed } = newest;
+  if (
+    stepsPlanned === undefined &&
+    gatesFired === undefined &&
+    gateRetries === undefined &&
+    unknownsOpened === undefined &&
+    unknownsClosed === undefined
+  ) {
+    return undefined;
+  }
+
+  const stepsExecuted = new Set(
+    sessionRecords
+      .filter((record) => record.stepNumber !== undefined)
+      .map((record) => record.stepNumber)
+  ).size;
+
+  return (
+    `_planned ${stepsPlanned ?? 0} / executed ${stepsExecuted}` +
+    ` · gates fired ${gatesFired ?? 0} (retries ${gateRetries ?? 0})` +
+    ` · unknowns opened ${unknownsOpened ?? 0} / closed ${unknownsClosed ?? 0}_`
+  );
 }
 
 function statusIcon(status: string): string {

@@ -52,6 +52,11 @@ interface ExecutionRecordRow {
   error_message: string | null;
   started_at: number;
   completed_at: number | null;
+  steps_planned: number | null;
+  gates_fired: number | null;
+  gate_retries: number | null;
+  unknowns_opened: number | null;
+  unknowns_closed: number | null;
 }
 
 export interface ExecutionRecordAppendInput {
@@ -67,6 +72,17 @@ export interface ExecutionRecordAppendInput {
   errorMessage?: string;
   startedAt?: number;
   completedAt?: number;
+  /**
+   * Run-level telemetry, flat rather than nested: this file's existing flat-scalar style
+   * (sessionId/chainId/stepNumber/promptId) maps one field to one column, which is what keeps
+   * the column names literal in the INSERT below and therefore visible to
+   * `validate:no-phantom-columns`. Bound only by the two terminal-record call sites.
+   */
+  stepsPlanned?: number;
+  gatesFired?: number;
+  gateRetries?: number;
+  unknownsOpened?: number;
+  unknownsClosed?: number;
   scope?: StateStoreOptions;
 }
 
@@ -103,8 +119,9 @@ export class ExecutionRecordStore {
           execution_id, tenant_id, organization_id, workspace_id,
           session_id, chain_id, step_number, prompt_id, status,
           substate_json, input_required_json, evidence_json, gate_verdicts_json,
-          error_message, started_at, completed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          error_message, started_at, completed_at,
+          steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     } catch (error) {
@@ -191,6 +208,11 @@ export class ExecutionRecordStore {
       completedAt: row.completed_at ?? undefined,
       organizationId: row.organization_id ?? undefined,
       workspaceId: row.workspace_id ?? undefined,
+      stepsPlanned: row.steps_planned ?? undefined,
+      gatesFired: row.gates_fired ?? undefined,
+      gateRetries: row.gate_retries ?? undefined,
+      unknownsOpened: row.unknowns_opened ?? undefined,
+      unknownsClosed: row.unknowns_closed ?? undefined,
     };
   }
 }
@@ -219,6 +241,11 @@ function buildAppendParams(
     input.errorMessage ?? null,
     startedAt,
     input.completedAt ?? null,
+    input.stepsPlanned ?? null,
+    input.gatesFired ?? null,
+    input.gateRetries ?? null,
+    input.unknownsOpened ?? null,
+    input.unknownsClosed ?? null,
   ];
 }
 

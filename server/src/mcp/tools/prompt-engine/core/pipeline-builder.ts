@@ -335,7 +335,8 @@ export class PipelineBuilder {
       deps.responseFormatter,
       responseAssembler,
       deps.logger,
-      deps.executionRecordStore
+      deps.executionRecordStore,
+      deps.chainSessionStore
     );
     const postFormattingStage = new PostFormattingCleanupStage(
       deps.chainSessionStore,
@@ -397,6 +398,7 @@ export class PipelineBuilder {
       // Stages take `| null`; PipelinePorts is uniformly optional, so normalize here
       // rather than admitting both empty representations into the ports interface.
       executionRecordStore: deps.executionRecordStore ?? undefined,
+      chainSessionStore: deps.chainSessionStore,
     });
   }
 

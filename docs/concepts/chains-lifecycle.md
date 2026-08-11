@@ -93,6 +93,30 @@ parameter shape and validation rules.
 
 ---
 
+## Run Telemetry (record-only)
+
+When a run reaches a terminal state, the server stamps six complexity facts onto that run's
+terminal `execution_records` row: steps planned, steps executed, gate verdict submissions, the
+FAIL subset of those submissions, and unknowns opened / closed.
+
+They are written at the moment they are true because the state they come from does not survive:
+`chain_sessions` and `chain_run_registry` are PID-scoped and deleted when the owning server exits,
+and `pendingGateReview.attemptCount` is destroyed the moment a PASS clears the review. The ledger
+row is the only place these numbers persist.
+
+**Recorded, never modeled.** No coefficient, score, threshold, or routing decision is derived from
+any of them, and nothing in the runtime branches on their values. That is a deliberate constraint,
+not an unfinished feature: a scoring model with no named consumer is a guess that ossifies. When a
+consumer exists, it gets built against real history rather than against invented weights.
+
+Both terminal paths carry them — a run that fails mid-chain records the same facts as one that
+completes. Non-terminal per-step rows leave them empty by design.
+
+See [MCP Tools Reference → Run telemetry line](../reference/mcp-tools.md#run-telemetry-line) for
+how they render and exactly what each one counts.
+
+---
+
 ## Delegation
 
 Steps can be handed off to sub-agents using the `==>` operator. Delegated steps run in isolated context, keeping the main conversation clean.

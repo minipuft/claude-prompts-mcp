@@ -314,7 +314,13 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'organization_id were declared and indexed but structurally unwritable. ' +
       'Closed by Tier 3 (reader + direct view + terminal records), 4.1 (scope), 6.4 (retention). ' +
       "Posture is 'ephemeral' deliberately: the SCHEMA_VERSION 16 note records that v15 rows " +
-      'decode to a lifecycle outside StepLifecycle, so these rows must not survive a bump.',
+      'decode to a lifecycle outside StepLifecycle, so these rows must not survive a bump. ' +
+      'P2 (v21) added steps_planned, gates_fired, gate_retries, unknowns_opened and ' +
+      'unknowns_closed. These are populated ONLY on terminal rows, by the two terminal-record ' +
+      'writers (21-formatting-stage.ts, prompt-execution-pipeline.ts), and are NULL on per-step ' +
+      '`working` rows. That is intentional partial population BY ROW TYPE — not the value-dead ' +
+      'pattern F2 named: a writer binds a real number on every row where the fact exists. They ' +
+      'are record-only (master decision D4): no consumer scores, weights, or routes on them.',
   },
 ];
 
@@ -332,6 +338,15 @@ export const VIEW_CONTRACTS: readonly ViewContract[] = [
     view: 'v_execution_history',
     sourceTable: 'execution_records',
     readers: ['src/mcp/tools/system-control/handlers/execution-history-action-handler.ts'],
+    finding:
+      'The declared reader does not actually read this view: measured 2026-08-11, ' +
+      'execution-history-action-handler.ts sources rows via ExecutionRecordStore.queryRecent() ' +
+      'against the raw table, and rg across src/ and hooks/ finds no other reader — only this ' +
+      'contract entry and the DDL. The view therefore has zero code readers today. P2 ' +
+      'deliberately did NOT project its five new columns here, nor add a steps_executed ' +
+      'aggregate: columns on a reader-less view are the value-dead defect class this table has ' +
+      'already produced twice (F2). The view gains columns when a real consumer exists, and ' +
+      'this finding retires when that consumer lands or the view is deleted.',
   },
 ];
 

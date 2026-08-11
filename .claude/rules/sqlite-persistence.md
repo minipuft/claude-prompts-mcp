@@ -37,8 +37,21 @@ structurally cannot observe a completed run. Until v20 it could not observe an i
 either — it json_extracted `$.state.currentStep` while its only writer emitted `currentStep` at the
 top level, so both step columns read NULL on every row and the hook's primary read path returned
 nothing for every input (F12). `v_execution_history` (added v17) reads
-`execution_records` directly and can — it is what the `system_control execution_history` action
-projects.
+`execution_records` directly and can — but **nothing reads it**. Measured 2026-08-11: the
+`system_control execution_history` action, which its contract entry names as its reader, calls
+`ExecutionRecordStore.queryRecent()` against the raw table; `rg` across `src/` and `hooks/` finds
+only the DDL and the contract entry. Do not add columns to it on the theory that its declared
+reader will pick them up — that is how this table produced value-dead columns twice. Its
+`VIEW_CONTRACTS` entry carries a `finding` saying so.
+
+`execution_records` gained five run-telemetry columns at v21 — `steps_planned`, `gates_fired`,
+`gate_retries`, `unknowns_opened`, `unknowns_closed`. They are populated **only on terminal rows**,
+by the two terminal-record writers (`21-formatting-stage.ts`, `prompt-execution-pipeline.ts`), and
+are NULL on per-step `working` rows. Read that partial population as intentional-by-row-type, not
+as either precedent already documented here: unlike `workspace_id` these have a writer that binds a
+real value, and unlike `gate_verdicts_json` that writer runs. They are record-only — nothing scores
+or routes on them, so a query finding them all NULL means the run never terminated, not that the
+column is dead.
 
 ## Two Tables Are Durable — A Schema Bump Must Not Destroy Them
 

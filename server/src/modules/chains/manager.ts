@@ -20,6 +20,7 @@ import type {
   GateReviewHistoryEntry,
   PendingGateReview,
   PendingShellVerificationSnapshot,
+  RunTelemetry,
   StepMetadata,
   GateReviewPrompt,
 } from '#shared/types/chain-execution.js';
@@ -1160,6 +1161,30 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Project the run's record-only complexity facts. Pure read — no mutation, no persistence,
+   * and no derived score of any kind (master decision D4).
+   *
+   * `unknownsOpened`/`unknownsClosed` are derived from the ledger rather than from their own
+   * counters because the ledger is already cumulative: entries are never deleted, only
+   * transitioned active -> resolved. A parallel counter would be a second, driftable source.
+   */
+  getRunTelemetry(sessionId: string, _scope?: StateStoreOptions): RunTelemetry | undefined {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const ledger = session.unknownsLedger ?? [];
+    return {
+      stepsPlanned: session.state.totalSteps,
+      gatesFired: session.gatesFiredCount ?? 0,
+      gateRetries: session.gateRetriesCount ?? 0,
+      unknownsOpened: ledger.length,
+      unknownsClosed: ledger.filter((entry) => entry.state === 'resolved').length,
+    };
+  }
+
+  /**
    * Get original arguments for session
    */
   getOriginalArgs(sessionId: string): Record<string, any> {
@@ -1375,6 +1400,14 @@ export class ChainSessionStore implements ChainSessionService {
     review.history.push(historyEntry);
     review.previousResponse = outcome.rawVerdict;
     review.attemptCount = (review.attemptCount ?? 0) + 1;
+
+    // Run-cumulative counterparts to attemptCount, which is destroyed with the pending review
+    // when a PASS clears it and so cannot answer "how many across the whole run". Record-only
+    // (D4): nothing branches on these values.
+    session.gatesFiredCount = (session.gatesFiredCount ?? 0) + 1;
+    if (outcome.verdict === 'FAIL') {
+      session.gateRetriesCount = (session.gateRetriesCount ?? 0) + 1;
+    }
 
     let result: 'cleared' | 'pending';
     if (outcome.verdict === 'PASS') {
