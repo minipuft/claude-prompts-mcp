@@ -1,14 +1,14 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-08-04T05:19:12.439Z",
+  "lastUpdated": "2026-08-12T00:27:21.375Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
-      "description": "🚀 PROMPT ENGINE: Execute prompts with framework guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
+      "description": "🚀 PROMPT ENGINE: Execute prompts with framework guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- ^Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.); @ deprecated\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS (one per command): %clean (no injection/gates), %lean (gates only), %judge (preview), %framework (force framework, no gates)\n",
       "shortDescription": "Execute prompts with validation and framework",
       "category": "execution",
       "parameters": {
-        "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
+        "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
         "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
         "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
         "gate_verdict": "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
@@ -17,8 +17,12 @@
           "type": "array",
           "description": "Quality gates for output validation. Four formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.\n\n**4. Shell Verification** (ground-truth validation): `:: verify:\"command\"` runs shell commands; exit 0 = PASS.\n   - **Presets**: `:fast` (1 attempt, 30s), `:full` (5 attempts, 5min), `:extended` (10 attempts, 10min)\n   - **Options**: `max:N` (attempts), `timeout:N` (seconds), `loop:true` (autonomous Stop hook)\n   - **Example**: `>>fix-bug :: verify:\"npm test\" :full loop:true`"
         },
-        "force_restart": "Restart chain from step 1, ignoring cached state.",
-        "options": "Execution options forwarded downstream."
+        "force_restart": "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id.",
+        "options": "Execution options forwarded downstream.",
+        "observations": {
+          "type": "array",
+          "description": "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement)."
+        }
       },
       "frameworkAware": {
         "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with framework guidance injected. You apply the framework yourself.",

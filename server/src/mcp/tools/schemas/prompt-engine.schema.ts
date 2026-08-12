@@ -41,6 +41,19 @@ export const temporaryGateObjectSchema = z
     source: z.enum(['manual', 'automatic', 'analysis']).optional(),
     context: z.record(z.string(), z.any()).optional(),
     target_step_number: z.number().int().positive().optional(),
+    /**
+     * Address the target step by its stable node id instead of its position. Union ADDITION —
+     * `target_step_number` keeps working unchanged, and a gate may carry either. Accepts the
+     * kebab-case ids minted from a YAML chain's `stepName`/`id:` and the frozen `nK` ids a
+     * symbolic chain mints at parse time.
+     */
+    target_step_id: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
+        'target_step_id must be a kebab-case node id or an nK symbolic id'
+      )
+      .optional(),
     apply_to_steps: z.array(z.number().int().positive()).optional(),
   })
   .refine(
@@ -203,7 +216,12 @@ export interface ToolSurfaceResolver {
 const PARAM_DEFAULTS = {
   command:
     'Prompt/chain command. PATTERNS: >>prompt_id key="value" (single) | >>s1 --> >>s2 (chain). RESUME: omit command, use chain_id + user_response only.',
-  force_restart: 'Create a new chain execution (increments chain ID). Use `command`.',
+  // Was "Create a new chain execution (increments chain ID). Use `command`." — which pointed at the
+  // one path where the flag changes nothing: a plain `command` already mints a new chain id, so
+  // true and absent were indistinguishable there (plan row 0.5.16). Both real behaviours are now
+  // stated, and both are asserted in chain-lifecycle.yaml.
+  force_restart:
+    "Start a new execution instead of resuming. Cannot be combined with 'chain_id'. Redundant with a plain 'command'; it matters when the command text itself carries a chain id.",
   chain_id:
     'Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.',
   gate_verdict:

@@ -191,6 +191,20 @@ export interface PipelineInternalState {
      */
     pendingShellVerification?: PendingShellVerification;
     /**
+     * The attempt budget a shell-verify gate RESOLVED to, kept for reporting.
+     *
+     * Separate from `pendingShellVerification` because that field is the loop's working state and
+     * ShellVerificationStage clears it the moment verification finishes (stage 17, lines 124/312) —
+     * long before the formatting stage builds a response. Reading the budget from there therefore
+     * showed nothing for any command that PASSED, which is every preset scenario. Written once
+     * where the presets expand, never cleared, so the response can state which budget applied.
+     */
+    shellVerifyBudget?: {
+      maxAttempts: number;
+      timeoutMs?: number;
+      preset?: 'fast' | 'full' | 'extended';
+    };
+    /**
      * Results from shell verification command executions.
      * Accumulated across multiple attempts for diagnostic display.
      */

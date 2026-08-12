@@ -29,13 +29,14 @@ export type prompt_engineParamName =
   | 'gate_action'
   | 'gates'
   | 'force_restart'
-  | 'options';
+  | 'options'
+  | 'observations';
 export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'command',
     type: 'string',
     description:
-      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset',
+      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset',
     required: false,
     status: 'working',
     compatibility: 'canonical',
@@ -110,6 +111,7 @@ export const prompt_engineParameters: ToolParameter[] = [
     notes: [
       'RECOMMENDED: Quick Gates {name, description} auto-default to severity:medium, type:validation.',
       'Full schema: id, name, severity, criteria[], pass_criteria[], guidance, apply_to_steps[].',
+      "Chain step targeting: target_step_number (1-based position) or target_step_id (stable node id, e.g. 'draft-outline' or 'n2'). Either addresses one step; supply whichever you have.",
       'Shell Verification: Use presets for common patterns. loop:true enables autonomous retry until pass.',
       'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
     ],
@@ -117,7 +119,8 @@ export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'force_restart',
     type: 'boolean',
-    description: 'Restart chain from step 1, ignoring cached state.',
+    description:
+      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id.",
     status: 'working',
     compatibility: 'canonical',
   },
@@ -128,13 +131,30 @@ export const prompt_engineParameters: ToolParameter[] = [
     status: 'working',
     compatibility: 'canonical',
   },
+  {
+    name: 'observations',
+    type: 'array<{type,id,statement,blocking?,resolution?}>',
+    description:
+      "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement).",
+    status: 'working',
+    compatibility: 'canonical',
+    examples: [
+      '[{"type": "unknown_discovered", "id": "cache-ttl-unknown", "statement": "TTL for the new cache layer is undecided", "blocking": false}]',
+      '[{"type": "unknown_resolved", "id": "cache-ttl-unknown", "statement": "TTL confirmed at 300s per ops runbook", "resolution": "answered"}]',
+    ],
+    notes: [
+      'Tier 1: type + schema only. No runtime ledger mutation yet — the parameter validates but is not yet consumed by the pipeline.',
+      '`id` must be kebab-case and stable within the run so re-discovery of the same id updates rather than duplicates.',
+      "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
+    ],
+  },
 ];
 
 export const prompt_engineCommands: ToolCommand[] = [
   {
     id: 'chain-resume',
     summary: 'Resume chain via chain_id + user_response/gate_verdict/gate_action',
-    parameters: ['chain_id', 'user_response', 'gate_verdict', 'gate_action'],
+    parameters: ['chain_id', 'user_response', 'gate_verdict', 'gate_action', 'observations'],
     status: 'working',
   },
 ];

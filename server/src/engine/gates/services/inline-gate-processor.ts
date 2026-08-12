@@ -503,6 +503,14 @@ export class InlineGateProcessor {
 
     context.state.gates.pendingShellVerification = pending;
 
+    // Publish the resolved budget on its own field. `pending` is cleared as soon as verification
+    // completes, so it cannot carry this to the formatting stage for a command that passes.
+    context.state.gates.shellVerifyBudget = {
+      maxAttempts: resolvedMaxIterations,
+      ...(resolvedTimeout != null ? { timeoutMs: resolvedTimeout } : {}),
+      ...(shellVerifyConfig.preset != null ? { preset: shellVerifyConfig.preset } : {}),
+    };
+
     this.logger.info('[InlineGateProcessor] Shell verification gate configured', {
       gateId,
       command: shellVerify.command,

@@ -228,6 +228,17 @@ export class ResponseAssembler {
   }
 
   /**
+   * The run-completion latch, as the pipeline recorded it.
+   *
+   * Single reader of `state.session.chainComplete` for footer purposes so the progress line and
+   * the CTA line cannot disagree — they were two independent `currentStep >= totalSteps`
+   * computations before.
+   */
+  private isRunLatchedComplete(context: ExecutionContext): boolean {
+    return context.state.session.chainComplete === true;
+  }
+
+  /**
    * Builds chain footer with session and progress tracking.
    */
   buildChainFooter(context: ExecutionContext): string {
@@ -236,14 +247,31 @@ export class ResponseAssembler {
     const chainIdentifier = sessionContext.chainId ?? sessionContext.sessionId;
     lines.push(`Chain: ${chainIdentifier}`);
 
+    const hasPendingReview = context.hasPendingReview();
+
+    // Completion is the LATCHED run fact (StepExecutionStage sets it from the store's
+    // runStatus), not `currentStep >= totalSteps`. Those two differ on exactly one state —
+    // the run standing on its final step with work still owed — and reading the ordinal there
+    // printed "✓ Chain complete (N/N) · No user_response needed" while the run was still
+    // `working`, so a client that obeyed the banner never sent the call that finished it.
+    const isComplete = this.isRunLatchedComplete(context);
+
     if (sessionContext.currentStep && sessionContext.totalSteps) {
       const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
       const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
-      const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
-      lines.push(isComplete ? `✓ Chain complete (${progress})` : `→ Progress ${progress}`);
+      const onFinalStep = normalizedStep === sessionContext.totalSteps;
+      if (isComplete) {
+        lines.push(`✓ Chain complete (${progress})`);
+      } else if (onFinalStep && hasPendingReview) {
+        // The one state whose text changes: still the final step, still owing a verdict.
+        // "step N/N" keeps the downstream step-indicator regexes matching (hooks/lib
+        // /session_state.py and the opencode mirror both key on step|progress + N/N).
+        lines.push(`→ Final step ${progress} — awaiting gate verdict`);
+      } else {
+        lines.push(`→ Progress ${progress}`);
+      }
     }
 
-    const hasPendingReview = context.hasPendingReview();
     const nextStepDelegated = this.isNextStepDelegated(context);
 
     if (nextStepDelegated) {
@@ -255,7 +283,6 @@ export class ResponseAssembler {
         `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
-      const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
       if (isComplete) {
         lines.push('Next: Chain complete. No user_response needed.');
       } else {
@@ -486,10 +513,16 @@ export class ResponseAssembler {
   }
 
   /**
-   * Builds completion message for the final chain step when no gate review is pending.
+   * Builds the completion message for a run that has actually finished.
+   *
+   * Gated on the latch rather than on `isFinalChainStep`, which is true from the moment the
+   * final step is *rendered*. Under the old guard this printed "✅ Chain execution complete.
+   * You may now respond to the user." on the call that handed the client its last step to do —
+   * the same one-call-early claim the footer made, on a second surface. With the footer now
+   * honest the two would have contradicted each other inside one payload.
    */
   private buildFinalStepMessage(context: ExecutionContext): string | null {
-    if (!this.isFinalChainStep(context)) {
+    if (!this.isFinalChainStep(context) || !this.isRunLatchedComplete(context)) {
       return null;
     }
     const completion = '\n\n✅ Chain execution complete. You may now respond to the user.';
@@ -625,6 +658,7 @@ export class ResponseAssembler {
     }
 
     this.appendVerifyHint(lines, context);
+    this.appendVerifyBudget(lines, context);
     this.appendLoopHint(lines, context);
 
     if (!hasPrimaryAction) {
@@ -675,6 +709,33 @@ export class ResponseAssembler {
     lines.push(`Verification: ${formatted} runs automatically on each attempt`);
   }
 
+  /**
+   * Publishes the RESOLVED attempt budget for a shell-verify gate.
+   *
+   * The preset table in the README claims `:fast` = 1 try/30s, `:full` = 5/5min, `:extended` =
+   * 10/10min, and until this line existed none of it was observable: the presets expand inside
+   * `InlineGateProcessor.setupShellVerification`, which logs the resolved values and stores them on
+   * `state.gates.pendingShellVerification`, but nothing rendered them. `:fast` and `:extended`
+   * therefore produced BYTE-IDENTICAL responses, so a conformance scenario for either could assert
+   * nothing beyond "the syntax parsed" — three published numbers with no way to check them (plan
+   * row 0.5.22).
+   *
+   * Read from the pending state rather than the parsed operator on purpose: the operator carries
+   * what the USER typed, which for a bare `:fast` is `maxIterations: undefined`. That is exactly
+   * how `appendLoopHint` came to print the global default for every preset.
+   */
+  private appendVerifyBudget(lines: string[], context: ExecutionContext): void {
+    const budget = context.state?.gates?.shellVerifyBudget;
+    if (budget == null) return;
+
+    const { maxAttempts: attempts, timeoutMs, preset } = budget;
+
+    const parts = [`${attempts} attempt${attempts === 1 ? '' : 's'}`];
+    if (timeoutMs != null) parts.push(`${Math.round(timeoutMs / 1000)}s timeout`);
+    const suffix = preset != null ? ` (preset: ${preset})` : '';
+    lines.push(`Verify budget: ${parts.join(' / ')}${suffix}`);
+  }
+
   /** Appends Ralph loop hint when :: verify:"cmd" loop:true is active. */
   private appendLoopHint(lines: string[], context: ExecutionContext): void {
     const operators = context.parsedCommand?.operators?.operators;
@@ -685,7 +746,13 @@ export class ResponseAssembler {
     );
     if (loopGate?.shellVerify == null) return;
 
-    const max = loopGate.shellVerify.maxIterations ?? SHELL_VERIFY_DEFAULT_MAX_ITERATIONS;
+    // Prefer the resolved budget over the typed one: a bare `:fast` leaves `maxIterations`
+    // undefined on the operator, so reading it here printed the global default no matter which
+    // preset was named. The pending state holds what the gate will actually enforce.
+    const max =
+      context.state?.gates?.shellVerifyBudget?.maxAttempts ??
+      loopGate.shellVerify.maxIterations ??
+      SHELL_VERIFY_DEFAULT_MAX_ITERATIONS;
     lines.push(`Loop mode: autonomous retry (max ${max} iterations)`);
   }
 
@@ -790,12 +857,12 @@ export class ResponseAssembler {
   private resolveFrameworkToken(context: ExecutionContext): string | null {
     const fwDecision = context.frameworkAuthority.getCachedDecision();
     if (fwDecision?.source === 'operator' && fwDecision.frameworkId != null) {
-      return `@${fwDecision.frameworkId}`;
+      return `^${fwDecision.frameworkId}`;
     }
     // Fallback: show @FRAMEWORK from parser when user typed it,
     // even if decision authority disabled it (e.g., implicit %clean on script-tool prompts)
     const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
-    return operatorOverride ? `@${operatorOverride.toLowerCase()}` : null;
+    return operatorOverride ? `^${operatorOverride.toLowerCase()}` : null;
   }
 
   /** Resolves the modifier token from execution modifiers. */
