@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-step visibility policy.** A chain step's YAML may declare `visibility: { withhold: [...], expose: [...] }` over three server-sourced context items — `previous_step_output`, `chain_history`, `unknowns_ledger`. A withheld item stays out of every later step's render (replaced by a named `[CONTEXT WITHHELD]` instruction) until a step explicitly `expose`s it, for that step only; a `==>` delegated step's handoff envelope excludes withheld items and carries a names-only manifest line instead. Withholding covers only what the server sources — the server cannot unsee the client's window, and true isolation remains the `==>` delegation operator; the docs now state that ceiling explicitly.
+
+### Fixed
+
+- **Step-targeted gates now review only their target step.** A gate bound to a node id (or step number) previously entered the run-wide review accumulator, so a gate "on step 3" reviewed every step — targeting scoped guidance injection only. Review participation is now carried per-step (`reviewGateIds`), with untargeted gates keeping their run-wide inheritance and single-prompt runs byte-identical. Known residual: a mutation-inserted node still falls back to run-wide review until its review scope is ruled.
+
 ### Removed
+
+- **BREAKING — the `checkpoint` resource type is gone.** `resource_manager(resource_type: "checkpoint", ...)` and the `clear` action are removed from the tool surface, along with the `GitCheckpoint` module behind them. Every checkpoint action returned "Checkpoint manager is not available" under every configuration: the handler was defined and exported but never constructed, so a quarter of the published `resource_type` enum could not succeed. Reinstating it was rejected rather than deferred — the actions were `git stash push`/`pop`/`drop` wrappers, and exposing stash manipulation to a client silently discards uncommitted work belonging to anyone else sharing the working tree. Nothing depended on it, since no call could ever have returned success.
 
 - **BREAKING — the pre-rename `methodology*` back-compat folds are retired.** The methodology→framework rename shipped in v3.0.0 with fold-forward support for the old spellings; those folds are now deleted. Six input spellings stop being accepted, and in every case but one they fail by silently falling back to the default rather than erroring:
   - framework YAML `methodologyGates:` → use `frameworkGates:`
@@ -20,12 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Chain steps accept a `framework` field, selecting the framework for that step alone. It outranks the run-wide default and yields to an explicit `^Framework` operator on the command; an id the registry does not know falls back to the run-wide framework rather than failing the load.
+- Documentation governance now routes public-doc changes through a versioned `documentation_change` chain, with focused gates for product positioning, information placement, semantic discoverability, and prose hygiene.
 - `prompt_engine` accepts an optional `observations` parameter — chain steps declare typed unknowns (discovered/resolved) that accumulate in a per-run ledger and surface in subsequent step context.
 - `execution_records` now records per-run telemetry (steps planned/executed, gate verdict submissions, the FAIL subset of those submissions, unknowns opened/closed) as record-only facts on terminal rows, surfaced as one plain-text line per session by `system_control execution_history`. No scoring, weighting, or routing decision is derived from these fields. Schema v21 — `execution_records` is `ephemeral`, so existing rows do not survive the bump.
 - Adaptive chain mutation v1 — a blocking unknown inserts one investigation step; an irrelevant-resolved unknown skips its declared target step; both audited on the terminal execution record (`nodes_inserted`/`nodes_skipped`) and capped per run (1 insertion per unknown id, 3 per run). The model only ever declares typed observations; the server owns every graph edit, in reaction to a declared observation only. Schema v23 — `chain_run_nodes` gains `origin`/`origin_unknown_id` provenance columns.
 
-## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
+### Changed
 
+- **BREAKING — `confirm: true` is now required to delete a prompt.** `resource_manager(resource_type: "prompt", action: "delete")` refuses without it and names the chains that would break. The parameter's schema text has always described it as delete's safety gate, but only `rollback` read it — the guard sat on the recoverable verb and was absent from the unrecoverable one. Deletion has no undo through the tool surface: a deleted prompt's `version_history` rows survive, but `rollback` reports "Prompt not found" once the prompt is gone, so those snapshots are unreachable by any action. Scripts calling delete must add `confirm: true`.
+- **BREAKING — chain steps reject unknown keys.** `chainSteps` entries in prompt YAML are validated strictly; a key with no schema field now fails the prompt's load, naming the key and its step index, instead of being silently discarded. A typo like `framwork: ReACT` previously parsed to a normal-looking step and ran the chain under the wrong framework with no signal — the same silence left six `inlineGateIds` declarations dead across three shipped chains. Every key with a real consumer was declared first, including `delegation`, which no code in the prompt module reads but the skills-sync exporter reads straight off the YAML.
+- Renovate hosted reruns now use a dry-run-first request script that verifies local/remote config parity, strict protected checks, full-SHA Actions enforcement, successful Renovate and Release Please checks on `main`, and the exact dashboard request marker before changing GitHub state. Automated lock maintenance retains Renovate's three-day npm resolution cutoff while treating the timestamp-less synthetic maintenance update as timestamp-optional, preventing a permanent `renovate/stability-days` block.
+
+## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 
 ### Fixed
 

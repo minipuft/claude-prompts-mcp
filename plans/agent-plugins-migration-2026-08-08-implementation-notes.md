@@ -131,6 +131,69 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 16:17 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== visibility leaked into 0e8b7875? ===" git show 0e8b7875 | gr` · ran
+- 2026-08-12 16:16 · `cd /tmp/idxcheck/server ln -sfn /home/minipuft/Applications/claude-prompts-mcp/server/node_modules ./node_modules 2>/dev` · ran
+- 2026-08-12 16:16 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path('/tmp/claude-1000/min` · ran
+- 2026-08-12 16:16 · `cd /home/minipuft/Applications/claude-prompts-mcp TREE=$(git write-tree) rm -rf /tmp/idxcheck git worktree add -q --deta` · ran
+- 2026-08-12 07:51 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path('plans/agent-plugins-` · ran
+- 2026-08-12 07:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "Validation suite|steps fai` · ran
+- 2026-08-12 07:48 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:e2e 2>&1 | grep -E "^Tests:|^Test Suites:|●" | hea` · ran
+- 2026-08-12 07:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | grep -E "^Tests:|^Test Suites:" npm run ` · ran
+- 2026-08-12 07:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run build >/dev/null 2>&1 npm run validate:all 2>&1 | grep ` · ran
+- 2026-08-12 07:42 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/mcp/tools` · ran
+- 2026-08-12 07:41 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src scripts eslint-rules --format json 2>/dev/null |` · ran
+- 2026-08-12 07:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node scripts/eslint-ratchet.js check 2>&1 | grep -A3 "prettier"` · ran
+- 2026-08-12 07:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src tests scripts --ext .ts,.js --format compact 2>&` · ran
+- 2026-08-12 07:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/mcp/tools` · ran
+- 2026-08-12 07:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== prettier violation location ===" npx eslint src tests` · ran
+- 2026-08-12 07:38 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== who owns the new plan file? ==="; git status --porcelain pla` · ran
+- 2026-08-12 07:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== lint:ratchet ==="; npm run lint:ratchet 2>&1 | grep -` · ran
+- 2026-08-12 07:37 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run build >/dev/null 2>&1 && echo "build ok" npm run valida` · ran
+- 2026-08-12 07:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import json, pathlib p = pathlib.Path('.typech` · ran
+- 2026-08-12 07:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp .typecheck-tests-ratchet-baseline.json /tmp/tb.bak python3 -` · ran
+- 2026-08-12 07:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck:tests:ratchet 2>&1 | grep -E "FAIL|PASS|disap` · ran
+- 2026-08-12 07:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx tsc --noEmit -p tsconfig.json 2>&1 | head -5; echo "--- tsc` · ran
+- 2026-08-12 07:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('tooling/contr` · ran
+- 2026-08-12 07:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -n '9p' src/mcp/tools/resource-manager/core/router.ts pytho` · ran
+- 2026-08-12 07:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib, re p = pathlib.Path('src/mcp/t` · ran
+- 2026-08-12 07:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/mcp/tools` · ran
+- 2026-08-12 07:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('tests/unit/pr` · ran
+- 2026-08-12 07:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/modules/p` · ran
+- 2026-08-12 07:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
+- 2026-08-12 07:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
+- 2026-08-12 07:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
+- 2026-08-12 07:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('tests/unit/pr` · ran
+- 2026-08-12 07:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/modules/p` · ran
+- 2026-08-12 07:20 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "Validation suite|steps fai` · ran
+- 2026-08-12 07:17 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write src/modules/prompts/prompt-schema.ts >/dev` · ran
+- 2026-08-12 07:17 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== my prompt-schema additions ===" npx eslint src/module` · ran
+- 2026-08-12 07:16 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run lint:ratchet 2>&1 | grep -E "PASS|FAIL|increased|^- " |` · ran
+- 2026-08-12 07:16 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/engine/ex` · ran
+- 2026-08-12 07:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/engine/ex` · ran
+- 2026-08-12 07:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== 12-framework-stage: cognitive + my nullable-boolean =` · ran
+- 2026-08-12 07:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server for f in src/engine/execution/pipeline/stages/12-framework-stag` · ran
+- 2026-08-12 07:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run lint:ratchet 2>&1 | grep -A12 "Rules that increased" | ` · ran
+- 2026-08-12 07:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-plan-row-tracking.js src/modules/pr` · ran
+- 2026-08-12 07:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "Validation suite|steps fai` · ran
+- 2026-08-12 07:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write scripts/validate-plan-row-tracking.js scri` · ran
+- 2026-08-12 07:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server run() { NODE_OPTIONS=--experimental-vm-modules npx jest tests/u` · ran
+- 2026-08-12 07:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write src/modules/prompts/prompt-schema.ts >/dev` · ran
+- 2026-08-12 07:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -i 's/^describe(.ChainStepSchema — D11 strictness/describe(` · ran
+- 2026-08-12 06:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | grep -E "✕|● ChainStep|● Delegation|●.*›` · ran
+- 2026-08-12 06:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -20` · ran
+- 2026-08-12 06:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server names() { NODE_OPTIONS=--experimental-vm-modules npx jest tests` · ran
+- 2026-08-12 06:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server run() { NODE_OPTIONS=--experimental-vm-modules npx jest tests/u` · ran
+- 2026-08-12 06:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
+- 2026-08-12 06:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -i "s|import type { FrameworkDecisionInput } from '../decis` · ran
+- 2026-08-12 06:52 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write src/modules/prompts/prompt-schema.ts >/dev` · ran
+- 2026-08-12 06:48 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node scripts/validate-operator-registry-drift.js --self-test >/` · ran
+- 2026-08-12 06:47 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== who reads .examples downstream ==="; rg -rn "\.examples\b" h` · ran
+- 2026-08-12 06:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 -c " import json,re d=json.load(open('tooling/contracts` · ran
+- 2026-08-12 06:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node scripts/validate-agent-plugins.js; echo "exit=$?" cd .. &&` · ran
+- 2026-08-12 04:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -A6 "steps failed" | head -20 ` · ran
+- 2026-08-12 04:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "^(✔|✖|✅|❌|\[[0-9]+/[0-9]+\` · ran
+- 2026-08-12 04:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate:all at working tree ==="; npm run validate:a` · ran
+- 2026-08-12 02:35 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/final && git worktree add --detach --quiet /tmp/final HEAD` · ran
 - 2026-08-12 02:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate-versions with root plugin.json registered ==` · ran
 - 2026-08-12 02:27 · `cd /tmp/e10e/server echo "=== typecheck (committed state) ==="; npx tsc --noEmit -p tsconfig.json 2>&1 | grep -c "error ` · ran
 - 2026-08-12 02:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/int` · ran
@@ -642,3 +705,27 @@ was red at HEAD and green in the tree. `verify:claims` shipped the suite-members
 declaring its CI consumer, and not the CI step — which is why that gate could name the missing
 wiring exactly. **A test suite is not evidence the behaviour shipped**, and neither is an
 exception declaring that something consumes you.
+
+### Deviations — breaking bundle, 2026-08-12
+
+- **DEV-BB-1** — D11 shipped `.strict()` only on the THIRD attempt. Attempt 1 reddened 5 shipped
+  prompts; attempt 2 reddened `delegation-schema.test.ts`. Each attempt was a measurement that the
+  previous plan reading was incomplete, not a retry of the same edit.
+- **DEV-BB-2** — `delegation` had to be DECLARED, not rejected. `modules/skills-sync/service.ts`
+  reads it off the raw YAML (`yaml.load`), bypassing every schema. A grep of the schema said the
+  key was unknown; the exporter proved otherwise. Rule now recorded in the schema comment:
+  enumerate readers of the FILE, not readers of the schema, before adding `.strict()`.
+- **DEV-BB-3** — the intermediate `discardedStepKeys` reporting channel built earlier the same
+  session was DELETED once `.strict()` landed. Keeping both would have been a parallel system whose
+  second half could never fire.
+- **DEV-BB-4** — `checkpoint` removal was larger than the row implied: 5 source files, 3 test
+  suites, a conformance scenario, the `clear` action (orphaned by the removal), the tool-schema
+  snapshot, and 3 source comments that claimed checkpoint was "available via resource_manager".
+  `sqlite-wal-checkpoint.test.ts` is a HOMONYM (SQLite WAL) and was correctly left alone.
+- **DEV-BB-5** — two shared-worktree near-misses, both the same shape: a regenerate-everything
+  command absorbing the other session's uncommitted work. The tool-schema snapshot (+267/−24 of
+  their P5 visibility fields) and the tests-ratchet baseline. Both resolved by applying only the
+  deltas this change is responsible for, by hand.
+- **DEV-BB-6** — `verify:claims` failed BECAUSE the 0.5.24 fix worked: the row's own
+  `known_divergence` block became false and the corpus's satisfied-exception check refused it. The
+  failure was the correct outcome; the block was deleted and the `claim_source` re-quoted.
