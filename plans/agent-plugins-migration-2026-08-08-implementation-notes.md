@@ -131,6 +131,9 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 02:04 · `cd /tmp/cpm-w/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "command-parsing-stage" | head -4 echo` · ran
+- 2026-08-12 02:04 · `cd /home/minipuft/Applications/claude-prompts-mcp git worktree remove --force /tmp/cpm-t 2>/dev/null; rm -rf /tmp/cpm-t ` · ran
+- 2026-08-12 02:03 · `cd /tmp/cpm-t/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "claims-conformance" | head -5` · ran
 - 2026-08-12 01:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run -s typecheck:committed; echo "exit=$?" echo "=== lint t` · ran
 - 2026-08-12 01:42 · `cd /home/minipuft/Applications/claude-prompts-mcp # Reproduce the exact defect shape: commit a consumer, leave its provi` · ran
 - 2026-08-12 01:41 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/cpm-headcheck git worktree add --detach /tmp/cpm-headcheck` · ran
@@ -584,3 +587,20 @@ the gate promptly began seeing its OWN test file"). Widening a gate's reach re-s
 a violation, and the new hits are not new code. **"Passes locally" and "passes once staged" are
 different claims** for any index-scoped gate — the same distinction E7 draws between the working
 tree and the commit, arrived at independently on the same afternoon from the opposite direction.
+
+**DEV-T05b-9 — the committed-state check paid for itself within one commit.** E7 was built because
+`8875ab42` shipped consumers without providers. Running it across the whole suite immediately
+found the same shape five more times, from at least two sessions: D3's `^` alias (2 of 4 sites
+uncommitted, so the canonical sigil did not route at HEAD), the `env` option
+`claims-conformance.test.ts` had been calling since 0.5.10, two validate scripts wired into
+`package.json` and the SUITE with no files behind them, and `ConvertedPrompt`'s export.
+
+**Working tree 32/34, HEAD 7/34.** Every gate in this repo had been grading a state that never
+ships. That is not a shared-worktree quirk; the worktree is what made it frequent, but the reason
+it went unseen for days is that the measurement was pointed at the wrong object — the eleventh
+sighting, and by far the most expensive.
+
+The specific irony worth keeping: `a2956450` is titled "fail when a validate/verify script is
+wired to nothing", and it committed two npm entries plus two SUITE lines whose script files do not
+exist. It guarded `script exists → is it run?` and not `script is run → does it exist?`. A gate
+built to catch dangling wiring, dangling in the one direction it did not check.
