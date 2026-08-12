@@ -44,7 +44,10 @@ const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
  * conflicts. Parallelism is deliberately NOT implemented here: sequential output is what makes
  * a failure attributable, and the suite is 47 s.
  */
-const SUITE = [
+// Exported so `validate:suite-membership` can compare the declared steps against every
+// `validate:*`/`verify:*` script package.json defines. It reads this array rather than regexing
+// this file, so the two cannot drift apart on a formatting change.
+export const SUITE = [
   { script: 'lint:ratchet', io: 'read' },
   { script: 'typecheck:tests:ratchet', io: 'read' },
   { script: 'validate:format', io: 'read' },
@@ -64,6 +67,7 @@ const SUITE = [
   { script: 'validate:github-action-pins', io: 'read' },
   { script: 'validate:release-workflow', io: 'read' },
   { script: 'validate:readme', io: 'read' },
+  { script: 'validate:conformance-coverage', io: 'read' },
   { script: 'validate:no-legacy-sidecars', io: 'read' },
   { script: 'validate:no-stepstate', io: 'read' },
   { script: 'validate:no-methodology-vocab', io: 'read' },
@@ -76,6 +80,9 @@ const SUITE = [
   { script: 'validate:table-contracts', io: 'read' },
   { script: 'validate:no-phantom-columns', io: 'read' },
   { script: 'validate:hooks-registered', io: 'read' },
+  { script: 'validate:suite-membership', io: 'read' },
+  { script: 'validate:agent-plugins', io: 'read' },
+  { script: 'validate:db-claim-order', io: 'read' },
   { script: 'plans:retire:check', io: 'read' },
 ];
 
@@ -164,7 +171,10 @@ async function main() {
   process.exit(results.some((entry) => entry.status !== 0) ? 1 : 0);
 }
 
-main().catch((error) => {
-  console.error(`validation suite runner failed: ${error.message}`);
-  process.exit(1);
-});
+// Guarded so importing `SUITE` does not run the 53-second suite as a side effect.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`validation suite runner failed: ${error.message}`);
+    process.exit(1);
+  });
+}
