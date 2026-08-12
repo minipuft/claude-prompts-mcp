@@ -99,6 +99,16 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     logger.info(`✓ Prompts ${pathType} exists: ${promptsPath}`);
   }
 
+  // Drop cached file contents before reading, so a reload observes the disk rather than the last
+  // load's snapshot. PromptLoader caches by path with no mtime check, and this function is the
+  // reload path behind `resource_manager(action:"reload")` — via fullServerRefresh →
+  // loadAndProcessData. Its sibling `reloadPromptData` (the file-watcher path) has always cleared
+  // the cache here; this one did not, so the manual reload re-read stale entries and still
+  // reported "All prompts refreshed from disk". Measured 2026-08-11: create → update → reload →
+  // execute served the PRE-update body, for a scoped reload, an unscoped reload, and two reloads
+  // in a row; only the debounced watcher eventually applied the change.
+  promptManager.clearLoaderCache();
+
   // Load prompts - loadAndConvertPrompts handles both directory and file paths
   const result = await promptManager.loadAndConvertPrompts(
     promptsPath,
