@@ -18,6 +18,8 @@ import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 import type { SessionResourceMetadata, ResourceDependencies } from '../types.js';
 import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
+import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
+
 /**
  * Build resource URI from pattern and optional ID
  * Patterns already include the full URI scheme (resource://...)
@@ -247,15 +249,18 @@ function buildSessionContent(session: {
   sessionId: string;
   chainId: string;
   state: {
-    currentStep: number;
-    totalSteps: number;
-    stepStates?: Map<number, unknown>;
+    currentNodeId: string | null;
+    nodes: Array<{ id: string }>;
+    stepStates?: Map<string, unknown>;
   };
   startTime: number;
   lastActivity: number;
   originalArgs: Record<string, unknown>;
   pendingGateReview?: unknown;
 }): string {
+  const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
+  const totalSteps = totalOf(session.state.nodes);
+
   // Convert step states Map to object if present
   const stepStates: Record<string, unknown> = {};
   if (session.state.stepStates !== undefined) {
@@ -268,9 +273,10 @@ function buildSessionContent(session: {
     sessionId: session.sessionId,
     chainId: session.chainId,
     progress: {
-      currentStep: session.state.currentStep,
-      totalSteps: session.state.totalSteps,
-      percentComplete: Math.round((session.state.currentStep / session.state.totalSteps) * 100),
+      currentStep,
+      totalSteps,
+      // Guard the division: a zero-node run used to divide by a zero `totalSteps` and emit NaN.
+      percentComplete: totalSteps > 0 ? Math.round((currentStep / totalSteps) * 100) : 0,
     },
     timing: {
       startTime: session.startTime,

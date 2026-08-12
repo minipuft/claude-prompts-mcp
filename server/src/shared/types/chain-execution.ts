@@ -13,8 +13,14 @@
  *
  * `rendered` and `responded` both map to lifecycle `working` — they are distinguished only by
  * which timestamp gets set, which is precisely the distinction a single enum could not express.
+ *
+ * `skipped` (P4) is the one milestone that is never reported by an executing step: it is asserted
+ * by `ChainSessionStore.markNodeSkipped` about a step that will now never execute. It is a
+ * milestone rather than a separate marker so that skipping reuses the existing lifecycle
+ * plumbing end to end — `setStepState` preserves substate, the `milestone` column persists it,
+ * and `run-registry.toStepStates` reconstructs it after a cold load with no new machinery.
  */
-export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed';
+export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed' | 'skipped';
 
 // `enum StepState` (PENDING | RENDERED | RESPONSE_CAPTURED | COMPLETED) was removed here.
 // Its two transient members had no counterpart in the sticky-terminal model: RENDERED and
@@ -32,12 +38,17 @@ export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed';
 export type ChainRunStatus = 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
 
 /**
- * Per-step lifecycle. Subset of {@link ChainRunStatus} plus `pending` (pre-execution).
+ * Per-step lifecycle. Subset of {@link ChainRunStatus} plus `pending` (pre-execution) and
+ * `skipped` (P4: the mutation policy retired this step before it ran).
  * Sticky terminal states. Non-sticky progress within `working` is captured by
  * {@link StepSubstate} flags.
+ *
+ * `skipped` is terminal and is NOT a member of {@link ChainRunStatus} — a run is never skipped,
+ * only a step within it. It has no `execution_records` row: a step that never executed produces
+ * no execution record, so nothing widens the record status vocabulary in practice.
  */
 export type StepLifecycle =
-  'pending' | 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+  'pending' | 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled' | 'skipped';
 
 /**
  * Non-sticky progress flags meaningful only when the enclosing step is in `working`.
@@ -119,6 +130,13 @@ export interface EvidencePayload {
  *
  * `gatesFired` counts gate VERDICT SUBMISSIONS (not distinct gate ids); `gateRetries`
  * counts the subset of those submissions whose verdict was FAIL.
+ *
+ * `nodesInserted`/`nodesSkipped` (P4) count what the adaptive mutation policy did to the run's
+ * node list. Both are derived from the node list and its step states at read time — the same
+ * posture as `unknownsOpened`, which reads the ledger rather than a parallel counter, because a
+ * counter alongside a list that already holds the fact is a second source that can drift.
+ * `stepsPlanned` is the node count AFTER any insertions, so `stepsPlanned - nodesInserted` is
+ * what the run started with.
  */
 export interface RunTelemetry {
   stepsPlanned: number;
@@ -126,6 +144,8 @@ export interface RunTelemetry {
   gateRetries: number;
   unknownsOpened: number;
   unknownsClosed: number;
+  nodesInserted: number;
+  nodesSkipped: number;
 }
 
 /**
@@ -141,6 +161,12 @@ export interface ExecutionRecord {
   sessionId: string;
   chainId?: string;
   stepNumber?: number;
+  /**
+   * Stable node identity of the step this record describes. Undefined on run-level terminal
+   * records, which describe a run rather than a node. `stepNumber` stays the ordinal at write
+   * time — a historical stamp, so the append-only log never renumbers when a run reorders.
+   */
+  nodeId?: string;
   promptId?: string;
   status: StepLifecycle;
   substate?: StepSubstate;
@@ -162,6 +188,8 @@ export interface ExecutionRecord {
   gateRetries?: number;
   unknownsOpened?: number;
   unknownsClosed?: number;
+  nodesInserted?: number;
+  nodesSkipped?: number;
 }
 
 /**
@@ -338,12 +366,49 @@ export interface FormatterExecutionContext {
 }
 
 /**
- * Chain state information with per-step lifecycle tracking.
+ * Stable node identity for a chain step.
+ *
+ * Minted once at parse time and frozen for the lifetime of a run: `id` is never recomputed and
+ * never renumbered, which is what lets P4 insert or reorder steps without invalidating anything
+ * already addressed by node id.
+ */
+export interface ChainNode {
+  id: string;
+  promptId: string;
+  stepName: string;
+  /**
+   * Provenance (P4, schema v23). `'inserted'` marks a node the mutation policy added mid-run;
+   * everything else was in the run when it started.
+   *
+   * OPTIONAL rather than required, and absence means `'planned'`. `ChainNode` is minted at four
+   * unrelated sites (`13-session-stage.buildChainNodes`, `ChainSessionStore.resolveCreationNodes`,
+   * `run-registry.reconstructSession`, and test helpers), and only the mutation path has an
+   * opinion here — a required field would force three call sites to restate the default. The
+   * persisted column is NOT NULL: the writer resolves `origin ?? 'planned'`, and reconstruction
+   * always sets it explicitly, so a node that has been through storage is never ambiguous.
+   */
+  origin?: 'planned' | 'inserted';
+  /**
+   * The declared unknown id whose blocking discovery caused this node to be inserted. Present
+   * only on `origin: 'inserted'` nodes. Read by the mutation policy's per-unknown-id insertion
+   * cap (OQ-P4-5), which is why it is carried as data instead of parsed back out of `id`.
+   */
+  originUnknownId?: string;
+}
+
+/**
+ * Chain state, addressed by stable node identity rather than by position.
+ *
+ * Integer positions are still what the hook projection, the state blob, and the rendering
+ * contract emit — but they are *derived* here (`shared/utils/node-order.ts`: `ordinalOf`,
+ * `totalOf`, `currentOrdinal`) rather than stored, so a run's identity survives reordering.
  */
 export interface ChainState {
-  currentStep: number;
-  totalSteps: number;
+  /** Node the run is standing at. `null` means the run advanced past its terminal node. */
+  currentNodeId: string | null;
+  /** Run order, frozen at creation. P4 mutates this inside the persistence transaction. */
+  nodes: ChainNode[];
   lastUpdated: number;
-  /** Map of step number -> lifecycle metadata */
-  stepStates?: Map<number, StepMetadata>;
+  /** Map of node id -> lifecycle metadata */
+  stepStates?: Map<string, StepMetadata>;
 }

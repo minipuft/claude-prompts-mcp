@@ -2,10 +2,12 @@
 import { resolveJudgeGates, composeJudgeReviewPrompt } from '../../../gates/core/review-utils.js';
 import { runGateShellVerifications } from '../../../gates/services/gate-shell-verify-runner.js';
 import { formatGateShellVerifySection } from '../../../gates/shell/shell-verify-message-formatter.js';
+import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { resolveShellVerificationCoverage } from '../decisions/gates/shell-verification-coverage.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { GatesConfig } from '#shared/types/core-config.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
@@ -29,9 +31,63 @@ export class GateReviewStage extends BasePipelineStage {
     private readonly chainSessionStore: ChainSessionService,
     private readonly gateDefinitionProvider: GateDefinitionProvider | null,
     logger: Logger,
-    private readonly gatesConfigProvider?: GatesConfigProvider
+    private readonly gatesConfigProvider?: GatesConfigProvider,
+    /**
+     * Ledger writer for the one step this stage renders that StepExecutionStage never does.
+     * Optional, matching stages 18 and 21: absent, the render still happens, just unledgered.
+     */
+    private readonly executionRecordStore: ExecutionRecordStore | null = null
   ) {
     super(logger);
+  }
+
+  /**
+   * Ledger the first step of a run that this stage — not StepExecutionStage — rendered.
+   *
+   * OQ6 trace result. On a gated chain the start call creates the pending review in
+   * SessionManagementStage, so StepExecutionStage takes its `pendingReview` early exit and its
+   * `working` append never runs; THIS stage renders step 1 instead, and appended nothing. Every
+   * later step is rendered by stage 18 on the call that clears the previous review, so exactly
+   * one row was missing per run — the measured `planned 3 / executed 2`.
+   *
+   * Scoped to the run-creating call for that reason: on any resume the current step already has
+   * a row from stage 18, and appending again would add a duplicate `working` row per gate retry.
+   */
+  private ledgerFirstRenderedStep(context: ExecutionContext): void {
+    if (this.executionRecordStore === null) return;
+
+    const decision = context.state.session.lifecycleDecision;
+    if (decision !== 'create-new' && decision !== 'create-force-restart') return;
+
+    const session = context.sessionContext;
+    if (session === undefined) return;
+
+    const steps = context.parsedCommand?.steps;
+    const currentNodeId = session.currentNodeId ?? undefined;
+    const stepNumber = session.currentStep ?? 1;
+    const step =
+      (currentNodeId !== undefined ? steps?.find((s) => s.nodeId === currentNodeId) : undefined) ??
+      steps?.find((s) => s.stepNumber === stepNumber);
+
+    const renderedAt = Date.now();
+    this.executionRecordStore.append({
+      sessionId: session.sessionId,
+      ...(session.chainId !== undefined ? { chainId: session.chainId } : {}),
+      stepNumber,
+      // Prefer the id on the resolved step over the session's, for the same reason stage 18
+      // does: the step object is what this stage rendered. Falls back to the session's node id,
+      // then to nothing — this stage resolves its step by either key already.
+      ...(step?.nodeId !== undefined
+        ? { nodeId: step.nodeId }
+        : currentNodeId !== undefined
+          ? { nodeId: currentNodeId }
+          : {}),
+      ...(step?.promptId !== undefined ? { promptId: step.promptId } : {}),
+      status: 'working',
+      substate: { renderedAt },
+      startedAt: renderedAt,
+      scope: context.getScopeOptions(),
+    });
   }
 
   async execute(context: ExecutionContext): Promise<void> {
@@ -103,6 +159,10 @@ export class GateReviewStage extends BasePipelineStage {
             generatedAt: Date.now(),
           };
 
+          // Same gap on the early-exit path: this call still consumed the run's first step
+          // without stage 18 ever rendering it, so the row is owed here too.
+          this.ledgerFirstRenderedStep(context);
+
           context.diagnostics.info(this.name, 'Gate review auto-cleared by shell verification', {
             sessionId,
             verifiedGates: coverage.verifiedGateIds,
@@ -121,9 +181,22 @@ export class GateReviewStage extends BasePipelineStage {
         sessionId,
         context.getScopeOptions()
       );
+      // Node-driven, for the same reason stage 18 is (P4 row 3.4 / DEV-T3-7). The review body is
+      // the reviewed step's own template, and `resolveReviewStep` locates it with the ordinal
+      // `getChainContext` publishes — which counts the RUN's nodes. Handing it the parse-time
+      // array put the two on different scales the moment a node was inserted, so a review opened
+      // on a step after an insertion quoted the NEXT step's task back to the client.
+      const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+      const reviewSteps = planNodeDrivenRender({
+        nodes: run?.state.nodes ?? [],
+        parseSteps: steps,
+        currentNodeId: run?.state.currentNodeId ?? context.sessionContext.currentNodeId,
+        fallbackOrdinal: context.sessionContext.currentStep ?? 1,
+        ledger: run?.unknownsLedger,
+      }).steps;
       const renderResult = await this.chainOperatorExecutor.renderStep({
         executionType: 'gate_review',
-        stepPrompts: steps,
+        stepPrompts: reviewSteps,
         chainContext,
         pendingGateReview: pendingReview,
         additionalGateIds: pendingReview.gateIds,
@@ -166,6 +239,8 @@ export class GateReviewStage extends BasePipelineStage {
         },
         generatedAt: Date.now(),
       };
+
+      this.ledgerFirstRenderedStep(context);
 
       // Record diagnostic for gate review rendering
       context.diagnostics.info(this.name, 'Gate review step rendered', {

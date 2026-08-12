@@ -11,6 +11,16 @@ import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
  */
 export interface ChainStepPrompt {
   readonly stepNumber: number;
+  /**
+   * Stable node identity, minted at parse time and frozen for the run.
+   *
+   * Still optional (P3 D10): making it required reddened 40 duck-typed fixture literals across
+   * 7 test files, past the tier's escape-hatch threshold. Every production construction site
+   * sets it; `SessionManagementStage.buildChainNodes` warns and falls back to sequential ids
+   * when a parsed chain reaches the store without one, which is the detector this type-level
+   * requirement would otherwise have been.
+   */
+  readonly nodeId?: string;
   readonly promptId: string;
   readonly args: Record<string, unknown>;
   readonly inlineGateCriteria?: readonly string[];

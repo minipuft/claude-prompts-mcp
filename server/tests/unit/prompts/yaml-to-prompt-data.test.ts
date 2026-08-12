@@ -48,6 +48,22 @@ describe('yamlToPromptData', () => {
     expect(result.chainSteps?.[1]?.agentType).toBe('code-reviewer');
   });
 
+  it('carries an explicit chain-step id through normalizeChainSteps (P3 Tier 1)', () => {
+    // Regression guard: normalizeChainSteps builds its output object field-by-field rather than
+    // spreading `step`, so a field can be silently dropped even though the Zod schema accepts it.
+    const result = yamlToPromptData(
+      makeMinimalYaml({
+        chainSteps: [
+          { promptId: 'a', stepName: 'A', id: 'custom-a' },
+          { promptId: 'b', stepName: 'B' },
+        ],
+      } as Partial<PromptYaml>)
+    );
+
+    expect(result.chainSteps?.[0]?.id).toBe('custom-a');
+    expect(result.chainSteps?.[1]?.id).toBeUndefined();
+  });
+
   it('defaults category to general', () => {
     const result = yamlToPromptData(makeMinimalYaml());
     expect(result.category).toBe('general');

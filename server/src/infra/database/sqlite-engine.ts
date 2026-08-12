@@ -46,6 +46,63 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v23: adds `origin` and `origin_unknown_id` to `chain_run_nodes`, and `nodes_inserted` /
+ * `nodes_skipped` to `execution_records` (P4 adaptive mutation).
+ *
+ * `origin` records whether a node was planned when the run started or inserted mid-run by the
+ * mutation policy. It is the accounting column for OQ-P4-5's caps: the run-wide "3 insertions"
+ * ceiling is `COUNT(*) WHERE origin = 'inserted'`, and it survives a cold load because it is a
+ * row, not in-memory state. It is `NOT NULL` with **no DEFAULT** on purpose. The plan sketched
+ * `DEFAULT 'planned'`, but a default would make the column invisible to
+ * `validate:no-phantom-columns` (which exempts defaulted columns) AND would silently fill in
+ * 'planned' if a future edit dropped it from the INSERT list — the value-dead shape that table
+ * has produced twice. With no default, the same edit fails loudly on the NOT NULL constraint.
+ *
+ * `origin_unknown_id` records WHICH declared unknown caused an insertion. `origin` alone answers
+ * the run-wide cap but not the per-unknown-id one ("has THIS unknown already received its one
+ * insertion"), and the alternative — recovering the id back out of the node id — is not a
+ * decodable inverse: `mintInsertionId` slugifies (lossy) and appends collision suffixes. It is
+ * NULL on planned rows because the fact does not exist there; that is intentional partial
+ * population BY ROW TYPE, the same pattern as the v21 telemetry columns, not a value-dead column.
+ *
+ * `nodes_inserted` / `nodes_skipped` on `execution_records` are the audit trail for the same two
+ * mutations, at run granularity. They extend the v21 telemetry group exactly — bound only on
+ * terminal rows, NULL on per-step `working` rows — and they are not a second copy of `origin`:
+ * `chain_run_nodes` is `ephemeral` and PID-deleted at cleanup, so once the run's rows are gone
+ * the terminal record is the only surviving statement of what the policy did. Both arrive on the
+ * one `getRunTelemetry` object that BOTH terminal writers spread, which is what stops the
+ * failure mode this table already produced once: a completed run carrying values while a failed
+ * run carries NULLs because only one writer was taught the new fields.
+ *
+ * All three tables touched are `ephemeral`, so this bump is free of the durable snapshot/restore
+ * path: `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ *
+ * v22: retires `chain_run_registry` into per-row `chain_runs` + `chain_run_nodes`, and adds a
+ * nullable `node_id` to `execution_records`.
+ *
+ * The registry held one JSON blob per owning process containing every run, every run's node list,
+ * every step's lifecycle metadata, and three chain-id mapping dictionaries. Nothing in it was
+ * queryable: answering "which node is run X standing at" meant parsing the whole document, and the
+ * three mapping dicts were a second copy of facts the sessions already carried. `chain_runs` holds
+ * one row per run with the run-level facts as columns (status, current node, scope, timestamps)
+ * plus a residual JSON document for the genuinely document-shaped remainder (blueprint,
+ * originalArgs, unknowns ledger, pending reviews, telemetry counters, execution order).
+ * `chain_run_nodes` holds one row per node with its position, prompt, and step lifecycle.
+ *
+ * `current_node_id` is the SINGLE source for where a run stands — the residual JSON deliberately
+ * does not carry it. Two copies of one fact with no gate between them is the drift shape this
+ * schema has produced twice; the column wins because it is the one a query can reach.
+ *
+ * No exclusion is declared for the dropped table and none is needed: `DROPPED_ON_THIS_BUMP` names
+ * DURABLE tables withheld from the snapshot/restore round-trip, and `chain_run_registry` is
+ * `ephemeral` — its rows are PID-scoped live-run state that a restart already invalidated. The
+ * drop needs no ceremony because there is nothing to carry.
+ *
+ * `node_id` on `execution_records` records WHICH node produced a record without renumbering the
+ * append-only log; `step_number` stays the ordinal-at-write. It is nullable because run-level
+ * terminal records (`21-formatting-stage.ts`, `prompt-execution-pipeline.ts`) describe a run, not
+ * a node, and bind it NULL explicitly.
+ *
  * v21: adds five nullable INTEGER columns to `execution_records` — `steps_planned`,
  * `gates_fired`, `gate_retries`, `unknowns_opened`, `unknowns_closed`. They are run-level
  * facts, so they are bound ONLY on terminal records (the `completed`/`cancelled` path in
@@ -127,7 +184,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 21;
+const SCHEMA_VERSION = 23;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -373,6 +430,9 @@ export class SqliteEngine implements DatabasePort {
     const currentVersion = this.getCurrentSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
+      // Tables are current, but views must still refresh: a stale view survives every
+      // version-match boot otherwise (see applyViews docblock).
+      this.applyViews();
       this.logger.info(`Database schema is up to date (version ${currentVersion})`);
       return false;
     }
@@ -520,10 +580,10 @@ export class SqliteEngine implements DatabasePort {
         applied_at TEXT DEFAULT (datetime('now'))
       );
 
-      -- Derived hook-read view of chain_run_registry (the SSOT blob).
+      -- Derived hook-read view of chain_runs + chain_run_nodes (the SSOT rows).
       -- Holds only the active subset of sessions for indexed PID-scoped queries
       -- by Python hooks. Writers MUST go through ChainSessionStore.projectToHookView,
-      -- not direct INSERT/UPDATE — primary writes land on chain_run_registry and
+      -- not direct INSERT/UPDATE — primary writes land on chain_runs/chain_run_nodes and
       -- this table is rebuilt atomically inside the same transaction.
       CREATE TABLE IF NOT EXISTS chain_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -544,8 +604,8 @@ export class SqliteEngine implements DatabasePort {
       -- Replaces what used to be 4 identical-shape tables (framework_state,
       -- gate_system_state, argument_history, resource_hash_cache) plus their
       -- per-table workspace/organization indexes. Consumers pass key to
-      -- SqliteStateStoreConfig to claim a slot. chain_run_registry intentionally
-      -- excluded -- retired separately by chain ledger Tier 10.
+      -- SqliteStateStoreConfig to claim a slot. Chain run state is intentionally
+      -- excluded -- it lives in the per-row chain_runs/chain_run_nodes tables.
       CREATE TABLE IF NOT EXISTS kv_state (
         tenant_id TEXT NOT NULL DEFAULT 'default',
         organization_id TEXT,
@@ -616,12 +676,54 @@ export class SqliteEngine implements DatabasePort {
         previous_hash TEXT
       );
 
-      CREATE TABLE IF NOT EXISTS chain_run_registry (
-        run_owner_pid TEXT NOT NULL PRIMARY KEY,
+      -- One row per chain run. Replaces the chain_run_registry blob at v22.
+      -- Run-level facts that anything queries are columns; the state column carries only the
+      -- genuinely document-shaped remainder (blueprint, originalArgs, unknownsLedger,
+      -- pendingGateReview, pendingShellVerification, telemetry counters, executionOrder).
+      -- current_node_id is NOT duplicated into that document — the column is the single
+      -- source, and NULL means the run advanced past its terminal node.
+      CREATE TABLE IF NOT EXISTS chain_runs (
+        session_id TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL,
+        base_chain_id TEXT NOT NULL,
+        run_owner_pid TEXT NOT NULL,
         organization_id TEXT,
         workspace_id TEXT,
-        state TEXT NOT NULL DEFAULT '{}',
-        updated_at TEXT DEFAULT (datetime('now'))
+        run_status TEXT NOT NULL,
+        current_node_id TEXT,
+        state TEXT NOT NULL,
+        created_at INTEGER,
+        last_activity INTEGER,
+        run_completed_at INTEGER
+      );
+
+      -- One row per node of a run, in run order. position is the per-run order and is
+      -- mutable (P4 reorders inside the persistence transaction); it is NOT identity —
+      -- (session_id, node_id) is. The step lifecycle columns carry what the old blob held
+      -- in ChainState.stepStates: milestone is the queryable StepLifecycle, and the four
+      -- companions are the substate the lifecycle alone cannot express (a placeholder step
+      -- and a genuinely completed one both read 'completed').
+      CREATE TABLE IF NOT EXISTS chain_run_nodes (
+        session_id TEXT NOT NULL,
+        node_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        prompt_id TEXT NOT NULL,
+        step_name TEXT,
+        milestone TEXT,
+        is_placeholder INTEGER,
+        rendered_at INTEGER,
+        responded_at INTEGER,
+        completed_at INTEGER,
+        -- P4 (v23): provenance. 'planned' when the node was in the run at creation,
+        -- 'inserted' when the mutation policy added it mid-run. NOT NULL with no DEFAULT so
+        -- dropping it from the writer's column list fails loudly instead of filling 'planned'.
+        origin TEXT NOT NULL,
+        -- Which declared unknown caused an insertion. NULL on planned rows (the fact does not
+        -- exist there); non-NULL on inserted rows, which is what the per-unknown-id insertion
+        -- cap counts. Not recoverable from node_id: mintInsertionId slugifies and suffixes.
+        origin_unknown_id TEXT,
+        updated_at INTEGER,
+        PRIMARY KEY (session_id, node_id)
       );
 
       -- Durable per-step (or per-chain when step_number IS NULL) execution records.
@@ -636,6 +738,10 @@ export class SqliteEngine implements DatabasePort {
         session_id TEXT NOT NULL,
         chain_id TEXT,
         step_number INTEGER,
+        -- Which node produced this record. Nullable: run-level terminal records describe a
+        -- run, not a node, and bind it NULL explicitly. step_number stays the
+        -- ordinal-at-write, so the append-only log never renumbers.
+        node_id TEXT,
         prompt_id TEXT,
         status TEXT NOT NULL,
         substate_json TEXT,
@@ -653,6 +759,11 @@ export class SqliteEngine implements DatabasePort {
         gate_retries INTEGER,
         unknowns_opened INTEGER,
         unknowns_closed INTEGER,
+        -- P4 (v23): what the adaptive mutation policy did to this run's node list. Same
+        -- terminal-rows-only posture as the five above; they arrive together on one
+        -- getRunTelemetry object, so no writer can bind one group and miss the other.
+        nodes_inserted INTEGER,
+        nodes_skipped INTEGER,
         created_at TEXT DEFAULT (datetime('now'))
       );
 
@@ -670,17 +781,41 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_organization ON resource_changes(organization_id);
-      CREATE INDEX IF NOT EXISTS idx_chain_run_registry_workspace ON chain_run_registry(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_runs_run_owner ON chain_runs(run_owner_pid);
+      CREATE INDEX IF NOT EXISTS idx_chain_runs_workspace ON chain_runs(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_runs_base_chain ON chain_runs(base_chain_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_run_nodes_session ON chain_run_nodes(session_id, position);
       CREATE INDEX IF NOT EXISTS idx_execution_records_session ON execution_records(session_id);
       CREATE INDEX IF NOT EXISTS idx_execution_records_chain ON execution_records(chain_id);
       CREATE INDEX IF NOT EXISTS idx_execution_records_started ON execution_records(started_at);
       CREATE INDEX IF NOT EXISTS idx_execution_records_tenant ON execution_records(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_run_status ON chain_sessions(run_status);
 
+      INSERT OR IGNORE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
+    `);
+    this.applyViews();
+  }
+
+  /**
+   * (Re)create the derived views unconditionally.
+   *
+   * Views are pure derivations with no rows of their own, so recreating them is free — and
+   * necessary: the IF-NOT-EXISTS form of view creation cannot replace an existing
+   * definition, and the version-bump recreate path only drops tables. A database file created before a view
+   * repair therefore kept its stale definition at ANY later schema version (observed live
+   * 2026-08-11: a file at v22 still carried the pre-v20 v_execution_status referencing
+   * cs.tenant_id and $.state.currentStep, so the F12 repair never reached it). Called from
+   * applySchema() and on every version-match boot so the embedded DDL is always live.
+   */
+  private applyViews(): void {
+    this.getDb().exec(`
+      DROP VIEW IF EXISTS v_execution_status;
+      DROP VIEW IF EXISTS v_execution_history;
+
       -- Cross-language SSOT view consumed by both TS server and Python hooks (db_reader.py).
       -- Single query answers "where is this chain run right now and what's the next action?".
       -- ChainSession is serialized as JSON in chain_sessions.state; nested ChainState is at $.state.
-      CREATE VIEW IF NOT EXISTS v_execution_status AS
+      CREATE VIEW v_execution_status AS
       SELECT
         cs.id AS row_id,
         json_extract(cs.state, '$.sessionId') AS session_id,
@@ -715,7 +850,7 @@ export class SqliteEngine implements DatabasePort {
       -- One row per session, carrying the latest record's state plus a count of the whole
       -- series. MAX(execution_id) identifies the newest record because execution ids are
       -- monotonic ULIDs (see ExecutionRecordStore), so lexical order IS creation order.
-      CREATE VIEW IF NOT EXISTS v_execution_history AS
+      CREATE VIEW v_execution_history AS
       SELECT
         latest.session_id,
         latest.chain_id,
@@ -739,8 +874,6 @@ export class SqliteEngine implements DatabasePort {
         GROUP BY session_id
       ) agg
       JOIN execution_records latest ON latest.execution_id = agg.latest_execution_id;
-
-      INSERT OR IGNORE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
     `);
   }
 

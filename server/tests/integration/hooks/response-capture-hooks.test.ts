@@ -49,7 +49,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       getPendingGateReview: jest.fn(),
       isRetryLimitExceeded: jest.fn(),
       recordGateReviewOutcome: jest.fn(),
-      advanceStep: jest.fn().mockResolvedValue(2),
+      advanceStep: jest.fn().mockResolvedValue({ nodeId: 'n3', ordinal: 3 }),
       clearPendingGateReview: jest.fn(),
       resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
@@ -91,7 +91,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
-      state: { currentStep: 1, totalSteps: 2 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       pendingGateReview: {
         gateIds: ['code-quality'],
         attemptCount: 1,
@@ -126,7 +126,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
-      state: { currentStep: 1, totalSteps: 2 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       pendingGateReview: {
         gateIds: ['code-quality'],
         attemptCount: 1,
@@ -176,7 +176,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
-      state: { currentStep: 1, totalSteps: 2 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       pendingGateReview: {
         gateIds: ['code-quality'],
         attemptCount: 2,
@@ -266,7 +266,7 @@ describe('gate events reach a port-only collaborator', () => {
       getSession: jest.fn().mockReturnValue({
         sessionId,
         chainId: 'test-chain',
-        state: { currentStep: 1, totalSteps: 2 },
+        state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
         pendingGateReview: { gateIds: ['code-quality'], attemptCount: 1, maxAttempts: 2 },
       }),
       getPendingGateReview: jest.fn().mockReturnValue({
@@ -281,7 +281,7 @@ describe('gate events reach a port-only collaborator', () => {
       // `jest.fn(impl)` infers its signature; the bare `jest.fn().mockResolvedValue(x)`
       // form used above resolves to `never` under the tests tsconfig.
       recordGateReviewOutcome: jest.fn(async () => 'pending'),
-      advanceStep: jest.fn(async () => 2),
+      advanceStep: jest.fn(async () => ({ nodeId: 'n3', ordinal: 3 })),
       clearPendingGateReview: jest.fn(),
       resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),

@@ -54,6 +54,8 @@ export interface LoadedPromptFile {
   chainSteps?: Array<{
     promptId: string;
     stepName: string;
+    /** Stable node identity (P3 Tier 1) — mirrors `ChainStepSchema.id`. */
+    id?: string;
     inputMapping?: Record<string, string>;
     outputMapping?: Record<string, string>;
     retries?: number;
@@ -371,6 +373,7 @@ function normalizeChainSteps(
       promptId: step.promptId,
       stepName: step.stepName,
     };
+    if (step.id != null) normalized.id = step.id;
     if (step.inputMapping) normalized.inputMapping = step.inputMapping;
     if (step.outputMapping) normalized.outputMapping = step.outputMapping;
     if (typeof step.retries === 'number') normalized.retries = step.retries;

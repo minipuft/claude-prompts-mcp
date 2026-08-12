@@ -174,15 +174,17 @@ describe('getRunTelemetry derivation', () => {
       gateRetries: 0,
       unknownsOpened: 0,
       unknownsClosed: 0,
+      nodesInserted: 0,
+      nodesSkipped: 0,
     });
   });
 
   test('two unknowns with one resolved report opened 2 / closed 1', async () => {
-    await manager.applyUnknownObservations('sess-derive', 1, [
+    await manager.applyUnknownObservations('sess-derive', 'n1', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
       { type: 'unknown_discovered', id: 'retry-policy', statement: 'Retry policy undecided' },
     ]);
-    await manager.applyUnknownObservations('sess-derive', 2, [
+    await manager.applyUnknownObservations('sess-derive', 'n2', [
       { type: 'unknown_resolved', id: 'cache-ttl', statement: '30s', resolution: 'answered' },
     ]);
 
@@ -193,11 +195,11 @@ describe('getRunTelemetry derivation', () => {
   });
 
   test('resolving does not reduce the opened count — the ledger is cumulative', async () => {
-    await manager.applyUnknownObservations('sess-derive', 1, [
+    await manager.applyUnknownObservations('sess-derive', 'n1', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
     ]);
     const beforeResolve = manager.getRunTelemetry('sess-derive');
-    await manager.applyUnknownObservations('sess-derive', 2, [
+    await manager.applyUnknownObservations('sess-derive', 'n2', [
       { type: 'unknown_resolved', id: 'cache-ttl', statement: '30s', resolution: 'answered' },
     ]);
 

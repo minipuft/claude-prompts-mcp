@@ -1,0 +1,344 @@
+---
+title: "P3 Step Identity — Discovery — Implementation Notes"
+plan: adaptive-chain-runtime-p3-discovery-2026-08-11.md
+date: 2026-08-11
+status: active
+tags: []
+---
+
+# Implementation Notes
+
+Deviations, discovered constraints, unknowns, and re-measurements found while
+executing the plan. Conservative option taken, logged, work continued.
+
+## Deviations
+
+## Unknowns / gaps found during execution
+
+## Validation runs
+
+- 2026-08-12 02:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -8` · ran
+- 2026-08-12 02:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:contracts 2>&1 | tail -12` · ran
+- 2026-08-12 01:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server; npm run test:ci 2>&1 | rg "Suites:|Tests:" | head -2; npm run ` · ran
+- 2026-08-12 01:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server; rg -n "nodesInserted" src/shared/types/chain-execution.ts src/` · ran
+- 2026-08-12 01:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:contracts 2>&1 | tail -5` · ran
+- 2026-08-12 01:22 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --check CLAUDE.md CHANGELOG.md docs/conce` · ran
+- 2026-08-12 01:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate:contracts (final) ===" && npm run validate:c` · ran
+- 2026-08-12 01:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate:format (full doc scope, may be slow) ===" ti` · ran
+- 2026-08-12 01:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server; npm run typecheck 2>&1 | tail -1; npm run lint:ratchet 2>&1 | ` · ran
+- 2026-08-12 01:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:contracts 2>&1 | tail -10` · ran
+- 2026-08-12 01:21 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff docs/concepts/chains-lifecycle.md docs/reference/mcp-tools.md` · ran
+- 2026-08-12 01:20 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --check /tmp/claude-1000/-home-minipuft-A` · ran
+- 2026-08-12 01:19 · `cd /home/minipuft/Applications/claude-prompts-mcp/server; cp src/engine/execution/formatting/response-assembler.ts /tmp/` · ran
+- 2026-08-12 01:19 · `npm run test:match -- "response-assembler-chain-cta" 2>&1 | rg "Tests:|✕" | head -4; npm run typecheck:tests:ratchet 2>&` · ran
+- 2026-08-12 01:19 · `npm run test:match -- "response-assembler-chain-cta" 2>&1 | rg -A 8 "standing on a PLANNED" | head -16` · ran
+- 2026-08-12 01:19 · `npm run test:match -- "response-assembler-chain-cta" 2>&1 | rg "✕|●" | head -8` · ran
+- 2026-08-12 01:19 · `npm run test:match -- "response-assembler-chain-cta" 2>&1 | tail -4; npm run typecheck 2>&1 | tail -1; npm run typecheck` · ran
+- 2026-08-12 01:18 · `npm run validate:contracts 2>&1 | tail -30` · ran
+- 2026-08-12 01:18 · `cd /home/minipuft/Applications/claude-prompts-mcp/server; ls /tmp/claude-1000/mp.bak && cp /tmp/claude-1000/mp.bak src/e` · ran
+- 2026-08-12 01:17 · `npm run test:match -- "step-lifecycle" 2>&1 | tail -8` · ran
+- 2026-08-12 01:12 · `npm run typecheck 2>&1 | tail -1; npm run typecheck:tests:ratchet 2>&1 | tail -1; npm run test:match -- "temporary-gate|` · ran
+- 2026-08-12 01:10 · `npm run typecheck 2>&1 | tail -2 && echo "TYPECHECK_EXIT=$?" && npm run typecheck:tests:ratchet 2>&1 | tail -2 && npm ru` · ran
+- 2026-08-12 01:08 · `timeout 900 npm run test:integration 2>&1 | tail -8; echo "=== e2e ==="; timeout 900 npm run test:e2e 2>&1 | tail -8` · ran
+- 2026-08-12 01:07 · `npm run test:match -- "gate-judge-pipeline-wiring" 2>&1 | tail -12` · ran
+- 2026-08-12 01:07 · `python3 - <<'PY' p='tests/integration/gates/gate-judge-pipeline-wiring.test.ts' s=open(p).read() old=""" getChainContext` · ran
+- 2026-08-12 01:07 · `timeout 900 npm run test:integration 2>&1 | tail -10; echo "=== SQLite gates ==="; npm run validate:table-contracts 2>&1` · ran
+- 2026-08-12 01:06 · `echo "=== validate:arch ==="; npm run validate:arch 2>&1 | tail -6; echo "=== test:ci ==="; timeout 900 npm run test:ci ` · ran
+- 2026-08-12 01:06 · `npm run test:match -- "temporary-gate|step-lifecycle|execution-stage|node-step-projection|gate-enhancement|gate-review|i` · ran
+- 2026-08-12 01:05 · `python3 - <<'PY' p='tests/unit/execution/pipeline/gate-review-stage.test.ts' s=open(p).read() old=""" getChainContext: j` · ran
+- 2026-08-12 01:05 · `npm run test:match -- "gate-review-stage" 2>&1 | sed -n '1,60p'` · ran
+- 2026-08-12 01:05 · `echo "=== 3b. test:match (substituted, observes every touched file) ==="; npm run test:match -- "temporary-gate|step-lif` · ran
+- 2026-08-12 01:05 · `echo "=== 1. typecheck ==="; npm run typecheck 2>&1 | tail -3 echo "=== 2. typecheck:tests:ratchet ==="; npm run typeche` · ran
+- 2026-08-12 01:05 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --listTests --testPathPatterns "temporary-gate|step-lifecycle|executio` · ran
+- 2026-08-12 01:05 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --listTests --testPathPatterns "temporary-gate|step-lifecycle|executio` · ran
+- 2026-08-12 01:05 · `npx prettier --write tests/integration/chain/step-lifecycle.integration.test.ts tests/unit/gates/services/temporary-gate` · ran
+- 2026-08-12 01:05 · `python3 - <<'PY' p='tests/unit/execution/operators/node-step-projection.test.ts' s=open(p).read() old=""" test('a skippe` · ran
+- 2026-08-12 01:04 · `npm run test:match -- "node-step-projection" 2>&1 | tail -30` · ran
+- 2026-08-12 01:04 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/20-gate-review-stage.ts' s=open(p).read() old=""" currentNodeId` · ran
+- 2026-08-12 01:03 · `npx eslint --format json src/engine/execution/pipeline/stages/20-gate-review-stage.ts src/engine/execution/pipeline/stag` · ran
+- 2026-08-12 01:03 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() old=""" // Ties row 4.2` · ran
+- 2026-08-12 01:02 · `npm run test:match -- "step-lifecycle" 2>&1 | tail -25` · ran
+- 2026-08-12 01:02 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/20-gate-review-stage.ts' s=open(p).read() old = """ const chain` · ran
+- 2026-08-12 01:02 · `npm run test:match -- "step-lifecycle" 2>&1 | sed -n '/reloaded run resumes/,/Progress 3\/4/p' | head -40` · ran
+- 2026-08-12 01:01 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() # imports old_imp = "im` · ran
+- 2026-08-12 01:00 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() # 1. Extract a module-l` · ran
+- 2026-08-12 01:00 · `set -e SC=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpa` · ran
+- 2026-08-12 01:00 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() old = """ test('the las` · ran
+- 2026-08-12 00:59 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() old = """ let scheduler` · ran
+- 2026-08-12 00:58 · `set -e SC=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpa` · ran
+- 2026-08-12 00:58 · `set -e SC=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpa` · ran
+- 2026-08-12 00:58 · `python3 - <<'PY' p='tests/unit/gates/services/temporary-gate-step-targeting.test.ts' s=open(p).read() old=""" test('an u` · ran
+- 2026-08-12 00:58 · `npm run test:match -- "temporary-gate-step-targeting" 2>&1 | tail -50` · ran
+- 2026-08-12 00:56 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/14-injection-control-stage.ts' s=open(p).read() old="import typ` · ran
+- 2026-08-12 00:55 · `npx eslint --format json src/ 2>/dev/null | python3 -c " import json,sys d=json.load(sys.stdin) for f in d: for m in f['` · ran
+- 2026-08-12 00:55 · `npx eslint --fix src/engine/gates/services/run-step-view.ts src/engine/execution/operators/node-step-projection.ts src/m` · ran
+- 2026-08-12 00:54 · `npx eslint src/engine/gates/services/run-step-view.ts src/engine/execution/operators/node-step-projection.ts 2>&1 | tail` · ran
+- 2026-08-12 00:54 · `npx eslint src/engine/gates/services/run-step-view.ts src/engine/gates/services/temporary-gate-registrar.ts src/engine/g` · ran
+- 2026-08-12 00:54 · `python3 - <<'PY' p='src/mcp/tools/prompt-engine/core/pipeline-builder.ts' s=open(p).read() old = """ const gateService =` · ran
+- 2026-08-12 00:52 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() s=s.replace(" expect(at` · ran
+- 2026-08-12 00:52 · `npm run test:match -- "step-lifecycle" 2>&1 | sed -n '1,80p'` · ran
+- 2026-08-12 00:52 · `npm run test:match -- "step-lifecycle" 2>&1 | tail -60` · ran
+- 2026-08-12 00:51 · `npm run test:match -- "step-lifecycle|injection-control|execution-stage|chain-operator" 2>&1 | tail -30` · ran
+- 2026-08-12 00:51 · `npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 00:51 · `npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 00:47 · `wc -l tests/integration/chain/step-lifecycle.integration.test.ts; rg -n "^ (test|describe)\(|^ })|loadSessions|dormant|s` · ran
+- 2026-08-12 00:40 · `npm run typecheck 2>&1 | tail -1; npm run typecheck:tests:ratchet 2>&1 | tail -1; npm run test:match -- "response-captur` · ran
+- 2026-08-12 00:39 · `npm run typecheck 2>&1 | tail -2 && npm run typecheck:tests:ratchet 2>&1 | tail -1 && npm run test:match -- "response-ca` · ran
+- 2026-08-12 00:38 · `for f in src/engine/execution/pipeline/stages/16-response-capture-stage.ts src/modules/chains/execution-record-store.ts ` · ran
+- 2026-08-12 00:37 · `echo "=== lint on changed src files ==="; npx eslint src/engine/execution/pipeline/stages/16-response-capture-stage.ts s` · ran
+- 2026-08-12 00:37 · `echo "=== 4. validate:no-phantom-columns ==="; npm run validate:no-phantom-columns 2>&1 | tail -8 echo "=== 5. validate:` · ran
+- 2026-08-12 00:37 · `echo "=== 1. typecheck ==="; npm run typecheck 2>&1 | tail -3 echo "=== 2. typecheck:tests:ratchet ==="; npm run typeche` · ran
+- 2026-08-12 00:36 · `npx prettier --write tests/integration/chain/step-lifecycle.integration.test.ts tests/integration/chain/run-telemetry.in` · ran
+- 2026-08-12 00:36 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() start=s.index(" test('P` · ran
+- 2026-08-12 00:35 · `npm run test:match -- "step-lifecycle" 2>&1 | sed -n '1,40p'` · ran
+- 2026-08-12 00:35 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() start=s.index(" test('P` · ran
+- 2026-08-12 00:35 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() old=""" test('the rende` · ran
+- 2026-08-12 00:34 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/16-response-capture-stage.ts' s=open(p).read() old=" if (applie` · ran
+- 2026-08-12 00:34 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p).read() start = s.index(" test(` · ran
+- 2026-08-12 00:34 · `cat > /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad/pr` · ran
+- 2026-08-12 00:34 · `npm run test:match -- "chain-session-hook-projection" 2>&1 | tail -8` · ran
+- 2026-08-12 00:33 · `npm run test:match -- "chain-session-hook-projection" 2>&1 | tail -25` · ran
+- 2026-08-12 00:32 · `npm run test:match -- "step-response-capture" 2>&1 | grep -E "●.*›|Tests:"; echo "=== FALSIFY: ledger-derived delta on e` · ran
+- 2026-08-12 00:32 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/16-response-capture-stage.ts' s=open(p).read() # defect A: fire` · ran
+- 2026-08-12 00:31 · `npm run test:match -- "step-response-capture" 2>&1 | grep -E "●.*›|Tests:"; echo "=== FALSIFY: fire on every call regard` · ran
+- 2026-08-12 00:31 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/16-response-capture-stage.ts' s=open(p).read() old=" insertedCo` · ran
+- 2026-08-12 00:31 · `cp src/engine/execution/pipeline/stages/16-response-capture-stage.ts /tmp/claude-1000/-home-minipuft-Applications-claude` · ran
+- 2026-08-12 00:31 · `npm run test:match -- "step-response-capture" 2>&1 | tail -40` · ran
+- 2026-08-12 00:30 · `npm run test:match -- "run-telemetry" 2>&1 | tail -30` · ran
+- 2026-08-12 00:29 · `npm run test:match -- "response-capture|run-telemetry|step-lifecycle" 2>&1 | grep -E "✕|FAIL|●.*›" | head -20` · ran
+- 2026-08-12 00:29 · `npm run test:match -- "response-capture|run-telemetry|step-lifecycle" 2>&1 | tail -30` · ran
+- 2026-08-12 00:28 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep -E "run-telemetry|step-lifecycle|execution-record-store|respon` · ran
+- 2026-08-12 00:28 · `npm run typecheck 2>&1 | tail -10; echo "=== TESTS TC ==="; npx tsc --noEmit --project tsconfig.test.json 2>&1 | tail -2` · ran
+- 2026-08-12 00:26 · `npx eslint src/engine/execution/pipeline/stages/16-response-capture-stage.ts 2>&1 | tail -20` · ran
+- 2026-08-12 00:26 · `npx prettier --write src/engine/execution/pipeline/stages/16-response-capture-stage.ts >/dev/null 2>&1; npx eslint src/e` · ran
+- 2026-08-12 00:26 · `npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 00:18 · `npm run typecheck 2>&1 | tail -1; npm run typecheck:tests:ratchet 2>&1 | tail -1; npm run test:match -- "chain-run-stora` · ran
+- 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 900 npm run test:integration 2>&1 | tail -12` · ran
+- 2026-08-12 00:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 900 npm run test:ci 2>&1 | tail -25` · ran
+- 2026-08-12 00:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== 1. typecheck ===" && npm run typecheck 2>&1 | tail` · ran
+- 2026-08-12 00:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint scripts eslint-rules --format json 2>/dev/null | ` · ran
+- 2026-08-12 00:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && node scripts/eslint-ratchet.js check 2>&1 | head -20; echo "` · ran
+- 2026-08-12 00:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --format json src/ 2>/dev/null | python3 -c " imp` · ran
+- 2026-08-12 00:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && python3 - <<'PY' p='src/modules/chains/manager.ts' s=open(p)` · ran
+- 2026-08-12 00:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --format json src/modules/chains/manager.ts src/m` · ran
+- 2026-08-12 00:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --format json src/modules/chains/manager.ts src/m` · ran
+- 2026-08-12 00:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -20` · ran
+- 2026-08-12 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 -m pytest hooks/tests/test_db_reader.py -q 2>&1 | tail -10` · ran
+- 2026-08-12 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/chains/manager.ts src/modules/chains/` · ran
+- 2026-08-12 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && rg -n "toBe\(2[0-9]\)|=== 2[0-9]|schemaVersion" tests/ src/ ` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== SUBSTITUTION: sqlite-backend + cli-schema-ownershi` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== validate:table-contracts ===" && npm run validate:` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "chain-run-storage|chain-session|manag` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck:tests:ratchet 2>&1 | tail -8` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "c` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== typecheck ===" && npm run typecheck 2>&1 | tail -4` · ran
+- 2026-08-12 00:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && cp /tmp/claude-1000/-home-minipuft-Applications-claude-promp` · ran
+- 2026-08-12 00:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && cp src/modules/chains/manager.ts /tmp/claude-1000/-home-mini` · ran
+- 2026-08-12 00:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && cat >> tests/unit/chain-session/chain-session-store.test.ts ` · ran
+- 2026-08-12 00:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "chain-run-storage" 2>&1 | tail -20` · ran
+- 2026-08-12 00:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "chain-run-storage" 2>&1 | tail -40` · ran
+- 2026-08-12 00:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -25` · ran
+- 2026-08-12 00:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --listTest` · ran
+- 2026-08-11 21:45 · `npm run typecheck 2>&1 | tail -2; npm run test:match -- "mutation-policy|node-order|prompt-engine-surface|unknown-observ` · ran
+- 2026-08-11 21:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== typecheck ===" && npm run typecheck 2>&1 | tail -10 e` · ran
+- 2026-08-11 21:42 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== eslint ===" npx eslint src/engine/execution/pipeline/` · ran
+- 2026-08-11 21:42 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint --fix src/engine/execution/pipeline/decisions/mutati` · ran
+- 2026-08-11 21:41 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src/engine/execution/pipeline/decisions/mutation/ sr` · ran
+- 2026-08-11 21:41 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src/engine/execution/pipeline/decisions/mutation/ sr` · ran
+- 2026-08-11 21:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/mutation-policy.ts.bak src/engine/execution/pipeline/de` · ran
+- 2026-08-11 21:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'EOF' path = "src/engine/execution/pipeline/decisio` · ran
+- 2026-08-11 21:40 · `cp /tmp/mutation-policy.ts.bak src/engine/execution/pipeline/decisions/mutation/mutation-policy.ts npm run test:match --` · ran
+- 2026-08-11 21:40 · `cp src/engine/execution/pipeline/decisions/mutation/mutation-policy.ts /tmp/mutation-policy.ts.bak sed -i 's/if (targetO` · ran
+- 2026-08-11 21:40 · `npm run test:match -- "prompt-engine-surface|unknown-observation-processor" 2>&1 | tail -20` · ran
+- 2026-08-11 21:40 · `npm run test:match -- "mutation-policy|node-order|prompt-schema" 2>&1 | tail -20 && echo "---VALIDATE-CONTRACTS---" && n` · ran
+- 2026-08-11 21:40 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | tail -20; echo "---"; npm run typecheck:tests:ratchet 2>&1 | tail -` · ran
+- 2026-08-11 21:39 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "mutation-policy"; echo "exit:$?"` · ran
+- 2026-08-11 21:38 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "mutation-policy"` · ran
+- 2026-08-11 21:38 · `npm run typecheck:tests:ratchet 2>&1 | tail -60` · ran
+- 2026-08-11 21:38 · `npm run test:match -- "mutation-policy|node-order|prompt-schema|prompt-engine-surface|unknown-observation-processor" 2>&` · ran
+- 2026-08-11 21:38 · `npm run test:match -- "mutation-policy|node-order|prompt-schema|prompt-engine-surface|unknown-observation-processor" 2>&` · ran
+- 2026-08-11 21:37 · `npm run test:match -- "prompt-engine-surface" 2>&1 | tail -40` · ran
+- 2026-08-11 21:37 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand --testPathPatterns "mutation-policy|node-order|prompt-sche` · ran
+- 2026-08-11 21:37 · `npm run test:match -- "mutation-policy|node-order|prompt-schema" 2>&1 | grep -i "PASS\|FAIL"` · ran
+- 2026-08-11 21:37 · `npm run test:match -- "mutation-policy|node-order|prompt-schema" 2>&1 | tail -100` · ran
+- 2026-08-11 21:37 · `npm run typecheck 2>&1 | tail -60` · ran
+- 2026-08-11 21:30 · `npm run validate:contracts 2>&1 | tail -30` · ran
+- 2026-08-11 19:52 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 -m pytest hooks/tests/ -q 2>&1 | tail -4 && cd server && np` · ran
+- 2026-08-11 19:50 · `npm run test:ci 2>&1 | tail -10` · ran
+- 2026-08-11 19:49 · `npm run typecheck 2>&1 | tail -10` · ran
+- 2026-08-11 19:49 · `npm run validate:python 2>&1 | grep -iE "^ruff|All checks|INFO Checking|INFO 0 errors|passed|failed|FAILED" | tail -20` · ran
+- 2026-08-11 19:49 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 -m pytest hooks/tests/test_db_reader.py 2>&1 | grep -E "^FA` · ran
+- 2026-08-11 19:48 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 -m pytest hooks/tests/test_db_reader.py -x 2>&1 | tail -60` · ran
+- 2026-08-11 19:48 · `npm run validate:python 2>&1 | tail -5` · ran
+- 2026-08-11 19:48 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci 2>&1 | tail -3 && npm ru` · ran
+- 2026-08-11 19:48 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx prettier --check docs/concepts/chains-lifecycle.md docs/referen` · ran
+- 2026-08-11 19:47 · `npm run lint:ratchet 2>&1 | tail -5` · ran
+- 2026-08-11 19:46 · `npm run typecheck 2>&1 | tail -5 && echo "===LINT===" && npm run lint:ratchet 2>&1 | tail -5` · ran
+- 2026-08-11 19:45 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx prettier --check docs/concepts/chains-lifecycle.md docs/referen` · ran
+- 2026-08-11 19:45 · `npm run test:ci 2>&1 | tail -30` · ran
+- 2026-08-11 19:45 · `npm run typecheck && npm run build 2>&1 | tail -1 && node /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mc` · ran
+- 2026-08-11 19:44 · `npm run lint:ratchet 2>&1 | tail -20` · ran
+- 2026-08-11 19:44 · `npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-11 19:41 · `npm run validate:table-contracts 2>&1 | tail -30` · ran
+- 2026-08-11 19:40 · `npm run validate:table-contracts 2>&1 | tail -2 && node /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/` · ran
+- 2026-08-11 19:39 · `npm run typecheck && npm run validate:table-contracts 2>&1 | tail -2 && npm run test:match -- "sqlite-backend" 2>&1 | ta` · ran
+- 2026-08-11 19:38 · `npm run validate:python 2>&1 | grep -iE "^ruff|error|fail|pyrefly|passed|checks passed|All checks" | head -40` · ran
+- 2026-08-11 19:38 · `npm run validate:python 2>&1 | tail -80` · ran
+- 2026-08-11 19:38 · `cd /home/minipuft/Applications/claude-prompts-mcp && find . -maxdepth 2 -iname "pytest.ini" -o -iname "conftest.py" 2>/d` · ran
+- 2026-08-11 19:33 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci 2>&1 | tail -3 && npm ru` · ran
+- 2026-08-11 19:29 · `cd /home/minipuft/Applications/claude-prompts-mcp && git stash list >/dev/null; npx prettier --check plans/adaptive-chai` · ran
+- 2026-08-11 19:29 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx prettier --check plans/adaptive-chain-runtime-p3-step-identity-` · ran
+- 2026-08-11 19:28 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad { ec` · ran
+- 2026-08-11 19:26 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad npx ` · ran
+- 2026-08-11 19:26 · `python3 - <<'PY' p='src/modules/chains/run-registry.ts' s=open(p,encoding='utf-8').read() old=""" nodes: nodeRows.map((n` · ran
+- 2026-08-11 19:25 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad npx ` · ran
+- 2026-08-11 19:25 · `python3 - <<'PY' p='src/modules/chains/run-registry.ts' s=open(p,encoding='utf-8').read() start=s.index("function parseR` · ran
+- 2026-08-11 19:24 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad npx ` · ran
+- 2026-08-11 19:24 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad npx ` · ran
+- 2026-08-11 19:23 · `sed -n '1,60p' scripts/eslint-ratchet.js` · ran
+- 2026-08-11 19:23 · `grep -n "srcGlobs\|paths\|eslint " scripts/eslint-ratchet.js | head -10; echo "---"; npx eslint src tests --format compa` · ran
+- 2026-08-11 19:23 · `python3 - <<'PY' p='tests/integration/chain/chain-run-storage.integration.test.ts' s=open(p,encoding='utf-8').read() s=s` · ran
+- 2026-08-11 19:23 · `npx eslint src tests --format compact 2>&1 | grep -E "no-unnecessary-type-assertion|import-x/order" | head; echo "=== St` · ran
+- 2026-08-11 19:23 · `npx eslint src --format compact 2>&1 | grep -E "no-unnecessary-type-assertion|import-x/order" | head; echo "=== tests ts` · ran
+- 2026-08-11 19:22 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad { ec` · ran
+- 2026-08-11 19:19 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad cp s` · ran
+- 2026-08-11 19:19 · `python3 - <<'PY' p='tests/integration/chain/chain-run-storage.integration.test.ts' s=open(p,encoding='utf-8').read() old` · ran
+- 2026-08-11 19:18 · `python3 - <<'PY' p='tests/integration/chain/chain-run-storage.integration.test.ts' s=open(p,encoding='utf-8').read() s=s` · ran
+- 2026-08-11 19:18 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad cp s` · ran
+- 2026-08-11 19:17 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad cp s` · ran
+- 2026-08-11 19:17 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad cp s` · ran
+- 2026-08-11 19:17 · `set -e SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchp` · ran
+- 2026-08-11 19:17 · `npm run test:match -- "chain-run-storage" 2>&1 | tail -25` · ran
+- 2026-08-11 19:17 · `npm run test:match -- "chain-run-storage" 2>&1 | tail -30` · ran
+- 2026-08-11 19:16 · `npm run test:match -- "chain-run-storage" 2>&1 | tail -60` · ran
+- 2026-08-11 19:15 · `python3 - <<'PY' for p in ['tests/integration/chain/run-telemetry.integration.test.ts', 'tests/integration/chain/step-li` · ran
+- 2026-08-11 19:14 · `npm run test:match -- "run-telemetry.integration" 2>&1 | grep -A 25 "●.*›" | head -60` · ran
+- 2026-08-11 19:14 · `npm run test:integration 2>&1 | grep -E "^(FAIL|Tests:|Test Suites:| ●)" | grep -v Console | sort -u | head -30` · ran
+- 2026-08-11 19:14 · `npm run test:ci 2>&1 | grep -E "^(FAIL|Tests:|Test Suites:)" | head -20` · ran
+- 2026-08-11 19:13 · `python3 - <<'PY' p='tests/integration/tenant/tenant-isolation.test.ts' s=open(p,encoding='utf-8').read() s=s.replace("""` · ran
+- 2026-08-11 19:11 · `npm run validate:table-contracts 2>&1 | tail -30; echo "=== PHANTOM ==="; npm run validate:no-phantom-columns 2>&1 | tai` · ran
+- 2026-08-11 19:11 · `python3 - <<'PY' p='src/infra/database/sqlite-engine.ts' s=open(p,encoding='utf-8').read() reps = [ ("-- Run-level facts` · ran
+- 2026-08-11 19:11 · `npm run typecheck 2>&1 | tail -40` · ran
+- 2026-08-11 19:02 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci 2>&1 | tail -3 && npm ru` · ran
+- 2026-08-11 18:58 · `{ echo "=========== 1/6 typecheck ==========="; npm run typecheck 2>&1 | tail -3 echo "=========== 2/6 lint:ratchet ====` · ran
+- 2026-08-11 18:56 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad cp $` · ran
+- 2026-08-11 18:56 · `python3 - <<'PY' scr="/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b` · ran
+- 2026-08-11 18:55 · `npm run validate:arch 2>&1 | tail -8` · ran
+- 2026-08-11 18:55 · `npx prettier --check tests/unit/gates/services/temporary-gate-step-targeting.test.ts && { echo "=========== 1/6 typechec` · ran
+- 2026-08-11 18:53 · `python3 - <<'PY' p='tests/unit/gates/services/temporary-gate-step-targeting.test.ts' s=open(p,encoding='utf-8').read() o` · ran
+- 2026-08-11 18:53 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "temporary-gate-step-targeting"` · ran
+- 2026-08-11 18:53 · `{ echo "=========== 1/6 typecheck ==========="; npm run typecheck 2>&1 | tail -4 echo "=========== 2/6 lint:ratchet ====` · ran
+- 2026-08-11 18:51 · `npx prettier --check src/engine/execution/pipeline/stages/13-session-stage.ts src/engine/execution/pipeline/stages/18-ex` · ran
+- 2026-08-11 18:51 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:50 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:50 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:50 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad pyth` · ran
+- 2026-08-11 18:50 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad pyth` · ran
+- 2026-08-11 18:50 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad pyth` · ran
+- 2026-08-11 18:49 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad cat ` · ran
+- 2026-08-11 18:49 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:49 · `npm run test:match -- "temporary-gate-step-targeting" 2>&1 | tail -50` · ran
+- 2026-08-11 18:47 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p,encoding='utf-8').read() old=""` · ran
+- 2026-08-11 18:47 · `python3 - <<'PY' p='tests/integration/chain/step-lifecycle.integration.test.ts' s=open(p,encoding='utf-8').read() s=s.re` · ran
+- 2026-08-11 18:47 · `npm run test:match -- "step-lifecycle" 2>&1 | tail -70` · ran
+- 2026-08-11 18:45 · `npm run test:integration 2>&1 | grep -E "^(FAIL|Tests:|Test Suites:)" | head` · ran
+- 2026-08-11 18:45 · `python3 - <<'PY' p='tests/unit/execution/pipeline/response-formatting-stage.test.ts' s=open(p,encoding='utf-8').read() o` · ran
+- 2026-08-11 18:44 · `npm run test:match -- "response-formatting-stage" 2>&1 | grep -B3 -A 15 "●.*›" | head -40` · ran
+- 2026-08-11 18:44 · `python3 - <<'PY' p='tests/unit/execution/pipeline/response-formatting-stage.test.ts' s=open(p,encoding='utf-8').read() o` · ran
+- 2026-08-11 18:43 · `python3 - <<'PY' p='tests/unit/execution/formatting/response-assembler-chain-cta.test.ts' s=open(p,encoding='utf-8').rea` · ran
+- 2026-08-11 18:42 · `python3 - <<'PY' import re p='tests/unit/execution/pipeline/step-execution-stage.test.ts' s=open(p,encoding='utf-8').rea` · ran
+- 2026-08-11 18:42 · `npm run test:match -- "step-execution-stage" 2>&1 | grep -A 12 "executes chain steps using session state" | head -30` · ran
+- 2026-08-11 18:42 · `npm run test:match -- "response-formatting-stage|step-execution-stage|response-assembler-chain-cta" 2>&1 | grep -E "●|✕|` · ran
+- 2026-08-11 18:42 · `grep -c "target_step_id" tooling/contracts/prompt-engine.json; python3 -c "import json;json.load(open('tooling/contracts` · ran
+- 2026-08-11 18:39 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad; git` · ran
+- 2026-08-11 18:39 · `npm run typecheck 2>&1 | tail -30` · ran
+- 2026-08-11 18:24 · `cat jest.config.js 2>/dev/null || cat jest.config.mjs 2>/dev/null || cat jest.config.ts 2>/dev/null; echo "=== package s` · ran
+- 2026-08-11 18:20 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci 2>&1 | tail -4 && npm ru` · ran
+- 2026-08-11 18:15 · `{ echo "=========== 1/6 typecheck ==========="; npm run typecheck 2>&1 | tail -4; echo "=========== 2/6 lint:ratchet ===` · ran
+- 2026-08-11 18:15 · `git status --porcelain tests/unit/scripts/methodology-vocab-scope.test.ts; echo "(empty = untouched by me, pre-existing)` · ran
+- 2026-08-11 18:15 · `git stash list >/dev/null; git diff --name-only tests/unit/scripts/methodology-vocab-scope.test.ts; npx prettier --write` · ran
+- 2026-08-11 18:15 · `git diff --stat src/ | tail -3 && npx prettier --check src tests 2>&1 | tail -5` · ran
+- 2026-08-11 18:14 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:14 · `python3 - <<'PY' p='tests/unit/execution/pipeline/response-formatting-stage.test.ts' s=open(p).read() old="""describe('R` · ran
+- 2026-08-11 18:14 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:14 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:13 · `python3 - <<'PY' p='tests/unit/text-references/text-reference-store.test.ts' s=open(p).read() old=""" expect(variables.s` · ran
+- 2026-08-11 18:13 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:13 · `echo "########## F4 RETRY ##########" python3 -c " p='src/engine/gates/services/gate-verdict-processor.ts'; s=open(p).re` · ran
+- 2026-08-11 18:13 · `python3 - <<'PY' p='tests/unit/execution/pipeline/step-response-capture-stage.test.ts' s=open(p).read() old=""" test('pr` · ran
+- 2026-08-11 18:12 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:12 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:12 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:11 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:11 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:11 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad pyth` · ran
+- 2026-08-11 18:11 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:10 · `SCR=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad echo` · ran
+- 2026-08-11 18:09 · `npm run test:ci > /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/s` · ran
+- 2026-08-11 18:09 · `npm run typecheck 2>&1 | tail -4; echo "===RATCHET-TESTS==="; npm run typecheck:tests:ratchet 2>&1 | tail -4` · ran
+- 2026-08-11 18:09 · `python3 - <<'PY' import json base=json.load(open('.eslint-ratchet-baseline.json'))['byRule'] d=json.load(open('/tmp/clau` · ran
+- 2026-08-11 18:09 · `head -c 400 .eslint-ratchet-baseline.json; echo; python3 - <<'PY' import json base=json.load(open('.eslint-ratchet-basel` · ran
+- 2026-08-11 18:08 · `node -e " const b=require('./.eslint-ratchet-baseline.json'); " 2>/dev/null; python3 - <<'PY' import json,subprocess,os,` · ran
+- 2026-08-11 18:08 · `npm run lint:ratchet 2>&1 | tail -15` · ran
+- 2026-08-11 18:08 · `python3 - <<'PY' # remove now-unnecessary casts p='src/engine/execution/parsers/symbolic-operator-parser.ts' s=open(p).r` · ran
+- 2026-08-11 18:07 · `python3 - <<'PY' p='src/engine/execution/capture/step-capture-service.ts' s=open(p).read() old = """ // Determine target` · ran
+- 2026-08-11 18:06 · `npx eslint src --format json --output-file /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8` · ran
+- 2026-08-11 18:06 · `npx eslint src --format compact 2>&1 | grep -E "no-unnecessary-type-assertion|import-x/order|max-params|prettier/prettie` · ran
+- 2026-08-11 18:05 · `cat scripts/eslint-ratchet.js | head -40` · ran
+- 2026-08-11 18:05 · `npx eslint src tests --format compact 2>&1 | grep -E "no-unnecessary-type-assertion|import-x/order|max-params|prettier/p` · ran
+- 2026-08-11 18:05 · `npm run lint:ratchet 2>&1 | tail -25` · ran
+- 2026-08-11 18:05 · `npm run typecheck:tests:ratchet 2>&1 | tail -5 && npm run test:ci 2>&1 | tail -6` · ran
+- 2026-08-11 18:04 · `python3 - <<'PY' import re p='tests/unit/chain-session/chain-session-hook-projection.test.ts' s=open(p).read() s=s.repla` · ran
+- 2026-08-11 18:04 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep -E "chain-session-hook-projection|step-response-capture-stage"` · ran
+- 2026-08-11 18:04 · `npm run test:match -- "chain-session-hook-projection" 2>&1 | tail -20 && npm run typecheck:tests:ratchet 2>&1 | tail -8` · ran
+- 2026-08-11 18:03 · `npm run test:match -- "chain-session-hook-projection" 2>&1 | tail -60` · ran
+- 2026-08-11 18:02 · `npm run test:integration 2>&1 | grep -E "^(FAIL| ●|Tests:|Test Suites:)" | grep -v Console | sort -u | head -30` · ran
+- 2026-08-11 18:02 · `python3 - <<'PY' p='tests/unit/execution/pipeline/step-response-capture-stage.test.ts' s=open(p).read() old="expect(comp` · ran
+- 2026-08-11 18:01 · `npm run test:match -- "step-response-capture" 2>&1 | sed -n '1,45p'` · ran
+- 2026-08-11 18:01 · `python3 - <<'PY' p='tests/unit/execution/pipeline/step-response-capture-stage.test.ts' s=open(p).read() for old,new in [` · ran
+- 2026-08-11 18:00 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/13-session-stage.ts' s=open(p).read() old=""" const nodes = thi` · ran
+- 2026-08-11 18:00 · `python3 - <<'PY' p='tests/unit/execution/pipeline/session-stage.test.ts' s=open(p).read() # revert the three sessionCont` · ran
+- 2026-08-11 18:00 · `npm run test:match -- "session-stage" 2>&1 | sed -n '1,90p'` · ran
+- 2026-08-11 17:59 · `python3 - <<'PY' for p,pairs in { 'tests/unit/execution/pipeline/step-response-capture-stage.test.ts':[ ("const advanceS` · ran
+- 2026-08-11 17:58 · `npm run test:ci 2>&1 | grep -E "^(FAIL| ●)" | grep -v "Console" | head -40` · ran
+- 2026-08-11 17:57 · `npm run test:ci 2>&1 | tail -80` · ran
+- 2026-08-11 17:57 · `python3 - <<'PY' p='tests/unit/execution/capture/unknown-observation-processor.test.ts' s=open(p).read() old=""" ( sessi` · ran
+- 2026-08-11 17:57 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "unknown-observation-processor.test"` · ran
+- 2026-08-11 17:56 · `python3 - <<'PY' p='tests/integration/resources/resource-registration.test.ts' s=open(p).read() old=""" state: { current` · ran
+- 2026-08-11 17:56 · `python3 - <<'PY' import re for p in ['tests/unit/chain-session/chain-session-store.test.ts', 'tests/unit/chain-session/m` · ran
+- 2026-08-11 17:55 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep -E "chain-session-argument-history|run-telemetry.integration|u` · ran
+- 2026-08-11 17:55 · `python3 - <<'PY' p='src/engine/execution/operators/types.ts' s=open(p).read() old=""" /** Stable node identity, minted a` · ran
+- 2026-08-11 17:55 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep -E "nodeId" | grep "^tests" | sed 's/:.*//' | sort -u | while ` · ran
+- 2026-08-11 17:54 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep -E "nodeId" | sed 's/(.*//' | sort | uniq -c | sort -rn` · ran
+- 2026-08-11 17:54 · `python3 - <<'PY' p='src/engine/execution/parsers/symbolic-operator-parser.ts' s=open(p).read() old=" nodeId: nodeIds[ind` · ran
+- 2026-08-11 17:54 · `python3 - <<'PY' p='src/engine/execution/parsers/types/operator-types.ts' s=open(p).read() old=""" /** * Stable node ide` · ran
+- 2026-08-11 17:53 · `python3 - <<'PY' p='src/modules/resources/handlers/observability-resources.ts' s=open(p).read() import re m=re.search(r"` · ran
+- 2026-08-11 17:53 · `python3 - <<'PY' p='src/mcp/tools/prompt-engine/core/chain-session-router.ts' s=open(p).read() s=s.replace("""import { C` · ran
+- 2026-08-11 17:53 · `python3 - <<'PY' p='src/shared/utils/node-order.ts' s=open(p).read() s=s.replace("import type { ChainNode } from '#share` · ran
+- 2026-08-11 17:52 · `python3 - <<'PY' p='src/engine/execution/pipeline/stages/13-session-stage.ts' s=open(p).read() s=s.replace("import { cur` · ran
+- 2026-08-11 17:51 · `python3 - <<'PY' p='src/engine/gates/services/gate-verdict-processor.ts' s=open(p).read() old = """ this.handleAdvisoryF` · ran
+- 2026-08-11 17:49 · `npm run typecheck 2>&1 | tail -60` · ran
+- 2026-08-11 16:44 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci 2>&1 | tail -8` · ran
+- 2026-08-11 16:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -150` · ran
+- 2026-08-11 16:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck:tests:ratchet 2>&1 | tail -15` · ran
+- 2026-08-11 16:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run lint:ratchet 2>&1 | tail -15` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck 2>&1 | tail -15` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp src/shared/utils/node-order.ts /tmp/claude-1000/-home-minipu` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp src/engine/execution/parsers/symbolic-operator-parser.ts /tm` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp src/engine/execution/pipeline/stages/04-parsing-stage.ts /tm` · ran
+- 2026-08-11 16:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-` · ran
+- 2026-08-11 16:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -i 's/if (seenStepIds.has(step.id)) {/if (false \&\& seenSt` · ran
+- 2026-08-11 16:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:match -- "yaml-to-prompt-data" 2>&1 | tail -40 ech` · ran
+- 2026-08-11 16:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:match -- "prompt-schema" 2>&1 | tail -60` · ran
+- 2026-08-11 16:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:match -- "node-order" 2>&1 | tail -60` · ran
+- 2026-08-11 16:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck:tests:ratchet 2>&1 | tail -40` · ran
+- 2026-08-11 16:37 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "comm` · ran
+- 2026-08-11 16:37 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck:tests:ratchet 2>&1 | tail -80` · ran
+- 2026-08-11 16:37 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run lint:ratchet 2>&1 | tail -40` · ran
+- 2026-08-11 16:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src/shared/utils/node-order.ts src/engine/execution/` · ran
+- 2026-08-11 16:35 · `npm run lint:ratchet 2>&1 | tail -60` · ran
+- 2026-08-11 16:35 · `npm run typecheck 2>&1 | tail -80` · ran
+- 2026-08-11 16:35 · `npm run typecheck 2>&1 | tail -80` · ran

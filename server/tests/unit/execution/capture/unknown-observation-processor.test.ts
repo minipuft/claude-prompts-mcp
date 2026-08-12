@@ -23,11 +23,17 @@ const createLogger = (): Logger =>
     debug: jest.fn(),
   }) as unknown as Logger;
 
-const discovered = (id: string, statement: string, blocking?: boolean): UnknownObservation => ({
+const discovered = (
+  id: string,
+  statement: string,
+  blocking?: boolean,
+  target_step_id?: string
+): UnknownObservation => ({
   type: 'unknown_discovered',
   id,
   statement,
   ...(blocking === undefined ? {} : { blocking }),
+  ...(target_step_id === undefined ? {} : { target_step_id }),
 });
 
 const resolved = (
@@ -92,6 +98,62 @@ describe('computeUnknownLedger — transition matrix', () => {
 
     const lowered = computeUnknownLedger(raised, [discovered('cache-ttl', 'TTL undecided')], 5);
     expect(lowered[0]?.blocking).toBe(false);
+  });
+
+  // P4: target_step_id (wire) -> targetStepId (ledger) is the field the mutation policy reads
+  // back at resolution time — confirm it survives the create path and the wire/internal rename.
+  test('discover with target_step_id carries it onto the ledger entry as targetStepId', () => {
+    const ledger = computeUnknownLedger(
+      [],
+      [discovered('cache-ttl', 'TTL undecided', true, 'draft-outline')],
+      1
+    );
+
+    expect(ledger[0]).toMatchObject({ targetStepId: 'draft-outline' });
+  });
+
+  test('discover without target_step_id leaves targetStepId absent (not a crash, not a default)', () => {
+    const ledger = computeUnknownLedger([], [discovered('cache-ttl', 'TTL undecided')], 1);
+
+    expect(ledger[0]).not.toHaveProperty('targetStepId');
+  });
+
+  test('re-discovery refreshes targetStepId the same way it refreshes blocking, including clearing it on omission', () => {
+    const opened = computeUnknownLedger(
+      [],
+      [discovered('cache-ttl', 'TTL undecided', true, 'draft-outline')],
+      1
+    );
+    expect(opened[0]?.targetStepId).toBe('draft-outline');
+
+    const retargeted = computeUnknownLedger(
+      opened,
+      [discovered('cache-ttl', 'TTL undecided', true, 'finish')],
+      2
+    );
+    expect(retargeted[0]?.targetStepId).toBe('finish');
+
+    const cleared = computeUnknownLedger(
+      retargeted,
+      [discovered('cache-ttl', 'TTL undecided', true)],
+      3
+    );
+    expect(cleared[0]).not.toHaveProperty('targetStepId');
+  });
+
+  test('targetStepId is still readable after the unknown resolves — the mutation policy reads it at resolution time', () => {
+    const opened = computeUnknownLedger(
+      [],
+      [discovered('cache-ttl', 'TTL undecided', true, 'draft-outline')],
+      1
+    );
+    const resolvedLedger = computeUnknownLedger(
+      opened,
+      [resolved('cache-ttl', 'Turned out not to matter', 'irrelevant')],
+      2
+    );
+
+    expect(resolvedLedger[0]).toMatchObject({ state: 'resolved', targetStepId: 'draft-outline' });
   });
 
   test('discover on an ACTIVE id updates the statement without re-stamping discoveredAtStep', () => {
@@ -300,7 +362,7 @@ describe('UnknownObservationProcessor', () => {
       jest.fn<
         (
           sessionId: string,
-          stepNumber: number,
+          nodeId: string,
           observations: UnknownObservation[]
         ) => Promise<UnknownLedgerEntry[]>
       >();
@@ -317,7 +379,7 @@ describe('UnknownObservationProcessor', () => {
     const ledger = await processor.applyObservations(
       new ExecutionContext({ command: '>>demo' }),
       'sess-1',
-      2,
+      'n2',
       []
     );
 
@@ -335,11 +397,11 @@ describe('UnknownObservationProcessor', () => {
     const ledger = await processor.applyObservations(
       new ExecutionContext({ command: '>>demo' }),
       'sess-1',
-      2,
+      'n2',
       observations
     );
 
-    expect(applyUnknownObservations).toHaveBeenCalledWith('sess-1', 2, observations);
+    expect(applyUnknownObservations).toHaveBeenCalledWith('sess-1', 'n2', observations);
     expect(ledger).toBe(updated);
   });
 
@@ -349,7 +411,7 @@ describe('UnknownObservationProcessor', () => {
     const processor = new UnknownObservationProcessor(store, createLogger());
 
     await expect(
-      processor.applyObservations(new ExecutionContext({ command: '>>demo' }), 'sess-1', 2, [
+      processor.applyObservations(new ExecutionContext({ command: '>>demo' }), 'sess-1', 'n2', [
         discovered('cache-ttl', 'TTL undecided'),
       ])
     ).rejects.toThrow('persist failed');

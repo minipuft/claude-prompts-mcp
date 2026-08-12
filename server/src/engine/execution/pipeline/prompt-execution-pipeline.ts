@@ -117,6 +117,9 @@ export class PromptExecutionPipeline {
     store.append({
       sessionId: session.sessionId,
       chainId: session.chainId,
+      // `nodeId` deliberately omitted: this closes out the RUN from the pipeline's single error
+      // boundary, which sees every failure but not which node was mid-render. `buildAppendParams`
+      // binds the column NULL for it.
       status: 'failed',
       errorMessage: failure.message,
       startedAt: failedAt,

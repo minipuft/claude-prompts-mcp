@@ -72,6 +72,7 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       session_id TEXT NOT NULL,
       chain_id TEXT,
       step_number INTEGER,
+      node_id TEXT,
       prompt_id TEXT,
       status TEXT NOT NULL,
       substate_json TEXT,
@@ -86,6 +87,8 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       gate_retries INTEGER,
       unknowns_opened INTEGER,
       unknowns_closed INTEGER,
+      nodes_inserted INTEGER,
+      nodes_skipped INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
@@ -130,7 +133,8 @@ const readTelemetryRow = (
 ): Record<string, unknown> | undefined =>
   db
     .prepare(
-      `SELECT status, steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed
+      `SELECT status, steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed,
+              nodes_inserted, nodes_skipped
        FROM execution_records
        WHERE session_id = ? AND completed_at IS NOT NULL
        ORDER BY execution_id DESC LIMIT 1`
@@ -216,10 +220,10 @@ describe('run telemetry, session counters through the ledger', () => {
       verdict: 'PASS',
       rawVerdict: 'GATE_REVIEW: PASS',
     });
-    await sessionStore.applyUnknownObservations(sessionId, 1, [
+    await sessionStore.applyUnknownObservations(sessionId, 'n1', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
     ]);
-    await sessionStore.applyUnknownObservations(sessionId, 2, [
+    await sessionStore.applyUnknownObservations(sessionId, 'n2', [
       { type: 'unknown_resolved', id: 'cache-ttl', statement: '30s', resolution: 'answered' },
     ]);
 
@@ -227,6 +231,112 @@ describe('run telemetry, session counters through the ledger', () => {
       recordStore.append({ sessionId, chainId: 'chain-tel', stepNumber: step, status: 'working' });
     }
   };
+
+  /**
+   * One insertion and one skip through the real store operations — no hand-set counters.
+   * The run stands at n1, so `n2` is strictly ahead and skippable and the inserted node lands
+   * between them.
+   */
+  const driveMutations = async (sessionId: string): Promise<void> => {
+    const inserted = await sessionStore.insertNodeAfter(sessionId, 'n1', {
+      stepName: 'Investigate: TTL undecided',
+      promptId: 'investigate_unknown',
+      origin: 'inserted',
+      unknownId: 'cache-ttl',
+    });
+    expect(inserted).not.toBeNull();
+    expect(await sessionStore.markNodeSkipped(sessionId, 'n2', 'cache-ttl')).toBe(true);
+  };
+
+  test('a mutated run stamps the P4 counters, values not NULLs, on BOTH terminal writers', async () => {
+    // Completed path (21-formatting-stage).
+    await sessionStore.createSession('sess-mutated', 'chain-tel', 3);
+    await driveRunActivity('sess-mutated', 3);
+    await driveMutations('sess-mutated');
+
+    const stage = new ResponseFormattingStage(
+      new ResponseFormatter(createLogger()),
+      new ResponseAssembler(),
+      createLogger(),
+      recordStore,
+      sessionStore
+    );
+    const context = new ExecutionContext({ command: '>>chain' });
+    context.executionPlan = { strategy: 'chain', gates: [] } as any;
+    context.sessionContext = {
+      sessionId: 'sess-mutated',
+      chainId: 'chain-tel',
+      isChainExecution: true,
+      currentStep: 4,
+      totalSteps: 4,
+    };
+    context.executionResults = { content: 'final output' };
+    context.state.session.chainComplete = true;
+    await stage.execute(context);
+
+    // Values, not NULLs, and steps_planned reflects the INSERTED node (3 planned + 1).
+    expect(readTelemetryRow(db, 'sess-mutated')).toEqual({
+      status: 'completed',
+      steps_planned: 4,
+      gates_fired: 2,
+      gate_retries: 1,
+      unknowns_opened: 1,
+      unknowns_closed: 1,
+      nodes_inserted: 1,
+      nodes_skipped: 1,
+    });
+
+    // Failure path (prompt-execution-pipeline) — the same numbers, on a `failed` row. Wiring
+    // only the completed writer is the exact partial fix this suite exists to reject.
+    await sessionStore.createSession('sess-mutated-doomed', 'chain-tel', 3);
+    await driveRunActivity('sess-mutated-doomed', 2);
+    await driveMutations('sess-mutated-doomed');
+
+    const stages: PipelineStage[] = stageOrder.map((name) => {
+      if (name === 'SessionManagement') {
+        return {
+          name,
+          execute: async (ctx: ExecutionContext) => {
+            ctx.sessionContext = {
+              sessionId: 'sess-mutated-doomed',
+              chainId: 'chain-tel',
+              isChainExecution: true,
+              currentStep: 2,
+              totalSteps: 4,
+            };
+          },
+        };
+      }
+      if (name === 'StepExecution') {
+        return {
+          name,
+          execute: async () => {
+            throw new Error('render exploded');
+          },
+        };
+      }
+      return { name, execute: async () => undefined };
+    });
+
+    const pipeline = new PromptExecutionPipeline(stages, {
+      logger: createLogger(),
+      metricsProvider: () => undefined,
+      executionRecordStore: recordStore,
+      chainSessionStore: sessionStore,
+    });
+    await expect(pipeline.execute({ command: '>>chain' })).rejects.toThrow('render exploded');
+
+    expect(readTelemetryRow(db, 'sess-mutated-doomed')).toEqual({
+      status: 'failed',
+      steps_planned: 4,
+      gates_fired: 2,
+      gate_retries: 1,
+      unknowns_opened: 1,
+      unknowns_closed: 1,
+      nodes_inserted: 1,
+      nodes_skipped: 1,
+    });
+  });
 
   test('a completed run stamps every telemetry column on its terminal record', async () => {
     await sessionStore.createSession('sess-done', 'chain-tel', 3);
@@ -268,6 +378,8 @@ describe('run telemetry, session counters through the ledger', () => {
       gate_retries: 1,
       unknowns_opened: 1,
       unknowns_closed: 1,
+      nodes_inserted: 0,
+      nodes_skipped: 0,
     });
   });
 
@@ -303,6 +415,8 @@ describe('run telemetry, session counters through the ledger', () => {
       gateRetries: row?.['gate_retries'],
       unknownsOpened: row?.['unknowns_opened'],
       unknownsClosed: row?.['unknowns_closed'],
+      nodesInserted: row?.['nodes_inserted'],
+      nodesSkipped: row?.['nodes_skipped'],
     });
   });
 
@@ -353,6 +467,8 @@ describe('run telemetry, session counters through the ledger', () => {
       gate_retries: 1,
       unknowns_opened: 1,
       unknowns_closed: 1,
+      nodes_inserted: 0,
+      nodes_skipped: 0,
     });
   });
 

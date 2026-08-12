@@ -52,6 +52,12 @@ export type TemporaryGateInput =
       readonly source?: 'manual' | 'automatic' | 'analysis';
       /** Target specific step number in chain execution */
       readonly target_step_number?: number;
+      /**
+       * Target a specific step by its stable node id (kebab-case, or `nK` for symbolic chains).
+       * Sibling of `target_step_number`, not a replacement — a gate may carry either, and the
+       * registrar fills in whichever was not supplied.
+       */
+      readonly target_step_id?: string;
       /** Apply to multiple steps in chain execution */
       readonly apply_to_steps?: readonly number[];
     };

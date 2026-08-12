@@ -17,7 +17,7 @@ import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
-import type { PersistedChainRunRegistry } from '../../../src/shared/types/index.js';
+import type { ChainSession } from '../../../src/shared/types/index.js';
 
 /**
  * The chain of custody for a declared unknown, composed from production units:
@@ -250,17 +250,31 @@ describe('unknowns ledger, rendered section', () => {
  * (`ChainSessionStore`'s constructor accepts a registry via DI) without a SQLite engine.
  */
 class InMemoryRunRegistry implements ChainRunRegistry {
-  private blob: PersistedChainRunRegistry = {};
+  private rows: ChainSession[] = [];
 
   async ensureInitialized(): Promise<void> {}
 
-  async load(): Promise<PersistedChainRunRegistry> {
-    return this.blob;
+  async load(): Promise<ChainSession[]> {
+    // Structured-clone rather than returning the live objects: the real registry reconstructs
+    // sessions from rows, so a double that hands back the same references would let a mutation
+    // after save() reach the "loaded" session and hide a reconstruction gap.
+    return this.rows.map(cloneSession);
   }
 
-  async save(store: PersistedChainRunRegistry): Promise<void> {
-    this.blob = store;
+  async save(sessions: readonly ChainSession[]): Promise<void> {
+    this.rows = sessions.map(cloneSession);
   }
+
+  deleteRunsForOwners(): void {}
+}
+
+/** Deep copy that survives the `stepStates` Map, which JSON round-tripping does not. */
+function cloneSession(session: ChainSession): ChainSession {
+  const copy = JSON.parse(
+    JSON.stringify({ ...session, state: { ...session.state, stepStates: undefined } })
+  ) as ChainSession;
+  copy.state.stepStates = new Map(session.state.stepStates ?? []);
+  return copy;
 }
 
 describe('unknowns ledger, persistence round-trip', () => {
@@ -275,7 +289,7 @@ describe('unknowns ledger, persistence round-trip', () => {
 
     const writer = new ChainSessionStore(logger, textReferenceStore, options, undefined, registry);
     await writer.createSession('sess-rt', 'chain-rt', 2);
-    const writtenLedger = await writer.applyUnknownObservations('sess-rt', 1, [
+    const writtenLedger = await writer.applyUnknownObservations('sess-rt', 'n1', [
       {
         type: 'unknown_discovered',
         id: 'cache-ttl',

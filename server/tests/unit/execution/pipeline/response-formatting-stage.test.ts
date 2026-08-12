@@ -51,11 +51,45 @@ describe('ResponseFormattingStage', () => {
     expect(text).toContain('Chain output with inline guidance');
     expect(text).toContain('Gate Summary');
     expect(text).toContain('Chain: chain-demo#2');
-    expect(text).toContain('✓ Chain complete (2/2)');
-    expect(text).toContain('Next: Chain complete. No user_response needed.');
+    // 2/2 with no completion latch means "standing on the final step, work outstanding" —
+    // it is NOT a completed run, and saying so is the P3 row-13 fix.
+    expect(text).toContain('Progress 2/2');
+    expect(text).not.toContain('Chain complete');
+    expect(text).toContain('user_response="<your step output>"');
     // Note: structuredContent is intentionally disabled (includeStructuredContent: false)
     // to keep model input lean. Chain metadata is included in the text footer instead.
     expect(response.structuredContent).toBeUndefined();
+  });
+
+  test('a completed run gets the completion footer, not a request for more output', async () => {
+    const formatter = new ResponseFormatter(createLogger());
+    const stage = new ResponseFormattingStage(formatter, new ResponseAssembler(), createLogger());
+
+    const context = new ExecutionContext({ command: '>>chain' });
+    context.executionPlan = {
+      strategy: 'chain',
+      gates: [],
+      requiresFramework: false,
+      requiresSession: true,
+      llmValidationEnabled: true,
+      category: 'analysis',
+    } as any;
+    context.sessionContext = {
+      sessionId: 'sess-123',
+      chainId: 'chain-demo#2',
+      isChainExecution: true,
+      currentStep: 3,
+      totalSteps: 2,
+    };
+    context.executionResults = { content: 'Execution complete.' };
+    // The latch StepExecutionStage sets from the store's terminal runStatus.
+    context.state.session.chainComplete = true;
+
+    await stage.execute(context);
+
+    const text = context.response?.content[0].text ?? '';
+    expect(text).toContain('✓ Chain complete (2/2)');
+    expect(text).toContain('Next: Chain complete. No user_response needed.');
   });
 
   test('passes simple prompt content through response formatter when no session data is present', async () => {
@@ -106,6 +140,75 @@ describe('ResponseFormattingStage', () => {
  * record at `working` permanently. Failure is NOT here; it is emitted from the pipeline's
  * catch boundary, because an abort does not throw and a throw never reaches this stage.
  */
+describe('ResponseFormattingStage — stepsExecuted', () => {
+  /** Captures the FormatterExecutionContext the stage builds, which is otherwise unobservable. */
+  const capturingFormatter = (): {
+    port: any;
+    captured: Array<Record<string, unknown>>;
+  } => {
+    const captured: Array<Record<string, unknown>> = [];
+    const port = {
+      formatPromptEngineResponse: (_text: string, formatterContext: Record<string, unknown>) => {
+        captured.push(formatterContext);
+        return { content: [{ type: 'text', text: 'ok' }], isError: false };
+      },
+    };
+    return { port, captured };
+  };
+
+  const chainContext = (): ExecutionContext => {
+    const context = new ExecutionContext({ command: '>>chain' });
+    context.executionPlan = {
+      strategy: 'chain',
+      gates: [],
+      requiresFramework: false,
+      requiresSession: true,
+      llmValidationEnabled: true,
+      category: 'analysis',
+    } as any;
+    context.sessionContext = {
+      sessionId: 'sess-count',
+      chainId: 'chain-count#1',
+      isChainExecution: true,
+      currentStep: 3,
+      totalSteps: 3,
+    };
+    context.executionResults = { content: 'output' };
+    return context;
+  };
+
+  test('reports the number of nodes actually executed, not the current position', async () => {
+    const { port, captured } = capturingFormatter();
+    const sessionStore = {
+      getSession: () => ({ executionOrder: ['n1'] }),
+      getRunTelemetry: () => undefined,
+    } as any;
+    const stage = new ResponseFormattingStage(
+      port,
+      new ResponseAssembler(),
+      createLogger(),
+      null,
+      sessionStore
+    );
+
+    // Standing at position 3 with only ONE node advanced past — the shape a run takes when a
+    // step is skipped or the run resumed mid-flight. Reporting `currentStep` would claim 3.
+    await stage.execute(chainContext());
+
+    expect(captured[0]!['stepsExecuted']).toBe(1);
+  });
+
+  test('falls back to the position when no session store is wired', async () => {
+    const { port, captured } = capturingFormatter();
+    const stage = new ResponseFormattingStage(port, new ResponseAssembler(), createLogger());
+
+    await stage.execute(chainContext());
+
+    // Undefined store means "cannot count", not "counted zero".
+    expect(captured[0]!['stepsExecuted']).toBe(3);
+  });
+});
+
 describe('ResponseFormattingStage terminal records', () => {
   const createRecordStore = (): {
     store: ExecutionRecordStore;

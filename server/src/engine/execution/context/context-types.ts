@@ -54,7 +54,14 @@ export interface SessionContext {
   sessionId: string;
   chainId?: string;
   isChainExecution: boolean;
+  /**
+   * Derived 1-based position of the run. Kept as an integer because rendering, injection
+   * targeting and the completion latch are all positional; `currentNodeId` is the identity
+   * the store actually addresses by.
+   */
   currentStep?: number;
+  /** Stable node id the run is standing at. `null` once the run passed its terminal node. */
+  currentNodeId?: string | null;
   totalSteps?: number;
   pendingReview?: PendingGateReview;
   /** Result status from the previous step (for injection condition evaluation) */

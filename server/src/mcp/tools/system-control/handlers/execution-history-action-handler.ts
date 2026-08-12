@@ -156,10 +156,18 @@ function formatTelemetryLine(
       .map((record) => record.stepNumber)
   ).size;
 
+  // Mutation counters render only when a mutation happened: an unmutated run's line stays
+  // byte-identical to its pre-P4 shape, and zeroes are not reported as if they were news.
+  const mutations =
+    (newest.nodesInserted ?? 0) > 0 || (newest.nodesSkipped ?? 0) > 0
+      ? ` · nodes inserted ${newest.nodesInserted ?? 0} / skipped ${newest.nodesSkipped ?? 0}`
+      : '';
+
   return (
     `_planned ${stepsPlanned ?? 0} / executed ${stepsExecuted}` +
     ` · gates fired ${gatesFired ?? 0} (retries ${gateRetries ?? 0})` +
-    ` · unknowns opened ${unknownsOpened ?? 0} / closed ${unknownsClosed ?? 0}_`
+    ` · unknowns opened ${unknownsOpened ?? 0} / closed ${unknownsClosed ?? 0}` +
+    `${mutations}_`
   );
 }
 

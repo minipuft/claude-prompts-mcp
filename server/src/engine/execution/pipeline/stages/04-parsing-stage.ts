@@ -16,6 +16,7 @@ import type { SymbolicCommandParseResult } from '../../parsers/types/operator-ty
 import type { ConvertedPrompt } from '../../types.js';
 
 import { PromptError } from '#shared/utils/index.js';
+import { mintNodeIds } from '#shared/utils/node-order.js';
 
 /**
  * Provider function to get all converted prompts.
@@ -141,6 +142,9 @@ export class CommandParsingStage extends BasePipelineStage {
 
     if (convertedPrompt.chainSteps?.length) {
       parsedCommand.commandType = 'chain';
+      // Minted once per parse, in step order — explicit `id` wins, otherwise a slug of
+      // `stepName` (P3 Tier 1, additive only: nothing downstream consumes this yet).
+      const nodeIds = mintNodeIds(convertedPrompt.chainSteps);
       parsedCommand.steps = convertedPrompt.chainSteps.map((step, index) => {
         const stepConverted = this.findConvertedPrompt(step.promptId);
         if (!stepConverted) {
@@ -149,6 +153,7 @@ export class CommandParsingStage extends BasePipelineStage {
 
         return {
           stepNumber: index + 1,
+          nodeId: nodeIds[index],
           promptId: step.promptId,
           args: (argResult as any).processedArgs,
           variableName: step.stepName ?? `step_${index + 1}`,

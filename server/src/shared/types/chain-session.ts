@@ -13,6 +13,7 @@
 
 import type {
   StepMilestone,
+  ChainNode,
   ChainRunStatus,
   ChainState,
   PendingGateReview,
@@ -82,6 +83,15 @@ export interface UnknownObservation {
   resolution?: 'answered' | 'irrelevant';
   /** Discovered-only. Defaults to false. */
   blocking?: boolean;
+  /**
+   * Discovered-only. Stable node id (kebab-case or `nK`) of the downstream step the P4
+   * mutation policy skips if this unknown later resolves `irrelevant`. Snake_case here
+   * (not `targetStepId`) because this interface is the exact runtime shape the Zod
+   * `unknownDiscoveredSchema` parse produces — there is no field-renaming layer between the
+   * MCP request and this type, matching the precedent already set by the sibling
+   * `GateSpecification['target_step_id']` union member in `execution.ts`.
+   */
+  target_step_id?: string;
 }
 
 /** A ledger row tracking one unknown's lifecycle across a chain run. */
@@ -94,6 +104,14 @@ export interface UnknownLedgerEntry {
   blocking: boolean;
   discoveredAtStep: number;
   resolvedAtStep?: number;
+  /**
+   * Carried from `UnknownObservation.target_step_id` at discovery time (camelCase here,
+   * matching this interface's existing `discoveredAtStep`/`resolvedAtStep` convention rather
+   * than the wire's snake_case). Present only when the discovering observation named one;
+   * still readable at resolution time, which is the point — the mutation policy consults it
+   * when an `unknown_resolved` observation carries `resolution: 'irrelevant'`.
+   */
+  targetStepId?: string;
 }
 
 export interface SessionBlueprint {
@@ -106,8 +124,8 @@ export interface ChainSession {
   sessionId: string;
   chainId: string;
   state: ChainState;
-  currentStepId?: string;
-  executionOrder: number[];
+  /** Node ids in the order they were advanced past. Length = steps actually executed. */
+  executionOrder: string[];
   startTime: number;
   lastActivity: number;
   originalArgs: Record<string, unknown>;
@@ -154,6 +172,22 @@ export const TERMINAL_RUN_STATUSES: readonly ChainRunStatus[] = [
 export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean =>
   status !== undefined && (TERMINAL_RUN_STATUSES as readonly string[]).includes(status);
 
+/**
+ * True when a run has finished: its status is terminal, or it has advanced past its last node
+ * (`currentNodeId === null`).
+ *
+ * Identity-based on purpose. The ordinal comparison this replaces (`currentStep >= totalSteps`)
+ * reports a run *standing on* its final step as finished — the completion lie that made a
+ * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is the
+ * primary signal because the store latches it at the moment the run passes its terminal node;
+ * `currentNodeId === null` is the same fact read off the state document, and covers a session
+ * loaded from a pre-latch blob.
+ */
+export const isRunComplete = (session: {
+  runStatus?: ChainRunStatus;
+  state: { currentNodeId: string | null };
+}): boolean => isTerminalRunStatus(session.runStatus) || session.state.currentNodeId === null;
+
 export interface GateReviewOutcomeUpdate {
   verdict: 'PASS' | 'FAIL';
   rationale?: string;
@@ -173,30 +207,29 @@ export interface ChainSessionSummary {
   promptId?: string;
 }
 
-export interface PersistedChainRunRegistry {
-  version?: number;
-  runs?: Record<string, unknown>;
-  runMapping?: Record<string, string[]>;
-  baseRunMapping?: Record<string, string[]>;
-  runToBase?: Record<string, string>;
-  /** Legacy keys preserved for backward compatibility */
-  sessions?: Record<string, unknown>;
-  chainMapping?: Record<string, string[]>;
-  baseChainMapping?: Record<string, string[]>;
-  runChainToBase?: Record<string, string>;
-}
+// Chain runs persist as `chain_runs` + `chain_run_nodes` rows. `ChainRunRegistry.load/save`
+// exchange `ChainSession` directly, so no persisted-shape type sits between the store and
+// storage — the columns and the residual document ARE the persisted shape.
 
 export interface ChainSessionLookupOptions extends StateStoreOptions {
   includeDormant?: boolean;
 }
 
 export interface ChainSessionService {
+  /**
+   * Create a run.
+   *
+   * `totalSteps` remains the cardinality of the run; `options.nodes` supplies the run's frozen
+   * identity list. Callers that have parsed steps pass `nodes` (ids minted at parse time);
+   * callers that only know a count get `mintSequentialIds(totalSteps)` synthesized for them, so
+   * the legacy call shape keeps working.
+   */
   createSession(
     sessionId: string,
     chainId: string,
     totalSteps: number,
     originalArgs?: Record<string, unknown>,
-    options?: StateStoreOptions & { blueprint?: SessionBlueprint }
+    options?: StateStoreOptions & { blueprint?: SessionBlueprint; nodes?: ChainNode[] }
   ): Promise<ChainSession>;
   getSession(sessionId: string, scope?: StateStoreOptions): ChainSession | undefined;
   hasActiveSession(sessionId: string): boolean;
@@ -239,24 +272,24 @@ export interface ChainSessionService {
   listActiveSessions(limit?: number, scope?: StateStoreOptions): ChainSessionSummary[];
   updateSessionState(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     stepResult: string,
     metadata?: Record<string, unknown>
   ): Promise<boolean>;
   setStepState(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     milestone: StepMilestone,
     isPlaceholder?: boolean
   ): boolean;
-  getStepState(sessionId: string, stepNumber: number): StepMetadata | undefined;
+  getStepState(sessionId: string, nodeId: string): StepMetadata | undefined;
   transitionStepState(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     newMilestone: StepMilestone,
     isPlaceholder?: boolean
   ): Promise<boolean>;
-  isStepComplete(sessionId: string, stepNumber: number): boolean;
+  isStepComplete(sessionId: string, nodeId: string): boolean;
   /**
    * Transition the run-level lifecycle status. Refuses transitions out of terminal
    * states (completed/failed/cancelled). Returns true on accepted transition,
@@ -276,23 +309,65 @@ export interface ChainSessionService {
   cancelChain(sessionId: string, scope?: StateStoreOptions): Promise<boolean>;
   completeStep(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     options?: { preservePlaceholder?: boolean; metadata?: Record<string, unknown> }
   ): Promise<boolean>;
   /**
-   * Advance to the next step after gate validation passes.
-   * Returns the new step number on success, or false if session not found.
+   * Advance past `nodeId` after gate validation passes.
    *
-   * Callers MUST use the returned step number to sync pipeline context:
-   *   const newStep = await mgr.advanceStep(id, step);
-   *   if (newStep !== false) sessionContext.currentStep = newStep;
+   * Returns the node the run now stands at plus its derived ordinal, or `false` when the
+   * session does not exist. `nodeId: null` in the result means the run advanced past its
+   * terminal node; its `ordinal` is then `totalSteps + 1`, the sentinel the position-keyed
+   * arithmetic produced.
+   *
+   * A `nodeId` that is absent from the run (including the empty string, which callers use when
+   * they cannot resolve one) is treated as already-passed: the run is left untouched and its
+   * current position is returned.
+   *
+   * Callers MUST use the returned ordinal to sync pipeline context:
+   *   const advanced = await mgr.advanceStep(id, nodeId);
+   *   if (advanced !== false) sessionContext.currentStep = advanced.ordinal;
    *
    * Should be called ONLY when:
    * - Gate review passes (PASS verdict)
    * - No gates are configured for this step
    * - Enforcement mode is advisory/informational (non-blocking)
    */
-  advanceStep(sessionId: string, stepNumber: number): Promise<number | false>;
+  advanceStep(
+    sessionId: string,
+    nodeId: string
+  ): Promise<{ nodeId: string | null; ordinal: number } | false>;
+  /**
+   * Insert a node immediately after `afterNodeId` (P4 adaptive mutation).
+   *
+   * Resolves to the minted node, or `null` when the insertion was refused — the session is
+   * unknown, the run is terminal, `afterNodeId` is not in the run, or `afterNodeId` sits behind
+   * the node the run is standing at (the new node would never be reached). Existing node ids are
+   * never renumbered, so anything already addressed by id survives the insertion.
+   *
+   * `origin` defaults to `'inserted'`; `unknownId` is persisted so the per-unknown-id insertion
+   * cap can be recomputed from rows after a cold load.
+   */
+  insertNodeAfter(
+    sessionId: string,
+    afterNodeId: string,
+    spec: {
+      stepName: string;
+      promptId: string;
+      origin?: 'planned' | 'inserted';
+      unknownId?: string;
+    }
+  ): Promise<ChainNode | null>;
+  /**
+   * Retire a not-yet-executed node ahead of the run (P4 adaptive mutation).
+   *
+   * The row is preserved and its lifecycle becomes `'skipped'`; `advanceStep` passes over it.
+   * Resolves `true` on success and on a repeat skip (idempotent), `false` when refused — the
+   * session is unknown, the node is not in the run, the node has already started, or the node is
+   * not STRICTLY ahead of the current node (OQ-P4-2: the current node is already rendered
+   * client-side and cannot be un-shown).
+   */
+  markNodeSkipped(sessionId: string, nodeId: string, unknownId: string): Promise<boolean>;
   /** Register a callback invoked when any session is cleared (explicit or stale cleanup). */
   onSessionCleared(
     callback: (sessionId: string, session: ChainSession) => void | Promise<void>
@@ -307,10 +382,14 @@ export interface ChainSessionService {
    * as tool-result validation errors rather than being silently dropped.
    *
    * Returns the full updated ledger.
+   *
+   * `nodeId` addresses the step reporting the observations. Ledger entries record the
+   * *ordinal at write time* (`discoveredAtStep`/`resolvedAtStep` stay numbers) — that is a
+   * historical stamp, not an address, and is deliberately out of the identity flip's scope.
    */
   applyUnknownObservations(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     observations: UnknownObservation[]
   ): Promise<UnknownLedgerEntry[]>;
   cleanup(): Promise<void>;

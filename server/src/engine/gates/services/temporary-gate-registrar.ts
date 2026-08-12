@@ -5,12 +5,15 @@ import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guid
 import type { Logger } from '#infra/logging/index.js';
 import type { GateBody } from './gate-body-merge.js';
 import type { GateReferenceResolver } from './gate-reference-resolver.js';
+import type { RunStepViewProvider } from './run-step-view.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 import type { TemporaryGateInput } from '../../execution/types.js';
 import type {
   TemporaryGateDefinition,
   TemporaryGateRegistry,
 } from '../core/temporary-gate-registry.js';
+
+import { nodeIdAt, ordinalOf } from '#shared/utils/node-order.js';
 
 /**
  * Anything that may carry inline gate definitions — structurally a `ConvertedPrompt`, declared
@@ -43,6 +46,8 @@ export interface NormalizedGateInput {
   source: 'manual' | 'automatic' | 'analysis';
   context?: Record<string, unknown>;
   target_step_number?: number;
+  /** Stable node id of the targeted step; see `resolveStepTarget`. */
+  target_step_id?: string;
   apply_to_steps?: number[];
 }
 
@@ -64,6 +69,8 @@ export type RawGateInput =
       pass_criteria?: string[] | readonly string[];
       source?: string;
       context?: unknown;
+      target_step_number?: number;
+      target_step_id?: string;
     };
 
 /**
@@ -79,7 +86,13 @@ export class TemporaryGateRegistrar {
   constructor(
     private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined,
     private readonly gateReferenceResolver: GateReferenceResolver | undefined,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    /**
+     * The live run's step identities, when there is a run (P4 row 4.1). Optional because gates
+     * are registered at stage 11, before the session stage resolves anything — on the call that
+     * STARTS a chain there is no run yet, and the parse-time node order is the run's order.
+     */
+    private readonly runStepViewProvider?: RunStepViewProvider
   ) {}
 
   /**
@@ -118,6 +131,23 @@ export class TemporaryGateRegistrar {
       context.hasChainCommand() ||
       (context.parsedCommand?.steps !== undefined && context.parsedCommand.steps.length > 1);
     const currentStep = context.sessionContext?.currentStep ?? 1;
+    // The node order a step target resolves against, LIVE run first (P4 row 4.1 / OQ-P4-3).
+    //
+    // A gate arriving with an ordinal is resolved to a node id once, here, and matched by that
+    // id from then on — so the only thing this list decides is which node the client's ordinal
+    // meant AT REGISTRATION. The client's ordinals come from the rendered footer, which counts
+    // the RUN's nodes, so a run that has already been mutated must be asked rather than the
+    // parse-time array, whose ordinals stopped agreeing the moment a node was inserted.
+    //
+    // Falls back to the parse-time order, which is the run's order on the call that starts a
+    // chain (node ids are minted at parse time and handed straight to the store). Steps that
+    // predate minting contribute nothing, which is why an unresolvable id is left alone rather
+    // than treated as absent.
+    const nodeIds =
+      this.resolveRunNodeIds(context) ??
+      (context.parsedCommand?.steps ?? [])
+        .map((step) => step.nodeId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
     const seenStringInputs = new Set<string>();
     const seenGateSignatures = new Set<string>();
@@ -166,7 +196,8 @@ export class TemporaryGateRegistrar {
         const { normalized: gate, isValid } = this.normalizeGateInput(
           rawGate,
           isChainExecution,
-          currentStep
+          currentStep,
+          nodeIds
         );
 
         if (!isValid) {
@@ -190,6 +221,7 @@ export class TemporaryGateRegistrar {
           criteriaArray.join('|').toLowerCase(),
           (gate.apply_to_steps ?? []).join(','),
           gate.target_step_number ?? '',
+          gate.target_step_id ?? '',
         ];
         const gateSignature = signatureParts.join('||');
         if (seenGateSignatures.has(gateSignature)) {
@@ -261,6 +293,9 @@ export class TemporaryGateRegistrar {
         if (gate.target_step_number !== undefined) {
           tempGateDefinition.target_step_number = gate.target_step_number;
         }
+        if (gate.target_step_id !== undefined) {
+          tempGateDefinition.target_step_id = gate.target_step_id;
+        }
         if (gate.apply_to_steps !== undefined) {
           tempGateDefinition.apply_to_steps = gate.apply_to_steps;
         }
@@ -317,12 +352,79 @@ export class TemporaryGateRegistrar {
   }
 
   /**
+   * The live run's node ids, or undefined when this call has no run to ask about.
+   *
+   * Reached by chain id rather than session id on purpose: gates register at stage 11, and
+   * `context.getSessionId()` is not populated until the session stage (13) resolves the resume
+   * target, so the request's own `chain_id` is the only run handle available this early.
+   */
+  private resolveRunNodeIds(context: ExecutionContext): readonly string[] | undefined {
+    if (this.runStepViewProvider === undefined) {
+      return undefined;
+    }
+
+    const chainId = context.getRequestedChainId();
+    if (chainId === undefined) {
+      return undefined;
+    }
+
+    const view = this.runStepViewProvider(chainId, context.getScopeOptions());
+    return view !== undefined && view.nodeIds.length > 0 ? view.nodeIds : undefined;
+  }
+
+  /**
+   * Bind a gate's step target to BOTH addressing forms at registration time.
+   *
+   * `target_step_number` and `target_step_id` are two names for one step, and a gate may arrive
+   * carrying either. Resolving both here — rather than teaching gate selection a second lookup —
+   * keeps selection positional per OQ5 (`gate-enhancement-service` still matches on
+   * `target_step_number`) while the identity travels with the definition for P4, when positions
+   * become mutable.
+   *
+   * An unresolvable target is left as given rather than dropped: a gate that names a step the
+   * run does not have should select nothing, not silently widen to every step.
+   */
+  private resolveStepTarget(
+    targetStepNumber: number | undefined,
+    targetStepId: string | undefined,
+    nodeIds: readonly string[]
+  ): { targetStepNumber: number | undefined; targetStepId: string | undefined } {
+    if (nodeIds.length === 0) {
+      return { targetStepNumber, targetStepId };
+    }
+
+    if (targetStepId !== undefined) {
+      const ordinal = ordinalOf(nodeIds, targetStepId);
+      if (ordinal === -1) {
+        this.logger.warn('[TemporaryGateRegistrar] target_step_id not found in this run', {
+          targetStepId,
+          nodeIds,
+        });
+        return { targetStepNumber, targetStepId };
+      }
+      // The id wins when both were supplied — it is the more specific address.
+      return { targetStepNumber: ordinal, targetStepId };
+    }
+
+    if (targetStepNumber !== undefined) {
+      const nodeId = nodeIdAt(nodeIds, targetStepNumber);
+      return { targetStepNumber, targetStepId: nodeId ?? undefined };
+    }
+
+    return { targetStepNumber, targetStepId };
+  }
+
+  /**
    * Normalize raw gate input to standard format.
+   *
+   * `nodeIds` is the run's frozen node order, used only to cross-resolve the two step-target
+   * forms. Empty (single prompts, callers with no parsed chain) leaves both fields as given.
    */
   normalizeGateInput(
     gate: RawGateInput,
     isChainExecution: boolean = false,
-    currentStep: number = 1
+    currentStep: number = 1,
+    nodeIds: readonly string[] = []
   ): { normalized: NormalizedGateInput; isValid: boolean } {
     if (typeof gate === 'string') {
       return {
@@ -379,10 +481,15 @@ export class TemporaryGateRegistrar {
     const extractedCriteria = 'criteria' in gate ? gate.criteria : undefined;
     const extractedPassCriteria = 'pass_criteria' in gate ? gate.pass_criteria : undefined;
 
-    const targetStepNumber =
+    const { targetStepNumber, targetStepId } = this.resolveStepTarget(
       'target_step_number' in gate && typeof gate.target_step_number === 'number'
         ? gate.target_step_number
-        : undefined;
+        : undefined,
+      'target_step_id' in gate && typeof gate.target_step_id === 'string'
+        ? gate.target_step_id
+        : undefined,
+      nodeIds
+    );
     const applyToSteps =
       'apply_to_steps' in gate && Array.isArray(gate.apply_to_steps)
         ? gate.apply_to_steps.filter((n): n is number => typeof n === 'number')
@@ -424,6 +531,10 @@ export class TemporaryGateRegistrar {
 
     if (targetStepNumber !== undefined) {
       normalized.target_step_number = targetStepNumber;
+    }
+
+    if (targetStepId !== undefined) {
+      normalized.target_step_id = targetStepId;
     }
 
     if (effectiveApplyToSteps !== undefined) {
@@ -742,6 +853,9 @@ function applyOptionalInlineFields(
   }
   if (typeof body['target_step_number'] === 'number') {
     definition.target_step_number = body['target_step_number'];
+  }
+  if (typeof body['target_step_id'] === 'string') {
+    definition.target_step_id = body['target_step_id'];
   }
 
   return definition;

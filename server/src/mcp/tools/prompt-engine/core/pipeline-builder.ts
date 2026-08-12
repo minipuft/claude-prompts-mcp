@@ -65,6 +65,7 @@ import { GateMetricsRecorder } from '#engine/gates/services/gate-metrics-recorde
 import { GateServiceFactory } from '#engine/gates/services/gate-service-factory.js';
 import { GateVerdictProcessor } from '#engine/gates/services/gate-verdict-processor.js';
 import { InlineGateProcessor } from '#engine/gates/services/inline-gate-processor.js';
+import { createRunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
 import {
   createShellVerifyExecutor,
@@ -238,6 +239,10 @@ export class PipelineBuilder {
     );
 
     const gateService = this.createGateService();
+    // One read model of the live run, two consumers: the registrar resolves an ordinal target to
+    // a node id against it, and the enhancement service matches by that id and drops gates whose
+    // target node the mutation policy retired (P4 row 4.1 / OQ-P4-3).
+    const runStepViewProvider = createRunStepViewProvider(deps.chainSessionStore);
     const gateEnhancementService = new GateEnhancementService(
       gateService,
       temporaryGateRegistry,
@@ -245,12 +250,14 @@ export class PipelineBuilder {
       () => deps.gateManager,
       deps.lightweightGateSystem.gateLoader,
       new GateMetricsRecorder(deps.getAnalyticsService),
-      deps.logger
+      deps.logger,
+      runStepViewProvider
     );
     const temporaryGateRegistrar = new TemporaryGateRegistrar(
       temporaryGateRegistry,
       deps.gateReferenceResolver,
-      deps.logger
+      deps.logger,
+      runStepViewProvider
     );
     const gateStage = new GateEnhancementStage(
       gateEnhancementService,
@@ -328,7 +335,8 @@ export class PipelineBuilder {
       deps.chainSessionStore,
       deps.lightweightGateSystem.gateLoader,
       deps.logger,
-      () => deps.configManager.getConfig().gates
+      () => deps.configManager.getConfig().gates,
+      deps.executionRecordStore
     );
     const responseAssembler = new ResponseAssembler();
     const formattingStage = new ResponseFormattingStage(

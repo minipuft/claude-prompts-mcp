@@ -393,9 +393,13 @@ prompt_engine(command:"code_review", gates:[
 ### Chain Step Targeting
 
 A full gate definition may target one chain step by 1-based position (`target_step_number`) or by
-its stable node id (`target_step_id`) — supply whichever you have. Selection itself still resolves
-positionally: an id target is cross-resolved to its ordinal at gate registration, so the two forms
-select the same step.
+its stable node id (`target_step_id`) — supply whichever you have. A position target is
+cross-resolved to a node id once, at gate registration, against the node list as it exists at
+that moment; from then on the gate is bound to that node id, and selection matches on node id
+first, falling back to the ordinal only for gates or chains carrying no node id. This matters once
+a run can mutate (see [Adaptive Mutation](#adaptive-mutation)): binding by node id means an
+insertion ahead of the gate's target cannot silently retarget it to whatever step now sits at that
+ordinal. A gate whose target node is later skipped never fires — see below.
 
 ```bash
 # Target by position
@@ -418,7 +422,9 @@ prompt_engine(command:"draft-outline --> draft --> polish", gates:[
 ```
 
 An unresolvable `target_step_id` (no step in the run carries it) is warned and selects nothing —
-it is never silently widened to apply to every step.
+it is never silently widened to apply to every step. A `target_step_id` that resolves to a node
+later retired by the adaptive mutation policy (`milestone:"skipped"`) also selects nothing — the
+guard is checked per-call against the run's live node list, not just once at registration.
 
 ### Shell Verification Gates (Ralph Mode)
 
@@ -762,6 +768,11 @@ planned 3 / executed 3 · gates fired 2 (retries 1) · unknowns opened 1 / close
 | `unknowns opened` | Entries in the run's unknowns ledger (cumulative — resolving does not decrement)   |
 | `unknowns closed` | Ledger entries in state `resolved`                                                 |
 
+Schema v23 added two more terminal-row facts alongside these six — `nodes_inserted` and
+`nodes_skipped`, the [adaptive mutation](#adaptive-mutation) audit counters. They are persisted
+the same terminal-row-only way and returned by `ExecutionRecordStore.queryRecent`, but this
+handler's rendered line above does not include them yet; read them via a direct store query.
+
 **These are recorded, never modeled.** Nothing in the server scores, weights, ranks, or routes on
 them; they exist so history is available to reason about later. The line is omitted entirely for a
 session with no terminal record yet, and for records written before these fields existed — an
@@ -914,18 +925,70 @@ prompt_engine(
 
 **Observation shapes:**
 
-| Type                 | Required fields                 | Optional fields | Effect                             |
-| -------------------- | ------------------------------- | --------------- | ---------------------------------- |
-| `unknown_discovered` | `id`, `statement`               | `blocking`      | Opens (or re-opens) a ledger entry |
-| `unknown_resolved`   | `id`, `statement`, `resolution` | —               | Closes a ledger entry              |
+| Type                 | Required fields                 | Optional fields              | Effect                             |
+| -------------------- | ------------------------------- | ---------------------------- | ---------------------------------- |
+| `unknown_discovered` | `id`, `statement`               | `blocking`, `target_step_id` | Opens (or re-opens) a ledger entry |
+| `unknown_resolved`   | `id`, `statement`, `resolution` | —                            | Closes a ledger entry              |
 
 - `id` — stable **kebab-case** slug, unique within the run (e.g. `cache-ttl-unknown`).
 - `resolution` — `"answered"` or `"irrelevant"`, required when `type` is `unknown_resolved`.
 - `blocking` — discovered-only, defaults to `false`; blocking entries render first.
+- `target_step_id` — discovered-only, optional. A stable node id (see
+  [Chain Step Targeting](#chain-step-targeting)) naming the downstream step the adaptive mutation
+  policy skips if this unknown later resolves `"irrelevant"`. Does not affect insertion — see
+  below.
 - **Cap:** 200 entries per run. A batch that would open a 201st unknown is rejected — an
   observation on an unknown id that doesn't exist in the ledger, or resolving without
   `resolution`, is a validation error surfaced as a tool-result error (`isError: true`), never a
   thrown exception. A rejected batch is all-or-nothing: nothing in it is applied.
+
+### Adaptive Mutation
+
+Two observation shapes drive a deterministic server-side policy that can insert or skip a node in
+the run's remaining step list. The model only ever declares typed observations (D2); the server
+owns every graph edit, and only ever makes one in reaction to a declared observation — never
+predictively (D6, advisory by construction). Full lifecycle:
+[Adaptive Mutation](../concepts/chains-lifecycle.md#adaptive-mutation).
+
+**Insert** — a blocking discovery inserts one investigation step (prompt `investigate_unknown`)
+immediately after the current node, regardless of whether `target_step_id` was supplied:
+
+```bash
+prompt_engine(
+  chain_id:"chain-draft#4",
+  user_response:"Step 1 output...",
+  observations:[
+    {"type":"unknown_discovered", "id":"cache-ttl-unknown", "statement":"TTL for the new cache layer is undecided", "blocking":true, "target_step_id":"review"}
+  ]
+)
+# -> response's CTA now names the inserted `investigate_unknown` step, not whatever
+#    would otherwise have run next.
+```
+
+**Skip** — resolving that same unknown `"irrelevant"` skips the node its ledger entry's
+`target_step_id` named, provided that node is still strictly ahead of the current step:
+
+```bash
+prompt_engine(
+  chain_id:"chain-draft#4",
+  user_response:"Investigation output...",
+  observations:[
+    {"type":"unknown_resolved", "id":"cache-ttl-unknown", "statement":"Caching is out of scope for this draft", "resolution":"irrelevant"}
+  ]
+)
+# -> the `review` node named by the discovery's target_step_id is retired
+#    (never rendered); the run proceeds past it.
+```
+
+- **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
+  observation still applies to the ledger — it just mutates nothing in the node list.
+- The current node can never be a skip target — only strictly-ahead, not-yet-executed nodes.
+- A run's terminal `execution_records` row carries two more terminal-row facts for this: how many
+  nodes were inserted and how many were skipped over the run's life (`nodes_inserted`,
+  `nodes_skipped` — same terminal-row-only pattern as the [run telemetry line](#run-telemetry-line)
+  facts). They are persisted and returned by `ExecutionRecordStore.queryRecent`; the
+  `execution_history` action's rendered telemetry line does not include them yet — query the store
+  directly to read them today.
 
 ---
 

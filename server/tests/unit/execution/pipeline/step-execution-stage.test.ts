@@ -33,11 +33,27 @@ const createChainExecutor = () => {
   };
 };
 
-const createSessionManager = () => {
+/**
+ * The two fields the stage reads to decide a run is over. Completion is latched on run
+ * identity now (terminal runStatus, or standing past the last node), so a test cannot express
+ * "finished" by pushing `currentStep` past `totalSteps` any more — that arithmetic is exactly
+ * what stopped being the signal.
+ */
+const runState = (
+  currentNodeId: string | null,
+  runStatus: 'working' | 'completed' = 'working'
+) => ({
+  runStatus,
+  state: { currentNodeId },
+});
+
+const createSessionManager = (session?: ReturnType<typeof runState>) => {
   const getChainContext = jest.fn().mockReturnValue({ memory: [] });
+  const getSession = jest.fn().mockReturnValue(session);
   return {
-    sessionManager: { getChainContext } as unknown as ChainSessionService,
+    sessionManager: { getChainContext, getSession } as unknown as ChainSessionService,
     getChainContext,
+    getSession,
   };
 };
 
@@ -117,7 +133,7 @@ describe('StepExecutionStage', () => {
 
   test('executes chain steps using session state and chain executor', async () => {
     const { executor: chainExecutor, renderStepMock } = createChainExecutor();
-    const { sessionManager } = createSessionManager();
+    const { sessionManager } = createSessionManager(runState('n2'));
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
     const context = new ExecutionContext({ command: '>>chain' });
@@ -175,7 +191,7 @@ describe('StepExecutionStage', () => {
 
   test('returns completion when session-based single prompt has advanced past totalSteps', async () => {
     const { executor: chainExecutor, renderStepMock } = createChainExecutor();
-    const { sessionManager } = createSessionManager();
+    const { sessionManager } = createSessionManager(runState(null, 'completed'));
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
     // Simulates: single prompt with gateConfiguration, after gate_verdict PASS
@@ -210,7 +226,7 @@ describe('StepExecutionStage', () => {
 
   test('does not short-circuit when session currentStep equals totalSteps (still executing)', async () => {
     const { executor: chainExecutor } = createChainExecutor();
-    const { sessionManager } = createSessionManager();
+    const { sessionManager } = createSessionManager(runState('n1'));
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
     // currentStep=1, totalSteps=1 → still needs to execute (not past total)
@@ -244,7 +260,7 @@ describe('StepExecutionStage', () => {
 
   test('skips rendering and returns completion stub when chain is already complete', async () => {
     const { executor: chainExecutor, renderStepMock } = createChainExecutor();
-    const { sessionManager } = createSessionManager();
+    const { sessionManager } = createSessionManager(runState(null, 'completed'));
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
     const context = new ExecutionContext({ command: '>>chain' });

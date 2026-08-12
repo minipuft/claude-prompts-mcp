@@ -61,6 +61,8 @@ export class ResponseFormattingStage extends BasePipelineStage {
     this.executionRecordStore.append({
       sessionId: session.sessionId,
       chainId: session.chainId,
+      // `nodeId` deliberately omitted: this record describes the RUN reaching a terminal
+      // status, not a node. `buildAppendParams` binds the column NULL for it.
       status,
       startedAt: completedAt,
       completedAt,
@@ -143,6 +145,22 @@ export class ResponseFormattingStage extends BasePipelineStage {
   }
 
   /**
+   * How many of the run's nodes have actually been advanced past.
+   *
+   * Undefined when the store is unavailable or the session cannot be read (single prompts,
+   * test harnesses wiring only a formatter) — the caller then keeps the position-derived
+   * value rather than reporting a confident zero.
+   */
+  private countExecutedSteps(context: ExecutionContext): number | undefined {
+    const sessionId = context.sessionContext?.sessionId;
+    if (this.chainSessionStore === null || sessionId === undefined) {
+      return undefined;
+    }
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    return session?.executionOrder.length;
+  }
+
+  /**
    * Build the FormatterExecutionContext from pipeline state.
    * This is orchestration-level context wiring, not domain logic.
    */
@@ -164,7 +182,14 @@ export class ResponseFormattingStage extends BasePipelineStage {
       formatterContext.frameworkUsed = frameworkUsed;
     }
 
-    if (sessionContext?.currentStep !== undefined) {
+    // Was `sessionContext.currentStep` — the position the run is standing at, reported as a
+    // count of work done. Those differ by one on a run that has not started its current step,
+    // and they stop tracking each other entirely once a step can be skipped or revisited.
+    // `executionOrder` records the nodes actually advanced past, so its length IS the count.
+    const executedCount = this.countExecutedSteps(context);
+    if (executedCount !== undefined) {
+      formatterContext.stepsExecuted = executedCount;
+    } else if (sessionContext?.currentStep !== undefined) {
       formatterContext.stepsExecuted = sessionContext.currentStep;
     }
 

@@ -1,0 +1,18 @@
+id: investigate_unknown
+name: Investigate Unknown
+category: workflow
+description: >-
+  Investigate one blocking unknown declared during a chain run and close it with
+  a typed unknown_resolved observation. Inserted automatically by the adaptive
+  chain mutation policy.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: unknown_id
+    type: string
+    description: >-
+      Ledger id of the unknown being investigated. Pass it back verbatim as the
+      observation id so the run's ledger closes the same entry it opened.
+  - name: statement
+    type: string
+    description: The unknown exactly as it was declared, in the declarer's words.

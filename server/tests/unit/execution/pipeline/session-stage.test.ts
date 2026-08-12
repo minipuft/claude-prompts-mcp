@@ -48,8 +48,8 @@ const createChainSession = (overrides: Partial<ChainSession> = {}): ChainSession
   sessionId: 'session-1',
   chainId: 'chain-chain_prompt#1',
   state: {
-    currentStep: 1,
-    totalSteps: 2,
+    currentNodeId: 'n1',
+    nodes: [{ id: 'n1' }, { id: 'n2' }],
     stepStates: new Map(),
     lastUpdated: Date.now(),
   },
@@ -130,6 +130,7 @@ describe('SessionManagementStage', () => {
       chainId: 'chain-chain_prompt#1',
       isChainExecution: true,
       currentStep: 1,
+      currentNodeId: 'n1',
       totalSteps: 2,
     });
     expect(context.state.session.lifecycleDecision).toBe('create-new');
@@ -141,8 +142,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-active',
       chainId: 'chain-chain_prompt#2',
       state: {
-        currentStep: 2,
-        totalSteps: 3,
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -164,6 +165,7 @@ describe('SessionManagementStage', () => {
       chainId: 'chain-chain_prompt#2',
       isChainExecution: true,
       currentStep: 2,
+      currentNodeId: 'n2',
       totalSteps: 3,
       pendingReview: undefined,
     });
@@ -175,8 +177,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-from-chain',
       chainId: 'chain-chain_prompt#5',
       state: {
-        currentStep: 1,
-        totalSteps: 2,
+        currentNodeId: 'n1',
+        nodes: [{ id: 'n1' }, { id: 'n2' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -202,6 +204,7 @@ describe('SessionManagementStage', () => {
       chainId: 'chain-chain_prompt#5',
       isChainExecution: true,
       currentStep: 1,
+      currentNodeId: 'n1',
       totalSteps: 2,
       pendingReview: undefined,
     });
@@ -213,8 +216,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-history',
       chainId: 'chain-chain_prompt#4',
       state: {
-        currentStep: 2,
-        totalSteps: 3,
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -240,8 +243,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-old',
       chainId: 'chain-chain_prompt#3',
       state: {
-        currentStep: 2,
-        totalSteps: 2,
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },

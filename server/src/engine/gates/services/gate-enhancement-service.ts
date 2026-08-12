@@ -6,6 +6,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
 import type { GateResolutionInput } from './gate-set-resolver.js';
+import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
@@ -68,7 +69,13 @@ export class GateEnhancementService {
     private readonly gateManagerProvider: () => GateManager | undefined,
     private readonly gateLoader: GateDefinitionProvider | undefined,
     private readonly metricsRecorder: GateMetricsRecorder,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    /**
+     * The live run's step identities, when there is a run (P4 row 4.1). Optional: single prompts
+     * and the call that starts a chain have no run, and a chain that never mutates selects
+     * identically with or without it.
+     */
+    private readonly runStepViewProvider?: RunStepViewProvider
   ) {}
 
   /**
@@ -271,6 +278,7 @@ export class GateEnhancementService {
   ): Promise<void> {
     const gateService = this.requireGateService();
     const { steps } = gateContext;
+    const runStepView = this.resolveRunStepView(context);
     let totalGatesApplied = 0;
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
@@ -332,7 +340,7 @@ export class GateEnhancementService {
         gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       }
 
-      gateIds = this.filterGatesByStepNumber(gateIds, step.stepNumber);
+      gateIds = this.filterGatesByStepTarget(gateIds, step, runStepView);
 
       if (gateIds.length === 0) {
         continue;
@@ -490,7 +498,40 @@ export class GateEnhancementService {
     }
   }
 
-  private filterGatesByStepNumber(gateIds: string[], stepNumber: number): string[] {
+  /**
+   * The live run's step identities for this call, or undefined when there is no run.
+   *
+   * Resolved once per chain enhancement rather than per step: the answer cannot change while
+   * one call walks the step list, and a per-step lookup would let it appear to.
+   */
+  private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
+    if (this.runStepViewProvider === undefined) {
+      return undefined;
+    }
+    const chainId = context.getRequestedChainId();
+    return chainId === undefined
+      ? undefined
+      : this.runStepViewProvider(chainId, context.getScopeOptions());
+  }
+
+  /**
+   * Which of the accumulated gates apply to THIS step.
+   *
+   * Node id first (OQ-P4-3). A step-targeted gate is bound to a node id at registration, and
+   * matching on that id is what makes the binding survive a mutation: matching on the ordinal
+   * instead would silently move the gate one step later the moment a node was inserted ahead of
+   * it, firing it against work its author never saw. The ordinal branch remains for gates and
+   * chains that carry no node id at all (P3 D10 keeps `nodeId` optional).
+   *
+   * A gate whose target node has been RETIRED (`milestone='skipped'`) fires nowhere: its step
+   * will not execute, and letting it fall through to the ordinal branch would attach it to
+   * whatever step now sits at that position.
+   */
+  private filterGatesByStepTarget(
+    gateIds: string[],
+    step: ChainStepPrompt,
+    runStepView: RunStepView | undefined
+  ): string[] {
     if (!this.temporaryGateRegistry) {
       return gateIds;
     }
@@ -500,11 +541,26 @@ export class GateEnhancementService {
       if (!tempGate) {
         return true;
       }
+
+      const targetNodeId = tempGate.target_step_id;
+      if (targetNodeId !== undefined) {
+        if (runStepView?.skippedNodeIds.includes(targetNodeId) === true) {
+          this.logger.debug('[GateEnhancementService] Gate target node is skipped — not firing', {
+            gateId,
+            targetNodeId,
+          });
+          return false;
+        }
+        if (typeof step.nodeId === 'string' && step.nodeId.length > 0) {
+          return targetNodeId === step.nodeId;
+        }
+      }
+
       if (tempGate.target_step_number !== undefined) {
-        return tempGate.target_step_number === stepNumber;
+        return tempGate.target_step_number === step.stepNumber;
       }
       if (tempGate.apply_to_steps !== undefined && tempGate.apply_to_steps.length > 0) {
-        return tempGate.apply_to_steps.includes(stepNumber);
+        return tempGate.apply_to_steps.includes(step.stepNumber);
       }
       return true;
     });

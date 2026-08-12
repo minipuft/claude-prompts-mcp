@@ -450,8 +450,16 @@ export class ResponseAssembler {
     if (!steps || steps.length === 0) {
       return undefined;
     }
+    // Node id first: after a mutation the run's ordinal no longer names parse step N, so an
+    // ordinal lookup points one step early (P4 row 5.4). An inserted node has no parse step —
+    // findIndex misses and this conservatively reports no delegation, which is correct: only
+    // planned steps can carry `delegated`.
+    const currentNodeId = context.sessionContext?.currentNodeId;
     const currentStep = context.sessionContext?.currentStep ?? 1;
-    const currentIndex = steps.findIndex((s) => s.stepNumber === currentStep);
+    const currentIndex =
+      currentNodeId != null && steps.some((s) => s.nodeId != null)
+        ? steps.findIndex((s) => s.nodeId === currentNodeId)
+        : steps.findIndex((s) => s.stepNumber === currentStep);
     const nextStep = currentIndex >= 0 ? steps[currentIndex + 1] : undefined;
     if (nextStep?.delegated === true) {
       return {
@@ -801,7 +809,13 @@ export class ResponseAssembler {
     const steps = context.parsedCommand?.steps;
     const currentStep = context.sessionContext?.currentStep;
     if (steps != null && currentStep != null && currentStep > 0) {
-      const step = steps.find((s) => s.stepNumber === currentStep);
+      // Node id first (P4 row 5.4): post-mutation the node ordinal in `currentStep` no longer
+      // names parse step N. An inserted node has no parse step; fall back to the ordinal so the
+      // pre-mutation behavior is preserved for legacy chains without node ids.
+      const currentNodeId = context.sessionContext?.currentNodeId;
+      const byNode =
+        currentNodeId != null ? steps.find((s) => s.nodeId === currentNodeId) : undefined;
+      const step = byNode ?? steps.find((s) => s.stepNumber === currentStep);
       return step?.convertedPrompt;
     }
 

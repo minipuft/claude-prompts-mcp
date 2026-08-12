@@ -1,7 +1,7 @@
 ---
 title: "P2 — Complexity Telemetry (Record-Only): Implementation Plan"
 date: 2026-08-11
-status: done
+status: reference
 tags: []
 ---
 

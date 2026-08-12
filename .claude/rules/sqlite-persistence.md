@@ -14,23 +14,34 @@ globs:
 retention. This file is the orientation map and the traps — when the two disagree, the contract
 module wins and this file is stale.
 
-## The Map (9 declared tables + 2 views)
+## The Map (10 declared tables + 2 views)
 
-Not 10, and not 11. `tenants` was deleted at v19 (F10). SQLite auto-creates `sqlite_sequence` for any table declaring `AUTOINCREMENT`; it is never
-declared in `applySchema()` and is excluded via `SQLITE_INTERNAL_TABLES`. A startup assert written
-against a raw `sqlite_master` count throws on every boot.
+Not 9, and not 11. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
+(P3 Tier 4), replaced by the two per-row tables below. SQLite auto-creates `sqlite_sequence` for
+any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
+`SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
+every boot.
 
-| Table                   | Owner                                               | Posture     | Scope         |
-| ----------------------- | --------------------------------------------------- | ----------- | ------------- |
-| `schema_version`        | `sqlite-engine.ts`                                  | derived     | none          |
-| `chain_sessions`        | `modules/chains/manager.ts`                         | derived     | run-owner-pid |
-| `kv_state`              | `stores/sqlite-store.ts`                            | ephemeral   | workspace     |
-| `resource_index`        | `resource-indexer.ts`                               | derived     | none          |
-| `skills_sync_manifests` | `modules/skills-sync/service.ts`                    | **durable** | client-scope  |
-| `version_history`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace     |
-| `resource_changes`      | `observability/tracking/resource-change-tracker.ts` | derived     | workspace     |
-| `chain_run_registry`    | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid |
-| `execution_records`     | `modules/chains/execution-record-store.ts`          | ephemeral   | workspace     |
+| Table                   | Owner                                               | Posture     | Scope           |
+| ----------------------- | --------------------------------------------------- | ----------- | --------------- |
+| `schema_version`        | `sqlite-engine.ts`                                  | derived     | none            |
+| `chain_sessions`        | `modules/chains/manager.ts`                         | derived     | run-owner-pid   |
+| `kv_state`              | `stores/sqlite-store.ts`                            | ephemeral   | workspace       |
+| `resource_index`        | `resource-indexer.ts`                               | derived     | none            |
+| `skills_sync_manifests` | `modules/skills-sync/service.ts`                    | **durable** | client-scope    |
+| `version_history`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
+| `resource_changes`      | `observability/tracking/resource-change-tracker.ts` | derived     | workspace       |
+| `chain_runs`            | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid   |
+| `chain_run_nodes`       | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid\* |
+| `execution_records`     | `modules/chains/execution-record-store.ts`          | ephemeral   | workspace       |
+
+\* `chain_run_nodes` declares `scope: 'run-owner-pid'` in the contract but carries no scope
+columns of its own — a node row belongs to exactly one `chain_runs` row via `session_id`, and
+that parent row already owns `run_owner_pid`/`workspace_id`. The scope is real, carried
+transitively through the parent, not duplicated. `ScopeKind` has no vocabulary for "scoped via
+parent" distinct from "owns this scope directly" — both read the same label in the table. Treat
+the two chain-run tables as one storage unit for scope purposes; do not add scope columns to
+`chain_run_nodes` on the theory that the contract's label implies they exist.
 
 Views: `v_execution_status` selects `FROM chain_sessions`, which is PID-deleted at cleanup, so it
 structurally cannot observe a completed run. Until v20 it could not observe an in-progress one
@@ -53,6 +64,29 @@ real value, and unlike `gate_verdicts_json` that writer runs. They are record-on
 or routes on them, so a query finding them all NULL means the run never terminated, not that the
 column is dead.
 
+`chain_run_nodes` gained two columns at v23 for adaptive mutation (P4) — `origin`
+(`'planned' | 'inserted'`) and `origin_unknown_id` (nullable). `origin` is `TEXT NOT NULL` with
+**no DDL DEFAULT**, deliberately: `validate:no-phantom-columns` exempts every defaulted column, so
+a default here would make the column invisible to the one gate built to catch a dropped writer —
+and if a future edit ever did drop it from the INSERT list, a default would silently paper over
+that with `'planned'` on every row, the same value-dead shape `execution_records` has already
+produced twice. Nothing is lost by omitting it: the table has one declared writer and the bump
+recreates it (ephemeral), so no pre-v23 row can arrive missing the column. `origin_unknown_id`
+records WHICH declared unknown caused an insertion — `origin` alone answers only the run-wide
+insertion count, never "has this unknown id already had its insertion", so both are real columns
+rather than one encoding the other (an id-in-the-node-id encoding was rejected: `mintInsertionId`'s
+slugify is lossy and not a decodable inverse). NULL on planned rows is partial population BY ROW
+TYPE, the same reading as the v21 columns above, not a value-dead column. The skip path has no
+symmetrical column: `markNodeSkipped`'s triggering unknown id is logged only, never persisted —
+skips are uncapped in v1 (each requires its own declared target, which is its own bound) and
+nothing reads it back.
+
+`execution_records` gained two more terminal-row columns at v23, `nodes_inserted` and
+`nodes_skipped` — the adaptive mutation policy's audit counters. They extend the same v21
+telemetry object rather than adding a second one; both terminal-record writers already spread that
+whole object into their row, so the both-writers invariant held structurally with no per-writer
+edit required.
+
 ## Two Tables Are Durable — A Schema Bump Must Not Destroy Them
 
 `version_history` holds rollback snapshots that nothing regenerates. `skills_sync_manifests` drives
@@ -69,12 +103,12 @@ table. That is intended: the change needs a real migration.
 
 ## `tenant_id` Means Two Things — It Used to Mean Three
 
-The PID meaning got its own name at v20. `chain_sessions` and `chain_run_registry` now declare
+The PID meaning got its own name at v20. `chain_sessions` and `chain_runs` now declare
 `run_owner_pid`, so no column name carries both a run owner and a workspace.
 
 | Value               | Column          | Tables                                                          | Consequence                                             |
 | ------------------- | --------------- | --------------------------------------------------------------- | ------------------------------------------------------- |
-| Server PID          | `run_owner_pid` | `chain_sessions`, `chain_run_registry`                          | Row dies with the process — a session key, not a tenant |
+| Server PID          | `run_owner_pid` | `chain_sessions`, `chain_runs`                                  | Row dies with the process — a session key, not a tenant |
 | Workspace id        | `tenant_id`     | `kv_state`, `version_history`, `resource_changes`               | Genuine isolation (Tier 4)                              |
 | Literal `'default'` | `tenant_id`     | `execution_records`, and any table with no workspace configured | No isolation                                            |
 
@@ -92,13 +126,14 @@ Every table that declares scope columns also populates them. Until Tier 4 only `
 a startup migration backfilled the rest on the next boot — a treadmill against writers that never
 stopped emitting NULLs. `applyIdentityScopeMigration` was deleted once each writer conformed:
 
-| Table                | How its scope arrives                                                              |
-| -------------------- | ---------------------------------------------------------------------------------- |
-| `kv_state`           | `SqliteStateStore` — PRAGMA-derived column list                                    |
-| `resource_changes`   | `defaultScope` on the tracker; the watcher fires with no request to thread         |
-| `chain_sessions`     | `defaultScope` on `ChainSessionStoreOptions`, bound in `projectToHookView`         |
-| `chain_run_registry` | merged `runScope` — PID decides `run_owner_pid`, workspace fills the scope columns |
-| `version_history`    | scope injected into the service; all nine query sites bind it together             |
+| Table              | How its scope arrives                                                              |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| `kv_state`         | `SqliteStateStore` — PRAGMA-derived column list                                    |
+| `resource_changes` | `defaultScope` on the tracker; the watcher fires with no request to thread         |
+| `chain_sessions`   | `defaultScope` on `ChainSessionStoreOptions`, bound in `projectToHookView`         |
+| `chain_runs`       | merged `runScope` — PID decides `run_owner_pid`, workspace fills the scope columns |
+| `chain_run_nodes`  | none of its own — scope travels via `session_id` to its `chain_runs` parent row    |
+| `version_history`  | scope injected into the service; all nine query sites bind it together             |
 
 **`version_history` had to move reads and writes together.** Scoping the writes alone would have
 broken version numbering, because `MAX(version)` would read a different set than the INSERT wrote

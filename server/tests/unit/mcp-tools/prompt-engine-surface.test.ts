@@ -127,6 +127,54 @@ describe('prompt_engine parameter surface', () => {
     expect(result.success).toBe(true);
   });
 
+  describe('observations[].target_step_id (P4)', () => {
+    // unknownDiscoveredSchema.target_step_id shares its regex with
+    // temporaryGateObjectSchema.target_step_id: kebab-case node id, or an nK symbolic id.
+    function parseObservations(target_step_id: string) {
+      return build().safeParse({
+        command: '>>demo',
+        observations: [
+          {
+            type: 'unknown_discovered',
+            id: 'cache-ttl-unknown',
+            statement: 'TTL for the new cache layer is undecided',
+            target_step_id,
+          },
+        ],
+      });
+    }
+
+    test('accepts a kebab-case node id', () => {
+      expect(parseObservations('draft-outline').success).toBe(true);
+    });
+
+    test('accepts an nK symbolic id', () => {
+      expect(parseObservations('n2').success).toBe(true);
+    });
+
+    test('rejects an uppercase target', () => {
+      expect(parseObservations('Draft-Outline').success).toBe(false);
+    });
+
+    test('rejects an underscore-separated target', () => {
+      expect(parseObservations('draft_outline').success).toBe(false);
+    });
+
+    test('remains optional — an entry omitting it still parses', () => {
+      const result = build().safeParse({
+        command: '>>demo',
+        observations: [
+          {
+            type: 'unknown_discovered',
+            id: 'cache-ttl-unknown',
+            statement: 'TTL for the new cache layer is undecided',
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
   test('description overlays change text without changing shape', () => {
     // The two halves of the resolver are independent by design: an overlay that
     // silently reshaped the surface would make every framework switch a

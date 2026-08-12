@@ -91,6 +91,20 @@ export const unknownDiscoveredSchema = z.object({
   id: unknownIdSchema,
   statement: z.string().min(1, 'Unknown statement cannot be empty'),
   blocking: z.boolean().optional(),
+  /**
+   * Address a downstream step by its stable node id — the mutation policy's skip target when
+   * this unknown later resolves `irrelevant`. Union ADDITION: existing callers that omit it are
+   * unaffected. Accepts the kebab-case ids minted from a YAML chain's `stepName`/`id:` and the
+   * frozen `nK` ids a symbolic chain mints at parse time — same vocabulary and regex as
+   * {@link temporaryGateObjectSchema}'s `target_step_id`, since both address one node id space.
+   */
+  target_step_id: z
+    .string()
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
+      'target_step_id must be a kebab-case node id or an nK symbolic id'
+    )
+    .optional(),
 });
 
 /** Closes an existing ledger entry. `statement` carries the resolution statement. */
@@ -234,7 +248,7 @@ const PARAM_DEFAULTS = {
     'Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).',
   options: 'Additional execution options (key-value pairs) passed through to execution.',
   observations:
-    'Declare typed unknowns discovered/resolved this step. Each entry: {type:"unknown_discovered"|"unknown_resolved", id:"kebab-case-slug", statement:"...", blocking?:true|false, resolution?:"answered"|"irrelevant"} (resolution required when type is unknown_resolved). Example: [{type:"unknown_discovered", id:"cache-ttl-unknown", statement:"TTL for the new cache layer is undecided", blocking:false}]',
+    'Declare typed unknowns discovered/resolved this step. Each entry: {type:"unknown_discovered"|"unknown_resolved", id:"kebab-case-slug", statement:"...", blocking?:true|false, target_step_id?:"...", resolution?:"answered"|"irrelevant"} (resolution required when type is unknown_resolved; target_step_id is discovered-only and names the downstream step the adaptive mutation policy skips if this unknown resolves irrelevant). Example: [{type:"unknown_discovered", id:"cache-ttl-unknown", statement:"TTL for the new cache layer is undecided", blocking:false, target_step_id:"draft-outline"}]',
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ the reads, not just coverage for them.
 CRITERIA UNDER TEST (enumerated — a behaviour not listed here is not covered)
   A. schema parity      : the extracted DDL is real, current, and creates every object read below
   B. resource_index     : prompts, gates, styles, frameworks — including the resource-type spelling
-  C. chain liveness     : PID filtering, terminal-run exclusion, and both documented fallbacks
+  C. chain liveness     : PID filtering, terminal-run exclusion, and the documented fallback
   D. view repair (v20)  : the primary read path returns rows, and terminal runs stay out of both
 """
 
@@ -42,7 +42,6 @@ SQLITE_ENGINE_TS = REPO_ROOT / "server" / "src" / "infra" / "database" / "sqlite
 READ_OBJECTS = (
     "resource_index",
     "chain_sessions",
-    "chain_run_registry",
     "v_execution_status",
 )
 
@@ -60,19 +59,26 @@ def _extract_server_schema() -> tuple[str, int]:
     if not version_match:
         raise AssertionError(f"SCHEMA_VERSION constant not found in {SQLITE_ENGINE_TS}")
 
+    # The engine's DDL spans more than one exec() literal since applyViews() was split out
+    # of applySchema() (views are dropped+recreated unconditionally on the TS side, so view
+    # DDL lives in its own literal). Concatenate every literal in source order — reading only
+    # the first one silently dropped v_execution_status from this fixture.
     marker = "this.getDb().exec(`"
+    segments: list[str] = []
     start = source.find(marker)
     if start == -1:
-        raise AssertionError(f"applySchema() DDL template literal not found in {SQLITE_ENGINE_TS}")
-    start += len(marker)
+        raise AssertionError(f"engine DDL template literal not found in {SQLITE_ENGINE_TS}")
+    while start != -1:
+        seg_start = start + len(marker)
+        end = source.find("`);", seg_start)
+        if end == -1:
+            raise AssertionError("an engine DDL template literal is unterminated")
+        segments.append(source[seg_start:end])
+        start = source.find(marker, end)
 
-    end = source.find("`);", start)
-    if end == -1:
-        raise AssertionError("applySchema() DDL template literal is unterminated")
-
-    ddl = source[start:end].replace("${SCHEMA_VERSION}", version_match.group(1))
+    ddl = "\n".join(segments).replace("${SCHEMA_VERSION}", version_match.group(1))
     if "${" in ddl:
-        raise AssertionError("applySchema() DDL carries an interpolation this extractor cannot resolve")
+        raise AssertionError("engine DDL carries an interpolation this extractor cannot resolve")
 
     return ddl, int(version_match.group(1))
 
@@ -387,93 +393,13 @@ class TestActiveChainState:
         assert state["current_step"] == 1
         assert state["total_steps"] == 2
 
-    def test_run_registry_serves_when_view_and_session_table_yield_nothing(self, state_db):
+    def test_no_state_when_the_view_and_session_table_both_yield_nothing(self, state_db):
+        """The retired third fallback (`chain_run_registry`, dropped at schema v22 — P3 Tier 4)
+        used to serve a run here; now the read order stops after the session table and reports
+        no active state.
+        """
         state_db.execute("DROP VIEW v_execution_status")
-        state_db.execute(
-            "INSERT INTO chain_run_registry (run_owner_pid, state) VALUES (?, ?)",
-            (
-                str(LIVE_PID),
-                json.dumps(
-                    {
-                        "runs": {
-                            "run-1": {
-                                "chainId": "chain-registry",
-                                "lifecycle": "active",
-                                "lastActivity": 500,
-                                "state": {"currentStep": 1, "totalSteps": 4},
-                            }
-                        }
-                    }
-                ),
-            ),
-        )
-        state_db.commit()
-
-        state = db_reader.load_active_chain_state()
-
-        assert state is not None
-        assert state["chain_id"] == "chain-registry"
-        assert state["current_step"] == 1
-
-    def test_run_registry_prefers_the_most_recent_run_and_skips_dormant_ones(self, state_db):
-        state_db.execute("DROP VIEW v_execution_status")
-        state_db.execute(
-            "INSERT INTO chain_run_registry (run_owner_pid, state) VALUES (?, ?)",
-            (
-                str(LIVE_PID),
-                json.dumps(
-                    {
-                        "runs": {
-                            "old": {
-                                "chainId": "chain-old",
-                                "lifecycle": "active",
-                                "lastActivity": 100,
-                                "state": {"currentStep": 1, "totalSteps": 4},
-                            },
-                            "recent": {
-                                "chainId": "chain-recent",
-                                "lifecycle": "active",
-                                "lastActivity": 900,
-                                "state": {"currentStep": 2, "totalSteps": 4},
-                            },
-                            "dormant": {
-                                "chainId": "chain-dormant",
-                                "lifecycle": "dormant",
-                                "lastActivity": 9999,
-                                "state": {"currentStep": 3, "totalSteps": 4},
-                            },
-                        }
-                    }
-                ),
-            ),
-        )
-        state_db.commit()
-
-        state = db_reader.load_active_chain_state()
-
-        assert state is not None
-        assert state["chain_id"] == "chain-recent"
-
-    def test_registry_blobs_owned_by_a_dead_process_are_skipped(self, state_db):
-        state_db.execute("DROP VIEW v_execution_status")
-        state_db.execute(
-            "INSERT INTO chain_run_registry (run_owner_pid, state) VALUES (?, ?)",
-            (
-                str(_dead_pid()),
-                json.dumps(
-                    {
-                        "runs": {
-                            "run-1": {
-                                "chainId": "chain-dead",
-                                "lifecycle": "active",
-                                "lastActivity": 500,
-                                "state": {"currentStep": 1, "totalSteps": 4},
-                            }
-                        }
-                    }
-                ),
-            ),
-        )
+        state_db.execute("DELETE FROM chain_sessions")
         state_db.commit()
 
         assert db_reader.load_active_chain_state() is None

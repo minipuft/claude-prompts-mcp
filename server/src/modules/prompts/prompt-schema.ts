@@ -77,6 +77,19 @@ export const ChainStepSchema = z.object({
   promptId: z.string().min(1, 'Step promptId is required'),
   /** Name/identifier of this step */
   stepName: z.string().min(1, 'Step name is required'),
+  /**
+   * Stable node identity for this step (kebab-case). Optional — when omitted, a node id is
+   * minted at parse time from a slug of `stepName`. Explicit ids must be unique within the
+   * chain (enforced in `validatePromptYaml` / `validatePromptSchema`). Tier 1: additive only —
+   * nothing downstream consumes this field yet.
+   */
+  id: z
+    .string()
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      'Step id must be kebab-case (lowercase alphanumeric, hyphen-separated)'
+    )
+    .optional(),
   /** Map step results to semantic names */
   inputMapping: z.record(z.string(), z.string()).optional(),
   /** Name this step's output for downstream steps */
@@ -461,7 +474,16 @@ export function validatePromptYaml(data: unknown, expectedId?: string): PromptYa
   // Validate chain steps if present
   if (definition.chainSteps && definition.chainSteps.length > 0) {
     const stepNames = new Set(definition.chainSteps.map((s) => s.stepName));
+    const seenStepIds = new Set<string>();
     for (const step of definition.chainSteps) {
+      if (step.id) {
+        if (seenStepIds.has(step.id)) {
+          errors.push(
+            `Chain step id '${step.id}' is duplicated — explicit step ids must be unique within a chain`
+          );
+        }
+        seenStepIds.add(step.id);
+      }
       if (step.inputMapping) {
         for (const ref of Object.values(step.inputMapping)) {
           if (ref.startsWith('step') && !stepNames.has(ref)) {
@@ -568,7 +590,16 @@ export function validatePromptSchema(
   if (definition.chainSteps && definition.chainSteps.length > 0) {
     // Validate chain step references
     const stepNames = new Set(definition.chainSteps.map((s) => s.stepName));
+    const seenStepIds = new Set<string>();
     for (const step of definition.chainSteps) {
+      if (step.id) {
+        if (seenStepIds.has(step.id)) {
+          errors.push(
+            `Chain step id '${step.id}' is duplicated — explicit step ids must be unique within a chain`
+          );
+        }
+        seenStepIds.add(step.id);
+      }
       if (step.inputMapping) {
         for (const ref of Object.values(step.inputMapping)) {
           // Input mappings can reference previous step outputs or argument names

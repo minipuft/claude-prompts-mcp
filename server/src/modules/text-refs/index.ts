@@ -11,12 +11,21 @@ import type { Logger } from '#shared/types/index.js';
 type StoredStepResult = {
   content: string;
   timestamp: number;
+  /**
+   * Position the step held when its result was stored.
+   *
+   * Kept alongside the node-id key rather than used as the key: identity is what survives a
+   * reordered or extended chain, but the *rendered* contract (`stepN_result`,
+   * `previous_step_results`) is positional and templates already depend on those names.
+   */
+  ordinal: number;
   metadata?: Record<string, any>;
 };
 
 export class TextReferenceStore {
   private readonly logger: Logger;
-  private readonly chainStepResults: Record<string, Record<number, StoredStepResult>> = {};
+  /** chainId -> nodeId -> result. Node-keyed since P3 Tier 2; was step-number-keyed. */
+  private readonly chainStepResults: Record<string, Record<string, StoredStepResult>> = {};
   // Named outputs from outputMapping (e.g., { "chainId": { "findings": "content" } })
   private readonly namedOutputs: Record<string, Record<string, string>> = {};
 
@@ -33,25 +42,30 @@ export class TextReferenceStore {
    */
   storeChainStepResult(
     chainId: string,
-    stepNumber: number,
+    nodeId: string,
     content: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
+    ordinal?: number
   ): void {
     if (!this.chainStepResults[chainId]) {
       this.chainStepResults[chainId] = {};
     }
 
+    const chainResults = this.chainStepResults[chainId];
     const stepResult: StoredStepResult = {
       content,
       timestamp: Date.now(),
+      // No ordinal supplied (callers with no node list) falls back to insertion index, which
+      // is the only position information available at that point.
+      ordinal: ordinal ?? chainResults[nodeId]?.ordinal ?? Object.keys(chainResults).length,
     };
     if (metadata) {
       stepResult.metadata = metadata;
     }
-    this.chainStepResults[chainId][stepNumber] = stepResult;
+    chainResults[nodeId] = stepResult;
 
     this.logger.debug(
-      `[TextReferenceStore] Stored step ${stepNumber} result for chain ${chainId} (${content.length} chars)`
+      `[TextReferenceStore] Stored node ${nodeId} result for chain ${chainId} (${content.length} chars)`
     );
 
     // Store under named outputs if outputMapping is provided
@@ -70,24 +84,27 @@ export class TextReferenceStore {
   }
 
   /**
-   * Retrieve all step results for a chain as a map of step -> content.
+   * Retrieve all step results for a chain as a map of position -> content.
+   *
+   * Position-keyed on purpose: this is the read shape the rendering context and its consumers
+   * already expect. Address a single result by node id via {@link getChainStepResult}.
    */
   getChainStepResults(chainId: string): Record<number, string> {
     const chainResults = this.chainStepResults[chainId] || {};
     const results: Record<number, string> = {};
 
-    Object.entries(chainResults).forEach(([stepNum, stepData]) => {
-      results[Number(stepNum)] = stepData.content;
+    Object.values(chainResults).forEach((stepData) => {
+      results[stepData.ordinal] = stepData.content;
     });
 
     return results;
   }
 
   /**
-   * Retrieve a specific step result.
+   * Retrieve a specific step result by node id.
    */
-  getChainStepResult(chainId: string, stepNumber: number): string | null {
-    return this.chainStepResults[chainId]?.[stepNumber]?.content ?? null;
+  getChainStepResult(chainId: string, nodeId: string): string | null {
+    return this.chainStepResults[chainId]?.[nodeId]?.content ?? null;
   }
 
   /**
@@ -119,8 +136,8 @@ export class TextReferenceStore {
   /**
    * Retrieve metadata stored for a specific step result.
    */
-  getChainStepMetadata(chainId: string, stepNumber: number): Record<string, any> | null {
-    return this.chainStepResults[chainId]?.[stepNumber]?.metadata ?? null;
+  getChainStepMetadata(chainId: string, nodeId: string): Record<string, any> | null {
+    return this.chainStepResults[chainId]?.[nodeId]?.metadata ?? null;
   }
 
   /**

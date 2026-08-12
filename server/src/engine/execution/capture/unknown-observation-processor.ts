@@ -33,7 +33,7 @@ export class UnknownObservationValidationError extends ValidationError {}
  *
  * Semantics (two-state machine: active <-> resolved):
  * - discover + new id            -> append an active entry stamped at `stepNumber`
- * - discover + active id         -> restatement; refresh statement/blocking, keep discoveredAtStep
+ * - discover + active id         -> restatement; refresh statement/blocking/targetStepId, keep discoveredAtStep
  * - discover + resolved id       -> re-open; the unknown genuinely returned, so this IS a new
  *                                   discovery event and re-stamps discoveredAtStep
  * - resolve  + active id         -> close; resolution + resolutionStatement + resolvedAtStep
@@ -96,6 +96,12 @@ function createEntry(observation: UnknownObservation, stepNumber: number): Unkno
     state: 'active',
     blocking: observation.blocking ?? false,
     discoveredAtStep: stepNumber,
+    // Carries observation.target_step_id (wire snake_case) onto the ledger's targetStepId
+    // (internal camelCase) so it is still readable at resolution time — see
+    // UnknownLedgerEntry.targetStepId docblock in chain-session.ts.
+    ...(observation.target_step_id !== undefined
+      ? { targetStepId: observation.target_step_id }
+      : {}),
   };
 }
 
@@ -106,6 +112,18 @@ function applyDiscoveryToExisting(
 ): void {
   entry.statement = observation.statement;
   entry.blocking = observation.blocking ?? false;
+  // Authoritative refresh, same posture as `blocking` above: a restatement that omits
+  // target_step_id clears a previously-declared one rather than silently keeping a stale
+  // target the caller no longer intends. Deleted rather than set to `undefined` so the key's
+  // presence/absence matches createEntry's `targetStepId` (conditionally spread, never present
+  // with an explicit `undefined` value) — an inconsistent representation of "no target" would
+  // make consumers' `'targetStepId' in entry` / `toHaveProperty` checks disagree with `?? `
+  // defaulting checks elsewhere in the ledger.
+  if (observation.target_step_id !== undefined) {
+    entry.targetStepId = observation.target_step_id;
+  } else {
+    delete entry.targetStepId;
+  }
 
   if (entry.state === 'active') return;
 
@@ -162,28 +180,28 @@ export class UnknownObservationProcessor {
   async applyObservations(
     context: ExecutionContext,
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     observations: readonly UnknownObservation[]
   ): Promise<UnknownLedgerEntry[]> {
     if (observations.length === 0) {
       return [];
     }
 
-    const ledger = await this.chainSessionStore.applyUnknownObservations(sessionId, stepNumber, [
+    const ledger = await this.chainSessionStore.applyUnknownObservations(sessionId, nodeId, [
       ...observations,
     ]);
 
     const activeCount = ledger.filter((entry) => entry.state === 'active').length;
     context.diagnostics.info('UnknownObservationProcessor', 'Applied unknown observations', {
       sessionId,
-      stepNumber,
+      nodeId,
       observations: observations.length,
       ledgerSize: ledger.length,
       active: activeCount,
       blocking: ledger.filter((entry) => entry.state === 'active' && entry.blocking).length,
     });
     this.logger.debug(
-      `[UnknownObservationProcessor] Applied ${observations.length} observation(s) at step ${stepNumber}; ledger now ${ledger.length} entr(ies), ${activeCount} active`
+      `[UnknownObservationProcessor] Applied ${observations.length} observation(s) at node ${nodeId}; ledger now ${ledger.length} entr(ies), ${activeCount} active`
     );
 
     return ledger;

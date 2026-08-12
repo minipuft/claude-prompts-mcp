@@ -12,9 +12,15 @@
 // │  ├── GateEnforcementAuthority                                   │
 // │  │     Gate verdicts, retry limits, enforcement modes           │
 // │  │                                                              │
-// │  └── InjectionDecisionService                                   │
-// │        Content injection: system-prompt, gate-guidance,         │
-// │        style-guidance with config hierarchy resolution          │
+// │  ├── InjectionDecisionService                                   │
+// │  │     Content injection: system-prompt, gate-guidance,         │
+// │  │     style-guidance with config hierarchy resolution          │
+// │  │                                                              │
+// │  └── decideMutation (P4)                                        │
+// │        Adaptive chain mutation: insert an investigation step on  │
+// │        a blocking unknown, skip a declared target on an          │
+// │        irrelevant resolution. Tier 1: pure decision only — dead   │
+// │        until Tier 3 wires it into stage 16.                      │
 // └─────────────────────────────────────────────────────────────────┘
 //
 // All pipeline stages MUST consult these authorities instead of
@@ -91,3 +97,7 @@ export type {
   ResolvedInjectionConfig,
   StepInjectionConfig,
 } from './injection/index.js';
+
+// Adaptive chain-mutation decision (P4 Tier 1 — pure; wired into stage 16 at Tier 3)
+export { decideMutation, MAX_INSERTIONS_PER_RUN } from './mutation/index.js';
+export type { ChainMutation, DecideMutationInput, MutationNoneReason } from './mutation/index.js';

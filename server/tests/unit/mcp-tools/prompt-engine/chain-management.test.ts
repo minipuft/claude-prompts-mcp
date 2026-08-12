@@ -21,8 +21,12 @@ const createChainSession = (overrides: Partial<ChainSession> = {}): ChainSession
   sessionId: 'sess-1',
   chainId: 'chain-research#1',
   state: {
-    currentStep: 1,
-    totalSteps: 3,
+    currentNodeId: 'n1',
+    nodes: [
+      { id: 'n1', promptId: 'chain-research', stepName: 'Step 1' },
+      { id: 'n2', promptId: 'chain-research', stepName: 'Step 2' },
+      { id: 'n3', promptId: 'chain-research', stepName: 'Step 3' },
+    ],
     stepStates: new Map(),
     lastUpdated: Date.now(),
   },

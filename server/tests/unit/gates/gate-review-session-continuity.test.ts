@@ -36,8 +36,12 @@ class StubChainSessionStore implements ChainSessionStore {
       sessionId,
       chainId,
       state: {
-        currentStep: totalSteps > 0 ? 1 : 0,
-        totalSteps,
+        currentNodeId: totalSteps > 0 ? 'n1' : null,
+        nodes: Array.from({ length: totalSteps }, (_, index) => ({
+          id: `n${index + 1}`,
+          promptId: chainId,
+          stepName: `Step ${index + 1}`,
+        })),
         lastUpdated: Date.now(),
         stepStates: new Map(),
       },
@@ -124,6 +128,6 @@ describe('SessionManagementStage continuity', () => {
     await stage.execute(context);
 
     expect(context.sessionContext?.sessionId).toBe(existingSession.sessionId);
-    expect(context.sessionContext?.currentStep).toBe(existingSession.state.currentStep);
+    expect(context.sessionContext?.currentNodeId).toBe(existingSession.state.currentNodeId);
   });
 });

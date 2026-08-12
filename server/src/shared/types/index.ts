@@ -34,7 +34,6 @@ export {
   type ChainSessionSummary,
   type GateReviewOutcomeUpdate,
   type ParsedCommandSnapshot,
-  type PersistedChainRunRegistry,
   type SessionBlueprint,
 } from './chain-session.js';
 
@@ -46,6 +45,7 @@ export {
   type GateReviewPrompt,
   type PendingGateReview,
   type FormatterExecutionContext,
+  type ChainNode,
   type ChainState,
 } from './chain-execution.js';
 
@@ -638,6 +638,11 @@ export interface ChainStep {
   promptId: string;
   /** Name/identifier of this step */
   stepName: string;
+  /**
+   * Stable node identity (kebab-case), mirroring `ChainStepSchema.id` (P3 Tier 1). Optional —
+   * defaults to a slug of `stepName` at mint time when omitted. Additive only; not yet consumed.
+   */
+  id?: string;
   /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
   inputMapping?: Record<string, string>;
   /** Name this step's output for downstream steps */

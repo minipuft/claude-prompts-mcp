@@ -76,13 +76,13 @@ describe('ChainSessionStore', () => {
     });
 
     await manager.createSession('session-placeholder', 'chain-placeholder', 2);
-    manager.setStepState('session-placeholder', 1, 'rendered', true);
+    manager.setStepState('session-placeholder', 'n1', 'rendered', true);
 
-    await manager.completeStep('session-placeholder', 1, { preservePlaceholder: true });
+    await manager.completeStep('session-placeholder', 'n1', { preservePlaceholder: true });
 
     const session = (manager as any).activeSessions.get('session-placeholder');
 
-    expect(session.state.currentStep).toBe(1);
+    expect(session.state.currentNodeId).toBe('n1');
     expect(session.executionOrder).toEqual([]);
   });
 
@@ -333,21 +333,21 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
   test('transitionStepState refuses to overwrite a COMPLETED step', async () => {
     manager = newManager('step-stickiness');
     await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 1, 'completed', false);
+    manager.setStepState('s1', 'n1', 'completed', false);
 
-    const result = await manager.transitionStepState('s1', 1, 'rendered');
+    const result = await manager.transitionStepState('s1', 'n1', 'rendered');
     expect(result).toBe(false);
 
-    const metadata = manager.getStepState('s1', 1);
+    const metadata = manager.getStepState('s1', 'n1');
     expect(metadata?.state).toBe('completed');
   });
 
   test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {
     manager = newManager('step-idempotent');
     await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 1, 'completed', false);
+    manager.setStepState('s1', 'n1', 'completed', false);
 
-    const result = await manager.transitionStepState('s1', 1, 'completed');
+    const result = await manager.transitionStepState('s1', 'n1', 'completed');
     expect(result).toBe(true);
   });
 
@@ -403,7 +403,7 @@ describe('ChainSessionStore — unknowns ledger', () => {
     await manager.createSession('s1', 'chain-a', 3);
     saveSpy.mockClear();
 
-    const ledger = await manager.applyUnknownObservations('s1', 2, [
+    const ledger = await manager.applyUnknownObservations('s1', 'n2', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided', blocking: true },
     ]);
 
@@ -424,7 +424,7 @@ describe('ChainSessionStore — unknowns ledger', () => {
     manager = newManager('copies');
     await manager.createSession('s1', 'chain-a', 3);
 
-    const ledger = await manager.applyUnknownObservations('s1', 1, [
+    const ledger = await manager.applyUnknownObservations('s1', 'n1', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
     ]);
     ledger[0]!.statement = 'mutated by a caller';
@@ -438,7 +438,7 @@ describe('ChainSessionStore — unknowns ledger', () => {
     saveSpy.mockClear();
 
     await expect(
-      manager.applyUnknownObservations('s1', 2, [
+      manager.applyUnknownObservations('s1', 'n2', [
         { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
         { type: 'unknown_resolved', id: 'never-seen', statement: 'done', resolution: 'answered' },
       ])
@@ -452,7 +452,7 @@ describe('ChainSessionStore — unknowns ledger', () => {
     manager = newManager('missing');
 
     await expect(
-      manager.applyUnknownObservations('nope', 1, [
+      manager.applyUnknownObservations('nope', 'n1', [
         { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
       ])
     ).rejects.toThrow(/session not found/);
@@ -464,7 +464,7 @@ describe('ChainSessionStore — unknowns ledger', () => {
     saveSpy.mockRejectedValueOnce(new Error('disk full'));
 
     await expect(
-      manager.applyUnknownObservations('s1', 1, [
+      manager.applyUnknownObservations('s1', 'n1', [
         { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
       ])
     ).rejects.toThrow('disk full');
@@ -480,7 +480,7 @@ describe('ChainSessionStore — unknowns ledger', () => {
   test('getChainContext exposes unknowns_ledger once entries exist', async () => {
     manager = newManager('context-populated');
     await manager.createSession('s1', 'chain-a', 3);
-    await manager.applyUnknownObservations('s1', 2, [
+    await manager.applyUnknownObservations('s1', 'n2', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
     ]);
 
@@ -495,5 +495,246 @@ describe('ChainSessionStore — unknowns ledger', () => {
         discoveredAtStep: 2,
       },
     ]);
+  });
+});
+
+describe('ChainSessionStore — adaptive mutation (P4 Tier 2)', () => {
+  let manager: ChainSessionStore;
+  // Typed by what this block actually uses rather than as `jest.SpyInstance`: the sibling
+  // describes above spell it that way and each costs a TS2694 against the ratchet baseline,
+  // because @jest/globals does not export that namespace member.
+  type RestorableSpy = { mockRestore: () => void };
+  let saveSpy: RestorableSpy;
+  let loadSpy: RestorableSpy;
+  let schedulerSpy: RestorableSpy;
+
+  beforeEach(() => {
+    saveSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .mockResolvedValue(undefined);
+    loadSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined);
+    schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+    }
+    saveSpy.mockRestore();
+    loadSpy.mockRestore();
+    schedulerSpy.mockRestore();
+  });
+
+  const newManager = (suffix: string): ChainSessionStore =>
+    new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
+      serverRoot: `/tmp/test-mutation-${suffix}`,
+      cleanupIntervalMs: 1000,
+    });
+
+  const nodeIds = (mgr: ChainSessionStore, sessionId: string): string[] =>
+    ((mgr as any).activeSessions.get(sessionId).state.nodes as Array<{ id: string }>).map(
+      (node) => node.id
+    );
+
+  // --- insertNodeAfter ------------------------------------------------------------------
+
+  test('insertNodeAfter places the node immediately after the anchor without renumbering', async () => {
+    manager = newManager('insert-mid');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    const inserted = await manager.insertNodeAfter('s1', 'n2', {
+      stepName: 'Investigate: cache TTL',
+      promptId: 'investigate',
+      unknownId: 'cache-ttl',
+    });
+
+    expect(inserted).not.toBeNull();
+    // Existing ids keep their spelling — every gate target and execution record addressed by
+    // id survives the insertion. Only the new id is new.
+    expect(nodeIds(manager, 's1')).toEqual(['n1', 'n2', inserted!.id, 'n3']);
+    expect(inserted!.id).not.toMatch(/^n\d+$/);
+  });
+
+  test('insertNodeAfter stamps origin and the originating unknown on the new node', async () => {
+    manager = newManager('insert-origin');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    const inserted = await manager.insertNodeAfter('s1', 'n1', {
+      stepName: 'Investigate: schema shape',
+      promptId: 'investigate',
+      unknownId: 'schema-shape',
+    });
+
+    expect(inserted?.origin).toBe('inserted');
+    expect(inserted?.originUnknownId).toBe('schema-shape');
+    expect(inserted?.promptId).toBe('investigate');
+    // Its neighbours were normalized to 'planned' at creation, so nothing in the list is
+    // ambiguous about its provenance.
+    const nodes = (manager as any).activeSessions.get('s1').state.nodes;
+    expect(nodes[0].origin).toBe('planned');
+    expect(nodes[2].origin).toBe('planned');
+  });
+
+  test('the inserted node becomes what the run advances to next', async () => {
+    manager = newManager('insert-next');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    const inserted = await manager.insertNodeAfter('s1', 'n1', {
+      stepName: 'Investigate',
+      promptId: 'investigate',
+      unknownId: 'u1',
+    });
+    const advanced = await manager.advanceStep('s1', 'n1');
+
+    expect(advanced).toEqual({ nodeId: inserted!.id, ordinal: 2 });
+  });
+
+  test('insertNodeAfter returns null when the anchor is not in the run', async () => {
+    manager = newManager('insert-absent');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    expect(
+      await manager.insertNodeAfter('s1', 'not-a-node', { stepName: 'X', promptId: 'p' })
+    ).toBeNull();
+    expect(nodeIds(manager, 's1')).toEqual(['n1', 'n2']);
+  });
+
+  test('insertNodeAfter returns null when the anchor sits behind the current node', async () => {
+    manager = newManager('insert-behind');
+    await manager.createSession('s1', 'chain-a', 3);
+    await manager.advanceStep('s1', 'n1');
+
+    // Anchoring at n1 would place the new node at ordinal 2, which traversal has already left.
+    expect(
+      await manager.insertNodeAfter('s1', 'n1', { stepName: 'Too late', promptId: 'p' })
+    ).toBeNull();
+    expect(nodeIds(manager, 's1')).toEqual(['n1', 'n2', 'n3']);
+  });
+
+  test('insertNodeAfter returns null once the run is terminal', async () => {
+    manager = newManager('insert-terminal');
+    await manager.createSession('s1', 'chain-a', 2);
+    await manager.transitionRunStatus('s1', 'completed');
+
+    expect(await manager.insertNodeAfter('s1', 'n1', { stepName: 'X', promptId: 'p' })).toBeNull();
+  });
+
+  test('insertNodeAfter returns null for an unknown session rather than no-opping silently', async () => {
+    manager = newManager('insert-missing');
+    expect(
+      await manager.insertNodeAfter('nope', 'n1', { stepName: 'X', promptId: 'p' })
+    ).toBeNull();
+  });
+
+  // --- markNodeSkipped ------------------------------------------------------------------
+
+  test('markNodeSkipped retires a node ahead of the run and preserves its position', async () => {
+    manager = newManager('skip-ahead');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    expect(await manager.markNodeSkipped('s1', 'n3', 'irrelevant-unknown')).toBe(true);
+    expect(manager.getStepState('s1', 'n3')?.state).toBe('skipped');
+    // Retired, not deleted: the ordinals of everything around it must not shift.
+    expect(nodeIds(manager, 's1')).toEqual(['n1', 'n2', 'n3']);
+  });
+
+  test('markNodeSkipped refuses the CURRENT node (OQ-P4-2 strictly-ahead rule)', async () => {
+    manager = newManager('skip-current');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    expect(await manager.markNodeSkipped('s1', 'n1', 'u1')).toBe(false);
+    expect(manager.getStepState('s1', 'n1')?.state).toBeUndefined();
+  });
+
+  test('markNodeSkipped refuses a node that has already started', async () => {
+    manager = newManager('skip-started');
+    await manager.createSession('s1', 'chain-a', 3);
+    manager.setStepState('s1', 'n2', 'rendered');
+
+    expect(await manager.markNodeSkipped('s1', 'n2', 'u1')).toBe(false);
+    expect(manager.getStepState('s1', 'n2')?.state).toBe('working');
+  });
+
+  test('markNodeSkipped refuses a node absent from the run', async () => {
+    manager = newManager('skip-absent');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    expect(await manager.markNodeSkipped('s1', 'ghost', 'u1')).toBe(false);
+  });
+
+  test('markNodeSkipped returns false for an unknown session rather than no-opping silently', async () => {
+    manager = newManager('skip-missing');
+    expect(await manager.markNodeSkipped('nope', 'n2', 'u1')).toBe(false);
+  });
+
+  test('markNodeSkipped is idempotent on an already-skipped node', async () => {
+    manager = newManager('skip-idempotent');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    expect(await manager.markNodeSkipped('s1', 'n3', 'u1')).toBe(true);
+    expect(await manager.markNodeSkipped('s1', 'n3', 'u1')).toBe(true);
+    expect(manager.getStepState('s1', 'n3')?.state).toBe('skipped');
+  });
+
+  test('a skipped node cannot be transitioned back out (terminal stickiness)', async () => {
+    manager = newManager('skip-sticky');
+    await manager.createSession('s1', 'chain-a', 3);
+    await manager.markNodeSkipped('s1', 'n2', 'u1');
+
+    expect(await manager.transitionStepState('s1', 'n2', 'rendered')).toBe(false);
+    expect(manager.getStepState('s1', 'n2')?.state).toBe('skipped');
+  });
+
+  // --- advanceStep over skipped nodes ---------------------------------------------------
+
+  test('advanceStep passes over a skipped node and lands on the next live one', async () => {
+    manager = newManager('advance-skip');
+    await manager.createSession('s1', 'chain-a', 3);
+    await manager.markNodeSkipped('s1', 'n2', 'u1');
+
+    const advanced = await manager.advanceStep('s1', 'n1');
+
+    expect(advanced).toEqual({ nodeId: 'n3', ordinal: 3 });
+    // The skipped node is not part of what the run executed — executionOrder is read to
+    // reconstruct step results, so a node with no result in it would read as a missing response.
+    expect((manager as any).activeSessions.get('s1').executionOrder).toEqual(['n1']);
+  });
+
+  test('advanceStep passes over a consecutive run of skipped nodes', async () => {
+    manager = newManager('advance-skip-run');
+    await manager.createSession('s1', 'chain-a', 4);
+    await manager.markNodeSkipped('s1', 'n2', 'u1');
+    await manager.markNodeSkipped('s1', 'n3', 'u2');
+
+    expect(await manager.advanceStep('s1', 'n1')).toEqual({ nodeId: 'n4', ordinal: 4 });
+  });
+
+  test('the completion latch still fires when every trailing node is skipped', async () => {
+    manager = newManager('advance-latch');
+    await manager.createSession('s1', 'chain-a', 3);
+    await manager.markNodeSkipped('s1', 'n2', 'u1');
+    await manager.markNodeSkipped('s1', 'n3', 'u2');
+
+    const advanced = await manager.advanceStep('s1', 'n1');
+
+    // Without the skip-loop the run would park on n2 forever: nothing renders a skipped node,
+    // so nothing would ever advance past it and the latch would never be reached.
+    expect(advanced).toEqual({ nodeId: null, ordinal: 4 });
+    expect((manager as any).activeSessions.get('s1').runStatus).toBe('completed');
+  });
+
+  test('the double-advance guard still short-circuits before the skip-loop runs', async () => {
+    manager = newManager('advance-guard');
+    await manager.createSession('s1', 'chain-a', 3);
+    await manager.advanceStep('s1', 'n1');
+    await manager.markNodeSkipped('s1', 'n3', 'u1');
+
+    // Re-advancing past an already-passed node reports the current position and mutates nothing.
+    expect(await manager.advanceStep('s1', 'n1')).toEqual({ nodeId: 'n2', ordinal: 2 });
+    expect((manager as any).activeSessions.get('s1').state.currentNodeId).toBe('n2');
   });
 });

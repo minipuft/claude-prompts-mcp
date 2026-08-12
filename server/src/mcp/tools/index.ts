@@ -845,6 +845,9 @@ export class McpToolRouter {
                   if (gate['target_step_number'] !== undefined) {
                     normalized['target_step_number'] = gate['target_step_number'];
                   }
+                  if (gate['target_step_id'] !== undefined) {
+                    normalized['target_step_id'] = gate['target_step_id'];
+                  }
                   if (gate['apply_to_steps'] !== undefined) {
                     normalized['apply_to_steps'] = gate['apply_to_steps'];
                   }

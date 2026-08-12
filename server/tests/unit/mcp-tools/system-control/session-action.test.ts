@@ -55,8 +55,8 @@ describe('System Control session action scope propagation', () => {
       {
         sessionId: 'sess-1',
         chainId: 'chain-research#1',
-        currentStep: 1,
-        totalSteps: 3,
+        currentNodeId: 'n1',
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
         pendingReview: false,
         lastActivity: Date.now(),
         startTime: Date.now(),
@@ -129,7 +129,7 @@ describe('System Control session action scope propagation', () => {
     sessions.getSession.mockReturnValue({
       sessionId: 'sess-1',
       chainId: 'chain-research#1',
-      state: { currentStep: 1, totalSteps: 3 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
       startTime: Date.now(),
       lastActivity: Date.now(),
       lifecycle: 'canonical',

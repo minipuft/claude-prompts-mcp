@@ -4,12 +4,20 @@ import { randomUUID } from 'crypto';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ChainSession, ChainSessionService, SessionBlueprint } from '#shared/types/index.js';
+import type {
+  ChainNode,
+  ChainSession,
+  ChainSessionService,
+  SessionBlueprint,
+  ToolResponse,
+} from '#shared/types/index.js';
 import type { ExecutionContext, ParsedCommand, SessionContext } from '../../context/index.js';
 import type { ExecutionPlan } from '../../types.js';
 import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';
 
+import { isRunComplete } from '#shared/types/chain-session.js';
 import { formatChainId, nextRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
+import { currentOrdinal, mintSequentialIds, totalOf } from '#shared/utils/node-order.js';
 
 /**
  * Pipeline Stage 13: Session Management
@@ -75,6 +83,24 @@ export class SessionManagementStage extends BasePipelineStage {
         resolvedSessionId = undefined;
       }
 
+      // Earliest point that holds the resolved session. A `user_response`/`gate_verdict`
+      // arriving for a run that has already finished used to fall straight through to
+      // `createPendingGateReviewIfNeeded`, which opened a FRESH review (attempt 1/3) against a
+      // completed run — the client was asked to re-review work the run had already accepted.
+      // Answering here, before any session context is published, is what stops it: with no
+      // `context.sessionContext` the capture stage skips, and with `context.response` set both
+      // the execution and formatting stages skip too.
+      if (existingSession !== undefined && !isRestart && isRunComplete(existingSession)) {
+        context.setResponse(this.buildAlreadyCompleteResponse(existingSession));
+        context.state.session.lifecycleDecision = 'resume-completed';
+        this.logExit({
+          skipped: 'Run already complete',
+          chainId: existingSession.chainId,
+          runStatus: existingSession.runStatus ?? 'working',
+        });
+        return;
+      }
+
       if (!resolvedSessionId) {
         resolvedSessionId = this.createSessionId(context);
       }
@@ -87,8 +113,12 @@ export class SessionManagementStage extends BasePipelineStage {
           sessionId: resolvedSessionId,
           chainId: existingSession.chainId,
           isChainExecution: true,
-          currentStep: existingSession.state.currentStep,
-          totalSteps: existingSession.state.totalSteps,
+          currentStep: currentOrdinal(
+            existingSession.state.nodes,
+            existingSession.state.currentNodeId
+          ),
+          currentNodeId: existingSession.state.currentNodeId,
+          totalSteps: totalOf(existingSession.state.nodes),
         };
         const pendingReview = this.chainSessionStore.getPendingGateReview(resolvedSessionId);
         if (pendingReview) {
@@ -108,12 +138,15 @@ export class SessionManagementStage extends BasePipelineStage {
         const blueprint = this.buildSessionBlueprint(context);
         const options = { ...scopeOptions, ...(blueprint ? { blueprint } : {}) };
 
+        // Carries the ids minted at parse time into the run — the only path by which an
+        // authored `id:` (or a symbolic chain's frozen `nK`) becomes the run's identity.
+        const nodes = this.buildChainNodes(context, chainId, totalSteps);
         await this.chainSessionStore.createSession(
           resolvedSessionId,
           chainId,
           totalSteps,
           context.getPromptArgs(),
-          Object.keys(options).length > 0 ? options : undefined
+          { ...options, nodes }
         );
 
         sessionContext = {
@@ -121,6 +154,10 @@ export class SessionManagementStage extends BasePipelineStage {
           chainId,
           isChainExecution: true,
           currentStep: 1,
+          // Derived from the same node list handed to the store rather than read back off its
+          // return value: a new run always stands at its first node, and depending on the
+          // return would couple this stage to a store implementation detail.
+          currentNodeId: nodes?.[0]?.id ?? (totalSteps > 0 ? 'n1' : null),
           totalSteps,
         };
         decision = forceRestart ? 'create-force-restart' : 'create-new';
@@ -142,6 +179,28 @@ export class SessionManagementStage extends BasePipelineStage {
     } catch (error) {
       this.handleError(error, 'Session management failed');
     }
+  }
+
+  /**
+   * The answer a client gets when it resumes a run that already finished.
+   *
+   * Names the chain and the final status so a driver can tell "your run is done" apart from
+   * "your chain_id was wrong" — the two were indistinguishable when the old path answered with
+   * a fresh gate review.
+   */
+  private buildAlreadyCompleteResponse(session: ChainSession): ToolResponse {
+    const totalSteps = totalOf(session.state.nodes);
+    const status = session.runStatus ?? 'completed';
+    const lines = [
+      `✓ Chain run already complete.`,
+      ``,
+      `Chain: ${session.chainId}`,
+      `Status: ${status}`,
+      `Steps: ${totalSteps}/${totalSteps}`,
+      ``,
+      `No user_response or gate_verdict is needed. Start a fresh run with the chain command, or pass force_restart to re-run this chain.`,
+    ];
+    return { content: [{ type: 'text', text: lines.join('\n') }], isError: false };
   }
 
   /**
@@ -174,7 +233,12 @@ export class SessionManagementStage extends BasePipelineStage {
     // Get step-level retry override if available
     const currentStepNumber = sessionContext.currentStep ?? 1;
     const steps = context.parsedCommand?.steps;
-    const currentStep = steps?.find((s) => s.stepNumber === currentStepNumber);
+    // Resolve by identity first: a step definition is addressed by its node id, and position
+    // is only the fallback for steps that predate minting (or for a context with no node id).
+    const currentNodeId = sessionContext.currentNodeId ?? undefined;
+    const currentStep =
+      (currentNodeId !== undefined ? steps?.find((s) => s.nodeId === currentNodeId) : undefined) ??
+      steps?.find((s) => s.stepNumber === currentStepNumber);
     const stepRetries = currentStep?.retries;
 
     // Determine maxAttempts with priority: step-level > gate-level > default
@@ -258,17 +322,64 @@ export class SessionManagementStage extends BasePipelineStage {
     return 1;
   }
 
+  /**
+   * Build the run's frozen node list from the parsed chain.
+   *
+   * Returns undefined when the request carries no parsed chain steps (a gated single prompt,
+   * for instance) — the store then synthesizes `n1..nK` from `totalSteps`, so the caller need
+   * not invent identities it does not have. A parsed chain missing minted ids anywhere falls
+   * back to sequential ids for the WHOLE list rather than mixing minted and synthetic ones,
+   * which would make the resulting identities depend on which steps happened to be parsed by
+   * which builder.
+   */
+  private buildChainNodes(
+    context: ExecutionContext,
+    chainId: string,
+    totalSteps: number
+  ): ChainNode[] | undefined {
+    const steps = context.parsedCommand?.steps;
+    if (!Array.isArray(steps) || steps.length === 0) {
+      return undefined;
+    }
+
+    const chainSteps = context.parsedCommand?.convertedPrompt?.chainSteps;
+    const allMinted = steps.every(
+      (step) => typeof step.nodeId === 'string' && step.nodeId.length > 0
+    );
+    const fallbackIds = allMinted ? [] : mintSequentialIds(steps.length);
+
+    if (!allMinted) {
+      // The detector standing in for a required `nodeId` on ChainStepPrompt (D10): every
+      // production parse path mints, so reaching here means a construction site was added
+      // without one and the run's identities are synthetic.
+      this.logger.warn(
+        `[SessionManagement] Parsed chain ${chainId} reached session creation without minted node ids (${steps.length} steps, expected ${totalSteps}); falling back to sequential ids`
+      );
+    }
+
+    return steps.map((step, index) => ({
+      id: allMinted ? (step.nodeId as string) : (fallbackIds[index] as string),
+      promptId: step.promptId,
+      stepName: chainSteps?.[index]?.stepName ?? step.promptId,
+    }));
+  }
+
   private getNextRunNumber(baseChainId: string): number {
     return nextRunNumber(this.chainSessionStore.getRunHistory(stripRunNumber(baseChainId)));
   }
 
+  /**
+   * Whether a run has finished — the input to the auto-restart decision.
+   *
+   * Was `currentStep >= totalSteps`, which reads a run *standing on* its final step as
+   * finished: resuming such a run without an explicit `chain_id` silently restarted it from
+   * step 1 instead of continuing. The latch distinguishes the two.
+   */
   private isChainComplete(session?: ChainSession): boolean {
     if (!session) {
       return false;
     }
-
-    const { currentStep = 0, totalSteps = 0 } = session.state;
-    return totalSteps > 0 && currentStep >= totalSteps;
+    return isRunComplete(session);
   }
 
   private buildSessionBlueprint(context: ExecutionContext): SessionBlueprint | undefined {
