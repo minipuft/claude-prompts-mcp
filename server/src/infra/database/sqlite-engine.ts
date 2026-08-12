@@ -268,6 +268,13 @@ export class SqliteEngine implements DatabasePort {
 
   /**
    * Get or create the SqliteEngine singleton
+   *
+   * A singleton drops the config of every call after the first. Five of the six call sites pass
+   * no `dbPath` and fall back to `serverRoot` — the PACKAGE directory — while the sixth passes
+   * the PathResolver-derived runtime path. Which one ran first therefore decided where
+   * `state.db` lived, and the tracker happening to initialize early is the only reason
+   * `MCP_WORKSPACE` was honored at all. Ordering is not a place to keep an invariant, so a
+   * later caller that disagrees about the path is named rather than silently ignored.
    */
   static async getInstance(
     serverRoot: string,
@@ -276,6 +283,16 @@ export class SqliteEngine implements DatabasePort {
   ): Promise<SqliteEngine> {
     if (!SqliteEngine.instance) {
       SqliteEngine.instance = new SqliteEngine(serverRoot, logger, config);
+      return SqliteEngine.instance;
+    }
+
+    const requested = config?.dbPath;
+    if (requested !== undefined && requested !== SqliteEngine.instance.dbPath) {
+      throw new Error(
+        `SqliteEngine is already open at ${SqliteEngine.instance.dbPath}, but a later caller ` +
+          `requested ${requested}. The composition root must claim the singleton with the ` +
+          `PathResolver-derived path before any consumer calls getInstance().`
+      );
     }
     return SqliteEngine.instance;
   }

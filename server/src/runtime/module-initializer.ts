@@ -82,6 +82,31 @@ export interface ModuleInitResult {
   resourceChangeTracker?: ResourceChangeTracker;
 }
 
+/**
+ * Claim the SqliteEngine singleton with the resolved runtime path before any consumer can
+ * construct it from `serverRoot`.
+ *
+ * `getInstance` keeps the config of whichever call arrives first, and five of its six call sites
+ * pass no `dbPath` — falling back to the PACKAGE directory, which is read-only under a sandboxed
+ * MCP child and invisible to the workspace either way. `MCP_WORKSPACE` was honored only because
+ * ResourceChangeTracker happened to initialize early and is the one site that passes the
+ * PathResolver-derived path. Claiming it here makes that an invariant rather than an ordering
+ * accident; the divergence guard in `SqliteEngine.getInstance` names any later disagreement.
+ *
+ * Extracted rather than inlined: `initializeModules` is already at cognitive complexity 63, and
+ * the lint ratchet counts violations, not the number inside one — an inline `if` would have
+ * pushed it to 64 with every gate still green.
+ */
+async function claimStateDatabase(
+  runtimeDbPath: string | undefined,
+  serverRoot: string | undefined,
+  logger: Logger
+): Promise<void> {
+  if (runtimeDbPath === undefined) return;
+  const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+  await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+}
+
 export async function initializeModules(params: ModuleInitParams): Promise<ModuleInitResult> {
   const {
     logger,
@@ -108,6 +133,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     pathResolver !== undefined
       ? path.join(pathResolver.getRuntimeStatePath(), 'state.db')
       : undefined;
+
+  await claimStateDatabase(runtimeDbPath, serverRoot, logger);
+
   if (serverRoot !== undefined && serverRoot !== '') {
     if (isVerbose) logger.info('🔄 Initializing Resource Change Tracker...');
     try {
