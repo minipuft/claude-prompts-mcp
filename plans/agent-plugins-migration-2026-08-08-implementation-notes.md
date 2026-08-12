@@ -131,6 +131,13 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 01:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run -s typecheck:committed; echo "exit=$?" echo "=== lint t` · ran
+- 2026-08-12 01:42 · `cd /home/minipuft/Applications/claude-prompts-mcp # Reproduce the exact defect shape: commit a consumer, leave its provi` · ran
+- 2026-08-12 01:41 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/cpm-headcheck git worktree add --detach /tmp/cpm-headcheck` · ran
+- 2026-08-12 01:39 · `cd /home/minipuft/Applications/claude-prompts-mcp cp server/src/engine/execution/parsers/types/operator-types.ts /tmp/cp` · ran
+- 2026-08-12 01:39 · `cd /home/minipuft/Applications/claude-prompts-mcp cp server/src/shared/utils/node-order.ts /tmp/cpm-headcheck/server/src` · ran
+- 2026-08-12 01:38 · `cd /tmp/cpm-headcheck/server npx tsc --noEmit -p tsconfig.json 2>&1 | sed 's/(.*//' | sort -u echo "--- total errors at ` · ran
+- 2026-08-12 01:38 · `cd /tmp/cpm-headcheck/server ln -s /home/minipuft/Applications/claude-prompts-mcp/server/node_modules node_modules 2>/de` · ran
 - 2026-08-12 00:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --check ../plans/agent-plugins-migration-2026-08-0` · ran
 - 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-operator-registry-drift.js scripts/` · ran
 - 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "### typecheck"; npx tsc --noEmit -p tsconfig.json 2>&1 | ` · ran
@@ -548,3 +555,20 @@ which passed, and nothing connected the unverified half of the claim to a failin
 the strongest argument in the initiative for gates over rows: `validate:operator-registry-drift`
 makes that particular claim mechanically checkable, and no amount of care in row-writing would
 have.
+
+**DEV-T05b-7 — the tier's own commit demonstrated the gap the tier was closing.** Verifying commit
+scope in a detached worktree at HEAD — a habit, not a required step — found HEAD did not compile.
+Cause was `8875ab42` from earlier the same session: two parser files carried edits from two
+concurrent sessions, staging them whole took the other session's consumer lines, and their
+providers stayed untracked. Every gate had passed, because `pre-commit` and `pre-push` both
+typecheck the WORKING TREE, where the providers are sitting on disk.
+
+This is the same failure shape as D9, one level up. D9: the registry pattern's only consumer was a
+path no test drove, so a false claim about it survived every test. E7: the typecheck's only input
+was a state CI never uses, so a broken commit survived every gate. Both times the check was real,
+ran, passed, and was measuring something adjacent to what it was believed to measure. Ten sightings
+of the adjacent-property shape are now recorded across this initiative; this is the first where the
+_gate_ rather than the _probe_ was the thing pointed at the wrong object.
+
+Worth noting what did NOT find it: `validate:all` 34/34, `test:ci` 2171/2171, `test:e2e` 134,
+`verify:claims` 89/89, both ratchets. A green board is evidence about what the board observes.
