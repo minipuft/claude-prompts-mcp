@@ -66,6 +66,38 @@ export const PromptArgumentSchema = z.object({
 export type PromptArgumentYaml = z.infer<typeof PromptArgumentSchema>;
 
 // ============================================
+// Visibility Policy Schema (P5)
+// ============================================
+
+/**
+ * A named item of chain-run context a step's `visibility` declaration can withhold from or
+ * expose to that step's render. Mirrors `VisibilityItem` in `shared/types/chain-execution.ts`
+ * (SSOT for the union) — kept as a literal Zod enum here rather than importing the type, since
+ * Zod needs runtime values, not just the type, and this is the one place the vocabulary is
+ * validated. Ruled item-kind-only for v1 (OQ-P5-1): node-id-addressed exposure is deferred to
+ * P6, pending `ParsedCommandSnapshot.steps` carrying a nodeId.
+ */
+export const VisibilityItemSchema = z.enum([
+  'previous_step_output',
+  'chain_history',
+  'unknowns_ledger',
+]);
+
+/**
+ * Per-step visibility policy, consumed by `decideVisibility` at render time. An item may
+ * appear in `withhold` or `expose`; mutual exclusivity is not validated — expose is only
+ * meaningful against a PRIOR step's withhold, so the same item in both is a no-op, not an error.
+ */
+export const StepVisibilitySchema = z
+  .object({
+    withhold: z.array(VisibilityItemSchema).optional(),
+    expose: z.array(VisibilityItemSchema).optional(),
+  })
+  .strict();
+
+export type StepVisibilityYaml = z.infer<typeof StepVisibilitySchema>;
+
+// ============================================
 // Chain Step Schema
 // ============================================
 
@@ -148,6 +180,13 @@ export const ChainStepSchema = z
      * them. Same posture as `id` above: additive, nothing downstream consumes it yet.
      */
     inlineGateIds: z.array(z.string().min(1)).optional(),
+    /**
+     * Per-step visibility policy: which chain-run context items to withhold from or expose to
+     * this step's render. Consumed by `decideVisibility` (pipeline/decisions/visibility) at the
+     * operator render and delegation-envelope chokepoints. Unknown item strings are rejected
+     * here by `VisibilityItemSchema`'s enum, naming the allowed vocabulary in the error.
+     */
+    visibility: StepVisibilitySchema.optional(),
     /**
      * Export this step as a delegated skill step.
      *

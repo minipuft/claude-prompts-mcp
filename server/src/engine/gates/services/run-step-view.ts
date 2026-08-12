@@ -23,6 +23,18 @@ export interface RunStepView {
    * firing it against a different step would be a silent retarget (OQ-P4-3).
    */
   readonly skippedNodeIds: readonly string[];
+  /**
+   * The node the run is standing at, or `null` once the run has walked off its last node.
+   *
+   * The SAME fact stage 13 publishes as `sessionContext.currentNodeId` and stage 14 resolves
+   * steps against (`session.state.currentNodeId`) — read one hop earlier, because gate
+   * enhancement is stage 11 and no session context exists yet. Not a second notion of "current":
+   * there is one, it lives on the run, and this is it.
+   *
+   * `undefined` only when there is no run to ask (the call that STARTS a chain), which is
+   * exactly the case where the run would stand at its first node.
+   */
+  readonly currentNodeId?: string | null;
 }
 
 /** Resolves the run behind a chain id. Returns undefined when there is no run (yet). */
@@ -53,6 +65,6 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
       (nodeId) => store.getStepState(session.sessionId, nodeId)?.state === 'skipped'
     );
 
-    return { nodeIds, skippedNodeIds };
+    return { nodeIds, skippedNodeIds, currentNodeId: session.state.currentNodeId };
   };
 }

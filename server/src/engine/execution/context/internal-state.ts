@@ -158,8 +158,28 @@ export interface PipelineInternalState {
     awaitingUserChoice?: boolean;
     /** Which subsystem triggered the escalation (retry exhaustion). */
     escalationSource?: 'gate-review' | 'shell-verify';
-    /** Accumulated gate IDs from enhancement stage for downstream use */
+    /**
+     * Accumulated gate IDs from enhancement stage for downstream use.
+     *
+     * RUN-WIDE, and deliberately so: the chain accumulator is never reset between steps, so this
+     * is "every gate the run has picked up by now". It is the INJECTION input (stage 14 builds
+     * gate-guidance from it) and the run-wide inheritance record. It is NOT a statement about
+     * which gates the step being rendered must be reviewed against — see `reviewGateIds`.
+     */
     accumulatedGateIds?: string[];
+    /**
+     * Gate IDs that THIS step must be reviewed against (P4-F3, OQ-P5-4).
+     *
+     * The per-step slice of `accumulatedGateIds`: step-targeted gates bound to another node are
+     * absent, untargeted gates are present on every step. Written only on the chain path, by
+     * `GateEnhancementService.enhanceChainSteps`, for the step the run is standing at; the
+     * single-prompt path leaves it undefined so its readers fall back to `accumulatedGateIds`
+     * and stay byte-identical.
+     *
+     * Kept separate rather than filtering `accumulatedGateIds` in place: that list feeds gate
+     * guidance INJECTION and run-wide inheritance, and narrowing it would scope those too.
+     */
+    reviewGateIds?: string[];
     /** Whether blocking gates are present that require review */
     hasBlockingGates?: boolean;
     /**

@@ -20,6 +20,7 @@ import type {
   PendingShellVerificationSnapshot,
   RunTelemetry,
   StepMetadata,
+  VisibilityItem,
 } from './chain-execution.js';
 import type { ExecutionModifiers, ExecutionPlan } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
@@ -41,6 +42,7 @@ export type {
   RunTelemetry,
   StepLifecycle,
   StepSubstate,
+  VisibilityItem,
 } from './chain-execution.js';
 
 /**
@@ -61,6 +63,8 @@ export interface ParsedCommandSnapshot {
   steps?: Array<{
     inlineGateIds?: string[];
     args?: Record<string, unknown>;
+    /** Additive only (P5 Tier 1) — no consumer reads this yet. */
+    visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
   }>;
   inlineGateIds?: string[];
   namedInlineGates?: unknown[];

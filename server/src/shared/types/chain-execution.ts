@@ -22,6 +22,16 @@
  */
 export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed' | 'skipped';
 
+/**
+ * A named item of chain-run context a step's `visibility` declaration can withhold from or
+ * expose to that step's render (P5 OQ-P5-1: ruled item-kind addressing for v1 — node-id-addressed
+ * exposure hard-depends on `ParsedCommandSnapshot.steps` carrying a nodeId, which it does not).
+ *
+ * Tier 1 (schema + type threading) is additive only: declaring `visibility` on a chain step
+ * threads it through parsing and persistence, but nothing reads it yet. Consumption is Tier 2-3.
+ */
+export type VisibilityItem = 'previous_step_output' | 'chain_history' | 'unknowns_ledger';
+
 // `enum StepState` (PENDING | RENDERED | RESPONSE_CAPTURED | COMPLETED) was removed here.
 // Its two transient members had no counterpart in the sticky-terminal model: RENDERED and
 // RESPONSE_CAPTURED are not states, they are progress *within* `working`, and are now carried

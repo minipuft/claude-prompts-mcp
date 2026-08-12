@@ -1,7 +1,9 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
+import { applyVisibilityToEnvelope } from '../delegation/envelope-visibility.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
+import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
@@ -13,10 +15,22 @@ import type {
 import type { ExecutionContext } from '../context/index.js';
 import type { DelegationPayload, ExecutionEnvelope, RenderingHints } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
+import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
 /** Max gates to list in the GATE_VERDICTS template */
 const MAX_GATE_VERDICT_ENTRIES = 10;
+
+/**
+ * The decision for "no declarations anywhere". A shared frozen constant rather than a fresh
+ * `{ withheld: [], exposed: [], manifest: [] }` per call: it is returned on the hot path every
+ * chain without `visibility:` takes, and `applyVisibilityToEnvelope` only reads its lengths.
+ */
+const EMPTY_VISIBILITY_DECISION: VisibilityDecision = Object.freeze({
+  withheld: [],
+  exposed: [],
+  manifest: [],
+});
 
 /**
  * Assembles response content sections for different execution types.
@@ -302,7 +316,6 @@ export class ResponseAssembler {
    */
   private buildHandoffSection(context: ExecutionContext): string | null {
     const metadata = context.executionResults?.metadata ?? {};
-    const envelope = this.buildHandoffEnvelope(context);
 
     // Read step info from metadata (StepExecutionStage) or fall back to parsed steps
     const stepNumber =
@@ -315,6 +328,7 @@ export class ResponseAssembler {
     const nextStep = this.findNextDelegatedStep(context);
     const agentType = nextStep?.agentType ?? 'chain-executor';
     const subagentModel = nextStep?.subagentModel;
+    const envelope = this.buildHandoffEnvelope(context, nextStep?.index);
 
     const gateCount = context.gates.getAll().length;
     const clientProfile = this.resolveClientProfile(context);
@@ -349,9 +363,17 @@ export class ResponseAssembler {
 
   /**
    * Builds an ExecutionEnvelope from gate instructions and framework context.
-   * Returns null when neither source has content.
+   * Returns null when no source has content and nothing is withheld.
+   *
+   * `nextStepIndex` is the index of the step being handed off within
+   * `context.parsedCommand.steps`; when present, the P5 visibility decision for that step
+   * filters the envelope and supplies its withheld manifest (Tier 3.2). Absent index (no
+   * delegated step located) leaves the envelope exactly as it was before P5.
    */
-  private buildHandoffEnvelope(context: ExecutionContext): ExecutionEnvelope | null {
+  private buildHandoffEnvelope(
+    context: ExecutionContext,
+    nextStepIndex?: number
+  ): ExecutionEnvelope | null {
     const gateInstructions =
       context.gateInstructions != null && context.gateInstructions.length > 0
         ? context.gateInstructions
@@ -362,11 +384,37 @@ export class ResponseAssembler {
         ? context.frameworkContext.systemPrompt
         : undefined;
 
-    if (gateInstructions === undefined && frameworkGuidance === undefined) {
-      return null;
-    }
+    const base =
+      gateInstructions === undefined && frameworkGuidance === undefined
+        ? null
+        : { gateInstructions, frameworkGuidance };
 
-    return { gateInstructions, frameworkGuidance };
+    return applyVisibilityToEnvelope(base, this.resolveHandoffVisibility(context, nextStepIndex));
+  }
+
+  /**
+   * Resolve the P5 visibility decision for the handed-off step.
+   *
+   * Reads declarations off `context.parsedCommand.steps` — the parse-time blueprint, which is
+   * where visibility lives (OQ-P5-5: definition-time facts, re-derived rather than persisted as
+   * run state). Returns an empty decision when there is no delegated step or no parsed steps,
+   * which keeps the envelope byte-identical for every chain that declares nothing.
+   */
+  private resolveHandoffVisibility(
+    context: ExecutionContext,
+    nextStepIndex?: number
+  ): VisibilityDecision {
+    const steps = context.parsedCommand?.steps;
+    if (steps === undefined || nextStepIndex === undefined || nextStepIndex < 0) {
+      return EMPTY_VISIBILITY_DECISION;
+    }
+    const target = steps[nextStepIndex];
+    return decideVisibility({
+      step: target?.visibility != null ? { visibility: target.visibility } : {},
+      priorDeclarations: steps
+        .slice(0, nextStepIndex)
+        .map((step) => (step.visibility != null ? { visibility: step.visibility } : {})),
+    });
   }
 
   /**
@@ -445,7 +493,7 @@ export class ResponseAssembler {
    */
   private findNextDelegatedStep(
     context: ExecutionContext
-  ): { promptId: string; agentType?: string; subagentModel?: string } | undefined {
+  ): { promptId: string; agentType?: string; subagentModel?: string; index: number } | undefined {
     const steps = context.parsedCommand?.steps;
     if (!steps || steps.length === 0) {
       return undefined;
@@ -466,6 +514,10 @@ export class ResponseAssembler {
         promptId: nextStep.promptId,
         agentType: nextStep.agentType,
         subagentModel: nextStep.subagentModel,
+        // Carried so the P5 visibility decision for the handed-off step can be resolved from
+        // the same lookup that found it — recomputing the index elsewhere would give the
+        // node-id/ordinal fallback above two implementations that could disagree.
+        index: currentIndex + 1,
       };
     }
     return undefined;
@@ -681,7 +733,12 @@ export class ResponseAssembler {
   /** Appends gate verdict CTA when gates are active and a session exists. */
   private appendGateAction(lines: string[], context: ExecutionContext): boolean {
     const chainId = context.sessionContext?.chainId;
-    const gateIds = context.state.gates.accumulatedGateIds ?? [];
+    // Review is scoped to the step being rendered (P4-F3): a gate bound to another node has no
+    // business in this step's verdict template. `accumulatedGateIds` is the fallback, not the
+    // preference — the single-prompt path writes no `reviewGateIds`, and its output must stay
+    // byte-identical.
+    const gateIds =
+      context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [];
     if (gateIds.length === 0 || chainId == null || chainId.length === 0) return false;
 
     const pendingReview = context.sessionContext?.pendingReview;

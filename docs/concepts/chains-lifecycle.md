@@ -176,8 +176,12 @@ targeting, step totals, the CTA footer, and the Python hook projection all re-de
 run's current (possibly mutated) node list rather than the original parse-time step list.
 
 **Gates under mutation**: a gate whose `target_step_id` resolves to a node that later gets
-skipped never fires. Inserted investigation nodes carry no gates in v1 — their only output is
-observations, so adding review friction to them would work against the point of inserting one.
+skipped never fires. A step-targeted gate also enters gate REVIEW only on the step it targets —
+an untargeted gate still reviews every step, run-wide inheritance unchanged. Known residual: a
+mutation-inserted node standing as the current step matches no parse-time step, so review falls
+back to run-wide for that step. Inserted investigation nodes carry no gates in v1 — their only
+output is observations, so adding review friction to them would work against the point of
+inserting one.
 
 **Audit trail**: a run's terminal `execution_records` row also carries `nodes_inserted` and
 `nodes_skipped` — how many mutations of each kind happened over the life of the run. See
@@ -212,6 +216,41 @@ how they render and exactly what each one counts.
 
 ---
 
+## Visibility Policy
+
+A chain step may declare `visibility: { withhold?, expose? }` in `prompt.yaml`, naming which
+chain-run context items later steps do or don't see by default. The vocabulary is fixed —
+`previous_step_output | chain_history | unknowns_ledger` (`VisibilityItem`) — and an unrecognized
+item is rejected when the prompt loads, naming the allowed values.
+
+| Item                   | Governs                                                                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `previous_step_output` | The `{{previous_step_output}}` / `{{previous_step_result}}` template context. Withheld → a neutral `**[CONTEXT WITHHELD]**` instruction takes its place                                  |
+| `chain_history`        | The `step_results`, `previous_step_results`, and `step{N}_result` template context — stripped before `inputMapping` runs, so an alias can't re-publish a withheld entry under a new name |
+| `unknowns_ledger`      | The [Unknowns Ledger](#unknowns-ledger) section rendered into a step's instructions — suppressed entirely, not summarized, on both the normal render and the gate-review render          |
+
+**Semantics**: a step's `withhold` withholds those items from every LATER step's default render;
+a later step's own `expose` overrides that withhold for itself only — a step's own `withhold`
+never affects its own render, and `expose`-ing an item nobody withheld is a harmless no-op. No
+`visibility` declared anywhere in a chain renders byte-identically to a build without this
+feature.
+
+**v1 boundary**: `outputMapping` named outputs (e.g. `{{findings}}`) are spread into the same flat
+context as ordinary arguments and carry no marker distinguishing them from an argument, so
+`chain_history` withholding does not cover them.
+
+### What Visibility Cannot Do
+
+The server cannot unsee the client's own conversation. Withholding applies only to the context
+items the server itself renders into a step (the table above) — anything already sitting in the
+client's context window from an earlier turn stays visible to whatever model reads it there.
+True isolation is the `==>` delegation operator below, which builds the sub-agent a fresh
+context rather than filtering an existing one.
+
+See [MCP Tools Reference](../reference/mcp-tools.md#visibility-policy) for the YAML schema.
+
+---
+
 ## Delegation
 
 Steps can be handed off to sub-agents using the `==>` operator. Delegated steps run in isolated context, keeping the main conversation clean.
@@ -220,6 +259,16 @@ Steps can be handed off to sub-agents using the `==>` operator. Delegated steps 
 # Step 2 runs in a sub-agent
 prompt_engine(command:">>research ==> >>analyze --> >>summarize")
 ```
+
+A delegated step's envelope also carries the [visibility policy](#visibility-policy) result: any
+item a prior step withheld is excluded from the envelope, and the handoff reports the withheld
+item names on one manifest line —
+
+```
+CONTEXT WITHHELD (names only, values not provided): chain_history
+```
+
+— names only, never the withheld values, across every client profile.
 
 ### Model Selection
 
@@ -257,5 +306,5 @@ Names are host-defined and are not validated by the server.
 
 - **[Chain Authoring Example](../guides/chain-authoring-example.md)** — Build a real multi-step pipeline
 - **[Chain Schema Reference](../reference/chain-schema.md)** — `chainSteps` configuration, input mapping, retries
-- **[MCP Tools Reference](../reference/mcp-tools.md)** — `prompt_engine` chain parameters
+- **[MCP Tools Reference](../reference/mcp-tools.md)** — `prompt_engine` chain parameters, [Visibility Policy schema](../reference/mcp-tools.md#visibility-policy)
 - **[Gates Guide](../guides/gates.md)** — Add validation between chain steps

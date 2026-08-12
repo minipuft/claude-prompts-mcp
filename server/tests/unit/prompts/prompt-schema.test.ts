@@ -107,6 +107,91 @@ describe('validatePromptYaml — chain step id uniqueness', () => {
   });
 });
 
+describe('ChainStepSchema.visibility (P5 Tier 1)', () => {
+  it('accepts a withhold/expose declaration using the allowed item vocabulary', () => {
+    const result = ChainStepSchema.safeParse({
+      promptId: 'p1',
+      stepName: 'Step One',
+      visibility: {
+        withhold: ['chain_history'],
+        expose: ['previous_step_output', 'unknowns_ledger'],
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an omitted visibility declaration (optional, no regression)', () => {
+    const result = ChainStepSchema.safeParse({ promptId: 'p1', stepName: 'Step One' });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.visibility).toBeUndefined();
+  });
+
+  it('rejects an unknown item string and names the allowed vocabulary in the error', () => {
+    const result = ChainStepSchema.safeParse({
+      promptId: 'p1',
+      stepName: 'Step One',
+      visibility: { withhold: ['not_a_real_item'] },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const message = result.error.issues.map((issue) => issue.message).join(' | ');
+      expect(message).toContain('previous_step_output');
+      expect(message).toContain('chain_history');
+      expect(message).toContain('unknowns_ledger');
+    }
+  });
+
+  it('rejects an unknown key inside the visibility object (strict)', () => {
+    const result = ChainStepSchema.safeParse({
+      promptId: 'p1',
+      stepName: 'Step One',
+      visibility: { hide: ['chain_history'] },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('validatePromptYaml — chain step visibility round-trip (P5 Tier 1)', () => {
+  it('preserves a declared visibility policy through validation', () => {
+    const result = validatePromptYaml(
+      minimalYamlChain([
+        {
+          promptId: 'p1',
+          stepName: 'Step One',
+          visibility: { withhold: ['chain_history'] },
+        },
+      ])
+    );
+
+    expect(result.valid).toBe(true);
+    expect(result.data?.chainSteps?.[0]?.visibility).toEqual({ withhold: ['chain_history'] });
+  });
+
+  it('round-trips byte-identical when no visibility is declared (negative control)', () => {
+    const result = validatePromptYaml(minimalYamlChain([{ promptId: 'p1', stepName: 'Step One' }]));
+
+    expect(result.valid).toBe(true);
+    expect(result.data?.chainSteps?.[0]?.visibility).toBeUndefined();
+    expect(
+      Object.prototype.hasOwnProperty.call(result.data?.chainSteps?.[0] ?? {}, 'visibility')
+    ).toBe(false);
+  });
+
+  it('rejects an invalid item string at the top-level validation entry point', () => {
+    const result = validatePromptYaml(
+      minimalYamlChain([
+        {
+          promptId: 'p1',
+          stepName: 'Step One',
+          visibility: { expose: ['bogus_item'] },
+        },
+      ])
+    );
+
+    expect(result.valid).toBe(false);
+  });
+});
+
 describe('validatePromptSchema — chain step id uniqueness (PromptDataSchema path)', () => {
   it('rejects a chain with two steps sharing the same explicit id', () => {
     const result = validatePromptSchema(

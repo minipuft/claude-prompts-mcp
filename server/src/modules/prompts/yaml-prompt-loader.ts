@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
 
 import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
+import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { PromptData } from './types.js';
 
 import { type Logger, PromptArgument } from '#shared/types/index.js';
@@ -65,6 +66,12 @@ export interface LoadedPromptFile {
     framework?: string;
     /** Accepted, not yet consumed — mirrors `ChainStepSchema.inlineGateIds`. */
     inlineGateIds?: string[];
+    /**
+     * Per-step visibility policy (P5 Tier 1) — mirrors `ChainStepSchema.visibility`. Threaded
+     * (unlike `inlineGateIds` above), not consumed: no gate/behavioral risk in carrying an
+     * unread declaration, since nothing branches on it yet.
+     */
+    visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
   }>;
 }
 
@@ -389,6 +396,11 @@ function normalizeChainSteps(
     // gate pipeline would move a dead field one layer deeper rather than making it work. This
     // allowlist is the second of the two strippers described on `ChainStepSchema`; when
     // inlineGateIds is wired, it is added here and in `04-parsing-stage.ts` together.
+    //
+    // `visibility` IS carried, unlike `inlineGateIds` above: it declares which context items a
+    // step's render may see, not an active behavior, so an unwired but preserved declaration
+    // carries no risk of newly changing what a chain does (P5 Tier 1: additive/threading only).
+    if (step.visibility != null) normalized.visibility = step.visibility;
     return normalized;
   });
 }

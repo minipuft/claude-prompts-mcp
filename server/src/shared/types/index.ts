@@ -11,8 +11,6 @@
 
 // ===== Import Domain-Specific Types =====
 
-import type { StateStoreOptions } from './persistence.js';
-
 export type { StateStoreOptions, StateStore, DatabasePort, ToolIndexEntry } from './persistence.js';
 export type { McpToolRequest } from './execution.js';
 
@@ -47,6 +45,7 @@ export {
   type FormatterExecutionContext,
   type ChainNode,
   type ChainState,
+  type VisibilityItem,
 } from './chain-execution.js';
 
 // Core configuration and protocol types (canonical source: ./core-config.ts)
@@ -59,7 +58,9 @@ import type {
   ScriptExecutionResult,
   ToolDetectionMatch,
 } from './automation.js';
+import type { VisibilityItem } from './chain-execution.js';
 import type { ContentAnalysisResult } from './core-config.js';
+import type { StateStoreOptions } from './persistence.js';
 
 export type {
   AdvancedConfig,
@@ -658,6 +659,12 @@ export interface ChainStep {
    * `12-framework-stage.ts`; an id the registry does not know falls back to the run-wide choice.
    */
   framework?: string;
+  /**
+   * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
+   * expose to this step's render. Mirrors `ChainStepSchema.visibility`. Additive only — threaded
+   * through parsing and persistence, nothing downstream consumes it yet (Tier 2-3).
+   */
+  visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
 }
 
 /**

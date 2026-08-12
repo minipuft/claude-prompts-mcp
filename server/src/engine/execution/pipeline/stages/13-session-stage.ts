@@ -216,7 +216,13 @@ export class SessionManagementStage extends BasePipelineStage {
       return;
     }
 
-    const gateIds = context.state.gates.accumulatedGateIds ?? [];
+    // Scoped to the step this review is being opened FOR (P4-F3, DEV-T4-2). This is the review
+    // feed that actually blocks a chain: `formatChainResponse` renders `buildGateReviewCTA` from
+    // `pendingReview.gateIds`, which is this list. Reading the run-wide accumulator here is what
+    // put a gate bound to node n2 into every step's review. `accumulatedGateIds` remains the
+    // fallback for the single-prompt path, which writes no `reviewGateIds`.
+    const gateIds =
+      context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [];
     if (gateIds.length === 0) {
       return;
     }

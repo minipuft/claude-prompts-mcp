@@ -1,5 +1,5 @@
 // @lifecycle canonical - Type definitions for chain operator execution
-import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 
@@ -50,6 +50,12 @@ export interface ChainStepPrompt {
    * requested id is unknown — collapsing them would leave nothing to fall back from.
    */
   framework?: string;
+  /**
+   * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
+   * expose to this step's render. Mirrors `ChainStep.visibility` / `ChainStepSchema.visibility`.
+   * Additive only — nothing downstream consumes it yet (Tier 2-3).
+   */
+  visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
 }
 
 /**

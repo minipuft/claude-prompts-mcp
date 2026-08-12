@@ -173,6 +173,9 @@ export class CommandParsingStage extends BasePipelineStage {
           // would promote a prompt-level preference into an explicit per-step OVERRIDE and let it
           // outrank the run-wide choice the user actually made.
           ...(step.framework != null ? { framework: step.framework } : {}),
+          // Threaded, not consumed (P5 Tier 1): step-declared visibility policy, carried through
+          // to the parse-time step list so it survives blueprint clone / cold-load round-trips.
+          ...(step.visibility != null ? { visibility: step.visibility } : {}),
         } as ChainStepPrompt;
       });
     }

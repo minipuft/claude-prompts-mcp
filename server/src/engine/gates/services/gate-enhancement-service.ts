@@ -279,6 +279,7 @@ export class GateEnhancementService {
     const gateService = this.requireGateService();
     const { steps } = gateContext;
     const runStepView = this.resolveRunStepView(context);
+    const currentStepKey = this.resolveCurrentStepKey(runStepView);
     let totalGatesApplied = 0;
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
@@ -341,6 +342,14 @@ export class GateEnhancementService {
       }
 
       gateIds = this.filterGatesByStepTarget(gateIds, step, runStepView);
+
+      // P4-F3 / OQ-P5-4. The per-step list is what REVIEW must be scoped to, and it exists only
+      // here, transiently. Published before the empty-list `continue` on purpose: "this step has
+      // no applicable gates" is the finding, and leaving the field unwritten would hand its
+      // readers the run-wide list through their fallback — the exact defect being closed.
+      if (this.isCurrentStep(step, currentStepKey)) {
+        context.state.gates.reviewGateIds = gateIds;
+      }
 
       if (gateIds.length === 0) {
         continue;
@@ -512,6 +521,49 @@ export class GateEnhancementService {
     return chainId === undefined
       ? undefined
       : this.runStepViewProvider(chainId, context.getScopeOptions());
+  }
+
+  /**
+   * Which step of the walk is the one the run is standing at.
+   *
+   * Gate enhancement is stage 11 and walks EVERY parse-time step, but only one of them is being
+   * rendered on this call. Read off the run's own `currentNodeId` — the same value stage 13
+   * publishes as `sessionContext.currentNodeId` and stage 14 resolves steps against — so this is
+   * that one notion of "current", asked one hop earlier rather than a second one invented here.
+   *
+   * With no run to ask (the call that STARTS a chain) the run stands at its first node, so
+   * ordinal 1. With `currentNodeId === null` the run has walked off its last node and no step is
+   * current: ordinal 0 matches nothing, which leaves `reviewGateIds` unwritten for a run that
+   * has no step left to review.
+   */
+  private resolveCurrentStepKey(view: RunStepView | undefined): {
+    nodeId?: string;
+    ordinal: number;
+  } {
+    if (view === undefined) {
+      return { ordinal: 1 };
+    }
+    const currentNodeId = view.currentNodeId;
+    if (currentNodeId === null) {
+      return { ordinal: 0 };
+    }
+    if (typeof currentNodeId === 'string' && currentNodeId.length > 0) {
+      const ordinal = view.nodeIds.indexOf(currentNodeId) + 1;
+      return { nodeId: currentNodeId, ordinal: ordinal > 0 ? ordinal : 1 };
+    }
+    return { ordinal: 1 };
+  }
+
+  /**
+   * Node id first, ordinal as fallback — the same precedence `filterGatesByStepTarget` and
+   * stage 14's `resolveCurrentChainStep` use, for the same reason: once a node has been inserted
+   * the run's ordinal space and the parse-time array stop being the same list.
+   */
+  private isCurrentStep(step: ChainStepPrompt, key: { nodeId?: string; ordinal: number }): boolean {
+    if (key.nodeId !== undefined && typeof step.nodeId === 'string' && step.nodeId.length > 0) {
+      return step.nodeId === key.nodeId;
+    }
+    return step.stepNumber === key.ordinal;
   }
 
   /**

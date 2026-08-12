@@ -426,6 +426,30 @@ it is never silently widened to apply to every step. A `target_step_id` that res
 later retired by the adaptive mutation policy (`milestone:"skipped"`) also selects nothing — the
 guard is checked per-call against the run's live node list, not just once at registration.
 
+### Visibility Policy
+
+A `chainSteps` entry in `prompt.yaml` may declare `visibility`, withholding or exposing named
+chain-run context items from later steps' default render:
+
+```yaml
+chainSteps:
+  - promptId: analyze
+    stepName: Analyze (step 1)
+    visibility:
+      withhold: [previous_step_output]
+```
+
+`withhold` and `expose` each take zero or more items from the fixed vocabulary
+`previous_step_output | chain_history | unknowns_ledger`. An unrecognized item fails the prompt's
+load, naming the allowed values. A step's `withhold` affects every LATER step's default render,
+never its own; a later step's `expose` overrides that withhold for itself only. No `visibility`
+declared anywhere in a chain renders byte-identically to a build without this feature.
+
+A delegated (`==>`) step's envelope excludes withheld items and reports their names on one
+manifest line so the sub-agent knows what it does not have. See [Visibility
+Policy](../concepts/chains-lifecycle.md#visibility-policy) for full semantics, the per-item
+meaning, and its honest ceiling.
+
 ### Shell Verification Gates (Ralph Mode)
 
 Ground-truth validation via shell command exit codes. Exit 0 = PASS, non-zero = FAIL.

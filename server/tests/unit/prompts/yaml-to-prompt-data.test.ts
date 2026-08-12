@@ -64,6 +64,34 @@ describe('yamlToPromptData', () => {
     expect(result.chainSteps?.[1]?.id).toBeUndefined();
   });
 
+  it('carries a declared visibility policy through normalizeChainSteps (P5 Tier 1)', () => {
+    // Same regression risk as the id test above: normalizeChainSteps builds its output
+    // object field-by-field, so a declared-but-unwired field can be silently dropped.
+    const result = yamlToPromptData(
+      makeMinimalYaml({
+        chainSteps: [
+          {
+            promptId: 'a',
+            stepName: 'A',
+            visibility: { withhold: ['chain_history'], expose: ['unknowns_ledger'] },
+          },
+          { promptId: 'b', stepName: 'B' },
+        ],
+      } as Partial<PromptYaml>)
+    );
+
+    expect(result.chainSteps?.[0]?.visibility).toEqual({
+      withhold: ['chain_history'],
+      expose: ['unknowns_ledger'],
+    });
+    // Negative control: a step without a declaration round-trips with no visibility key at all,
+    // proving the threading did not change default (undeclared) behavior.
+    expect(result.chainSteps?.[1]?.visibility).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(result.chainSteps?.[1] ?? {}, 'visibility')).toBe(
+      false
+    );
+  });
+
   it('defaults category to general', () => {
     const result = yamlToPromptData(makeMinimalYaml());
     expect(result.category).toBe('general');

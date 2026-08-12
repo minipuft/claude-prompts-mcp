@@ -204,6 +204,15 @@ The `gates.enabled` setting controls the entire gate subsystem, which includes g
 
 See [Gates Guide](./gates.md) for details.
 
+## Relationship to Visibility Policy
+
+Injection control decides what guidance is **added** to a step — frameworks, gate criteria, style
+rules. A chain step's `visibility: { withhold, expose }` declaration decides what chain-run
+context is **withheld** from a step's render — a separate axis, not a mode of injection. The two
+never interact: withholding `chain_history` does not change what gets injected, and disabling
+injection does not withhold `previous_step_output`. See [Visibility
+Policy](../concepts/chains-lifecycle.md#visibility-policy) for the schema and semantics.
+
 ---
 
 ## See Also
@@ -212,3 +221,4 @@ See [Gates Guide](./gates.md) for details.
 - **[Phase Guards Guide](./phase-guards.md)** — Structural validation of framework phase compliance
 - **[Troubleshooting](./troubleshooting.md)** — "Framework Not Injecting" and other injection-related issues
 - **[MCP Tools Reference](../reference/mcp-tools.md)** — `system_control` parameters for injection overrides
+- **[Chains: Visibility Policy](../concepts/chains-lifecycle.md#visibility-policy)** — Withhold/expose chain-run context between steps
