@@ -131,6 +131,16 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-11 23:51 · `cd server && npx tsc --noEmit --project tsconfig.json 2>&1 | head -4; echo "exit=$?"` · ran
+- 2026-08-11 23:50 · `cd server && npm run -s validate:all 2>&1 | rg "steps failed|── |FAIL" | head -6; echo "=== e2e ==="; NODE_OPTIONS="--ex` · ran
+- 2026-08-11 23:48 · `rm -f tests/e2e/__probe6.test.ts; NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conform` · ran
+- 2026-08-11 23:47 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad cp te` · ran
+- 2026-08-11 23:47 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad cp te` · ran
+- 2026-08-11 23:46 · `python3 - <<'PY' p='tests/e2e/conformance/workspace-and-mutations.yaml' s=open(p).read() s += """ # ── Framework switch ` · ran
+- 2026-08-11 23:46 · `python3 - <<'PY' p='tests/e2e/conformance/chain-lifecycle.yaml' s=open(p).read() s += """ # ── gate_action retry / abort` · ran
+- 2026-08-11 23:45 · `cd server && python3 - <<'PY' p='tests/e2e/conformance/tool-surface.yaml' s=open(p).read() s += """ # ── Read-only resou` · ran
+- 2026-08-11 23:44 · `echo "callers of createCheckpointToolHandler:"; rg -n "createCheckpointToolHandler" src/ --type ts | rg -v "manager.ts:3` · ran
+- 2026-08-11 23:43 · `cd server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe6.test.ts 2>&1 | rg "^ ### "` · ran
 - 2026-08-11 21:36 · `npx eslint src --format json 2>/dev/null | python3 -c " import json,sys,os d=json.load(sys.stdin) for f in d: hits=[m fo` · ran
 - 2026-08-11 21:35 · `cd server && npm run validate:format 2>&1 | tail -2; npm run lint:ratchet 2>&1 | tail -2` · ran
 - 2026-08-11 21:34 · `python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08.md' s=open(p).read() start=s.index("**RESUME-FROM-COLD STAT` · ran
@@ -410,3 +420,72 @@ satisfied exception outliving what it suppressed — worth a gate if it recurs.
 The answer to the question that triggered this pass: **0.5b does not gate the plugin release.**
 The Done criteria are Tiers 2–6. Closing 0.5b first would also mean writing scenarios against a
 surface Tier 2's renderer is about to change.
+
+## Deviation — pre-commit scoping (unplanned, 2026-08-11)
+
+**Not in any row.** Done because the commit sequence for Tiers 0.5/0.5b was blocked four times in
+ninety minutes, and diagnosing why turned up a duplication rather than a scheduling problem.
+
+`.husky/pre-commit` ran `lint:ratchet` (38s) and `typecheck` (6s) unconditionally. Both already run
+in `.husky/pre-push` — and pre-push has consulted `scripts/classify-validation-scope.js`, the
+declared changed-path SSOT, all along. Pre-commit never adopted it, so a markdown-only commit paid
+~44s of whole-tree checking over zero changed lines.
+
+Adopted the existing classifier rather than adding a second mechanism, and dropped the duplicated
+ratchet. Two reasons the ratchet in particular does not belong there: CLAUDE.md defines it as a
+project-wide **direction** measure, not conformance (per-commit conformance is `lint:staged`); and
+because it reads all of `src`, any unrelated violation blocks every commit — which in this shared
+worktree meant blocking on another session's in-flight code three separate times.
+
+**Scoped by path CLASS, not diff size**, per the Gate Skip Policy's "size is a signal, not the
+test". A line-count threshold was considered and rejected: a 3-line concurrency fix is
+decision-bearing while a 40-line generated update is mechanical.
+
+Contract preserved — pre-push runs both gates, CI runs `validate:all` whole, every local route
+stays a strict subset of CI. Classifier routing verified per case rather than assumed: docs/plans/
+READMEs → `docs`, `hooks/**` → `hooks`, and source, tests, `package.json`, mixed, empty input and
+the hook file itself → `full`.
+
+**Relates to E5/E6.** E6 asks for an audit of gates whose scope is "shipped content" but whose
+mechanism is a filesystem walk; this is the adjacent defect — a gate whose scope is "this commit"
+but whose mechanism is the whole tree. Worth folding into E6's sweep.
+
+**Landed** as `a5d8cb51`. The three commits it unblocked: `5864b824`, `f90b0242`, `1044afd5`.
+
+## Tier 0.5c — Workstreams A/B/C closed (2026-08-11)
+
+11 scenarios; corpus 78 → 89. Every one falsified by a mutation that reds it and nothing else,
+verified in two batches of 5 and 3.
+
+**One new defect, and it is a surface defect rather than a behavioural one.** `checkpoint` is one of
+four values in the published `resource_type` enum and cannot succeed under any configuration. The
+error text — "Ensure checkpoint support is enabled" — promises a setting that does not exist:
+`createCheckpointToolHandler` is defined in `checkpoint/manager.ts`, re-exported from
+`checkpoint/index.ts`, and called from nowhere in `src/`. The router's `checkpointManager` is
+declared optional and never injected, so its guard is unconditionally true. That is the
+reader-without-producer shape, and the schema enum is the user-facing interface that decides which
+reading applies: a missing producer, not a redundant channel. Filed as 0.5.26, held as a
+self-retiring divergence row.
+
+**C6 falsified my own prediction, which is the point of writing it.** I expected a malformed legacy
+`gate_verdict` to be silently accepted as a pass — the tier's record made that the likely outcome,
+and it would have meant the gate could be defeated by a typo. It is rejected at the schema layer,
+before any of the five regexes CLAUDE.md warns can fail to parse. The row now guards that rather
+than reporting a defect that was not there. **A hypothesis-driven row is worth writing whether or
+not the hypothesis survives** — the negative result is what makes the retirement clause's `source`
+field trustworthy.
+
+**B2's probe failed for a probe reason first.** `system_control(action:'framework')` returned
+"Unknown framework operation: default" for three different argument shapes before I read the handler
+and found the required `operation` arg. Recorded because the error names the valid operations but
+not the parameter that carries them — a caller reading only the message cannot recover.
+
+**Two rows where one would have looked sufficient**: B2 asserts both the read-back (`🟢 ACTIVE`
+moved) and the effect on execution (`operating under the 5W1H Framework`). A registry that updated
+without the pipeline reading it passes the first and fails the second — exactly the D6 shape, where
+a framework applied its banner but not its guidance.
+
+**Ordering hazard handled, not inherited**: both B2 rows switch to 5W1H themselves rather than one
+depending on the other, so they are order-independent and idempotent. They leave the isolated server
+on 5W1H; every other row in that file either passes `%clean` or asserts a body marker no framework
+changes.
