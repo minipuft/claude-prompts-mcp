@@ -54,7 +54,7 @@ const hasConditionalOperator = /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-
 | ----------- | ----------- | ---------------------------------------------------------- | ----------- | ---------------------- |
 | Chain       | `-->`       | `/-->/`                                                    | Implemented | `>>a --> >>b`          |
 | Gate        | `::` or `=` | `/\s(::\|=)\s*\S/`                                         | Implemented | `:: "criteria"`        |
-| Framework   | `@`         | `/(?:^\|\s)@([A-Za-z0-9_-]+)/`                             | Implemented | `@CAGEERF >>prompt`    |
+| Framework   | `^`         | `/(?:^\|\s)[@^]([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])/`         | Implemented | `^CAGEERF >>prompt`    |
 | Style       | `#`         | `/(?:^\|\s)#([A-Za-z][A-Za-z0-9_-]*)/`                     | Implemented | `#analytical >>report` |
 | Repetition  | `*N`        | `/\s+\*\s*(\d+)/`                                          | Implemented | `>>prompt *3`          |
 | Parallel    | `+`         | `/\s*\+\s*/`                                               | Reserved    | `>>a + >>b + >>c`      |

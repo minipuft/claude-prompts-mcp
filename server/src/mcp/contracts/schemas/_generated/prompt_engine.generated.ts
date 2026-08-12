@@ -133,19 +133,20 @@ export const prompt_engineParameters: ToolParameter[] = [
   },
   {
     name: 'observations',
-    type: 'array<{type,id,statement,blocking?,resolution?}>',
+    type: 'array<{type,id,statement,blocking?,target_step_id?,resolution?}>',
     description:
-      "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement).",
+      "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false, target_step_id?:'...'}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement). `target_step_id` on a discovered entry names the downstream step (stable node id, e.g. 'draft-outline' or 'n3') the adaptive mutation policy skips if this unknown later resolves 'irrelevant'.",
     status: 'working',
     compatibility: 'canonical',
     examples: [
-      '[{"type": "unknown_discovered", "id": "cache-ttl-unknown", "statement": "TTL for the new cache layer is undecided", "blocking": false}]',
+      '[{"type": "unknown_discovered", "id": "cache-ttl-unknown", "statement": "TTL for the new cache layer is undecided", "blocking": false, "target_step_id": "draft-outline"}]',
       '[{"type": "unknown_resolved", "id": "cache-ttl-unknown", "statement": "TTL confirmed at 300s per ops runbook", "resolution": "answered"}]',
     ],
     notes: [
-      'Tier 1: type + schema only. No runtime ledger mutation yet — the parameter validates but is not yet consumed by the pipeline.',
+      "Applied to the run's unknowns ledger at capture time, in the same call that carries the observation — no extra round-trip.",
       '`id` must be kebab-case and stable within the run so re-discovery of the same id updates rather than duplicates.',
       "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
+      "A blocking `unknown_discovered` (with or without `target_step_id`) inserts one `investigate_unknown` step immediately after the current node; `target_step_id` instead governs the skip side — a later `unknown_resolved` with resolution 'irrelevant' skips that ledger entry's target once it is strictly ahead of the current step. Capped at 1 insertion per unknown id and 3 per run. The server never infers a target and only ever mutates in reaction to an observation — enforcement stays advisory.",
     ],
   },
 ];

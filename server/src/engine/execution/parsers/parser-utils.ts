@@ -1,4 +1,9 @@
 // @lifecycle canonical - Shared helpers for command parsing normalization.
+import { OPERATOR_PATTERNS } from './operator-patterns.js';
+
+/** Framework operator core match, from the operators.json registry (SSOT). */
+const FRAMEWORK_OPERATOR_PATTERN = OPERATOR_PATTERNS.framework.pattern;
+
 /**
  * Normalize >> prefixes in symbolic commands for consistent parsing.
  *
@@ -118,10 +123,16 @@ export interface FrameworkOperatorMatch {
  * @returns The match details, or null if not found outside quotes
  */
 export function findFrameworkOperatorOutsideQuotes(str: string): FrameworkOperatorMatch | null {
-  // Pattern: @word at start or after whitespace
-  // We DON'T require whitespace/end after - we'll check the next char ourselves
-  // to properly handle @docs/ and @file.ext patterns
-  const pattern = /(?:^|\s)@([A-Za-z0-9_-]+)/g;
+  // Core match derives from the operators.json registry (SSOT) — this used to be a second,
+  // hand-maintained copy, which is why relaxing the registry pattern alone changed nothing
+  // observable (plan row D6) and why the registry then sat two revisions stale without any gate
+  // noticing (row D9). The registry's trailing `(?![A-Za-z0-9_-])` is redundant against a greedy
+  // `[A-Za-z0-9_-]+` but harmless, so the two are behaviourally identical on the match itself.
+  //
+  // What does NOT derive: the quote-awareness and the `@docs/` / `@file.ext` rejection below.
+  // A single regex cannot express them, which is why this extractor still exists rather than
+  // being replaced by the registry pattern outright.
+  const pattern = new RegExp(FRAMEWORK_OPERATOR_PATTERN.source, 'g');
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(str)) !== null) {
