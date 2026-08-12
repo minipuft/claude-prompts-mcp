@@ -198,6 +198,17 @@ const ALLOWLIST = [
     match: 'methodolog',
     closedBy: RETIREMENT.GUARD_DELETED,
   },
+  // Fourth instance of the same re-scoping, 2026-08-12 (plan row E6). `scripts/lib/tracked-scope.js`
+  // was extracted so three other gates could adopt THIS gate's `git ls-files` mechanism, and it
+  // cites this file by name as the precedent it implements. It went red the moment it was
+  // committed — not when it was written — because the scan is index-scoped, which is the property
+  // E6 deliberately introduced. A gate that reads the index re-scopes at `git add`, so "passes
+  // locally" and "passes once staged" are different claims.
+  {
+    file: 'scripts/lib/tracked-scope.js',
+    match: 'methodolog',
+    closedBy: RETIREMENT.GUARD_DELETED,
+  },
   {
     file: 'validate-no-methodology-vocab.d.ts',
     match: 'methodolog',
