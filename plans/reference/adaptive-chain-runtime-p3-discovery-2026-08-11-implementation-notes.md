@@ -2,7 +2,7 @@
 title: "P3 Step Identity — Discovery — Implementation Notes"
 plan: adaptive-chain-runtime-p3-discovery-2026-08-11.md
 date: 2026-08-11
-status: active
+status: reference
 tags: []
 ---
 
@@ -17,6 +17,9 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 02:11 · `cd /home/minipuft/Applications/claude-prompts-mcp; git worktree add /tmp/claude-1000/p4-headcheck HEAD 2>&1 | tail -1; l` · ran
+- 2026-08-12 02:11 · `cd /home/minipuft/Applications/claude-prompts-mcp; git show --stat HEAD | tail -3; git show --name-only HEAD | rg -c "mo` · ran
+- 2026-08-12 02:10 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== log ==="; git log --oneline -4 echo "=== agent-plugins files` · ran
 - 2026-08-12 02:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -8` · ran
 - 2026-08-12 02:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:contracts 2>&1 | tail -12` · ran
 - 2026-08-12 01:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server; npm run test:ci 2>&1 | rg "Suites:|Tests:" | head -2; npm run ` · ran

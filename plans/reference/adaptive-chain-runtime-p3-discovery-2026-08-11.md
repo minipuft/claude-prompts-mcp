@@ -1,7 +1,7 @@
 ---
 title: "P3 Step Identity — Discovery (consumer enumeration)"
 date: 2026-08-11
-status: active
+status: reference
 tags: []
 ---
 

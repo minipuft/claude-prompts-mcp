@@ -2,7 +2,7 @@
 title: "Validation Harness Consolidation — Implementation Notes"
 plan: validation-harness-consolidation-2026-08-11.md
 date: 2026-08-11
-status: active
+status: reference
 tags: []
 ---
 

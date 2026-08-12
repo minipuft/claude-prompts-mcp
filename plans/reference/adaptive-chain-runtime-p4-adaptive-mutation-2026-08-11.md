@@ -1,7 +1,7 @@
 ---
 title: "P4 — Adaptive Mutation v1 (insert + skip)"
 date: 2026-08-11
-status: active
+status: reference
 tags: [adaptive-chain-runtime, chains, mutation]
 ---
 

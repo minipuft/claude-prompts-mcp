@@ -38,6 +38,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const PLANS_DIR = path.join(REPO_ROOT, "plans");
@@ -205,6 +206,37 @@ function collect() {
   );
 
   return { queue, misclassified, relocations, invalid, orphanedReferences };
+}
+
+/**
+ * Queue entries whose on-disk state git has not fully committed.
+ *
+ * This guards the ARCHIVE path only. Archiving moves a plan into gitignored
+ * `plans/archive/`, where git history is the only surviving copy — so an untracked plan
+ * would be destroyed outright, and uncommitted modifications would be missing from the
+ * history that is supposed to preserve them. `reference` relocations stay tracked and
+ * carry their content with them, so they need no guard. The release workflow never hits
+ * this (a CI checkout is clean); the guard exists so `--apply` is equally safe run by
+ * hand between releases, e.g. at phase completion.
+ *
+ * Fails closed: if git itself cannot answer (not installed, not a repository), archiving
+ * is refused rather than assumed safe — the same posture as the frontmatter and link
+ * checks, where an unanswerable question is an error, never a pass.
+ */
+function uncommittedPlans(records, root = REPO_ROOT) {
+  if (records.length === 0) return [];
+  const output = execFileSync(
+    "git",
+    ["status", "--porcelain", "--", ...records.map((r) => r.rel)],
+    { cwd: root, encoding: "utf8" },
+  );
+  const dirty = new Set(
+    output
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.slice(3).trim()),
+  );
+  return records.filter((r) => dirty.has(r.rel));
 }
 
 /**
@@ -416,9 +448,34 @@ function selfTest() {
       "inbound link from the sibling not detected",
     );
 
+    // 7. The archive guard flags untracked and modified plans, and clears committed ones.
+    const repo = path.join(sandbox, "guard-repo");
+    fs.mkdirSync(repo);
+    const git = (...gitArgs) =>
+      execFileSync("git", gitArgs, { cwd: repo, encoding: "utf8" });
+    git("init", "-q");
+    fs.writeFileSync(path.join(repo, "plan.md"), fm("done"));
+    const record = [{ rel: "plan.md" }];
+    assert(
+      uncommittedPlans(record, repo).length === 1,
+      "untracked plan not flagged by the archive guard",
+    );
+    git("add", "plan.md");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "t");
+    assert(
+      uncommittedPlans(record, repo).length === 0,
+      "committed plan wrongly flagged by the archive guard",
+    );
+    fs.appendFileSync(path.join(repo, "plan.md"), "drift\n");
+    assert(
+      uncommittedPlans(record, repo).length === 1,
+      "modified plan not flagged by the archive guard",
+    );
+
     console.log(
       "retire-done-plans self-test OK — validates frontmatter, detects an inbound citation, " +
-        "re-bases a relative link for the added archive depth, and follows a co-moving target.",
+        "re-bases a relative link for the added archive depth, follows a co-moving target, " +
+        "and refuses to archive an uncommitted plan.",
     );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
@@ -497,6 +554,30 @@ function main() {
     console.log(
       "Run with --apply (the release workflow does this) to move them.",
     );
+    return;
+  }
+
+  let dirtyQueue;
+  try {
+    dirtyQueue = uncommittedPlans(queue);
+  } catch (error) {
+    console.error(
+      `[retire-done-plans] cannot verify the queue is committed (${error.message}); refusing to archive.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (dirtyQueue.length > 0) {
+    console.error(
+      "[retire-done-plans] `status: done` but not fully committed:\n",
+    );
+    for (const { rel } of dirtyQueue) console.error(`  ${rel}`);
+    console.error(
+      "\nArchiving moves a plan into gitignored plans/archive/, where git history is the only\n" +
+        "surviving copy. Commit these first — archiving an untracked or modified plan destroys\n" +
+        "the uncommitted content.",
+    );
+    process.exitCode = 1;
     return;
   }
 

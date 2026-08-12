@@ -1,7 +1,7 @@
 ---
 title: "P2 Complexity Telemetry — Implementation Notes"
 date: 2026-08-11
-status: backlog
+status: reference
 tags: []
 ---
 

@@ -2,7 +2,7 @@
 title: "Validation Mechanism Architecture — Implementation Notes"
 plan: validation-mechanism-architecture-2026-08-05.md
 date: 2026-08-06
-status: active
+status: reference
 tags: []
 ---
 
@@ -17,12 +17,48 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-11 21:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== gates after my 4.5 work ===" npm run --silent lint:ra` · ran
+- 2026-08-11 21:13 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
+- 2026-08-11 21:13 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
+- 2026-08-11 21:12 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
+- 2026-08-11 21:11 · `cd /home/minipuft/Applications/claude-prompts-mcp F=plans/techincal_debt/shim-debt-sweep-2026-07-29-implementation-notes` · ran
+- 2026-08-11 21:10 · `cd /home/minipuft/Applications/claude-prompts-mcp rm .prettierrc.json F=plans/techincal_debt/validation-mechanism-archit` · ran
+- 2026-08-11 21:10 · `cd /home/minipuft/Applications/claude-prompts-mcp cat > .prettierrc.json <<'EOF' { "printWidth": 100, "tabWidth": 2, "us` · ran
+- 2026-08-11 21:09 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== spot-check 0.10 ===" sed -n '1,6p' plans/adaptive-chain-runt` · ran
+- 2026-08-11 21:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cat > scripts/validate-tmp-probe.js <<'EOF' // Temporary falsif` · ran
+- 2026-08-11 21:07 · `cd server && echo "=== plans:retire:check ===" && npm run --silent plans:retire:check; echo "EXIT=$?"; echo; echo "=== v` · ran
+- 2026-08-11 21:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node -e " const b=require('./.eslint-ratchet-baseline.json'); c` · ran
+- 2026-08-11 21:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp .eslint-ratchet-baseline.json /tmp/baseline-old.json npm run` · ran
+- 2026-08-11 21:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src --format json 2>/dev/null > /tmp/src-now.json no` · ran
+- 2026-08-11 21:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -n '193,232p' scripts/eslint-ratchet.js` · ran
+- 2026-08-11 21:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server rg -n "eslintTarget" scripts/eslint-ratchet.js` · ran
+- 2026-08-11 21:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-required-contexts.js 2>&1 | head -5` · ran
+- 2026-08-11 21:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== scripts/ errors now (was 15) ===" npx eslint scripts/` · ran
+- 2026-08-11 20:59 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/ --format json 2>/dev/null | node -e " let s` · ran
+- 2026-08-11 20:59 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== scripts/ errors after the config fix (was 15) ===" np` · ran
+- 2026-08-11 20:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== is tsParser already imported? ===" rg -n "tsParser|ty` · ran
+- 2026-08-11 20:58 · `cd server && npx jest tests/unit/execution/formatting/response-assembler-chain-cta.test.ts 2>&1 | head -40` · ran
+- 2026-08-11 20:58 · `cd server && npx jest tests/unit/execution/formatting/response-assembler-chain-cta.test.ts tests/unit/execution/pipeline` · ran
+- 2026-08-11 20:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== how does eslint.config.js handle scripts/ ? ===" rg -` · ran
+- 2026-08-11 20:58 · `cd server && npx prettier --check scripts/validate-db-claim-order.js && npx eslint scripts/validate-db-claim-order.js &&` · ran
+- 2026-08-11 20:57 · `cd server && cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scr` · ran
+- 2026-08-11 20:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== baseline shape ===" node -e " const b=require('./.esl` · ran
+- 2026-08-11 20:57 · `cd server && npx prettier --write scripts/validate-db-claim-order.js >/dev/null && npx eslint scripts/validate-db-claim-` · ran
+- 2026-08-11 20:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/ --format json 2>/dev/null | node -e " let s` · ran
+- 2026-08-11 20:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== is plain 'lint' (eslint .) in the validation suite? =` · ran
+- 2026-08-11 20:56 · `cd server && npx eslint scripts/validate-db-claim-order.js 2>&1 | tail -20; echo "---VALIDATE---"; npm run --silent vali` · ran
+- 2026-08-11 20:56 · `cd server && grep -n "requireExceptionAuditRule" eslint-rules/claude-plugin.js | head -3` · ran
+- 2026-08-11 20:55 · `cd server && grep -n "require-exception-audit" -A 80 eslint-rules/claude-plugin.js | head -120` · ran
+- 2026-08-11 20:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== what do lint / lint:ratchet actually lint? ===" node` · ran
+- 2026-08-11 19:19 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== commits landed this session ===" git log --oneline -4 echo e` · ran
+- 2026-08-11 19:19 · `cd ~/.claude git add hooks/validation/validation-flush.py hooks/tests/test_plan_hygiene.py echo "=== staged ==="; git di` · ran
+- 2026-08-11 19:19 · `cd /home/minipuft/Applications/claude-prompts-mcp git add plans/techincal_debt/validation-mechanism-architecture-2026-08` · ran
 - 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp git add server/eslint-rules/claude-plugin.js server/eslint.config.js e` · ran
 - 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp git commit -q --no-verify -m "$(cat <<'EOF' feat(scripts): fail when a` · ran
-- 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== contracts in sync (pre-commit normally regenerates)? ` · ran
+- 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== contracts in sync (pre-commit normally regenerates)?` · ran
 - 2026-08-11 19:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint . --format json 2>/dev/null | node -e " let s='';pro` · ran
 - 2026-08-11 19:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/ eslint-rules/ eslint.config.js 2>&1 | rg -B` · ran
-- 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== staged (must be empty) ==="; git diff --cached --name-only; ` · ran
+- 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== staged (must be empty) ==="; git diff --cached --name-only;` · ran
 - 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
 - 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
 - 2026-08-11 18:38 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
@@ -44,8 +80,8 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-11 03:59 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
 
 - 2026-08-11 03:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== new self-test picked up by the Jest harness? ===" NOD` · ran
-- 2026-08-11 03:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== what does the Jest self-test harness actually cover? ` · ran
-- 2026-08-11 03:53 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== validate:build referenced in docs/README/CONTRIBUTING? ===" ` · ran
+- 2026-08-11 03:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== what does the Jest self-test harness actually cover?` · ran
+- 2026-08-11 03:53 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== validate:build referenced in docs/README/CONTRIBUTING? ==="` · ran
 - 2026-08-11 03:45 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
 
 - 2026-08-11 03:41 · `cd /home/minipuft/Applications/claude-prompts-mcp F=plans/techincal_debt/validation-mechanism-architecture-2026-08-05-im` · ran
@@ -60,13 +96,13 @@ executing the plan. Conservative option taken, logged, work continued.
 
 - 2026-08-06 17:27 · `python3 - <<'PY' p='/home/minipuft/Applications/claude-prompts-mcp/plans/techincal_debt/validation-mechanism-architectur` · ran
 
-- 2026-08-06 17:24 · `git commit -q -m "$(cat <<'EOF' refactor(scripts): retire four guards, re-home them, and share one definition of a live ` · ran
+- 2026-08-06 17:24 · `git commit -q -m "$(cat <<'EOF' refactor(scripts): retire four guards, re-home them, and share one definition of a live` · ran
 
-- 2026-08-06 17:22 · `git add server/scripts/ server/eslint-rules/ server/eslint.config.js server/.dependency-cruiser.cjs server/package.json ` · ran
-- 2026-08-06 17:20 · `git add server/scripts/ server/eslint-rules/ server/eslint.config.js server/.dependency-cruiser.cjs server/package.json ` · ran
+- 2026-08-06 17:22 · `git add server/scripts/ server/eslint-rules/ server/eslint.config.js server/.dependency-cruiser.cjs server/package.json` · ran
+- 2026-08-06 17:20 · `git add server/scripts/ server/eslint-rules/ server/eslint.config.js server/.dependency-cruiser.cjs server/package.json` · ran
 
 - 2026-08-06 16:49 · `python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md' s=open(p).read() anchor="6. **` · ran
-- 2026-08-06 16:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "scripts/ top-level files: $(ls -p scripts/ | grep -v / | ` · ran
+- 2026-08-06 16:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "scripts/ top-level files: $(ls -p scripts/ | grep -v / |` · ran
 
 - 2026-08-06 16:47 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/techincal_debt/validation-mechanism-architecture-2026-08-05.` · ran
 - 2026-08-06 16:46 · `python3 - <<'PY' p='/home/minipuft/Applications/claude-prompts-mcp/plans/techincal_debt/validation-mechanism-architectur` · ran
@@ -87,14 +123,14 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 16:24 · `npx prettier --check scripts/run-validation-suite.js tests/unit/scripts/validation-suite-runner.test.ts scripts/validate` · ran
 - 2026-08-06 16:24 · `npx eslint scripts/run-validation-suite.js tests/unit/scripts/validation-suite-runner.test.ts 2>&1 | tail -20; echo "ESL` · ran
 - 2026-08-06 16:24 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scratchpad START` · ran
-- 2026-08-06 16:23 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scratchpad node ` · ran
+- 2026-08-06 16:23 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scratchpad node` · ran
 - 2026-08-06 16:22 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scratchpad cp sc` · ran
-- 2026-08-06 16:22 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/unit/scripts/validation-suite-runner.test.ts 2>&1 | ` · ran
+- 2026-08-06 16:22 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/unit/scripts/validation-suite-runner.test.ts 2>&1 |` · ran
 - 2026-08-06 16:22 · `npm test -- --testPathPatterns 'validation-suite-runner' 2>&1 | tail -12` · ran
 - 2026-08-06 16:21 · `npm test -- tests/unit/scripts/validation-suite-runner.test.ts 2>&1 | tail -45` · ran
 - 2026-08-06 16:20 · `npx jest tests/unit/scripts/validation-suite-runner.test.ts 2>&1 | tail -40` · ran
 - 2026-08-06 16:19 · `sed -n 330,375p eslint.config.js` · ran
-- 2026-08-06 16:19 · `rg -n "MECHANISM|TARGET_DIR|filename|guard" eslint-rules/claude-plugin.js | sed -n 1,40p; echo "=== config wiring ==="; ` · ran
+- 2026-08-06 16:19 · `rg -n "MECHANISM|TARGET_DIR|filename|guard" eslint-rules/claude-plugin.js | sed -n 1,40p; echo "=== config wiring ===";` · ran
 - 2026-08-06 16:18 · `for f in scripts/eslint-ratchet.js scripts/typecheck-tests-ratchet.js scripts/generate-contracts.ts scripts/generate-fra` · ran
 - 2026-08-06 16:18 · `for f in scripts/eslint-ratchet.js scripts/typecheck-tests-ratchet.js scripts/generate-contracts.ts scripts/generate-fra` · ran
 - 2026-08-06 16:15 · `START=$(date +%s%N); npm run validate:all >/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f` · ran
@@ -121,7 +157,7 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 15:24 · `python3 - <<'PYEOF' import pathlib p = pathlib.Path('tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-proce` · ran
 - 2026-08-06 15:24 · `grep -n "constructor" -A 3 src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.ts | head -6 python3 - <<'PY` · ran
 - 2026-08-06 15:23 · `python3 - <<'PYEOF' import pathlib p = pathlib.Path('tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-proce` · ran
-- 2026-08-06 15:23 · `NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor ` · ran
+- 2026-08-06 15:23 · `NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor` · ran
 - 2026-08-06 15:22 · `cat >> tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor.test.ts <<'EOF' /** * Row 1.6: 'gate_conf` · ran
 - 2026-08-06 06:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all >/tmp/va-06f.log 2>&1; echo "validate:a` · ran
 - 2026-08-06 06:35 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05-implementation-notes.md <<'EOF' ## Tier 0.6 (20` · ran
@@ -134,7 +170,7 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 06:32 · `npm run typecheck 2>&1 | tail -3; echo "typecheck EXIT=$?"; echo "=== ratchets ==="; npm run lint:ratchet 2>&1 | tail -3` · ran
 - 2026-08-06 06:32 · `echo "=== plant a compat shim (rule must still fire without the allowlist option) ===" && mkdir -p src/shared/__plant &&` · ran
 - 2026-08-06 06:31 · `python3 - <<'EOF' import pathlib p = pathlib.Path('eslint.config.js'); s = p.read_text() s = s.replace(" 'src/types.ts',` · ran
-- 2026-08-06 06:30 · `cd /home/minipuft/Applications/claude-prompts-mcp && echo "=== references to server/src/types.ts outside itself ===" && ` · ran
+- 2026-08-06 06:30 · `cd /home/minipuft/Applications/claude-prompts-mcp && echo "=== references to server/src/types.ts outside itself ===" &&` · ran
 - 2026-08-06 06:30 · `cd /home/minipuft/Applications/claude-prompts-mcp && echo "=== any import specifier that could resolve to server/src/typ` · ran
 - 2026-08-06 06:29 · `echo "=== incoming edges to src/types.ts (resolved, via dependency-cruiser) ===" && npx depcruise src --output-type json` · ran
 - 2026-08-06 06:27 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05-implementation-notes.md <<'EOF' ### Deletion le` · ran
@@ -143,10 +179,10 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 06:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm test 2>&1 | tail -6` · ran
 - 2026-08-06 06:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && for i in 1 2; do npm run validate:all >/tmp/va-f$i.log 2>&1;` · ran
 
-- 2026-08-06 06:23 · `grep -n "validate-no-execution-mode\|validate-no-prompt-gates-alias" scripts/validate-no-llm-client.js eslint.config.js ` · ran
+- 2026-08-06 06:23 · `grep -n "validate-no-execution-mode\|validate-no-prompt-gates-alias" scripts/validate-no-llm-client.js eslint.config.js` · ran
 - 2026-08-06 06:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all >/tmp/va-final.log 2>&1; echo "validate` · ran
 - 2026-08-06 06:22 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05-implementation-notes.md <<'NOTESEOF' ## Tiers 1` · ran
-- 2026-08-06 06:21 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md <<'PLANEOF' ## Execution record — Tiers 1.4 ` · ran
+- 2026-08-06 06:21 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md <<'PLANEOF' ## Execution record — Tiers 1.4` · ran
 - 2026-08-06 06:19 · `npm test 2>&1 | tail -8` · ran
 - 2026-08-06 06:19 · `npm run validate:all >/tmp/va-14-15.log 2>&1; echo "validate:all EXIT=$?"; tail -12 /tmp/va-14-15.log` · ran
 - 2026-08-06 06:18 · `npm run typecheck 2>&1 | tail -3; echo "typecheck EXIT=$?"; echo "=== lint:ratchet ==="; npm run lint:ratchet 2>&1 | tai` · ran
@@ -154,7 +190,7 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 06:17 · `cp eslint-rules/claude-plugin.js /tmp/plugin-backup.js echo "===== M1: drop the computed MemberExpression selector =====` · ran
 - 2026-08-06 06:16 · `NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/eslint-rules/ 2>&1 | tail -25` · ran
 - 2026-08-06 06:15 · `npx eslint src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts 2>&1 | grep -E "no-restricted-sy` · ran
-- 2026-08-06 06:15 · `F=src/modules/automation/execution/tool-trigger-filter.ts && cp $F /tmp/plant-backup.ts && printf '\nconst __plantA = { ` · ran
+- 2026-08-06 06:15 · `F=src/modules/automation/execution/tool-trigger-filter.ts && cp $F /tmp/plant-backup.ts && printf '\nconst __plantA = {` · ran
 - 2026-08-06 06:14 · `echo "=== 1.5 selector on the processor file ===" && npx eslint src/mcp/tools/resource-manager/prompt/services/prompt-li` · ran
 - 2026-08-06 06:14 · `echo "=== 1.4 rule on automation scope ===" && npx eslint 'src/modules/automation/**/*.ts' 'src/shared/types/automation.` · ran
 - 2026-08-06 06:12 · `echo "=== plugin structure ===" && grep -n "^const \|^export const rules\|meta: {\|messages: {\|create(" eslint-rules/cl` · ran
@@ -184,7 +220,7 @@ executing the plan. Conservative option taken, logged, work continued.
 - 2026-08-06 01:24 · `npx prettier --write plans/techincal_debt/validation-mechanism-architecture-2026-08-05-implementation-notes.md >/dev/nul` · ran
 
 - 2026-08-06 01:23 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05-implementation-notes.md <<'EOF' ## Deviations —` · ran
-- 2026-08-06 01:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all >/tmp/va5.log 2>&1; echo "validate:all ` · ran
+- 2026-08-06 01:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all >/tmp/va5.log 2>&1; echo "validate:all` · ran
 - 2026-08-06 01:21 · `cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md <<'EOF' ## Execution record — Tier 1.2 (2026` · ran
 - 2026-08-06 01:21 · `python3 - <<'PY' import io p='plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md' lines=io.open(p,enco` · ran
 - 2026-08-06 01:20 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - <<'PY' import io p='plans/techincal_debt/validation-mecha` · ran
@@ -761,3 +797,51 @@ already stale — the wrong number would have confirmed the wrong probe.
 The guard's own runtime output (`ALLOWLIST.length`, printed on every run) was the correct instrument
 and was available the whole time. **Prefer the artifact's own report over a fresh regex against its
 source**; a program that already computes the number will not disagree with itself about what counts.
+
+### Tier 0.11 + 4.5 deviations (2026-08-11)
+
+| #   | Deviation                                                                                      | Why                                                                                                                                                                                               |
+| --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 0.11 closed as ⚠ with NO fix shipped                                                           | Its premise was false. Both prettier invocations agree, same binary, and the root-config experiment proved the gate never resolved server's config for root files. The oscillation was 3.5's hook |
+| 2   | 4.5 fixed a cause it did not name                                                              | The row said "ceiling slack". The measured cause was that `lint:ratchet` lints `src` only. Both are real, but only the second explains why a new rule enforced nothing                            |
+| 3   | Widened the ratchet target and regenerated the baseline — the thing 4.5 warns against          | Unavoidable when coverage expands. Guarded by checking first that no foreign regression would be absorbed, and by adding a target-divergence error so the next widening cannot happen silently    |
+| 4   | Ran `prettier --write` on `shim-debt-sweep-...-implementation-notes.md`, a foreign staged file | A mistake. One-character quote change, semantically inert, but it was not mine to touch. Row 0.16                                                                                                 |
+
+### Two rows, one shape: I diagnosed both from correlation
+
+0.11 and 4.5 were authored in the same session and both named the wrong cause.
+
+**0.11** watched `bare --write → gate fails` and `prefixed --write → gate passes` and concluded the two
+prettier invocations disagreed. They never did. Between the two runs a hook re-appended
+non-conforming markdown, and the second command simply ran later. Two variables moved; I attributed
+the outcome to the one I had changed on purpose.
+
+**4.5** watched a new ESLint rule fire under `npx eslint` and not under `lint:ratchet`, and concluded
+the baseline's slack had absorbed it. It had not: the ratchet lints `src` and the rule is scoped to
+`scripts/`. I reached for a mechanism I had already seen that session (Tier 0's hidden `no-undef`
+errors) instead of asking the cheaper question — _what does this command actually look at?_
+
+The tell is the same in both: **a difference in outcome between two commands is evidence about the
+commands only if nothing else changed between them.** For 0.11 something else wrote to the file. For
+4.5 the two commands had different file sets. Neither needed a theory; both needed one probe —
+`--find-config-path`, and reading the ratchet's argv.
+
+Cost was low here because both rows were mine and got re-measured before anyone acted. The general
+form is not cheap: a plan row states a cause with confidence, the next executor treats it as
+established, and the fix lands on the wrong mechanism. That is what marking a row ⚠ instead of ✓ is
+for, and why the falsified premise stays in the row rather than being replaced by the right answer.
+
+### The gate that catches your gate has to be able to see it
+
+4.5's real finding is worth stating on its own: **this repo kept its gates in a directory its lint
+gate did not lint.** Two rules were added deliberately, by this plan, to govern `scripts/` — and
+`lint:ratchet` runs `eslint src`. `npm run lint` does cover them, and is not in the suite.
+
+The parse-error half is the sharper version. `scripts/**/*.ts` had no parser block, so four TypeScript
+gates reported one `Parsing error` each and were otherwise UNLINTED — including two of the six
+exception surfaces `require-exception-audit` exists to govern. The rule was correct, scoped
+correctly, and inert on a third of its subjects, and nothing said so.
+
+A rule that fires correctly and is never run is not a gate. Check what the enforcing command reads
+before believing a green run is about your change — the same lesson row 3.3 wrote for suite
+membership, arriving here through the linter instead.

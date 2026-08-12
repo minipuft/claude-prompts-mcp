@@ -1,7 +1,7 @@
 ---
 title: "P1 — Unknowns Ledger: Implementation Plan"
 date: 2026-08-09
-status: backlog
+status: reference
 tags: []
 ---
 

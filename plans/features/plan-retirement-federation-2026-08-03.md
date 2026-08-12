@@ -180,7 +180,22 @@ time rather than trusting the state they were authored in.
 
 ---
 
-## Execution notes — F4.3 (2026-08-03)
+## Execution note — local hardening the extraction must carry (2026-08-12)
+
+`--apply` gained a fail-closed git-cleanliness guard: it refuses to archive a `done` plan that
+`git status --porcelain` reports untracked or modified, because `plans/archive/` is gitignored and
+git history is the only surviving copy. `reference` relocations are deliberately unguarded
+(tracked → tracked, nothing lost). Self-test covers untracked/modified/committed; documented in
+`docs/guides/release-process.md`. This unlocked the between-release cadence (run at phase
+completion; release PR stays the backstop) — 23 plans retired by hand on 2026-08-12 under it.
+F4.4 must move this guard with the script: it is what makes hand-run `--apply` safe in repos with
+no CI, which is most of the fleet this plan targets.
+
+## Execution notes — F4.3 (2026-08-03) — RESOLVED
+
+F4.3 landed: the frontmatter convention is published at `repository-standards`
+(`conventions/plan-frontmatter.md`, commit `a57a767`) and both citation sites point at that
+public path. Notes below are the record of how, not open work.
 
 ### The leak fix had landed half-done
 

@@ -1,7 +1,7 @@
 ---
 title: "Validation Mechanism Architecture — right tool per check class"
 date: 2026-08-05
-status: active
+status: reference
 tags: [tooling, validation, eslint, technical-debt]
 ---
 

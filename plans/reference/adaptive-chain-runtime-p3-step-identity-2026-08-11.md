@@ -1,7 +1,7 @@
 ---
 title: "P3 Step Identity + Registry Retirement — Implementation Plan"
 date: 2026-08-11
-status: active
+status: reference
 tags: []
 ---
 
