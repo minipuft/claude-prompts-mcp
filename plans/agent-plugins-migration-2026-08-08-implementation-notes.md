@@ -572,3 +572,15 @@ _gate_ rather than the _probe_ was the thing pointed at the wrong object.
 
 Worth noting what did NOT find it: `validate:all` 34/34, `test:ci` 2171/2171, `test:e2e` 134,
 `verify:claims` 89/89, both ratchets. A green board is evidence about what the board observes.
+
+**DEV-T05b-8 — E6's own extraction was the first thing E6 caught.** `scripts/lib/tracked-scope.js`
+passed every local run while untracked, then reddened `validate:no-methodology-vocab` the moment it
+was committed — because that gate is index-scoped, which is precisely the property E6 introduced
+one commit earlier. It names the vocabulary because it cites that guard by name as the precedent it
+implements, so the fix was a fourth allowlist entry alongside the guard's own, not a reword.
+
+The gate's existing comment had already recorded this shape once ("row 0.8 widened the scan ... and
+the gate promptly began seeing its OWN test file"). Widening a gate's reach re-scopes what counts as
+a violation, and the new hits are not new code. **"Passes locally" and "passes once staged" are
+different claims** for any index-scoped gate — the same distinction E7 draws between the working
+tree and the commit, arrived at independently on the same afternoon from the opposite direction.
