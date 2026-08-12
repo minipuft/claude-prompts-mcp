@@ -101,6 +101,8 @@
     "typecheck:committed": "node scripts/typecheck-committed.js",
     "validate:operator-registry-drift": "node scripts/validate-operator-registry-drift.js",
     "validate:operator-registry-drift:self-test": "node scripts/validate-operator-registry-drift.js --self-test",
+    "validate:plan-row-tracking": "node scripts/validate-plan-row-tracking.js",
+    "validate:plan-row-tracking:self-test": "node scripts/validate-plan-row-tracking.js --self-test",
     "validate:no-legacy-sidecars": "node scripts/validate-no-legacy-sidecars.js",
     "validate:no-stepstate": "node scripts/validate-no-stepstate.js",
     "validate:no-methodology-vocab": "node scripts/validate-no-methodology-vocab.js",

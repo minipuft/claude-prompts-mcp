@@ -69,6 +69,7 @@ export const SUITE = [
   { script: 'validate:readme', io: 'read' },
   { script: 'validate:conformance-coverage', io: 'read' },
   { script: 'validate:operator-registry-drift', io: 'read' },
+  { script: 'validate:plan-row-tracking', io: 'read' },
   { script: 'validate:no-legacy-sidecars', io: 'read' },
   { script: 'validate:no-stepstate', io: 'read' },
   { script: 'validate:no-methodology-vocab', io: 'read' },
