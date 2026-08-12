@@ -1,0 +1,93 @@
+# Claims-conformance corpus — MCP tool surface
+#
+# The three tools ARE the public API contract (CLAUDE.md § Public API Contract), so every action
+# they advertise is a claim. This file covers the READ-ONLY actions; mutating ones (create,
+# update, delete, rollback, clear, maintenance) are tracked as plan rows because they need an
+# isolated workspace per scenario before they can assert anything without corrupting state.
+#
+# Coverage source of truth:
+#   system_control    — 11 actions, from the router dispatch
+#   resource_manager  — 4 resource_types x 14 actions, from resource-manager.schema.ts
+#   frameworks        — 8 ids under resources/frameworks/
+
+version: 1
+
+scenarios:
+  # ── system_control: every read-only action answers ──────────────────────────
+  - id: sc-status
+    claim_source: 'system_control action: status — CLAUDE.md tool layer'
+    requests: [{ tool: system_control, args: { action: status } }]
+    expect: { ok: true }
+
+  - id: sc-framework-list
+    claim_source: 'system_control action: framework (list) — FrameworkManager is the authority'
+    requests: [{ tool: system_control, args: { action: framework, operation: list } }]
+    expect: { ok: true }
+
+  - id: sc-gates-list
+    claim_source: 'system_control action: gates (list) — docs/guides/gates.md'
+    requests: [{ tool: system_control, args: { action: gates, operation: list } }]
+    expect: { ok: true }
+
+  - id: sc-analytics
+    claim_source: 'system_control action: analytics — docs/guides/telemetry-observability.md'
+    requests: [{ tool: system_control, args: { action: analytics, operation: view } }]
+    expect: { ok: true }
+
+  - id: sc-config
+    claim_source: 'system_control action: config'
+    requests: [{ tool: system_control, args: { action: config } }]
+    expect: { ok: true }
+
+  - id: sc-guide
+    claim_source: 'system_control action: guide'
+    requests: [{ tool: system_control, args: { action: guide } }]
+    expect: { ok: true }
+
+  - id: sc-injection
+    claim_source: 'system_control action: injection — docs/guides/injection-control.md'
+    requests: [{ tool: system_control, args: { action: injection } }]
+    expect: { ok: true }
+
+  - id: sc-session
+    claim_source: 'system_control action: session'
+    requests: [{ tool: system_control, args: { action: session } }]
+    expect: { ok: true }
+
+  - id: sc-changes
+    claim_source: 'system_control action: changes — resource_changes tracking'
+    requests: [{ tool: system_control, args: { action: changes } }]
+    expect: { ok: true }
+
+  - id: sc-execution-history
+    claim_source: 'system_control action: execution_history — SEP-1686 ledger, v_execution_history'
+    requests: [{ tool: system_control, args: { action: execution_history } }]
+    expect: { ok: true }
+
+  - id: sc-unknown-action-rejects
+    claim_source: 'system_control advertises a closed action set — an unknown action must not pass'
+    requests: [{ tool: system_control, args: { action: definitely_not_an_action } }]
+    # Names the rejected action AND that a closed set exists — a generic failure cannot produce it.
+    expect: { error_contains: 'Unknown action: definitely_not_an_action. Valid actions:' }
+
+  # ── resource_manager: list answers for every advertised resource_type ───────
+  - id: rm-list-prompt
+    claim_source: 'resource-manager.schema.ts resource_type enum includes "prompt"'
+    requests: [{ tool: resource_manager, args: { resource_type: prompt, action: list } }]
+    expect: { ok: true }
+
+  - id: rm-list-gate
+    claim_source: 'resource-manager.schema.ts resource_type enum includes "gate"'
+    requests: [{ tool: resource_manager, args: { resource_type: gate, action: list } }]
+    expect: { ok: true }
+
+  - id: rm-list-framework
+    claim_source: 'resource-manager.schema.ts resource_type enum includes "framework"'
+    requests: [{ tool: resource_manager, args: { resource_type: framework, action: list } }]
+    expect: { ok: true }
+
+  - id: rm-unknown-type-rejects
+    claim_source: 'resource_type is a closed enum — an undeclared type must not pass'
+    requests: [{ tool: resource_manager, args: { resource_type: not_a_type, action: list } }]
+    # Schema-level enum rejection, quoting the permitted set.
+    expect: { error_contains: 'resource_type: Invalid option: expected one of' }

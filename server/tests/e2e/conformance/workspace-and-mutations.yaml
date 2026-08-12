@@ -1,0 +1,275 @@
+# Claims-conformance corpus — workspace overlay, mutating actions, and the resource:// read surface
+#
+# WHY THIS FILE NEEDS ITS OWN SERVER (`workspace: isolated`)
+# Every other corpus file only READS. These rows create, update, roll back and DELETE real files,
+# and the shared server's resource tree is `server/resources/` — the repo. A delete row there would
+# remove a tracked prompt from the working tree. The driver therefore spawns a second server with
+# `MCP_WORKSPACE` pointed at a throwaway copy of the bundled tree.
+#
+# The isolated workspace also sets `resources.registerWithMcp: true`, which the shipped config
+# leaves FALSE. That is not incidental: measured 2026-08-11, the default server answers
+# `resources/list` with an empty array and returns "Resource not found" for every URI printed in
+# `docs/reference/mcp-tools.md`. The default-off behaviour is asserted on the shared server
+# (`prompt-engine-surface.yaml`); the read surface can only be exercised here.
+#
+# EVERY assertion below is a substring MEASURED from a real server on 2026-08-11, never guessed.
+# Each mutating scenario uses a UNIQUE prompt id so one row's leftovers cannot satisfy another's
+# claim — the rows share one server, and an id collision would let a stale prompt answer for a
+# create that silently failed.
+#
+# WHY EVERY READ-BACK IS PRECEDED BY `action: reload`
+# `update` writes to disk immediately but is NOT live immediately: the change reaches the in-memory
+# registry through the file watcher, which is debounced. Measured 2026-08-11 — straight after a
+# successful update whose own response printed a V1→V2 diff, both `inspect` AND executing the
+# prompt returned the V1 body; the same reads returned V2 after a 4s wait, and after an explicit
+# `reload` with no wait. This nearly produced a false defect report, and it silently disarmed the
+# first draft of `prompt-rollback-restores-previous-content`: that row asserted V1 after a rollback
+# and passed WITHOUT the rollback ever running, because the stale registry was still serving V1
+# either way. Removing `confirm: true` — which makes rollback fail outright — did not red the row.
+# An explicit reload is deterministic where a sleep is a race, so every read-back forces one.
+
+version: 1
+workspace: isolated
+
+scenarios:
+  # ── Workspace overlay (CLAUDE.md § Environment) ────────────────────────────
+  - id: workspace-overlay-serves-overlay-only-prompt
+    claim_source: >-
+      CLAUDE.md § Key Constraints — "Workspace resources overlay bundled ones." Implemented by
+      PathResolver.getOverlayResourceDirs (paths.ts:359-366) and data-loader.ts:112-128.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>overlay_probe' }
+    # `overlay_probe` exists ONLY in `<workspace>/prompts/`, never in the bundled tree, so serving
+    # its body proves the overlay directory was merged. Asserting the MARKER rather than `ok:` is
+    # what distinguishes "the overlay was loaded" from "some prompt by that name resolved" — and
+    # the entire overlay branch is unreachable unless the workspace differs from the package root,
+    # which no scenario exercised before this file existed.
+    expect: { text_contains: 'OVERLAY_PROBE_MARKER' }
+
+  # ── resource:// reads (plan row 0.5.8) ─────────────────────────────────────
+  - id: resource-list-advertises-prompt-uris
+    claim_source: >-
+      docs/reference/mcp-tools.md § MCP Resources — "resource://prompt/{id} → Full prompt with
+      metadata + template". docs/architecture/overview.md:388 — "the server exposes MCP Resources".
+    requests: [{ method: resources/list }]
+    expect: { resources_include: ['resource://prompt/minimal_prompt'] }
+
+  - id: resource-read-prompt-by-id
+    claim_source: >-
+      docs/reference/mcp-tools.md § Resource URIs — `resource://prompt/{id}` returns "Full prompt
+      with metadata + template".
+    requests: [{ method: resources/read, args: { uri: 'resource://prompt/minimal_prompt' } }]
+    # The claim is metadata AND template, so assert a string only the rendered document contains.
+    expect: { text_contains: '**ID:** `minimal_prompt`' }
+
+  - id: resource-read-nested-id-is-unreachable
+    claim_source: >-
+      docs/reference/mcp-tools.md § Resource URIs — `resource://prompt/{id}` is documented as
+      readable for every id, and `resources/list` advertises nested ids such as
+      `resource://prompt/deep_analysis/initial_scan` with no marking that they differ.
+    requests:
+      - method: resources/read
+        args: { uri: 'resource://prompt/deep_analysis/initial_scan' }
+    expect: { text_contains: '**ID:** `deep_analysis/initial_scan`' }
+    known_divergence:
+      measured: >-
+        The URI is ADVERTISED by resources/list and 404s on read: "Resource not found:
+        resource://prompt/deep_analysis/initial_scan". Ids containing a slash — nested prompt
+        categories — are listed but unreadable, so a client that enumerates the surface and reads
+        each entry fails on a subset with no way to tell which in advance. Measured 2026-08-11
+        against a server with registerWithMcp enabled; `resource://prompt/minimal_prompt` (no
+        slash) reads correctly in the same run, which isolates the slash as the cause.
+      closed_by: >-
+        Either the read handler matching multi-segment ids, or resources/list ceasing to advertise
+        ids it cannot serve. Then delete this block so the row asserts the claim directly.
+      since: '2026-08-11'
+
+  # ── Mutating lifecycle (plan row 0.5.10) ───────────────────────────────────
+  - id: prompt-create-then-inspect
+    claim_source: >-
+      resource_manager contract — action `create` for resource_type `prompt`, and `inspect` which
+      "Returns full prompt definition".
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_create
+          name: Conformance Create
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CREATE_MARKER
+      - tool: resource_manager
+        args: { resource_type: prompt, action: inspect, id: conformance_create, detail: full }
+    # Asserts the created BODY comes back, not that create returned ok. A create that wrote no
+    # template would still report success, and the inspect would still succeed on the metadata.
+    expect: { text_contains: 'CONFORMANCE_CREATE_MARKER' }
+
+  - id: prompt-update-saves-a-version
+    claim_source: >-
+      resource_manager contract — `update` auto-versions unless `skip_version` is set; version
+      history is what `rollback` and `history` operate on.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_version
+          name: Conformance Version
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_V1_MARKER
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_version
+          user_message_template: CONFORMANCE_V2_MARKER
+    expect: { text_contains: '**Version 1** saved' }
+
+  - id: prompt-update-is-live-after-reload
+    claim_source: >-
+      README § "All hot-reloadable" — an updated prompt body is served by the running server
+      without a restart. resource_manager `reload` — "Hot reload completed - All prompts refreshed
+      from disk."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_hotreload
+          name: Conformance Hot Reload
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_V1_MARKER
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_hotreload
+          user_message_template: CONFORMANCE_V2_MARKER
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_hotreload }
+      # EXECUTE rather than inspect: the claim is that the running server serves the new body, and
+      # inspect could in principle read the file while execution still used a cached template.
+      - tool: prompt_engine
+        args: { command: '%clean >>conformance_hotreload' }
+    expect: { text_contains: 'CONFORMANCE_V2_MARKER' }
+
+  - id: prompt-rollback-requires-confirmation
+    claim_source: >-
+      resource_manager `confirm` parameter — "Safety confirmation" for destructive actions. The
+      server's own message names rollback as one of them.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_rollback_guard
+          name: Conformance Rollback Guard
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_V1_MARKER
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_rollback_guard
+          user_message_template: CONFORMANCE_V2_MARKER
+      - tool: resource_manager
+        args:
+          { resource_type: prompt, action: rollback, id: conformance_rollback_guard, version: 1 }
+    expect: { error_contains: 'Rollback requires confirmation' }
+
+  - id: prompt-rollback-restores-previous-content
+    claim_source: >-
+      resource_manager contract — `rollback` "Restore a previous version". README § versioning —
+      "all versioned with rollback".
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_rollback
+          name: Conformance Rollback
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_V1_MARKER
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_rollback
+          user_message_template: CONFORMANCE_V2_MARKER
+      # Make V2 the LIVE body before rolling back. Without this the registry is still serving V1
+      # from creation time, and the final assertion below would hold whether or not the rollback
+      # ran at all — measured, see the file header.
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_rollback }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: rollback
+          id: conformance_rollback
+          version: 1
+          confirm: true
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_rollback }
+      - tool: prompt_engine
+        args: { command: '%clean >>conformance_rollback' }
+    # V1 here can only mean the rollback restored it: the preceding reload made V2 the served body,
+    # so a rollback that silently no-opped would leave V2 in this response. `ok: true` cannot see
+    # the difference — the same blindness that let the framework-application defect survive.
+    expect: { text_contains: 'CONFORMANCE_V1_MARKER' }
+
+  - id: prompt-delete-removes-the-prompt
+    claim_source: >-
+      resource_manager contract — `delete` "Remove a resource". The follow-up inspect is the
+      server's own evidence that it is gone.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_delete
+          name: Conformance Delete
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_DELETE_MARKER
+      - tool: resource_manager
+        args: { resource_type: prompt, action: delete, id: conformance_delete, confirm: true }
+      - tool: resource_manager
+        args: { resource_type: prompt, action: inspect, id: conformance_delete }
+    expect: { error_contains: 'Prompt not found: conformance_delete' }
+
+  - id: prompt-delete-honors-the-confirm-safety
+    claim_source: >-
+      resource_manager `confirm` parameter, schema text — "Safety confirmation for delete
+      operation." It names DELETE specifically, and rollback enforces the same parameter.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_delete_guard
+          name: Conformance Delete Guard
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_DELETE_GUARD_MARKER
+      - tool: resource_manager
+        args: { resource_type: prompt, action: delete, id: conformance_delete_guard }
+    expect: { error_contains: 'requires confirmation' }
+    known_divergence:
+      measured: >-
+        Delete WITHOUT `confirm` succeeds and removes the prompt directory: "🗑️ Deleting Prompt
+        ... ✅ Prompt successfully removed from system". The parameter whose only documented
+        purpose is guarding this action is not read on this path, while the SAME parameter is
+        enforced for rollback in the same handler — measured 2026-08-11, in one run, which rules
+        out a configuration difference. The schema sentence names delete explicitly, so the
+        description is currently false rather than merely incomplete.
+      closed_by: >-
+        Enforcing `confirm` on delete — a breaking change to the tool surface under CLAUDE.md
+        § Public API Contract, so it belongs to a major bump — or correcting the parameter
+        description to state that only rollback enforces it. Then delete this block.
+      since: '2026-08-11'

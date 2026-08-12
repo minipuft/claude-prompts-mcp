@@ -1,0 +1,99 @@
+# Claims-conformance corpus — framework selection (@framework)
+#
+# `resources/frameworks/` declares 8 ids, and CLAUDE.md § Key Constraints names
+# `frameworkManager.getFramework(id)` as the authority that must never be hardcoded. That makes
+# the declared set itself the claim: every id present on disk must be selectable, and an id that
+# is not present must be rejected.
+#
+# Every scenario runs against `minimal_prompt` — no arguments, no script tools, no includes — so
+# a red row here is a framework defect and cannot be the fixture's own validation. The corpus
+# previously used `reference_demo`, whose required `text` and embedded {{script:word_count}}
+# failed three rows on the fixture instead of on their claim (plan row 0.5.11).
+
+version: 1
+
+scenarios:
+  - id: framework-5w1h
+    claim_source: 'resources/frameworks/5w1h — declared, therefore selectable'
+    requests: [{ tool: prompt_engine, args: { command: '@5W1H >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-focus
+    claim_source: 'resources/frameworks/focus — declared, therefore selectable'
+    requests: [{ tool: prompt_engine, args: { command: '@FOCUS >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-liquescent
+    claim_source: 'resources/frameworks/liquescent — declared, therefore selectable'
+    requests: [{ tool: prompt_engine, args: { command: '@LIQUESCENT >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-radiant
+    claim_source: 'resources/frameworks/radiant — declared, therefore selectable'
+    requests: [{ tool: prompt_engine, args: { command: '@RADIANT >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-scamper
+    claim_source: 'resources/frameworks/scamper — declared, therefore selectable'
+    requests: [{ tool: prompt_engine, args: { command: '@SCAMPER >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-verify
+    claim_source: 'resources/frameworks/verify — declared, therefore selectable'
+    requests: [{ tool: prompt_engine, args: { command: '@VERIFY >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  # ── B3: casing. The tool description shows @CAGEERF; the directory holds `cageerf`. ──────
+  # Whichever form is unsupported becomes an explicit row rather than folklore.
+  - id: framework-lowercase-id
+    claim_source: 'resources/frameworks/ ids are lowercase on disk; the tool description shows uppercase'
+    requests: [{ tool: prompt_engine, args: { command: '@cageerf >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  # ── Trailing space is no longer required (relaxed 2026-08-09, owner-directed) ──────────
+  # The old pattern ended `(?=\s|$)`, so `@CAGEERF>>prompt` silently did not match and the
+  # framework was never applied. Both forms are now claims and both are checked.
+  - id: framework-no-trailing-space
+    claim_source: 'operators.json "@" pattern — examples include "@CAGEERF>>analyze"'
+    # SCAMPER, not CAGEERF: the response footer echoes the ACTIVE framework, and cageerf is the
+    # session default — so asserting on it would pass even when the prefix never matched. A
+    # non-default id is the only way this scenario can tell "applied" from "silently ignored".
+    #
+    # And NOT `ok: true` — measured 2026-08-09, this command SUCCEEDS under the old pattern too,
+    # with the framework silently unapplied. Success is not evidence the claimed effect happened.
+    requests: [{ tool: prompt_engine, args: { command: '@SCAMPER>>minimal_prompt' } }]
+    expect: { text_contains: '^scamper' }
+
+  - id: framework-with-trailing-space-still-works
+    claim_source: 'operators.json "@" pattern — the original spaced form must not regress'
+    requests: [{ tool: prompt_engine, args: { command: '@SCAMPER >>minimal_prompt' } }]
+    expect: { text_contains: '^scamper' }
+
+  - id: framework-no-space-unknown-still-rejects
+    claim_source: 'Relaxing the separator must not relax VALIDATION — unknown ids still reject'
+    requests: [{ tool: prompt_engine, args: { command: '@NotAFramework>>minimal_prompt' } }]
+    expect: { error_contains: 'Parse error: "@NotAFramework>>minimal_prompt"' }
+
+  # ── '^' alias (D3, 2026-08-09). '@' collides with the client UI in every harness. ──────
+  # Additive: '^' becomes canonical, '@' keeps parsing and is removed at the next major.
+  # Assertions use text_contains on the re-run footer with a NON-DEFAULT framework, because
+  # `ok: true` provably cannot distinguish "applied" from "silently ignored" here.
+  - id: framework-caret-alias
+    claim_source: 'operators.json framework.symbol = "^" — canonical spelling'
+    requests: [{ tool: prompt_engine, args: { command: '^SCAMPER >>minimal_prompt' } }]
+    expect: { text_contains: '^scamper' }
+
+  - id: framework-caret-no-space
+    claim_source: 'operators.json framework examples include "^CAGEERF>>analyze"'
+    requests: [{ tool: prompt_engine, args: { command: '^SCAMPER>>minimal_prompt' } }]
+    expect: { text_contains: '^scamper' }
+
+  - id: framework-at-still-parses-deprecated
+    claim_source: 'operators.json framework.deprecatedSymbols = ["@"] — parses until next major'
+    requests: [{ tool: prompt_engine, args: { command: '@SCAMPER >>minimal_prompt' } }]
+    expect: { text_contains: '^scamper' }
+
+  - id: framework-caret-unknown-rejects
+    claim_source: 'Adding a sigil must not relax VALIDATION — unknown ids still reject under "^"'
+    requests: [{ tool: prompt_engine, args: { command: '^NotAFramework>>minimal_prompt' } }]
+    expect: { error_contains: 'Parse error: "^NotAFramework>>minimal_prompt"' }

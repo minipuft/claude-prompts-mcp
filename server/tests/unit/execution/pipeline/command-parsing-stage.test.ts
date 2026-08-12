@@ -360,7 +360,10 @@ describe('CommandParsingStage', () => {
       arguments: [],
       chainSteps: [
         { promptId: 'step_prepare', stepName: 'prepare' },
-        { promptId: 'step_review', stepName: 'review' },
+        // Explicit id on the second step (P3 Tier 1 discriminating probe, criterion 3):
+        // proves mintNodeIds prefers `id` over the stepName slug at this mint site, not
+        // just that the field exists on the type.
+        { promptId: 'step_review', stepName: 'Review Something', id: 'review-explicit' },
       ],
     };
 
@@ -379,5 +382,10 @@ describe('CommandParsingStage', () => {
     expect(context.parsedCommand?.steps).toHaveLength(2);
     expect(context.parsedCommand?.steps?.[0].promptId).toBe('step_prepare');
     expect(context.parsedCommand?.steps?.[1].promptId).toBe('step_review');
+    // P3 Tier 1 — discriminating probe (criterion 6): proves mintNodeIds actually ran at this
+    // mint site (slug of stepName), not just that a nodeId field exists on the type.
+    expect(context.parsedCommand?.steps?.[0].nodeId).toBe('prepare');
+    // Criterion 3: explicit id wins over slug.
+    expect(context.parsedCommand?.steps?.[1].nodeId).toBe('review-explicit');
   });
 });

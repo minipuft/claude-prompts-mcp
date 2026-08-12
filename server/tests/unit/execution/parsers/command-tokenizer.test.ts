@@ -226,11 +226,15 @@ describe('tokenizeCommand', () => {
       expect(result.format).toBe('simple');
     });
 
-    test('does not detect + when chain present (chain takes precedence)', () => {
-      // In "a --> b + c", the + is ambiguous — chains take precedence
+    test('detects + alongside a chain while + is reserved', () => {
+      // Inverted from "chain takes precedence" (plan row 0.5.15). The precedence rule protects a
+      // chain from having its `+` consumed as a parallel STEP — irrelevant while `+` is
+      // `status: reserved` in operators.json, because no strategy may consume the token and
+      // CommandParser throws on it first. Emitting it is what lets that rejection happen; the
+      // suppression is restored automatically if `+` ever becomes implemented.
       const result = tokenizeCommand('>>a --> >>b + >>c');
       expect(opTypes(result.operators)).toContain('chain');
-      expect(opTypes(result.operators)).not.toContain('parallel');
+      expect(opTypes(result.operators)).toContain('parallel');
     });
   });
 

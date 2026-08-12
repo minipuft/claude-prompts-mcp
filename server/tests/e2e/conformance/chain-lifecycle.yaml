@@ -1,0 +1,213 @@
+# Claims-conformance corpus — chain execution lifecycle
+#
+# Everything here needs something no other corpus file needs: a value MINTED BY THE SERVER in
+# response N used to compose request N+1. A chain resume is defined in terms of a `chain_id` the
+# client cannot know in advance, so `capture:` + `${...}` binding is what makes the claim
+# expressible at all (plan rows B4 / C1).
+#
+# FIXTURE CHOICE — `quick_decision`, and the reason is not convenience.
+# It is one of the 26 prompt.yaml files GIT TRACKS under resources/prompts/. The directory holds
+# 119 on a developer machine; `resources/prompts/.gitignore` ignores `*` and whitelists only
+# examples/, guidance/, codebase-setup/ and workflow/, so the other 93 are the operator's own
+# prompts and are absent from a CI checkout and from the npm tarball. A scenario built on one of
+# those would pass locally and fail in CI for a reason having nothing to do with its claim.
+# `quick_decision` is also script-free and takes exactly one required argument, so its only
+# failure mode is the claim under test — the property row 0.5.11 asks of every fixture.
+
+version: 1
+
+scenarios:
+  - id: chain-resume-advances-step
+    claim_source: >-
+      prompt_engine tool description — chain_id is the "Resume token (e.g. chain-demo#2). RESUME:
+      chain_id + user_response only." Also 01-request-normalization-stage.ts:61-62, which instructs
+      the caller to "Provide 'chain_id' parameter (with optional 'user_response')".
+    requests:
+      # Step 1 of 3. The server mints the chain id here and publishes it in the response footer.
+      #
+      # `%clean` suppresses injection and gates, and is load-bearing rather than cosmetic: under
+      # the default framework the first step returns with a phase-guard gate pending, so a resume
+      # carrying only chain_id + user_response leaves the chain parked at step 1. Dropping gates
+      # removes that second variable, which is what row 0.5.11 asks of every fixture — the only
+      # reason this scenario can fail is the resume claim itself. Gate-blocked resume is a
+      # DIFFERENT claim and belongs to rows C3–C6.
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"pick a database"' }
+        capture:
+          chain_id: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      # Step 2 of 3, reachable ONLY by echoing back the captured id.
+      - tool: prompt_engine
+        args:
+          chain_id: '${chain_id}'
+          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+    # Asserts the step ADVANCED, not merely that the call succeeded. `ok: true` is provably blind
+    # here: MEASURED 2026-08-09, the same two requests WITHOUT `%clean` return a successful
+    # response whose footer still reads "Progress 1/3" — the resume is accepted and the chain does
+    # not move, because a framework phase-guard gate is pending. The server emits the counter, so
+    # "Progress 2/3" is the one substring that cannot appear unless step 2 was actually served.
+    expect: { text_contains: 'Progress 2/3' }
+
+  # ── Gate verdict round-trip (plan row 0.5.13) ──────────────────────────────
+  #
+  # These deliberately DROP `%clean`. The scenario above suppresses gates so the resume claim is
+  # the only variable; here the pending gate IS the claim, so it must be left on. Both rows assert
+  # `Progress 2/3` rather than `ok: true` — measured 2026-08-11, a resume that cannot advance
+  # still returns success (see `chain-gated-resume-without-verdict` below), so success is not
+  # evidence the verdict was honored.
+  - id: chain-gate-verdict-structured
+    claim_source: >-
+      prompt_engine gate_verdict parameter — "PREFERRED (structured, cannot be malformed):
+      {overall, rationale, per_gate[]}". CLAUDE.md § Public API Contract names this shape as the
+      one that is schema-validated.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+          gate_verdict:
+            overall: 'PASS'
+            rationale: 'listed three options with one-line descriptions'
+    expect: { text_contains: 'Progress 2/3' }
+
+  # The RETIRING shape. CLAUDE.md commits to deleting the string branch and the four non-primary
+  # regexes in verdict-patterns.yaml "once no client has submitted a string verdict for one
+  # release cycle", and calls that deletion breaking. This row is the dated measurement that the
+  # branch still works — when it is deleted, this row must be deleted in the SAME commit, which is
+  # what makes the retirement observable instead of folklore.
+  - id: chain-gate-verdict-legacy-string
+    claim_source: >-
+      prompt_engine gate_verdict parameter — "Also accepts the legacy string
+      \"GATE_REVIEW: PASS - rationale\"". CLAUDE.md § Public API Contract, retirement clause.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a cache"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: Redis, Memcached, Dragonfly.'
+          gate_verdict: 'GATE_REVIEW: PASS - three options listed'
+    expect: { text_contains: 'Progress 2/3' }
+
+  - id: chain-gated-resume-without-verdict
+    claim_source: >-
+      prompt_engine chain_id parameter — "RESUME: chain_id + user_response only. Omit command."
+      The description states no gate precondition, so the documented two-parameter resume is the
+      claim being tested.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a queue"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: SQS, RabbitMQ, NATS.'
+    expect: { text_contains: 'Progress 2/3' }
+    known_divergence:
+      measured: >-
+        The documented two-parameter resume returns SUCCESS and does not advance: the footer still
+        reads "Progress 1/3" because a gate is pending. Identical to the two rows above except for
+        the omitted gate_verdict, which isolates the cause. The tool description presents
+        chain_id + user_response as sufficient, and it is sufficient only with gates disabled — so
+        a caller following the documented contract gets a silent no-op reported as success.
+        Third instance of that shape on this initiative (`?` accepted at 0.5.6, `@X>>y` silently
+        unapplied at D6).
+      closed_by: >-
+        Making a resume that cannot advance say so — a non-ok result or an explicit
+        "blocked on gate" signal — or amending the tool description to state the gate
+        precondition. Then delete this block so the row asserts the claim directly.
+        Filed as plan row C8; measured 2026-08-09, re-measured 2026-08-11.
+      since: '2026-08-09'
+
+  # ── force_restart (plan row 0.5.16) ────────────────────────────────────────
+  #
+  # The row concluded the parameter had "no observable effect", measured on the `command` path —
+  # where it is indeed indistinguishable, because a bare repeat already mints a new chain id.
+  # That was the wrong path to measure on. `force_restart` governs whether a RESUME is honoured,
+  # and it has exactly two observable behaviours, both asserted below (measured 2026-08-11).
+  - id: force-restart-conflicts-with-chain-id
+    claim_source: >-
+      prompt_engine force_restart parameter — "Create a new chain execution (increments chain ID).
+      Use `command`." The tool rejects the combination that contradicts that instruction.
+    requests:
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+          force_restart: true
+    expect: { error_contains: "'force_restart=true' cannot be used together with 'chain_id'" }
+
+  # The one input where `true` and absent produce DIFFERENT successful behaviour rather than an
+  # error: a chain id carried in the COMMAND TEXT plus a resume payload. Without the flag this is
+  # normalized into a resume (prompt-executor.ts:428) and advances the chain; with it, the id is
+  # taken as a command and no resume happens. Row 0.5.12 requires a scenario to distinguish its
+  # claim from the parameter's absence — this pair is that distinction, and the two rows must be
+  # read together.
+  - id: force-restart-suppresses-command-embedded-resume
+    claim_source: >-
+      prompt-engine metadata — "Setting force_restart:true ignores previously cached steps even if
+      chain_id is present."
+    requests:
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"pick a cache"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          command: '${cid}'
+          user_response: 'Options: Redis, Memcached, Dragonfly.'
+          force_restart: true
+    # The id stops being read as a resume target and is looked up as a prompt name, which fails.
+    expect: { error_contains: 'Unknown prompt "chain-quick_decision"' }
+
+  - id: command-embedded-resume-advances-without-force-restart
+    claim_source: >-
+      prompt-executor.ts:428 — a chain id in the command text plus a resume payload is normalized
+      into a resume. This is the arm that makes the row above mean something.
+    requests:
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"pick a queue"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          command: '${cid}'
+          user_response: 'Options: SQS, RabbitMQ, NATS.'
+    expect: { text_contains: 'Progress 2/3' }
+
+  # ── gate_action (plan row 0.5.17) ──────────────────────────────────────────
+  #
+  # The row recorded that `skip` "did not bypass its gate" — after exhausting a gate, submitting
+  # skip appeared to return the SAME gate at attempt 1/3. It was filed as unconfirmed precisely
+  # because a sibling gate could explain it, and re-measured 2026-08-11, that is what it was:
+  # skipping the shell-verify gate hands off to the framework's own gates (content-structure,
+  # intent-quality, framework-compliance), whose fresh attempt counter reads like a reset. `skip`
+  # works. The row is closed by evidence, not by a fix.
+  - id: gate-action-skip-bypasses-shell-verification
+    claim_source: >-
+      prompt_engine gate_action parameter — "skip: Bypass verification and continue", offered by
+      the server's own failure message after a shell-verify gate exhausts its attempts.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
+        capture:
+          cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'skip' }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: 'done' }
+    # Reaching completion is the proof: the shell gate is configured to fail on EVERY attempt
+    # (`exit 1`), so a run that finishes can only have bypassed it. Asserting the intermediate
+    # response would measure which gate spoke next, which is the ambiguity that produced the
+    # original finding.
+    expect: { text_contains: 'Execution complete' }
