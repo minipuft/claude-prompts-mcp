@@ -131,6 +131,9 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 02:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate-versions with root plugin.json registered ==` · ran
+- 2026-08-12 02:27 · `cd /tmp/e10e/server echo "=== typecheck (committed state) ==="; npx tsc --noEmit -p tsconfig.json 2>&1 | grep -c "error ` · ran
+- 2026-08-12 02:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/int` · ran
 - 2026-08-12 02:04 · `cd /tmp/cpm-w/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "command-parsing-stage" | head -4 echo` · ran
 - 2026-08-12 02:04 · `cd /home/minipuft/Applications/claude-prompts-mcp git worktree remove --force /tmp/cpm-t 2>/dev/null; rm -rf /tmp/cpm-t ` · ran
 - 2026-08-12 02:03 · `cd /tmp/cpm-t/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "claims-conformance" | head -5` · ran
@@ -604,3 +607,38 @@ The specific irony worth keeping: `a2956450` is titled "fail when a validate/ver
 wired to nothing", and it committed two npm entries plus two SUITE lines whose script files do not
 exist. It guarded `script exists → is it run?` and not `script is run → does it exist?`. A gate
 built to catch dangling wiring, dangling in the one direction it did not check.
+
+## E9 + E10 (2026-08-12)
+
+**DEV-E10-1 — "foreign" was measured on the wrong property.** E10 classified all six HEAD failures
+as the adaptive-chain workstream's, reasoning from _which plan owns the failing gate_. The property
+that decides ownership is _whose uncommitted file causes the failure_. `validate:agent-plugins` is
+a foreign gate reading four of THIS plan's Tier 1 deliverables, every one untracked under a row
+marked ✓. Twelfth sighting of the adjacent-property shape, and the first inside a row I wrote
+myself the same evening.
+
+**DEV-E10-2 — re-measuring the tier's own inventory changed the work.** The concurrent session
+landed `951db98d` between E10 being written and executed, resolving three of its six causes.
+Executing the row as written would have chased two already-fixed items. Section A's re-measure step
+is the only reason that did not happen.
+
+**DEV-E10-3 — a ✓ meant "I made the edit", not "the edit is in the repository".** Seven rows.
+Three days. The native Agent Plugins package this whole initiative exists to produce did not exist
+at the committed state, while Tier 1 read as landed. Every gate had been reading the working tree,
+so nothing could report the gap — this is E7's finding generalised past typechecking, and it is
+filed as E11 rather than treated as closed, because E7 covers only the compile half.
+
+**DEV-E10-4 — the build-output check reproduced its own bug on the first attempt.** Fixing
+`validate:agent-plugins` to accept `server/dist` via `git check-ignore` still failed in a fresh
+worktree: `.gitignore` declares `server/dist/` with a trailing slash, which matches directories
+only, and git cannot infer directory-ness for a path that does not exist yet. Testing both
+spellings fixed it. Notable because the falsification caught it — the "does a typo still fail"
+control was green while the "does the real path pass" case was red, and only running both
+distinguished a fix from a fix-shaped no-op.
+
+**DEV-E10-5 — two of the seven had their COMMITTED half be the test or the exception.** The
+reserved-operator rejection shipped its three tests and not the code, so `command-parser.test.ts`
+was red at HEAD and green in the tree. `verify:claims` shipped the suite-membership exception
+declaring its CI consumer, and not the CI step — which is why that gate could name the missing
+wiring exactly. **A test suite is not evidence the behaviour shipped**, and neither is an
+exception declaring that something consumes you.
