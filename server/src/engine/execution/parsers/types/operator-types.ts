@@ -161,6 +161,8 @@ export interface SymbolicExecutionPlan {
 
 export interface ExecutionStep {
   stepNumber: number;
+  /** Stable node identity, minted at parse time and frozen for the run. Optional — see D10. */
+  nodeId?: string;
   type: 'prompt' | 'gate' | 'framework_switch' | 'parallel_group';
   promptId?: string;
   args?: string;

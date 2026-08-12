@@ -45,3 +45,14 @@ export type OperatorId = keyof typeof OPERATOR_PATTERNS;
 export const IMPLEMENTED_OPERATORS = contract.operators
   .filter((op) => op.status === 'implemented')
   .map((op) => op.id);
+
+/**
+ * Operator id → symbol, for every operator the registry declares `reserved`.
+ *
+ * `status: reserved` is a published claim: the symbol is documented and deliberately NOT
+ * executable. Keyed by id because the tokenizer emits operator ids, so enforcement can consume
+ * this directly rather than re-deriving which symbols are off-limits.
+ */
+export const RESERVED_OPERATORS: ReadonlyMap<string, string> = new Map(
+  contract.operators.filter((op) => op.status === 'reserved').map((op) => [op.id, op.symbol])
+);
