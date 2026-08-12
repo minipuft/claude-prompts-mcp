@@ -146,7 +146,7 @@ Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` 
 
 ## What You Get
 
-Four primitives you author, version, and compose. The bundled set ships 27 prompts across 4 categories — a starting library, not the ceiling: your AI writes new prompts and chains through `resource_manager` as it works, so the set grows around what you actually do. All hot-reloadable, all versioned with rollback.
+Four primitives you author, version, and compose. The bundled set ships 28 prompts across 4 categories — a starting library, not the ceiling: your AI writes new prompts and chains through `resource_manager` as it works, so the set grows around what you actually do. All hot-reloadable, all versioned with rollback.
 
 | Primitive       | Symbol | What it is                                                                                                                                                                                                               | Example                                      |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
