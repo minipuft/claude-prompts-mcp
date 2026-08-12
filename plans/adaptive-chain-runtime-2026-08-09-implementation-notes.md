@@ -17,6 +17,8 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 16:47 · `cd /tmp/claude-1000/p5-headcheck/server && npx tsc --noEmit > /tmp/claude-1000/tsc1.txt 2>&1; echo "SRC_TSC_EXIT=$?"; wc` · ran
+- 2026-08-12 16:46 · `cd /home/minipuft/Applications/claude-prompts-mcp WT=/tmp/claude-1000/p5-headcheck rm -rf "$WT" 2>/dev/null; git worktre` · ran
 - 2026-08-12 08:47 · `cd server && npm run test:match -- "p5-acceptance" 2>&1 | tail -4 && npm run typecheck 2>&1 | tail -1 && npm run lint:ra` · ran
 - 2026-08-12 08:33 · `npm run test:match -- "p5-acceptance" 2>&1 | tail -3 && npm run typecheck:tests:ratchet 2>&1 | tail -1; ls /tmp/claude-1` · ran
 - 2026-08-12 08:30 · `timeout 1200 npm run typecheck:tests:ratchet 2>&1 | tail -6` · ran
