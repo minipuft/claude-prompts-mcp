@@ -180,3 +180,19 @@ server/tests/integration/gates/path-verification.test.ts
 # CLI build output (built by server/esbuild.config.mjs into server/dist, and
 # by `npm -w cli run build` into cli/dist for standalone dev)
 cli/dist/
+
+# Skills-sync export output — generated, never committed.
+#
+# `skills/` is the Agent Plugins project-scope output dir (skills-sync service.ts:380); the spec
+# fixes it at the plugin root, which is why it lands here and not under a dot-dir. Every OTHER
+# client's export dir is already ignored on the same principle — `.claude/skills` and
+# `.codex/skills` are 0-tracked — so committing this one was the anomaly, not the rule.
+#
+# It is produced by `npm run skills:export` from the registrations in server/skills-sync.yaml,
+# which ship EMPTY by default (see server/skills-sync.example.yaml). Committing the output would
+# mean a hand edit survives silently until someone re-exports, and it would make the repo carry
+# one user's choice of exported resources as if it were the project's.
+#
+# Consequence for the distribution renderer: it GENERATES skills/ rather than drift-checking a
+# committed tree. `scripts/render-targets.json` records the same under canonicalTree.
+skills/
