@@ -131,6 +131,22 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 00:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --check ../plans/agent-plugins-migration-2026-08-0` · ran
+- 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-operator-registry-drift.js scripts/` · ran
+- 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "### typecheck"; npx tsc --noEmit -p tsconfig.json 2>&1 | ` · ran
+- 2026-08-12 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cat > /tmp/d7probe.mjs <<'EOF' const { ChainStepSchema } = awai` · ran
+- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== hooks pytest ==="; python3 -m pytest hooks/tests -q 2>&1 | t` · ran
+- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/ops.bak tooling/contracts/registries/operators.json nod` · ran
+- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
+- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp tooling/contracts/registries/operators.json /tmp/ops.bak # M` · ran
+- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server rm -f tests/unit/execution/parsers/__probe_d9.test.ts node --ex` · ran
+- 2026-08-12 00:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx tsc --noEmit --project tsconfig.json 2>&1 | head -10; echo ` · ran
+- 2026-08-12 00:03 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff --numstat server/tooling/contracts/registries/operators.json ` · ran
+- 2026-08-12 00:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
+- 2026-08-12 00:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
+- 2026-08-12 00:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
+- 2026-08-11 23:59 · `npx jest tests/unit/execution/parsers/__probe_d9.test.ts 2>&1 | tail -40` · ran
+- 2026-08-11 23:59 · `npx jest tests/unit/execution/parsers/__probe_d9.test.ts 2>&1 | grep -E 'REGISTRY|cmd|✓|✕|Tests:' | head -20` · ran
 - 2026-08-11 23:51 · `cd server && npx tsc --noEmit --project tsconfig.json 2>&1 | head -4; echo "exit=$?"` · ran
 - 2026-08-11 23:50 · `cd server && npm run -s validate:all 2>&1 | rg "steps failed|── |FAIL" | head -6; echo "=== e2e ==="; NODE_OPTIONS="--ex` · ran
 - 2026-08-11 23:48 · `rm -f tests/e2e/__probe6.test.ts; NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conform` · ran
@@ -489,3 +505,46 @@ a framework applied its banner but not its guidance.
 depending on the other, so they are order-independent and idempotent. They leave the isolated server
 on 5W1H; every other row in that file either passes `%clean` or asserts a body marker no framework
 changes.
+
+## Tier 0.5b — Workstream D + E6 (2026-08-12)
+
+**DEV-T05b-1 — my own gate had the bug it was written to catch.** The first run of
+`validate-operator-registry-drift.js` reported the hook fallback as drifted, quoting
+`>>\s*([a-zA-Z0-9_-]+)`. That is the prompt-id regex at `prompt-suggest.py:107`, not the framework
+fallback at `:208` — the matcher grabbed the file's FIRST `re.search`. A probe for something
+merely adjacent to the property, inside the gate whose entire purpose is catching that. Fixed by
+scoping to `detect_framework`'s body first. Had I trusted the first red, I would have "fixed" a
+file that was already correct.
+
+**DEV-T05b-2 — the markdown table check tore its own input in half.** `row.split('|')` split on
+the `\|` INSIDE the regex cell, so the gate compared a fragment (`(?:^\`) and reported a stale
+pattern that was merely mis-parsed. Both bugs surfaced in the same run and both produced
+confident, specific, wrong error messages. A gate's diagnostics are as capable of lying as the
+code it guards.
+
+**DEV-T05b-3 — E6's row named a filename convention, not a defect.** "Audit the other
+`validate:no-*` scripts" would have audited 3 gates and missed `documented-options`, which has the
+same defect and a different prefix. Auditing on the property (_shipped-content scope + filesystem
+walk_) found 4. The row's own wording was the adjacent-property trap, one level up: the name
+`no-*` co-occurs with the defect without being it.
+
+**DEV-T05b-4 — measuring both directions changed the remedy.** The `.ignore` vector that caused
+E5 turned out to be **unreachable** for all four gates, and the 16 "missed tracked files" were all
+`.gitkeep`. Had I stopped at either, the honest write-up would have been "documents why not" and
+no code would have changed. The third measurement — 18 untracked files currently inside the scan
+roots, most of them another session's uncommitted work — is what justified converting. Two of the
+three directions were dead ends, and running only one of them would have produced a confident
+answer either way.
+
+**DEV-T05b-5 — D4 resolved by NOT doing what it said.** The row asked for a `pattern.python` key.
+Measured first: all 8 patterns compile and agree under both engines, so the key would have added a
+second definition to the very registry D9 was consolidating. The real risk it gestured at — a
+JS-only construct silently emptying the Python detector — is now a behavioural check. Executing
+the row literally would have made the codebase worse while marking the row ✓.
+
+**DEV-T05b-6 — a ✓ row is N claims wearing one checkbox.** D1 and D3 both named `operators.json`
+among their changed files; neither had touched it. Their verification drove standalone commands,
+which passed, and nothing connected the unverified half of the claim to a failing test. This is
+the strongest argument in the initiative for gates over rows: `validate:operator-registry-drift`
+makes that particular claim mechanically checkable, and no amount of care in row-writing would
+have.
