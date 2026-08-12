@@ -20,3 +20,8 @@ registrations:
       - prompt:development/dev-workflow
     project:
       - prompt:examples/reference_demo
+  # Agent Plugins 1.0.0 canonical tree. `project` scope only — the spec fixes skills/ at the
+  # plugin root, so a user-scope export would write outside the plugin and never be shipped.
+  agent-plugins:
+    project:
+      - prompt:examples/reference_demo

@@ -363,6 +363,23 @@ const CLIENT_REGISTRY: Record<string, ClientConfig> = {
     outputDir: { user: '~/.config/opencode/skills', project: '.opencode/skills' },
     capabilities: { scripts: false, references: false, assets: false, subagents: true },
   },
+  /**
+   * Agent Plugins 1.0.0 canonical tree.
+   *
+   * Unlike the entries above, this one does not target an installed client directory — the spec
+   * fixes `skills/<name>/SKILL.md` at the PLUGIN root, so `project` is a bare `skills` and the
+   * export lands in the repository beside `plugin.json` and `mcp.json`.
+   *
+   * `variant` deliberately matches neither the `cursor` nor the `opencode` branch below: the
+   * spec says SKILL.md conforms to agentskills.io and assigns no further frontmatter, so the
+   * neutral shape is the conforming one. `subagents: false` because v1 defines no core agents.
+   */
+  'agent-plugins': {
+    adapter: 'agent-skills',
+    variant: 'agent-plugins',
+    outputDir: { user: '~/.agent-plugins/skills', project: 'skills' },
+    capabilities: { scripts: true, references: true, assets: true, subagents: false },
+  },
 };
 
 interface OutputFile {
