@@ -131,6 +131,10 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 16:22 · `cd /home/minipuft/Applications/claude-prompts-mcp git worktree remove --force /tmp/idxcheck 2>/dev/null; git worktree pr` · ran
+- 2026-08-12 16:22 · `cd /tmp/headcheck/server && npm run test:e2e 2>&1 | grep -E "^Tests:|^Test Suites:" git worktree remove --force /tmp/hea` · ran
+- 2026-08-12 16:22 · `cd /tmp/headcheck/server npm run validate:all 2>&1 | tail -3 npm run test:ci 2>&1 | grep -E "^Tests:|^Test Suites:" npm ` · ran
+- 2026-08-12 16:20 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/headcheck && git worktree add -q --detach /tmp/headcheck H` · ran
 - 2026-08-12 16:17 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== visibility leaked into 0e8b7875? ===" git show 0e8b7875 | gr` · ran
 - 2026-08-12 16:16 · `cd /tmp/idxcheck/server ln -sfn /home/minipuft/Applications/claude-prompts-mcp/server/node_modules ./node_modules 2>/dev` · ran
 - 2026-08-12 16:16 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path('/tmp/claude-1000/min` · ran
