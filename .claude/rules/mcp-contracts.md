@@ -165,7 +165,7 @@ Before committing parameter changes:
 
 **Zod schemas are hand-written** in `src/mcp/tools/schemas/`:
 
-- `prompt-engine.schema.ts` — schema factory with `DescriptionResolver` for methodology overlays
+- `prompt-engine.schema.ts` — schema factory with `DescriptionResolver` for framework overlays
 - `system-control.schema.ts` — system control input schema
 - `resource-manager.schema.ts` — resource manager input schema with gate sub-schemas
 

@@ -192,20 +192,6 @@ module.exports = {
       },
     },
     {
-      name: 'methodology-via-loader-only',
-      comment: 'Methodology YAML files should only be accessed via RuntimeMethodologyLoader.',
-      severity: 'warn',
-      from: {
-        pathNot: [
-          'src/engine/frameworks/methodology/runtime-methodology-loader\\.ts$',
-          'src/engine/frameworks/methodology/methodology-hot-reload\\.ts$',
-        ],
-      },
-      to: {
-        path: 'methodologies/',
-      },
-    },
-    {
       name: 'no-runtime-state-direct-access',
       comment: 'Runtime state should be accessed via managers, not directly.',
       severity: 'warn',

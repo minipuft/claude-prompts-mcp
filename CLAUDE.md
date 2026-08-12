@@ -121,16 +121,16 @@ Read the relevant doc before editing. Update docs when behavior changes.
 ```
 prompt_engine  → PromptExecutor → PipelineBuilder → Pipeline (22 stages)
 resource_manager → Router → Handler (≤125 lines) → Processors (lifecycle/discovery/versioning)
-system_control → SystemControl Router → 10 action handlers
+system_control → SystemControl Router → 11 action handlers
 ```
 
 | Tool | Handler | Processors |
 |------|---------|------------|
 | `resource_manager` (prompt) | `PromptResourceHandler` | `PromptLifecycleProcessor`, `PromptDiscoveryProcessor`, `PromptVersioningProcessor` |
 | `resource_manager` (gate) | `GateToolHandler` | `GateLifecycleProcessor`, `GateDiscoveryProcessor`, `GateVersioningProcessor` |
-| `resource_manager` (methodology) | `FrameworkToolHandler` | `FrameworkLifecycleProcessor`, `FrameworkDiscoveryProcessor`, `FrameworkVersioningProcessor`, `MethodologyValidator` |
+| `resource_manager` (framework) | `FrameworkToolHandler` | `FrameworkLifecycleProcessor`, `FrameworkDiscoveryProcessor`, `FrameworkVersioningProcessor`, `FrameworkValidator` |
 | `prompt_engine` | `PromptExecutor` | `PipelineBuilder` (factory), `ChainSessionRouter` |
-| `system_control` | `ConsolidatedSystemControl` | 10 action handlers in `system-control/handlers/` |
+| `system_control` | `ConsolidatedSystemControl` | 11 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `status`) |
 
 ## Runtime State (SQLite -- never commit `state.db`)
 
@@ -157,7 +157,7 @@ breaking and major versions inflate until they carry no information.
 |------------------------------------------|----------------------------------------|
 | MCP tool surface: `prompt_engine`, `resource_manager`, `system_control` names, parameters, and response shape | Internal TypeScript exports, including `src/index.ts` |
 | CLI surface: `claude-prompts` and `cpm` commands and flags | `package.json` packaging fields (`types`, `exports`, `files`) |
-| Resource formats: prompt/gate/methodology YAML schema, `config.json` | `src/` layer structure, module layout, import style |
+| Resource formats: prompt/gate/framework YAML schema, `config.json` | `src/` layer structure, module layout, import style |
 | Python hook contract consumed by downstream plugins -- **durable surface only**, see below | Which files land in the published tarball |
 | | **PID-scoped derived projections**: `chain_sessions`, `chain_run_registry` column names |
 | Symbolic command language (`>>`, `==>`) | Build tooling, validation scripts, CI |
@@ -219,5 +219,5 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 -> `docs/architecture/overview.md` for architecture, pipeline stages, subsystems
 -> `docs/reference/mcp-tools.md` for MCP tool workflows, symbolic command language
 -> `docs/guides/injection-control.md` for injection types, frequency, hierarchy
--> `docs/guides/gates.md` for gate/methodology structure and hot-reload
+-> `docs/guides/gates.md` for gate/framework structure and hot-reload
 -> `/testing` skill for test patterns and project-specific coverage
