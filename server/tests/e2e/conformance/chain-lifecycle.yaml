@@ -211,3 +211,61 @@ scenarios:
     # response would measure which gate spoke next, which is the ambiguity that produced the
     # original finding.
     expect: { text_contains: 'Execution complete' }
+
+  # ── gate_action retry / abort (Tier 0.5b row C5) ───────────────────────────
+  #
+  # `skip` landed earlier and falsified plan row 0.5.17. These are the other two arms. Each asserts
+  # the string only ITS action produces — the three outcomes are textually distinct, which is what
+  # makes one row unable to pass for another's reason.
+  - id: gate-action-retry-resets-the-attempt-counter
+    claim_source: >-
+      prompt_engine gate_action parameter — "retry: Reset attempt count and try again", offered by
+      the server's own message after a shell-verify gate exhausts its attempts.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
+        capture:
+          cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'retry' }
+    # `Attempts: 0/1` is the reset itself. The preceding response read `1/1`, so this substring
+    # cannot appear unless the counter actually moved backwards.
+    expect: { text_contains: 'Attempts:** 0/1' }
+
+  - id: gate-action-abort-stops-verification
+    claim_source: >-
+      prompt_engine gate_action parameter — "abort: Stop execution". The server offers it in the
+      same failure message as retry and skip.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
+        capture:
+          cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'abort' }
+    expect: { text_contains: 'No further verification will run' }
+
+  # ── Malformed gate_verdict (Tier 0.5b row C6) ──────────────────────────────
+  #
+  # The failure mode the structured object exists to remove. CLAUDE.md § Public API Contract says
+  # the legacy string "is read back by five regexes and can fail to parse", and the retirement
+  # clause depends on the `source` field being trustworthy — which it is not if unparseable input
+  # is silently accepted as a pass. Measured 2026-08-11: it is rejected, at the SCHEMA layer,
+  # before any of the five regexes see it. The claim holds and this row now guards it.
+  - id: malformed-gate-verdict-string-is-rejected
+    claim_source: >-
+      prompt_engine gate_verdict parameter — the legacy shape is documented as
+      "GATE_REVIEW: PASS|FAIL - reason". A string outside that shape must not be read as a verdict.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+          gate_verdict: 'total nonsense here'
+    # Names the format requirement, so the row cannot be satisfied by an unrelated failure on the
+    # same input — the wrong-reason class that made `rejects: true` unusable.
+    expect: { error_contains: 'Gate verdict must follow format' }

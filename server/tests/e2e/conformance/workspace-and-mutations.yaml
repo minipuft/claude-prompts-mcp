@@ -273,3 +273,41 @@ scenarios:
         § Public API Contract, so it belongs to a major bump — or correcting the parameter
         description to state that only rollback enforces it. Then delete this block.
       since: '2026-08-11'
+
+  # ── Framework switch round-trip (Tier 0.5b row B2) ─────────────────────────
+  #
+  # Isolated because `switch` PERSISTS: it writes `kv_state key='framework'`, and on the shared
+  # server that is the developer's own active framework. The row was marked BLOCKED on A1 for two
+  # days after A1 had landed — nothing re-checks a blocked row's blocker.
+  #
+  # Both rows switch to 5W1H themselves rather than depending on each other, so they are
+  # order-independent and idempotent. They deliberately leave the isolated server on 5W1H; every
+  # other row in this file either passes `%clean` or asserts a body marker that no framework
+  # changes, so nothing above depends on which framework is active.
+  - id: framework-switch-changes-the-active-framework
+    claim_source: >-
+      system_control `framework` action, operation `switch` — CLAUDE.md § Domain Ownership routes
+      framework selection through FrameworkManager. The `list` operation marks the active one.
+    requests:
+      - tool: system_control
+        args: { action: framework, operation: switch, framework: '5w1h' }
+      - tool: system_control
+        args: { action: framework, operation: list }
+    # Reads the state BACK rather than trusting the switch's own success banner. `ok:` is provably
+    # blind here — a switch that reported success and changed nothing would satisfy it, which is the
+    # same shape as the framework that applied its banner but not its guidance (row D6).
+    expect: { text_contains: '**5W1H Framework** 🟢 ACTIVE' }
+
+  - id: framework-switch-is-observable-in-execution
+    claim_source: >-
+      system_control `framework` switch — the point of switching is that subsequent executions use
+      the new framework's guidance, not merely that a registry field changed.
+    requests:
+      - tool: system_control
+        args: { action: framework, operation: switch, framework: '5w1h' }
+      - tool: prompt_engine
+        args: { command: '>>minimal_prompt' }
+    # The strongest available assertion: the switched framework's guidance reaches the response.
+    # A registry that updated without the pipeline reading it would pass the row above and fail
+    # this one, which is why both exist.
+    expect: { text_contains: 'operating under the 5W1H Framework' }

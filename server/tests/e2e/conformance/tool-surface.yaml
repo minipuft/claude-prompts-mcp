@@ -91,3 +91,77 @@ scenarios:
     requests: [{ tool: resource_manager, args: { resource_type: not_a_type, action: list } }]
     # Schema-level enum rejection, quoting the permitted set.
     expect: { error_contains: 'resource_type: Invalid option: expected one of' }
+
+  # ── Read-only resource_manager actions (Tier 0.5b row A2) ──────────────────
+  #
+  # Safe on the shared server BY CONSTRUCTION: every action below only reads. They were the largest
+  # uncovered part of the 14-action surface — `list` was the single action any scenario exercised.
+  # Each asserts a string only that action emits, so a row cannot pass on a generic success banner.
+  - id: resource-manager-prompt-guide
+    claim_source: >-
+      resource_manager contract — action `guide`, "phase-appropriate recommendations" for authoring.
+      CLAUDE.md § MCP Tool Layer names it one of the discovery actions.
+    requests: [{ tool: resource_manager, args: { resource_type: prompt, action: guide } }]
+    expect: { text_contains: 'Prompt Resource Guide' }
+
+  - id: resource-manager-prompt-analyze-type
+    claim_source: 'resource_manager contract — action `analyze_type` classifies a prompt as single or chain'
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: analyze_type, id: minimal_prompt }
+    # Asserts the CLASSIFICATION, not that the call answered. `minimal_prompt` has no chain steps,
+    # so `single` is the correct verdict and a misclassification would red this row.
+    expect: { text_contains: 'Normalized Execution Type**: single' }
+
+  - id: resource-manager-prompt-analyze-gates
+    claim_source: 'resource_manager contract — action `analyze_gates` reports gate configuration for a prompt'
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: analyze_gates, id: minimal_prompt }
+    expect: { text_contains: 'Gate Analysis' }
+
+  - id: resource-manager-gate-inspect
+    claim_source: >-
+      resource_manager contract — `inspect` "Returns full definition". Exercised on resource_type
+      `gate`, which no scenario read before.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: content-structure }
+    # The gate's own guidance body, not just its name — proves the definition was loaded and
+    # rendered rather than the id being echoed back.
+    expect: { text_contains: 'Content Structure Guidelines' }
+
+  - id: resource-manager-framework-inspect
+    claim_source: >-
+      resource_manager contract — `inspect` on resource_type `framework`. CLAUDE.md § Domain
+      Ownership: framework identity comes from FrameworkManager, never a hardcoded list.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: framework, action: inspect, id: cageerf }
+    expect: { text_contains: 'C.A.G.E.E.R.F Framework' }
+
+  # ── checkpoint resource_type (Tier 0.5b row A5) ────────────────────────────
+  - id: resource-manager-checkpoint-is-available
+    claim_source: >-
+      resource_manager input schema — `resource_type` is an enum of four values, and `checkpoint`
+      is one of them. Nothing in the schema, the contract or the docs marks it conditional.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: checkpoint, action: list }
+    expect: { text_contains: 'Checkpoint' }
+    known_divergence:
+      measured: >-
+        Every checkpoint action returns "Checkpoint manager is not available. Ensure checkpoint
+        support is enabled." — create, list, rollback and clear alike, measured 2026-08-11. This is
+        NOT a disabled-by-config surface: `createCheckpointToolHandler` is defined in
+        `checkpoint/manager.ts` and re-exported from `checkpoint/index.ts`, and `rg` finds NO call
+        site anywhere in `src/`. `ResourceManagerRouter.checkpointManager` is declared optional and
+        never injected, so the guard in `router.ts:405` is unconditionally true. A quarter of the
+        published `resource_type` enum cannot succeed under any configuration — a reader with no
+        producer, where the schema enum is the user-facing interface that decides it is a missing
+        producer rather than a redundant channel.
+      closed_by: >-
+        Constructing and injecting the handler (the error text promises an "enable" that does not
+        exist), or removing `checkpoint` from the `resource_type` enum and its contract entry.
+        Either way delete this block. Filed as plan row 0.5.26.
+      since: '2026-08-11'
