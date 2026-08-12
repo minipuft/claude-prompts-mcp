@@ -27,6 +27,7 @@
  * `--self-test` proves each rule can still fail.
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +37,35 @@ import Ajv2020 from 'ajv/dist/2020.js';
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(SERVER, '..');
 const VENDOR = path.join(SERVER, 'tooling', 'contracts', 'vendor', 'agent-plugins', '1.0.0');
+
+/**
+ * Does a `consumes` path resolve?
+ *
+ * Present on disk is the easy case. The hard one is `server/dist`, which every target consumes
+ * and which no checkout has before `npm run build` — CI's `lint` job runs `validate:all` with no
+ * build step (`build` is a separate job), so a bare `existsSync` fails there while passing on any
+ * developer machine that has ever built. That is this repo's recurring gate defect in miniature:
+ * a check that reads the working tree while claiming to describe the repository.
+ *
+ * `git check-ignore` supplies the missing distinction. A path deliberately listed in `.gitignore`
+ * is a declared build output — someone wrote it down — whereas a typo like `server/dsit` is
+ * neither present nor ignored and is still caught, which is the failure this check exists for.
+ */
+function consumesResolves(rel) {
+  if (existsSync(path.join(REPO, rel))) return true;
+
+  // Both spellings are required. `.gitignore:10` reads `server/dist/`, and a pattern ending in
+  // `/` matches directories only — which git cannot infer for a path that does not exist yet, so
+  // `check-ignore server/dist` returns "not ignored" while `server/dist/` returns the matching
+  // rule. Testing only the bare form reproduces the exact bug this function was written to fix.
+  //
+  // exit 0 = ignored (declared build output), 1 = not ignored (a real absence).
+  return [rel, `${rel}/`].some(
+    (candidate) =>
+      spawnSync('git', ['check-ignore', '-q', '--', candidate], { cwd: REPO, stdio: 'ignore' })
+        .status === 0
+  );
+}
 
 /** The spec mandates these filenames at these locations; neither is configurable. */
 const TARGETS = [
@@ -101,8 +131,10 @@ function renderTargetViolations() {
       violations.push(`${label}: missing "output.repo"`);
     }
     for (const rel of target.consumes ?? []) {
-      if (!existsSync(path.join(REPO, rel))) {
-        violations.push(`${label}: consumes "${rel}", which does not exist`);
+      if (!consumesResolves(rel)) {
+        violations.push(
+          `${label}: consumes "${rel}", which neither exists nor is a declared build output`
+        );
       }
     }
   }
