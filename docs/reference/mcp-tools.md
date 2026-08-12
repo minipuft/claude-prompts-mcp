@@ -42,6 +42,11 @@ resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 
 ## MCP Resources — Token-Efficient Discovery
 
+> **Off by default.** `resources.registerWithMcp` ships as `false`, because the tools cover the same
+> discovery more cheaply. Until you enable it, `resources/list` returns an empty list and every URI
+> below answers `Resource not found`. Turn it on with `cpm enable resources`, or set
+> `resources.registerWithMcp: true` in `config.json`, then restart the server.
+
 MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
 
 - **Discover** available prompts, gates, and frameworks without consuming execution tokens
@@ -309,6 +314,14 @@ prompt_engine(command:"%judge analysis_report")
 
 For step schemas, input mapping, and retries, see the [Chain Schema Reference](./chain-schema.md).
 
+Each step is addressed internally by a stable node id, not by its position. A YAML step may set
+`id:` explicitly (kebab-case, unique within the chain); when omitted, the id defaults to a slug of
+`stepName`. Symbolic chains (`>>step1 --> >>step2`, no YAML) have no step names to slug, so the
+parser mints frozen `n1`, `n2`, … ids once at parse time instead. Either form is a stable node id
+you can hand to `target_step_id` — see [Chain Step Targeting](#chain-step-targeting) below. Client
+integrations that only track position are unaffected: `chain_id`, resume, and every response shape
+still speak integer step numbers.
+
 **Start a chain:**
 
 ```bash
@@ -376,6 +389,36 @@ prompt_engine(command:"code_review", gates:[
 - Trackable gate IDs in output (shows as "security" not "Inline Validation Criteria")
 - Multiple distinct validation criteria in one command
 - Self-documenting commands that LLMs can parse unambiguously
+
+### Chain Step Targeting
+
+A full gate definition may target one chain step by 1-based position (`target_step_number`) or by
+its stable node id (`target_step_id`) — supply whichever you have. Selection itself still resolves
+positionally: an id target is cross-resolved to its ordinal at gate registration, so the two forms
+select the same step.
+
+```bash
+# Target by position
+prompt_engine(command:"draft-outline --> draft --> polish", gates:[
+  {
+    "name": "Outline covers required sections",
+    "description": "Every required section is listed before drafting begins",
+    "target_step_number": 1
+  }
+])
+
+# Same target, addressed by the step's node id instead
+prompt_engine(command:"draft-outline --> draft --> polish", gates:[
+  {
+    "name": "Outline covers required sections",
+    "description": "Every required section is listed before drafting begins",
+    "target_step_id": "draft-outline"
+  }
+])
+```
+
+An unresolvable `target_step_id` (no step in the run carries it) is warned and selects nothing —
+it is never silently widened to apply to every step.
 
 ### Shell Verification Gates (Ralph Mode)
 

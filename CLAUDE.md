@@ -137,8 +137,9 @@ system_control → SystemControl Router → 11 action handlers
 | Table | Purpose |
 |-------|---------|
 | `kv_state` | Consolidated key-value store (`key='framework'` active framework + switch history, `key='gates'` enable/disable, `key='arg_history'` argument tracking, `key='resource_hashes'` content hash cache) |
-| `chain_run_registry` | Blob-encoded chain run state (primary SSOT for active runs; will be retired post-Tier-10 in favor of per-row tables) |
-| `chain_sessions` | Derived read-projection of `chain_run_registry` for Python hook + cross-language consumers |
+| `chain_runs` | One row per live chain run (header facts: chain id, run owner, status, current node id, residual document). Primary SSOT for active runs -- replaces the retired `chain_run_registry` blob (schema v22) |
+| `chain_run_nodes` | One row per step of a run (position, prompt id, step lifecycle). Sibling to `chain_runs`; together they are what `chain_run_registry` used to serialize into one JSON blob |
+| `chain_sessions` | Derived read-projection of `chain_runs` + `chain_run_nodes`, rebuilt in the same transaction, for Python hook + cross-language consumers |
 | `execution_records` | SEP-1686 append-only per-step execution log (ULID-sorted); source for `v_execution_status` view |
 | `resource_index` | Resource discovery cache |
 
@@ -159,11 +160,11 @@ breaking and major versions inflate until they carry no information.
 | CLI surface: `claude-prompts` and `cpm` commands and flags | `package.json` packaging fields (`types`, `exports`, `files`) |
 | Resource formats: prompt/gate/framework YAML schema, `config.json` | `src/` layer structure, module layout, import style |
 | Python hook contract consumed by downstream plugins -- **durable surface only**, see below | Which files land in the published tarball |
-| | **PID-scoped derived projections**: `chain_sessions`, `chain_run_registry` column names |
+| | **PID-scoped derived projections**: `chain_sessions`, `chain_runs`, `chain_run_nodes` column names |
 | Symbolic command language (`>>`, `==>`) | Build tooling, validation scripts, CI |
 
 **The Python hook contract covers the durable surface, not every table a hook can open.**
-`chain_sessions` and `chain_run_registry` are `derived` and `ephemeral` respectively: their rows are
+`chain_sessions` is `derived`; `chain_runs` and `chain_run_nodes` are `ephemeral`. All three's rows are
 `DELETE`d per-PID at cleanup, cleared when the owning process exits, and dropped outright by any
 `SCHEMA_VERSION` bump. Nothing a hook reads there survives a restart -- they are a live-process
 projection, closer to a cache than to an interface. Listing them as major-version-protected was a
