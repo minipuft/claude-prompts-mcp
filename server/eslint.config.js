@@ -371,6 +371,20 @@ export default [
     },
   },
 
+  // Row 4.3 — form without truth. Scoped to gate scripts, where `closedBy` can only mean a
+  // retirable suppression of that gate's own findings; elsewhere in the tree the word does not
+  // appear. Deliberately NOT scoped by declaration name — see the rule's header for why
+  // `ALLOWED_METRIC_LABELS` and friends make that probe useless.
+  {
+    files: ['scripts/validate-*.js', 'scripts/validate-*.ts', 'scripts/verify-*.mjs'],
+    plugins: {
+      claude: claudePlugin,
+    },
+    rules: {
+      'claude/require-exception-audit': 'error',
+    },
+  },
+
   // Ignore patterns
   {
     ignores: [

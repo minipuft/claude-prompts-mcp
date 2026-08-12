@@ -708,7 +708,63 @@ const noDeprecatedAutomationModeRule = {
   },
 };
 
+/**
+ * A gate that declares retirable exceptions must also audit them.
+ *
+ * `closedBy` is this repo's marker for "this exemption names what would let it be deleted" — the
+ * FORM half of exception hygiene. `auditExceptions` (scripts/lib/exception-hygiene.js) is the
+ * TRUTH half: it asks, on every run, whether the entry still suppresses anything. Row 4.3: no gate
+ * had both until 4.1, and nothing required the pair of a NEW surface.
+ *
+ * It is not hypothetical. `scripts/validate-db-claim-order.js` landed while this plan was open
+ * carrying `closedBy` on every entry of `ACCEPTED_INHERITORS` and no audit call — the author
+ * adopted the half that is visible while reading the file and missed the half you only make if you
+ * know the harness exists. That asymmetry is why this is a rule rather than a convention.
+ *
+ * WHY `closedBy` AND NOT THE DECLARATION'S NAME: matching identifiers like `ALLOWLIST` /
+ * `ACCEPTED_*` / `ALLOWED_*` finds `ALLOWED_METRIC_LABELS`, `ACCEPTED_PACKAGE_NAMES` and
+ * `ALLOWED_PREFIX_TOKENS`, none of which are gate exceptions. `closedBy` is the property itself.
+ *
+ * KNOWN BLIND SPOT, stated rather than papered over: an exception list carrying NEITHER `closedBy`
+ * nor an audit is invisible here, because nothing distinguishes it from an ordinary constant. This
+ * rule catches the half-adopted case, which is the one observed. Widening it to identifier names
+ * would trade a documented gap for silent false positives on domain vocabulary.
+ */
+const requireExceptionAuditRule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'A gate declaring `closedBy` exceptions must pass them through `auditExceptions`',
+    },
+    schema: [],
+    messages: {
+      missingAudit:
+        'This file declares exceptions with `closedBy` but never calls `auditExceptions`. `closedBy` is the form half — it states what would retire the entry. Without the truth half nothing ever asks whether the entry still suppresses a finding, so it survives after the defect it excuses is gone. Import `auditExceptions` from `./lib/exception-hygiene.js`, classify each entry, and fold `reportExceptionAudit`s count into the exit code.',
+    },
+  },
+  create(context) {
+    let firstClosedBy = null;
+    let auditsExceptions = false;
+
+    return {
+      'Property > Identifier.key[name="closedBy"]'(node) {
+        if (firstClosedBy === null) firstClosedBy = node;
+      },
+      'CallExpression > Identifier.callee[name="auditExceptions"]'() {
+        auditsExceptions = true;
+      },
+      'Program:exit'() {
+        if (firstClosedBy !== null && !auditsExceptions) {
+          context.report({ node: firstClosedBy, messageId: 'missingAudit' });
+        }
+      },
+    };
+  },
+};
+
 export const rules = {
+  'require-exception-audit': requireExceptionAuditRule,
   'no-context-deep-imports': noContextDeepImportsRule,
   'no-legacy-imports': noLegacyImportsRule,
   'require-file-lifecycle': requireLifecycleRule,
