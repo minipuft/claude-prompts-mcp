@@ -197,8 +197,15 @@ def detect_framework(message: str) -> str | None:
         # Normalize to lowercase (MCP server stores framework keys as lowercase)
         return matches[0].lower() if matches else None
 
-    # Fallback: hardcoded pattern
-    match = re.search(r"(?:^|\s)@([A-Za-z0-9_-]+)(?=\s|$)", message)
+    # Fallback only — the path above derives from the registry via lib/operators.py, which
+    # compiles `pattern.typescript` with Python `re`. This copy exists for when the generated
+    # operators are unavailable, and it is drift by construction: it has already had to be
+    # hand-moved twice (trailing-space relaxation and the `^` alias, both 2026-08-09). Keep it
+    # byte-equivalent to the `framework` entry in
+    # server/tooling/contracts/registries/operators.json.
+    #
+    # `^` is canonical; `@` is the deprecated spelling, removed at the next major.
+    match = re.search(r"(?:^|\s)[@^]([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])", message)
     return match.group(1).lower() if match else None
 
 

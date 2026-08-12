@@ -13,7 +13,8 @@ const FRAMEWORK_PATTERN = /^(>>|\/)?framework\s+(switch|change)\s+(.+)$/i;
 const ANALYTICS_PATTERN = /^(>>|\/)?analytics?$/i;
 const GUIDE_PATTERN = /^(>>|\/)?guide(?:\s+(.*))?$/i;
 const GATES_PATTERN = /^(>>|\/)?gates?(?:\s+(.*))?$/i;
-const ALLOWED_PREFIX_TOKENS = ['@', '%judge', '%clean', '%lean'];
+// '^' is the canonical framework sigil; '@' is the deprecated spelling (removed next major).
+const ALLOWED_PREFIX_TOKENS = ['^', '@', '%judge', '%clean', '%lean'];
 
 function isPlausiblePromptId(token: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9_\/-]*$/.test(token);
