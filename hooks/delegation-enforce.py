@@ -2,11 +2,12 @@
 """
 PreToolUse hook: Enforce delegation when ==> operator requires sub-agent execution.
 
-Fires on Edit|Write|Bash|Task tool calls.
+Fires on Edit|Write|Bash|Task|Agent tool calls.
 
 Behavior:
-- Task while delegation pending → clear state and allow (agent delegating correctly)
-- Read-only tools while delegation pending → allow (research before delegation is fine)
+- Task/Agent while delegation pending → clear state and allow (agent delegating correctly)
+- Read-only + task-tracking tools while delegation pending → allow (research and
+  Task* tracking calls before delegation are fine)
 - Action tools (Edit/Write/Bash) while delegation pending → DENY (hard block)
 - No delegation pending → no-op
 """
@@ -19,8 +20,27 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import clear_delegation_state, load_session_state
 
-# Tools allowed during pending delegation (read-only + delegation itself)
-ALLOW_LIST = {"Task", "Read", "Glob", "Grep", "WebSearch", "WebFetch", "ListMcpResourcesTool"}
+# Tools allowed during pending delegation (read-only + delegation itself).
+# "Agent" is this Claude Code build's reported subagent-invocation tool name
+# (extension-alignment drift vs "Task"); TaskCreate/TaskUpdate/TaskGet/TaskList/
+# TaskOutput/TaskStop are task-tracking calls, not action tools, and would
+# otherwise be caught by the unanchored hooks.json matcher.
+ALLOW_LIST = {
+    "Task",
+    "Agent",
+    "Read",
+    "Glob",
+    "Grep",
+    "WebSearch",
+    "WebFetch",
+    "ListMcpResourcesTool",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskGet",
+    "TaskList",
+    "TaskOutput",
+    "TaskStop",
+}
 
 
 def log(msg: str) -> None:
@@ -52,9 +72,11 @@ def main():
     agent_type = state.get("delegation_agent_type", "chain-executor")
     model_hint = state.get("delegation_model_hint")
 
-    # Task tool call = agent is delegating correctly — clear state and allow
-    if tool_name == "Task":
-        log(f"Task tool invoked, clearing delegation state (agent_type={agent_type})")
+    # Task/Agent tool call = agent is delegating correctly — clear state and allow.
+    # "Agent" is this client's reported name for subagent invocation; "Task"
+    # covers other clients/older builds.
+    if tool_name in {"Task", "Agent"}:
+        log(f"{tool_name} tool invoked, clearing delegation state (agent_type={agent_type})")
         clear_delegation_state(session_id)
         sys.exit(0)
 
