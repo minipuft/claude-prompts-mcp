@@ -13,6 +13,7 @@
  */
 
 import { tokenizeCommand } from './command-tokenizer.js';
+import { RESERVED_OPERATORS } from './operator-patterns.js';
 import { normalizeSymbolicPrefixes } from './parser-utils.js';
 import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
 
@@ -42,6 +43,34 @@ const VALID_MODIFIERS: Record<string, ExecutionModifier> = {
   lean: 'lean',
   framework: 'framework',
 };
+
+/**
+ * Reject any operator the registry declares `reserved`.
+ *
+ * `status: reserved` in operators.json is a published claim — documented symbol, deliberately
+ * not executable. Neither reserved operator was actually enforced before this check: `+` and the
+ * conditional form both tokenized, every parsing strategy then ignored the token, and the command
+ * ran its leading prompt and returned SUCCESS with the operator silently dropped. A user typing a
+ * documented-as-reserved operator got the wrong semantics with no signal (measured 2026-08-11).
+ *
+ * `+` previously looked enforced only because the conformance fixture it was probed with failed
+ * for an unrelated missing argument — the rejection had nothing to do with the operator.
+ *
+ * Detection reuses the tokenizer instead of re-matching the registry patterns, so this rejects
+ * exactly when the operator was genuinely recognized. That inherits the tokenizer's existing
+ * exclusions: `+` inside a quoted argument ("R3F + Visx"), `+` where a chain takes precedence,
+ * and a bare `?` in natural language ("is there a bug?") are all untouched.
+ */
+function rejectReservedOperators(tokens: TokenizedCommand): void {
+  for (const token of tokens.operators) {
+    const symbol = RESERVED_OPERATORS.get(token.type);
+    if (symbol !== undefined) {
+      throw new ValidationError(
+        `Operator "${symbol}" is reserved and not implemented. It is documented for a future release and cannot be executed yet.`
+      );
+    }
+  }
+}
 
 /**
  * Parsing strategy interface
@@ -183,6 +212,9 @@ export class UnifiedCommandParser {
 
     // Tokenize once — strategies consume tokens instead of re-detecting operators
     const tokens = tokenizeCommand(preprocessed);
+
+    // Reserved operators are documented but not executable — fail loudly rather than drop them
+    rejectReservedOperators(tokens);
 
     // Try each strategy in order of confidence (now operating on preprocessed command)
     const sortedStrategies = [...this.strategies].sort((a, b) => b.confidence - a.confidence);
