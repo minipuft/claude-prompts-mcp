@@ -142,6 +142,35 @@ module.exports = {
     },
 
     // ============================================
+    // LAYER SPECIFIER FORM
+    // ============================================
+    {
+      name: 'no-crosslayer-relative',
+      comment:
+        'A cross-layer import must use its package.json "imports" subpath specifier (#shared/x.js), ' +
+        'not a relative chain (../../shared/x.js). The subpath form names the layer it comes from and ' +
+        "survives the importing file moving; a ../../ chain encodes the importer's depth into the " +
+        'specifier, so moving the file silently changes what it means. Intra-layer relatives are left ' +
+        'alone on purpose — "./foo.js" says "next to me", which is information.\n\n' +
+        'Ported from scripts/validate-no-crosslayer-relative.js (plan row 2.2, 2026-08-11), which was ' +
+        'a script because whether an import crosses a layer is a question about the RESOLVED path and ' +
+        'a textual ../../* ban flags 197 legitimate deep intra-layer imports. That reasoning is right ' +
+        'about ESLint no-restricted-imports and does not apply here: dependency-cruiser resolves, and ' +
+        'dependencyTypesNot separates the subpath form from a relative one. Two properties make it ' +
+        'equivalent rather than approximate — the $1 back-reference compares the TO layer against the ' +
+        'FROM layer, and tsPreCompilationDeps (already enabled below) is what makes type-only imports ' +
+        'visible; without it a type-only cross-layer relative is elided and silently passes.',
+      severity: 'error',
+      from: { path: '^src/([^/]+)/' },
+      to: {
+        path: '^src/',
+        pathNot: '^src/$1/',
+        // Anything reached through an "imports"/paths alias is already in the canonical form.
+        dependencyTypesNot: ['aliased-subpath-import', 'aliased-tsconfig', 'aliased-workspace'],
+      },
+    },
+
+    // ============================================
     // ENGINE INTERNAL ISOLATION
     // ============================================
     {

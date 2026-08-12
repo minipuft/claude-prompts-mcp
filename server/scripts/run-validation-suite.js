@@ -72,7 +72,6 @@ export const SUITE = [
   { script: 'validate:no-stepstate', io: 'read' },
   { script: 'validate:no-methodology-vocab', io: 'read' },
   { script: 'validate:no-llm-client', io: 'read' },
-  { script: 'validate:no-crosslayer-relative', io: 'read' },
   { script: 'validate:documented-options', io: 'read' },
   { script: 'validate:required-contexts', io: 'read' },
   { script: 'validate:package-entries', io: 'read' },

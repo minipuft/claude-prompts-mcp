@@ -1,7 +1,7 @@
 ---
 title: "Acquisition Recovery Plan — Listings, Metadata, README Content Pass"
 date: 2026-08-02
-status: active
+status: reference
 tags: []
 ---
 

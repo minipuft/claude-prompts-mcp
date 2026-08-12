@@ -1,7 +1,7 @@
 ---
 title: "README Restructure & License Migration Plan"
 date: 2026-05-13
-status: backlog
+status: reference
 tags: []
 ---
 
@@ -120,7 +120,7 @@ _Automated checks_
 - `server/scripts/validate-readme.js` (renamed from `scripts/check-readme.sh` per sibling-pattern discovery: 6 `validate-*.js` precedents in `server/scripts/` vs 1 process-bash; npm target uses `validate:*` namespace not `check:*`):
   - Fail if `wc -l README.md` > 400.
   - Fail on forbidden words (charter §5) unless preceded by `<!-- charter-allow: <word> -->`.
-  - Fail if any `^## ` heading lacks a `<!-- diataxis: tutorial|how-to|reference|explanation -->` marker within the prior 3 lines.
+  - Fail if any `^##` heading lacks a `<!-- diataxis: tutorial|how-to|reference|explanation -->` marker within the prior 3 lines.
   - Fail on broken internal links (regex-based; HTTP link checker deferred until `markdown-link-check` dep is added).
 - Wire into `npm run validate:all` as `validate:readme`. Warn-only on first cycle per bundled-release strategy; flips to `--mode=block` at end of B2 once markers are added.
 

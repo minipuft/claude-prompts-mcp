@@ -128,11 +128,16 @@ export default [
       'import-x/no-cycle': 'error',
       'import-x/newline-after-import': 'error',
 
-      // Cross-layer relative imports are enforced by `validate:no-crosslayer-relative`,
-      // NOT by no-restricted-imports. A textual `../../*` ban flags 197 legitimate deep
-      // intra-layer imports and zero real violations: `mcp/tools/handlers/x.ts` importing
-      // `../../schemas/y.js` never leaves `mcp`. Whether an import crosses a layer is a
-      // question about the resolved path, so the guard resolves it.
+      // Cross-layer relative imports are enforced by the `no-crosslayer-relative` rule in
+      // `.dependency-cruiser.cjs`, NOT by no-restricted-imports. A textual `../../*` ban flags
+      // 197 legitimate deep intra-layer imports and zero real violations: `mcp/tools/handlers/x.ts`
+      // importing `../../schemas/y.js` never leaves `mcp`. Whether an import crosses a layer is a
+      // question about the resolved path, so a resolver has to answer it.
+      //
+      // It lived in `scripts/validate-no-crosslayer-relative.js` until 2026-08-11 on the reasoning
+      // above, which is sound about ESLint and was over-generalised to "no standard tool can do
+      // this". dependency-cruiser resolves, and its `$1` back-reference compares the target layer
+      // against the source layer, so the script was deleted rather than kept alongside.
 
       // General rules - warn on all console usage, use EnhancedLogger instead
       'no-console': 'warn',
@@ -315,6 +320,11 @@ export default [
   },
 
   // Scripts configuration (Node.js environment)
+  //
+  // `URL`/`URLSearchParams`/`TextEncoder`/`TextDecoder`/`AbortController` are Node globals since
+  // v10-15 and are used unprefixed across these scripts. They were missing here, so every
+  // `new URL(import.meta.url)` — the standard ESM path idiom, present in most of these files —
+  // reported `no-undef`. Nothing surfaced it because `lint:ratchet` lints `src` only (row 4.5).
   {
     files: ['scripts/**/*.js', 'scripts/**/*.cjs', 'scripts/**/*.mjs'],
     languageOptions: {
@@ -327,11 +337,65 @@ export default [
         __filename: 'readonly',
         Buffer: 'readonly',
         fetch: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
       },
     },
     rules: {
       'no-console': 'off',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+
+  // The same environment for the TypeScript half of `scripts/`, which had NO block at all.
+  //
+  // Without a TS parser every type annotation is a syntax error, so `validate-table-contracts.ts`,
+  // `validate-no-phantom-columns.ts`, `validate-config-schema.ts`, `validate-frameworks.ts` and
+  // the hand-written `.d.ts` files each reported a single `Parsing error` and were otherwise
+  // UNLINTED. Consequence worth stating: rules scoped to `scripts/validate-*.ts` — including
+  // `claude/require-exception-audit` below — could never fire on them, so two of the six exception
+  // surfaces were exempt from the rule written to govern them, silently and by accident.
+  //
+  // Deliberately NOT type-aware (`projectService` is not set): `scripts/**` is outside both
+  // tsconfigs, so a type-aware pass would need a third project just to lint build tooling. Syntax
+  // and single-file semantics are what the rules here need.
+  {
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
+      // `no-undef` is off for TS: the compiler owns undefined-symbol detection, and leaving it on
+      // reports every type-only name as undefined.
+      'no-undef': 'off',
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+
+  // Ambient declaration files declare an API surface and consume nothing; `no-unused-vars` reads
+  // every `export declare` as dead. These exist so Jest can type an import of a `.js` guard —
+  // `scripts/**` is outside both tsconfigs — and their whole content is the thing being flagged.
+  {
+    files: ['scripts/**/*.d.ts'],
+    rules: {
+      'no-unused-vars': 'off',
     },
   },
 

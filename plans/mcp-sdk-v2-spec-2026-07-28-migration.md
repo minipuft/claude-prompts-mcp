@@ -1,7 +1,7 @@
 ---
 title: "MCP SDK v2 + Spec 2026-07-28 Migration"
 date: 2026-08-01
-status: active
+status: reference
 tags: []
 ---
 

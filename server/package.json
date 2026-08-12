@@ -103,8 +103,6 @@
     "validate:no-methodology-vocab": "node scripts/validate-no-methodology-vocab.js",
     "validate:no-llm-client": "node scripts/validate-no-llm-client.js",
     "validate:no-llm-client:self-test": "node scripts/validate-no-llm-client.js --self-test",
-    "validate:no-crosslayer-relative": "node scripts/validate-no-crosslayer-relative.js",
-    "validate:no-crosslayer-relative:self-test": "node scripts/validate-no-crosslayer-relative.js --self-test",
     "validate:documented-options": "node scripts/validate-documented-options.js",
     "validate:required-contexts": "node scripts/validate-required-contexts.js",
     "validate:required-contexts:self-test": "node scripts/validate-required-contexts.js --self-test",

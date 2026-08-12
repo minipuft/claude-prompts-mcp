@@ -1,7 +1,7 @@
 ---
 title: "Validation Surface Cleanup — Tier F5"
 date: 2026-08-04
-status: backlog
+status: reference
 tags: []
 ---
 
@@ -11,6 +11,18 @@ tags: []
 **Area**: `.github/workflows/ci.yml`, `server/package.json`, two `server/scripts/validate-no-*.js` guards, `CLAUDE.md`
 **Work type**: refactor (secondary: bug_fix — one registered check runs nowhere)
 **Origin**: validation-surface audit 2026-08-04, prompted by "we have a lot that seem redundant at first glance"
+**Status**: **COMPLETE** — all 5 rows (Tier A + Tier B) executed 2026-08-04. Status was still
+`backlog` until 2026-08-11: a fully-executed plan whose frontmatter never moved, which is the same
+stale-status defect its sibling plans keep finding in their own headers.
+
+> **Superseded count, kept for the trend rather than corrected in place.** This plan asserted
+> **9 of 9** `validate-no-*` guards carry a retirement condition, and rejected merging them as a
+> non-goal. Re-measured 2026-08-11: **5 of 5**. Four retired on their own conditions rather than on
+> size — `no-tool-layer-validator-imports` and `no-crosslayer-relative` to dependency-cruiser rules,
+> `no-crosslayer-reexport` to a custom ESLint AST rule, `no-prompt-gates-alias` with its defect. The
+> plan's non-goal was right (do not merge on size) and its implicit assumption was wrong (that the
+> count was therefore stable). Guards leave when a standard tool can express them, one at a time.
+
 **Confidence**: high on the findings — every count below is a probe result, and the one finding that
 looked identical to the headline defect was re-checked and turned out to be correctly wired
 
