@@ -53,9 +53,9 @@
         { "syntax": ":: verify:'cmd'", "description": "Shell verification" }
       ],
       "examples": [
-        ":: 'cite sources'",
-        ":: security:'no secrets'",
-        ":: verify:'npm test' :full"
+        ">>analyze :: 'cite sources'",
+        ">>deploy :: security:'no secrets'",
+        ">>build :: verify:'npm test' :full"
       ],
       "status": "implemented",
       "detectInHooks": true

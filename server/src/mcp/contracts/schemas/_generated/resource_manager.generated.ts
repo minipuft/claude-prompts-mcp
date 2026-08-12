@@ -62,7 +62,7 @@ export type resource_managerParamName =
 export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'resource_type',
-    type: 'enum[prompt|gate|framework|checkpoint]',
+    type: 'enum[prompt|gate|framework]',
     description: 'Type of resource to manage. Routes to appropriate handler.',
     required: true,
     status: 'working',
@@ -72,7 +72,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]',
     description:
-      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/framework). Checkpoint: create/rollback/list/delete/clear.',
+      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework). Versioning: history/rollback/compare (prompt/gate/framework).',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -109,7 +109,8 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'confirm',
     type: 'boolean',
-    description: 'Safety confirmation for delete operation.',
+    description:
+      'Required `true` for destructive actions — `delete` and `rollback` both refuse without it. Deletion cannot be undone: rollback cannot restore a deleted prompt.',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -545,36 +546,6 @@ export const resource_managerCommands: ToolCommand[] = [
     id: 'common:compare',
     summary: 'Compare two versions of a resource.',
     parameters: ['resource_type', 'action', 'id', 'from_version', 'to_version'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:create',
-    summary: 'Create a git checkpoint (stash) before risky operations.',
-    parameters: ['resource_type', 'action', 'name', 'description'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:rollback',
-    summary: 'Rollback to a previously created checkpoint.',
-    parameters: ['resource_type', 'action', 'name', 'confirm'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:list',
-    summary: 'List all active checkpoints.',
-    parameters: ['resource_type', 'action'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:delete',
-    summary: 'Delete a checkpoint without restoring changes.',
-    parameters: ['resource_type', 'action', 'name', 'confirm'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:clear',
-    summary: 'Clear all checkpoints.',
-    parameters: ['resource_type', 'action', 'confirm'],
     status: 'working',
   },
 ];

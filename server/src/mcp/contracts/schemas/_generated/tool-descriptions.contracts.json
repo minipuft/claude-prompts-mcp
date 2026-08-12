@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-08-12T03:30:44.853Z",
+  "lastUpdated": "2026-08-12T13:31:31.891Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -34,17 +34,17 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
-      "shortDescription": "Manage prompts, gates, frameworks, and checkpoints",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "shortDescription": "Manage prompts, gates, and frameworks",
       "category": "management",
       "parameters": {
         "resource_type": "Type of resource to manage. Routes to appropriate handler.",
-        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/framework). Checkpoint: create/rollback/list/delete/clear.",
+        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework). Versioning: history/rollback/compare (prompt/gate/framework).",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",
         "description": "Resource description explaining its purpose (create/update).",
         "enabled_only": "Filter list to enabled resources only. Default: true.",
-        "confirm": "Safety confirmation for delete operation.",
+        "confirm": "Required `true` for destructive actions — `delete` and `rollback` both refuse without it. Deletion cannot be undone: rollback cannot restore a deleted prompt.",
         "reason": "Audit reason for reload/delete/switch operations."
       },
       "frameworkAware": {

@@ -189,6 +189,62 @@ print("\\n".join(problems))
     .map((line) => `operators.json ${line}. The Python hook would silently detect no operators.`);
 }
 
+/**
+ * Every operator's own `examples` must be matched by its own `pattern`.
+ *
+ * WHY. Measured 2026-08-12: `gate` scored 0/3 against its own pattern while the other seven
+ * scored 2/2, 3/3, 1/1. Its pattern requires a leading `\s+` and all three examples began at
+ * position 0. Nothing compared the two, so the registry could be internally inconsistent while
+ * every drift check above passed: those compare the registry to its COPIES, and agreeing copies
+ * of a wrong pattern still agree.
+ *
+ * WHAT THIS IS NOT. `examples` has no live consumer today, and the fix was NOT urgent for that
+ * reason — measured before claiming otherwise. `hooks/lib/operators.py` loads it into a dataclass
+ * field nothing reads; `generate-contracts.ts` has an `examples` field but it belongs to
+ * ToolParameter, a homonym on a different contract; the operator tables in docs/ are hand-written
+ * and already anchor their own examples, which is what flagged the registry as the outlier.
+ * The value here is that the field is one consumer away from mattering, and a wrong example is
+ * invisible until then. Do not restate this as "users were copying broken hints" — they were not.
+ *
+ * SCOPE — `examples` only, deliberately. `variants[].syntax` holds fragments (`:: 'text'`) that
+ * describe an operator's shape rather than a runnable command, so requiring them to match would
+ * force a rewrite of accurate documentation to satisfy a check. An example is the thing a reader
+ * copies; that is the property worth gating.
+ */
+function checkExamplesMatchOwnPattern(registryText) {
+  const contract = JSON.parse(registryText);
+  const problems = [];
+
+  for (const op of contract.operators) {
+    const pattern = op.pattern?.typescript;
+    const examples = op.examples ?? [];
+    if (!pattern || examples.length === 0) continue;
+
+    // Strip `g`/`y` before testing. Both make `.test()` stateful via `lastIndex`, so the same
+    // regex would alternate true/false across a loop and this check would report failures that
+    // depend on example ORDER — an adjacent-property bug in a gate written to catch exactly that.
+    const flags = (op.pattern.flags ?? '').replace(/[gy]/g, '');
+    let regex;
+    try {
+      regex = new RegExp(pattern, flags);
+    } catch (error) {
+      problems.push(`operators.json ${op.id}: pattern does not compile — ${error.message}`);
+      continue;
+    }
+
+    const unmatched = examples.filter((example) => !regex.test(example));
+    if (unmatched.length > 0) {
+      problems.push(
+        `operators.json ${op.id}: ${unmatched.length}/${examples.length} example(s) do not match ` +
+          `its own pattern — ${unmatched.map((e) => JSON.stringify(e)).join(', ')}. ` +
+          'Anchor the example in a full command, or fix the pattern if the example is right.'
+      );
+    }
+  }
+
+  return problems;
+}
+
 function loadSources() {
   return Object.fromEntries(
     Object.entries(SITES).map(([key, relative]) => [key, readRepoFile(relative)])
@@ -232,6 +288,25 @@ function selfTest() {
     failures += 1;
   } else {
     console.log('  ✓ JS-only construct is rejected');
+  }
+
+  // Self-consistency gets its own baseline + mutation, on registry TEXT like the check above.
+  if (checkExamplesMatchOwnPattern(registryText).length !== 0) {
+    console.error('  ✗ baseline: an operator already fails to match its own examples');
+    failures += 1;
+  } else {
+    console.log('  ✓ baseline: every operator matches its own examples');
+  }
+  // Un-anchor the gate examples — the literal defect this check was written for.
+  const unanchored = registryText.replace(
+    '">>analyze :: \'cite sources\'"',
+    '":: \'cite sources\'"'
+  );
+  if (unanchored === registryText || checkExamplesMatchOwnPattern(unanchored).length === 0) {
+    console.error('  ✗ un-anchored example: mutation did not trip the self-consistency check');
+    failures += 1;
+  } else {
+    console.log('  ✓ an example that does not match its own pattern is rejected');
   }
 
   if (runChecks(operator, clean).length !== 0) {
@@ -285,6 +360,7 @@ function main() {
   const problems = [
     ...runChecks(operator, loadSources()),
     ...checkPythonEngineAgreement(registryText),
+    ...checkExamplesMatchOwnPattern(registryText),
   ];
 
   if (problems.length > 0) {
@@ -298,7 +374,7 @@ function main() {
   }
 
   console.log(
-    `✅ Operator registry: ${Object.keys(SITES).length} hand-written copies agree with operators.json`
+    `✅ Operator registry: ${Object.keys(SITES).length} hand-written copies agree with operators.json; every operator matches its own examples`
   );
 }
 
