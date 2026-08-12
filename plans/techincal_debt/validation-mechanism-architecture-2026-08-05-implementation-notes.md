@@ -17,6 +17,47 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp git add server/eslint-rules/claude-plugin.js server/eslint.config.js e` · ran
+- 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp git commit -q --no-verify -m "$(cat <<'EOF' feat(scripts): fail when a` · ran
+- 2026-08-11 19:18 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== contracts in sync (pre-commit normally regenerates)? ` · ran
+- 2026-08-11 19:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint . --format json 2>/dev/null | node -e " let s='';pro` · ran
+- 2026-08-11 19:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/ eslint-rules/ eslint.config.js 2>&1 | rg -B` · ran
+- 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== staged (must be empty) ==="; git diff --cached --name-only; ` · ran
+- 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
+- 2026-08-11 18:39 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
+- 2026-08-11 18:38 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
+- 2026-08-11 18:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp scripts/validate-suite-membership.js /tmp/sm.bak echo "=== c` · ran
+- 2026-08-11 18:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== every file the new rule fires on ===" npx eslint scri` · ran
+- 2026-08-11 18:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -n '693,780p' eslint-rules/claude-plugin.js` · ran
+- 2026-08-11 18:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== require-guard-mechanism-verdict scope (0.3's check) =` · ran
+- 2026-08-11 18:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== existing ESLint plugin rules ===" ls eslint-rules/ 2>` · ran
+- 2026-08-11 18:22 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
+- 2026-08-11 18:21 · `cd /home/minipuft/Applications/claude-prompts-mcp F=plans/techincal_debt/validation-mechanism-architecture-2026-08-05-im` · ran
+- 2026-08-11 18:21 · `cd /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scratchpad cp /h` · ran
+- 2026-08-11 18:20 · `cd /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/8f5977e0-8d9f-4302-a7a6-09e3a23a0438/scratchpad pytho` · ran
+- 2026-08-11 18:20 · `cd ~/.claude/hooks echo "=== notes-skeleton's section creation (the correct form) ===" rg -n "Validation runs" -B2 -A2 p` · ran
+
+- 2026-08-11 04:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-suite-membership.js scripts/run-val` · ran
+- 2026-08-11 04:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== eslint on new/changed scripts ===" npx eslint scripts` · ran
+
+- 2026-08-11 04:00 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
+- 2026-08-11 03:59 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' p='plans/techincal_debt/validation-mechanism-architec` · ran
+
+- 2026-08-11 03:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== new self-test picked up by the Jest harness? ===" NOD` · ran
+- 2026-08-11 03:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== what does the Jest self-test harness actually cover? ` · ran
+- 2026-08-11 03:53 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== validate:build referenced in docs/README/CONTRIBUTING? ===" ` · ran
+- 2026-08-11 03:45 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
+
+- 2026-08-11 03:41 · `cd /home/minipuft/Applications/claude-prompts-mcp F=plans/techincal_debt/validation-mechanism-architecture-2026-08-05-im` · ran
+
+- 2026-08-11 03:41 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --check plans/techincal_debt/validation-mechanism-archite` · ran
+- 2026-08-11 03:39 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== eslint on my file (expect 0 errors) ===" npx eslint s` · ran
+- 2026-08-11 03:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== eslint on the files I touched/created ===" npx eslint` · ran
+
+- 2026-08-11 03:35 · `cd /home/minipuft/Applications/claude-prompts-mcp cat >> plans/techincal_debt/validation-mechanism-architecture-2026-08-` · ran
+- 2026-08-11 03:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server G=scripts/validate-no-methodology-vocab.js T="NODE_OPTIONS=--ex` · ran
+- 2026-08-11 03:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest tests/unit` · ran
+
 - 2026-08-06 17:27 · `python3 - <<'PY' p='/home/minipuft/Applications/claude-prompts-mcp/plans/techincal_debt/validation-mechanism-architectur` · ran
 
 - 2026-08-06 17:24 · `git commit -q -m "$(cat <<'EOF' refactor(scripts): retire four guards, re-home them, and share one definition of a live ` · ran
@@ -577,3 +618,146 @@ the fact, fixed by `git reset --mixed` back to the pre-session commit and redoin
 The habit that prevents it is cheap: **print `git diff --cached --name-only` and read it before every
 commit**, not `git add` carefully and trust it. Staging is durable across commits and across
 sessions; "I only added these files" is a statement about one command, not about the index.
+
+### Tier 0.8 + 0.9 deviations (2026-08-11)
+
+| #   | Deviation                                                                                                         | Why                                                                                                                                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | 0.9 executed **before** 0.8, against the plan's stated dependencies (0.9 declared `Depends: —`)                   | All 5 of `.dependency-cruiser.cjs`'s vocabulary occurrences are 0.9's dead rule. Reversed, 0.8 would have triaged five lines about to be deleted                                           |
+| 2   | Fixed the scan by scoping to `git ls-files` rather than adding `--hidden`, which is what "widen the scan" implies | `--hidden` fixes only the narrow half, still misses gitignored-but-tracked `CLAUDE.md`, and adds 5,405 `.git/` files. It would also have left the 2026-08-09 `.ignore` over-reach in place |
+| 3   | `EXCLUDED_PATHS` converted from globs to regexes                                                                  | `--glob` does not filter explicitly-passed paths — measured. The globs would have become decoration                                                                                        |
+| 4   | Zero allowlist entries added, though the row permitted "fixed **or** allowlisted"                                 | All 11 occurrences were stale documentation. An allowlist entry for a wrong statement would have preserved the wrong statement                                                             |
+| 5   | `plans:retire:check` left failing                                                                                 | Owned by the adaptive-chain-runtime workstream (`2e84bb3c`). Recorded as row 0.10                                                                                                          |
+
+### A probe that confirms is worth as much as one that corrects
+
+Every previous tier here corrected a count, and the running lesson was "re-measure, the number will
+have drifted". 0.8's three numbers — 57 unreachable, 4 files, 11 occurrences — all measured exactly.
+
+The useful distinction is _where a number came from_, not how old it is. 0.8's counts came from a
+probe run when the row was written. The ones that drifted in this same tier (`validate:arch`'s 444,
+`SUITE`'s 30) were both **quoted from an earlier run of something else** and never re-derived. Age
+predicted nothing; provenance predicted both.
+
+The re-measure still earned its keep, and not through the counts. Checking _where_ the 11
+occurrences were is what exposed that 0.9 owned 5 of them — an ordering constraint neither row
+declared. A count can be right while the plan built on it is still wrong.
+
+### Widening a scan is a scope change, and scope has two edges
+
+"The guard cannot see 57 files" reads as a one-directional defect, and the one-directional fix
+(`--hidden`) is available and wrong. Measuring the _other_ edge — what the scan reaches that it
+should not — found 18 untracked files in scope, which is a defect that had already fired once, on
+2026-08-09, as a false red.
+
+Both edges were the same root cause: the scan's file set was defined by ripgrep's traversal
+heuristics rather than by the property the gate actually means. Naming the property — "shipped
+content" is `git ls-files` — collapsed two fixes into one and made both failure modes structurally
+impossible instead of merely handled.
+
+Worth carrying: when a finding says a check is blind, ask what it is blind _to_ and what it is
+looking at that it shouldn't be. The second question is not implied by the first, and here it was
+the one that picked the mechanism.
+
+### The formatting gate and the formatting tool were never the same tool
+
+`validate:format` failed on this plan's own notes file, and `npx prettier --check` on that same
+file passed. Both statements were true at the same moment.
+
+`validate:format` is `cd .. && git ls-files … | xargs npx --prefix server prettier --check`. The
+`--prefix server` makes prettier resolve `server/.prettierrc.json` — `printWidth: 100`. Run from
+the repo root with no prefix, prettier finds **no configuration file** for `plans/**` at all
+(`--find-config-path` errors outright) and falls back to the default width of 80. Markdown tables
+are padded to the print width, so a table-bearing plan file has two different correct forms and
+each invocation reverts the other.
+
+That is the whole of row 0.2's unexplained behaviour — "`--write` does not converge, ran 3×, failed
+each time". It was read as the file being pathological and closed by adding it to
+`.prettierignore`. It was neither pathological nor about that file: any plan file with a table
+does this, and 0.2's fix removed one file from the blast radius while leaving the mechanism intact.
+Recorded as row 0.11.
+
+**The reusable shape**: when a gate and the tool it wraps disagree, suspect _config resolution_
+before suspecting content. The two commands were both "prettier on this file" and differed only in
+which directory prettier started looking from. Nothing in the failure output mentions
+configuration, print width, or the prefix — the gate reports the file, so the file is where you
+look. Fixing it required reading the npm script, not the file it named.
+
+Cost of not knowing: the loop is only observable through a 53-second suite run, and it re-arms
+every time someone formats a plan with the obvious command.
+
+### Tier 3.2 + 3.3 deviations (2026-08-11)
+
+| #   | Deviation                                                                                                        | Why                                                                                                                                                                                                        |
+| --- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 3.2 marked ⚠ and **no change made to the script**                                                                | Its premise is false: the script is a live CI gate. Both stated options (join `SUITE` / delete) are impossible or wrong — it reads stdin, and `SUITE` steps run with stdin ignored                         |
+| 2   | Deleted `validate:build`, which no row asked me to touch                                                         | It is the orphan 3.2 was looking for. Leaving it would have forced a fake exception entry in the new checker, i.e. writing down an excuse for something nothing runs                                       |
+| 3   | Exported `SUITE` + added a main guard to `run-validation-suite.js` (another workstream's actively-modified file) | The checker must read the real array. Regexing the source would repeat the token-vs-property error this tier exists to fix. Both edits are additive and on lines distinct from the entries they are adding |
+| 4   | Did **not** rewrite the renovate workflow to invoke via `npm run`, though stdin forwarding was verified to work  | It is a CI job I cannot execute locally, and the uniformity it would buy is already delivered by the checker matching both spellings. Fixing the class beat fixing the instance                            |
+| 5   | Two new rows (3.4 `validate:build` deleted, 3.5 ledger-hook format oscillation)                                  | Both discovered mid-tier; prose in an execution record does not get executed                                                                                                                               |
+
+### An excuse is not evidence, and nobody re-reads one
+
+The plan flagged the wired script and excused the dead one. Both came from one probe, but only the
+false-positive was ever going to be noticed — someone acting on 3.2 would have opened the file.
+`validate:build`'s excuse ("needs a build so cannot sit in a pre-build suite") was plausible,
+unfalsifiable as written, and therefore permanent.
+
+That asymmetry is the reusable part. A wrong _finding_ gets tested when someone tries to fix it. A
+wrong _exemption_ is never tested, because its whole function is to stop anyone looking. So the
+exception list is where measurement error accumulates, and it is exactly where nobody re-measures.
+
+This is why `runBy` is asserted rather than documented. The entry does not say "this is fine
+because CI runs it"; it names the file, and the gate opens that file on every run. An excuse that
+cannot go stale silently is a different kind of object from a comment.
+
+### The probe error has two axes, and fixing one does not fix the other
+
+0.8 fixed the **file set** a probe covers (dot-paths, gitignored-but-tracked). This tier hit the
+**token** a probe matches: the npm name vs the script file it resolves to. My first measurement in
+this tier used 0.8's corrected file set — it searched `.github/**` correctly — and still returned
+the wrong answer, because it was looking for the wrong string inside those files.
+
+Worth stating plainly since it cost a full re-measure: _widening where you look does not fix
+looking for the wrong thing._ Both are "the probe measured something adjacent", and a fix for one
+reads as a fix for the class.
+
+### Tier 3.5 + 4.2 + 4.3 deviations (2026-08-11)
+
+| #   | Deviation                                                                                       | Why                                                                                                                                                      |
+| --- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 3.5 fixed a file **outside this repository** (`~/.claude/hooks/validation/validation-flush.py`) | That is where the writer lives. Fixing it in-repo means another `.prettierignore` entry, which is the treadmill the row exists to stop                   |
+| 2   | 4.2 used shared named constants instead of a string per entry                                   | 18 entries retire in one event; a copied string per entry satisfies the gate and deletes that fact                                                       |
+| 3   | 4.3 landed as an ESLint rule, not a `scripts/` guard                                            | 0.3's convention: single-file AST work belongs in the plugin. This is one file's declarations vs one file's calls                                        |
+| 4   | Did **not** fix `scripts/validate-db-claim-order.js`, the rule's only true positive             | Another workstream's uncommitted guard. Recorded as row 4.4 with the owner named                                                                         |
+| 5   | Did **not** fix the 6 failing chain/formatting tests                                            | Same workstream's mid-refactor `response-assembler.ts` + 8 pipeline stages. Row 0.13; the plan Gate is marked blocked rather than left reading as passed |
+
+### The convention was followed and the defect happened anyway
+
+`validate-db-claim-order.js` is the strongest single piece of evidence this plan produced about
+inflow gates. Its author wrote `reason` and `closedBy` on all four entries — textbook form — and
+never called `auditExceptions`.
+
+They were not careless. They copied what a sibling gate's data **looks like**, which is the only
+part of the convention visible from inside the file they were writing. The audit call lives in
+`lib/exception-hygiene.js`, and nothing in a gate's data shape tells you to go look for it.
+
+So the failure mode is not "people ignore conventions". It is that **a convention with a visible
+half and an invisible half gets half-adopted, by exactly the people trying to follow it** — and the
+adopted half is the one that produces no signal when the other is missing, because `closedBy` reads
+as diligence. A stated convention cannot fix this; it addresses the people who already read it.
+
+### Measuring the thing that measures things
+
+While counting the vocab allowlist for 4.2 I ran a regex for the entry shape and got 38 against an
+authored 35. The three extras were commented-out example entries sitting inside the file's own
+explanatory prose — entries that exist to _document_ two deletions.
+
+This tier's whole subject is probes that match a token adjacent to the property. I committed the
+error inside the measurement for the row about it, and caught it only because 38 ≠ 35 and the
+authored number happened to be right. Had the drift gone the other way — an authored count that was
+already stale — the wrong number would have confirmed the wrong probe.
+
+The guard's own runtime output (`ALLOWLIST.length`, printed on every run) was the correct instrument
+and was available the whole time. **Prefer the artifact's own report over a fresh regex against its
+source**; a program that already computes the number will not disagree with itself about what counts.
