@@ -64,6 +64,15 @@ echo ""
 echo "1/8 Type checking..."
 npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
+# The check above compiles the WORKING TREE, which is a state CI never sees — CI checks out the
+# commit. In a shared worktree those two disagree routinely: staging a file whole can take a
+# consumer line whose provider is still untracked, leaving a commit that does not compile while
+# every local gate is green. That is not hypothetical; `8875ab42` did it with three symbols across
+# two parser files (2026-08-12). This compiles HEAD in a detached worktree, which is the same
+# input CI uses, so it is a stricter subset rather than a new obligation. Skips itself when the
+# tree already equals HEAD.
+npm --prefix "$SERVER_DIR" run typecheck:committed || { echo "❌ Committed state does not typecheck"; exit 1; }
+
 echo ""
 echo "2/8 Linting..."
 npm --prefix "$SERVER_DIR" run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }

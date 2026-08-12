@@ -98,6 +98,7 @@
     "validate:conformance-coverage": "node scripts/validate-conformance-coverage.js",
     "validate:conformance-coverage:self-test": "node scripts/validate-conformance-coverage.js --self-test",
     "validate:versions": "node scripts/validate-versions.js",
+    "typecheck:committed": "node scripts/typecheck-committed.js",
     "validate:operator-registry-drift": "node scripts/validate-operator-registry-drift.js",
     "validate:operator-registry-drift:self-test": "node scripts/validate-operator-registry-drift.js --self-test",
     "validate:no-legacy-sidecars": "node scripts/validate-no-legacy-sidecars.js",
