@@ -4,7 +4,7 @@
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 395
+    "errors": 383
   },
   "byCode": {
     "TS18046": 3,
@@ -38,7 +38,6 @@
     "tests/e2e/plugin-validation.test.ts": 3,
     "tests/e2e/shell-verify-e2e.test.ts": 5,
     "tests/helpers/test-helpers.ts": 43,
-    "tests/integration/checkpoint/checkpoint-manager.test.ts": 1,
     "tests/integration/framework/framework-creation.test.ts": 2,
     "tests/integration/gates/gate-judge-pipeline-wiring.test.ts": 3,
     "tests/integration/hooks/gate-hooks-integration.test.ts": 8,
@@ -101,7 +100,6 @@
     "tests/unit/mcp-tools/system-control/framework-action.test.ts": 1,
     "tests/unit/mcp-tools/system-control/gate-action.test.ts": 1,
     "tests/unit/mcp-tools/system-control/session-action.test.ts": 9,
-    "tests/unit/prompts/delegation-schema.test.ts": 11,
     "tests/unit/prompts/hot-reload-auxiliary.test.ts": 5,
     "tests/unit/prompts/inline-gate-definitions.test.ts": 1,
     "tests/unit/prompts/yaml-to-prompt-data.test.ts": 2,

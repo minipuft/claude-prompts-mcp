@@ -41,6 +41,15 @@ export interface ChainStepPrompt {
   agentType?: string;
   /** Capability hint for delegation model selection (step-level override) */
   subagentModel?: 'heavy' | 'standard' | 'fast';
+  /**
+   * Declared per-step framework id from the chain YAML.
+   *
+   * Distinct from `frameworkContext` above: this is the author's REQUEST, a bare id carried from
+   * the resource; `frameworkContext` is the RESOLVED context that `12-framework-stage.ts` builds
+   * from it. Keeping both is what lets the stage fall back to the run-wide framework when the
+   * requested id is unknown — collapsing them would leave nothing to fall back from.
+   */
+  framework?: string;
 }
 
 /**

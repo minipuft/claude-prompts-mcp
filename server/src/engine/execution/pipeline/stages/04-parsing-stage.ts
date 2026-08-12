@@ -167,6 +167,12 @@ export class CommandParsingStage extends BasePipelineStage {
           ...(step.agentType != null || stepConverted.agentType != null
             ? { agentType: step.agentType ?? stepConverted.agentType }
             : {}),
+          // Step-declared framework only. Unlike agentType/subagentModel above there is no
+          // `stepConverted` fallback: the referenced prompt's own framework preference is already
+          // read by `generateExecutionContext(step.convertedPrompt, …)`, so reading it here too
+          // would promote a prompt-level preference into an explicit per-step OVERRIDE and let it
+          // outrank the run-wide choice the user actually made.
+          ...(step.framework != null ? { framework: step.framework } : {}),
         } as ChainStepPrompt;
       });
     }

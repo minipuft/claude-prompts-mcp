@@ -653,6 +653,11 @@ export interface ChainStep {
   subagentModel?: 'heavy' | 'standard' | 'fast';
   /** Host agent to spawn for this step, overriding the prompt-level default */
   agentType?: string;
+  /**
+   * Framework this step runs under, overriding the run-wide selection. Resolved by
+   * `12-framework-stage.ts`; an id the registry does not know falls back to the run-wide choice.
+   */
+  framework?: string;
 }
 
 /**

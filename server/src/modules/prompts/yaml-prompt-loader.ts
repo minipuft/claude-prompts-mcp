@@ -61,6 +61,10 @@ export interface LoadedPromptFile {
     retries?: number;
     subagentModel?: 'heavy' | 'standard' | 'fast';
     agentType?: string;
+    /** Per-step framework override — mirrors `ChainStepSchema.framework`. */
+    framework?: string;
+    /** Accepted, not yet consumed — mirrors `ChainStepSchema.inlineGateIds`. */
+    inlineGateIds?: string[];
   }>;
 }
 
@@ -379,6 +383,12 @@ function normalizeChainSteps(
     if (typeof step.retries === 'number') normalized.retries = step.retries;
     if (step.subagentModel != null) normalized.subagentModel = step.subagentModel;
     if (step.agentType != null) normalized.agentType = step.agentType;
+    if (step.framework != null) normalized.framework = step.framework;
+    // NOTE: `inlineGateIds` is deliberately NOT carried. It is accepted by the schema to preserve
+    // the six declarations already in the shipped corpus, but carrying it here without wiring the
+    // gate pipeline would move a dead field one layer deeper rather than making it work. This
+    // allowlist is the second of the two strippers described on `ChainStepSchema`; when
+    // inlineGateIds is wired, it is added here and in `04-parsing-stage.ts` together.
     return normalized;
   });
 }

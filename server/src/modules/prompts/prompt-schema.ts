@@ -71,36 +71,103 @@ export type PromptArgumentYaml = z.infer<typeof PromptArgumentSchema>;
 
 /**
  * Schema for chain step definitions.
+ *
+ * STRICT, deliberately — the third strictness posture in this file, and previously the unmarked
+ * one. `PromptInjectionRuleSchema` and `PromptInjectionConfigSchema` are `.strict()` because every
+ * field they accept is read by the hierarchy resolver; `inline_gate_definitions` is
+ * `.passthrough()` because a gate definition legitimately carries custom fields. A chain step is
+ * the first kind: every field below is consumed downstream, so a key that is not here cannot take
+ * effect no matter what the author intended.
+ *
+ * Zod's default (strip) made that failure invisible — `framwork: ReACT` parsed to a normal-looking
+ * step and told the author nothing, which is how six `inlineGateIds` declarations sat dead in three
+ * shipped chains. `.passthrough()` would be worse than either: `normalizeChainSteps` in
+ * yaml-prompt-loader enumerates fields explicitly and drops the rest regardless, so passthrough
+ * would advertise an extensibility the very next layer denies.
+ *
+ * BREAKING, and priced as such. An unknown key now fails the whole prompt's load
+ * (`yaml-prompt-loader.ts` returns null on `valid: false`), so YAML that loaded before can stop
+ * loading. That is a resource-format change and rides a major version.
+ *
+ * What that made mandatory: every key with a REAL consumer had to be declared first, including the
+ * ones no code in this module reads. `delegation` is the worked example — the schema knew nothing
+ * about it, but the skills-sync exporter reads it straight off the YAML. Rejecting it would have
+ * broken the server's load path while the exporter kept honouring the field. Before adding
+ * `.strict()` to any schema, enumerate readers of the FILE, not readers of the schema.
  */
-export const ChainStepSchema = z.object({
-  /** ID of the prompt to execute in this step */
-  promptId: z.string().min(1, 'Step promptId is required'),
-  /** Name/identifier of this step */
-  stepName: z.string().min(1, 'Step name is required'),
-  /**
-   * Stable node identity for this step (kebab-case). Optional — when omitted, a node id is
-   * minted at parse time from a slug of `stepName`. Explicit ids must be unique within the
-   * chain (enforced in `validatePromptYaml` / `validatePromptSchema`). Tier 1: additive only —
-   * nothing downstream consumes this field yet.
-   */
-  id: z
-    .string()
-    .regex(
-      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-      'Step id must be kebab-case (lowercase alphanumeric, hyphen-separated)'
-    )
-    .optional(),
-  /** Map step results to semantic names */
-  inputMapping: z.record(z.string(), z.string()).optional(),
-  /** Name this step's output for downstream steps */
-  outputMapping: z.record(z.string(), z.string()).optional(),
-  /** Number of retry attempts on failure (default: 0) */
-  retries: z.number().int().nonnegative().optional(),
-  /** Client-agnostic capability hint for delegation model selection */
-  subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
-  /** Host agent to spawn for this step, overriding the prompt-level default */
-  agentType: z.string().min(1).optional(),
-});
+export const ChainStepSchema = z
+  .object({
+    /** ID of the prompt to execute in this step */
+    promptId: z.string().min(1, 'Step promptId is required'),
+    /** Name/identifier of this step */
+    stepName: z.string().min(1, 'Step name is required'),
+    /**
+     * Stable node identity for this step (kebab-case). Optional — when omitted, a node id is
+     * minted at parse time from a slug of `stepName`. Explicit ids must be unique within the
+     * chain (enforced in `validatePromptYaml` / `validatePromptSchema`). Tier 1: additive only —
+     * nothing downstream consumes this field yet.
+     */
+    id: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        'Step id must be kebab-case (lowercase alphanumeric, hyphen-separated)'
+      )
+      .optional(),
+    /** Map step results to semantic names */
+    inputMapping: z.record(z.string(), z.string()).optional(),
+    /** Name this step's output for downstream steps */
+    outputMapping: z.record(z.string(), z.string()).optional(),
+    /** Number of retry attempts on failure (default: 0) */
+    retries: z.number().int().nonnegative().optional(),
+    /** Client-agnostic capability hint for delegation model selection */
+    subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
+    /** Host agent to spawn for this step, overriding the prompt-level default */
+    agentType: z.string().min(1).optional(),
+    /**
+     * Framework this step runs under, overriding the run-wide selection.
+     *
+     * Validated as a non-empty string, NOT an enum: frameworks are registry-resolved and
+     * `frameworkManager.getFramework(id)` is the only authority on validity (project CLAUDE.md).
+     * Baking the list into a schema would put a second, staler copy beside the registry — the
+     * exact defect the operator registry gate exists to prevent. An unknown id resolves to the
+     * run-wide framework at `12-framework-stage.ts` rather than failing the load, because a
+     * framework that was renamed should degrade, not make the whole prompt unloadable.
+     */
+    framework: z.string().min(1).optional(),
+    /**
+     * Inline gate ids for this step.
+     *
+     * ACCEPTED BUT NOT YET WIRED — declared here because the runtime type already has it
+     * (`ChainStepPrompt.inlineGateIds`) while the schema did not, so three shipped chains
+     * (`research_chain`, `code_review_test`, `tech_evaluation_chain`) carry six of these and every
+     * one is dropped: first by Zod's strip, then again by `normalizeChainSteps`'s explicit
+     * allowlist. Declaring it preserves the authors' intent through `.strict()` instead of
+     * deleting it, and makes the gap visible. Wiring it to the gate pipeline is a separate change
+     * with real behavioural risk — it would newly APPLY gates to chains that have run without
+     * them. Same posture as `id` above: additive, nothing downstream consumes it yet.
+     */
+    inlineGateIds: z.array(z.string().min(1)).optional(),
+    /**
+     * Export this step as a delegated skill step.
+     *
+     * DECLARED BECAUSE IT HAS A CONSUMER, not because the execution runtime reads it — it does
+     * not. The only reader is the skills-sync exporter (`modules/skills-sync/service.ts`), which
+     * loads prompt YAML with `yaml.load(raw)` and never passes it through this schema, so
+     * `s.delegation` there is a real field on a second, unvalidated read path.
+     *
+     * That second path is exactly why `.strict()` had to declare it rather than reject it: a
+     * search of this schema says `delegation` is unknown, while an exported skill provably
+     * carries it. Rejecting would have failed the prompt's load in the server while the exporter
+     * kept honouring the field — divergence between two readers of one file, which is worse than
+     * either behaviour alone.
+     *
+     * Not to be confused with `ChainStepPrompt.delegated`, the runtime's own flag, which is set
+     * by the execution pipeline and never sourced from here.
+     */
+    delegation: z.boolean().optional(),
+  })
+  .strict();
 
 export type ChainStepYaml = z.infer<typeof ChainStepSchema>;
 
