@@ -18,8 +18,6 @@ export const CONFIG_VALID_KEYS = [
   'logging.directory',
   'gates.enabled',
   'gates.frameworkGates',
-  // Pre-rename spelling, still accepted.
-  'gates.methodologyGates',
   'execution.judge',
   'frameworks.enabled',
   'frameworks.dynamicToolDescriptions',
@@ -87,7 +85,6 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
 
     case 'gates.enabled':
     case 'gates.frameworkGates':
-    case 'gates.methodologyGates':
     case 'execution.judge':
     case 'frameworks.enabled':
     case 'frameworks.dynamicToolDescriptions':

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING — the pre-rename `methodology*` back-compat folds are retired.** The methodology→framework rename shipped in v3.0.0 with fold-forward support for the old spellings; those folds are now deleted. Six input spellings stop being accepted, and in every case but one they fail by silently falling back to the default rather than erroring:
+  - framework YAML `methodologyGates:` → use `frameworkGates:`
+  - gate YAML `pass_criteria.methodology:` → use `framework:`; and `type: methodology_compliance` → `framework_compliance` (this one throws at parse, being a closed enum)
+  - `config.json` `gates.methodologyGates` → `gates.frameworkGates`; the top-level `methodologies:` section and `resources.methodologies` are no longer adopted into their `frameworks` equivalents
+  - `resource_manager` authoring payload `methodology_gates` / `methodology_elements` → `framework_gates` / `framework_elements`
+  - prompt-template placeholder `{METHODOLOGY}` → `{FRAMEWORK_TYPE}`
+
+  Marked breaking because the framework/gate YAML schemas and `config.json` are declared API surface. Shipped in a minor by explicit maintainer decision — the pre-rename spellings have been unsupported since v3.0.0 (2026-07-31), and the only spelling measurably outside the declared contract was the `resource_manager` authoring payload. If you hold a workspace resource written before v3.0.0, rename the keys above before upgrading.
+
 ### Added
 
 - `prompt_engine` accepts an optional `observations` parameter — chain steps declare typed unknowns (discovered/resolved) that accumulate in a per-run ledger and surface in subsequent step context.

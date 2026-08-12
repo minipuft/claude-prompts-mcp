@@ -379,12 +379,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
-      // `methodologyGates` is the pre-rename config.json key. Folded here rather than at each
-      // consumer so only this function knows both spellings exist.
-      enableFrameworkGates:
-        gatesConfig.frameworkGates ??
-        gatesConfig.methodologyGates ??
-        DEFAULT_GATES_CONFIG.enableFrameworkGates,
+      enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
     };
   }
 
@@ -649,33 +644,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     // Ensure transport mode is set
     if (!this.config.transport) {
       this.config.transport = DEFAULT_TRANSPORT_MODE;
-    }
-
-    // Adopt the legacy `methodologies:` section if a pre-rename config.json still carries it,
-    // then drop it so only one key remains. Values are identical — this was a rename, not a
-    // schema change — so adoption is lossless and no user edit is required.
-    const legacySection = (this.config as { methodologies?: FrameworkSettings }).methodologies;
-    if (legacySection && !this.config.frameworks) {
-      this.config.frameworks = legacySection;
-    }
-    delete (this.config as { methodologies?: unknown }).methodologies;
-
-    // Same rename one level down: `resources.methodologies` -> `resources.frameworks`. Without
-    // this the old key is read as undefined and silently falls back to the default, so a user who
-    // had deliberately disabled framework resources would find them re-enabled with no error.
-    // Widening, not redundant: `methodologies` is the removed legacy key and is absent from
-    // ResourcesConfig by design, so this intersection is what makes the two reads below compile.
-    // TS 6's no-unnecessary-type-assertion reports it as unnecessary (the assignability check
-    // passes trivially for an intersection) and `--fix` deletes it, which breaks the migration
-    // with TS2339. Verified 2026-08-01: removing the assertion fails typecheck.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    const legacyResources = this.config.resources as
-      (ResourcesConfig & { methodologies?: { enabled?: boolean } }) | undefined;
-    if (legacyResources?.methodologies && !legacyResources.frameworks) {
-      legacyResources.frameworks = legacyResources.methodologies;
-    }
-    if (legacyResources) {
-      delete legacyResources.methodologies;
     }
 
     if (!this.config.frameworks) {

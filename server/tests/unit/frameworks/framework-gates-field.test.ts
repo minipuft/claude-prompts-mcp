@@ -37,13 +37,20 @@ describe('framework gate list survives schema parse', () => {
     );
   });
 
-  it('still accepts the pre-rename methodologyGates spelling from an older file', () => {
+  /**
+   * The pre-rename fold was retired in plan row 5.7. Asserting it is INERT rather than deleting
+   * the case: `.passthrough()` keeps the unknown key on the object, so "the fold is gone" and
+   * "the fold silently still runs" look identical without an assertion that separates them.
+   *
+   * NEGATIVE-VERIFY TARGET: reinstate the `.transform()` in `framework-schema.ts` and this fails.
+   */
+  it('no longer folds the pre-rename methodologyGates spelling forward', () => {
     const raw = loadYaml(readFileSync(FRAMEWORK_YAML, 'utf8')) as Record<string, unknown>;
     const legacy: Record<string, unknown> = { ...raw, methodologyGates: raw.frameworkGates };
     delete legacy.frameworkGates;
 
     const parsed = FrameworkSchema.parse(legacy) as { frameworkGates?: unknown[] };
 
-    expect(parsed.frameworkGates?.length ?? 0).toBeGreaterThan(0);
+    expect(parsed.frameworkGates).toBeUndefined();
   });
 });

@@ -30,15 +30,6 @@ export const TEMPLATE_VARIABLE_NAMES = [
 ] as const;
 
 /**
- * Pre-rename spelling of `{FRAMEWORK_TYPE}`.
- *
- * Kept so a workspace template authored before the rename still substitutes. It resolved to
- * `framework.type`, which is what the new name says; the old name read as a sibling of
- * `{FRAMEWORK_NAME}` and did not. Retire once no workspace template uses it.
- */
-const DEPRECATED_FRAMEWORK_TYPE_PLACEHOLDER = /\{METHODOLOGY\}/g;
-
-/**
  * Substitute framework placeholders in a system-prompt template.
  *
  * Pure: same input always yields the same output, no I/O and no mutation of `values`.
@@ -52,6 +43,5 @@ export function substituteTemplateVariables(
     .replace(/\{PROMPT_CATEGORY\}/g, values.promptCategory)
     .replace(/\{FRAMEWORK_NAME\}/g, values.frameworkName)
     .replace(/\{FRAMEWORK_TYPE\}/g, values.frameworkType)
-    .replace(DEPRECATED_FRAMEWORK_TYPE_PLACEHOLDER, values.frameworkType)
     .replace(/\{PROMPT_TYPE\}/g, values.promptType);
 }

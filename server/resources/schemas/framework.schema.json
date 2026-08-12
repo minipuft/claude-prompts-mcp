@@ -97,62 +97,6 @@
         ]
       }
     },
-    "methodologyGates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": {
-            "type": "string"
-          },
-          "frameworkArea": {
-            "type": "string"
-          },
-          "priority": {
-            "type": "string",
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low"
-            ]
-          },
-          "validationCriteria": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "criteria": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "severity": {
-            "type": "string",
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "name"
-        ]
-      }
-    },
     "phasesFile": {
       "type": "string"
     },

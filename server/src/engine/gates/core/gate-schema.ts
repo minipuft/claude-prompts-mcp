@@ -71,21 +71,13 @@ export const GatePassCriteriaSchema = z
      * - `script_tool`: runs a registered script tool with JSON input via stdin,
      *   parses structured pass/fail return.
      */
-    /**
-     * Unlike the `.passthrough()` fields below, this is a CLOSED enum — a pre-rename value fails
-     * loudly at parse rather than dropping silently. The preprocess exists so a gate authored
-     * before the rename still loads at all, not to prevent a silent loss.
-     */
-    type: z.preprocess(
-      (value) => (value === 'methodology_compliance' ? 'framework_compliance' : value),
-      z.enum([
-        'inline_guidance',
-        'llm_self_check',
-        'framework_compliance',
-        'shell_verify',
-        'script_tool',
-      ])
-    ),
+    type: z.enum([
+      'inline_guidance',
+      'llm_self_check',
+      'framework_compliance',
+      'shell_verify',
+      'script_tool',
+    ]),
 
     // Content check options
     min_length: z.number().int().nonnegative().optional(),
@@ -151,20 +143,8 @@ export const GatePassCriteriaSchema = z
     script_tool_timeout: z.number().int().positive().optional(),
     /** Working directory for script execution */
     script_tool_working_dir: z.string().optional(),
-    /** @deprecated Pre-rename spelling of `framework`; folded in by the transform below. */
-    methodology: z.string().optional(),
   })
-  .passthrough() // Allow additional fields for extensibility
-  // Fold the pre-rename spelling forward, matching what FrameworkSchema does for
-  // `methodologyGates`. Without this a gate authored before the rename still parses (passthrough
-  // keeps the key) but no typed consumer reads it, so the criterion silently evaluates as absent —
-  // the same failure mode that made every framework contribute zero gates.
-  .transform((data) => {
-    if (data.framework === undefined && data.methodology !== undefined) {
-      return { ...data, framework: data.methodology };
-    }
-    return data;
-  });
+  .passthrough(); // Allow additional fields for extensibility
 
 export type GatePassCriteriaYaml = z.infer<typeof GatePassCriteriaSchema>;
 

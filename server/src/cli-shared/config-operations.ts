@@ -427,7 +427,6 @@ function getKeyTypeInfo(key: string): {
   const boolKeys = [
     'gates.enabled',
     'gates.frameworkGates',
-    'gates.methodologyGates',
     'gates.enforcePendingVerdict',
     'execution.judge',
     'frameworks.enabled',

@@ -179,12 +179,8 @@ export interface ResourceManagerInput {
 
   // Advanced framework parameters (not advertised for token efficiency)
   framework_gates?: FrameworkGate[];
-  /** @deprecated Pre-rename spelling of `framework_gates`; folded on read. */
-  methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
   framework_elements?: FrameworkElements;
-  /** @deprecated Pre-rename spelling of `framework_elements`; folded on read. */
-  methodology_elements?: FrameworkElements;
   argument_suggestions?: ArgumentSuggestion[];
   judge_prompt?: string;
 

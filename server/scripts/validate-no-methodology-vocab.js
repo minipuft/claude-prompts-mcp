@@ -50,11 +50,18 @@ const EXCLUDED_PATHS = [
  * prose only ever said to a human who happened to scroll to the right comment.
  */
 const RETIREMENT = {
-  RENAME_MAJOR:
-    'the first major release after the methodology→framework rename, when v2.1.0 workspaces (which shipped 7 framework files naming `methodologyGates`) are no longer supported',
-  PINS_FOLD: 'the same commit as the back-compat fold this test pins',
+  // RENAME_MAJOR was RETIRED 2026-08-11 (plan row 5.7) along with all 19 entries that named it and
+  // the 3 test entries that pinned them. Its condition — "the first major release after the rename"
+  // — was met by v3.0.0 (tagged 2026-07-31, one day after the rename landed), and v3.2.1 is two
+  // further releases on. Every fold it covered is deleted; nothing here is waiting on it.
+  //
+  // Kept as a comment rather than silently dropped because this is the first retirement condition
+  // in this file to actually come true, and the shape is the reusable part: a condition stated so
+  // it can be CHECKED (a tag comparison) rather than felt. Conditions worded as "when we no longer
+  // need it" are the ones that never retire.
   NOTE_USEFUL: 'when the note stops being useful — delete the note and this entry together',
-  FOLD_DOCUMENTED: 'when the fold this prose documents goes',
+  ASSERTS_RETIRED:
+    'never while the retirement is worth pinning — these name the old spelling to prove it is inert, so deleting them would remove the proof rather than a fold',
   BAN_WANTED:
     'never, while the ban is wanted — the pre-rename path must stay named in order to stay banned',
   REMOVAL_OLD: 'when the env-var removal is old enough to stop mentioning',
@@ -70,100 +77,46 @@ const RETIREMENT = {
  * fold AND this entry in the same commit.
  */
 const ALLOWLIST = [
-  // --- Back-compat folds. All retire together once no supported release's resources use the
-  // --- pre-rename spellings. v2.1.0 shipped 7 framework files containing `methodologyGates`, so
-  // --- a user who copied one into their workspace still depends on these. RETIREMENT: the first
-  // --- major release after the rename ships, i.e. when v2.1.0 workspaces are no longer supported.
-  { file: 'framework-schema.ts', match: 'methodologyGates', closedBy: RETIREMENT.RENAME_MAJOR },
-  { file: 'gate-schema.ts', match: 'methodology', closedBy: RETIREMENT.RENAME_MAJOR },
-  { file: 'core-config.ts', match: 'methodologyGates', closedBy: RETIREMENT.RENAME_MAJOR },
-  { file: 'infra/config/index.ts', match: 'methodologies', closedBy: RETIREMENT.RENAME_MAJOR },
-  { file: 'infra/config/index.ts', match: 'methodologyGates', closedBy: RETIREMENT.RENAME_MAJOR },
-  {
-    file: 'config-input-validator.ts',
-    match: 'gates.methodologyGates',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-  { file: 'config-utils.ts', match: 'gates.methodologyGates', closedBy: RETIREMENT.RENAME_MAJOR },
-  {
-    file: 'config-operations.ts',
-    match: 'gates.methodologyGates',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-  { file: 'config.schema.json', match: 'methodologyGates', closedBy: RETIREMENT.RENAME_MAJOR },
-  { file: 'framework-authoring-keys.ts', match: 'methodology_', closedBy: RETIREMENT.RENAME_MAJOR },
-  {
-    file: 'framework-lifecycle-processor.ts',
-    match: 'methodology_',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-  { file: 'framework-file-writer.ts', match: 'methodology', closedBy: RETIREMENT.RENAME_MAJOR },
-  {
-    file: 'resource-manager/core/router.ts',
-    match: 'methodology_',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-  {
-    file: 'resource-manager/core/types.ts',
-    match: 'methodology_',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-  {
-    file: 'framework-manager/core/types.ts',
-    match: 'methodology_',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-  { file: 'template-variables.ts', match: 'METHODOLOGY', closedBy: RETIREMENT.RENAME_MAJOR },
-  { file: 'framework_builder/script.py', match: 'methodology_', closedBy: RETIREMENT.RENAME_MAJOR },
-  {
-    file: 'resources/schemas/framework.schema.json',
-    match: 'methodologyGates',
-    closedBy: RETIREMENT.RENAME_MAJOR,
-  },
-
-  // --- Tests that pin the folds above, scoped one entry per test file so each names the fold it
-  // --- actually guards.
+  // --- The back-compat fold block that stood here (19 entries) and the 3 test entries that pinned
+  // --- it were DELETED 2026-08-11 with the folds themselves — plan row 5.7. See the RENAME_MAJOR
+  // --- note above for why the condition was considered met.
   // ---
-  // --- This was a single blanket `{ file: 'tests/', match: 'methodolog' }`. That exempted the
-  // --- whole test tree, so 18 stale `methodology` assertions in tests/integration survived a
-  // --- guard written to prevent exactly them — four suites were failing against production that
-  // --- had correctly renamed. Its retirement condition ("same commit as the fold each one
-  // --- guards") could not be checked, because the entry named no fold. An exemption you cannot
-  // --- retire is the defect this file exists to catch, so it does not get to keep one.
+  // --- What remains below are the survivors that never shared that condition. Do not re-add a
+  // --- fold entry here without a fold to go with it: this file's whole premise is that an
+  // --- exemption outlives what it exempted unless the two are deleted in one commit.
+
+  // --- Tests asserting the retired folds are INERT. These name the old spelling in order to prove
+  // --- it no longer does anything, which is the opposite of pinning a fold — deleting them would
+  // --- remove the only evidence that the retirement took effect.
   {
     file: 'tests/unit/infra/config/legacy-key-migration.test.ts',
     match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
+    closedBy: RETIREMENT.ASSERTS_RETIRED,
   },
   {
-    file: 'tests/unit/gates/pass-criteria-framework-fold.test.ts',
+    file: 'tests/unit/gates/pass-criteria-framework-vocab.test.ts',
     match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
-  },
-  {
-    file: 'tests/unit/mcp-tools/framework-manager/authoring-key-fold.test.ts',
-    match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
-  },
-  {
-    file: 'tests/unit/mcp-tools/system-control/framework-action-handler.test.ts',
-    match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
-  },
-  {
-    file: 'tests/unit/frameworks/template-variable-substitution.test.ts',
-    match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
+    closedBy: RETIREMENT.ASSERTS_RETIRED,
   },
   {
     file: 'tests/unit/frameworks/framework-gates-field.test.ts',
     match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
+    closedBy: RETIREMENT.ASSERTS_RETIRED,
+  },
+  {
+    file: 'tests/unit/frameworks/template-variable-substitution.test.ts',
+    match: 'METHODOLOGY',
+    closedBy: RETIREMENT.ASSERTS_RETIRED,
+  },
+  {
+    file: 'tests/unit/mcp-tools/system-control/framework-action-handler.test.ts',
+    match: 'methodolog',
+    closedBy: RETIREMENT.ASSERTS_RETIRED,
   },
   {
     file: 'tests/unit/versioning/version-history-service.test.ts',
     match: 'methodolog',
-    closedBy: RETIREMENT.PINS_FOLD,
+    closedBy: RETIREMENT.ASSERTS_RETIRED,
   },
 
   // --- Prose recording what a rewritten test used to assert, so the next reader does not
@@ -185,11 +138,16 @@ const ALLOWLIST = [
     closedBy: RETIREMENT.NOTE_USEFUL,
   },
 
-  // --- Prose explaining what was renamed and why. RETIREMENT: when the fold it documents goes.
+  // --- Prose explaining what was renamed and why.
+  // ---
+  // --- Its condition was `FOLD_DOCUMENTED` ("when the fold this prose documents goes"), which was
+  // --- wrong: re-read at 5.7, the comment records a dropped `keyword_count` ENTRY, not a fold. The
+  // --- folds are now gone and this note is unaffected, which is exactly how a mis-stated condition
+  // --- surfaces — it came due for a reason that had nothing to do with it.
   {
     file: 'resources/gates/framework-compliance/gate.yaml',
     match: 'methodology',
-    closedBy: RETIREMENT.FOLD_DOCUMENTED,
+    closedBy: RETIREMENT.NOTE_USEFUL,
   },
   //
   // Two entries removed here 2026-08-06 (row 0.7), for DIFFERENT reasons — worth distinguishing:
@@ -228,6 +186,26 @@ const ALLOWLIST = [
   {
     file: 'validate-no-methodology-vocab.js',
     match: 'methodolog',
+    closedBy: RETIREMENT.GUARD_DELETED,
+  },
+  // These three went RED at HEAD without anyone noticing, and the cause is worth naming: row 0.8
+  // widened the scan from "what ripgrep walks" to "the git-tracked set", and the gate promptly
+  // began seeing its OWN test file and type declarations — which name the vocabulary for the same
+  // reason the guard itself does. Widening a gate's reach re-scopes what counts as a violation;
+  // the new hits were not new code. RETIREMENT: identical to the guard's own entry above.
+  {
+    file: 'tests/unit/scripts/methodology-vocab-scope.test.ts',
+    match: 'methodolog',
+    closedBy: RETIREMENT.GUARD_DELETED,
+  },
+  {
+    file: 'validate-no-methodology-vocab.d.ts',
+    match: 'methodolog',
+    closedBy: RETIREMENT.GUARD_DELETED,
+  },
+  {
+    file: 'validate-suite-membership.js',
+    match: 'validate-no-methodology-vocab.js',
     closedBy: RETIREMENT.GUARD_DELETED,
   },
   // The second package.json entry (`match: 'validate-no-methodology-vocab.js'`) was removed
