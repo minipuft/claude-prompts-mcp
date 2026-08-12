@@ -245,8 +245,9 @@ scenarios:
 
   - id: prompt-delete-honors-the-confirm-safety
     claim_source: >-
-      resource_manager `confirm` parameter, schema text — "Safety confirmation for delete
-      operation." It names DELETE specifically, and rollback enforces the same parameter.
+      resource_manager `confirm` parameter, schema text — "Required `true` for destructive
+      actions: `delete` and `rollback`. Both refuse without it." Enforced on delete since the
+      4.0 line; before that the sentence named delete while only rollback read the parameter.
     requests:
       - tool: resource_manager
         args:
@@ -260,19 +261,6 @@ scenarios:
       - tool: resource_manager
         args: { resource_type: prompt, action: delete, id: conformance_delete_guard }
     expect: { error_contains: 'requires confirmation' }
-    known_divergence:
-      measured: >-
-        Delete WITHOUT `confirm` succeeds and removes the prompt directory: "🗑️ Deleting Prompt
-        ... ✅ Prompt successfully removed from system". The parameter whose only documented
-        purpose is guarding this action is not read on this path, while the SAME parameter is
-        enforced for rollback in the same handler — measured 2026-08-11, in one run, which rules
-        out a configuration difference. The schema sentence names delete explicitly, so the
-        description is currently false rather than merely incomplete.
-      closed_by: >-
-        Enforcing `confirm` on delete — a breaking change to the tool surface under CLAUDE.md
-        § Public API Contract, so it belongs to a major bump — or correcting the parameter
-        description to state that only rollback enforces it. Then delete this block.
-      since: '2026-08-11'
 
   # ── Framework switch round-trip (Tier 0.5b row B2) ─────────────────────────
   #

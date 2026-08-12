@@ -25,7 +25,7 @@ export const resourceManagerInputSchema = z
   .object({
     // ── Core parameters ──────────────────────────────────────────────────
     /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'framework', 'checkpoint']),
+    resource_type: z.enum(['prompt', 'gate', 'framework']),
     /** Operation to perform. */
     action: z.enum([
       'create',
@@ -41,7 +41,6 @@ export const resourceManagerInputSchema = z
       'history',
       'rollback',
       'compare',
-      'clear',
     ]),
     /** Resource identifier. Required for create, update, delete, inspect, reload, switch. */
     id: z.string().optional(),
@@ -51,7 +50,10 @@ export const resourceManagerInputSchema = z
     description: z.string().optional(),
     /** Filter list to enabled resources only. Default: true. */
     enabled_only: z.boolean().optional(),
-    /** Safety confirmation for delete operation. */
+    /**
+     * Required `true` for destructive actions: `delete` and `rollback`. Both refuse without it.
+     * Delete cannot be undone — rollback cannot restore a deleted prompt.
+     */
     confirm: z.boolean().optional(),
     /** Audit reason for reload/delete/switch operations. */
     reason: z.string().trim().optional(),

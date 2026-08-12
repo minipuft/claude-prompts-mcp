@@ -139,29 +139,3 @@ scenarios:
       - tool: resource_manager
         args: { resource_type: framework, action: inspect, id: cageerf }
     expect: { text_contains: 'C.A.G.E.E.R.F Framework' }
-
-  # ── checkpoint resource_type (Tier 0.5b row A5) ────────────────────────────
-  - id: resource-manager-checkpoint-is-available
-    claim_source: >-
-      resource_manager input schema — `resource_type` is an enum of four values, and `checkpoint`
-      is one of them. Nothing in the schema, the contract or the docs marks it conditional.
-    requests:
-      - tool: resource_manager
-        args: { resource_type: checkpoint, action: list }
-    expect: { text_contains: 'Checkpoint' }
-    known_divergence:
-      measured: >-
-        Every checkpoint action returns "Checkpoint manager is not available. Ensure checkpoint
-        support is enabled." — create, list, rollback and clear alike, measured 2026-08-11. This is
-        NOT a disabled-by-config surface: `createCheckpointToolHandler` is defined in
-        `checkpoint/manager.ts` and re-exported from `checkpoint/index.ts`, and `rg` finds NO call
-        site anywhere in `src/`. `ResourceManagerRouter.checkpointManager` is declared optional and
-        never injected, so the guard in `router.ts:405` is unconditionally true. A quarter of the
-        published `resource_type` enum cannot succeed under any configuration — a reader with no
-        producer, where the schema enum is the user-facing interface that decides it is a missing
-        producer rather than a redundant channel.
-      closed_by: >-
-        Constructing and injecting the handler (the error text promises an "enable" that does not
-        exist), or removing `checkpoint` from the `resource_type` enum and its contract entry.
-        Either way delete this block. Filed as plan row 0.5.26.
-      since: '2026-08-11'

@@ -198,8 +198,7 @@
           "switch",
           "history",
           "rollback",
-          "compare",
-          "clear"
+          "compare"
         ],
         "type": "string"
       },
@@ -421,7 +420,7 @@
         "type": "string"
       },
       "resource_type": {
-        "enum": ["prompt", "gate", "framework", "checkpoint"],
+        "enum": ["prompt", "gate", "framework"],
         "type": "string"
       },
       "retry_config": {

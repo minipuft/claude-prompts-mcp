@@ -23,7 +23,6 @@ import type {
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
-import type { CheckpointToolHandler } from '../checkpoint/index.js';
 
 /**
  * Script tool definition for inline tool creation
@@ -54,7 +53,7 @@ export interface ToolDefinitionInput {
 /**
  * Resource types supported by the unified manager
  */
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'checkpoint';
+export type ResourceType = 'prompt' | 'gate' | 'framework';
 
 /**
  * All possible actions across resource types
@@ -71,16 +70,14 @@ export type ResourceAction =
   | 'guide' // prompt only
   | 'switch' // framework only
   | 'history' // versioning (all types)
-  | 'rollback' // versioning (all types) + checkpoint
-  | 'compare' // versioning (all types)
-  | 'clear'; // checkpoint only
+  | 'rollback' // versioning (all types)
+  | 'compare'; // versioning (all types)
 
 /**
  * Actions specific to certain resource types
  */
 export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
 export const FRAMEWORK_ONLY_ACTIONS: ResourceAction[] = ['switch'];
-export const CHECKPOINT_ONLY_ACTIONS: ResourceAction[] = ['clear'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
 export const COMMON_ACTIONS: ResourceAction[] = [
   'create',
@@ -222,7 +219,6 @@ export interface ResourceManagerDependencies {
   promptResourceHandler: PromptResourceHandlerPort;
   gateManager: GateToolHandler;
   frameworkManager: FrameworkToolHandler;
-  checkpointManager?: CheckpointToolHandler;
 }
 
 /**

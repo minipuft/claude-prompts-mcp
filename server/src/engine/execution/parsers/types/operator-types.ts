@@ -55,7 +55,7 @@ export interface GateOperator {
    * - max:N - Maximum iterations
    * - :fast/:full/:extended - Presets for common configurations
    *
-   * Checkpoint/rollback available via resource_manager tool.
+   * Checkpoint/rollback is no longer available — the resource_type was removed in the 4.0 line.
    */
   shellVerify?: ShellVerifyGate;
 }

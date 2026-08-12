@@ -388,14 +388,50 @@ export class PromptLifecycleProcessor {
   async deletePrompt(args: any): Promise<ToolResponse> {
     validateRequiredFields(args, ['id']);
 
-    const promptToDelete = this.getPromptsData().find((prompt) => prompt.id === args.id);
+    // Narrowed once, immediately after the required-field check, rather than reaching into `any`
+    // at each use. The parameter type is pre-existing; this at least keeps the destructive path
+    // reading typed values, and stops every new reference adding another unsafe access.
+    const { id, confirm } = args as { id: string; confirm?: boolean };
+
+    const promptToDelete = this.getPromptsData().find((prompt) => prompt.id === id);
     if (!promptToDelete) {
-      throw new PromptError(`Prompt not found: ${args.id}`);
+      throw new PromptError(`Prompt not found: ${id}`);
     }
 
-    const dependencies = this.findPromptDependencies(args.id);
+    const dependencies = this.findPromptDependencies(id);
 
-    let response = `🗑️ **Deleting Prompt**: ${promptToDelete.name} (${args.id})\n\n`;
+    // BREAKING (major): `confirm` is now enforced on delete, as its schema text has always claimed.
+    //
+    // It was read on `rollback` and ignored here — the gate was on the RECOVERABLE verb and absent
+    // from the unrecoverable one. Delete has no undo through the tool surface: the prompt's
+    // `version_history` rows survive (nothing calls `deleteHistory` on this path), but
+    // `handleRollback` returns "Prompt not found" when the prompt is gone, so those snapshots are
+    // unreachable by any action.
+    //
+    // The dependency list is computed BEFORE the gate so the refusal can name what would break.
+    // Reporting the blast radius and then proceeding anyway — the previous behaviour — told the
+    // caller exactly why to stop, after stopping was no longer possible.
+    if (confirm !== true) {
+      const blastRadius =
+        dependencies.length > 0
+          ? `\n\n⚠️ ${dependencies.length} prompt(s) reference it and would break:\n` +
+            dependencies.map((dep) => `- ${dep.name} (${dep.id})`).join('\n')
+          : '';
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `⚠️ Deletion requires confirmation.\n\n` +
+              `To delete prompt '${id}', set confirm: true.\n` +
+              `This cannot be undone — rollback cannot restore a deleted prompt.${blastRadius}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    let response = `🗑️ **Deleting Prompt**: ${promptToDelete.name} (${id})\n\n`;
 
     if (dependencies.length > 0) {
       response += `⚠️ **Warning**: This prompt is referenced by ${dependencies.length} other prompts:\n`;
