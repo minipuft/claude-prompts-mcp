@@ -8,7 +8,7 @@ tags: []
 # Downstream Standards Federation Implementation Plan
 
 **Status:** RETIRED to reference 2026-08-12 — the contract layer shipped; the open remainder moved
-to [`agent-plugins-migration-2026-08-08.md`](agent-plugins-migration-2026-08-08.md) **Tier 7**.
+to [`agent-plugins-migration-2026-08-08.md`](../agent-plugins-migration-2026-08-08.md) **Tier 7**.
 
 **Companion:**
 [`downstream-standards-federation-2026-08-02-implementation-notes.md`](downstream-standards-federation-2026-08-02-implementation-notes.md)

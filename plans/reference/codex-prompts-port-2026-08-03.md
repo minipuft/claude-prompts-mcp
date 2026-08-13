@@ -13,7 +13,7 @@ its upstream seams are live and **client-agnostic** — the `PLUGIN_ROOT` branch
 which repaired a defect that had silently disabled object-shaped verdicts on _every_ client
 including Claude Code. None of that retires with the repo it was built for.
 
-**Superseded only in distribution.** [`agent-plugins-migration-2026-08-08.md`](agent-plugins-migration-2026-08-08.md)
+**Superseded only in distribution.** [`agent-plugins-migration-2026-08-08.md`](../agent-plugins-migration-2026-08-08.md)
 Tier 4.2 archives the codex-prompts repo in favour of a native Agent Plugins package. Kept at
 `reference` rather than archived because Tier 4.1 cites §Spike Results: those four measurements
 against codex-cli 0.146 are the only record of what Codex actually does, and the `.mcp.json`

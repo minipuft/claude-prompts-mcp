@@ -150,7 +150,7 @@ Findings (live chain run, 2026-08-09):
 **Research questions**: a patch-style `update` mode (anchored old/new-string or section-targeted replacement) with server-side template validation + dry-run render; whether `inspect` needs a section-addressed detail level; interaction with versioning (a patch still snapshots a full version); relationship to the step-level chain CRUD gap already tracked in the chain-management tooling backlog memory.
 **Acceptance**: a one-section prompt edit is expressible without transmitting the untouched sections, rejected cleanly on template-syntax error, and produces the same `version_history` entry a full update would.
 
-### P8 — MIGRATED OUT 2026-08-12 → [`subagent-delegation-contract-2026-08-12.md`](subagent-delegation-contract-2026-08-12.md) tier S5
+### P8 — MIGRATED OUT 2026-08-12 → [`subagent-delegation-contract-2026-08-12.md`](../subagent-delegation-contract-2026-08-12.md) tier S5
 
 Agent export left this plan intact (goal, both sightings, promotion condition, research questions).
 It was queued here because it was noticed here, but this plan is about **chain runtime
