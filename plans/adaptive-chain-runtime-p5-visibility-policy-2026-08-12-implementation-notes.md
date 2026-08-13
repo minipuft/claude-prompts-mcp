@@ -357,6 +357,312 @@ the only place the filtered list exists.
 
 ## Validation runs
 
+- 2026-08-12 22:45 · `python3 - <<'PY' p='plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12.md' s=open(p,encoding='utf-8').read() subs=[ ` · ran
+- 2026-08-12 22:44 · `git add plans/adaptive-chain-runtime-2026-08-09.md plans/adaptive-chain-runtime-2026-08-09-implementation-notes.md plans` · ran
+- 2026-08-12 22:36 · `for f in server/package.json server/scripts/run-validation-suite.js server/scripts/eslint-ratchet.js server/resources/ga` · ran
+- 2026-08-12 22:35 · `python3 - << 'PYEOF' plan = 'plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12.md' lines = open(plan).read()` · ran
+- 2026-08-12 22:32 · `cd server && npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci && npm run ` · ran
+- 2026-08-12 22:31 · `python3 - << 'PYEOF' p = 'scripts/validate-plan-row-tracking.js' s = open(p).read() # 1) auditOpenRows takes an entries ` · ran
+- 2026-08-12 22:30 · `cd server && npm run validate:plan-row-tracking:self-test 2>&1 | tail -8` · ran
+- 2026-08-12 22:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -3 && echo "=== LINT ===" && n` · ran
+- 2026-08-12 22:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -3; echo "===" ; npm run lint:` · ran
+- 2026-08-12 22:28 · `cd server && npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci && npm run ` · ran
+- 2026-08-12 22:27 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'NOTES' **Tier 1 addendum — broa` · ran
+- 2026-08-12 22:27 · `ps -eo pid,etime,cmd | grep -E "jest" | grep -v grep | head -5` · ran
+- 2026-08-12 22:27 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'NOTES' **Formatting note (Tier ` · ran
+- 2026-08-12 22:27 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad; md5s` · ran
+- 2026-08-12 22:27 · `git show HEAD:plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md | npx prettier --check --st` · ran
+- 2026-08-12 22:26 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad && cp` · ran
+- 2026-08-12 22:26 · `cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad/notes` · ran
+- 2026-08-12 22:26 · `git show HEAD:plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md > /tmp/claude-1000/-home-mi` · ran
+- 2026-08-12 22:26 · `npx prettier --check plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md 2>&1 | tail -5` · ran
+- 2026-08-12 22:26 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementat` · ran
+- 2026-08-12 22:26 · `git stash list | head -3; npx prettier --check plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-not` · ran
+- 2026-08-12 22:25 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'WRITEBACK' ## Tier 2 — worker e` · ran
+- 2026-08-12 22:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 550 npm run test:match -- "visibility-policy|p5-acce` · ran
+- 2026-08-12 22:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 900 npx cross-env NODE_OPTIONS="--experimental-vm-mo` · ran
+- 2026-08-12 22:23 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci && npm run validate:all ` · ran
+- 2026-08-12 22:16 · `npm run test:match -- "resource-manager|file-operations|version-history|prompt-patch|p7-acceptance" 2>&1 | rg "Tests:|Su` · ran
+- 2026-08-12 22:15 · `rg -n "overrides|permanent|frozen|freez" tooling/contracts/resource-manager.json | head -4 && npm run typecheck 2>&1 | t` · ran
+- 2026-08-12 22:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write tests/unit/execution/formatting/respons` · ran
+- 2026-08-12 22:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check src/engine/execution/formatting/respons` · ran
+- 2026-08-12 22:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/engine/execution/formatting/response-assemble` · ran
+- 2026-08-12 22:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "visibility|p5-acceptance|integration/` · ran
+- 2026-08-12 22:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "operator-validation" 2>&1 | tail -8` · ran
+- 2026-08-12 22:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "06-|delegation|chain-operator" 2>&1 |` · ran
+- 2026-08-12 22:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -4 && echo "=== LINT ===" && n` · ran
+- 2026-08-12 22:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && md5sum src/mcp/tools/resource-manager/core/router.ts && npm ` · ran
+- 2026-08-12 22:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:arch 2>&1 | tail -8; echo "===ESLINT PER-FI` · ran
+- 2026-08-12 22:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -4 && echo "===GATE2===" && np` · ran
+- 2026-08-12 22:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:arch 2>&1 | tail -15` · ran
+- 2026-08-12 22:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager/router" 2>&1 | tail ` · ran
+- 2026-08-12 22:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "operator-validation|integration/chain` · ran
+- 2026-08-12 22:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "c` · ran
+- 2026-08-12 22:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ls tsconfig*.json; cat scripts/typecheck-tests-ratchet.js | ` · ran
+- 2026-08-12 22:09 · `npx prettier --check plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md 2>&1 | tail -` · ran
+- 2026-08-12 22:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit -p tsconfig.tests.json 2>&1 | grep -i "chai` · ran
+- 2026-08-12 22:09 · `cat >> plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md <<'NOTES' ## OQ-P7-8 — impl` · ran
+- 2026-08-12 22:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "response-assembler|session-stage|blue` · ran
+- 2026-08-12 22:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "response-assembler|session-stage|blue` · ran
+- 2026-08-12 22:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "response-assembler|session-stage|blue` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== typecheck ===" && npm run typecheck 2>&1 | tail -5` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "06-|delegation|chain-operator" 2>&1 |` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck:tests:ratchet 2>&1 | tail -8` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:arch 2>&1 | tail -10` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck && npm run lint:ratchet && npm run typeche` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -8` · ran
+- 2026-08-12 22:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "response-assembler" 2>&1 | tail -40` · ran
+- 2026-08-12 22:07 · `cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad/06-mi` · ran
+- 2026-08-12 22:07 · `git stash list >/dev/null; mkdir -p /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-b` · ran
+- 2026-08-12 22:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "response-assembler" 2>&1 | tail -50` · ran
+- 2026-08-12 22:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:06 · `git show HEAD:server/.eslint-ratchet-baseline.json | rg -n "no-unused-vars" -A 3 && echo "=== diff of baseline ===" && g` · ran
+- 2026-08-12 22:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && git status --porcelain .eslint-ratchet-baseline.json; rg -n ` · ran
+- 2026-08-12 22:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && fd -H "ratchet" scripts/ . --max-depth 2 2>/dev/null | head ` · ran
+- 2026-08-12 22:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:06 · `for f in server/src/engine/execution/context/context-resolver.ts server/src/engine/execution/parsers/symbolic-operator-p` · ran
+- 2026-08-12 22:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src --rule '{"@typescript-eslint/no-unused-vars":` · ran
+- 2026-08-12 22:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 22:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/engine/execution/pipeline/stages/06-operator-` · ran
+- 2026-08-12 22:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -12` · ran
+- 2026-08-12 22:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5 && echo "===LINT===" && npm` · ran
+- 2026-08-12 22:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5` · ran
+- 2026-08-12 22:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 22:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/mcp/tools/resource-manager/prompt/services/pr` · ran
+- 2026-08-12 22:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 22:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5; echo "===LINT==="; npm run` · ran
+- 2026-08-12 22:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 22:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx jest tests/unit/execution/pipeline/p6-probe.test.ts 2>&1` · ran
+- 2026-08-12 22:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx jest tests/unit/execution/pipeline/p6-probe.test.ts 2>&1` · ran
+- 2026-08-12 22:03 · `tail -8 /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/5c2e54b0-7145-4581-9f2d-cf1d4e773e39/tasks/bhqwz` · ran
+- 2026-08-12 22:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && cat jest.config.js 2>/dev/null || cat jest.config.cjs 2>/dev` · ran
+- 2026-08-12 22:02 · `git stash list >/dev/null; npx prettier --check docs/reference/mcp-tools.md >/dev/null 2>&1; echo "---"; git diff --stat` · ran
+- 2026-08-12 22:02 · `npx prettier --check docs/reference/mcp-tools.md 2>&1 | tail -5` · ran
+- 2026-08-12 22:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest tests/unit` · ran
+- 2026-08-12 22:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx jest tests/unit 2>&1 | tail -8` · ran
+- 2026-08-12 22:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|file-operations|vers` · ran
+- 2026-08-12 22:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "version-history" 2>&1 | tail -25` · ran
+- 2026-08-12 22:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "prompt-lifecycle-processor" 2>&1 | ta` · ran
+- 2026-08-12 21:59 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "file-operations" 2>&1 | tail -30` · ran
+- 2026-08-12 21:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "argument-contract" 2>&1 | tail -30` · ran
+- 2026-08-12 21:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run generate:contracts 2>&1 | tail -15 && echo "=== type` · ran
+- 2026-08-12 21:51 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12-imple` · ran
+- 2026-08-12 21:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "gate-review-scoping|chain-session|res` · ran
+- 2026-08-12 21:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck:tests:ratchet 2>&1 | tail -60` · ran
+- 2026-08-12 21:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -60` · ran
+- 2026-08-12 21:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -40` · ran
+- 2026-08-12 21:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 21:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "gate-review-scoping" 2>&1 | tail -100` · ran
+- 2026-08-12 21:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "gate-review-scoping" 2>&1 | tail -80` · ran
+- 2026-08-12 21:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx jest tests/unit/gates/services/gate-review-scoping.test.` · ran
+- 2026-08-12 21:49 · `npx prettier --check plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12-implementation-notes.md 2>&1 echo "---` · ran
+- 2026-08-12 21:49 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12-imple` · ran
+- 2026-08-12 21:48 · `npx prettier --write docs/reference/chain-schema.md 2>&1 && npx prettier --check docs/reference/chain-schema.md docs/ref` · ran
+- 2026-08-12 21:45 · `npm run typecheck 2>&1 | tail -2 && npm run lint:ratchet 2>&1 | tail -1 && npm run test:match -- "p7-acceptance|prompt-p` · ran
+- 2026-08-12 21:44 · `npx eslint src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts src/mcp/tools/resource-manager/p` · ran
+- 2026-08-12 21:44 · `npx eslint src/mcp/tools/resource-manager/prompt/ --rule '{"@typescript-eslint/no-unnecessary-type-assertion":"error"}' ` · ran
+- 2026-08-12 21:44 · `npx eslint src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts src/mcp/tools/resource-manager/p` · ran
+- 2026-08-12 21:44 · `npm run typecheck 2>&1 | tail -3 && npm run lint:ratchet 2>&1 | tail -1 && npm run typecheck:tests:ratchet 2>&1 | tail -` · ran
+- 2026-08-12 21:42 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | head -25` · ran
+- 2026-08-12 21:42 · `npm run typecheck 2>&1 | head -25` · ran
+- 2026-08-12 21:34 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-impl` · ran
+- 2026-08-12 21:33 · `npm run typecheck:tests:ratchet 2>&1 | tail -80` · ran
+- 2026-08-12 21:33 · `npm run lint:ratchet 2>&1 | tail -60` · ran
+- 2026-08-12 21:32 · `npm run typecheck 2>&1 | tail -60` · ran
+- 2026-08-12 21:32 · `npm run test:match -- "p7-acceptance|prompt-patch-update|resource-manager|file-operations|version-history" 2>&1 | tail -` · ran
+- 2026-08-12 21:31 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -150` · ran
+- 2026-08-12 21:31 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -30` · ran
+- 2026-08-12 21:31 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -150` · ran
+- 2026-08-12 21:29 · `npm run test:match -- "p7-acceptance" 2>&1 | grep -A 40 "DEBUG"` · ran
+- 2026-08-12 21:28 · `npm run test:match -- "p7-acceptance" 2>&1 | grep -A 20 "DEBUG"` · ran
+- 2026-08-12 21:28 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -60` · ran
+- 2026-08-12 21:28 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -150` · ran
+- 2026-08-12 21:25 · `npm run test:match -- "p7-acceptance" 2>&1 | rg -A12 "clause \(c\)" | head -30` · ran
+- 2026-08-12 21:25 · `npx jest tests/integration/mcp-tools/p7-acceptance.integration.test.ts -t "clause \(c\)" 2>&1 | tail -20` · ran
+- 2026-08-12 21:24 · `npm run test:match -- "p7-acceptance" 2>&1 | rg "●.*P7 acceptance" | sort -u` · ran
+- 2026-08-12 21:24 · `npm run test:match -- "p7-acceptance" 2>&1 | rg "✓|✕|Tests:" | head -10` · ran
+- 2026-08-12 21:23 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -8` · ran
+- 2026-08-12 21:19 · `npm run test:match -- "p7-acceptance" 2>&1 | rg -B8 "266:34" | head -30` · ran
+- 2026-08-12 21:19 · `npm run test:match -- "p7-acceptance" 2>&1 | tail -25` · ran
+- 2026-08-12 21:16 · `python3 - << 'PYEOF' notes = 'plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md' tex` · ran
+- 2026-08-12 21:15 · `python3 - << 'PYEOF' plan = 'plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12.md' lines = open(plan).read()` · ran
+- 2026-08-12 21:15 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx prettier --write plans/adaptive-chain-runtime-p5-visibility-pol` · ran
+- 2026-08-12 21:15 · `npm run validate:format 2>&1 | tail -3 && npm run test:match -- "resource-manager" 2>&1 | tail -5` · ran
+- 2026-08-12 19:36 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-impl` · ran
+- 2026-08-12 19:35 · `npx --prefix server prettier --check docs/reference/mcp-tools.md 2>&1 echo "---diff stat---" git diff --stat -- docs/ref` · ran
+- 2026-08-12 19:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write ../docs/reference/mcp-tools.md 2>&1 | t` · ran
+- 2026-08-12 19:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check ../docs/reference/mcp-tools.md 2>&1 | t` · ran
+- 2026-08-12 19:30 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - << 'PYEOF' plan = 'plans/adaptive-chain-runtime-p7-resour` · ran
+- 2026-08-12 19:30 · `npm run test:match -- "file-operations|resource-manager" 2>&1 | tail -8` · ran
+- 2026-08-12 19:30 · `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet 2>&1 | tail -5` · ran
+- 2026-08-12 19:28 · `\ echo "=== typecheck ===" && npm run typecheck 2>&1 | tail -5 && \ echo "=== lint:ratchet ===" && npm run lint:ratchet ` · ran
+- 2026-08-12 19:27 · `npm run test:match -- "file-operations|resource-manager" 2>&1 | tail -100` · ran
+- 2026-08-12 19:27 · `npm run typecheck:tests:ratchet 2>&1 | tail -50` · ran
+- 2026-08-12 19:26 · `npm run typecheck 2>&1 | tail -30` · ran
+- 2026-08-12 19:26 · `npm run lint:ratchet 2>&1 | tail -40` · ran
+- 2026-08-12 19:26 · `npx eslint src/mcp/tools/resource-manager/prompt/operations/file-operations.ts src/mcp/tools/resource-manager/prompt/cor` · ran
+- 2026-08-12 19:26 · `npx eslint src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts 2>&1 | grep -E "import-x/order"` · ran
+- 2026-08-12 19:25 · `sed -n '90,135p' eslint.config.mjs 2>/dev/null || sed -n '90,135p' eslint.config.js 2>/dev/null || find . -maxdepth 1 -i` · ran
+- 2026-08-12 19:25 · `grep -n "import-x/order\|pathGroups\|groups:" eslint.config.* 2>/dev/null | head -40` · ran
+- 2026-08-12 19:25 · `npx eslint src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts 2>&1 | head -20` · ran
+- 2026-08-12 19:25 · `npx eslint src/mcp/tools/resource-manager/prompt/operations/file-operations.ts src/mcp/tools/resource-manager/prompt/ser` · ran
+- 2026-08-12 19:25 · `npx eslint src/mcp/tools/resource-manager/prompt/operations/file-operations.ts src/mcp/tools/resource-manager/prompt/ser` · ran
+- 2026-08-12 19:24 · `npm run lint:ratchet 2>&1 | tail -80` · ran
+- 2026-08-12 19:24 · `npm run typecheck 2>&1 | tail -60` · ran
+- 2026-08-12 19:23 · `npm run test:match -- "prompt-lifecycle-processor" 2>&1 | tail -60` · ran
+- 2026-08-12 19:23 · `npm run test:match -- "file-operations|prompt-lifecycle-processor" 2>&1 | tail -140` · ran
+- 2026-08-12 19:23 · `npm run test:match -- "prompt-lifecycle-processor" 2>&1 | tail -80` · ran
+- 2026-08-12 19:23 · `npm run test:match -- "prompt-lifecycle-processor" 2>&1 | tail -80` · ran
+- 2026-08-12 19:23 · `npm run test:match -- "prompt-lifecycle-processor" 2>&1 | tail -150` · ran
+- 2026-08-12 19:21 · `npm run test:match -- "file-operations" 2>&1 | tail -80` · ran
+- 2026-08-12 19:21 · `npm run test:match -- "file-operations" 2>&1 | tail -150` · ran
+- 2026-08-12 19:21 · `npx jest tests/integration/resources/yaml-corpus.test.ts 2>&1 | tail -40` · ran
+- 2026-08-12 19:21 · `npx jest tests/unit/mcp-tools/resource-manager/prompt/file-operations.validation.test.ts 2>&1 | tail -100` · ran
+- 2026-08-12 19:19 · `npm run typecheck 2>&1 | tail -60` · ran
+- 2026-08-12 19:12 · `python3 - << 'PYEOF' import io, re plan = '../plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12.md' with io.` · ran
+- 2026-08-12 19:11 · `wc -l src/mcp/tools/resource-manager/prompt/operations/template-patch.ts; rg -n "replace_all|anchor_ambiguous" src/mcp/t` · ran
+- 2026-08-12 19:10 · `echo "===FINAL GATE==="; npm run typecheck 2>&1 | tail -2; npm run validate:contracts 2>&1 | tail -2; npm run lint:ratch` · ran
+- 2026-08-12 19:09 · `python3 - <<'PY' import io p='/home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p7-resource-au` · ran
+- 2026-08-12 19:09 · `python3 - <<'PY' import io p='/home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p7-resource-au` · ran
+- 2026-08-12 19:09 · `until ! pgrep -f "jest --runInBand tests/integration" >/dev/null; do sleep 15; done; rg "Tests:|Suites:|●.*›" /tmp/claud` · ran
+- 2026-08-12 18:58 · `pgrep -f "jest --runInBand tests/integration" >/dev/null && echo STILL_RUNNING || rg "Tests:|Suites:|●.*›" /tmp/claude-1` · ran
+- 2026-08-12 18:58 · `cd /home/minipuft/Applications/claude-prompts-mcp && git diff --stat -- server/.eslint-ratchet-baseline.json && git diff` · ran
+- 2026-08-12 18:57 · `pgrep -f "jest --runInBand tests/integration" >/dev/null && echo STILL_RUNNING || rg "Tests:|Suites:|●.*›" /tmp/claude-1` · ran
+- 2026-08-12 18:57 · `npx prettier --check src/mcp/tools/resource-manager/prompt/utils/validation.ts; npm run typecheck 2>&1 | tail -2; npm ru` · ran
+- 2026-08-12 18:57 · `ls -la /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/5c2e54b0-7145-4581-9f2d-cf1d4e773e39/tasks/ | tai` · ran
+- 2026-08-12 18:57 · `pgrep -f "jest --runInBand tests/integration" >/dev/null && echo STILL_RUNNING || rg "Tests:|Suites:|●.*›" /tmp/claude-1` · ran
+- 2026-08-12 18:56 · `pgrep -f "jest --runInBand tests/integration" >/dev/null && echo STILL_RUNNING || rg "Tests:|Suites:|●.*›" /tmp/claude-1` · ran
+- 2026-08-12 18:56 · `until ! pgrep -f "jest --runInBand tests/integration" >/dev/null; do sleep 10; done; echo INTEGRATION_DONE` · ran
+- 2026-08-12 18:56 · `pgrep -f "jest --runInBand tests/integration" >/dev/null && echo STILL_RUNNING || rg "●.*›|Tests:|Suites:|exit" /tmp/cla` · ran
+- 2026-08-12 18:55 · `cat /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/5c2e54b0-7145-4581-9f2d-cf1d4e773e39/tasks/bjjco9cpd` · ran
+- 2026-08-12 18:55 · `cat >> /home/minipuft/Applications/claude-prompts-mcp/plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-impl` · ran
+- 2026-08-12 18:54 · `NODE_OPTIONS="--experimental-vm-modules" timeout 1200 npx jest --runInBand tests/integration 2>&1 | rg "●.*›|Tests:|Suit` · ran
+- 2026-08-12 18:43 · `NODE_OPTIONS="--experimental-vm-modules" timeout 900 npx jest --runInBand tests/unit 2>&1 | rg "●.*›|Tests:|Suites:" | h` · ran
+- 2026-08-12 18:42 · `echo "===TYPECHECK==="; npm run typecheck 2>&1 | tail -2; echo "===VALIDATE:CONTRACTS==="; npm run validate:contracts 2>` · ran
+- 2026-08-12 18:41 · `npx prettier --write src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts src/mcp/tools/resource` · ran
+- 2026-08-12 18:41 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/utils/validation.ts' s=io.open(p,encoding='utf-8').r` · ran
+- 2026-08-12 18:40 · `npx eslint --format json src/mcp/tools/schemas/resource-manager.schema.ts src/mcp/tools/resource-manager/core/types.ts s` · ran
+- 2026-08-12 18:40 · `rg -n "eslint|glob|src|tests" scripts/eslint-ratchet.js | head -20` · ran
+- 2026-08-12 18:40 · `npx eslint --format json src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts 2>/dev/null | node` · ran
+- 2026-08-12 18:40 · `npm run lint:ratchet 2>&1 | tail -6` · ran
+- 2026-08-12 18:39 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/utils/validation.ts' s=io.open(p,encoding='utf-8').r` · ran
+- 2026-08-12 18:39 · `echo "=== template-patch.ts ==="; npx eslint src/mcp/tools/resource-manager/prompt/operations/template-patch.ts 2>&1 | t` · ran
+- 2026-08-12 18:39 · `npx eslint src/mcp/tools/resource-manager/prompt/operations/template-patch.ts src/mcp/tools/resource-manager/prompt/util` · ran
+- 2026-08-12 18:39 · `npm run typecheck 2>&1 | tail -3; echo "===CONTRACTS==="; npm run validate:contracts 2>&1 | tail -3; echo "===LINT:RATCH` · ran
+- 2026-08-12 18:38 · `npx prettier --write src/mcp/tools/resource-manager/prompt/operations/template-patch.ts tests/unit/mcp-tools/resource-ma` · ran
+- 2026-08-12 18:38 · `npx prettier --check src/mcp/tools/resource-manager/prompt/operations/template-patch.ts src/mcp/tools/resource-manager/p` · ran
+- 2026-08-12 18:37 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/core/router.ts' s=io.open(p,encoding='utf-8').read() s=s.re` · ran
+- 2026-08-12 18:37 · `npm run test:match -- "resource-manager-workflow" 2>&1 | rg "●.*›|Tests:|Suites:" | head` · ran
+- 2026-08-12 18:37 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/operations/template-patch.ts' s=io.open(p,encoding='` · ran
+- 2026-08-12 18:37 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open(p,` · ran
+- 2026-08-12 18:37 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open(p,` · ran
+- 2026-08-12 18:36 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open(p,` · ran
+- 2026-08-12 18:36 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open(p,` · ran
+- 2026-08-12 18:36 · `npm run test:match -- "patch-update|prompt-patch-update" 2>&1 | rg "●.*›" | head -10` · ran
+- 2026-08-12 18:36 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open(p,` · ran
+- 2026-08-12 18:36 · `python3 - <<'PY' import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open(p,` · ran
+- 2026-08-12 18:36 · `python3 - <<'PY' import io,re p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' s=io.open` · ran
+- 2026-08-12 18:35 · `python3 - <<'PY' import io,re p='tests/integration/mcp-tools/prompt-patch-update.test.ts' s=io.open(p,encoding='utf-8').` · ran
+- 2026-08-12 18:35 · `npm run test:match -- "prompt-patch-update" 2>&1 | tail -50` · ran
+- 2026-08-12 18:34 · `npm run test:match -- "patch-update" 2>&1 | tail -60` · ran
+- 2026-08-12 18:33 · `npm run test:match -- "template-patch" 2>&1 | tail -20` · ran
+- 2026-08-12 18:32 · `npm run validate:contracts 2>&1 | tail -8; echo "===ARCH==="; npm run validate:arch 2>&1 | tail -15` · ran
+- 2026-08-12 18:32 · `npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 18:31 · `npm run generate:contracts 2>&1 | tail -5; echo "=== typecheck ==="; npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 18:20 · `python3 - << 'PYEOF' import io, re notes = '../plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementat` · ran
+- 2026-08-12 18:20 · `npx prettier --write tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor.test.ts tests/unit/versioni` · ran
+- 2026-08-12 18:19 · `python3 -c " import io p='src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.ts' t=io.open(p,enco` · ran
+- 2026-08-12 18:18 · `python3 - << 'PYEOF' import io p = 'tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor.test.ts' wit` · ran
+- 2026-08-12 18:18 · `npm run test:match -- "resource-manager|versioning" 2>&1 | rg "Tests:|Suites:"; echo -- FALSIFY; cp src/mcp/tools/resour` · ran
+- 2026-08-12 18:17 · `python3 - << 'PYEOF' import io p = 'tests/unit/mcp-tools/resource-manager/prompt/prompt-lifecycle-processor.test.ts' wit` · ran
+- 2026-08-12 18:16 · `npm run test:match -- "resource-manager" 2>&1 | rg -B2 -A10 "✕|FAIL " | head -30` · ran
+- 2026-08-12 18:16 · `npm run test:match -- "resource-manager" 2>&1 | rg -B3 -A14 "●.*›.*›" | head -30` · ran
+- 2026-08-12 18:16 · `npm run test:match -- "resource-manager" 2>&1 | tail -4` · ran
+- 2026-08-12 18:16 · `npm run test:match -- "versioning" 2>&1 | tail -4` · ran
+- 2026-08-12 18:15 · `npm run test:match -- "versioning" 2>&1 | rg -B4 -A12 "✕|●.*›" | head -40` · ran
+- 2026-08-12 18:15 · `npm run typecheck 2>&1 | tail -2 && npm run test:match -- "versioning" 2>&1 | tail -4` · ran
+- 2026-08-12 18:12 · `cd server && npm run test:match -- "versioning|resource-manager" 2>&1 | tail -3 && npm run typecheck 2>&1 | tail -1 && n` · ran
+- 2026-08-12 18:12 · `rg -n "npx jest tests/integration" plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md` · ran
+- 2026-08-12 18:11 · `python3 - <<'PY' import io p = 'plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md' s` · ran
+- 2026-08-12 18:10 · `pgrep -f "jest tests/integration" >/dev/null && echo RUNNING || cat /tmp/claude-1000/-home-minipuft-Applications-claude-` · ran
+- 2026-08-12 18:10 · `pgrep -f "jest tests/integration" >/dev/null && echo RUNNING || echo DONE; ls -la /tmp/claude-1000/-home-minipuft-Applic` · ran
+- 2026-08-12 18:10 · `sleep 90 2>/dev/null; pgrep -f "jest tests/integration" >/dev/null && echo RUNNING || cat /tmp/claude-1000/-home-minipuf` · ran
+- 2026-08-12 18:10 · `pgrep -f "jest tests/integration" >/dev/null && echo RUNNING || cat /tmp/claude-1000/-home-minipuft-Applications-claude-` · ran
+- 2026-08-12 18:10 · `pgrep -f "jest tests/integration" >/dev/null && echo RUNNING || cat /tmp/claude-1000/-home-minipuft-Applications-claude-` · ran
+- 2026-08-12 18:10 · `pgrep -f "jest tests/integration" >/dev/null && echo RUNNING || echo DONE` · ran
+- 2026-08-12 18:09 · `pgrep -f "jest tests/integration" >/dev/null && echo "STILL RUNNING" || echo "FINISHED"; wc -c /tmp/claude-1000/-home-mi` · ran
+- 2026-08-12 18:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check src/mcp/tools/resource-manager/prompt/s` · ran
+- 2026-08-12 18:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 300 npx jes` · ran
+- 2026-08-12 18:07 · `wc -c /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/5c2e54b0-7145-4581-9f2d-cf1d4e773e39/tasks/b7xq1y2` · ran
+- 2026-08-12 18:06 · `cat >> plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md <<'EOF' ### Tier 2 validati` · ran
+- 2026-08-12 18:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 900 npx jes` · ran
+- 2026-08-12 17:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 900 npx jes` · ran
+- 2026-08-12 17:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:table-contracts 2>&1 | tail -6; echo "===PH` · ran
+- 2026-08-12 17:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "versioning|resource-manager" 2>&1 | t` · ran
+- 2026-08-12 17:52 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5; echo "===LINT:RATCHET===";` · ran
+- 2026-08-12 17:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/versioning/version-history-service.ts` · ran
+- 2026-08-12 17:48 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -8; echo "===LINT:RATCHET===";` · ran
+- 2026-08-12 17:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:34 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - << 'PYEOF' import io, re plan = 'plans/adaptive-chain-run` · ran
+- 2026-08-12 17:33 · `cd server && rg -n "required|defaultValue|validation" src/mcp/tools/schemas/resource-manager.schema.ts | sed -n '1,6p'; ` · ran
+- 2026-08-12 17:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck && npm run validate:contracts && npm run l` · ran
+- 2026-08-12 17:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check src/mcp/tools/schemas/resource-manager.` · ran
+- 2026-08-12 17:31 · `npx prettier --write plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md 2>&1 | tail -` · ran
+- 2026-08-12 17:31 · `npx prettier --check plans/adaptive-chain-runtime-p7-resource-authoring-2026-08-12-implementation-notes.md 2>&1 | tail -` · ran
+- 2026-08-12 17:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 500 npx jes` · ran
+- 2026-08-12 17:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "resource-manager|prompt-schema" 2>&1 ` · ran
+- 2026-08-12 17:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck:tests:ratchet 2>&1 | tail -10` · ran
+- 2026-08-12 17:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5; echo "===VALIDATE:CONTRACT` · ran
+- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 300 npx jes` · ran
+- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 300 npx jes` · ran
+- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 300 npx jes` · ran
+- 2026-08-12 17:27 · `cd server && rg -n "currentNodeOrigin" src/engine/gates/services/run-step-view.ts src/engine/gates/services/gate-enhance` · ran
+- 2026-08-12 17:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 300 npx jes` · ran
+- 2026-08-12 17:25 · `python3 - <<'PY' import io p='plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12-implementation-notes.md' s=io` · ran
+- 2026-08-12 17:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -3 && echo "=== git status ` · ran
+- 2026-08-12 17:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -25` · ran
+- 2026-08-12 17:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && node scripts/eslint-ratchet.js check 2>&1 | tail -20 && echo` · ran
+- 2026-08-12 17:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/mcp/tools/resource-manager/prompt/operations/` · ran
+- 2026-08-12 17:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 17:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --format json src/engine/gates/services/run-step-` · ran
+- 2026-08-12 17:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:ci 2>&1 | tail -6 && echo "===TYPECHECK===" && ` · ran
+- 2026-08-12 17:20 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check src/engine/gates/services/run-step-view` · ran
+- 2026-08-12 17:19 · `git status --short | grep -v "^ M .github\|^ M README\|^ M docs/portfolio\|^ M package.json\|^ M plans/adaptive-chain-ru` · ran
+- 2026-08-12 17:19 · `cat >> plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12-implementation-notes.md <<'EOF' ## Deviations — row ` · ran
+- 2026-08-12 17:18 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && git stash list >/dev/null; git show c07a80c1:server/src/engi` · ran
+- 2026-08-12 17:17 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --format json src/engine/gates/services/gate-enha` · ran
+- 2026-08-12 17:17 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:ci 2>&1 | tail -6 && echo "===TYPECHECK===" && ` · ran
+- 2026-08-12 17:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 400 npx jes` · ran
+- 2026-08-12 17:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" timeout 300 npx jes` · ran
+- 2026-08-12 17:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && md5sum src/engine/gates/services/gate-enhancement-service.ts` · ran
+- 2026-08-12 17:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/mcp/tools/resource-manager/prompt/services/pr` · ran
+- 2026-08-12 17:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write src/engine/gates/services/gate-enhancem` · ran
+- 2026-08-12 17:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --format json src/engine/gates/services/gate-enha` · ran
+- 2026-08-12 17:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/engine/gates/services/gate-enhancement-servic` · ran
+- 2026-08-12 17:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -25` · ran
+- 2026-08-12 17:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5 && echo "---TESTS RATCHET--` · ran
+- 2026-08-12 17:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:ci 2>&1 | tail -25` · ran
+- 2026-08-12 17:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && cp /tmp/claude-1000/-home-minipuft-Applications-claude-promp` · ran
+- 2026-08-12 17:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 17:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 16:59 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 16:59 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 16:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-12 16:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx jest tests/unit/gates/services/gate-review-scoping.test.` · ran
+- 2026-08-12 16:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit 2>&1 | head -20` · ran
 - 2026-08-12 16:47 · `cd /tmp/claude-1000/p5-headcheck/server && npx tsc --noEmit > /tmp/claude-1000/tsc1.txt 2>&1; echo "SRC_TSC_EXIT=$?"; wc` · ran
 - 2026-08-12 16:46 · `cd /home/minipuft/Applications/claude-prompts-mcp WT=/tmp/claude-1000/p5-headcheck rm -rf "$WT" 2>/dev/null; git worktre` · ran
 - 2026-08-12 08:47 · `cd server && npm run test:match -- "p5-acceptance" 2>&1 | tail -4 && npm run typecheck 2>&1 | tail -1 && npm run lint:ra` · ran
@@ -609,3 +915,283 @@ The stage-06 hoist changes behavior for every YAML chain carrying `subagentModel
 delegation surface and decides with a survey of affected chains.
 
 ### Sequencing → RULED: commit P5 core now (P8 sighting two); P7 opens next; 4.4 follows the commit
+
+## Deviations — row 4.4 (P5-F4), executed after the P5 core commit
+
+### DEV-T4-7 — the join lives in `RunStepView`, not in the gate service
+
+The ruling's chain is `current node → origin_unknown_id → ledger entry → target_step_id`. That
+walks two session-owned collections (`state.nodes` and `unknownsLedger`), and the gate layer owns
+neither. Resolved in `createRunStepViewProvider` and published as one optional field,
+`RunStepView.currentNodeOrigin: { origin: 'inserted'; originUnknownId?; unknownTargetNodeId? }`.
+
+Chosen because `run-step-view.ts` is already the declared seam for run facts entering gate
+selection — its own header says the gate layer needs exactly the facts it lists, kept behind a
+function type rather than an injected `ChainSessionService`. Adding a third fact there costs one
+field; resolving it in `GateEnhancementService` would make the gate layer import ledger internals
+(`UnknownLedgerEntry`) to read one string, and would put a second definition of "which node is
+current" beside `resolveCurrentStepKey`'s.
+
+Rejected: (a) passing the whole `ChainSession` into the gate service — widens the seam the module
+exists to keep narrow; (b) re-deriving the target from the inserted node's ID — `mintInsertionId`
+slugifies, so the id is not a decodable inverse, which is the same reason `origin_unknown_id`
+exists as a column rather than being parsed back out of `id`.
+
+The field is emitted ONLY for `origin === 'inserted'`. Absence is what keeps every planned-node
+path byte-identical: the inheritance branch is entered on the field's presence, never on a node id
+failing to match a parse step (see DEV-T4-9).
+
+### DEV-T4-8 — the inherited scope reads the FULL accumulator, and only the NODE address
+
+Two choices the ruling leaves open, both settled conservatively:
+
+1. **Which accumulator snapshot.** Tier 4's per-step write publishes the accumulator _as of that
+   step_. An inserted node has no parse step, so it has no "as of" — there is no position in the
+   parse array to take a snapshot at, which is the whole reason this defect exists. The inherited
+   scope is therefore computed after the loop against the complete accumulated set, matching the
+   ruling's own wording ("accumulated gates whose `target_step_id` === that node"). Practically
+   identical: the untargeted half is run-wide by definition, and the targeted half is filtered to
+   one node.
+2. **Node address only, never an ordinal.** `filterGatesForTarget` is called with `{ nodeId }` and
+   no `stepNumber`, so a gate addressed _only_ by ordinal (`target_step_number` / `apply_to_steps`
+   with no `target_step_id`) does NOT inherit. An ordinal names a parse-time position, and the
+   run's ordinal space stopped agreeing with the parse array the moment a node was inserted —
+   inheriting one would be exactly the silent retarget OQ-P4-3's node-id-first rule exists to
+   prevent. In practice this costs nothing: `TemporaryGateRegistrar.resolveStepTarget` cross-fills
+   both forms at registration, so a gate that named a real step carries `target_step_id` too.
+
+Mechanics are reused rather than reimplemented: `filterGatesByStepTarget` and the inherited path
+now both call one `filterGatesForTarget`, so the skipped-node veto, the node-id-first precedence
+and the untargeted pass-through have a single definition. The target descriptor distinguishes
+`nodeId: null` ("no node identity, and none can be inherited" → every node-addressed gate drops)
+from `nodeId: undefined` ("this step carries no node id", the legacy P3 D10 case → the ordinal
+branch decides). Collapsing the two would have made an unknown with no target silently inherit
+every node-addressed gate — the widening the ruling explicitly rejects.
+
+### DEV-T4-9 — the branch is gated on PROVENANCE, not on "no scope was written"
+
+DEV-T4-5 suggested closing this by filtering "after the loop" against a synthetic step. The
+tempting guard is `if (reviewGateIds === undefined)`. That is wrong twice, and both are covered by
+test (h):
+
+- it fires for a run that has walked off its last node (`currentNodeId === null`, ordinal 0
+  matching nothing), which Tier 4 deliberately leaves unwritten — measured: that guard turns the
+  existing "walked off its last node writes no review scope" test red;
+- it would silently start inheriting for any future case where no parse step matched.
+
+Gating on `currentNodeOrigin` also makes the write unconditional _within_ the branch rather than a
+fallback, which matters for a chain whose parse steps carry no node ids at all: `isCurrentStep`
+then falls back to ordinal matching and can match some unrelated step for an inserted current node.
+The run's own provenance is the authority, so it overwrites.
+
+### DEV-T4-10 — the `shouldSkip` sibling residual is NOT covered for free; still open
+
+DEV-T4-5's second, smaller residual: a current step carrying `clean` / `framework` modifiers
+`continue`s before the filter runs, so no scope is published and both readers fall back run-wide.
+This fix does not touch it and was not extended to. Such a step is PLANNED, so the provider emits
+no `currentNodeOrigin` for it and the new branch never fires — verified by construction and by
+test (h), which is the same shape (no provenance → nothing written). Behaviour there is unchanged
+from `c07a80c1`.
+
+Left open deliberately: closing it means deciding what a step that receives NO gate enhancement at
+all should be reviewed against, which is a behaviour question the row-4.4 ruling does not answer.
+It is the last remaining fallback-to-run-wide path.
+
+### DEV-T4-11 — `enhanceChainSteps` cognitive complexity 30 → 31
+
+Measured with the identical ESLint config against `git show c07a80c1:` of the same file: the
+function was already **30** (Tier 4 took it 28 → 30). The one post-loop `if` costs +1. No new rule
+fires — `sonarjs/cognitive-complexity` was already reporting this function — and `lint:ratchet` is
+green at 3199 errors / 1016 warnings, unchanged. `filterGatesForTarget` (the extracted filter, +2
+branches over the original) stays under the limit and is not flagged, as its predecessor was not.
+Decomposing a 31-complexity hot-path function remains a separate refactor, per DEV-T4-6.
+
+One incidental fix: the new `&&` line tripped `prettier/prettier` (+1 over baseline) and was
+reformatted with `npx prettier --write` on the four touched files. `run-step-view.ts` and the
+integration test were already conformant.
+
+### DEV-T4-12 — falsification: three mutations, each killed only what it should
+
+Run, not inspected. Pre-mutation md5:
+`gate-enhancement-service.ts 131b47a19a1036a50d16fe0b4ff16273`,
+`run-step-view.ts d8f4f9d46188463370db96518a7850c2`.
+
+- **M1** — `inheritedReviewGateIds`: the resolved target replaced by `null`, so nothing is ever
+  inherited. **1 failed / 13 passed** — only (e), `Expected value: "temp_1" / Received array:
+["run-wide-gate"]`. (f) and (g) already expect `["run-wide-gate"]`, so they stay green, which is
+  what makes M1 criterion-(e)-specific.
+- **M2** — the whole post-loop branch disabled (pre-fix behaviour). **3 failed / 11 passed** —
+  (e), (f) and (g), each `Received: undefined`, i.e. the reader fallback to the run-wide
+  accumulator. (h), (i) and all six Tier-4 cases green, confirming planned-node behaviour is
+  untouched by the branch's existence.
+- **M3** — the guard swapped from `currentNodeOrigin !== undefined` to
+  `reviewGateIds === undefined && runStepView !== undefined` (the naive "unwritten" guard).
+  **2 failed / 12 passed** — (h), plus the pre-existing "a run that has walked off its last node
+  writes no review scope", both `Received: ["run-wide-gate"]`. This is DEV-T4-9's claim, measured.
+
+Both files restored from byte copies and re-verified by md5 against the hashes above; suite green
+after restore. Final hashes differ from the pre-mutation ones for two behaviour-free reasons
+applied AFTER all three runs: the Prettier reformat of DEV-T4-11
+(`gate-enhancement-service.ts 05cee0db8d7038cbfcb9b0d9de31e8cf`), and naming
+`resolveInsertedNodeOrigin`'s return type `InsertedNodeOrigin` instead of restating its inline
+shape (`run-step-view.ts 8e97f87a92805d13b751833a08774f22`). Typecheck and the suites were re-run
+green after each.
+
+`git diff` against `main` in this shared worktree still shows other parties' files; the md5 match
+is the restoration proof, not the diff.
+
+**Shared-worktree noise, recorded not chased**: one `lint:ratchet` run reported
+`@typescript-eslint/no-unused-vars 17 → 18` and the immediately following run reported OK with no
+edit in between. `npx eslint` over both touched source files reports zero `no-unused-vars` at any
+point. Another session was mid-edit; the ratchet measures the whole project, so it sees that.
+
+### DEV-T4-13 — the provider join needed an INTEGRATION test; the unit suite structurally cannot cover it
+
+`gate-review-scoping.test.ts` hands `GateEnhancementService` a hand-built `RunStepView`, so it
+proves what the gate layer DOES with `currentNodeOrigin` and nothing about whether the provider
+ever produces one. Three cases were added to
+`tests/integration/chain/unknown-observations-flow.integration.test.ts` — the suite that already
+owns the ledger's chain of custody — driving the real `ChainSessionStore` through
+`applyUnknownObservations` → `insertNodeAfter` → `advanceStep` and then calling
+`createRunStepViewProvider` for real: target present, target absent, and a planned node carrying
+no provenance at all. Without them a rename of `UnknownLedgerEntry.targetStepId` would leave the
+whole unit suite green while the feature returned nothing.
+
+### Row 4.5 — RULED 2026-08-13 (owner, AskUserQuestion)
+
+**No review for skipped steps.** A modifier-`shouldSkip`ped step produced no output — there is
+nothing to judge, so it triggers no gate review at all. This removes the LAST fallback-to-run-wide
+path (DEV-T4-10 residual). Rejected: keep run-wide fallback (the over-broad scope P4-F3 existed to
+fix); review against planned gates (reviews output that does not exist). ~10 lines + discriminating
+test; dispatched to a sonnet worker. Row 5.5 separately ruled: dispatch now as its own docs worker
+(NOT folded into P6 — pre-answers half of the P6 planner's OQ-P6-7).
+
+## Row 5.5 — docs worker execution
+
+**Scope**: `docs/reference/chain-schema.md` Step Schema table, the `gate-guidance` frequency
+contradiction between `docs/reference/mcp-tools.md` §Injection Control and
+`docs/guides/injection-control.md`, and this append-only note.
+
+### Chain-schema Step Schema table — measured against `ChainStepSchema`
+
+`server/src/modules/prompts/prompt-schema.ts:130-209` (`ChainStepSchema`, `.strict()`) declares
+twelve fields: `promptId`, `stepName`, `id`, `inputMapping`, `outputMapping`, `retries`,
+`subagentModel`, `agentType`, `framework`, `inlineGateIds`, `visibility`, `delegation`. The table
+had seven (missing `id`, `framework`, `inlineGateIds`, `visibility`, `delegation` — two beyond the
+three named in the row: `framework` and `delegation` were also undocumented). Added all five as
+rows, in schema declaration order, plus a `### Visibility` subsection (allowed-item table for
+`VisibilityItemSchema` at `prompt-schema.ts:80-84`: `previous_step_output`, `chain_history`,
+`unknowns_ledger`) matching the existing `### Subagent Model` / `### Agent Type` subsection
+pattern. `inlineGateIds`'s row states its "accepted but not yet wired" status verbatim from the
+schema's own doc comment (`prompt-schema.ts:172-181`) — omitting that would misrepresent a
+declared-but-inert field as live. `delegation`'s row notes it is read only by the skills-sync
+exporter, not the execution pipeline (`prompt-schema.ts:193-206`).
+
+### Frequency contradiction — measured ground truth
+
+Default `gateGuidance.frequency` is `0` (first-only), not "every step":
+
+- `server/src/infra/config/index.ts:164` — `DEFAULT` injection config: `gateGuidance: { frequency: 0, target: 'both' }`.
+- `server/src/infra/config/index.ts:527` — `toFrequency(inj?.gateGuidance?.frequency, 'first-only')`, the resolved shipped default when unset.
+- `server/src/shared/types/core-config.ts:129-130,243-244` — doc comments on both `gateGuidance.frequency` and the flat `gateGuidanceFrequency` alias: "Inject gate criteria every N steps. 0 = first-only (default: 0)".
+- `rg -n "gateGuidance" server/resources/ --no-ignore` — no match; no shipped resource config overrides the code default.
+
+`docs/guides/injection-control.md` already stated this correctly (`First step only`, `frequency: 0`
+in its example, line 12/30/45). `docs/reference/mcp-tools.md` §Injection Control (line 924) was
+the wrong doc — it said "Every step". Corrected the single cell to `First step only`; no other
+line in that doc's Injection Control section needed a change. `injection-control.md` was left
+untouched (already correct — not in this worker's writable scope for that reason too).
+
+### Prettier
+
+`npx prettier --check` on the three touched-or-writable-scope files initially flagged
+`docs/reference/chain-schema.md` (my table edit widened columns without realigning). `--write`
+reformatted it (widened the `Description` column, tightened the new Visibility table); reran
+`--check` on `chain-schema.md` + `mcp-tools.md` — both clean. `injection-control.md` was not
+touched, so not re-checked.
+
+### Smelled wrong / out of scope
+
+- `framework` and `delegation` being undocumented was not in the plan row's named gap list
+  (`visibility`, `id`, `inlineGateIds`) but is the same defect class — flagged and fixed per the
+  row's own "not a cap" instruction, not left for a future pass.
+- Did not touch `inlineGateIds`' "not yet wired" status beyond documenting it — wiring it to the
+  gate pipeline is a separate, behaviourally risky change per the schema's own comment
+  (`prompt-schema.ts:178-180`), out of scope for a docs row.
+- Did not flip the P5 plan row status (per instructions); this section is append-only.
+
+## Row 4.5 — worker execution
+
+Sonnet worker, per ruling recorded above (owner 2026-08-13, AskUserQuestion): a modifier-`shouldSkip`ped
+current step gets NO gate review — not `[]` as a symptom of "unwritten", but `[]` written
+deliberately, matching the existing "no applicable gates" convention at the empty-gate-list
+`continue` a few lines below (both readers' `?? accumulatedGateIds` treats `undefined` as
+"nothing was decided, fall back" and `[]` as "empty was decided, stop").
+
+### Where the fallback lived
+
+`server/src/engine/gates/services/gate-enhancement-service.ts:297-299` (pre-fix) — the
+`shouldSkip` branch inside `enhanceChainSteps`'s per-step loop `continue`d before reaching the
+`isCurrentStep` write at (then) line 350, so a shouldSkip'ped current step left
+`context.state.gates.reviewGateIds` unset for that call. Both readers
+(`13-session-stage.ts:225`, `response-assembler.ts:741`) resolve an unset value via
+`?? accumulatedGateIds ?? []`, which is the run-wide fallback this row closes — the last of the
+three fallback-to-run-wide paths named across Tiers 4-4.5 (post-insertion ordinal drift → 4.1-4.3;
+inserted-node no-provenance → 4.4; shouldSkip'ped current step → this row).
+
+### What was written
+
+```ts
+if (this.shouldSkip(step.executionPlan?.modifiers)) {
+  // Row 4.5 (P5-F4 residual, DEV-T4-10, owner-ruled 2026-08-13). A modifier-skipped step
+  // produces no output, so there is nothing to review. Write the same positive-empty-list
+  // convention the "no applicable gates" case below uses (line ~356) rather than leaving
+  // the field unset — unset is exactly what both readers' `?? accumulatedGateIds` fallback
+  // turns into a run-wide review, the last remaining fallback path this row closes.
+  if (this.isCurrentStep(step, currentStepKey)) {
+    context.state.gates.reviewGateIds = [];
+  }
+  continue;
+}
+```
+
+8 lines added (7 body + the guard is the pre-existing `if`), inside the owner service
+(`GateEnhancementService`) per Domain Ownership Matrix — no stage touched. `isCurrentStep` and
+`currentStepKey` were already resolved above the loop (Tier 4), so no new plumbing was needed —
+this row only moved a write earlier in the same function's control flow.
+
+### Deviations
+
+| #   | What                                                                                                                                 | Why                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Extended `stepPrompt()`/`reviewGatesFor()` test helpers with an optional `modifiers`/`skipNodeIds` parameter instead of a new helper | Existing helpers already parameterize per-node state (`plannedGates`, `view`); a parallel helper would duplicate the stage/service wiring boilerplate for no behavioral difference                         |
+| D2  | Added a second test (k) — a shouldSkip'ped step that is NOT current — beyond the single discriminating test asked for                | The ~10-line source fix has exactly one branch-order hazard worth guarding: a non-current skip must not disturb the real current step's write; cheap to add, closes a plausible off-by-one before it ships |
+
+### Falsification
+
+Pre-fix hash (matches DEV-T4-12's final recorded hash exactly, confirming no drift since Tier 4):
+`gate-enhancement-service.ts 05cee0db8d7038cbfcb9b0d9de31e8cf`. Post-fix hash:
+`gate-enhancement-service.ts c9e324a707e684c890868bab9778fa2a`.
+
+Reverted the hunk with Edit (md5 matched the pre-fix hash exactly) and re-ran
+`test:match gate-review-scoping`: **1 failed / 15 passed** — the new discriminating test (j)
+failed with `Expected: [] / Received: undefined`, i.e. exactly the pre-fix "unset → fallback"
+shape. Test (k) (the non-current-skip guard) and all 14 pre-existing tests stayed green. Restored
+the fix with Edit; md5 matched the post-fix hash exactly; re-ran the suite green (16/16).
+
+### Validation ledger
+
+| Gate                                                                           | Result                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`                                                            | clean, no output                                                                                                                                                                                           |
+| `npm run lint:ratchet`                                                         | `OK: 3199 errors, 1017 warnings (no regressions)` — 1 warning above DEV-T4-12's recorded 1016; not chased, same shared-worktree noise class DEV-T4-12 documented (other parties mid-edit in this worktree) |
+| `npm run typecheck:tests:ratchet`                                              | `OK: 377 errors in tests/ (no regressions)`                                                                                                                                                                |
+| `npm run test:match -- "gate-review-scoping\|chain-session\|response-capture"` | `Test Suites: 8 passed, 8 total` / `Tests: 106 passed, 106 total`                                                                                                                                          |
+
+### Smelled wrong / out of scope
+
+- None found beyond the ruling's own scope. The three fallback-to-run-wide paths named in Tier 4's
+  record are now all closed (4.1-4.3, 4.4, 4.5) — worth a note for whoever verifies P4-F3/P5-F4
+  closure at Tier 5 acceptance that this was the actual last one, not just the last one _named_ at
+  the time DEV-T4-10 was written.
+- Did not flip the plan row status (per instructions); this section is append-only.
