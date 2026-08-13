@@ -131,6 +131,37 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 17:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -6 echo "=== typecheck ==="; npm ru` · ran
+- 2026-08-13 17:37 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 17:35 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 17:34 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 17:32 · `cd /home/minipuft/.claude python3 -m pytest hooks/tests/test_plan_hygiene.py -q 2>&1 | tail -3 ruff check hooks/lib/plan` · ran
+- 2026-08-13 17:32 · `cd /home/minipuft/.claude sed -n '154,166p' hooks/lib/plan_hygiene.py echo "=== hook tests still pass? ==="; python3 -m ` · ran
+- 2026-08-13 17:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== renovate self-test ==="; npm run validate:renovate-ex` · ran
+- 2026-08-13 17:29 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== orphaned symbols? ===" for s in distributionMode skipNpmChec` · ran
+- 2026-08-13 14:07 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 14:06 · `cd /home/minipuft/Applications/claude-prompts-mcp S=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0` · ran
+- 2026-08-13 14:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:plan-row-tracking 2>&1 | tail -6 echo "=== pla` · ran
+- 2026-08-13 14:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -6 echo "=== tests ratchet ==="; np` · ran
+- 2026-08-13 14:02 · `cd /home/minipuft/Applications/claude-prompts-mcp S=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0` · ran
+- 2026-08-13 14:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 14:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 14:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -8` · ran
+- 2026-08-13 14:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck 2>&1 | tail -3 npm run typecheck:tests:ratche` · ran
+- 2026-08-13 13:59 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 13:59 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write scripts/render-targets.json >/dev` · ran
+- 2026-08-13 13:58 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== do sibling root scripts pass prettier? ==="; npx --prefix se` · ran
+- 2026-08-13 13:57 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write scripts/render-distributions.mjs ` · ran
+- 2026-08-13 13:57 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write scripts/render-targets.json 2>&1 ` · ran
+- 2026-08-13 13:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -30` · ran
+- 2026-08-13 13:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== in SUITE? ==="; rg -n "renovate" scripts/run-validati` · ran
+- 2026-08-13 13:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:renovate-extraction 2>&1 | head -25` · ran
+- 2026-08-13 13:56 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== yaml parses + steps landed ==="; python3 -c " import yaml,sy` · ran
+- 2026-08-13 13:54 · `cd /home/minipuft/Applications/claude-prompts-mcp node -e 'const fs=require("fs");const f="plugin.json";fs.writeFileSync` · ran
+- 2026-08-13 13:54 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff --quiet -- package.json manifest.json .claude-plugin/plugin.j` · ran
+- 2026-08-13 13:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:suite-membership 2>&1 | tail -6 echo "=== self` · ran
+- 2026-08-13 13:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:suite-membership 2>&1 | tail -15` · ran
+- 2026-08-13 13:46 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== .prettierignore ==="; cat .prettierignore 2>/dev/null echo "` · ran
 - 2026-08-13 05:56 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
 - 2026-08-13 05:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -5` · ran
 - 2026-08-13 05:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -6` · ran
@@ -831,3 +862,82 @@ retirement is the tooling Tier 7 absorbed from federation; the code fixes are co
   `server/README.md` carry 11 pre-existing broken links that would need target rulings first, and a
   gate that starts red is a gate nobody turns on. Open — flips when those 11 are resolved or
   exempted.
+
+## Deviations — Tier 2 + Tier 3 execution (2026-08-13)
+
+Section A re-measurement ran before any file was written. The rows below are logged as hit, not
+reconstructed afterwards.
+
+- **DEV-T2-1** — the tier's gate named four comparison trees; only one is a render. `gemini-prompts`
+  symlinks `hooks/lib` into `node_modules/claude-prompts/` and carries its own differing adapters,
+  `opencode-prompts` tracks no `hooks/` and no `server/`. Scope corrected in `render-targets.json`
+  with `renderKind` per target rather than deleting the entries — Tiers 4 and 5 still need them.
+- **DEV-T2-2** — serialization was measured, not chosen. Both published files are byte-exactly
+  `JSON.stringify(obj, null, 2) + "\n"`; both canonical sources are Prettier-formatted and are not.
+  `.claude-plugin/plugin.json` is prettierignored because release-please writes it, and
+  release-please emits that exact serialization. Choosing Prettier's would have put the renderer in
+  a rewrite war with the release bot on every release.
+- **DEV-T2-3** — 2.3's premise ran backwards. The rendered manifest was already version-gated and
+  predates this plan; the CANONICAL one had **no writer at all**, in neither
+  `release-please-config.json` nor `sync-versions.js`. Found by simulating a bump rather than by
+  reading the configs — reading tells you what is listed, running tells you what happens.
+- **DEV-T2-4** — my first restore list after that simulation omitted `server.json`, which
+  `sync-versions.js` also writes, so a `9.9.9` survived into the tree until the next `git status`.
+  **A restore list must be derived from what the command writes, not from what I remember passing
+  it.** Repaired by targeted rewrite rather than `git checkout` — the diff was verified to be
+  entirely mine first, and this is a shared worktree.
+- **DEV-T2-5** — the substrate gate reddened the new SUITE entry: `declares [file] but source
+contains [file, spawn]`, because the renderer's failure hint contained the literal `npm run`.
+  Reworded the hint. Declaring `spawn` would have been the cheaper fix and the wrong one — the
+  whole value of that ledger is that entries are true.
+- **DEV-T3-1** — `rg "downstream-release"` across this repo returned only an ASCII diagram, which
+  reads as "dead workflow, safe to delete". `repository_dispatch` is **cross-repo by construction**;
+  the dispatcher is `opencode-prompts/.github/workflows/release-please.yml:34-40`. A repo-scoped
+  probe cannot answer a cross-repo question, and this one would have deleted a live workflow.
+- **DEV-T3-2** — an earlier `rg` in the same session missed `.github/**` entirely, because ripgrep
+  skips dotted directories without `--hidden`. Same class as DEV-T3-1, smaller blast radius: both
+  are a probe whose scope silently excludes the subject.
+- **DEV-T3-3** — 3.3 would have deleted `synchronize-downstream-lock.js`, which is called at
+  `extension-publish.yml:384` and whose absence **fails `validate-release-workflow.js:52`**. The
+  row's "delete if empty" assumed absorption that never happened. Its existence traces to a real
+  months-long breakage: package.json/lockfile desync blocked opencode-prompts' publish path.
+- **DEV-T3-4** — `validate:renovate-extraction` reads stdin and throws when run bare. Its declared
+  Verify ("gate green") therefore names an invocation that cannot pass. Substituted with the
+  `--self-test` plus a direct inventory re-measurement.
+- **DEV-T2-6** — `validation-suite-runner.test.ts` was red **at HEAD before this tier began**,
+  attributed to `e582adc0` (the previous session's substrate commit). Its assertion regexed the
+  runner's source for `{ script: '…'` on one line; adding a second field made Prettier wrap every
+  entry, so zero of 37 matched. Fixed inside this tier because a gate nobody can pass blocks every
+  future one. The fix reads the `SUITE` export instead of the source text — the same substrate
+  correction the tier is about, applied to the tooling that measures it.
+
+## Deviations — dead-chain cleanup (2026-08-13, owner-directed after Tier 3)
+
+- **DEV-T3-5** — the `downstream-release` chain was dead in three independent ways, and only the
+  third was visible from source: `downstream-sync.yml` has **0 runs ever**;
+  `UPSTREAM_DISPATCH_TOKEN` is **absent from opencode-prompts' secrets** so the dispatch could
+  never authenticate; and both the dispatch step and the receiver's check carried
+  `continue-on-error`. **A workflow existing is not evidence it runs** — `gh api .../runs` answers
+  a question no amount of reading the YAML can.
+- **DEV-T3-6** — an in-code comment in `validate-versions.js` had already recorded "it never fired
+  because downstream-sync.yml runs on repository_dispatch and has zero runs". That measurement was
+  true, correct, sitting in the file the whole time, and **nothing acted on it** — the dead code
+  stayed for months. A finding written into a comment is not a finding written into a row.
+- **DEV-T3-7** — a blanket delete would have taken `assertMarketplaceSource` with it, whose own
+  comment says "this check is the only thing that would notice" a rename redirect. The fleet
+  auditor does NOT open `marketplace.json`. **Zero-writers has two readings**: the dependency-range
+  checks were a redundant channel (delete), the marketplace guard is a missing producer (file it).
+  Deleting both because they lived in the same function would have been the wrong call. Filed as
+  row 3.6 against the auditor rather than kept here unreachable.
+- **DEV-T3-8** — the local `opencode-prompts` checkout was **2 commits behind origin**. Editing it
+  would have diffed against a stale base. Fetched first, then built the change in an isolated
+  worktree so the owner's `main` checkout was never written to.
+- **DEV-T3-9** — removing the dispatch job orphaned the `outputs:` block on the `release-please`
+  job. Verified unconsumed before deleting: job outputs are readable only by a `needs:` dependent
+  in the same workflow, and `npm-publish.yml` reads `github.event.release.tag_name` — the release
+  EVENT payload, a different thing that merely shares the name.
+- **DEV-HOOK-1** — the plan-hygiene ledger wrote my validation runs into a DIFFERENT plan's notes.
+  Not a defect: `bound_active_plans` binds every `status: active` plan Read this session, by
+  design. The fix already existed — `~/.claude/scripts/bind-plan.py` — and I did not find it
+  because `plan_hygiene.py`'s docstring cites it bare, as though it sat beside the hooks. Session
+  now pinned. **A tool referenced without its path reads as a tool that does not exist.**
