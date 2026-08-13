@@ -660,6 +660,15 @@ export interface ChainStep {
    */
   framework?: string;
   /**
+   * Inline gate ids applied to this step (P6 Tier 4, OQ-P6-8 — WIRED).
+   *
+   * Carried from `ChainStepSchema.inlineGateIds` through `normalizeChainSteps` and the stage-04
+   * projection onto `ChainStepPrompt.inlineGateIds`, where `GateEnhancementService.
+   * enhanceChainSteps` already read it (as `inlineOperatorGateIds`, rank `inline-operator`) — the
+   * reader predated the producer, so wiring meant removing two strippers, not adding a consumer.
+   */
+  inlineGateIds?: string[];
+  /**
    * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
    * expose to this step's render. Mirrors `ChainStepSchema.visibility`. Additive only — threaded
    * through parsing and persistence, nothing downstream consumes it yet (Tier 2-3).

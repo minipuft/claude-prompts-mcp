@@ -482,17 +482,14 @@ export class SymbolicCommandParser {
       };
     });
 
-    const hasDelegation = steps.some((s) => s.delegated === true);
-
     this.logger.debug(
-      `[parseChainOperator] Final steps array length: ${steps.length}${hasDelegation ? ' (has delegation)' : ''}`
+      `[parseChainOperator] Final steps array length: ${steps.length}${steps.some((s) => s.delegated === true) ? ' (has delegation)' : ''}`
     );
 
     return {
       type: 'chain',
       steps,
       contextPropagation: 'automatic',
-      ...(hasDelegation ? { hasDelegation: true } : {}),
     };
   }
 

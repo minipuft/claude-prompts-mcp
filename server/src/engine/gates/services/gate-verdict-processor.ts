@@ -168,12 +168,6 @@ export class GateVerdictProcessor {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
     }
 
-    // Extract per-gate verdicts from gate_verdict (GATE_VERDICTS block)
-    const gateVerdicts = authority.parseGateVerdicts(gateVerdictInput);
-    if (gateVerdicts.length > 0) {
-      context.state.gates.perGateVerdicts = gateVerdicts;
-    }
-
     const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
     const outcome = await authority.recordOutcome(sessionId, verdictPayload, enforcementMode);
 
@@ -242,12 +236,6 @@ export class GateVerdictProcessor {
 
     if (verdictPayload === null) {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
-    }
-
-    // Extract per-gate verdicts from gate_verdict (GATE_VERDICTS block)
-    const perGateVerdicts = context.gateEnforcement?.parseGateVerdicts(gateVerdictInput ?? '');
-    if (perGateVerdicts != null && perGateVerdicts.length > 0) {
-      context.state.gates.perGateVerdicts = perGateVerdicts;
     }
 
     const outcome = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {

@@ -242,11 +242,6 @@ export interface PipelineInternalState {
      * GateReviewStage uses this to auto-clear gate reviews for these gates.
      */
     shellVerifyPassedForGates?: string[];
-    /**
-     * Per-gate verdicts parsed from the GATE_VERDICTS block in gate_verdict.
-     * Extracted alongside the overall verdict for granular delivery tracking.
-     */
-    perGateVerdicts?: Array<{ index: number; passed: boolean; rationale: string }>;
   };
 
   /**

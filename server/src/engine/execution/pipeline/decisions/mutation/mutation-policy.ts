@@ -54,6 +54,22 @@ export function decideMutation(input: DecideMutationInput): ChainMutation {
  * Returns `undefined` (not a `{kind:'none'}` mutation) when no candidate exists, so the caller
  * can fall through to {@link decideSkip} without special-casing "no-trigger" twice.
  */
+/**
+ * The run's insertion ceiling: the server cap, narrowed by any cap the submission declared.
+ *
+ * `Math.min` rather than `input.maxInsertions ?? MAX_INSERTIONS_PER_RUN`, so a declared value
+ * larger than the server cap cannot widen it no matter how it got here. The IR validator already
+ * rejects a widening `budget.maxInsertions` with `cap-exceeded`, but that validator runs on ONE
+ * submission path and this function is the last place the ceiling is applied — a cap enforced
+ * only at the door is a cap the next door does not have.
+ */
+function effectiveInsertionCap(input: DecideMutationInput): number {
+  if (input.maxInsertions === undefined) {
+    return MAX_INSERTIONS_PER_RUN;
+  }
+  return Math.min(MAX_INSERTIONS_PER_RUN, Math.max(0, input.maxInsertions));
+}
+
 function decideInsertion(input: DecideMutationInput): ChainMutation | undefined {
   if (input.currentNodeId === null) {
     // No node to insert after — the run has already advanced past its terminal node. This is
@@ -75,7 +91,7 @@ function decideInsertion(input: DecideMutationInput): ChainMutation | undefined 
     if (input.insertedUnknownIds.includes(observation.id)) {
       return { kind: 'none', reason: 'cap-reached' };
     }
-    if (input.insertedCount >= MAX_INSERTIONS_PER_RUN) {
+    if (input.insertedCount >= effectiveInsertionCap(input)) {
       return { kind: 'none', reason: 'cap-reached' };
     }
 

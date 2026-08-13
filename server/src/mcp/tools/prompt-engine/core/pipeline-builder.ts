@@ -21,7 +21,11 @@ import type { PipelineDependencies } from './pipeline-dependencies.js';
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '#engine/execution/capture/unknown-observation-processor.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
-import { ChainBlueprintResolver, SymbolicCommandBuilder } from '#engine/execution/parsers/index.js';
+import {
+  ChainBlueprintResolver,
+  SymbolicCommandBuilder,
+  WorkflowCommandBuilder,
+} from '#engine/execution/parsers/index.js';
 import { GateEnforcementAuthority } from '#engine/execution/pipeline/decisions/index.js';
 import {
   // Core pipeline
@@ -74,6 +78,8 @@ import {
 import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
+import { compileWorkflowIR } from '#modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
 
 /**
  * Factory that constructs and wires the PromptExecutionPipeline.
@@ -133,13 +139,23 @@ export class PipelineBuilder {
       deps.logger
     );
     const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
+    // The composition root is the only layer that may name both sides: `engine/` cannot
+    // value-import `modules/workflow-ir/` (dependency-cruiser `engine-no-modules-or-mcp-value`,
+    // error severity), and these three functions are pure, so passing them as a port costs
+    // nothing at runtime and keeps the layer edge honest. Constructed per pipeline, holding no
+    // state — the Streamable HTTP transport rebuilds the server per request, so anything cached
+    // here would exist on STDIO and vanish on HTTP.
+    const workflowCommandBuilder = new WorkflowCommandBuilder(
+      { validate: validateWorkflowIR, compile: compileWorkflowIR },
+      deps.logger
+    );
     const commandParsingStage = new CommandParsingStage(
       deps.parsingSystem.commandParser,
       deps.parsingSystem.argumentParser,
       deps.getConvertedPrompts,
       deps.logger,
       symbolicCommandBuilder,
-      blueprintResolver
+      { blueprintResolver, workflowCommandBuilder }
     );
 
     const inlineGateProcessor = new InlineGateProcessor(

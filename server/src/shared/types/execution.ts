@@ -6,6 +6,7 @@
  * MCP tool requests, validation, and execution context types.
  */
 
+import type { WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from './chain-session.js';
 
 /** Scope for gate validation application */
@@ -153,6 +154,19 @@ export interface McpToolRequest {
    * consumed by the pipeline (lands in Tier 3).
    */
   readonly observations?: readonly UnknownObservation[];
+
+  /**
+   * A planner-submitted Workflow IR (P6 Tier 5) — the third command source, beside a command
+   * string and a chain resume. Mutually exclusive with `command` and `chain_id`: a request
+   * carrying more than one is a typed rejection, not a precedence puzzle.
+   *
+   * Typed by direct reference to `modules/workflow-ir/` rather than restated structurally here.
+   * The restatement would be a fifth hand-maintained copy of a shape that already has four
+   * (P6-F8), and the shape is the Zod schema's SSOT — a divergent copy in `shared/` would be
+   * invisible to `tsc` on the one path that matters. The import is type-only, so it lands under
+   * `shared-cross-layer-type-only` (warn, tracked) and not the value-import error.
+   */
+  readonly workflow?: WorkflowIR;
 
   /** Raw MCP SDK extra payload (authInfo, headers, sessionId) captured at tool boundary */
   readonly _extra?: Record<string, unknown>;

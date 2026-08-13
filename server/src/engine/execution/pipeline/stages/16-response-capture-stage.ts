@@ -5,7 +5,11 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainNode } from '#shared/types/chain-execution.js';
-import type { UnknownLedgerEntry, UnknownObservation } from '#shared/types/chain-session.js';
+import type {
+  SessionBlueprint,
+  UnknownLedgerEntry,
+  UnknownObservation,
+} from '#shared/types/chain-session.js';
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
@@ -283,6 +287,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       // enforces the same caps as one that never dropped out of memory.
       insertedCount: insertedNodes.length,
       insertedUnknownIds: collectOriginUnknownIds(insertedNodes),
+      // Read off the run's stored blueprint, not off `mcpRequest`: a Workflow IR is submitted on
+      // the run's FIRST call and every later step is its own MCP call carrying only a chain_id.
+      // The blueprint is the one run-scoped record of the submission that survives that gap, and
+      // it survives a cold load with it.
+      ...resolveDeclaredInsertionCap(
+        this.chainSessionStore.getSessionBlueprint(sessionId, scopeOptions)
+      ),
     });
 
     const applied = await this.performMutation(sessionId, decision);
@@ -413,6 +424,19 @@ function collectOriginUnknownIds(insertedNodes: readonly ChainNode[]): string[] 
   return insertedNodes
     .map((node) => node.originUnknownId)
     .filter((unknownId): unknownId is string => unknownId !== undefined);
+}
+
+/**
+ * The submission-declared insertion cap, as a spreadable fragment of `DecideMutationInput`.
+ *
+ * Returns `{}` rather than `{ maxInsertions: undefined }` when nothing was declared, because
+ * `exactOptionalPropertyTypes` distinguishes the two and only the first means "server default".
+ */
+function resolveDeclaredInsertionCap(blueprint: SessionBlueprint | undefined): {
+  maxInsertions?: number;
+} {
+  const declared = blueprint?.parsedCommand.budget?.maxInsertions;
+  return declared !== undefined ? { maxInsertions: declared } : {};
 }
 
 /** Human-legible step name for an inserted investigation node, statement truncated. */

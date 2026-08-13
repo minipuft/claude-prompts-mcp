@@ -8,6 +8,7 @@
  */
 
 import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type { DeclaredRunBudget } from '#shared/types/chain-session.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { CommandParseResult } from '../parsers/command-parser.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
@@ -45,6 +46,15 @@ export interface ParsedCommand extends CommandParseResult {
   steps?: ChainStepPrompt[];
   modifiers?: ExecutionModifiers;
   styleSelection?: string;
+  /**
+   * Run-level budget declared by a submitted Workflow IR (P6 Tier 5). Rides the parsed command
+   * because that is what `SessionManagementStage.buildSessionBlueprint` clones into the run's
+   * residual document — so the cap survives the call that declared it and is readable on every
+   * later step of the run without a column, a `createSession` parameter, or a second store.
+   *
+   * Absent on every other submission path. Absence means "server defaults", never "zero".
+   */
+  budget?: DeclaredRunBudget;
 }
 
 /**

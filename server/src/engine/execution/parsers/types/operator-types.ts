@@ -10,8 +10,6 @@ export interface ChainOperator {
   type: 'chain';
   steps: ChainStep[];
   contextPropagation: 'automatic' | 'manual';
-  /** True if any step uses the ==> delegation operator */
-  hasDelegation?: boolean;
 }
 
 export interface ChainStep {
@@ -19,7 +17,14 @@ export interface ChainStep {
   args: string;
   position: number;
   variableName: string;
-  /** True if this step is preceded by the ==> delegation operator */
+  /**
+   * True if this step is preceded by the ==> delegation operator.
+   * Read once, at parse time, by `generateExecutionPlan` (same file) to seed
+   * `ExecutionStep.delegated`, which `buildSymbolicChain` then carries onto
+   * `ChainStepPrompt.delegated` — the field the runtime actually reads. Keep this
+   * declaration even though nothing reads it after stage 06 (P6 row 6.3 measured that
+   * the stage-06 mirror-copy onto this exact field was the dead half, not this one).
+   */
   delegated?: boolean;
 }
 

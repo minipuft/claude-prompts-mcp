@@ -23,7 +23,7 @@ import type { PromptReferenceResolver } from '../reference/index.js';
 import type { ConvertedPrompt } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
-import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
+import { DEFAULT_FRAMEWORK_ID, NAMED_OUTPUT_NAMESPACE } from '#shared/utils/constants.js';
 import { processTemplate, processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
@@ -376,8 +376,11 @@ export class ChainOperatorExecutor {
     const visibility = this.resolveStepVisibility(stepPrompts, currentStepIndex);
     const withheld = new Set<VisibilityItem>(visibility.withheld);
 
-    // Stripped BEFORE inputMapping: a mapping like `{ research: 'step1_result' }` would
-    // otherwise re-publish a withheld history entry under a name the filter never sees.
+    // Stripped BEFORE inputMapping: a mapping like `{ research: 'step1_result' }` — or
+    // `{ research: 'outputs' }` — would otherwise re-publish a withheld history entry under a
+    // name the filter never sees. inputMapping stays FLAT and is not namespaced: it renames
+    // into this step's own context, which is the step's own business, whereas `outputMapping`
+    // publishes chain-wide and is what the namespace exists to fence.
     if (withheld.has('chain_history')) {
       this.stripChainHistory(templateContext);
     }
@@ -790,14 +793,21 @@ export class ChainOperatorExecutor {
    * {@link VisibilityItem}, and a step that withholds history while leaving the immediately
    * preceding output in place is a declaration the vocabulary is designed to allow.
    *
-   * Known v1 boundary: named outputs from a step's `outputMapping` (e.g. `{{findings}}`) are
-   * spread into the same flat context as ordinary arguments and carry no marker distinguishing
-   * them, so they are not stripped here. Withholding those needs the mapping to travel with the
-   * context — out of scope for Tier 3, recorded as DEV-T3-2.
+   * Named outputs (`outputMapping`) go with the history, because they ARE the history: a named
+   * output is a prior step's whole content under an author-chosen name. They used to be spread
+   * flat and so could not be told apart from an ordinary argument — the P5-F2 leak. Publishing
+   * them under the reserved {@link NAMED_OUTPUT_NAMESPACE} object makes the withhold one delete.
+   *
+   * Withheld with `chain_history` and NOT with `previous_step_output`, deliberately: a named
+   * output is the same content `step{N}_result` publishes positionally, and `previous_step_output`
+   * leaves `step{N}_result` in place by design (see the paragraph above). Stripping the named
+   * view while the positional view of identical bytes survives would be a stricter rule for the
+   * alias than for the thing it aliases — a withhold that depends on which name the author chose.
    */
   private stripChainHistory(templateContext: Record<string, unknown>): void {
     delete templateContext['step_results'];
     delete templateContext['previous_step_results'];
+    delete templateContext[NAMED_OUTPUT_NAMESPACE];
     for (const key of Object.keys(templateContext)) {
       if (/^step\d+_result$/.test(key)) {
         delete templateContext[key];

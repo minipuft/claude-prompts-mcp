@@ -46,6 +46,30 @@ export type {
 } from './chain-execution.js';
 
 /**
+ * The two run-level budget declarations that outlive the submission that carried them.
+ *
+ * A submitted Workflow IR declares four caps (`WorkflowBudget`, `modules/workflow-ir/types.ts`).
+ * Two of them — `maxNodes` and `maxFanOut` — are answered entirely at validation time from the
+ * submission itself and have no reader afterwards, so persisting them would be two write-only
+ * fields. These two DO have post-validation consumers, which is why they are the only two here:
+ *
+ * - `maxInsertions` is read by the P4 adaptive-mutation policy on every LATER request of the run
+ *   (each chain step is its own MCP call), so the cap has to survive the call that declared it.
+ * - `declaredCostCeiling` is RECORD-ONLY (D4/D6, OQ-P6-3): nothing compares it to anything. It is
+ *   kept so a run's declared intent is readable back off the run, not so the server can act on it.
+ *
+ * Carried on {@link ParsedCommandSnapshot} rather than on {@link ChainSession} directly: the
+ * blueprint is already cloned into the run's residual document and restored on resume, so this
+ * needs no column, no `createSession` parameter and no new persistence path.
+ */
+export interface DeclaredRunBudget {
+  /** ENFORCED at runtime — may only NARROW `MAX_INSERTIONS_PER_RUN`, never widen it. */
+  maxInsertions?: number;
+  /** RECORD-ONLY — never enforced, never compared against a server-side estimate. */
+  declaredCostCeiling?: number;
+}
+
+/**
  * Minimal structural contract for parsed commands stored in session blueprints.
  * Covers the fields accessed through blueprint consumers across layers.
  * Engine code should cast to the full ParsedCommand type when needed.
@@ -88,6 +112,12 @@ export interface ParsedCommandSnapshot {
   namedInlineGates?: unknown[];
   modifiers?: ExecutionModifiers;
   promptArgs?: Record<string, unknown>;
+  /**
+   * Run-level budget declared by a submitted Workflow IR (P6 Tier 5). Absent on every other
+   * submission path — a `>>chain` and a symbolic chain declare no budget, and absence means
+   * "server defaults", never "zero".
+   */
+  budget?: DeclaredRunBudget;
 }
 
 export type ChainSessionLifecycle = 'dormant' | 'canonical';

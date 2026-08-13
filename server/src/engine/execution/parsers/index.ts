@@ -38,6 +38,12 @@ export {
   type CollectedGateCriteria,
   type CollectedNamedGate,
 } from './symbolic-command-builder.js';
+export {
+  WorkflowCommandBuilder,
+  WORKFLOW_COMMAND_LABEL,
+  type WorkflowIrPort,
+  type WorkflowCommandResult,
+} from './workflow-command-builder.js';
 
 // Context resolution system
 export {

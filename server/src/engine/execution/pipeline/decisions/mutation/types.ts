@@ -82,6 +82,17 @@ export interface DecideMutationInput {
   /** Unknown ids that have already received an investigation insertion earlier in this run
    * (OQ-P4-5's 1-per-unknown-id cap). */
   readonly insertedUnknownIds: readonly string[];
+  /**
+   * A run-level insertion cap the SUBMISSION declared — today only a Workflow IR's
+   * `budget.maxInsertions` (P6 Tier 5), read back off the run's blueprint on every step.
+   *
+   * NARROWING ONLY. {@link MAX_INSERTIONS_PER_RUN} stays the ceiling and this value can only
+   * lower it: the policy takes the minimum of the two, so a declared 99 does not buy 99
+   * insertions. Absent means "server default", which is NOT the same as 0 — a submission
+   * declaring `maxInsertions: 0` opts out of adaptive insertion entirely, and that has to stay
+   * distinguishable from declaring nothing.
+   */
+  readonly maxInsertions?: number;
 }
 
 /** OQ-P4-5: hard ceiling on insertions per run, independent of how many distinct unknowns

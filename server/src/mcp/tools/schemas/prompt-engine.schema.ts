@@ -11,69 +11,24 @@
 
 import { z } from 'zod/v4';
 
-import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
+import { gateSpecUnionSchema } from './gate-spec.schema.js';
+import { workflowIRSchema } from './workflow-ir.schema.js';
 
 import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-renderer.js';
 
+import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
+
 // ---------------------------------------------------------------------------
-// Gate sub-schemas (shared with resource_manager)
+// Gate sub-schemas (defined in gate-spec.schema.ts; shared with resource_manager
+// and workflow-ir.schema.ts, which is why they no longer live here — see that
+// file's header for the import-cycle this split avoids)
 // ---------------------------------------------------------------------------
 
-/** Quick inline gate: {name, description} */
-export const customCheckSchema = z.object({
-  name: z.string().min(1, 'Custom check name cannot be empty'),
-  description: z.string().min(1, 'Custom check description cannot be empty'),
-});
-
-/** Full gate definition with optional fields */
-export const temporaryGateObjectSchema = z
-  .object({
-    id: z.string().min(1, 'Gate ID cannot be empty').optional(),
-    template: z.string().min(1, 'Template reference cannot be empty').optional(),
-    name: z.string().optional(),
-    type: z.enum(['validation', 'guidance']).optional(),
-    scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
-    description: z.string().optional(),
-    guidance: z.string().optional(),
-    criteria: z.array(z.string().min(1)).optional(),
-    pass_criteria: z.array(z.string().min(1)).optional(),
-    severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-    source: z.enum(['manual', 'automatic', 'analysis']).optional(),
-    context: z.record(z.string(), z.any()).optional(),
-    target_step_number: z.number().int().positive().optional(),
-    /**
-     * Address the target step by its stable node id instead of its position. Union ADDITION —
-     * `target_step_number` keeps working unchanged, and a gate may carry either. Accepts the
-     * kebab-case ids minted from a YAML chain's `stepName`/`id:` and the frozen `nK` ids a
-     * symbolic chain mints at parse time.
-     */
-    target_step_id: z
-      .string()
-      .regex(
-        /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
-        'target_step_id must be a kebab-case node id or an nK symbolic id'
-      )
-      .optional(),
-    apply_to_steps: z.array(z.number().int().positive()).optional(),
-  })
-  .refine(
-    (value) => {
-      if (value.id != null) return true;
-      const hasCriteria =
-        (value.criteria?.length ?? 0) > 0 || (value.pass_criteria?.length ?? 0) > 0;
-      const hasGuidance =
-        (value.guidance?.trim().length ?? 0) > 0 || (value.description?.trim().length ?? 0) > 0;
-      return hasCriteria || hasGuidance;
-    },
-    { message: 'Temporary gate entries require an id or some inline criteria/guidance' }
-  );
-
-/** Union of all accepted gate formats */
-export const gateSpecUnionSchema = z.union([
-  z.string().min(1, 'Gate reference cannot be empty'),
+export {
   customCheckSchema,
   temporaryGateObjectSchema,
-]);
+  gateSpecUnionSchema,
+} from './gate-spec.schema.js';
 
 // ---------------------------------------------------------------------------
 // Unknowns ledger observations (Tier 1 — types + validation only, no runtime yet)
@@ -247,6 +202,8 @@ const PARAM_DEFAULTS = {
   gates:
     'Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).',
   options: 'Additional execution options (key-value pairs) passed through to execution.',
+  workflow:
+    'Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with `command` and `chain_id` — sending more than one is rejected. SHAPE: {version:1, nodes:[{id:"kebab-case", promptId:"...", args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:["chain_history"|"previous_step_output"|"unknowns_ledger"], expose?:[...]}, subagentModel?:"heavy"|"standard"|"fast", agentType?:"...", framework?:"...", retries?:0, inlineGateIds?:["gate-id"]}], edges?:[{from:"node-a", to:"node-b"}], gates?:[...same as `gates`, target_step_id addresses a node id...], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>}}. EDGES ARE DEPENDENCIES, NOT BRANCHES: they are linearized (Kahn, ties broken by declaration order) into one run order; with no edges the order is `nodes[]` as written. Structural caps are enforced and may only be narrowed; `declaredCostCeiling` is recorded, never enforced. An invalid workflow is rejected with one addressed line per problem and NOTHING is created — no run, no session. Example: {version:1, nodes:[{id:"research", promptId:"research_docs"},{id:"draft", promptId:"write_summary"}], edges:[{from:"research", to:"draft"}]}',
   observations:
     'Declare typed unknowns discovered/resolved this step. Each entry: {type:"unknown_discovered"|"unknown_resolved", id:"kebab-case-slug", statement:"...", blocking?:true|false, target_step_id?:"...", resolution?:"answered"|"irrelevant"} (resolution required when type is unknown_resolved; target_step_id is discovered-only and names the downstream step the adaptive mutation policy skips if this unknown resolves irrelevant). Example: [{type:"unknown_discovered", id:"cache-ttl-unknown", statement:"TTL for the new cache layer is undecided", blocking:false, target_step_id:"draft-outline"}]',
 } as const;
@@ -297,6 +254,14 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .array(unknownObservationSchema)
       .optional()
       .describe(resolve('observations', PARAM_DEFAULTS.observations)),
+
+    /**
+     * The third command source (P6 Tier 5, OQ-P6-1). A CORE field, never gate-dependent:
+     * the IR shape depends on no runtime state, so it is never narrowed and therefore can never
+     * be silently stripped from a client's call the way a withdrawn parameter is (P6-F6 —
+     * narrowing drops a value rather than rejecting it, because Zod's strip default is kept).
+     */
+    workflow: workflowIRSchema.optional().describe(resolve('workflow', PARAM_DEFAULTS.workflow)),
   };
 }
 
@@ -391,10 +356,41 @@ export function buildPromptEngineSchema(
   // Absent state means "widest", matching `isGateSystemEnabled()`, which
   // defaults to enabled when no gate state store is wired.
   if (surface.state?.gateSystemEnabled === false) {
-    return z.object(buildCoreFields(resolve));
+    return withSourceExclusivity(z.object(buildCoreFields(resolve)));
   }
 
-  return buildWidestSchema(resolve, verdictValidator, verdictMessage);
+  return withSourceExclusivity(buildWidestSchema(resolve, verdictValidator, verdictMessage));
+}
+
+/** The three command sources, in the order the rejection message names them. */
+const COMMAND_SOURCE_PARAMETERS = ['command', 'chain_id', 'workflow'] as const;
+
+/**
+ * Reject a call that carries more than one command source.
+ *
+ * A REJECTION, not a precedence rule. The three sources mean three different runs — parse this
+ * string, resume that run, execute this graph — and picking one silently would execute something
+ * the caller did not ask for. The narrowing path (`gateSystemEnabled === false`) gets the same
+ * refinement because exclusivity has nothing to do with gates, and a rule applied to one
+ * reachable shape and not the other is a rule with a hole in it.
+ *
+ * Applied here rather than folded into `buildWidestSchema` so `PromptEngineInput` keeps inferring
+ * from the unrefined object: a refinement does not change the inferred type, but deriving the
+ * public type from the refined schema would tie the declared contract to a runtime check.
+ *
+ * The stage-04 twin of this check is not redundant — it guards the in-process callers that never
+ * pass through this schema. See `collectSourceConflicts` there.
+ */
+function withSourceExclusivity<
+  T extends z.ZodType<{ [K in (typeof COMMAND_SOURCE_PARAMETERS)[number]]?: unknown }>,
+>(schema: T): T {
+  return schema.refine(
+    (value) => COMMAND_SOURCE_PARAMETERS.filter((name) => value[name] !== undefined).length <= 1,
+    {
+      message:
+        "Provide exactly one of 'command', 'chain_id' or 'workflow'. A workflow submission is a complete run description and cannot be combined with a command string or a resume token.",
+    }
+  );
 }
 
 /**

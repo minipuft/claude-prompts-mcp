@@ -171,14 +171,24 @@ export const ChainStepSchema = z
     /**
      * Inline gate ids for this step.
      *
-     * ACCEPTED BUT NOT YET WIRED — declared here because the runtime type already has it
-     * (`ChainStepPrompt.inlineGateIds`) while the schema did not, so three shipped chains
-     * (`research_chain`, `code_review_test`, `tech_evaluation_chain`) carry six of these and every
-     * one is dropped: first by Zod's strip, then again by `normalizeChainSteps`'s explicit
-     * allowlist. Declaring it preserves the authors' intent through `.strict()` instead of
-     * deleting it, and makes the gap visible. Wiring it to the gate pipeline is a separate change
-     * with real behavioural risk — it would newly APPLY gates to chains that have run without
-     * them. Same posture as `id` above: additive, nothing downstream consumes it yet.
+     * WIRED as of P6 Tier 4 (OQ-P6-8). The gate pipeline's reader predated the producer:
+     * `GateEnhancementService.enhanceChainSteps` has always read `step.inlineGateIds` and passed
+     * it to `GateSetResolver` at rank `inline-operator`. What stood between the author and that
+     * reader were the two later strippers this docblock's neighbour describes —
+     * `normalizeChainSteps`'s allowlist and the stage-04 projection — both removed in the same
+     * change, because a field carried at fewer than all three is silently dead (P6-F7).
+     *
+     * BEHAVIOUR CHANGE, priced: a step declaring gate ids now has them applied. Measured
+     * 2026-08-13 with `rg --no-ignore`: six declarations across four chains, and every one lives
+     * in the operator's LOCAL, gitignored prompt corpus — **zero tracked/bundled chains declare
+     * the field**, so the shipped package's behaviour is unchanged. Of the six, one names a
+     * registered gate (`code-quality`); the other five name display strings with no registered
+     * gate, which enter the accumulator and render no guidance (P6-F13).
+     *
+     * An id naming no registered gate is NOT filtered here. Every other gate source behaves the
+     * same way — a client-supplied unknown id in `gates` also enters the accumulator — and
+     * special-casing this one source would make gate resolution mean different things depending
+     * on where an id came from.
      */
     inlineGateIds: z.array(z.string().min(1)).optional(),
     /**

@@ -4,8 +4,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkValidator } from '../../../frameworks/framework-validator.js';
 import type { ExecutionContext } from '../../context/index.js';
-import type { ChainStepPrompt } from '../../operators/types.js';
-import type { ChainOperator, SymbolicOperator } from '../../parsers/types/operator-types.js';
+import type { SymbolicOperator } from '../../parsers/types/operator-types.js';
 
 /**
  * Pipeline Stage 06: Operator Validation
@@ -59,9 +58,8 @@ export class OperatorValidationStage extends BasePipelineStage {
     // `operators` is populated only by the symbolic parse path; the direct (`>>chain`) path
     // leaves it empty while still writing per-step `subagentModel` onto parsedCommand.steps.
     // Returning on an empty operator set therefore left YAML-declared delegation inert on every
-    // direct invocation (P5-F5). `normalizeDelegation` carries its own empty-set guard, so both
-    // halves are safe to call here.
-    this.normalizeDelegation(parsedCommand, operators);
+    // direct invocation (P5-F5).
+    this.normalizeDelegation(parsedCommand);
 
     if (operators.length === 0) {
       this.logExit({ skipped: 'No operators detected' });
@@ -138,23 +136,22 @@ export class OperatorValidationStage extends BasePipelineStage {
    * prompt-wide delegation means adding the schema key and the converter that writes it,
    * not restoring this read.
    *
-   * Propagates to both parsedCommand.steps (ChainStepPrompt) and operator steps (ChainStep).
+   * Callable with an empty operator set — `markDelegatedStepPrompts` reads only
+   * `parsedCommand.steps`. That is what lets this sit above the operators-empty exit (P5-F5).
    *
-   * Callable with an empty operator set: `markDelegatedStepPrompts` reads only
-   * `parsedCommand.steps`, and `syncDelegationToOperators` guards on the set being empty. That is
-   * what lets the whole normalization sit above the operators-empty exit (P5-F5).
-   *
-   * `syncDelegationToOperators` writes `ChainStep.delegated` and `ChainOperator.hasDelegation`,
-   * neither of which has a reader downstream of this stage — the observable output of this
-   * method is `ChainStepPrompt.delegated`, read by `chain-operator-executor.ts` (delegation CTA)
-   * and `response-assembler.ts` (handoff section + visibility envelope).
+   * Until P6 row 6.3, this method also mirrored the result onto the positionally-aligned
+   * operator `ChainStep[]` (`syncDelegationToOperators` / `applyDelegationToChainOp`) and set
+   * `ChainOperator.hasDelegation`. Both were measured write-no-reader — nothing downstream of
+   * stage 06 ever read that mirror or that flag, only `ChainStepPrompt.delegated` (read by
+   * `chain-operator-executor.ts` for the delegation CTA and `response-assembler.ts` for the
+   * handoff section + visibility envelope) — and were deleted rather than kept as dead sync
+   * code. `ChainStep.delegated` itself was NOT deleted: it is still written by the parser from
+   * the `==>` operator and read once, at parse time (`symbolic-operator-parser.ts`,
+   * `generateExecutionPlan`), to seed `ChainStepPrompt.delegated` for symbolic chains — a real,
+   * pre-normalization consumer, not this stage's dead mirror.
    */
-  private normalizeDelegation(
-    parsedCommand: ExecutionContext['parsedCommand'],
-    operators: SymbolicOperator[]
-  ): void {
+  private normalizeDelegation(parsedCommand: ExecutionContext['parsedCommand']): void {
     this.markDelegatedStepPrompts(parsedCommand);
-    this.syncDelegationToOperators(parsedCommand, operators);
   }
 
   /** Mark ChainStepPrompt[] entries as delegated based on per-step subagentModel. */
@@ -164,41 +161,6 @@ export class OperatorValidationStage extends BasePipelineStage {
       if (step.subagentModel != null) {
         step.delegated = true;
       }
-    }
-  }
-
-  /**
-   * Propagate delegation from ChainStepPrompt[] to positionally-aligned operator ChainStep[].
-   *
-   * Owns the empty-set guard that used to be a stage-level early exit. The direct invocation path
-   * has no operators to sync to, and that is a no-op here rather than a reason to skip
-   * `markDelegatedStepPrompts`.
-   */
-  private syncDelegationToOperators(
-    parsedCommand: ExecutionContext['parsedCommand'],
-    operators: SymbolicOperator[]
-  ): void {
-    if (operators.length === 0) return;
-    const stepPrompts = parsedCommand?.steps;
-    for (const operator of operators) {
-      if (operator.type !== 'chain') continue;
-      this.applyDelegationToChainOp(operator, stepPrompts);
-    }
-  }
-
-  private applyDelegationToChainOp(
-    operator: ChainOperator,
-    stepPrompts: ChainStepPrompt[] | undefined
-  ): void {
-    for (let i = 0; i < operator.steps.length; i++) {
-      const step = operator.steps[i];
-      if (!step) continue;
-      if (stepPrompts?.[i]?.delegated === true) {
-        step.delegated = true;
-      }
-    }
-    if (operator.steps.some((s) => s.delegated === true)) {
-      operator.hasDelegation = true;
     }
   }
 }

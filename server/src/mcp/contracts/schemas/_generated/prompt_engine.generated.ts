@@ -30,7 +30,8 @@ export type prompt_engineParamName =
   | 'gates'
   | 'force_restart'
   | 'options'
-  | 'observations';
+  | 'observations'
+  | 'workflow';
 export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'command',
@@ -147,6 +148,25 @@ export const prompt_engineParameters: ToolParameter[] = [
       '`id` must be kebab-case and stable within the run so re-discovery of the same id updates rather than duplicates.',
       "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
       "A blocking `unknown_discovered` (with or without `target_step_id`) inserts one `investigate_unknown` step immediately after the current node; `target_step_id` instead governs the skip side — a later `unknown_resolved` with resolution 'irrelevant' skips that ledger entry's target once it is strictly ahead of the current step. Capped at 1 insertion per unknown id and 3 per run. The server never infers a target and only ever mutates in reaction to an observation — enforcement stays advisory.",
+    ],
+  },
+  {
+    name: 'workflow',
+    type: '{version,nodes[],edges?,gates?,budget?}',
+    description:
+      "Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with 'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by precedence. SHAPE: `{version:1, nodes:[{id:'kebab-case', promptId:'...', stepName?:'...', args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:[...], expose?:[...]}, subagentModel?:'heavy'|'standard'|'fast', agentType?:'...', framework?:'...', retries?:0, inlineGateIds?:['gate-id']}], edges?:[{from:'node-a', to:'node-b'}], gates?:[<same shapes as the 'gates' parameter>], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>}}`. Full field reference: docs/reference/workflow-ir.md.",
+    status: 'working',
+    compatibility: 'canonical',
+    examples: [
+      '{"version": 1, "nodes": [{"id": "research", "promptId": "research_docs"}, {"id": "draft", "promptId": "write_summary"}], "edges": [{"from": "research", "to": "draft"}]}',
+      '{"version": 1, "nodes": [{"id": "gather", "promptId": "research_docs", "args": {"topic": "caching"}, "outputMapping": {"findings": "gather"}}, {"id": "review", "promptId": "code_review", "subagentModel": "fast", "visibility": {"withhold": ["chain_history"]}}], "edges": [{"from": "gather", "to": "review"}], "gates": [{"id": "source-quality", "target_step_id": "gather"}], "budget": {"maxInsertions": 1, "declaredCostCeiling": 50000}}',
+    ],
+    notes: [
+      "EDGES ARE DEPENDENCIES, NOT BRANCHES. There is no branching runtime; edges are linearized into one total order (Kahn's algorithm, ties broken by declaration order). With no edges the run order is nodes[] exactly as written, so a client that already knows its order can simply write it.",
+      "Node ids are the SAME id space as a gate's target_step_id and an observation's target_step_id. A workflow gate binds to a node by declaring target_step_id: '<node id>'.",
+      'Structural caps (maxNodes, maxFanOut, maxInsertions) are ENFORCED and may only NARROW the server defaults — asking for a wider cap is rejected, never silently clamped. declaredCostCeiling is RECORDED on the run and never enforced: the server does not meter client tokens.',
+      'Rejection is all-or-nothing and writes nothing: an invalid workflow returns one addressed line per problem ([reason] node "x": detail) and creates no run, no session and no version. Every reason names the node or edge it is about.',
+      'Never state-narrowed. Unlike the three gate parameters, this one is advertised in every reachable shape, so it can never be silently dropped from a call.',
     ],
   },
 ];
