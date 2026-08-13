@@ -86,6 +86,31 @@ Every section must describe something the server does **for** the client, never 
 
 This keeps the positioning one whose value grows **as** clients get more capable, instead of one clients eventually obsolete. It applies to repo metadata (description, listings copy) as much as README prose.
 
+### Canonical positioning and terminology
+
+The client or harness provides execution, tools, agents, working context, memory features, and
+native skills. Claude Prompts adds a portable workflow layer around those capabilities: reusable
+prompt resources, step sequencing and context transfer, reasoning guidance, validation gates,
+version history, rollback, hot reload, and client-native skills export.
+
+Use the following terms consistently:
+
+| Concept                                       | Canonical term                                      | Avoid unless explicitly qualified |
+| --------------------------------------------- | --------------------------------------------------- | --------------------------------- |
+| Claude Code, Codex, Cursor, and similar hosts | `client` after first naming the client or harness   | body, operating system            |
+| A client-provided reusable capability         | `native skill`                                      | Claude Prompts skill              |
+| What this server adds                         | `portable workflow layer` or the specific feature   | training, intelligence            |
+| Stored prompt and gate definitions            | `versioned resources` or the specific resource type | memory, learning                  |
+| Work performed from a rendered prompt         | `the client executes`                               | the server executes               |
+
+Claims that the server trains a model, learns automatically from completed work, supplies general
+client memory, executes repository changes, or replaces native skills fail review. When hooks or a
+plugin provide behavior beyond MCP-only operation, name that dependency in the claim.
+
+Governance follows one path: this charter defines durable policy, `documentation_change` organizes
+the editorial workflow, `readme_improver` drafts, semantic gates review judgment-bearing claims,
+and `validate-readme.js` enforces mechanically decidable rules.
+
 ## 6. Syntax & Semantic Conventions
 
 ### Section headers
@@ -105,6 +130,10 @@ Each section starts with an HTML comment marker so editors stay honest:
 ```
 
 Valid markers: `tutorial`, `how-to`, `reference`, `explanation`. A section mixing quadrants must be split.
+
+These labels are maintainer metadata, not product terminology. Keep them inside HTML comments.
+Reader-facing headings and navigation describe the task: learn, accomplish a task, look up syntax,
+or understand the design. Visible references to Diátaxis in `README.md` fail validation.
 
 ### Code blocks
 
@@ -140,6 +169,9 @@ Valid markers: `tutorial`, `how-to`, `reference`, `explanation`. A section mixin
 - Tables mixing Diátaxis quadrants without labels.
 - Mermaid diagrams without a one-paragraph narrative explaining the takeaway.
 - License badge as the only badge (signals pre-launch — add version, downloads, or stars).
+- Installation badges without a current official client contract and a live verification. A badge
+  that links to instructions says `Set up`; reserve `Install` and `one-click` for links that perform
+  that action.
 
 ## 8. Success Metrics
 
@@ -169,3 +201,19 @@ Charter changes are their own PR. The PR must:
 3. Update any checklists, tests, or scripts that depend on the changed principle.
 
 Content PRs cannot silently change the charter.
+
+**Amended 2026-08-12.** The positioning litmus rejected direct native-skill replacement claims but
+did not define ownership for adjacent claims about training, learning, memory, or execution. It also
+required Diátaxis markers without distinguishing hidden editorial metadata from visible reader copy;
+the README consequently described its documentation index using the framework name. This amendment
+adds a canonical terminology map, explicit client/server boundaries, governance ownership, and the
+reader-visible terminology rule. The companion validator change enforces only the last item because
+the remaining checks require semantic judgment.
+
+**Amended 2026-08-12 (client setup links).** The hero treated a legacy VS Code redirect and an
+undocumented Cursor MCP deeplink as durable one-click installers. The Cursor action failed in live
+use, and current official client documentation no longer supports the two links as one shared
+pattern. Installation URLs are now external contracts: verify each against current official client
+documentation and test the exact link before publishing it. Navigation badges may link to local
+Claude Code or Codex instructions, but their label must say `Set up`, not `Install`. This supersedes
+the install-link assumption in the 2026-08-04 budget rationale without changing the 40-line budget.

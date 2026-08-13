@@ -169,6 +169,52 @@ function checkDiataxisMarkers(lines) {
   return violations;
 }
 
+function checkReaderFacingTerminology(lines) {
+  const violations = [];
+  let inComment = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let remaining = lines[i];
+    let visible = '';
+
+    while (remaining.length > 0) {
+      if (inComment) {
+        const end = remaining.indexOf('-->');
+        if (end === -1) {
+          remaining = '';
+          continue;
+        }
+        remaining = remaining.slice(end + 3);
+        inComment = false;
+        continue;
+      }
+
+      const start = remaining.indexOf('<!--');
+      if (start === -1) {
+        visible += remaining;
+        remaining = '';
+        continue;
+      }
+
+      visible += remaining.slice(0, start);
+      remaining = remaining.slice(start + 4);
+      inComment = true;
+    }
+
+    if (/\bdi[aá]taxis\b/i.test(visible)) {
+      violations.push({
+        line: i + 1,
+        category: 'terminology',
+        detail:
+          'Diátaxis is maintainer metadata, not reader-facing terminology (charter §6) — ' +
+          'describe the reader task instead',
+      });
+    }
+  }
+
+  return violations;
+}
+
 function checkInternalLinks(lines, readmeDir) {
   const violations = [];
   for (let i = 0; i < lines.length; i++) {
@@ -380,6 +426,7 @@ function main() {
     ...checkSectionBudgets(lines),
     ...checkForbiddenWords(lines),
     ...checkDiataxisMarkers(lines),
+    ...checkReaderFacingTerminology(lines),
     ...checkInternalLinks(lines, readmeDir),
     ...checkClaimCoverage(lines),
     ...checkShippedPromptCount(lines),
