@@ -53,7 +53,7 @@ function declaredJobNames(dir) {
     try {
       doc = yaml.load(readFileSync(path.join(dir, entry), 'utf8'));
     } catch (error) {
-      throw new Error(`${entry}: not parseable as YAML — ${error.message}`);
+      throw new Error(`${entry}: not parseable as YAML — ${error.message}`, { cause: error });
     }
 
     for (const [jobId, job] of Object.entries(doc?.jobs ?? {})) {

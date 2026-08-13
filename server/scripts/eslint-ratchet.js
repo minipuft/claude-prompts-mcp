@@ -26,14 +26,38 @@ function getEslintBinPath() {
   return path.resolve(process.cwd(), 'node_modules', '.bin', binName);
 }
 
+/**
+ * What the ratchet lints.
+ *
+ * `scripts` and `eslint-rules` were added 2026-08-11 (row 4.5). The target was `src` alone, so the
+ * only gate that runs ESLint could not see the directory where this repo keeps its **gates** — and
+ * `npm run lint` (`eslint .`), which does see it, is not a member of the validation suite. Two
+ * consequences, both live at the time:
+ *
+ *   - 15 errors sat in `scripts/` reported by nothing, 13 of them caused by a config gap rather
+ *     than by code: `scripts/**\/*.ts` had no parser block, so every TypeScript gate failed to
+ *     parse and was silently unlinted in full.
+ *   - Both ESLint rules this plan ADDED as gates — `claude/require-guard-mechanism-verdict` and
+ *     `claude/require-exception-audit` — are scoped to `scripts/`, so neither was enforced by
+ *     anything. A rule that fires correctly and is never run is not a gate.
+ *
+ * Keep this in sync with `eslintTarget` in the baseline; `check` fails loudly when they diverge,
+ * because a baseline measured over a different file set is not a baseline.
+ */
+const ESLINT_TARGETS = ['src', 'scripts', 'eslint-rules'];
+
 function runEslintJsonReport() {
   const reportPath = path.join(os.tmpdir(), `eslint-ratchet-${Date.now()}.json`);
   const eslintBin = getEslintBinPath();
 
-  const result = spawnSync(eslintBin, ['src', '--format', 'json', '--output-file', reportPath], {
-    stdio: 'inherit',
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    eslintBin,
+    [...ESLINT_TARGETS, '--format', 'json', '--output-file', reportPath],
+    {
+      stdio: 'inherit',
+      encoding: 'utf8',
+    }
+  );
 
   // ESLint exit codes:
   // 0 -> no problems
@@ -151,7 +175,7 @@ async function writeBaseline(summary) {
   const baseline = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    eslintTarget: 'src',
+    eslintTarget: ESLINT_TARGETS.join(','),
     totals: summary.totals,
     byRule: summary.byRule,
   };
@@ -180,6 +204,18 @@ async function handleCheck() {
   } catch {
     throw new Error(
       `[eslint-ratchet] Missing baseline at ${path.relative(process.cwd(), BASELINE_PATH)}. Run: npm run lint:ratchet:baseline`
+    );
+  }
+
+  // A baseline measured over a different file set is not a baseline: widening the target makes
+  // every pre-existing finding in the new directories read as a regression, and narrowing it makes
+  // real findings vanish silently. Both are worse than an explicit stop.
+  const expectedTarget = ESLINT_TARGETS.join(',');
+  if (baseline.eslintTarget !== expectedTarget) {
+    throw new Error(
+      `[eslint-ratchet] Baseline covers "${baseline.eslintTarget}" but this run lints ` +
+        `"${expectedTarget}". The two are not comparable. If the target change is intended, ` +
+        `run: npm run lint:ratchet:baseline`
     );
   }
 
