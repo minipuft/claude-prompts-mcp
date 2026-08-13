@@ -9,6 +9,13 @@
 CHANGELOG.md
 manifest.json
 .claude-plugin/plugin.json
+# Root plugin.json joined this list when it gained a version writer (Tier 2.3, 2026-08-13). It is
+# the CANONICAL Agent Plugins manifest and was previously bumped by nothing at all: release-please
+# stamped the rendered `.claude-plugin/plugin.json` while the source it is rendered FROM kept the
+# old number. Simulating a bump reproduced it — `validate:versions` reported a mismatch and
+# `validate:render-drift` reported the rendered file ahead of its source. Both writers emit
+# `JSON.stringify(…, 2)`, so it is now machine-formatted for the same reason its render is.
+plugin.json
 
 # Written by pyrefly (`validate:python` regenerates it with --baseline). It emits no
 # trailing newline, which prettier requires — so the file oscillates between the two

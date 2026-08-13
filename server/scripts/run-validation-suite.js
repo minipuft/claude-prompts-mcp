@@ -291,6 +291,13 @@ export const SUITE = [
     reads: ['file', 'spawn', 'tracked', 'walk'],
     converse: 'unexamined',
   },
+  {
+    script: 'validate:render-drift',
+    io: 'read',
+    reads: ['file'],
+    converse:
+      'CHECKED — the render direction is bidirectional by construction: mutating the PUBLISHED file and mutating the CANONICAL source each redden the same comparison, verified with three distinct seeded mutations (published byte, canonical byte, missing output) producing three distinct single-file failures. What it does NOT check is the converse of its own scope — that every published duplicate of a canonical field is declared as a render. A file rendered by hand and never added to render-targets.json is invisible to it.',
+  },
 ];
 
 /**

@@ -164,6 +164,17 @@ jobs:
           done
           echo "All required files present."
 
+      # Present is not the same as current. Both files above are RENDERED from the canonical
+      # Agent Plugins manifests (root plugin.json / mcp.json), and both publishing jobs stage them
+      # verbatim into an artifact installers consume — the dist branch and the plugin archive. A
+      # stale render therefore ships a wrong version, license or server path to every installer,
+      # and the existence check above is structurally unable to see it.
+      #
+      # Runs before `npm ci` on purpose: the renderer uses only Node builtins, so a drifted render
+      # fails the release in seconds instead of after a full install and build.
+      - name: Verify rendered manifests match their canonical source
+        run: node scripts/render-distributions.mjs --check
+
       - name: Install and build server
         working-directory: server
         run: |
@@ -515,6 +526,17 @@ jobs:
             echo "  ✓ $file exists"
           done
           echo "All required files present."
+
+      # Present is not the same as current. Both files above are RENDERED from the canonical
+      # Agent Plugins manifests (root plugin.json / mcp.json), and both publishing jobs stage them
+      # verbatim into an artifact installers consume — the dist branch and the plugin archive. A
+      # stale render therefore ships a wrong version, license or server path to every installer,
+      # and the existence check above is structurally unable to see it.
+      #
+      # Runs before `npm ci` on purpose: the renderer uses only Node builtins, so a drifted render
+      # fails the release in seconds instead of after a full install and build.
+      - name: Verify rendered manifests match their canonical source
+        run: node scripts/render-distributions.mjs --check
 
       - name: Install and build server
         working-directory: server

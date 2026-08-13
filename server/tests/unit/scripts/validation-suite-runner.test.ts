@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const RUNNER = path.join(SERVER_ROOT, 'scripts', 'run-validation-suite.js');
@@ -118,17 +118,29 @@ describe('validation suite runner', () => {
     RUNNER_TIMEOUT_MS
   );
 
-  it('declares only steps that package.json actually defines', () => {
+  it('declares only steps that package.json actually defines', async () => {
     // The suite list moved out of package.json, so a step name and its definition can now drift
     // apart. Before the move, `validate:all` referenced the names directly and could not.
+    //
+    // READS THE EXPORT, NOT THE SOURCE TEXT. This assertion originally scanned the runner's
+    // source for `{ script: '…'` on one line, which is a stand-in for "what the suite declares"
+    // rather than the thing itself — and the two came apart the moment the entries grew a second
+    // field and Prettier wrapped every one of them onto its own line. Zero matched, and the
+    // property under test had not changed at all. `validate:all` never noticed because it runs
+    // checkers, not Jest.
+    //
+    // The `toBeGreaterThan(0)` guard below is what made that loud instead of silent, so it stays
+    // even though an empty import is now much harder to produce. Importing is safe here despite
+    // the header note: the runner guards its entry point on `process.argv[1]`, and
+    // `validate-suite-membership.js` already imports `SUITE` the same way. The header's warning
+    // is about RUNNING the suite, not about reading its declaration.
     const manifest = JSON.parse(readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8')) as {
       scripts?: Record<string, string>;
     };
-    const source = readFileSync(
-      path.join(SERVER_ROOT, 'scripts', 'run-validation-suite.js'),
-      'utf8'
-    );
-    const declared = [...source.matchAll(/\{ script: '([^']+)'/g)].map((match) => match[1]);
+    const { SUITE } = (await import(pathToFileURL(RUNNER).href)) as {
+      SUITE: Array<{ script: string }>;
+    };
+    const declared = SUITE.map((step) => step.script);
 
     expect(declared.length).toBeGreaterThan(0);
     const undefinedSteps = declared.filter((name) => !manifest.scripts?.[name]);

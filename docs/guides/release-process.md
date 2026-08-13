@@ -126,7 +126,6 @@ Push to main
 │  • marketplace: validated merge    │
 │  • gemini-prompts: auto-merge PR   │
 │  • opencode-prompts: auto-merge PR │
-│    + dispatches downstream-release │
 └────────────────────────────────────┘
 ```
 
