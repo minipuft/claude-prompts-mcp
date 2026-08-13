@@ -2,7 +2,7 @@
 title: "Adaptive Chain Runtime — Master Plan — Implementation Notes"
 plan: adaptive-chain-runtime-2026-08-09.md
 date: 2026-08-12
-status: active
+status: reference
 tags: []
 ---
 

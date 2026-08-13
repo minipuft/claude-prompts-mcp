@@ -1,7 +1,7 @@
 ---
 title: "P7 — Resource authoring efficiency (patch-mode update + four write-path defects)"
 date: 2026-08-12
-status: active
+status: reference
 tags:
   [adaptive-chain-runtime, resource-manager, versioning, mcp-contracts, prompts]
 ---

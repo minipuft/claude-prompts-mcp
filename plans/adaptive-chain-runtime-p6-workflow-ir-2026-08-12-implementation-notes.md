@@ -1,7 +1,7 @@
 ---
 title: "P6 — Workflow IR: implementation notes"
 date: 2026-08-12
-status: active
+status: reference
 tags: [adaptive-chain-runtime, chains, workflow-ir, implementation-notes]
 ---
 

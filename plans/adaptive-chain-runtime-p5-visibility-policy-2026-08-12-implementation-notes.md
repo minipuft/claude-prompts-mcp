@@ -2,7 +2,7 @@
 title: "P5 Visibility Policy — Implementation Notes"
 plan: adaptive-chain-runtime-p5-visibility-policy-2026-08-12.md
 date: 2026-08-12
-status: active
+status: reference
 tags: [adaptive-chain-runtime, deviations]
 ---
 

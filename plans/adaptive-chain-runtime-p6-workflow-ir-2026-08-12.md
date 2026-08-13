@@ -1,7 +1,7 @@
 ---
 title: "P6 — Planner-submitted Workflow IR (+ the five findings deferred here)"
 date: 2026-08-12
-status: active
+status: reference
 tags: [adaptive-chain-runtime, chains, workflow-ir, mcp-contracts, delegation]
 ---
 

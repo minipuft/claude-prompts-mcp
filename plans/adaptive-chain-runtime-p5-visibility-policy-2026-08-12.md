@@ -1,7 +1,7 @@
 ---
 title: "P5 — Visibility Policy (context compiler, honest scope)"
 date: 2026-08-12
-status: active
+status: reference
 tags: [adaptive-chain-runtime, chains, visibility, gates]
 ---
 
