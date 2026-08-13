@@ -8,7 +8,13 @@
 
 import { z } from 'zod/v4';
 
-import { ChainStepSchema } from '#modules/prompts/prompt-schema.js';
+import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
+
+import {
+  ArgumentValidationSchema,
+  ChainStepSchema,
+  PromptInjectionConfigSchema,
+} from '#modules/prompts/prompt-schema.js';
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -65,16 +71,69 @@ export const resourceManagerInputSchema = z
     user_message_template: z.string().optional(),
     /** [Prompt] Optional system message for the prompt. */
     system_message: z.string().optional(),
-    /** [Prompt] Argument definitions for the prompt. */
+    /**
+     * [Prompt] Argument definitions for the prompt.
+     *
+     * Mirrors `PromptArgumentSchema` (prompt-schema.ts) field for field, deliberately. Until
+     * 2026-08-12 this accepted only `{name, type, description}`, all three required, with `type`
+     * as a free `z.string()`. Zod strips unknown keys, so `required`, `defaultValue` and
+     * `validation` were discarded at the FIRST boundary — before the router, the processor or the
+     * writer ever saw them. The contract (`resource-manager.json`), `core/types.ts` and the loader
+     * all already declared `required`; this schema was the one layer that did not, which is why a
+     * prompt authored through the tool could never carry it (P7-D1).
+     *
+     * Every field stays OPTIONAL rather than mirroring the loader's `required: z.boolean()
+     * .default(false)`. A default here would materialise `required: false` into the YAML of every
+     * argument on every update — writing a default is the failure mode the widening exists to
+     * avoid. The loader applies the default at load time, where it belongs.
+     *
+     * Explicit fields, not `.passthrough()` (OQ-P7-2). The sibling `chain_steps` ten lines below
+     * IS passthrough because a step is an opaque object; an argument is a typed contract, and
+     * passthrough would admit arbitrary keys into persisted YAML.
+     */
     arguments: z
       .array(
         z.object({
           name: z.string(),
-          type: z.string(),
-          description: z.string(),
+          type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
+          description: z.string().optional(),
+          required: z.boolean().optional(),
+          defaultValue: z.unknown().optional(),
+          /**
+           * Also the switch that arms required-enforcement: `ArgumentParser.enrichResult` runs
+           * schema validation (which is what throws on a missing required argument) only when
+           * some argument declares `minLength`/`maxLength`/`pattern`. Unsettable through the tool
+           * until now, so a tool-authored `required: true` had no reachable enforcement path.
+           */
+          validation: ArgumentValidationSchema.optional(),
         })
       )
       .optional(),
+    /**
+     * [Prompt] Anchored replacements applied server-side to a prompt's text bodies (P7 Tier 3).
+     *
+     * Additive union member — a caller that never sends `patch` sees the previous behaviour
+     * unchanged. Operations apply IN ORDER, each against the previous one's output. `old_string`
+     * must match exactly and (without `replace_all`) uniquely; an ambiguous anchor is a typed
+     * rejection rather than a best-effort edit. `field` names a tool parameter, and the vocabulary
+     * comes from `PATCH_TARGET_FIELDS` so the schema cannot drift from the applier.
+     */
+    patch: z
+      .array(
+        z.object({
+          field: z.enum(PATCH_TARGET_FIELDS),
+          old_string: z.string().min(1),
+          new_string: z.string(),
+          replace_all: z.boolean().optional(),
+        })
+      )
+      .optional(),
+    /**
+     * [Prompt] Render and diff the update without writing it — no file change, no version row.
+     * Applies to a full update as well as a patch; it is how an operator confirms an anchor
+     * matched before spending a version.
+     */
+    dry_run: z.boolean().optional(),
     /** [Prompt] Chain steps definition for multi-step prompts. */
     chain_steps: z.array(ChainStepSchema.passthrough()).optional(),
     /** [Prompt] Step-level operation for chain updates (default: replace entire array). */
@@ -89,6 +148,49 @@ export const resourceManagerInputSchema = z
     tools: z.array(z.unknown()).optional(),
     /** [Prompt] Gate configuration: include, exclude, framework_gates. */
     gate_configuration: z.record(z.string(), z.unknown()).optional(),
+    // ── Prompt parameters the writer preserves rather than builds (OQ-P7-8) ─────
+    //
+    // Tier 1 made these five SURVIVE an update by reading them off the on-disk `prompt.yaml`
+    // (`PRESERVED_PROMPT_YAML_KEYS`), which left them authorable only by hand — a state the
+    // project's MCP-tooling-only constraint forbids (P7-F7). Owner ruling 2026-08-13: all five
+    // become settable. Additive union members, non-breaking per the Public API Contract.
+    //
+    // Every shape here mirrors `PromptYamlSchema` (prompt-schema.ts:465-487) exactly — same
+    // optionality, same enum members — because the value goes straight into the YAML the loader
+    // reads back. A wider shape tool-side would be accepted at the call and rejected at load.
+    //
+    // Parameter names are the snake_case form of the YAML keys, matching the 70/70 snake_case
+    // convention across every tool contract; `UPDATE_FIELDS` owns the one mapping, exactly as it
+    // already does for `gate_configuration` → `gateConfiguration`.
+    /**
+     * [Prompt] Prompt-level injection control. Resolved between step and chain config: a prompt's
+     * declaration about itself outranks the chain or category it runs inside. Omitting this leaves
+     * whatever the file declares untouched.
+     */
+    injection: PromptInjectionConfigSchema.optional(),
+    /**
+     * [Prompt] Whether this prompt registers as a native MCP prompt.
+     *
+     * FREEZE HAZARD: this value is resolved through prompt → category → global → default `true`,
+     * and setting it writes an explicit prompt-level value that outranks all three PERMANENTLY —
+     * the prompt stops following any later change to the category or global default. Omit it
+     * unless this prompt specifically needs to differ from its category.
+     */
+    register_with_mcp: z.boolean().optional(),
+    /**
+     * [Prompt] Native MCP prompt behaviour: 'expand' (plain template text) or 'launch' (route
+     * through prompt_engine).
+     *
+     * FREEZE HAZARD: resolved through prompt → category → default `'expand'`; an explicit value
+     * outranks both PERMANENTLY and the prompt stops following any later change to the category
+     * default. Omit it unless this prompt specifically needs to differ from its category.
+     */
+    mcp_prompt_mode: z.enum(['expand', 'launch']).optional(),
+    /** [Prompt] Client-agnostic capability hint for `==>` delegated steps. */
+    subagent_model: z.enum(['heavy', 'standard', 'fast']).optional(),
+    /** [Prompt] Default host agent for this prompt's `==>` delegated steps (a step may override). */
+    agent_type: z.string().min(1).optional(),
+
     /** [Prompt] Hint for execution type on creation. */
     execution_hint: z.enum(['single', 'chain']).optional(),
     /** [Prompt] List filter query. */

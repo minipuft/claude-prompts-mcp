@@ -6,6 +6,10 @@
  * that routes to prompt, gate, and framework handlers.
  */
 
+import type {
+  ArgumentValidationYaml,
+  PromptInjectionConfigYaml,
+} from '#modules/prompts/prompt-schema.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
   FrameworkManagerInput,
@@ -23,6 +27,7 @@ import type {
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
+import type { TemplatePatchOperation } from '../prompt/operations/template-patch.js';
 
 /**
  * Script tool definition for inline tool creation
@@ -117,12 +122,28 @@ export interface ResourceManagerInput {
   category?: string;
   user_message_template?: string;
   system_message?: string;
+  /**
+   * Kept in lockstep with the `arguments` member of `resourceManagerInputSchema` and with
+   * `PromptArgumentSchema` (prompt-schema.ts). `type` narrows to the loader's five-value
+   * vocabulary rather than `string`: the schema now rejects anything else, so a wider type here
+   * would describe values that can no longer arrive.
+   */
   arguments?: Array<{
     name: string;
-    type?: string;
+    type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
     description?: string;
     required?: boolean;
+    defaultValue?: unknown;
+    validation?: ArgumentValidationYaml;
   }>;
+  /**
+   * [Prompt] Anchored replacements applied to a prompt's text bodies. Kept in lockstep with the
+   * `patch` member of `resourceManagerInputSchema`; the operation type is the applier's own, so a
+   * change to `TemplatePatchOperation` cannot leave this layer describing a different shape.
+   */
+  patch?: TemplatePatchOperation[];
+  /** [Prompt] Render and diff the update without writing it or recording a version. */
+  dry_run?: boolean;
   chain_steps?: Array<Record<string, unknown>>;
   /** [Prompt] Step-level operation for chain updates (default: replace entire array) */
   chain_step_operation?: 'add' | 'remove' | 'reorder' | 'replace';
@@ -139,6 +160,18 @@ export interface ResourceManagerInput {
     exclude?: string[];
     framework_gates?: boolean;
   };
+  /**
+   * The five prompt-level fields the YAML writer preserves rather than builds (OQ-P7-8). Kept in
+   * lockstep with `resourceManagerInputSchema` and with `PromptYamlSchema` — the value is written
+   * verbatim into `prompt.yaml`, so a wider type here would describe values the loader rejects.
+   * `register_with_mcp` and `mcp_prompt_mode` freeze the prompt against its category/global
+   * default once set; see the schema for the operator-facing statement of that.
+   */
+  injection?: PromptInjectionConfigYaml;
+  register_with_mcp?: boolean;
+  mcp_prompt_mode?: 'expand' | 'launch';
+  subagent_model?: 'heavy' | 'standard' | 'fast';
+  agent_type?: string;
   execution_hint?: 'single' | 'chain';
   is_chain?: boolean;
   full_restart?: boolean;

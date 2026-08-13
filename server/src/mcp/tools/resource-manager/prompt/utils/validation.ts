@@ -3,12 +3,15 @@
  * Field validation and error handling utilities
  */
 
+import nunjucks from 'nunjucks';
+
 import { promptResourceMetadata } from '../../../../metadata/definitions/prompt-resource.js';
 import { ValidationContext } from '../core/types.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
 
+import { ResourceVerificationService } from '#modules/resources/services/index.js';
 import { ValidationError } from '#shared/utils/index.js';
 
 /**
@@ -29,7 +32,85 @@ export const UPDATE_FIELDS: Record<string, string> = {
   // is declared `[Framework]` in tooling/contracts/resource-manager.json. With the alias gone the
   // field needs no special handling and clears like every other one.
   gate_configuration: 'gateConfiguration',
+  // OQ-P7-8 (owner ruling 2026-08-13). The five fields `PRESERVED_PROMPT_YAML_KEYS` carries
+  // forward are now also settable. These entries are what makes an explicitly supplied value
+  // reach `promptData` — and `resolvePreservedPromptYamlFields` gives `promptData` precedence
+  // over the on-disk value, so "set" and "preserve" are one write model with a fallback, not the
+  // two competing ones the settable/preserved sets were originally kept disjoint to prevent.
+  //
+  // Row 1.5 deliberately added none of these (DEV-T1-4): with no tool parameter to key on, an
+  // entry here was inert. The parameters now exist, so the entries are live.
+  injection: 'injection',
+  register_with_mcp: 'registerWithMcp',
+  mcp_prompt_mode: 'mcpPromptMode',
+  subagent_model: 'subagentModel',
+  agent_type: 'agentType',
 };
+
+/**
+ * The three preserved fields the canonical snapshot projects, and the two it cannot.
+ *
+ * A field belongs here only when the projection SOURCE holds its authored value. `ConvertedPrompt`
+ * copies `subagentModel` and `agentType` verbatim from the prompt's own YAML (converter.ts:165-169,
+ * both behind a `!= null` guard) and carries `injection` only when the file declared one
+ * (converter.ts:176-177) — so for these three, present-on-the-source means authored.
+ *
+ * `registerWithMcp` and `mcpPromptMode` are deliberately absent. `PromptConverter` RESOLVES both
+ * through prompt → category → global → hard-coded default (converter.ts:28-64) and assigns them
+ * unconditionally, so they are ALWAYS present on a live prompt. Projecting them "if present" would
+ * therefore materialise an inherited default into `promptData` on EVERY update, and `promptData`
+ * outranks the writer's on-disk preservation — freezing the prompt against any later change to the
+ * default it was inheriting, on every edit, without anyone asking. That is DEV-T1-3's hazard made
+ * unconditional. They reach the YAML only when a caller sets them explicitly.
+ */
+export const SNAPSHOT_PRESERVED_FIELDS = ['injection', 'subagentModel', 'agentType'] as const;
+
+/**
+ * Project a live prompt onto the canonical snapshot shape `updatePrompt` records.
+ *
+ * `recordEditResult` decides whether to write a bridge row by structurally comparing the latest
+ * recorded snapshot against the live pre-edit state. A live `ConvertedPrompt` carries
+ * loader-resolved runtime keys the recorded shape never has (`registerWithMcp`, `mcpPromptMode`,
+ * `promptDir`, `scriptTools`, …), and the comparison is JSON-based, so passing the raw converted
+ * prompt makes every post-reload edit look out-of-band and bridge — doubling rows in steady
+ * state. Both sides of every before/after comparison (bridge check, diffs, dry-run) must
+ * therefore come from THIS one projection; `updatePrompt`'s produced `promptData` is this object
+ * plus `tools` (which only ever arrives via `args.tools` — the live prompt carries loaded
+ * `scriptTools`, not the raw id list, so the prior value is not reconstructable here and the key
+ * is deliberately absent).
+ *
+ * The `SNAPSHOT_PRESERVED_FIELDS` tail (OQ-P7-8) is preserve-if-present, never defaulted: absent
+ * on the source stays absent from the projection. Without it a recorded snapshot omits a field the
+ * file still carries, and a rollback to that version restores a prompt the version never described
+ * — it would land on whatever the on-disk preservation happened to be holding. With it, every
+ * snapshot recorded from this point describes the whole authored state of those three fields.
+ */
+export function canonicalPromptSnapshot(
+  id: string,
+  source: object | undefined
+): Record<string, unknown> {
+  const from = source as Record<string, unknown> | undefined;
+  const snapshot: Record<string, unknown> = {
+    id,
+    name: from?.['name'] ?? id,
+    category: from?.['category'] ?? 'general',
+    description: from?.['description'] ?? '',
+    systemMessage: from?.['systemMessage'],
+    userMessageTemplate: from?.['userMessageTemplate'] ?? '',
+    arguments: from?.['arguments'] ?? [],
+    chainSteps: from?.['chainSteps'] ?? [],
+    gateConfiguration: from?.['gateConfiguration'],
+  };
+
+  for (const field of SNAPSHOT_PRESERVED_FIELDS) {
+    const value = from?.[field];
+    if (value !== undefined) {
+      snapshot[field] = value;
+    }
+  }
+
+  return snapshot;
+}
 
 /**
  * Action-specific parameter requirements and examples
@@ -395,6 +476,189 @@ export function validateChainStepReferences(
   }
 
   return { valid: warnings.length === 0, warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Produced-prompt validation (P7 row 3.5)
+// ---------------------------------------------------------------------------
+
+/** The three text bodies whose template syntax is checked before a write. */
+const TEMPLATE_BODY_FIELDS = ['description', 'systemMessage', 'userMessageTemplate'] as const;
+
+/**
+ * The subset of `promptData` this validation reads. Deliberately not `PromptData` or
+ * `ConvertedPrompt`: the check runs on the state an update PRODUCES, which is a plain object
+ * assembled by the processor and not yet either type.
+ */
+export interface PromptWriteCandidate {
+  id?: unknown;
+  name?: unknown;
+  category?: unknown;
+  description?: unknown;
+  systemMessage?: unknown;
+  userMessageTemplate?: unknown;
+  arguments?: unknown;
+  chainSteps?: unknown;
+  gateConfiguration?: unknown;
+}
+
+export interface PromptWriteDefect {
+  /** Stable class of the defect, used to tell a NEW defect from a pre-existing one. */
+  key: string;
+  message: string;
+}
+
+export interface PromptWriteDiagnosis {
+  /** Defects this edit introduces — the write must not proceed. */
+  blocking: PromptWriteDefect[];
+  /** Defects the prompt already had before the edit — reported, never blocking. */
+  preExisting: PromptWriteDefect[];
+}
+
+/**
+ * `{{ref:id}}` and `{{script:id ...}}` are resolved by the reference resolvers BEFORE Nunjucks
+ * ever sees the template (`processTemplateWithRefs`), and neither is valid Nunjucks expression
+ * syntax on its own. Measured 2026-08-12: 4 on-disk resource files carry them, and every one throws
+ * under a bare parse. They are neutralised here so the syntax check reads the template the engine will
+ * actually compile. Patterns mirror `prompt-reference-validator.ts` and `script-reference-resolver.ts`.
+ */
+const REFERENCE_PLACEHOLDER_PATTERNS: RegExp[] = [
+  /\{\{ref:([a-zA-Z0-9_-]+)\}\}/g,
+  /\{\{script:([a-zA-Z0-9_-]+)(?:\.([a-zA-Z0-9_]+))?((?:\s+[a-zA-Z_][a-zA-Z0-9_]*=(?:'[^']*'|"[^"]*"|\d+(?:\.\d+)?|true|false))*)\s*\}\}/g,
+];
+
+let syntaxEnvironment: nunjucks.Environment | undefined;
+let verificationService: ResourceVerificationService | undefined;
+
+/** Stateless service; one instance per process, matching `cli-shared/resource-validation.ts:13`. */
+function getVerificationService(): ResourceVerificationService {
+  verificationService ??= new ResourceVerificationService();
+  return verificationService;
+}
+
+/**
+ * A loader-less environment. `getNunjucksEnv()` (jsonUtils.ts:59) configures the DEFAULT tag
+ * delimiters and registers no custom extensions, and only extensions change how a template parses —
+ * so this compiles identically to the runtime environment while avoiding `nunjucks.configure()`'s
+ * global side effect and its filesystem path resolution inside a validator.
+ */
+function getSyntaxEnvironment(): nunjucks.Environment {
+  syntaxEnvironment ??= new nunjucks.Environment(null, {
+    autoescape: false,
+    throwOnUndefined: false,
+  });
+  return syntaxEnvironment;
+}
+
+/**
+ * Compile-only syntax check.
+ *
+ * Eager COMPILE rather than a render with empty arguments: rendering evaluates the template, so
+ * `{% for j in ci_jobs.split(',') %}` throws on an undefined variable even though its syntax is
+ * valid — measured against `workflow/github_repo_setup`. Compiling separates "this text is not a
+ * template" from "this template needs its arguments", and only the first is a write-blocking
+ * defect.
+ */
+function findTemplateSyntaxError(text: string): string | undefined {
+  let neutralised = text;
+  for (const pattern of REFERENCE_PLACEHOLDER_PATTERNS) {
+    neutralised = neutralised.replace(pattern, 'reference_placeholder');
+  }
+
+  try {
+    // `eagerCompile: true` is what turns construction into a parse. `nunjucks.compile()` is the
+    // same call with that flag typed away by `@types/nunjucks`, so the class is used directly.
+    new nunjucks.Template(neutralised, getSyntaxEnvironment(), undefined, true);
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message.trim() : String(error);
+  }
+}
+
+function collectPromptWriteDefects(candidate: PromptWriteCandidate): PromptWriteDefect[] {
+  const defects: PromptWriteDefect[] = [];
+
+  for (const field of TEMPLATE_BODY_FIELDS) {
+    const value = candidate[field];
+    if (typeof value !== 'string' || value.length === 0) continue;
+    const syntaxError = findTemplateSyntaxError(value);
+    if (syntaxError !== undefined) {
+      defects.push({ key: `syntax:${field}`, message: `${field}: ${syntaxError}` });
+    }
+  }
+
+  // `tools` is deliberately excluded from the projection: the writer holds tool DEFINITION
+  // objects while `PromptYamlSchema` declares an id list (P7-F8), so including it would report a
+  // shape mismatch that exists on every prompt and has nothing to do with the edit under test.
+  //
+  // Validation goes through `ResourceVerificationService`, not `validatePromptYaml` directly:
+  // `.dependency-cruiser.cjs` `tool-layer-no-validator-value-imports` (severity: error) bars
+  // `src/mcp/tools/` from value-importing `modules/prompts/prompt-schema`, and this is the same
+  // service `file-operations.ts:183` verifies the WRITTEN file with — so the pre-write verdict and
+  // the post-write verdict cannot diverge.
+  const projection: Record<string, unknown> = {
+    id: candidate.id,
+    name: candidate.name,
+    category: candidate.category,
+    description: candidate.description,
+    systemMessage: candidate.systemMessage,
+    userMessageTemplate: candidate.userMessageTemplate,
+    arguments: candidate.arguments,
+    chainSteps: candidate.chainSteps,
+    gateConfiguration: candidate.gateConfiguration,
+  };
+  for (const key of Object.keys(projection)) {
+    if (projection[key] === undefined) delete projection[key];
+  }
+
+  const promptId = typeof candidate.id === 'string' ? candidate.id : 'prompt';
+  const schemaResult = getVerificationService().validateDocument(
+    'prompts',
+    promptId,
+    `${promptId}/prompt.yaml`,
+    projection
+  );
+  if (!schemaResult.valid) {
+    for (const issue of schemaResult.errors) {
+      defects.push({ key: `schema:${issue.path}`, message: `${issue.path}: ${issue.message}` });
+    }
+  }
+
+  return defects;
+}
+
+/**
+ * Diagnose the state an update would write, relative to the state it replaces.
+ *
+ * Differential by design. Three on-disk prompts carry Handlebars-style `{{#if}}` / `{{{x}}}` text
+ * that no Nunjucks parse accepts; a flat check would refuse every future edit to them, including
+ * an edit that improves them. A defect is blocking only when the edit INTRODUCES it — the same
+ * defect class present before the edit is reported and allowed through.
+ */
+export function diagnosePromptWrite(
+  before: PromptWriteCandidate | null | undefined,
+  after: PromptWriteCandidate
+): PromptWriteDiagnosis {
+  const afterDefects = collectPromptWriteDefects(after);
+  if (afterDefects.length === 0) {
+    return { blocking: [], preExisting: [] };
+  }
+
+  const beforeKeys = new Set(
+    before != null ? collectPromptWriteDefects(before).map((defect) => defect.key) : []
+  );
+
+  const blocking: PromptWriteDefect[] = [];
+  const preExisting: PromptWriteDefect[] = [];
+  for (const defect of afterDefects) {
+    if (beforeKeys.has(defect.key)) {
+      preExisting.push(defect);
+    } else {
+      blocking.push(defect);
+    }
+  }
+
+  return { blocking, preExisting };
 }
 
 /**

@@ -8,7 +8,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { OperationResult, PromptResourceDependencies } from '../core/types.js';
+import { CategoryShipStatus, OperationResult, PromptResourceDependencies } from '../core/types.js';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
@@ -23,7 +23,7 @@ import {
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
-import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
+import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface FileOperationsDependencies extends Pick<
   PromptResourceDependencies,
@@ -44,6 +44,138 @@ export interface FileOperationsDependencies extends Pick<
 export function toYamlPromptId(promptId: string): string {
   const segments = String(promptId).split('/');
   return segments[segments.length - 1] ?? String(promptId);
+}
+
+/**
+ * Prompt-level keys `PromptYamlSchema` accepts that the writer builds no value for.
+ *
+ * The writer emitted 10 of the 17 fields the loader accepts, so an `update` through
+ * `resource_manager` silently deleted every one of these from a prompt that declared them
+ * (P7-F2). `subagentModel` and `agentType` govern `==>` delegation, so the loss was behavioural,
+ * not cosmetic.
+ */
+export const PRESERVED_PROMPT_YAML_KEYS = [
+  'injection',
+  'registerWithMcp',
+  'mcpPromptMode',
+  'subagentModel',
+  'agentType',
+] as const;
+
+/**
+ * Decide what each preserved key should carry into the rewritten YAML: an explicitly supplied
+ * value if the caller had one, otherwise whatever the file itself already declared, otherwise
+ * nothing.
+ *
+ * Preserve-if-present, never write defaults — and the on-disk YAML is the only source that can
+ * honour that. `ConvertedPrompt.registerWithMcp` and `.mcpPromptMode` are always populated because
+ * `PromptConverter` RESOLVES them through prompt → category → global → hard-coded default, so
+ * carrying them from the loaded prompt would bake a category or global default into a file that
+ * never declared one, freezing that prompt against any future change to the default it was
+ * inheriting. `injection` has the same hazard in a milder form: the loaded value is normalised, so
+ * writing it back would churn the authored shape.
+ *
+ * The explicit branch is reachable from the tool surface as of OQ-P7-8 — `injection`,
+ * `register_with_mcp`, `mcp_prompt_mode`, `subagent_model` and `agent_type` are `resource_manager`
+ * parameters, mapped to these keys by `UPDATE_FIELDS`. That makes this function the precedence
+ * rule the whole feature rests on: an explicitly supplied value wins, an omitted one leaves the
+ * file's own declaration exactly as it was.
+ */
+export function resolvePreservedPromptYamlFields(
+  promptData: Record<string, unknown>,
+  existingYaml: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const preserved: Record<string, unknown> = {};
+
+  for (const key of PRESERVED_PROMPT_YAML_KEYS) {
+    const supplied = promptData[key];
+    if (supplied !== undefined) {
+      preserved[key] = supplied;
+      continue;
+    }
+    const declared = existingYaml?.[key];
+    if (declared !== undefined) {
+      preserved[key] = declared;
+    }
+  }
+
+  return preserved;
+}
+
+/** One parsed `.gitignore` line: its pattern segments, negation flag, and anchoring. */
+interface GitignoreRule {
+  negate: boolean;
+  /** Pattern split on `/`, trailing slash and `/**` suffix stripped (`'*'` segments are wildcards). */
+  segments: string[];
+  /**
+   * `true` when the pattern contains a `/` other than a trailing one — anchored to the root of
+   * this `.gitignore` and matched as a path prefix. `false` (e.g. bare `*`, `!.gitignore`) means
+   * the pattern has no `/` at all and git matches it against any single path segment, at any
+   * depth — see `git help gitignore` "PATTERN FORMAT".
+   */
+  anchored: boolean;
+}
+
+function parseGitignoreRules(gitignoreText: string): GitignoreRule[] {
+  return gitignoreText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .map((line) => {
+      const negate = line.startsWith('!');
+      let pattern = negate ? line.slice(1) : line;
+      if (pattern.endsWith('/')) {
+        pattern = pattern.slice(0, -1);
+      }
+      const anchored = pattern.includes('/');
+      if (pattern.endsWith('/**')) {
+        pattern = pattern.slice(0, -3);
+      }
+      return { negate, segments: pattern.split('/'), anchored };
+    });
+}
+
+function gitignoreRuleMatches(rule: GitignoreRule, pathSegments: string[]): boolean {
+  const segmentMatches = (pattern: string, actual: string): boolean =>
+    pattern === '*' || pattern === actual;
+
+  if (!rule.anchored) {
+    // Unanchored (no non-trailing `/`): git matches a single-segment pattern against any
+    // component of the path, at any depth — not just a prefix.
+    return pathSegments.some((segment) => segmentMatches(rule.segments[0] ?? '', segment));
+  }
+  // Anchored: matched as a prefix from the root of this `.gitignore`. A directory match implies
+  // everything beneath it matches too (git prunes descent into an ignored directory), so a
+  // shorter pattern matching the leading segments is sufficient regardless of a `/**` suffix.
+  if (rule.segments.length > pathSegments.length) {
+    return false;
+  }
+  return rule.segments.every((segment, i) => segmentMatches(segment, pathSegments[i] ?? ''));
+}
+
+/**
+ * Does `categorySlug` ship with the repo, per `.gitignore` text alone?
+ *
+ * Pure by design (no fs): `resources/prompts/.gitignore` ignores everything (`*`) and un-ignores
+ * specific categories with `!<category>/` + `!<category>/**` pairs (the pair is required — git
+ * cannot re-include a file whose parent directory is still excluded, so the source file always
+ * carries both). This walks a synthetic path for a brand-new prompt under the category
+ * (`<category>/__new_prompt__/prompt.yaml`) through every rule in file order — last match wins,
+ * matching git's own precedence — so it answers the same question `git check-ignore` would for a
+ * prompt that does not yet exist on disk.
+ *
+ * Table-driven tests bind this against `git check-ignore` ground truth for all real categories,
+ * so a change here that drifts from git's semantics fails loudly rather than silently.
+ */
+export function resolveCategoryShipStatus(gitignoreText: string, categorySlug: string): boolean {
+  const testPath = [categorySlug, '__new_prompt__', 'prompt.yaml'];
+  let ignored = false;
+  for (const rule of parseGitignoreRules(gitignoreText)) {
+    if (gitignoreRuleMatches(rule, testPath)) {
+      ignored = !rule.negate;
+    }
+  }
+  return !ignored;
 }
 
 /**
@@ -144,6 +276,30 @@ export class FileOperations {
     return {
       message: result.messages.join('\n'),
       affectedFiles: result.affectedFiles,
+      categoryShipStatus: await this.readCategoryShipStatus(promptsDir, effectiveCategory),
+    };
+  }
+
+  /**
+   * Read `.gitignore` from the resolved prompts directory and resolve category ship status
+   * (P7-D4). A missing `.gitignore` — the common case for a workspace overlay that is not the
+   * bundled repo tree — means nothing restricts what ships, so the category always ships.
+   */
+  private async readCategoryShipStatus(
+    promptsDir: string,
+    categorySlug: string
+  ): Promise<CategoryShipStatus> {
+    const gitignorePath = path.join(promptsDir, '.gitignore');
+    let gitignoreText: string;
+    try {
+      gitignoreText = await fs.readFile(gitignorePath, 'utf-8');
+    } catch {
+      return { category: categorySlug, ships: true, gitignorePath };
+    }
+    return {
+      category: categorySlug,
+      ships: resolveCategoryShipStatus(gitignoreText, categorySlug),
+      gitignorePath,
     };
   }
 
@@ -273,6 +429,11 @@ export class FileOperations {
     // Check if prompt directory already exists
     const existsBefore = existsSync(promptDir);
 
+    // Read BEFORE the directory is (re)created — this is the only surviving record of the fields
+    // the writer builds no value for. Runs inside the mutation transaction's `mutate`, before any
+    // write, so it observes pre-mutation content.
+    const existingYaml = await this.readExistingPromptYaml(path.join(promptDir, 'prompt.yaml'));
+
     // Create prompt directory
     await fs.mkdir(promptDir, { recursive: true });
     paths.push(promptDir);
@@ -313,6 +474,13 @@ export class FileOperations {
       promptYamlData['tools'] = promptData.tools.map((t: ToolDefinitionInput) => t.id);
     }
 
+    // Carry forward the fields this writer builds no value for. Without this, every update
+    // deletes them (P7-F2).
+    Object.assign(
+      promptYamlData,
+      resolvePreservedPromptYamlFields(promptData as Record<string, unknown>, existingYaml)
+    );
+
     // Write prompt.yaml
     const promptYamlPath = path.join(promptDir, 'prompt.yaml');
     const yamlContent = serializeYaml(promptYamlData, { sortKeys: false });
@@ -339,6 +507,40 @@ export class FileOperations {
     };
   }
   /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unsafe-member-access */
+
+  /**
+   * Read the prompt.yaml already on disk, for field preservation only.
+   *
+   * A missing or unparseable file is not an error here: a create has no prior file, and a file
+   * too broken to parse is about to be replaced wholesale by the write this feeds. Either way
+   * there is simply nothing to preserve, and the write itself is still validated afterwards by
+   * `ResourceVerificationService` inside the mutation transaction.
+   */
+  private async readExistingPromptYaml(
+    promptYamlPath: string
+  ): Promise<Record<string, unknown> | undefined> {
+    if (!existsSync(promptYamlPath)) {
+      return undefined;
+    }
+
+    try {
+      const raw = await fs.readFile(promptYamlPath, 'utf8');
+      const parsed = parseYaml<Record<string, unknown> | null>(raw, { filename: promptYamlPath });
+      // An empty or `null` document parses successfully to a non-object — nothing to preserve.
+      if (!parsed.success || parsed.data == null || typeof parsed.data !== 'object') {
+        this.logger.warn(
+          `Could not read existing prompt.yaml for field preservation: ${promptYamlPath}`
+        );
+        return undefined;
+      }
+      return parsed.data;
+    } catch (error) {
+      this.logger.warn(
+        `Could not read existing prompt.yaml for field preservation: ${promptYamlPath} (${String(error)})`
+      );
+      return undefined;
+    }
+  }
 
   /**
    * Create or update script tools for a prompt

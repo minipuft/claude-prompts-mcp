@@ -112,6 +112,38 @@ describe('ResourceManagerRouter', () => {
       expect(mockGateManager.handleAction).not.toHaveBeenCalled();
       expect(result.isError).toBeFalsy();
     });
+
+    /**
+     * OQ-P7-8. `routeToPromptResource` builds an explicit key whitelist, so a parameter left out of
+     * it is dropped SILENTLY — the schema still accepts the call, the processor still runs, and the
+     * field simply never arrives. Nothing downstream can detect that: every processor test calls
+     * `updatePrompt` directly and never crosses this boundary. This is the only assertion in the
+     * suite that would fail on a forgotten pass-through.
+     */
+    test('passes the five preserved-field parameters through to the prompt handler', async () => {
+      const args = {
+        resource_type: 'prompt',
+        action: 'update',
+        id: 'review_code',
+        injection: { 'system-prompt': { enabled: false } },
+        register_with_mcp: false,
+        mcp_prompt_mode: 'launch',
+        subagent_model: 'heavy',
+        agent_type: 'code-lifecycle-auditor',
+      } as unknown as ResourceManagerInput;
+
+      await router.handleAction(args, {});
+
+      const forwarded = mockPromptResourceHandler.handleAction.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(forwarded['injection']).toEqual({ 'system-prompt': { enabled: false } });
+      expect(forwarded['register_with_mcp']).toBe(false);
+      expect(forwarded['mcp_prompt_mode']).toBe('launch');
+      expect(forwarded['subagent_model']).toBe('heavy');
+      expect(forwarded['agent_type']).toBe('code-lifecycle-auditor');
+    });
   });
 
   describe('action validation', () => {

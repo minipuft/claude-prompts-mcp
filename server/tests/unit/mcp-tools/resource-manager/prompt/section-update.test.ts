@@ -15,6 +15,15 @@ describe('UPDATE_FIELDS map', () => {
       arguments: 'arguments',
       chain_steps: 'chainSteps',
       gate_configuration: 'gateConfiguration',
+      // OQ-P7-8: the five fields `PRESERVED_PROMPT_YAML_KEYS` carries forward became settable
+      // (owner ruling 2026-08-13). Listed exhaustively rather than spread from the preserved
+      // constant, because this assertion's job is to notice a map that grew without anyone saying
+      // so — importing the growth would defeat it.
+      injection: 'injection',
+      register_with_mcp: 'registerWithMcp',
+      mcp_prompt_mode: 'mcpPromptMode',
+      subagent_model: 'subagentModel',
+      agent_type: 'agentType',
     });
   });
 

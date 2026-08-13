@@ -64,10 +64,29 @@ export interface PromptResourceData {
   categories: Category[];
 }
 
+/**
+ * Whether a category's written prompts are actually tracked by git (P7-D4).
+ *
+ * `server/resources/prompts/.gitignore` allowlists which categories ship in the published repo —
+ * the write path never consulted it, so `create`/`update` reported identical success whether the
+ * prompt landed in a shipped category or a gitignored one. `ships: false` does not block the
+ * write (OQ-P7-4 ruled warn, not refuse); it only tells the caller the file will not be tracked.
+ */
+export interface CategoryShipStatus {
+  /** Slugified category (matches the directory actually written to disk). */
+  category: string;
+  /** `false` means the category is excluded by the allowlist and will not ship with the repo. */
+  ships: boolean;
+  /** Absolute path to the `.gitignore` consulted — may not exist (workspace overlays). */
+  gitignorePath: string;
+}
+
 export interface OperationResult {
   message: string;
   affectedFiles?: string[];
   metadata?: any;
+  /** Present whenever a write path resolved category-ship status (P7-D4). */
+  categoryShipStatus?: CategoryShipStatus;
 }
 
 export interface ValidationContext {

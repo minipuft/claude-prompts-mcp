@@ -85,8 +85,22 @@
     },
     {
       "name": "arguments",
-      "type": "array<{name,required?,description?,type?}>",
-      "description": "[Prompt] Argument definitions for the prompt.",
+      "type": "array<{name,required?,description?,type?,defaultValue?,validation?}>",
+      "description": "[Prompt] Argument definitions for the prompt. `type` is one of string|number|boolean|array|object. `required` and `defaultValue` are persisted to the prompt's YAML; `validation` accepts pattern/minLength/maxLength and is what arms required-argument enforcement at execution.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "patch",
+      "type": "array<{field,old_string,new_string,replace_all?}>",
+      "description": "[Prompt] Anchored edits applied server-side on `update`, so one section can be changed without resending the rest. `field` is user_message_template|system_message|description; `old_string` must match the current text EXACTLY (whitespace included) and uniquely, otherwise the update is rejected naming the anchor and its occurrence count; `new_string` may be empty to delete. Operations apply in order. Pass `replace_all: true` to accept a multi-occurrence anchor. Mutually exclusive with `user_message_template`/`system_message` in the same call. Combine with `dry_run: true` to preview.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "dry_run",
+      "type": "boolean",
+      "description": "[Prompt] Preview an `update`: returns the resulting text bodies and the diff without writing the file or recording a version. Works for a full update as well as a `patch`.",
       "status": "working",
       "includeInDescription": false
     },
@@ -108,6 +122,41 @@
       "name": "gate_configuration",
       "type": "object",
       "description": "[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean).",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "injection",
+      "type": "object",
+      "description": "[Prompt] Prompt-level injection control. Keys: system-prompt, gate-guidance, style-guidance; each takes {enabled?: boolean, frequency?: {mode: every|first-only|never, interval?: number}, target?: steps|gates|both}. A prompt's own declaration outranks the chain or category it runs inside. Omit to leave the prompt's existing block untouched.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "register_with_mcp",
+      "type": "boolean",
+      "description": "[Prompt] Whether this prompt registers as a native MCP prompt. FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "mcp_prompt_mode",
+      "type": "enum[expand|launch]",
+      "description": "[Prompt] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "subagent_model",
+      "type": "enum[heavy|standard|fast]",
+      "description": "[Prompt] Client-agnostic capability hint for this prompt's ==> delegated steps.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "agent_type",
+      "type": "string",
+      "description": "[Prompt] Default host agent for this prompt's ==> delegated steps. A step's own agentType overrides it; neither present falls back to chain-executor.",
       "status": "working",
       "includeInDescription": false
     },
@@ -283,6 +332,11 @@
         "chain_steps",
         "tools",
         "gate_configuration",
+        "injection",
+        "register_with_mcp",
+        "mcp_prompt_mode",
+        "subagent_model",
+        "agent_type",
         "execution_hint"
       ]
     },
@@ -301,7 +355,12 @@
         "arguments",
         "chain_steps",
         "tools",
-        "gate_configuration"
+        "gate_configuration",
+        "injection",
+        "register_with_mcp",
+        "mcp_prompt_mode",
+        "subagent_model",
+        "agent_type"
       ]
     },
     {

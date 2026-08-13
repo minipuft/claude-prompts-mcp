@@ -143,6 +143,10 @@ export class ResourceManagerRouter {
       user_message_template: args.user_message_template,
       system_message: args.system_message,
       arguments: args.arguments,
+      // Pass-through, no renaming (mcp-contracts.md): the processor reads `patch`/`dry_run` under
+      // the names the caller sent.
+      patch: args.patch,
+      dry_run: args.dry_run,
       chain_steps: args.chain_steps,
       chain_step_operation: args.chain_step_operation,
       chain_step_index: args.chain_step_index,
@@ -150,6 +154,14 @@ export class ResourceManagerRouter {
       chain_step_order: args.chain_step_order,
       tools: args.tools,
       gate_configuration: args.gate_configuration,
+      // OQ-P7-8. Pass-through, no renaming: `UPDATE_FIELDS` owns the single snake_case →
+      // camelCase mapping these take on their way into the YAML, so a second translation here
+      // would be the hidden router transformation mcp-contracts.md bans.
+      injection: args.injection,
+      register_with_mcp: args.register_with_mcp,
+      mcp_prompt_mode: args.mcp_prompt_mode,
+      subagent_model: args.subagent_model,
+      agent_type: args.agent_type,
       execution_hint: args.execution_hint,
       filter: args.filter,
       format: args.format,
