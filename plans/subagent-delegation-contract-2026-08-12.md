@@ -10,7 +10,7 @@ tags: []
 **Work type**: bug_fix (S1–S4) + feature (S5, migrated from the adaptive-chain master plan as P8)
 **Origin**: owner report 2026-08-12 — "sub-agents aren't receiving the context, or gates, from the
 prompt that leads to the agent firing… they're part of the same step."
-**Parent**: [`adaptive-chain-runtime-2026-08-09.md`](adaptive-chain-runtime-2026-08-09.md) — P8
+**Parent**: [`adaptive-chain-runtime-2026-08-09.md`](reference/adaptive-chain-runtime-2026-08-09.md) — P8
 migrated here in full; delegation findings P5-F1/F5 bind.
 **Companion**: `subagent-delegation-contract-2026-08-12-implementation-notes.md`
 
@@ -150,4 +150,4 @@ a fix for them.
 | Owner report     | 2026-08-12 session — step-scoped gates, `-->` as the only delimiter                                                |
 | Live measurement | `prompt_engine` probes on `chain-reference_demo#1`/`#2`, this session                                              |
 | Prior finding    | P5-F1 (same `chainHistory` field, found independently at P5 T3) · P5-F5 (delegation+visibility client-unreachable) |
-| Codex divergence | [`codex-prompts-port-2026-08-03.md`](codex-prompts-port-2026-08-03.md) §Spike Results S1                           |
+| Codex divergence | [`codex-prompts-port-2026-08-03.md`](reference/codex-prompts-port-2026-08-03.md) §Spike Results S1                 |

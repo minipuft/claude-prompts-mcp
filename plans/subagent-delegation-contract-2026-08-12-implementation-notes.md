@@ -49,6 +49,7 @@ Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 03:56 · `cd server && node scripts/validate-plan-row-tracking.js 2>&1 | tail -2 && npx prettier --check ../plans/*.md ../plans/te` · ran
 - 2026-08-13 03:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20 && echo "=== TYPECHECK DON` · ran
 - 2026-08-13 03:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all 2>&1 | tail -55` · ran
 - 2026-08-13 03:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all 2>&1 | tail -150` · ran

@@ -59,10 +59,10 @@ can race 2b; **Tier 3 onward can**, and the gate should be honored there.
 
 **Owner**: minipuft — validates each client manually; the per-phase client checks are an explicit gate, not a courtesy
 **Parent**: `plans/acquisition-recovery.md` Tier 6 (pointer); subsumes Tier 5's marketplace research
-**Absorbs**: [`downstream-standards-federation-2026-08-02`](downstream-standards-federation-2026-08-02.md)
+**Absorbs**: [`downstream-standards-federation-2026-08-02`](reference/downstream-standards-federation-2026-08-02.md)
 — its five external hold points become **Tier 7**, its four rows that this plan's tiers make
 unnecessary are recorded as superseded there. Prior Codex measurements this plan's Tier 4 depends
-on live in [`codex-prompts-port-2026-08-03`](codex-prompts-port-2026-08-03.md). Both are retired
+on live in [`codex-prompts-port-2026-08-03`](reference/codex-prompts-port-2026-08-03.md). Both are retired
 to `reference` as of 2026-08-12; neither is a source of open work any more.
 **Standard**: [Agent Plugins 1.0.0](https://agent-plugins.org/) — announced 2026-08-06 by OpenAI
 with AWS, Cursor, GitHub, Microsoft, Vercel. **Days old — pin, don't chase.**
@@ -348,7 +348,7 @@ merges. Never in pre-commit, never in the docs/hooks push routes, and token-bear
 | 4.3 | marketplace.json codex entry → native package or removed           | 4.2            | rendered index valid                                                    |
 
 **4.1's "P0-researched" is partly already paid.** The retired
-[`codex-prompts-port-2026-08-03`](codex-prompts-port-2026-08-03.md) §Spike Results holds four
+[`codex-prompts-port-2026-08-03`](reference/codex-prompts-port-2026-08-03.md) §Spike Results holds four
 measured answers against codex-cli 0.146 — the tool-name table, the SubagentStop envelope, the
 directive size budget, and the one that binds hardest here: **plugin `.mcp.json` placeholder
 interpolation does not exist on that release**, so a bundled server cannot start from plugin
