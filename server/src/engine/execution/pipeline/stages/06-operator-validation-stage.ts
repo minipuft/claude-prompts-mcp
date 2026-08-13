@@ -14,8 +14,19 @@ import type { ChainOperator, SymbolicOperator } from '../../parsers/types/operat
  * ensuring framework overrides are valid before execution planning.
  *
  * Dependencies: context.parsedCommand, context.parsedCommand.operators
- * Output: Validated operators (framework names normalized)
- * Can Early Exit: No
+ * Output: Validated operators (framework names normalized) + delegation flags normalized
+ * Can Early Exit: Yes — FOUR exits, in order (measured 2026-08-12; this block read
+ * `Can Early Exit: No` until then, and the stale marker sat directly above the exit that hid
+ * P5-F5 for two phases — P6-F5):
+ *   1. `context.state.session.isBlueprintRestored` — a resumed run replays a blueprint cloned
+ *      AFTER this stage ran on the original invocation, so its flags are already set.
+ *   2. `context.parsedCommand` missing — nothing to validate.
+ *   3. operator set empty — nothing left to normalize. This exit now runs BELOW
+ *      `normalizeDelegation`, not above it: the direct (non-symbolic) invocation path always has
+ *      an empty operator set, so exiting first made YAML-declared `subagentModel` inert on every
+ *      `>>chain` that did not spell `==>` (P5-F5).
+ *   4. `frameworkValidator` unavailable — framework normalization is skipped; delegation
+ *      normalization has already run above it.
  */
 export class OperatorValidationStage extends BasePipelineStage {
   readonly name = 'OperatorValidation';
@@ -42,15 +53,20 @@ export class OperatorValidationStage extends BasePipelineStage {
     }
 
     const operatorSet = parsedCommand?.operators?.operators;
+    const operators: SymbolicOperator[] = Array.isArray(operatorSet) ? operatorSet : [];
 
-    if (!Array.isArray(operatorSet) || operatorSet.length === 0) {
+    // Delegation normalization runs ABOVE the operators-empty check, not below it.
+    // `operators` is populated only by the symbolic parse path; the direct (`>>chain`) path
+    // leaves it empty while still writing per-step `subagentModel` onto parsedCommand.steps.
+    // Returning on an empty operator set therefore left YAML-declared delegation inert on every
+    // direct invocation (P5-F5). `normalizeDelegation` carries its own empty-set guard, so both
+    // halves are safe to call here.
+    this.normalizeDelegation(parsedCommand, operators);
+
+    if (operators.length === 0) {
       this.logExit({ skipped: 'No operators detected' });
       return;
     }
-
-    // Prompt-level delegation:true → mark all chain steps as delegated
-    // Runs regardless of framework validator availability
-    this.normalizeDelegation(parsedCommand, operatorSet);
 
     if (!this.frameworkValidator) {
       this.logExit({ skipped: 'Framework validator unavailable' });
@@ -60,7 +76,7 @@ export class OperatorValidationStage extends BasePipelineStage {
     try {
       const normalizedFrameworkOperators = this.normalizeFrameworkOperators(
         parsedCommand,
-        operatorSet
+        operators
       );
 
       if (normalizedFrameworkOperators > 0) {
@@ -123,6 +139,15 @@ export class OperatorValidationStage extends BasePipelineStage {
    * not restoring this read.
    *
    * Propagates to both parsedCommand.steps (ChainStepPrompt) and operator steps (ChainStep).
+   *
+   * Callable with an empty operator set: `markDelegatedStepPrompts` reads only
+   * `parsedCommand.steps`, and `syncDelegationToOperators` guards on the set being empty. That is
+   * what lets the whole normalization sit above the operators-empty exit (P5-F5).
+   *
+   * `syncDelegationToOperators` writes `ChainStep.delegated` and `ChainOperator.hasDelegation`,
+   * neither of which has a reader downstream of this stage — the observable output of this
+   * method is `ChainStepPrompt.delegated`, read by `chain-operator-executor.ts` (delegation CTA)
+   * and `response-assembler.ts` (handoff section + visibility envelope).
    */
   private normalizeDelegation(
     parsedCommand: ExecutionContext['parsedCommand'],
@@ -142,11 +167,18 @@ export class OperatorValidationStage extends BasePipelineStage {
     }
   }
 
-  /** Propagate delegation from ChainStepPrompt[] to positionally-aligned operator ChainStep[]. */
+  /**
+   * Propagate delegation from ChainStepPrompt[] to positionally-aligned operator ChainStep[].
+   *
+   * Owns the empty-set guard that used to be a stage-level early exit. The direct invocation path
+   * has no operators to sync to, and that is a no-op here rather than a reason to skip
+   * `markDelegatedStepPrompts`.
+   */
   private syncDelegationToOperators(
     parsedCommand: ExecutionContext['parsedCommand'],
     operators: SymbolicOperator[]
   ): void {
+    if (operators.length === 0) return;
     const stepPrompts = parsedCommand?.steps;
     for (const operator of operators) {
       if (operator.type !== 'chain') continue;

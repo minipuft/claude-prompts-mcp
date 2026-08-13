@@ -22,7 +22,9 @@
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
 import { createParsingSystem } from '../../../src/engine/execution/parsers/index.js';
+import { SymbolicCommandBuilder } from '../../../src/engine/execution/parsers/symbolic-command-builder.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
+import { CommandParsingStage } from '../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 
@@ -471,6 +473,121 @@ describe('Delegation Operator (==>) Flow', () => {
       });
 
       expect(result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
+    });
+  });
+
+  /**
+   * P5-F5 — delegation reachability on the DIRECT (non-symbolic) invocation path.
+   *
+   * A plain `>>chain_prompt` never produces symbolic operators: `CommandParsingStage` takes
+   * `buildDirectCommand`, which writes each step's `subagentModel` onto `parsedCommand.steps`
+   * and leaves `parsedCommand.operators` undefined. `OperatorValidationStage` used to return on
+   * an empty operator set BEFORE `normalizeDelegation`, so YAML-declared delegation was inert on
+   * every invocation that did not spell `==>` — the exact thing `docs/reference/chain-schema.md`
+   * documents as working. Real stage 04 + real stage 06 + real executor; only the logger and the
+   * prompt fixtures are stand-ins.
+   */
+  describe('direct invocation path — YAML subagentModel (P5-F5)', () => {
+    const chainPrompts: ConvertedPrompt[] = [
+      ...testPrompts,
+      {
+        id: 'delegating_chain',
+        name: 'Delegating Chain',
+        description: 'Chain whose second step declares subagentModel in YAML',
+        category: 'analysis',
+        userMessageTemplate: 'Run the chain',
+        arguments: [],
+        chainSteps: [
+          { promptId: 'research', stepName: 'Research' },
+          { promptId: 'summarize', stepName: 'Summarize', subagentModel: 'fast' },
+        ],
+      } as ConvertedPrompt,
+      {
+        id: 'plain_chain',
+        name: 'Plain Chain',
+        description: 'Chain declaring no delegation fields at all',
+        category: 'analysis',
+        userMessageTemplate: 'Run the chain',
+        arguments: [],
+        chainSteps: [
+          { promptId: 'research', stepName: 'Research' },
+          { promptId: 'summarize', stepName: 'Summarize' },
+        ],
+      } as ConvertedPrompt,
+    ];
+
+    /** Drive real stage 04 over a bare `>>id` command — no operators, no `==>`. */
+    const parseDirectly = async (command: string): Promise<ExecutionContext> => {
+      const parsing = createParsingSystem(mockLogger);
+      const stage04 = new CommandParsingStage(
+        parsing.commandParser,
+        parsing.argumentParser,
+        () => chainPrompts,
+        mockLogger,
+        new SymbolicCommandBuilder(parsing.argumentParser, mockLogger)
+      );
+      const context = new ExecutionContext({ command });
+      await stage04.execute(context);
+      return context;
+    };
+
+    const runStage06 = async (context: ExecutionContext): Promise<void> => {
+      await new OperatorValidationStage(null, mockLogger).execute(context);
+    };
+
+    test('the direct path really produces no operators (the exit that hid the defect)', async () => {
+      const context = await parseDirectly('>>delegating_chain');
+
+      // If this ever becomes non-empty the suite below stops discriminating: it would then be
+      // exercising the symbolic path the `==>` tests above already cover.
+      expect(context.parsedCommand?.operators?.operators ?? []).toHaveLength(0);
+      expect(context.parsedCommand?.commandType).toBe('chain');
+      expect(context.parsedCommand?.steps?.[1]?.subagentModel).toBe('fast');
+    });
+
+    test('stage 06 marks the step delegated even though no operator was parsed', async () => {
+      const context = await parseDirectly('>>delegating_chain');
+      expect(context.parsedCommand?.steps?.[1]?.delegated).toBeUndefined();
+
+      await runStage06(context);
+
+      expect(context.parsedCommand!.steps![0]!.delegated).not.toBe(true);
+      expect(context.parsedCommand!.steps![1]!.delegated).toBe(true);
+    });
+
+    test('the marked step produces a delegation CTA on the preceding step', async () => {
+      const context = await parseDirectly('>>delegating_chain');
+      await runStage06(context);
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: context.parsedCommand!.steps!,
+        currentStepIndex: 0,
+      });
+
+      expect(result.nextStepDelegated).toBe(true);
+      expect(result.callToAction).toContain('HANDOFF');
+      expect(result.callToAction).toContain('Tool: Task');
+    });
+
+    test('a chain declaring no delegation fields is untouched by stage 06', async () => {
+      const context = await parseDirectly('>>plain_chain');
+      const before = JSON.stringify(context.parsedCommand!.steps);
+
+      await runStage06(context);
+
+      // Bounds the blast radius: the hoist may only add marks where a `subagentModel` exists.
+      // Measured 2026-08-12 (`rg --no-ignore`): 1 of 17 shipped chain resources carries one.
+      expect(JSON.stringify(context.parsedCommand!.steps)).toBe(before);
+      expect(context.parsedCommand!.steps!.some((s) => s.delegated === true)).toBe(false);
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: context.parsedCommand!.steps!,
+        currentStepIndex: 0,
+      });
+      expect(result.nextStepDelegated).toBeUndefined();
+      expect(result.callToAction).not.toContain('HANDOFF');
     });
   });
 });
