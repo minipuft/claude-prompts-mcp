@@ -47,6 +47,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { VERDICT, auditExceptions, reportExceptionAudit } from './lib/exception-hygiene.js';
+import { auditSubstrate } from './lib/substrate.js';
 import { SUITE } from './run-validation-suite.js';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
@@ -260,6 +261,68 @@ function selfTestCases() {
       expect: () =>
         classifyEntry(entry, new Set(['verify:mcp']), [wired]).verdict === VERDICT.SATISFIED,
     },
+    // ---- substrate rule. Each case names a DIFFERENT way a declaration can be wrong, because a
+    // single "it fails on bad input" case cannot tell an over-claim from an omission, and the two
+    // have opposite fixes: one edits the declaration, the other edits the gate.
+    {
+      rule: 'a declaration matching the derived substrate passes',
+      input: {
+        suite,
+        entryUnderTest: entry,
+        substrate: [{ script: 'x', reads: ['file'] }],
+        command: () => 'node -e "readFileSync(\'a\')"',
+      },
+      expect: () =>
+        auditSubstrate([{ script: 'x', reads: ['file', 'spawn'] }], () => "readFileSync('a')")
+          .length === 0,
+    },
+    {
+      rule: 'a declaration OMITTING a substrate the source contains fails',
+      input: { suite, entryUnderTest: entry },
+      expect: () =>
+        auditSubstrate(
+          [{ script: 'x', reads: ['file'] }],
+          () => "readFileSync('a'); execFileSync('git',['ls-files'])"
+        ).length === 1,
+    },
+    {
+      rule: 'a declaration CLAIMING a substrate the source lacks fails',
+      input: { suite, entryUnderTest: entry },
+      expect: () =>
+        auditSubstrate([{ script: 'x', reads: ['file', 'head'] }], () => "readFileSync('a')")
+          .length === 1,
+    },
+    {
+      rule: 'a step declaring no reads at all fails',
+      input: { suite, entryUnderTest: entry },
+      expect: () => auditSubstrate([{ script: 'x', reads: [] }], () => 'x').length === 1,
+    },
+    {
+      rule: 'a substrate value outside the vocabulary fails',
+      input: { suite, entryUnderTest: entry },
+      expect: () => auditSubstrate([{ script: 'x', reads: ['worktree'] }], () => 'x').length === 1,
+    },
+    // A token in a comment or a regex is not an operation. Without this the module trips its own
+    // pattern table — measured, not hypothetical: it reported that the membership gate reads HEAD
+    // and walks directories, on the strength of this file's prose describing those very signals.
+    {
+      rule: 'a signal token appearing only in a comment is not a substrate',
+      input: { suite, entryUnderTest: entry },
+      expect: () =>
+        auditSubstrate(
+          [{ script: 'x', reads: ['file', 'spawn'] }],
+          () => "readFileSync('a') // also uses ls-files somewhere\n"
+        ).length === 0,
+    },
+    {
+      rule: 'a real call is still detected when a comment mentions another signal',
+      input: { suite, entryUnderTest: entry },
+      expect: () =>
+        auditSubstrate(
+          [{ script: 'x', reads: ['file', 'spawn', 'tracked'] }],
+          () => "// walks nothing\nreadFileSync('a'); execFileSync('git',['ls-files'])"
+        ).length === 0,
+    },
   ];
 }
 
@@ -327,7 +390,43 @@ function main() {
   });
 
   const exceptionProblems = reportExceptionAudit('suite-membership', audit);
-  if (unwired.length > 0 || falseReasons.length > 0 || exceptionProblems > 0) process.exit(1);
+
+  // THIRD RULE — every step declares what it READS, and the declaration is re-derived rather
+  // than trusted. A hand-maintained annotation is the same artifact as the ✓ that E11 found:
+  // true when written, unchecked afterwards. Deriving it means the only way to change what a
+  // gate reads is to change the declaration with it.
+  const commands = JSON.parse(readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8')).scripts;
+  const substrateFindings = auditSubstrate(SUITE, (script) => commands[script]);
+  for (const { step, problem } of substrateFindings) {
+    console.error(`SUBSTRATE: ${step} ${problem}.`);
+  }
+  if (substrateFindings.length > 0) console.error('');
+
+  // The converse ledger is REPORTED, never enforced. Requiring a real analysis for all 36 would
+  // buy thirty-one fabricated ones; requiring nothing makes the gap invisible. Counting it keeps
+  // it an honest backlog — the same reason a bounded workflow logs what it dropped.
+  const missingConverse = SUITE.filter(
+    (step) => typeof step.converse !== 'string' || step.converse.length === 0
+  );
+  for (const step of missingConverse) {
+    console.error(`CONVERSE: ${step.script} declares no converse field.`);
+  }
+  const unexamined = SUITE.filter((step) => step.converse === 'unexamined');
+
+  if (
+    unwired.length > 0 ||
+    falseReasons.length > 0 ||
+    exceptionProblems > 0 ||
+    substrateFindings.length > 0 ||
+    missingConverse.length > 0
+  ) {
+    process.exit(1);
+  }
+
+  console.log(
+    `suite-membership: ${SUITE.length} step(s) declare a re-derived substrate; ` +
+      `converse examined for ${SUITE.length - unexamined.length}, unexamined for ${unexamined.length}.`
+  );
 
   console.log(
     `Every validate:*/verify: script is wired: ${suiteNames.size} in SUITE, ` +

@@ -240,6 +240,47 @@ function uncommittedPlans(records, root = REPO_ROOT) {
 }
 
 /**
+ * The one definition of "a link this tool can re-base". Returned fresh because it carries `g`,
+ * and a shared global regex holds `lastIndex` between calls.
+ *
+ * It is a function rather than a constant so the corpus check below and `rewriteLinks` cannot
+ * drift apart. They were never two regexes, but they were one regex and one ASSUMPTION about it,
+ * which is how the prefix bug survived: the self-test asserted behaviour on inputs the author
+ * wrote, and the author wrote the form the author had in mind.
+ */
+function linkPattern() {
+  return /\]\((?!\/)((?:\.\.?\/)?[^)\s#:]+)(#[^)\s]*)?\)/g;
+}
+
+/**
+ * Every markdown link target in `text` that this tool would consider, and every one it would not.
+ *
+ * `uncaptured` is the interesting half — a resolvable relative link the pattern does not match is
+ * a link that will be left pointing at a vacated path after a move, silently.
+ */
+function classifyLinkTargets(text, dir) {
+  const captured = new Set();
+  for (const match of text.matchAll(linkPattern())) captured.add(match[1]);
+
+  const uncaptured = [];
+  for (const match of text.matchAll(/\]\(([^)\s]+?)(#[^)\s]*)?\)/g)) {
+    const target = match[1];
+    if (
+      /^[a-z][a-z0-9+.-]*:/i.test(target) ||
+      target.startsWith("/") ||
+      target.startsWith("#")
+    ) {
+      continue;
+    }
+    if (captured.has(target)) continue;
+    // Only a target that RESOLVES matters. An already-dead link is a different defect, and
+    // failing this check on one would make it red for a reason it cannot fix.
+    if (fs.existsSync(path.resolve(dir, target))) uncaptured.push(target);
+  }
+  return { captured, uncaptured };
+}
+
+/**
  * Rewrite one file's relative markdown links, accounting for files that are moving.
  *
  * Two independent shifts have to compose: the CITING file may change depth (fromDir → toDir),
@@ -262,7 +303,7 @@ function rewriteLinks(text, fromDir, toDir, moveMap = new Map()) {
     // a leading `/` is rejected outright — both are absolute, neither re-bases. The
     // existsSync/moveMap guard below is what makes widening safe: a target that resolves to
     // no real file is returned untouched, so prose in parentheses is never rewritten.
-    /\]\((?!\/)((?:\.\.?\/)?[^)\s#:]+)(#[^)\s]*)?\)/g,
+    linkPattern(),
     (whole, target, hash) => {
       const absolute = path.resolve(fromDir, target);
       const destination =
@@ -435,7 +476,10 @@ function selfTest() {
       sandbox,
       sandbox,
       new Map([
-        [movingFrom, path.resolve(path.join(sandbox, REFERENCE_DIRNAME, "moving.md"))],
+        [
+          movingFrom,
+          path.resolve(path.join(sandbox, REFERENCE_DIRNAME, "moving.md")),
+        ],
       ]),
     );
     assert(
@@ -452,9 +496,57 @@ function selfTest() {
       path.join(sandbox, REFERENCE_DIRNAME),
     );
     assert(
-      untouched === "[a](https://example.com/x.md) [b](/abs/x.md) [c](does-not-exist.md) [d](#anchor)",
+      untouched ===
+        "[a](https://example.com/x.md) [b](/abs/x.md) [c](does-not-exist.md) [d](#anchor)",
       `rewrote a link that has no relative form: ${untouched}`,
     );
+
+    // 3d. THE CORPUS CASE. Cases 1-3c are inputs someone wrote; this one is the repository.
+    //
+    // Falsification grades the cases you thought of. It cannot tell you the corpus contains a
+    // form you never imagined — which is exactly how the prefix bug shipped green: every authored
+    // case carried `./`, because the author's model of a plan citation carried `./`, and plans
+    // overwhelmingly write a bare `sibling.md`.
+    //
+    // So this asserts a PROPERTY over every tracked plan: any relative link that resolves to a
+    // real file must be one this tool can re-base. It pins no path and no file, which is
+    // deliberate — the fixture that DID pin a real path (in the plan-row gate) broke the day a
+    // routine retirement moved that path. A property survives the corpus changing; it fails only
+    // when the corpus gains a shape the pattern cannot see, which is the thing worth knowing.
+    const tracked = execFileSync("git", ["ls-files", "--", "plans"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    })
+      .split("\n")
+      .filter((file) => file.endsWith(".md"));
+
+    const blind = [];
+    for (const file of tracked) {
+      const absolute = path.join(REPO_ROOT, file);
+      if (!fs.existsSync(absolute)) continue;
+      const { uncaptured } = classifyLinkTargets(
+        fs.readFileSync(absolute, "utf8"),
+        path.dirname(absolute),
+      );
+      for (const target of uncaptured) blind.push(`${file} -> ${target}`);
+    }
+
+    if (tracked.length === 0) {
+      console.error(
+        "✖ self-test: corpus check scanned no plans — the scan itself is broken",
+      );
+      failures += 1;
+    } else if (blind.length > 0) {
+      console.error(
+        `✖ self-test: ${blind.length} resolvable link(s) the rewriter cannot see, e.g. ${blind[0]}`,
+      );
+      failures += 1;
+    } else {
+      console.log(
+        `✔ self-test: every resolvable link across ${tracked.length} tracked plan(s) is one the rewriter can re-base`,
+      );
+    }
 
     // 4. Frontmatter defects are reported, not silently skipped.
     const bad = path.join(sandbox, "bad.md");

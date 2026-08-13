@@ -43,49 +43,254 @@ const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
  * blocker. The remaining obstacles are CPU contention and interleaved output, not write
  * conflicts. Parallelism is deliberately NOT implemented here: sequential output is what makes
  * a failure attributable, and the suite is 47 s.
+ *
+ * `reads` records the SUBSTRATE — which bytes the step actually inspects. Vocabulary and the
+ * evidence for it live in `lib/substrate.js`; `validate:suite-membership` RE-DERIVES this field
+ * from each step's source and fails when the two disagree, so it cannot rot into decoration the
+ * way a hand-maintained annotation does.
+ *
+ * Why the field exists: a gate reads some stand-in for the property it claims, and the stand-in
+ * silently becomes the definition. Every "green while broken" case this repo has recorded is that
+ * substitution — typecheck reading the working tree while claiming about HEAD (E7), gates walking
+ * the filesystem while claiming about shipped content (E6), a ✓ meaning "I edited" rather than
+ * "it is committed" (E11). Written down beside the claim, none of them are subtle.
+ *
+ * `converse` records the INVERSE implication and whether anything checks it. A gate enforcing
+ * "X implies Y" almost always ships without "Y implies X", because the author traverses the
+ * problem in one direction and the check inherits that direction. This suite has produced the
+ * shape at least three times: a check that a declared step exists but not that an existing check
+ * is declared; a stale ✓ caught while a stale ☐ was invisible; inbound citations verified while
+ * outbound ones broke. `'unexamined'` is a legitimate value and is COUNTED in the gate's output —
+ * an honest backlog beats thirty-six fabricated analyses, but it must stay visible to be a
+ * backlog rather than a silence.
  */
 // Exported so `validate:suite-membership` can compare the declared steps against every
 // `validate:*`/`verify:*` script package.json defines. It reads this array rather than regexing
 // this file, so the two cannot drift apart on a formatting change.
 export const SUITE = [
-  { script: 'lint:ratchet', io: 'read' },
-  { script: 'typecheck:tests:ratchet', io: 'read' },
-  { script: 'validate:format', io: 'read' },
-  { script: 'validate:arch', io: 'read' },
-  { script: 'validate:filesize', io: 'read' },
-  { script: 'verify:action-metadata', io: 'read' },
-  { script: 'validate:contracts', io: 'read' },
-  // ruff and pytest write `.ruff_cache/` and `hooks/__pycache__/`, both gitignored. The only
+  {
+    script: 'lint:ratchet',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'typecheck:tests:ratchet',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:format',
+    io: 'read',
+    reads: ['spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:arch',
+    io: 'read',
+    reads: ['spawn'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:filesize',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'verify:action-metadata',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:contracts',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse: 'unexamined',
+  },
+  // ruff and pytest write .ruff_cache/ and hooks/__pycache__/, both gitignored. The only
   // member of the suite that writes anything at all.
-  { script: 'validate:python', io: 'write:cache' },
-  { script: 'validate:frameworks', io: 'read' },
-  { script: 'validate:schemas', io: 'read' },
-  { script: 'validate:config-schema', io: 'read' },
-  { script: 'validate:gate-index', io: 'read' },
-  { script: 'validate:versions', io: 'read' },
-  { script: 'validate:extension-artifact', io: 'read' },
-  { script: 'validate:github-action-pins', io: 'read' },
-  { script: 'validate:release-workflow', io: 'read' },
-  { script: 'validate:readme', io: 'read' },
-  { script: 'validate:conformance-coverage', io: 'read' },
-  { script: 'validate:operator-registry-drift', io: 'read' },
-  { script: 'validate:plan-row-tracking', io: 'read' },
-  { script: 'validate:no-legacy-sidecars', io: 'read' },
-  { script: 'validate:no-stepstate', io: 'read' },
-  { script: 'validate:no-methodology-vocab', io: 'read' },
-  { script: 'validate:no-llm-client', io: 'read' },
-  { script: 'validate:documented-options', io: 'read' },
-  { script: 'validate:required-contexts', io: 'read' },
-  { script: 'validate:package-entries', io: 'read' },
-  { script: 'validate:state-field-writers', io: 'read' },
-  { script: 'validate:table-contracts', io: 'read' },
-  { script: 'validate:no-phantom-columns', io: 'read' },
-  { script: 'validate:hooks-registered', io: 'read' },
-  { script: 'validate:hook-harness:self-test', io: 'read' },
-  { script: 'validate:suite-membership', io: 'read' },
-  { script: 'validate:agent-plugins', io: 'read' },
-  { script: 'validate:db-claim-order', io: 'read' },
-  { script: 'plans:retire:check', io: 'read' },
+  {
+    script: 'validate:python',
+    io: 'write:cache',
+    reads: ['spawn'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:frameworks',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:schemas',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:config-schema',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:gate-index',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:versions',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:extension-artifact',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:github-action-pins',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:release-workflow',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:readme',
+    io: 'read',
+    reads: ['file', 'index', 'spawn', 'tracked', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:conformance-coverage',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:operator-registry-drift',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:plan-row-tracking',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse:
+      'CHECKED both polarities — a stale ✓ claims work that does not exist, a stale ☐ disclaims work that does; the second direction was added 2026-08-12 after five ☐ rows were found already at HEAD',
+  },
+  {
+    script: 'validate:no-legacy-sidecars',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:no-stepstate',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:no-methodology-vocab',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:no-llm-client',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:documented-options',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:required-contexts',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:package-entries',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:state-field-writers',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:table-contracts',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED — set-equality against the embedded DDL is bidirectional by construction: a contract without a table and a table without a contract both fail',
+  },
+  {
+    script: 'validate:no-phantom-columns',
+    io: 'read',
+    reads: ['file'],
+    converse:
+      'UNCHECKED and known — catches declaration-dead columns (no writer names them), NOT value-dead ones (a writer names the column and always binds NULL). Follows from substrate ',
+  },
+  {
+    script: 'validate:hooks-registered',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — a registered hook whose file is absent, and a hook file no registration names',
+  },
+  {
+    script: 'validate:hook-harness:self-test',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:suite-membership',
+    io: 'read',
+    reads: ['file', 'index', 'spawn', 'tracked'],
+    converse:
+      'CHECKED both ways — UNWIRED (a check in no SUITE) and FALSE REASON (an exception whose consumers vanished); the header records that only the first was guarded originally',
+  },
+  {
+    script: 'validate:agent-plugins',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:db-claim-order',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'plans:retire:check',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked', 'walk'],
+    converse: 'unexamined',
+  },
 ];
 
 /**
