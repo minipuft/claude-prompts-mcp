@@ -17,6 +17,7 @@
  * Classification: Integration (real modules, real temp filesystem)
  */
 
+import { readFileSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import os from 'node:os';
@@ -24,7 +25,10 @@ import os from 'node:os';
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { MockLogger } from '../../helpers/test-helpers.js';
+import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
+import { PromptVersioningProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
+import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type { VersioningConfig, HistoryFile } from '../../../src/modules/versioning/types.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
@@ -32,7 +36,8 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 /** Subset of the resource-manager `ResourceType` union that this workflow versions. */
 type VersionedResourceType = 'prompt' | 'gate' | 'framework';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
-import type { Logger } from '../../../src/infra/logging/index.js';
+import type { PromptResourceContext } from '../../../src/mcp/tools/resource-manager/prompt/core/context.js';
+import type { ConfigManager, Logger } from '../../../src/shared/types/index.js';
 
 /**
  * Mock ConfigManager implementing VersioningConfigProvider
@@ -517,6 +522,252 @@ describe('Version History Workflow Integration', () => {
       history = await manager.history();
       expect(history!.versions).toHaveLength(3);
       expect(history!.versions[0].version).toBe(6); // Newest
+    });
+  });
+
+  /**
+   * P7-D2 mechanisms 2 and 3, driven through the REAL `PromptVersioningProcessor` and the REAL
+   * prompt writer against a temp prompts directory and the real `version_history` table.
+   *
+   * The simulated manager above cannot observe either defect: both live in how the processor
+   * projects a snapshot onto the write model, and neither reaches the service. What the live
+   * incident looked like — `action:"history" id:"implementation_plan"`, v4 "Pre-rollback snapshot"
+   * — was a restored prompt matching neither the target version nor the current state.
+   */
+  describe('Prompt rollback through the real write path', () => {
+    let promptsDir: string;
+    let fileOperations: FileOperations;
+    let processor: PromptVersioningProcessor;
+    let convertedPrompts: Array<Record<string, unknown>>;
+    let onRefreshCalls: number;
+
+    const PROMPT_ID = 'rollback_target';
+    const CATEGORY = 'general';
+
+    /** Fields the writer builds no value for; only an authored file can carry them. */
+    const ON_DISK_ONLY_FIELDS = [
+      'injection:',
+      '  system-prompt:',
+      '    enabled: false',
+      'registerWithMcp: false',
+      "mcpPromptMode: 'launch'",
+      "subagentModel: 'heavy'",
+      "agentType: 'current-agent'",
+    ].join('\n');
+
+    function readPromptYaml(): Record<string, unknown> {
+      return parseYamlOrThrow<Record<string, unknown>>(
+        readFileSync(path.join(promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml'), 'utf8')
+      );
+    }
+
+    beforeEach(async () => {
+      promptsDir = path.join(tempDir, 'prompts');
+      onRefreshCalls = 0;
+      convertedPrompts = [];
+      fileOperations = new FileOperations({
+        logger: mockLogger as unknown as Logger,
+        configManager: {
+          getResolvedPromptsDirectory: () => promptsDir,
+        } as unknown as ConfigManager,
+      });
+      processor = new PromptVersioningProcessor({
+        dependencies: {
+          logger: mockLogger as unknown as Logger,
+          onRefresh: async () => {
+            onRefreshCalls += 1;
+          },
+        },
+        fileOperations,
+        versionHistoryService,
+        getData: () => ({ convertedPrompts }),
+      } as unknown as PromptResourceContext);
+    });
+
+    /**
+     * Seeds a prompt whose LIVE state (v2) differs from its recorded snapshot (v1) in four ways
+     * that separate an exact restore from a merge:
+     *   - `description` and `userMessageTemplate` differ (both states have them)
+     *   - `systemMessage` exists live and is ABSENT from the snapshot
+     *   - `agentType` is authored on disk as 'current-agent' and recorded as 'snapshot-agent'
+     */
+    async function seedDivergedPrompt(
+      snapshotOverrides: Record<string, unknown> = {}
+    ): Promise<void> {
+      await fileOperations.updatePromptImplementation({
+        id: PROMPT_ID,
+        name: 'Rollback Target',
+        category: CATEGORY,
+        description: 'v1 description',
+        userMessageTemplate: 'v1 template',
+        arguments: [],
+      });
+
+      await versionHistoryService.saveVersion(
+        'prompt',
+        PROMPT_ID,
+        {
+          id: PROMPT_ID,
+          name: 'Rollback Target',
+          category: CATEGORY,
+          description: 'v1 description',
+          userMessageTemplate: 'v1 template',
+          arguments: [],
+          // No `systemMessage` key at all — v1 had none.
+          agentType: 'snapshot-agent',
+          // A ConvertedPrompt always carries these two, RESOLVED rather than authored.
+          registerWithMcp: true,
+          mcpPromptMode: 'expand',
+          ...snapshotOverrides,
+        },
+        { description: 'v1' }
+      );
+
+      // Live edit to v2, then author on disk the fields no tool parameter can set.
+      await fileOperations.updatePromptImplementation({
+        id: PROMPT_ID,
+        name: 'Rollback Target',
+        category: CATEGORY,
+        description: 'v2 description',
+        userMessageTemplate: 'v2 template',
+        systemMessage: 'v2 system message',
+        arguments: [],
+      });
+      const yamlPath = path.join(promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml');
+      await fs.writeFile(
+        yamlPath,
+        `${await fs.readFile(yamlPath, 'utf8')}\n${ON_DISK_ONLY_FIELDS}\n`,
+        'utf8'
+      );
+
+      convertedPrompts = [
+        {
+          id: PROMPT_ID,
+          name: 'Rollback Target',
+          category: CATEGORY,
+          description: 'v2 description',
+          userMessageTemplate: 'v2 template',
+          systemMessage: 'v2 system message',
+          arguments: [],
+          registerWithMcp: false,
+          mcpPromptMode: 'launch',
+          subagentModel: 'heavy',
+          agentType: 'current-agent',
+        },
+      ];
+    }
+
+    it('restores the recorded content rather than a hybrid of snapshot and live values', async () => {
+      await seedDivergedPrompt();
+
+      const response = await processor.handleRollback({
+        id: PROMPT_ID,
+        version: 1,
+        confirm: true,
+      });
+
+      expect(response.isError).toBe(false);
+      const written = readPromptYaml();
+      expect(written['description']).toBe('v1 description');
+
+      // THE MECHANISM-2 REPRODUCTION. `snapshot['systemMessage'] ?? currentPrompt.systemMessage`
+      // kept the LIVE system message for a version that never had one, so the restored prompt was
+      // v1's description beside v2's system message — a state that had never existed. An absent key
+      // in the snapshot now means absent, and the YAML stops referencing the file.
+      expect(written).not.toHaveProperty('systemMessageFile');
+
+      expect(onRefreshCalls).toBe(1);
+    });
+
+    it('restores an authored field the live prompt overwrote', async () => {
+      await seedDivergedPrompt();
+
+      await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+
+      // Mechanism 3: rollback wrote a private 8-key object, so a field outside that set could only
+      // ever keep its live value. Routed through the same write model, the snapshot's value wins.
+      expect(readPromptYaml()['agentType']).toBe('snapshot-agent');
+    });
+
+    /**
+     * Rollback now shares `update`'s single writer, so it inherits Tier 1.4's on-disk preservation.
+     * One assertion per field: a writer that drops exactly one produces exactly one failure.
+     */
+    describe('preserves the fields the writer builds no value for', () => {
+      const preserved = {
+        injection: { 'system-prompt': { enabled: false } },
+        registerWithMcp: false,
+        mcpPromptMode: 'launch',
+        subagentModel: 'heavy',
+      } as const;
+
+      for (const [field, value] of Object.entries(preserved)) {
+        it(`preserves ${field} across a rollback`, async () => {
+          await seedDivergedPrompt();
+
+          await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+
+          expect(readPromptYaml()[field]).toEqual(value);
+        });
+      }
+
+      it("does not let the snapshot's RESOLVED registerWithMcp overwrite the authored one", async () => {
+        // The snapshot records `registerWithMcp: true` because the converter resolves it through
+        // prompt → category → global → default for every prompt. Restoring that value would bake an
+        // inherited default into a file that authored `false` — DEV-T1-3's hazard, reached from the
+        // rollback side. These two fields are deliberately left to on-disk preservation.
+        await seedDivergedPrompt();
+
+        await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+
+        expect(readPromptYaml()['registerWithMcp']).toBe(false);
+      });
+
+      /**
+       * OQ-P7-8 moved `injection` from `SNAPSHOT_FIELDS_LEFT_TO_THE_WRITER` into
+       * `RESTORED_OPTIONAL_SNAPSHOT_FIELDS`. It is settable through the tool now, and
+       * `canonicalPromptSnapshot` projects it, so a recorded value is a DECLARED value — the
+       * caller's own object, or a load-normalised copy of one the file declared — never an
+       * inherited default. Restoring it is what makes a rollback restore the block the target
+       * version actually had, instead of whatever on-disk preservation happens to be holding.
+       *
+       * The `preserves injection across a rollback` case above is the complement: a snapshot that
+       * records nothing leaves the file's block untouched.
+       */
+      it('restores an injection block the snapshot recorded, overriding the authored one', async () => {
+        await seedDivergedPrompt({
+          injection: { 'style-guidance': { enabled: true, target: 'both' } },
+        });
+
+        await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+
+        expect(readPromptYaml()['injection']).toEqual({
+          'style-guidance': { enabled: true, target: 'both' },
+        });
+      });
+    });
+
+    it('refuses a snapshot missing a required field instead of merging the live value', async () => {
+      // Snapshots are durable rows written by older code and by a second, CLI-side writer, so an
+      // incomplete one is reachable. `description: null` is the JSON form of "absent".
+      await seedDivergedPrompt({ description: null });
+
+      const response = await processor.handleRollback({
+        id: PROMPT_ID,
+        version: 1,
+        confirm: true,
+      });
+
+      expect(response.isError).toBe(true);
+      const text = response.content.map((part) => part.text ?? '').join('');
+      expect(text).toContain('not a complete snapshot');
+      expect(text).toContain('description');
+
+      // The prompt is untouched — the old code would have written v1's template beside v2's
+      // description and reported success.
+      const written = readPromptYaml();
+      expect(written['description']).toBe('v2 description');
+      expect(onRefreshCalls).toBe(0);
     });
   });
 

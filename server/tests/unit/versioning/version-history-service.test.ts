@@ -11,12 +11,18 @@
  * - formatHistoryForDisplay: Display formatting
  */
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
+import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 
 import type { TestDatabaseContext } from '../../helpers/test-database.js';
+import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 import type { VersioningConfig } from '../../../src/shared/types/index.js';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 
@@ -172,6 +178,162 @@ describe('VersionHistoryService', () => {
   });
 
   // ==========================================================================
+  // Persistence failure posture (P7 row 2.3, OQ-P7-6)
+  // ==========================================================================
+
+  /**
+   * `saveVersion` used to catch every persistence error and return `{success:false}`; all three
+   * callers logged a warning and PROCEEDED, so a snapshot that never landed on a durable table was
+   * reported to the operator as a successful update. architecture.md's posture is that persistence
+   * throws and the caller decides.
+   *
+   * Asserted through an injected failure rather than a real broken database: the point is the
+   * posture at the boundary, and a real failure mode is neither reproducible nor necessary to
+   * observe it.
+   */
+  describe('persistence failure posture', () => {
+    /** Wraps the live port and fails exactly the write, so reads still work for seeding. */
+    function failingWrites(realDb: DatabasePort): { db: DatabasePort; fail: () => void } {
+      let failing = false;
+      const db: DatabasePort = {
+        isInitialized: () => realDb.isInitialized(),
+        initialize: () => realDb.initialize(),
+        query: (sql, params) => realDb.query(sql, params),
+        queryOne: (sql, params) => realDb.queryOne(sql, params),
+        run: (sql, params) => {
+          if (failing) throw new Error('disk I/O error');
+          realDb.run(sql, params);
+        },
+        transaction: (fn) => realDb.transaction(fn),
+        beginTransaction: () => realDb.beginTransaction(),
+        commit: () => realDb.commit(),
+        rollback: () => realDb.rollback(),
+      };
+      return {
+        db,
+        fail: () => {
+          failing = true;
+        },
+      };
+    }
+
+    it('throws instead of returning a failure result the caller can ignore', async () => {
+      const { db, fail } = failingWrites(dbCtx.dbManager);
+      const failingService = new VersionHistoryService({
+        logger: dbCtx.logger,
+        configManager: mockConfigProvider,
+        dbManager: db,
+      });
+      fail();
+
+      await expect(failingService.saveVersion('prompt', 'doomed', { x: 1 })).rejects.toThrow(
+        /Failed to persist version snapshot for prompt\/doomed/
+      );
+
+      // And nothing was recorded — the gap the old posture left silently.
+      expect(await service.loadHistory('prompt', 'doomed')).toBeNull();
+    });
+
+    it('still reports a rollback whose pre-rollback snapshot cannot persist as a failure', async () => {
+      // The one caller that already had a catch boundary: `rollback` converts the throw into the
+      // same `{success:false}` it returned before, so its contract is unchanged.
+      const { db, fail } = failingWrites(dbCtx.dbManager);
+      const failingService = new VersionHistoryService({
+        logger: dbCtx.logger,
+        configManager: mockConfigProvider,
+        dbManager: db,
+      });
+
+      await failingService.saveVersion('prompt', 'rollback-target', { state: 'v1' });
+      fail();
+
+      const result = await failingService.rollback('prompt', 'rollback-target', 1, {
+        state: 'live',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to persist version snapshot');
+      expect(result.snapshot).toBeUndefined();
+    });
+
+    it('does not throw when versioning is disabled — that path never reaches the database', async () => {
+      const { db, fail } = failingWrites(dbCtx.dbManager);
+      const failingService = new VersionHistoryService({
+        logger: dbCtx.logger,
+        configManager: mockConfigProvider,
+        dbManager: db,
+      });
+      mockConfigProvider.setConfig({ enabled: false });
+      fail();
+
+      await expect(failingService.saveVersion('prompt', 'disabled', { x: 1 })).resolves.toEqual({
+        success: true,
+        version: 0,
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Config key spelling (P7 row 2.6, finding P7-F1)
+  // ==========================================================================
+
+  /**
+   * `config.json` ships `versioning.autoVersion` / `maxVersions` (camelCase) while
+   * `VersioningConfig` declares `auto_version` / `max_versions`. The spellings never met, so the
+   * whole block was inert; the defaults coincided with the shipped values, which is why it had no
+   * live symptom.
+   *
+   * These drive a REAL `ConfigLoader` into a real service, because that is the only place the two
+   * spellings are joined — a mocked provider returns whatever the test hands it and would pass
+   * against the inert code.
+   */
+  describe('camelCase versioning config reaches the service', () => {
+    async function serviceFromConfig(raw: Record<string, unknown>) {
+      const dir = await mkdtemp(path.join(tmpdir(), 'versioning-config-'));
+      const configPath = path.join(dir, 'config.json');
+      await writeFile(configPath, JSON.stringify({ versioning: raw }), 'utf8');
+      const loader = new ConfigLoader(configPath);
+      await loader.loadConfig();
+      return {
+        service: new VersionHistoryService({
+          logger: dbCtx.logger,
+          configManager: loader,
+          dbManager: dbCtx.dbManager,
+        }),
+        cleanup: () => rm(dir, { recursive: true, force: true }),
+      };
+    }
+
+    it('honours "autoVersion": false', async () => {
+      const { service: configured, cleanup } = await serviceFromConfig({
+        enabled: true,
+        autoVersion: false,
+      });
+
+      expect(configured.isEnabled()).toBe(true);
+      expect(configured.isAutoVersionEnabled()).toBe(false);
+
+      await cleanup();
+    });
+
+    it('honours "maxVersions" as the pruning bound, not just as a readable value', async () => {
+      const { service: configured, cleanup } = await serviceFromConfig({
+        enabled: true,
+        maxVersions: 2,
+      });
+
+      for (let i = 1; i <= 4; i++) {
+        await configured.saveVersion('prompt', 'bounded', { v: i });
+      }
+
+      const history = await configured.loadHistory('prompt', 'bounded');
+      expect(history!.versions.map((v) => v.version)).toEqual([4, 3]);
+
+      await cleanup();
+    });
+  });
+
+  // ==========================================================================
   // loadHistory Tests
   // ==========================================================================
 
@@ -246,6 +408,9 @@ describe('VersionHistoryService', () => {
       await service.saveVersion('gate', 'test-gate', { criteria: 'latest' });
     });
 
+    // Deliberately re-encoded for go-forward semantics (P7 row 2.4, OQ-P7-3): the live state
+    // differs from v3's snapshot, so it is bridged as v4, and the RESTORED state is recorded as
+    // v5 — the newest version now holds what the rollback produced, not what preceded it.
     it('should rollback to previous version successfully', async () => {
       const currentSnapshot = { criteria: 'current-state' };
 
@@ -253,11 +418,68 @@ describe('VersionHistoryService', () => {
 
       expect(result.success).toBe(true);
       expect(result.restored_version).toBe(1);
-      expect(result.saved_version).toBe(4); // v4 = pre-rollback snapshot
+      expect(result.saved_version).toBe(5); // v4 = bridged live state, v5 = restored state
       expect(result.snapshot).toEqual({ criteria: 'original' });
 
       const history = await service.loadHistory('gate', 'test-gate');
-      expect(history!.current_version).toBe(4);
+      expect(history!.current_version).toBe(5);
+      const bridged = await service.getVersion('gate', 'test-gate', 4);
+      expect(bridged!.snapshot).toEqual({ criteria: 'current-state' });
+      expect(bridged!.description).toContain('Bridge');
+      const restored = await service.getVersion('gate', 'test-gate', 5);
+      expect(restored!.snapshot).toEqual({ criteria: 'original' });
+      expect(restored!.description).toBe('Rollback to v1');
+    });
+
+    // P7 row 2.4 — go-forward numbering semantics
+    it('records exactly one row per rollback when the live state is already recorded', async () => {
+      // Live state equals v3's snapshot → no bridge; restored state becomes v4.
+      const result = await service.rollback('gate', 'test-gate', 1, { criteria: 'latest' });
+
+      expect(result.saved_version).toBe(4);
+      expect(await service.getLatestVersion('gate', 'test-gate')).toBe(4);
+      const restored = await service.getVersion('gate', 'test-gate', 4);
+      expect(restored!.snapshot).toEqual({ criteria: 'original' });
+    });
+
+    it('consumes no version number when the target does not exist', async () => {
+      const before = await service.getLatestVersion('gate', 'test-gate');
+      const result = await service.rollback('gate', 'test-gate', 99, { criteria: 'anything' });
+
+      expect(result.success).toBe(false);
+      expect(await service.getLatestVersion('gate', 'test-gate')).toBe(before);
+    });
+
+    it('recordEditResult: newest version equals the produced state, single row at steady state', async () => {
+      // Prior live equals v3's snapshot → no bridge row.
+      const result = await service.recordEditResult(
+        'gate',
+        'test-gate',
+        { criteria: 'latest' },
+        { criteria: 'edited' },
+        { description: 'Update via resource_manager' }
+      );
+
+      expect(result.bridged).toBe(false);
+      expect(result.version).toBe(4);
+      const newest = await service.getVersion('gate', 'test-gate', 4);
+      expect(newest!.snapshot).toEqual({ criteria: 'edited' });
+    });
+
+    it('recordEditResult: bridges an unrecorded prior live state before recording the result', async () => {
+      const result = await service.recordEditResult(
+        'gate',
+        'test-gate',
+        { criteria: 'out-of-band' },
+        { criteria: 'edited' },
+        { description: 'Update via resource_manager' }
+      );
+
+      expect(result.bridged).toBe(true);
+      expect(result.version).toBe(5);
+      const bridge = await service.getVersion('gate', 'test-gate', 4);
+      expect(bridge!.snapshot).toEqual({ criteria: 'out-of-band' });
+      expect(bridge!.description).toContain('Bridge');
     });
 
     it('should fail when target version does not exist', async () => {
