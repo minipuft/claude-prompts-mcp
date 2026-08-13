@@ -9,6 +9,16 @@
 !codebase-setup/**
 !workflow/
 !workflow/**
+!documentation/
+documentation/*
+!documentation/readme_improver/
+!documentation/readme_improver/**
+!documentation/documentation_change/
+!documentation/documentation_change/**
+!development/
+development/*
+!development/strategicImplement/
+!development/strategicImplement/**
 !planning/
 !planning/**
 workflow/sync_indexes/

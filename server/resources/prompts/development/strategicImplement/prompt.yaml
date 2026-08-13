@@ -1,0 +1,31 @@
+id: strategicImplement
+name: Strategic Implementation
+category: development
+description: >-
+  Implementation-mode starting gun (single-shot). Signals that it is time to
+  implement: classifies the work type, binds the session to its plan file
+  (arming the plan-hygiene hooks), and routes to the owning skills under the
+  always-loaded global standards. Deliberately adds no thresholds or step
+  templates of its own — the dev loop lives in ~/.claude/rules/dev-workflow.md
+  and the skills it dispatches. Vocabulary: master plans have phases, phase
+  plans have tiers, tiers have task rows.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: task
+    required: true
+    description: What to implement — describe the feature, test, fix, refactor, or change
+    type: string
+  - name: plan_path
+    required: false
+    description: Path to existing plan document (for plan-driven implementation)
+    type: string
+  - name: work_type
+    required: false
+    description: 'Override auto-detection: test, bug_fix, feature, refactor, optimize'
+    type: string
+gateConfiguration:
+  include:
+    - workflow-preflight
+    - workflow-integration
+  framework_gates: false
