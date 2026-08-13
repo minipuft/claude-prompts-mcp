@@ -79,6 +79,33 @@ const runView = (
 ): RunStepView => ({ nodeIds, skippedNodeIds, currentNodeId });
 
 /**
+ * The mutated run standing ON the inserted node — the P5-F4 case.
+ *
+ * `currentNodeOrigin` is what the provider publishes only for a node the mutation policy
+ * inserted; a planned node never carries it, which is what keeps every case above unchanged.
+ */
+const insertedRunView = (
+  origin: { originUnknownId?: string; unknownTargetNodeId?: string },
+  skippedNodeIds: readonly string[] = []
+): RunStepView => ({
+  nodeIds: MUTATED_NODE_IDS,
+  skippedNodeIds,
+  currentNodeId: 'inv-cache-ttl',
+  currentNodeOrigin: { origin: 'inserted', ...origin },
+});
+
+/** A gate bound to the node the unknown blocked, and one bound to a node it did not. */
+const BODY_GATE = { name: 'Body only', criteria: ['cite sources'], target_step_id: 'write-body' };
+const FINAL_GATE = {
+  name: 'Final only',
+  criteria: ['check tone'],
+  target_step_id: 'final-review',
+};
+/** Registration order decides the minted ids — `createRegistry` counts from 1. */
+const BODY_GATE_ID = 'temp_1';
+const FINAL_GATE_ID = 'temp_2';
+
+/**
  * A gate id that is NOT a temporary gate: it reaches the accumulator through the step's planned
  * gates, so `filterGatesByStepTarget` finds no registry entry and lets it through on every step.
  * This is what "run-wide inheritance" means after scoping, and the guard against a filter that
@@ -86,7 +113,12 @@ const runView = (
  */
 const RUN_WIDE_GATE = 'run-wide-gate';
 
-const stepPrompt = (nodeId: string, stepNumber: number, plannedGates: string[]) => ({
+const stepPrompt = (
+  nodeId: string,
+  stepNumber: number,
+  plannedGates: string[],
+  modifiers?: { clean?: boolean }
+) => ({
   stepNumber,
   nodeId,
   promptId: nodeId,
@@ -101,7 +133,7 @@ const stepPrompt = (nodeId: string, stepNumber: number, plannedGates: string[]) 
     systemMessage: '',
     arguments: [],
   },
-  executionPlan: { gates: plannedGates },
+  executionPlan: { gates: plannedGates, ...(modifiers === undefined ? {} : { modifiers }) },
 });
 
 /**
@@ -112,8 +144,11 @@ const reviewGatesFor = async (options: {
   gateSpecs?: Array<Record<string, unknown>>;
   plannedGates?: string[];
   view: RunStepView | undefined;
+  /** Node ids whose parse-time step carries `modifiers: { clean: true }` — row 4.5. */
+  skipNodeIds?: readonly string[];
 }): Promise<{ review: string[] | undefined; accumulated: string[] | undefined }> => {
   const gateSpecs = options.gateSpecs ?? [];
+  const skipNodeIds = options.skipNodeIds ?? [];
   const registry = createRegistry();
   const logger = createLogger();
   const provider = options.view === undefined ? undefined : () => options.view;
@@ -135,7 +170,12 @@ const reviewGatesFor = async (options: {
   );
 
   const steps = NODE_IDS.map((nodeId, index) =>
-    stepPrompt(nodeId, index + 1, options.plannedGates ?? [])
+    stepPrompt(
+      nodeId,
+      index + 1,
+      options.plannedGates ?? [],
+      skipNodeIds.includes(nodeId) ? { clean: true } : undefined
+    )
   );
   const context = new ExecutionContext({ chain_id: 'chain-demo#1', gates: gateSpecs } as never);
   context.state.gates.requestedOverrides = { gates: gateSpecs };
@@ -245,6 +285,120 @@ describe('gate review scoping (P4-F3)', () => {
         view: runView(NODE_IDS, null),
       });
       expect(result.review).toBeUndefined();
+    });
+
+    test('(j) a shouldSkip current step writes no review — not a run-wide fallback', async () => {
+      // Row 4.5 (P5-F4 residual, DEV-T4-10, owner-ruled 2026-08-13). A modifier-skipped step
+      // produces no output, so there is nothing to review. Before this fix the field was left
+      // unset for this step, and both readers' `?? accumulatedGateIds` fallback turned that into
+      // a run-wide review — the last surviving fallback-to-run-wide shape. The empty array (not
+      // `undefined`) is the discriminator: it is what makes the reader NOT fall back.
+      const result = await reviewGatesFor({
+        plannedGates: [RUN_WIDE_GATE],
+        view: runView(NODE_IDS, 'write-body'),
+        skipNodeIds: ['write-body'],
+      });
+
+      expect(result.review).toEqual([]);
+    });
+
+    test('(k) a shouldSkip step that is NOT current leaves the current step review untouched', async () => {
+      const spec = { name: 'Body only', criteria: ['cite sources'], target_step_id: 'write-body' };
+
+      const result = await reviewGatesFor({
+        gateSpecs: [spec],
+        view: runView(NODE_IDS, 'write-body'),
+        skipNodeIds: ['draft-outline'],
+      });
+
+      expect(result.review).toEqual([TEMP_ID]);
+    });
+  });
+
+  /**
+   * P5-F4 — the last surviving P4-F3 shape. An INSERTED node has no parse-time step, so the walk
+   * never visits it and (before this) nothing published a scope for it: both readers fell back to
+   * the run-wide accumulator. Owner ruling 2026-08-12: it INHERITS the review of the node its
+   * triggering unknown blocked.
+   */
+  describe('writer: an inserted node inherits its unknown’s target scope (P5-F4)', () => {
+    test('(e) inherits the gates bound to the node the unknown blocked, and only those', async () => {
+      const result = await reviewGatesFor({
+        gateSpecs: [BODY_GATE, FINAL_GATE],
+        plannedGates: [RUN_WIDE_GATE],
+        view: insertedRunView({
+          originUnknownId: 'cache-ttl',
+          unknownTargetNodeId: 'write-body',
+        }),
+      });
+
+      // The review the investigation exists to serve: the blocked node's gate.
+      expect(result.review).toContain(BODY_GATE_ID);
+      // Untargeted gates keep flowing — the ruling scopes only TARGETED gates.
+      expect(result.review).toContain(RUN_WIDE_GATE);
+      // A gate bound to a DIFFERENT node is the whole defect; run-wide fallback would include it.
+      expect(result.review).not.toContain(FINAL_GATE_ID);
+      // And the accumulator is untouched, so injection and inheritance still see every gate.
+      expect(result.accumulated).toEqual(
+        expect.arrayContaining([BODY_GATE_ID, FINAL_GATE_ID, RUN_WIDE_GATE])
+      );
+    });
+
+    test('(f) an unknown that named no target inherits nothing — untargeted gates only', async () => {
+      const result = await reviewGatesFor({
+        gateSpecs: [BODY_GATE, FINAL_GATE],
+        plannedGates: [RUN_WIDE_GATE],
+        view: insertedRunView({ originUnknownId: 'cache-ttl' }),
+      });
+
+      // Nothing to inherit is NOT "inherit everything": every node-addressed gate drops.
+      expect(result.review).toEqual([RUN_WIDE_GATE]);
+    });
+
+    test('(g) the skipped-node veto still applies to an inherited target', async () => {
+      const result = await reviewGatesFor({
+        gateSpecs: [BODY_GATE],
+        plannedGates: [RUN_WIDE_GATE],
+        view: insertedRunView({ originUnknownId: 'cache-ttl', unknownTargetNodeId: 'write-body' }, [
+          'write-body',
+        ]),
+      });
+
+      // The blocked node was retired, so its gate fires nowhere — inheriting it would attach a
+      // gate to a step that will never execute.
+      expect(result.review).toEqual([RUN_WIDE_GATE]);
+    });
+
+    test('(h) the branch is gated on provenance, not on the node id being unmatched', async () => {
+      // Same run, same current node, but no `currentNodeOrigin` — i.e. exactly what the provider
+      // publishes for a planned node. This is the pre-fix behaviour, kept as the discriminator:
+      // if the inheritance branch keyed on "no parse step matched" instead of on provenance, this
+      // would silently start inheriting too.
+      const result = await reviewGatesFor({
+        gateSpecs: [BODY_GATE, FINAL_GATE],
+        plannedGates: [RUN_WIDE_GATE],
+        view: runView(MUTATED_NODE_IDS, 'inv-cache-ttl'),
+      });
+
+      expect(result.review).toBeUndefined();
+    });
+
+    test('(i) planned nodes on the SAME mutated run are unchanged', async () => {
+      // Regression guard for the ruling's third clause: byte-identical behaviour off the
+      // inserted node. `write-body` is ordinal 3 on this run and ordinal 2 at parse time.
+      const atBody = await reviewGatesFor({
+        gateSpecs: [BODY_GATE, FINAL_GATE],
+        plannedGates: [RUN_WIDE_GATE],
+        view: runView(MUTATED_NODE_IDS, 'write-body'),
+      });
+      expect(atBody.review).toEqual([BODY_GATE_ID, RUN_WIDE_GATE]);
+
+      const atFinal = await reviewGatesFor({
+        gateSpecs: [BODY_GATE, FINAL_GATE],
+        plannedGates: [RUN_WIDE_GATE],
+        view: runView(MUTATED_NODE_IDS, 'final-review'),
+      });
+      expect(atFinal.review).toEqual([FINAL_GATE_ID, RUN_WIDE_GATE]);
     });
   });
 

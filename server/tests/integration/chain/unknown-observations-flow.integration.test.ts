@@ -10,6 +10,7 @@ import {
   isValidGateVerdict,
 } from '../../../src/engine/gates/core/gate-verdict-contract.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { createRunStepViewProvider } from '../../../src/engine/gates/services/run-step-view.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
@@ -173,6 +174,110 @@ describe('unknown observations, schema through ledger', () => {
     expect(context.response?.isError).toBe(true);
     expect(context.response?.content?.[0]?.text).toContain('never-declared');
     expect(store.getSession('sess-1')?.unknownsLedger).toBeUndefined();
+  });
+});
+
+/**
+ * P5-F4: the ledger is also what an INSERTED node's gate REVIEW is scoped by.
+ *
+ * `createRunStepViewProvider` performs the join the ruling names — current node →
+ * `originUnknownId` → ledger entry → `targetStepId` — and it is the one link the sibling unit
+ * suite cannot cover, because that suite hands `GateEnhancementService` a hand-built
+ * `RunStepView`. Driven against the real `ChainSessionStore` (persistence stubbed as above), with
+ * a real `applyUnknownObservations`, a real `insertNodeAfter` and a real `advanceStep`.
+ */
+describe('inserted-node review scope: the run-step view join (P5-F4)', () => {
+  let store: ChainSessionStore;
+  let saveSpy: jest.SpiedFunction<() => Promise<void>>;
+  let loadSpy: jest.SpiedFunction<() => Promise<void>>;
+  let schedulerSpy: jest.SpiedFunction<() => void>;
+
+  const NODES = [
+    { id: 'draft-outline', promptId: 'draft', stepName: 'Draft' },
+    { id: 'write-body', promptId: 'body', stepName: 'Body' },
+    { id: 'final-review', promptId: 'review', stepName: 'Review' },
+  ];
+
+  beforeEach(async () => {
+    saveSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
+    loadSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
+    schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
+
+    store = new ChainSessionStore(createLogger(), new TextReferenceStore(createLogger()), {
+      serverRoot: '/tmp/test-inserted-node-review-scope',
+      cleanupIntervalMs: 1000,
+    });
+    await store.createSession('sess-ins', 'chain-ins', 3, {}, { nodes: NODES });
+  });
+
+  afterEach(async () => {
+    await store.cleanup();
+    saveSpy.mockRestore();
+    loadSpy.mockRestore();
+    schedulerSpy.mockRestore();
+  });
+
+  /** Declare a blocking unknown at step 1, insert its investigation, and stand the run on it. */
+  const mutateOntoInsertedNode = async (targetStepId?: string): Promise<string> => {
+    await store.applyUnknownObservations('sess-ins', 'draft-outline', [
+      {
+        type: 'unknown_discovered',
+        id: 'cache-ttl',
+        statement: 'TTL for the new cache layer is undecided',
+        blocking: true,
+        ...(targetStepId === undefined ? {} : { target_step_id: targetStepId }),
+      },
+    ]);
+    const inserted = await store.insertNodeAfter('sess-ins', 'draft-outline', {
+      stepName: 'Investigate: TTL for the new cache layer is undecided',
+      promptId: 'investigate_unknown',
+      unknownId: 'cache-ttl',
+    });
+    expect(inserted).not.toBeNull();
+    await store.advanceStep('sess-ins', 'draft-outline');
+    expect(store.getSession('sess-ins')?.state.currentNodeId).toBe(inserted!.id);
+    return inserted!.id;
+  };
+
+  test('the view carries the blocked node as the scope an inserted node inherits', async () => {
+    await mutateOntoInsertedNode('write-body');
+
+    const view = createRunStepViewProvider(store)('chain-ins');
+
+    expect(view?.currentNodeOrigin).toEqual({
+      origin: 'inserted',
+      originUnknownId: 'cache-ttl',
+      unknownTargetNodeId: 'write-body',
+    });
+  });
+
+  test('an unknown that named no target yields provenance with nothing to inherit', async () => {
+    await mutateOntoInsertedNode();
+
+    const view = createRunStepViewProvider(store)('chain-ins');
+
+    // Present-but-targetless is a distinct outcome from absent: the gate layer still knows the
+    // node was inserted (so it must not fall back run-wide), it just has no target to inherit.
+    expect(view?.currentNodeOrigin).toEqual({ origin: 'inserted', originUnknownId: 'cache-ttl' });
+  });
+
+  test('a planned current node carries no provenance at all', async () => {
+    await mutateOntoInsertedNode('write-body');
+    // Walk off the inserted node onto `write-body`, which was in the run when it started.
+    const insertedId = store.getSession('sess-ins')!.state.currentNodeId!;
+    await store.advanceStep('sess-ins', insertedId);
+
+    const view = createRunStepViewProvider(store)('chain-ins');
+
+    expect(view?.currentNodeId).toBe('write-body');
+    // The field's absence is what keeps every planned-node path byte-identical.
+    expect(view?.currentNodeOrigin).toBeUndefined();
   });
 });
 
