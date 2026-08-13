@@ -25,7 +25,9 @@ export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed' |
 /**
  * A named item of chain-run context a step's `visibility` declaration can withhold from or
  * expose to that step's render (P5 OQ-P5-1: ruled item-kind addressing for v1 — node-id-addressed
- * exposure hard-depends on `ParsedCommandSnapshot.steps` carrying a nodeId, which it does not).
+ * exposure hard-depended on `ParsedCommandSnapshot.steps` carrying a nodeId, which it now does as
+ * of P6 Tier 2. The blocker is gone; widening this union to node-addressed items is a separate
+ * vocabulary decision, not a plumbing one).
  *
  * Tier 1 (schema + type threading) is additive only: declaring `visibility` on a chain step
  * threads it through parsing and persistence, but nothing reads it yet. Consumption is Tier 2-3.

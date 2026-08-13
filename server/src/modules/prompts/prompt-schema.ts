@@ -74,8 +74,9 @@ export type PromptArgumentYaml = z.infer<typeof PromptArgumentSchema>;
  * expose to that step's render. Mirrors `VisibilityItem` in `shared/types/chain-execution.ts`
  * (SSOT for the union) — kept as a literal Zod enum here rather than importing the type, since
  * Zod needs runtime values, not just the type, and this is the one place the vocabulary is
- * validated. Ruled item-kind-only for v1 (OQ-P5-1): node-id-addressed exposure is deferred to
- * P6, pending `ParsedCommandSnapshot.steps` carrying a nodeId.
+ * validated. Ruled item-kind-only for v1 (OQ-P5-1): node-id-addressed exposure was deferred to
+ * P6 pending `ParsedCommandSnapshot.steps` carrying a nodeId, which it does as of P6 Tier 2 —
+ * the vocabulary stays item-kind-only until a ruling widens it, but no longer for want of an id.
  */
 export const VisibilityItemSchema = z.enum([
   'previous_step_output',

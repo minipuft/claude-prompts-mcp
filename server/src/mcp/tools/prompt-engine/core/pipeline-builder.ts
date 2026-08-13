@@ -338,7 +338,11 @@ export class PipelineBuilder {
       () => deps.configManager.getConfig().gates,
       deps.executionRecordStore
     );
-    const responseAssembler = new ResponseAssembler();
+    // Third consumer of the same run read model (P6 Tier 2): the handoff CTA and its P5
+    // visibility envelope resolve the handed-off step by node identity, so they need the run's
+    // node order and its retired nodes — the parse array alone answers a positional question the
+    // mutation policy has already invalidated (P6-F1).
+    const responseAssembler = new ResponseAssembler(runStepViewProvider);
     const formattingStage = new ResponseFormattingStage(
       deps.responseFormatter,
       responseAssembler,

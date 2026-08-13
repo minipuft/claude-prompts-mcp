@@ -206,6 +206,50 @@ describe('ChainSessionStore', () => {
     blueprint.gateInstructions = 'mutated';
     expect(stored?.gateInstructions).toBe('Persisted gate instructions');
   });
+
+  /**
+   * P6 Tier 2 / P4-F2. `nodeId` was always PRESENT in this slot — the blueprint clone is a JSON
+   * round-trip, so a `ChainStepPrompt.nodeId` survived it — but `ParsedCommandSnapshot.steps` did
+   * not DECLARE it, so no consumer could read it without casting the whole snapshot back to
+   * `ParsedCommand`. This test is written against the declared field with no cast anywhere: it
+   * fails to COMPILE (not merely to assert) if the declaration is removed, which is the only
+   * failure mode a type-level contract has.
+   */
+  test('blueprint steps carry declared node identity across the store round-trip', async () => {
+    manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
+      serverRoot: '/tmp/test-chain-sessions-nodeid',
+      cleanupIntervalMs: 1000,
+    });
+
+    await manager.createSession('session-nodeid', 'chain-nodeid', 2);
+
+    const blueprint: SessionBlueprint = {
+      parsedCommand: {
+        promptId: 'chain-nodeid',
+        commandType: 'chain',
+        steps: [
+          { nodeId: 'research', args: { topic: 'a' } },
+          { nodeId: 'review', visibility: { withhold: ['chain_history'] } },
+        ],
+      },
+      executionPlan: {
+        strategy: 'chain',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: true,
+      },
+    };
+
+    manager.updateSessionBlueprint('session-nodeid', blueprint);
+
+    const storedSteps = manager.getSessionBlueprint('session-nodeid')?.parsedCommand.steps;
+    expect(storedSteps?.map((step) => step.nodeId)).toEqual(['research', 'review']);
+    // Identity and the P5 declaration travel together — addressing one by the other is the whole
+    // point of the declaration.
+    expect(storedSteps?.find((step) => step.nodeId === 'review')?.visibility?.withhold).toEqual([
+      'chain_history',
+    ]);
+  });
 });
 
 describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {

@@ -6,6 +6,7 @@ import { getHandoffFooterInstruction } from '../delegation/strategy.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
+import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type {
@@ -42,7 +43,14 @@ const EMPTY_VISIBILITY_DECISION: VisibilityDecision = Object.freeze({
  * Extracted from ResponseFormattingStage.
  */
 export class ResponseAssembler {
-  constructor() {}
+  /**
+   * @param runStepViewProvider The live run's node order and retired-node list (P6 Tier 2).
+   *   Optional, and absent means "answer from the parse array alone" — the pre-P6 behavior,
+   *   byte-identical. The same narrow-view + provider seam the gate layer uses
+   *   (`GateEnhancementService`, `TemporaryGateRegistrar`): the assembler needs two facts about
+   *   the run, not a session store, so the dependency stays a function type.
+   */
+  constructor(private readonly runStepViewProvider?: RunStepViewProvider) {}
 
   /**
    * Formats response for chain execution with session tracking.
@@ -399,6 +407,12 @@ export class ResponseAssembler {
    * where visibility lives (OQ-P5-5: definition-time facts, re-derived rather than persisted as
    * run state). Returns an empty decision when there is no delegated step or no parsed steps,
    * which keeps the envelope byte-identical for every chain that declares nothing.
+   *
+   * `nextStepIndex` now names the step the RUN hands off to (`resolveNextStepIndex`), so the
+   * target is correct after a mutation. The prior declarations are additionally filtered against
+   * the run's retired nodes: a `withhold` declared by a step the mutation policy skipped never
+   * took effect, and carrying it into the decision would withhold context on the authority of a
+   * step that did not run.
    */
   private resolveHandoffVisibility(
     context: ExecutionContext,
@@ -409,10 +423,12 @@ export class ResponseAssembler {
       return EMPTY_VISIBILITY_DECISION;
     }
     const target = steps[nextStepIndex];
+    const retiredNodeIds = this.resolveRunStepView(context)?.skippedNodeIds ?? [];
     return decideVisibility({
       step: target?.visibility != null ? { visibility: target.visibility } : {},
       priorDeclarations: steps
         .slice(0, nextStepIndex)
+        .filter((step) => step.nodeId === undefined || !retiredNodeIds.includes(step.nodeId))
         .map((step) => (step.visibility != null ? { visibility: step.visibility } : {})),
     });
   }
@@ -488,7 +504,7 @@ export class ResponseAssembler {
   }
 
   /**
-   * Finds the next step in parsed command steps that has `delegated: true`.
+   * Finds the parse-time step the run hands off to next, when that step is `delegated: true`.
    * Returns undefined if no delegation is found.
    */
   private findNextDelegatedStep(
@@ -498,29 +514,123 @@ export class ResponseAssembler {
     if (!steps || steps.length === 0) {
       return undefined;
     }
-    // Node id first: after a mutation the run's ordinal no longer names parse step N, so an
-    // ordinal lookup points one step early (P4 row 5.4). An inserted node has no parse step —
-    // findIndex misses and this conservatively reports no delegation, which is correct: only
-    // planned steps can carry `delegated`.
-    const currentNodeId = context.sessionContext?.currentNodeId;
-    const currentStep = context.sessionContext?.currentStep ?? 1;
-    const currentIndex =
-      currentNodeId != null && steps.some((s) => s.nodeId != null)
-        ? steps.findIndex((s) => s.nodeId === currentNodeId)
-        : steps.findIndex((s) => s.stepNumber === currentStep);
-    const nextStep = currentIndex >= 0 ? steps[currentIndex + 1] : undefined;
-    if (nextStep?.delegated === true) {
+    const nextIndex = this.resolveNextStepIndex(context, steps);
+    const nextStep = nextIndex === undefined ? undefined : steps[nextIndex];
+    if (nextIndex !== undefined && nextStep?.delegated === true) {
       return {
         promptId: nextStep.promptId,
         agentType: nextStep.agentType,
         subagentModel: nextStep.subagentModel,
         // Carried so the P5 visibility decision for the handed-off step can be resolved from
         // the same lookup that found it — recomputing the index elsewhere would give the
-        // node-id/ordinal fallback above two implementations that could disagree.
-        index: currentIndex + 1,
+        // node-id/ordinal fallback two implementations that could disagree.
+        index: nextIndex,
       };
     }
     return undefined;
+  }
+
+  /**
+   * Which parse-time step the run hands off to next (P6-F1).
+   *
+   * **Node address first, and asked of the RUN.** The previous implementation resolved the
+   * current step by node id and then took `currentIndex + 1` — a node-addressed anchor followed
+   * by a positional step. That offset is only correct while the parse array and the run's node
+   * list are the same list, which stops being true the moment the P4 mutation policy inserts or
+   * retires a node: after a skip the run's next node is two parse positions ahead, so the handoff
+   * (and the visibility declarations resolved from it) resolved against a step that will never
+   * execute; after an insertion the run's next node is the inserted one, and the handoff rendered
+   * a planned step's CTA a step early. The run is the only thing that knows which node comes
+   * next, so it is asked, and its answer is matched back into the parse array by identity.
+   *
+   * A node id with no parse step — the shape every inserted node has — yields `undefined`, i.e.
+   * no delegation. That is correct rather than conservative: only planned steps carry `delegated`.
+   *
+   * The ordinal branch survives for the two cases that have no node address to use: a legacy
+   * chain whose steps carry no `nodeId` (P3 D10 keeps it optional), and a call with no run view
+   * to ask (no provider injected, or the request names no chain). Those keep the pre-P6 answer
+   * exactly, which is what leaves an unmutated run byte-identical.
+   */
+  private resolveNextStepIndex(
+    context: ExecutionContext,
+    steps: readonly { nodeId?: string; stepNumber: number }[]
+  ): number | undefined {
+    const nodeAddressed = steps.some((step) => step.nodeId != null);
+
+    if (nodeAddressed) {
+      const nextNodeId = this.resolveNextRunNodeId(context);
+      if (nextNodeId === null) {
+        // The run is standing at its last live node: there is no next step to hand off to.
+        return undefined;
+      }
+      if (nextNodeId !== undefined) {
+        const index = steps.findIndex((step) => step.nodeId === nextNodeId);
+        return index >= 0 ? index : undefined;
+      }
+      // `undefined` = no run view to ask. Fall through to the pre-P6 offset.
+    }
+
+    const currentNodeId = context.sessionContext?.currentNodeId;
+    const currentStep = context.sessionContext?.currentStep ?? 1;
+    const currentIndex =
+      currentNodeId != null && nodeAddressed
+        ? steps.findIndex((step) => step.nodeId === currentNodeId)
+        : steps.findIndex((step) => step.stepNumber === currentStep);
+    return currentIndex >= 0 ? currentIndex + 1 : undefined;
+  }
+
+  /**
+   * The node the run stands at NEXT, read off the live run.
+   *
+   * Three distinct answers, deliberately not collapsed (the `filterGatesForTarget` split):
+   * a **string** is the next live node; **null** is "resolved, and there is none" — the run is on
+   * its last node or has walked off the end; **undefined** is "no run to ask", which is the only
+   * one that licenses the ordinal fallback. Collapsing `null` into `undefined` would make a
+   * finished run silently fall back to the positional offset and render a handoff for a step the
+   * run already passed.
+   *
+   * Retired nodes are filtered out before the successor is taken, for the same reason
+   * `filterGatesForTarget` refuses to fire a gate whose target was skipped: a step that will not
+   * execute cannot be the step being handed off to.
+   */
+  private resolveNextRunNodeId(context: ExecutionContext): string | null | undefined {
+    const view = this.resolveRunStepView(context);
+    if (view === undefined) {
+      return undefined;
+    }
+
+    const liveNodeIds = view.nodeIds.filter((nodeId) => !view.skippedNodeIds.includes(nodeId));
+    const currentNodeId = view.currentNodeId ?? context.sessionContext?.currentNodeId;
+    if (currentNodeId === null) {
+      return null;
+    }
+    if (currentNodeId === undefined) {
+      return undefined;
+    }
+
+    const currentIndex = liveNodeIds.indexOf(currentNodeId);
+    if (currentIndex < 0) {
+      // The run is standing somewhere this view cannot place — do not invent a successor.
+      return undefined;
+    }
+    return liveNodeIds[currentIndex + 1] ?? null;
+  }
+
+  /**
+   * The live run behind this request, or undefined when there is none to ask.
+   *
+   * Resolved per call rather than memoized: the assembler holds no per-request state, the answer
+   * cannot change while one response is being assembled, and the provider reads already-loaded
+   * session maps.
+   */
+  private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
+    if (this.runStepViewProvider === undefined) {
+      return undefined;
+    }
+    const chainId = context.getRequestedChainId();
+    return chainId === undefined
+      ? undefined
+      : this.runStepViewProvider(chainId, context.getScopeOptions());
   }
 
   /**

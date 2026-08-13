@@ -61,6 +61,24 @@ export interface ParsedCommandSnapshot {
     category?: string;
   };
   steps?: Array<{
+    /**
+     * Stable node identity for this parse-time step — the SAME id space as {@link ChainNode.id}
+     * and `GateSpecification.target_step_id`, minted once at parse time and frozen for the run.
+     *
+     * Declared here (P6 Tier 2, closing P4-F2) because the value was already travelling: the
+     * blueprint clone is `JSON.parse(JSON.stringify(...))`, so a `ChainStepPrompt.nodeId` survived
+     * into this slot by serialization accident while the type denied it existed. A field that is
+     * present but undeclared is reachable only by cast, and a cast is how a structural narrowing
+     * hides — so every consumer that wanted to address the blueprint by identity indexed it by
+     * array position instead, which is exactly the drift P4 mutation introduces (P6-F1).
+     *
+     * `undefined` means "this step carries no node identity" — a legacy chain addressed by
+     * ordinal (P3 D10 keeps `nodeId` optional on `ChainStepPrompt`). It is NOT the same as a
+     * resolved-but-absent target, which the node-addressing readers spell `null`; see
+     * `GateEnhancementService.filterGatesForTarget` for the canonical statement of that split.
+     * Do not introduce a third state here.
+     */
+    nodeId?: string;
     inlineGateIds?: string[];
     args?: Record<string, unknown>;
     /** Additive only (P5 Tier 1) — no consumer reads this yet. */
