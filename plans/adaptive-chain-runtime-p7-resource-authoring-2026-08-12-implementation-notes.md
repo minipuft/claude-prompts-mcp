@@ -116,6 +116,15 @@ Copy these into each tier brief verbatim.
 
 ## Validation runs
 
+- 2026-08-13 03:39 · `cd /home/minipuft/Applications/claude-prompts-mcp git commit -m "$(cat <<'EOF' fix(scripts): widen eslint ratchet target` · ran
+- 2026-08-13 03:39 · `cd /home/minipuft/Applications/claude-prompts-mcp git add server/scripts/eslint-ratchet.js server/.eslint-ratchet-baseli` · ran
+- 2026-08-13 03:39 · `cd /home/minipuft/Applications/claude-prompts-mcp git commit -m "$(cat <<'EOF' docs(docs): documentation governance poli` · ran
+- 2026-08-13 03:34 · `cd /home/minipuft/Applications/claude-prompts-mcp git status --porcelain=v1 -- server/eslint-rules server/eslint.config.` · ran
+- 2026-08-13 03:33 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff --stat server/.eslint-ratchet-baseline.json echo "---" git di` · ran
+- 2026-08-13 03:33 · `cd /home/minipuft/Applications/claude-prompts-mcp git log --oneline -5 -- server/scripts/eslint-ratchet.js echo "---base` · ran
+- 2026-08-13 03:33 · `cd /home/minipuft/Applications/claude-prompts-mcp rg -n "eslint-ratchet|ESLINT_TARGETS|scripts, eslint-rules|4\.5" plans` · ran
+- 2026-08-13 03:33 · `cd /home/minipuft/Applications/claude-prompts-mcp rg -l "validate-hook-registration|require-guard-mechanism-verdict|requ` · ran
+- 2026-08-13 03:33 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== validate-hook-registration.js diff ===" git diff scripts/val` · ran
 - 2026-08-13 03:26 · `git status --porcelain -- server/.eslint-ratchet-baseline.json echo "rc=$?" git log --oneline -3 -- server/.eslint-ratch` · ran
 - 2026-08-13 03:26 · `git show HEAD -- server/.eslint-ratchet-baseline.json | head -5 echo "---diff now---" git diff HEAD -- server/.eslint-ra` · ran
 - 2026-08-13 03:22 · `git diff HEAD -- server/scripts/eslint-ratchet.js server/scripts/run-validation-suite.js server/scripts/validate-require` · ran
