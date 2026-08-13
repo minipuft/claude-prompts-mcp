@@ -336,7 +336,7 @@ The reasoning, alternatives considered, trade-offs made.
 ### Description Standards
 
 - **Outcomes over internals:** "Validate output between steps" not "23-stage execution pipeline"
-- **Plain language:** "validation rules" not "gates", "reasoning guidance" not "methodologies" — define jargon on first use
+- **Plain language:** "validation rules" not "gates", "reasoning guidance" not internal framework jargon — define jargon on first use
 - **No generic labels:** "MCP workflow server" not "powerful tool for AI workflows"
 - **Active voice:** "Hot-reloads instantly" not "Can be hot-reloaded"
 - **Concrete examples:** Real commands, real output
