@@ -63,7 +63,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -444,88 +444,105 @@ function selfTest() {
   );
   // Synthetic fixture: the live GRANDFATHERED_OPEN_ROWS list is empty in the healthy steady
   // state (2026-08-13: its one entry retired the day its closedBy arrived), so the self-test
-  // carries its own entry. The path must be a real tracked plan — the unreachable case below
-  // distinguishes on-disk-but-unscanned from vanished via existsSync.
+  // carries its own entry.
+  //
+  // The unreachable case below needs a path that EXISTS on disk yet is absent from the scanned
+  // map, since that is exactly what "present but untracked" looks like. An earlier version got
+  // the on-disk half by naming a real plan — and a routine retirement moved that plan into
+  // plans/reference/ the next day, flipping the verdict to subject-missing and failing the
+  // suite on a change that had nothing to do with this gate. A self-test must not be
+  // load-bearing on where the repository's own documents happen to live.
+  //
+  // So the fixture creates its own file, which also makes it a truer fixture than the old one:
+  // a freshly written temp file IS untracked, which is the condition under test, whereas the
+  // real plan it used to name was tracked and merely absent from a hand-built map.
+  const FIXTURE_DIR = path.join(REPO, '.plan-row-selftest');
   const SYNTHETIC_GRANDFATHERED = {
-    plan: 'plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12.md',
+    plan: '.plan-row-selftest/untracked-plan.md',
     reason: 'self-test fixture',
     closedBy: 'n/a — synthetic self-test entry',
   };
-  {
-    const { graded } = auditOpenRows(SYNTHETIC_GRANDFATHERED.plan, `${ACTIVE}| 1.1 | ☐ | x |`, [
-      SYNTHETIC_GRANDFATHERED,
-    ]);
-    if (graded !== false) {
-      console.error('✖ self-test: a grandfathered plan should not be graded');
+  mkdirSync(FIXTURE_DIR, { recursive: true });
+  writeFileSync(path.join(REPO, SYNTHETIC_GRANDFATHERED.plan), `${ACTIVE}| 1.1 | ☐ | x |\n`);
+  try {
+    {
+      const { graded } = auditOpenRows(SYNTHETIC_GRANDFATHERED.plan, `${ACTIVE}| 1.1 | ☐ | x |`, [
+        SYNTHETIC_GRANDFATHERED,
+      ]);
+      if (graded !== false) {
+        console.error('✖ self-test: a grandfathered plan should not be graded');
+        failures += 1;
+      } else {
+        console.log('✔ self-test: a grandfathered plan is not graded');
+      }
+    }
+
+    // ---- The satisfied-exception check must itself be able to fail -----------------------------
+    const g = SYNTHETIC_GRANDFATHERED.plan;
+    const exceptionCase = (name, texts, expectedVerdict) => {
+      const { counts } = auditGrandfathered(new Map(texts), [SYNTHETIC_GRANDFATHERED]);
+      if ((counts[expectedVerdict] ?? 0) !== 1) {
+        console.error(
+          `✖ self-test: "${name}" — expected verdict ${expectedVerdict}, got ${JSON.stringify(counts)}`
+        );
+        failures += 1;
+      } else {
+        console.log(`✔ self-test: ${name}`);
+      }
+    };
+
+    exceptionCase(
+      'a grandfathered plan that still has bare open rows stays load-bearing',
+      [[g, `${ACTIVE}| 1.1 | ☐ | x |`]],
+      VERDICT.LOAD_BEARING
+    );
+    exceptionCase(
+      'a grandfathered plan whose rows are ALL stamped is satisfied — delete the entry',
+      [[g, `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12 · flips when x) | x |`]],
+      VERDICT.SATISFIED
+    );
+    exceptionCase(
+      'a grandfathered plan that left `active` is satisfied',
+      [[g, '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ☐ | x |']],
+      VERDICT.SATISFIED
+    );
+    // The distinction the hand-rolled version got wrong: absent from the scan is NOT cleanliness.
+    // p5 exists on disk here, so an empty map means "untracked", which must never say "delete".
+    exceptionCase(
+      'a grandfathered plan the scan cannot reach is unreachable, NOT satisfied',
+      [],
+      VERDICT.UNREACHABLE
+    );
+
+    const missing = auditExceptions({
+      gate: 'self-test',
+      entries: [{ plan: 'plans/does-not-exist.md', closedBy: 'n/a' }],
+      describe: (entry) => entry.plan,
+      closedBy: (entry) => entry.closedBy,
+      classify: (entry) => classifyGrandfathered(entry, new Map()),
+    });
+    if ((missing.counts[VERDICT.SUBJECT_MISSING] ?? 0) !== 1) {
+      console.error('✖ self-test: a vanished plan should be subject-missing');
       failures += 1;
     } else {
-      console.log('✔ self-test: a grandfathered plan is not graded');
+      console.log('✔ self-test: a grandfathered plan that vanished is subject-missing');
     }
-  }
 
-  // ---- The satisfied-exception check must itself be able to fail -----------------------------
-  const g = SYNTHETIC_GRANDFATHERED.plan;
-  const exceptionCase = (name, texts, expectedVerdict) => {
-    const { counts } = auditGrandfathered(new Map(texts), [SYNTHETIC_GRANDFATHERED]);
-    if ((counts[expectedVerdict] ?? 0) !== 1) {
-      console.error(
-        `✖ self-test: "${name}" — expected verdict ${expectedVerdict}, got ${JSON.stringify(counts)}`
-      );
+    const noClosedBy = auditExceptions({
+      gate: 'self-test',
+      entries: [{ plan: g, closedBy: '' }],
+      describe: (entry) => entry.plan,
+      closedBy: (entry) => entry.closedBy,
+      classify: () => ({ verdict: VERDICT.LOAD_BEARING }),
+    });
+    if (noClosedBy.problems.length !== 1) {
+      console.error('✖ self-test: an entry with no closedBy must be a problem');
       failures += 1;
     } else {
-      console.log(`✔ self-test: ${name}`);
+      console.log('✔ self-test: an exception with no closedBy is refused');
     }
-  };
-
-  exceptionCase(
-    'a grandfathered plan that still has bare open rows stays load-bearing',
-    [[g, `${ACTIVE}| 1.1 | ☐ | x |`]],
-    VERDICT.LOAD_BEARING
-  );
-  exceptionCase(
-    'a grandfathered plan whose rows are ALL stamped is satisfied — delete the entry',
-    [[g, `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12 · flips when x) | x |`]],
-    VERDICT.SATISFIED
-  );
-  exceptionCase(
-    'a grandfathered plan that left `active` is satisfied',
-    [[g, '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ☐ | x |']],
-    VERDICT.SATISFIED
-  );
-  // The distinction the hand-rolled version got wrong: absent from the scan is NOT cleanliness.
-  // p5 exists on disk here, so an empty map means "untracked", which must never say "delete".
-  exceptionCase(
-    'a grandfathered plan the scan cannot reach is unreachable, NOT satisfied',
-    [],
-    VERDICT.UNREACHABLE
-  );
-
-  const missing = auditExceptions({
-    gate: 'self-test',
-    entries: [{ plan: 'plans/does-not-exist.md', closedBy: 'n/a' }],
-    describe: (entry) => entry.plan,
-    closedBy: (entry) => entry.closedBy,
-    classify: (entry) => classifyGrandfathered(entry, new Map()),
-  });
-  if ((missing.counts[VERDICT.SUBJECT_MISSING] ?? 0) !== 1) {
-    console.error('✖ self-test: a vanished plan should be subject-missing');
-    failures += 1;
-  } else {
-    console.log('✔ self-test: a grandfathered plan that vanished is subject-missing');
-  }
-
-  const noClosedBy = auditExceptions({
-    gate: 'self-test',
-    entries: [{ plan: g, closedBy: '' }],
-    describe: (entry) => entry.plan,
-    closedBy: (entry) => entry.closedBy,
-    classify: () => ({ verdict: VERDICT.LOAD_BEARING }),
-  });
-  if (noClosedBy.problems.length !== 1) {
-    console.error('✖ self-test: an entry with no closedBy must be a problem');
-    failures += 1;
-  } else {
-    console.log('✔ self-test: an exception with no closedBy is refused');
+  } finally {
+    rmSync(FIXTURE_DIR, { recursive: true, force: true });
   }
 
   return failures === 0 ? 0 : 1;
