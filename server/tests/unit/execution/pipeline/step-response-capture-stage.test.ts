@@ -48,6 +48,11 @@ const createSessionManager = () => {
   insertNodeAfter.mockResolvedValue({ id: 'inv-cache-ttl', promptId: 'investigate_unknown' });
   const markNodeSkipped = jest.fn<(...args: any[]) => Promise<boolean>>();
   markNodeSkipped.mockResolvedValue(true);
+  // The stage reads the run's stored blueprint for a submission-declared `budget.maxInsertions`
+  // (P6 Tier 5). `undefined` is the shape a run that declared no budget has — the server default
+  // then stands, which is what every case in this file asserts against.
+  const getSessionBlueprint = jest.fn<(...args: any[]) => any>();
+  getSessionBlueprint.mockReturnValue(undefined);
 
   return {
     manager: {
@@ -65,6 +70,7 @@ const createSessionManager = () => {
       getPendingGateReview,
       insertNodeAfter,
       markNodeSkipped,
+      getSessionBlueprint,
     } as unknown as ChainSessionService,
     applyUnknownObservations,
     getSession,
@@ -80,6 +86,7 @@ const createSessionManager = () => {
     getPendingGateReview,
     insertNodeAfter,
     markNodeSkipped,
+    getSessionBlueprint,
   };
 };
 

@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
+import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 
 import type { ChainStepPrompt } from '../../../src/engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -340,5 +341,113 @@ describe('P5 visibility — the no-declarations guarantee', () => {
     expect(render.callToAction).toBe(
       'Deliver the final response to the user (no user_response needed once the chain completes).'
     );
+  });
+});
+
+/**
+ * P6 Tier 3 — named outputs under the reserved `outputs.<name>` namespace (OQ-P6-5, owner ruled
+ * the ALTERNATIVE), and the P5-F2 leak that namespace exists to close.
+ *
+ * The context here is built by the REAL `TextReferenceStore`, not hand-written: the producer
+ * (L3) and the withholder (L2) cannot import each other, so the only thing that proves they
+ * agree on the namespace key is running both. A hand-written `{ outputs: … }` fixture would
+ * pass against a producer that publishes under any other name.
+ */
+describe('P6 named outputs — reserved namespace + the chain_history leak', () => {
+  const NAMED_OUTPUT = 'NAMED_OUTPUT_SECRET_BODY';
+
+  const namedOutputPrompts: ConvertedPrompt[] = [
+    {
+      id: 'analyze',
+      name: 'Analyze',
+      description: 'Analyze',
+      category: 'analysis',
+      userMessageTemplate: 'Analyze it',
+      arguments: [],
+    },
+    {
+      id: 'synthesize',
+      name: 'Synthesize',
+      description: 'Synthesize from a named output',
+      category: 'analysis',
+      // Reaches for the namespaced name AND the bare one, so a single render tells "published
+      // under outputs" apart from "still spread flat" — a template asserting only the former
+      // would pass on a dual-read implementation.
+      userMessageTemplate: 'Named: [{{outputs.findings}}] Bare: [{{findings}}]',
+      arguments: [],
+    },
+  ];
+
+  /** Context a live run carries after step 1 stored a result with an `outputMapping`. */
+  const namedOutputContext = (): Record<string, unknown> => {
+    const store = new TextReferenceStore(createLogger());
+    store.storeChainStepResult('chain-named', 'analyze', NAMED_OUTPUT, {
+      outputMapping: { findings: 'output' },
+    });
+    return { ...store.buildChainVariables('chain-named'), chain_id: 'chain-named' };
+  };
+
+  const namedOutputSteps = (
+    declarations: readonly (ChainStepPrompt['visibility'] | undefined)[] = []
+  ): ChainStepPrompt[] =>
+    ['analyze', 'synthesize'].map((promptId, index) => ({
+      stepNumber: index + 1,
+      promptId,
+      args: {},
+      ...(declarations[index] != null ? { visibility: declarations[index] } : {}),
+    }));
+
+  const renderNamed = async (
+    steps: ChainStepPrompt[],
+    currentStepIndex: number
+  ): ReturnType<ChainOperatorExecutor['renderStep']> =>
+    new ChainOperatorExecutor(createLogger(), namedOutputPrompts).renderStep({
+      executionType: 'normal',
+      stepPrompts: steps,
+      currentStepIndex,
+      chainContext: namedOutputContext(),
+    });
+
+  test('step 2 reads a step-1 named output as {{outputs.findings}}, and the bare alias is gone', async () => {
+    const render = await renderNamed(namedOutputSteps(), 1);
+
+    expect(render.content).toContain(`Named: [${NAMED_OUTPUT}]`);
+    // The migration criterion, not a formatting detail: a template still written against
+    // `{{findings}}` renders empty. No dual read (cleanup-standards: no parallel system).
+    expect(render.content).toContain('Bare: []');
+  });
+
+  test('withholding chain_history removes the named output — the P5-F2 leak', async () => {
+    const render = await renderNamed(namedOutputSteps([withhold('chain_history')]), 1);
+
+    // Against the withheld VALUE, not against a banner: a render that announced the withholding
+    // and still leaked the bytes would pass a banner-only assertion.
+    expect(render.content).not.toContain(NAMED_OUTPUT);
+    expect(render.content).toContain('Named: []');
+  });
+
+  test('control: the same render WITHOUT the declaration carries the named output', async () => {
+    const control = await renderNamed(namedOutputSteps(), 1);
+
+    expect(control.content).toContain(NAMED_OUTPUT);
+  });
+
+  test('withholding previous_step_output alone leaves the named output in place', async () => {
+    // Deliberate asymmetry, asserted so it cannot be "fixed" by accident: a named output is the
+    // same content `step{N}_result` publishes positionally, and `previous_step_output` leaves
+    // those in place by design. Withholding the alias but not the thing it aliases would make
+    // the rule depend on which name the author chose.
+    const render = await renderNamed(namedOutputSteps([withhold('previous_step_output')]), 1);
+
+    expect(render.content).toContain(`Named: [${NAMED_OUTPUT}]`);
+  });
+
+  test('a later expose of chain_history restores the named output for that step', async () => {
+    const render = await renderNamed(
+      namedOutputSteps([withhold('chain_history'), expose('chain_history')]),
+      1
+    );
+
+    expect(render.content).toContain(`Named: [${NAMED_OUTPUT}]`);
   });
 });

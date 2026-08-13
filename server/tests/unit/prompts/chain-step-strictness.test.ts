@@ -120,17 +120,27 @@ describe('ChainStepSchema — per-step framework', () => {
     expect(data.chainSteps?.[0]?.framework).toBeUndefined();
   });
 
-  it('drops inlineGateIds at the normalizer, which is why the schema comment says NOT YET WIRED', () => {
-    // Guards the documented gap rather than the wish: `inlineGateIds` is accepted by the schema to
-    // preserve six shipped declarations, and deliberately not carried. If someone wires it, this
-    // test fails and points at the two sites that must change together.
+  it('carries inlineGateIds through the normalizer (wired, P6 Tier 4 / OQ-P6-8)', () => {
+    // This assertion was inverted on 2026-08-13. Its predecessor guarded the documented gap —
+    // "accepted by the schema, deliberately not carried" — and said that whoever wired the field
+    // would see it fail and be pointed at the two sites that must change together. Both changed
+    // (this normalizer's allowlist and the stage-04 projection), so the guard did its job and now
+    // states the behaviour instead of the gap. Full path coverage:
+    // tests/unit/gates/inline-gate-chain-step-wiring.test.ts.
     const data = yamlToPromptData({
       ...yamlChain([{ ...STEP, inlineGateIds: ['code-quality'] }]),
       category: 'general',
     } as never);
 
-    expect(
-      (data.chainSteps?.[0] as Record<string, unknown> | undefined)?.inlineGateIds
-    ).toBeUndefined();
+    expect(data.chainSteps?.[0]?.inlineGateIds).toEqual(['code-quality']);
+  });
+
+  it('does not invent inlineGateIds when none is declared', () => {
+    const data = yamlToPromptData({
+      ...yamlChain([{ ...STEP }]),
+      category: 'general',
+    } as never);
+
+    expect(data.chainSteps?.[0]).not.toHaveProperty('inlineGateIds');
   });
 });

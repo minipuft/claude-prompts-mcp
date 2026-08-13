@@ -49,3 +49,97 @@ describe('TextReferenceStore.buildChainVariables', () => {
     expect(manager.getChainStepResult('chain-3', 'nope')).toBeNull();
   });
 });
+
+/**
+ * P6 Tier 3 — the reserved `outputs.<name>` namespace (OQ-P6-5, owner ruled the ALTERNATIVE).
+ *
+ * Asserted against the BARE name as well as the namespaced one on every case: publishing under
+ * `outputs` while ALSO leaving the flat alias behind would satisfy a namespace-only assertion
+ * and would be exactly the dual-read parallel system the ruling forbids.
+ */
+describe('TextReferenceStore named outputs — reserved namespace', () => {
+  test('an outputMapping key is published under outputs.<name> and NOT as a bare alias', () => {
+    const manager = new TextReferenceStore(logger);
+    manager.storeChainStepResult('chain-ns', 'analyze', 'ANALYSIS_BODY', {
+      outputMapping: { findings: 'output' },
+    });
+
+    const variables = manager.buildChainVariables('chain-ns');
+
+    expect(variables.outputs).toEqual({ findings: 'ANALYSIS_BODY' });
+    expect(variables.findings).toBeUndefined();
+    expect(Object.keys(variables)).not.toContain('findings');
+  });
+
+  test('the namespace is absent, not empty, when no step declares an outputMapping', () => {
+    const manager = new TextReferenceStore(logger);
+    manager.storeChainStepResult('chain-plain', 'analyze', 'ANALYSIS_BODY');
+
+    const variables = manager.buildChainVariables('chain-plain');
+
+    // Absence, not `{}`: matches `previous_step_results` / `unknowns_ledger`, so a template can
+    // branch on presence and a chain declaring nothing renders as it did before the namespace.
+    expect(Object.keys(variables)).not.toContain('outputs');
+  });
+
+  test('every key of a mapping receives the WHOLE step content — the values are not read (P6-F2)', () => {
+    const manager = new TextReferenceStore(logger);
+    // `verdict` reads like a sub-content selector. Nothing implements one, so it must not be
+    // silently honoured — the two keys carry identical bytes and the doc says so.
+    manager.storeChainStepResult('chain-two-key', 'audit', 'AUDIT_BODY', {
+      outputMapping: { security_audit: 'output', security_verdict: 'verdict' },
+    });
+
+    const outputs = manager.buildChainVariables('chain-two-key').outputs as Record<string, string>;
+
+    expect(outputs.security_audit).toBe('AUDIT_BODY');
+    expect(outputs.security_verdict).toBe('AUDIT_BODY');
+  });
+
+  test('later steps merge into one namespace object; a repeated name is overwritten', () => {
+    const manager = new TextReferenceStore(logger);
+    manager.storeChainStepResult(
+      'chain-merge',
+      'first',
+      'FIRST_BODY',
+      { outputMapping: { findings: 'output' } },
+      0
+    );
+    manager.storeChainStepResult(
+      'chain-merge',
+      'second',
+      'SECOND_BODY',
+      { outputMapping: { summary: 'output', findings: 'output' } },
+      1
+    );
+
+    expect(manager.buildChainVariables('chain-merge').outputs).toEqual({
+      findings: 'SECOND_BODY',
+      summary: 'SECOND_BODY',
+    });
+  });
+
+  test('the published namespace is a copy — mutating it cannot corrupt stored results', () => {
+    const manager = new TextReferenceStore(logger);
+    manager.storeChainStepResult('chain-copy', 'analyze', 'ANALYSIS_BODY', {
+      outputMapping: { findings: 'output' },
+    });
+
+    const first = manager.buildChainVariables('chain-copy').outputs as Record<string, string>;
+    first.findings = 'TAMPERED';
+
+    expect(manager.buildChainVariables('chain-copy').outputs).toEqual({
+      findings: 'ANALYSIS_BODY',
+    });
+  });
+
+  test('clearing a chain removes its namespace', () => {
+    const manager = new TextReferenceStore(logger);
+    manager.storeChainStepResult('chain-clear', 'analyze', 'ANALYSIS_BODY', {
+      outputMapping: { findings: 'output' },
+    });
+    manager.clearChainStepResults('chain-clear');
+
+    expect(Object.keys(manager.buildChainVariables('chain-clear'))).not.toContain('outputs');
+  });
+});

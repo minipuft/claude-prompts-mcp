@@ -91,7 +91,7 @@ describe('OperatorValidationStage', () => {
       return { stage, context };
     };
 
-    test('subagentModel: fast sets delegated on step prompt and chain operator', async () => {
+    test('subagentModel: fast sets delegated on step prompt', async () => {
       const { stage, context } = buildChainContext([{}, { subagentModel: 'fast' }, {}]);
 
       await stage.execute(context);
@@ -99,10 +99,6 @@ describe('OperatorValidationStage', () => {
       expect(context.parsedCommand!.steps![0].delegated).not.toBe(true);
       expect(context.parsedCommand!.steps![1].delegated).toBe(true);
       expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);
-
-      const chainOp = context.parsedCommand!.operators!.operators[0] as any;
-      expect(chainOp.steps[1].delegated).toBe(true);
-      expect(chainOp.hasDelegation).toBe(true);
     });
 
     test('all subagentModel variants trigger delegation', async () => {
@@ -137,13 +133,14 @@ describe('OperatorValidationStage', () => {
       expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);
     });
 
-    test('hasDelegation not set when no steps have subagentModel or delegation', async () => {
+    test('no step marked delegated when none declare subagentModel', async () => {
       const { stage, context } = buildChainContext([{}, {}, {}]);
 
       await stage.execute(context);
 
-      const chainOp = context.parsedCommand!.operators!.operators[0] as any;
-      expect(chainOp.hasDelegation).not.toBe(true);
+      for (const step of context.parsedCommand!.steps!) {
+        expect(step.delegated).not.toBe(true);
+      }
     });
   });
 

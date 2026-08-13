@@ -97,7 +97,6 @@ describe('Delegation Operator (==>) Flow', () => {
       );
 
       expect(chainOp).toBeDefined();
-      expect(chainOp!.hasDelegation).toBe(true);
       // First step: not delegated (it's the source). Second step: delegated
       expect(chainOp!.steps[0].delegated).not.toBe(true);
       expect(chainOp!.steps[1].delegated).toBe(true);
@@ -231,7 +230,6 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(chainOp!.steps[0].delegated).not.toBe(true);
       expect(chainOp!.steps[1].delegated).toBe(true);
       expect(chainOp!.steps[2].delegated).toBe(true);
-      expect(chainOp!.hasDelegation).toBe(true);
     });
   });
 
@@ -326,9 +324,10 @@ describe('Delegation Operator (==>) Flow', () => {
       // Step 3: NOT delegated (no subagentModel)
       expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);
 
-      // Chain operator also updated
-      expect(chainOp!.steps[1].delegated).toBe(true);
-      expect(chainOp!.hasDelegation).toBe(true);
+      // The chain operator's own ChainStep[] is NOT synced by OperatorValidationStage (P6
+      // row 6.3 deleted that mirror — it had zero downstream readers). It stays exactly as
+      // the parser left it: no `==>` in this command, so no step was marked at parse time.
+      expect(chainOp!.steps[1].delegated).not.toBe(true);
 
       // CTA for step 1 → step 2 shows delegation handoff with model hint
       const result = await executor.renderStep({

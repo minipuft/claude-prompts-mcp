@@ -193,4 +193,57 @@ describe('prompt_engine parameter surface', () => {
     );
     expect(overlaidJson.properties?.['command']?.description).toContain('[OVERLAY command]');
   });
+
+  describe('the `workflow` command source (P6 Tier 5)', () => {
+    const IR = {
+      version: 1 as const,
+      nodes: [{ id: 'gather', promptId: 'research_docs' }],
+    };
+
+    test('is advertised in BOTH states — it is never narrowed', () => {
+      // Deliberate, and the reason it is a core field: narrowing withdraws a parameter without
+      // rejecting it (Zod's strip default is kept), so a client holding a stale tools/list would
+      // get a success with its whole workflow discarded (P6-F6). A shape that never narrows
+      // cannot express that failure.
+      expect(advertisedKeys({ gateSystemEnabled: true })).toContain('workflow');
+      expect(advertisedKeys({ gateSystemEnabled: false })).toContain('workflow');
+    });
+
+    test('accepts a workflow submitted on its own', () => {
+      expect(build({ gateSystemEnabled: true }).safeParse({ workflow: IR }).success).toBe(true);
+    });
+
+    test.each([
+      ['command', { command: '>>demo', workflow: IR }],
+      ['chain_id', { chain_id: 'chain-demo#1', workflow: IR }],
+      ['all three', { command: '>>demo', chain_id: 'chain-demo#1', workflow: IR }],
+    ])('rejects a workflow combined with %s', (_label, payload) => {
+      const result = build({ gateSystemEnabled: true }).safeParse(payload);
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('exactly one of');
+    });
+
+    test('applies the exclusivity rule in the narrowed state too', () => {
+      // Exclusivity has nothing to do with gates. A rule applied to one reachable shape and not
+      // the other is a rule with a hole in it.
+      expect(
+        build({ gateSystemEnabled: false }).safeParse({ command: '>>demo', workflow: IR }).success
+      ).toBe(false);
+    });
+
+    test('still accepts each command source on its own', () => {
+      // Bounds the guard: a refinement that rejected every call would pass all four assertions
+      // above.
+      const schema = build({ gateSystemEnabled: true });
+      expect(schema.safeParse({ command: '>>demo' }).success).toBe(true);
+      expect(schema.safeParse({ chain_id: 'chain-demo#1' }).success).toBe(true);
+    });
+
+    test('rejects an unknown key inside a node — the IR schema is strict all the way down', () => {
+      const result = build({ gateSystemEnabled: true }).safeParse({
+        workflow: { version: 1, nodes: [{ id: 'gather', promptId: 'p', notAField: true }] },
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });

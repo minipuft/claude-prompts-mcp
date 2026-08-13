@@ -176,6 +176,58 @@ describe('decideMutation', () => {
     expectMutation(result, { kind: 'none', reason: 'cap-reached' });
   });
 
+  describe('a submission-declared maxInsertions NARROWS the run cap, never widens it (P6 Tier 5)', () => {
+    const blockingDiscovery = (): Partial<DecideMutationInput> => ({
+      delta: [discover('cache-ttl', { blocking: true })],
+      ledger: [ledgerEntry({ id: 'cache-ttl', blocking: true })],
+    });
+
+    test('a declared cap of 1 stops the SECOND insertion, which the server default would allow', () => {
+      // Discriminating: insertedCount 1 is well under MAX_INSERTIONS_PER_RUN, so without the
+      // declared cap this input inserts. The bound is seeded PAST the declared value and under
+      // the server one — a fixture inside both bounds could not fail.
+      expectMutation(
+        decideMutation(buildInput({ ...blockingDiscovery(), insertedCount: 1, maxInsertions: 1 })),
+        { kind: 'none', reason: 'cap-reached' }
+      );
+    });
+
+    test('a declared cap of 0 opts the run out of insertion entirely', () => {
+      expectMutation(
+        decideMutation(buildInput({ ...blockingDiscovery(), insertedCount: 0, maxInsertions: 0 })),
+        { kind: 'none', reason: 'cap-reached' }
+      );
+    });
+
+    test('a declared cap ABOVE the server ceiling does not widen it', () => {
+      // The validator rejects a widening budget at submit time, but this function is the last
+      // place the ceiling is applied and must hold on its own.
+      expectMutation(
+        decideMutation(
+          buildInput({
+            ...blockingDiscovery(),
+            insertedCount: MAX_INSERTIONS_PER_RUN,
+            maxInsertions: MAX_INSERTIONS_PER_RUN + 50,
+          })
+        ),
+        { kind: 'none', reason: 'cap-reached' }
+      );
+    });
+
+    test('an undeclared cap leaves the server default in force', () => {
+      // Bounds the narrowing: a cap that always applied would make every run refuse insertion.
+      const result = decideMutation(buildInput({ ...blockingDiscovery(), insertedCount: 1 }));
+      expect(result.kind).toBe('insert_investigation');
+    });
+
+    test('a declared cap still under-run allows the insertion', () => {
+      const result = decideMutation(
+        buildInput({ ...blockingDiscovery(), insertedCount: 1, maxInsertions: 2 })
+      );
+      expect(result.kind).toBe('insert_investigation');
+    });
+  });
+
   test('none/target-absent (no target declared): an irrelevant resolution whose ledger entry never named a target', () => {
     // Guard: decideSkip's `targetStepId === undefined` branch. This is the discriminating
     // probe: the entry WAS resolved irrelevant (a real candidate was found and processed), so a

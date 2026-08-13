@@ -126,7 +126,10 @@ scenarios:
           action: update
           id: conformance_version
           user_message_template: CONFORMANCE_V2_MARKER
-    expect: { text_contains: '**Version 1** saved' }
+    # Go-forward numbering (P7 row 2.4): version N is the state edit N PRODUCED. The first update
+    # of a never-recorded prompt lays a self-healing bridge row (v1 = the pre-edit content the
+    # create produced), then records its own result as v2 — so v2 is the deterministic number here.
+    expect: { text_contains: '**Version 2** saved' }
 
   - id: prompt-update-is-live-after-reload
     claim_source: >-
