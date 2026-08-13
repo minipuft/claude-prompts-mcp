@@ -17,6 +17,160 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 03:26 · `git status --porcelain -- server/.eslint-ratchet-baseline.json echo "rc=$?" git log --oneline -3 -- server/.eslint-ratch` · ran
+- 2026-08-13 03:26 · `git show HEAD -- server/.eslint-ratchet-baseline.json | head -5 echo "---diff now---" git diff HEAD -- server/.eslint-ra` · ran
+- 2026-08-13 03:22 · `git diff HEAD -- server/scripts/eslint-ratchet.js server/scripts/run-validation-suite.js server/scripts/validate-require` · ran
+- 2026-08-13 03:15 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx prettier --write plans/adaptive-chain-runtime-2026-08-09.md pla` · ran
+- 2026-08-13 03:00 · `(npm run validate:all && npm run validate:arch && npm run validate:contracts && npm run validate:table-contracts && npm ` · ran
+- 2026-08-13 02:59 · `npm run test:e2e -- claims-conformance 2>&1 | grep -E "Tests:|Test Suites:|✕" | head -5` · ran
+- 2026-08-13 02:58 · `npx jest tests/e2e/claims-conformance.test.ts 2>&1 | head -25` · ran
+- 2026-08-13 02:58 · `cd server && npx jest tests/e2e/claims-conformance.test.ts 2>&1 | grep -E "Tests:|Test Suites:|✕" | head -5` · ran
+- 2026-08-13 02:57 · `npm run test:e2e > /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/` · ran
+- 2026-08-13 02:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -iE "jest|node .*test" | grep -v grep | head -` · ran
+- 2026-08-13 02:40 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'EOF' ## Tier 6 — main-thread ac` · ran
+- 2026-08-13 02:34 · `npm run test:match -- "p6-acceptance|p6-workflow-ir" 2>&1 | tail -6` · ran
+- 2026-08-13 02:34 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep | head -3; npm run type` · ran
+- 2026-08-13 02:33 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; echo "===TYPECHECK==="` · ran
+- 2026-08-13 02:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== typecheck ===" && npm run typecheck 2>&1 | tail -3` · ran
+- 2026-08-13 02:32 · `npx --prefix server prettier --check plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md 2>&1` · ran
+- 2026-08-13 02:32 · `npx --prefix server prettier --check plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md 2>&1` · ran
+- 2026-08-13 02:31 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'NOTES' ## Row 6.1 — acceptance ` · ran
+- 2026-08-13 02:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:format 2>&1 | tail -10` · ran
+- 2026-08-13 02:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check ../plans/adaptive-chain-runtime-p6-work` · ran
+- 2026-08-13 02:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; echo "===TYPECHECK==="` · ran
+- 2026-08-13 02:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5 && npm run lint:ratchet 2>&` · ran
+- 2026-08-13 02:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; timeout 150 npm run te` · ran
+- 2026-08-13 02:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write tests/integration/chain/p6-acceptance.i` · ran
+- 2026-08-13 02:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint tests/integration/chain/p6-acceptance.integration` · ran
+- 2026-08-13 02:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 400 npm run lint:ratchet 2>&1 | tail -20` · ran
+- 2026-08-13 02:29 · `cat > /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/1029e560-dbd8-490e-bb94-3b01d9406b3b/scratchpad/p6` · ran
+- 2026-08-13 02:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 400 npm run typecheck:tests:ratchet 2>&1 | tail -20` · ran
+- 2026-08-13 02:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 400 npm run typecheck 2>&1 | tail -40` · ran
+- 2026-08-13 02:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; echo "sibling-check-do` · ran
+- 2026-08-13 02:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; timeout 150 npm run te` · ran
+- 2026-08-13 02:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; timeout 150 npm run te` · ran
+- 2026-08-13 02:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; timeout 150 npm run te` · ran
+- 2026-08-13 02:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:format 2>&1 | tail -15` · ran
+- 2026-08-13 02:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep; echo "---"; timeout 15` · ran
+- 2026-08-13 02:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "chain-operator|session-stage|gate" 2>` · ran
+- 2026-08-13 02:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 120 npm run test:match -- "p6-acceptance" 2>&1 | tai` · ran
+- 2026-08-13 02:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck:tests:ratchet 2>&1 | tail -10` · ran
+- 2026-08-13 02:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -10` · ran
+- 2026-08-13 02:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-13 02:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --check ../docs/reference/workflow-ir.md ../doc` · ran
+- 2026-08-13 02:26 · `git stash 2>&1 | head -3; cd server && npx prettier --check ../CHANGELOG.md 2>&1; cd .. && git stash pop 2>&1 | head -3` · ran
+- 2026-08-13 02:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 120 npm run test:match -- "p6-acceptance" 2>&1 | tai` · ran
+- 2026-08-13 02:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 120 npm run test:match -- "p6-acceptance" 2>&1 | tai` · ran
+- 2026-08-13 02:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep -i` · ran
+- 2026-08-13 02:25 · `ps aux | grep -i jest | grep -v grep | head -10` · ran
+- 2026-08-13 02:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -5 && echo "=== TESTS ===" && ` · ran
+- 2026-08-13 02:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-13 02:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | rg "del` · ran
+- 2026-08-13 02:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:format 2>&1 | tail -40` · ran
+- 2026-08-13 02:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "chain-operator|session-stage|gate" 2>` · ran
+- 2026-08-13 02:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBan` · ran
+- 2026-08-13 02:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "chain-operator|session-stage|gate" 2>` · ran
+- 2026-08-13 02:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -30` · ran
+- 2026-08-13 02:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck:tests:ratchet 2>&1 | tail -30` · ran
+- 2026-08-13 02:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -40` · ran
+- 2026-08-13 00:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -i jest | grep -v grep` · ran
+- 2026-08-13 00:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -c "[j]est"; npm run test:match -- "workflow|p` · ran
+- 2026-08-13 00:31 · `npx prettier --write docs/reference/mcp-tools.md docs/reference/workflow-ir.md plans/adaptive-chain-runtime-p6-workflow-` · ran
+- 2026-08-13 00:30 · `git stash list >/dev/null; npx prettier --check docs/reference/chain-schema.md docs/concepts/chains-lifecycle.md 2>&1 | ` · ran
+- 2026-08-13 00:30 · `npx prettier --check plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md docs/reference/mcp-t` · ran
+- 2026-08-13 00:30 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'NOTES' ## Tier 5 — worker execu` · ran
+- 2026-08-13 00:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:integration 2>&1 | tail -25` · ran
+- 2026-08-13 00:18 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 550 npm run test:integration 2>&1 | tail -25` · ran
+- 2026-08-13 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 900 npm run test:integration 2>&1 | tail -20` · ran
+- 2026-08-13 00:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 900 npm run test:ci 2>&1 | tail -12` · ran
+- 2026-08-13 00:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && python3 - <<'EOF' p='tests/unit/execution/pipeline/step-resp` · ran
+- 2026-08-13 00:12 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -c "[j]est"; timeout 900 npm run test:ci 2>&1 ` · ran
+- 2026-08-13 00:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -c "[j]est"; timeout 600 npm run test:match --` · ran
+- 2026-08-13 00:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run typecheck:tests:ratchet 2>&1 | tail -4; ` · ran
+- 2026-08-13 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | rg "com` · ran
+- 2026-08-13 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run typecheck:tests:ratchet 2>&1 | tail -8; ` · ran
+- 2026-08-13 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && python3 - <<'EOF' p='src/mcp/tools/prompt-engine/core/prompt` · ran
+- 2026-08-13 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && sed -n '228,270p' eslint.config.js` · ran
+- 2026-08-13 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ls eslint.config* && rg -n "no-restricted-syntax" -A 15 esli` · ran
+- 2026-08-13 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/ --rule '{"no-restricted-syntax":"error"}' --` · ran
+- 2026-08-13 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --fix src/engine/execution/pipeline/stages/04-par` · ran
+- 2026-08-13 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && python3 - <<'EOF' p='src/mcp/tools/prompt-engine/core/pipeli` · ran
+- 2026-08-13 00:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint --fix src/modules/workflow-ir/compiler.ts src/eng` · ran
+- 2026-08-13 00:08 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/workflow-ir/compiler.ts src/engine/ex` · ran
+- 2026-08-13 00:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/workflow-ir/compiler.ts src/engine/ex` · ran
+- 2026-08-13 00:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep -c "[j]est" ; timeout 500 npm run typecheck 2>` · ran
+- 2026-08-13 00:07 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && python3 - <<'EOF' p='src/engine/execution/parsers/workflow-c` · ran
+- 2026-08-13 00:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run test:match -- "p6-workflow-ir" 2>&1 | rg` · ran
+- 2026-08-13 00:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run test:match -- "workflow-ir|p6-workflow-i` · ran
+- 2026-08-13 00:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run test:match -- "workflow-ir|p6-workflow-i` · ran
+- 2026-08-13 00:06 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run test:match -- "workflow-ir|p6-workflow-i` · ran
+- 2026-08-13 00:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 300 npm run test:match -- "mutation-policy" 2>&1 | t` · ran
+- 2026-08-13 00:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 300 npm run test:match -- "prompt-engine-surface" 2>` · ran
+- 2026-08-13 00:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 300 npm run test:match -- "prompt-engine-surface" 2>` · ran
+- 2026-08-13 00:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run test:match -- "p6-workflow-ir" 2>&1 | ta` · ran
+- 2026-08-13 00:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 500 npm run test:match -- "p6-workflow-ir" 2>&1 | ta` · ran
+- 2026-08-13 00:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 400 npm run test:match -- "workflow-ir" 2>&1 | tail ` · ran
+- 2026-08-13 00:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 300 npx jest tests/unit/workflow-ir/ 2>&1 | tail -30` · ran
+- 2026-08-12 23:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 400 npm run typecheck 2>&1 | tail -40` · ran
+- 2026-08-12 23:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 300 npm run validate:arch 2>&1 | tail -25` · ran
+- 2026-08-12 23:43 · `ps aux | grep -i "jest\|node.*test" | grep -v grep | head -20; echo "---GIT STATUS---"; git status --porcelain | head -6` · ran
+- 2026-08-12 23:42 · `ls server/src/modules/workflow-ir/ && npm --prefix server run test:match -- "workflow-ir" 2>&1 | rg "Tests:|Suites:" && ` · ran
+- 2026-08-12 23:41 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck && npm run lint:ratchet && npm run typeche` · ran
+- 2026-08-12 23:41 · `npx --prefix server prettier --write plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md >/de` · ran
+- 2026-08-12 23:40 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'MDEOF' ## Tier 4 — worker execu` · ran
+- 2026-08-12 23:38 · `npx --prefix server prettier --check docs/reference/workflow-ir.md docs/reference/chain-schema.md docs/README.md server/` · ran
+- 2026-08-12 23:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:arch 2>&1 | tail -6 && echo "=== FULL UNIT ` · ran
+- 2026-08-12 23:37 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck && npm run lint:ratchet && npm run typeche` · ran
+- 2026-08-12 23:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && S=/tmp/claude-1000/-home-minipuft-Applications-claude-prompt` · ran
+- 2026-08-12 23:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write tests/unit/gates/inline-gate-chain-step` · ran
+- 2026-08-12 23:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "workflow-ir|gate-enhancement|inline-g` · ran
+- 2026-08-12 23:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "workflow-ir|inline-gate-chain-step-wi` · ran
+- 2026-08-12 23:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "workflow-ir|inline-gate-chain-step-wi` · ran
+- 2026-08-12 23:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "workflow-ir|inline-gate-chain-step-wi` · ran
+- 2026-08-12 23:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "workflow-ir|inline-gate-chain-step-wi` · ran
+- 2026-08-12 23:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write tests/unit/prompts/chain-step-strictnes` · ran
+- 2026-08-12 23:33 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && timeout 900 npm run test:ci 2>&1 | tail -20` · ran
+- 2026-08-12 23:33 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux|grep "jest --runInBand"|grep -v grep|wc -l; npm run t` · ran
+- 2026-08-12 23:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:arch 2>&1 | tail -12` · ran
+- 2026-08-12 23:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx prettier --write tests/unit/workflow-ir/ tests/unit/gate` · ran
+- 2026-08-12 23:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | rg "wor` · ran
+- 2026-08-12 23:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | rg "wor` · ran
+- 2026-08-12 23:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== TYPECHECK ===" && npm run typecheck 2>&1|tail -3 &` · ran
+- 2026-08-12 23:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -10` · ran
+- 2026-08-12 23:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/workflow-ir/ src/mcp/tools/schemas/wo` · ran
+- 2026-08-12 23:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/workflow-ir/ src/mcp/tools/schemas/wo` · ran
+- 2026-08-12 23:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npx eslint src/modules/workflow-ir/ src/mcp/tools/schemas/wo` · ran
+- 2026-08-12 23:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && echo "=== TYPECHECK ===" && npm run typecheck 2>&1 | tail -5` · ran
+- 2026-08-12 23:29 · `npx --prefix server prettier --write docs/reference/workflow-ir.md docs/reference/chain-schema.md server/tooling/contrac` · ran
+- 2026-08-12 23:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run generate:contracts 2>&1 | tail -2 && npm run test:ma` · ran
+- 2026-08-12 23:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep "jest --runInBand" | grep -v grep | wc -l && n` · ran
+- 2026-08-12 23:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -15 && echo "=== stale note ==` · ran
+- 2026-08-12 23:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && rm src/mcp/contracts/schemas/_generated/workflow-ir.generate` · ran
+- 2026-08-12 23:22 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 23:15 · `ls plans/ | head -50 && echo "---PS---" && ps aux | grep -i jest | grep -v grep | head -20` · ran
+- 2026-08-12 23:12 · `npx prettier --write docs/reference/chain-schema.md docs/concepts/chains-lifecycle.md && npx prettier --check docs/refer` · ran
+- 2026-08-12 23:12 · `git stash list >/dev/null; for f in docs/reference/chain-schema.md docs/concepts/chains-lifecycle.md; do git show HEAD:$` · ran
+- 2026-08-12 23:12 · `npx prettier --check docs/reference/chain-schema.md docs/concepts/chains-lifecycle.md 2>&1 | tail -10` · ran
+- 2026-08-12 23:11 · `cat >> plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12-implementation-notes.md <<'MDEOF' ## Tier 3 — worker execu` · ran
+- 2026-08-12 23:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "text-refs|visibility|response-assembl` · ran
+- 2026-08-12 23:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "visibility|p5-acceptance" 2>&1 | tail` · ran
+- 2026-08-12 23:03 · `kill 2043412 2043413 2>/dev/null; sleep 2; cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:matc` · ran
+- 2026-08-12 23:03 · `ps aux | grep -E "jest" | grep -v grep | head -5; echo "---"; ls -la /tmp/claude-1000/-home-minipuft-Applications-claude` · ran
+- 2026-08-12 23:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:arch 2>&1 | tail -12` · ran
+- 2026-08-12 23:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep "jest --runInBand" | grep -v grep | wc -l && n` · ran
+- 2026-08-12 23:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -6 && echo "=== LINT RATCHET =` · ran
+- 2026-08-12 22:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && md5sum -c /tmp/claude-1000/-home-minipuft-Applications-claud` · ran
+- 2026-08-12 22:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "text-refs|text-reference|visibility" ` · ran
+- 2026-08-12 22:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "text-refs|text-reference|visibility" ` · ran
+- 2026-08-12 22:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "text-refs|text-reference|visibility" ` · ran
+- 2026-08-12 22:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run test:match -- "text-refs|text-reference|visibility" ` · ran
+- 2026-08-12 22:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run lint:ratchet 2>&1 | tail -15 && echo "=== TESTS RATC` · ran
+- 2026-08-12 22:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && rg -n "writeFileSync|update.*baseline|--update" scripts/esli` · ran
+- 2026-08-12 22:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && ps aux | grep "jest --runInBand" | grep -v grep | head -3; n` · ran
+- 2026-08-12 22:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20` · ran
+- 2026-08-12 22:49 · `ls plans/ | head -50 && echo "---PS---" && ps aux | grep -i jest | grep -v grep | head` · ran
+- 2026-08-12 22:47 · `cd server && npm run validate:contracts 2>&1 | tail -3; cd .. ; echo "=== committed paths in series ==="; git diff --nam` · ran
+- 2026-08-12 22:46 · `cd server && npm run typecheck 2>&1 | tail -3; echo "=== RATCHET ==="; npm run lint:ratchet 2>&1 | tail -4; echo "=== TE` · ran
 - 2026-08-12 22:45 · `python3 - <<'PY' p='plans/adaptive-chain-runtime-p6-workflow-ir-2026-08-12.md' s=open(p,encoding='utf-8').read() subs=[ ` · ran
 - 2026-08-12 22:44 · `git add plans/adaptive-chain-runtime-2026-08-09.md plans/adaptive-chain-runtime-2026-08-09-implementation-notes.md plans` · ran
 - 2026-08-12 22:36 · `for f in server/package.json server/scripts/run-validation-suite.js server/scripts/eslint-ratchet.js server/resources/ga` · ran
