@@ -13,7 +13,9 @@
     "sync": "bash scripts/sync-to-cache.sh",
     "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'",
     "dev:claude": "bash scripts/dev-claude.sh",
-    "dev:claude:resume": "bash scripts/dev-claude.sh --resume"
+    "dev:claude:resume": "bash scripts/dev-claude.sh --resume",
+    "renovate:request-run": "node scripts/request-renovate-run.js",
+    "renovate:request-run:self-test": "node scripts/request-renovate-run.js --self-test"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2",

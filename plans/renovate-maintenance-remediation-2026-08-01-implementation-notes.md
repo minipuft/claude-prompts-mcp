@@ -9,8 +9,8 @@ tags: []
 
 ## Status
 
-- **Lifecycle:** `migrating`
-- **Current milestone:** Phase 5 safe reconciliation complete; Phase 6 hosted rollout pending
+- **Lifecycle:** guarded activation = `canonical`; lock-maintenance policy and hosted canary merge proof = `migrating`
+- **Current milestone:** Phase 7 guarded run exposed an indefinite synthetic-update timestamp block; the policy fix awaits deployment and a rerun
 - **Baseline:** `main` at `2ddd763f` when Phase 1 started
 - **Phase 2 validation baseline:** `main` at `905c9261`
 - **Phase 3 validation baseline:** `main` at `b41adc43`
@@ -143,56 +143,69 @@ comparisons passed, including the staged `.package-lock.json`.
 
 ## Deviations
 
-1. **Phase 0 clean-tree guard is not yet satisfied.** The user directed Tier 1 work
+0. **DEV-T7-1 — self-test fixture initially aliased the policy array.** The first
+   `renovate:request-run:self-test` correctly stopped before any GitHub mutation when
+   its missing-context case false-greened. The fixture now copies the canonical
+   context list before mutation; the full self-test is rerun before `--apply`.
+
+1. **DEV-T7-2 — lock maintenance cannot supply a release timestamp.** PR #194
+   remained pending after every refreshed package had exceeded the configured
+   three-day age. Renovate documents `lockFileMaintenance` as unsupported by the
+   update-level timestamp check because package-manager delegation creates a
+   synthetic update. Keep `minimumReleaseAge: "3 days"` so npm lock generation uses
+   the cutoff, and set `minimumReleaseAgeBehaviour: "timestamp-optional"` only on
+   lock maintenance so the synthetic update does not remain pending indefinitely.
+
+2. **Phase 0 clean-tree guard is not yet satisfied.** The user directed Tier 1 work
    on `main` while another session finishes. Phase 1 changes are limited to
    `.github/renovate.json5`, `.github/workflows/ci.yml`, and these notes; the
    concurrent session's files were not edited.
-2. **The plan's five-file Action inventory is stale.** Measured extraction reports
+3. **The plan's five-file Action inventory is stale.** Measured extraction reports
    seven external-Action package files. In addition to the five listed in the plan,
    `.github/workflows/downstream-sync.yml` and `.github/workflows/npm-publish.yml`
    contain external mutable refs. Phase 3 must include both files before its pinning
    gate may pass.
-3. **Local Renovate needs `GITHUB_COM_TOKEN` for warning-free Action extraction.**
+4. **Local Renovate needs `GITHUB_COM_TOKEN` for warning-free Action extraction.**
    Phase 2's validator workflow should supply the standard GitHub token without
    logging it.
-4. **Node 24.11.1 cannot load the `re2@1.26.1` engine-supported range without an
+5. **Node 24.11.1 cannot load the `re2@1.26.1` engine-supported range without an
    engine warning.** Local strict validation used an isolated installation where
    RE2 loaded successfully; hosted validation should run on the repository's current
    Node 24 line and record the exact patch version.
-5. **A locked-tree MCPB spike exposed npm binary links as part of the artifact
+6. **A locked-tree MCPB spike exposed npm binary links as part of the artifact
    contract.** Removing the intentionally bundled `ulid` package left
    `node_modules/.bin/ulid` dangling, and MCPB correctly rejected the archive.
    Phase 2 now removes dangling package binary links after applying exclusions and
    validates the resulting staged tree before packing.
-6. **`server/package-lock.json` remained unchanged.** Phase 2 changes only server
+7. **`server/package-lock.json` remained unchanged.** Phase 2 changes only server
    scripts; npm lock v3 does not persist the `scripts` object. Rewriting the lock
    would create unrelated churn, so validation proved the existing root dependency
    metadata and every required lock entry instead.
-7. **The concurrent worktree is not a valid lint baseline.** Its in-progress server
+8. **The concurrent worktree is not a valid lint baseline.** Its in-progress server
    edits currently add one `import-x/order` error. The isolated `905c9261` overlay
    passes the committed lint ratchet; no concurrent source file was edited here.
-8. **The sandbox's default npm cache is read-only.** The first root install failed
+9. **The sandbox's default npm cache is read-only.** The first root install failed
    with `EROFS`; all recorded clean-install evidence uses the same npm command with
    `npm_config_cache` pointed at `/tmp`. The isolated clone's Husky prepare step also
    completed normally because its Git metadata is writable.
-9. **Full ESLint remains a nonblocking debt report under the repository's explicit
-   ratchet policy.** The isolated Phase 2 overlay reports 3,473 errors and 1,407
-   warnings across the repository. Both changed validators pass targeted ESLint, and
-   the blocking source ratchet passes without regression.
-10. **The planned `>=22.0.0` server floor was not executable as written.** The server
+10. **Full ESLint remains a nonblocking debt report under the repository's explicit
+    ratchet policy.** The isolated Phase 2 overlay reports 3,473 errors and 1,407
+    warnings across the repository. Both changed validators pass targeted ESLint, and
+    the blocking source ratchet passes without regression.
+11. **The planned `>=22.0.0` server floor was not executable as written.** The server
     imports `node:sqlite` without a launch flag. Node added that module in 22.5.0 and
     removed the `--experimental-sqlite` requirement in 22.13.0, so Phase 4 corrected
     the server manifest, lock root, MCPB manifest, CI minimum, and documentation to
     `>=22.13.0`. See the [Node.js SQLite history](https://nodejs.org/download/release/latest-v22.x/docs/api/sqlite.html).
-11. **`.nvmrc` is not a canonical pin.** It was intentionally removed earlier because
+12. **`.nvmrc` is not a canonical pin.** It was intentionally removed earlier because
     no machine consumer read it; `.node-version` is the sole Node 24 development and
     publish pin. Phase 4 corrected the stale completed TODO instead of recreating a
     second path.
-12. **The first CLI validation invocation ran tests before producing `cli/dist/cpm.js`.**
+13. **The first CLI validation invocation ran tests before producing `cli/dist/cpm.js`.**
     The integration suite correctly failed on the missing artifact. Re-running the
     CI order (typecheck → build → tests) passed, including build, tests, and help smoke
     under the declared Node 18.18.0 floor.
-13. **The session-local `AGENTS.md` remains outside the release surface.** Git excludes
+14. **The session-local `AGENTS.md` remains outside the release surface.** Git excludes
     it through `.git/info/exclude`, and its supplied Node 18–24/`.nvmrc` guidance is
     stale. The tracked operator handbook and contributor/runtime docs are canonical;
     the local agent-rule source should be regenerated separately rather than added to
@@ -589,3 +602,64 @@ Renovate cycle; no automerge behavior was enabled during rollout.
   `<7.0.0` rule still permits server TypeScript 6 patches. Delete the CLI hold once a
   dedicated migration passes CLI typecheck, build, integration tests, and the full
   protected matrix.
+
+### Guarded hosted-run activation — 2026-08-12
+
+#### Final decisions
+
+- Stable nonmajor development updates and lock maintenance remain the only automatic
+  merge classes. Production dependencies, 0.x, majors, Actions, TypeScript, MCP SDK,
+  testing/lint/build tooling, Python validation tools, and vulnerabilities remain
+  manual.
+- Eligible updates retain `chore(deps)`. They enter the source state accumulated by an
+  already-open Release Please PR, but they do not independently trigger a version
+  bump. Server production updates retain manual `fix(deps)` semantics and remain the
+  only dependency class that independently creates a patch-release input.
+- Release PR #201 remains a manual publication boundary. This remediation automates
+  dependency intake, not release publication.
+- The dashboard's manual-job checkbox is no longer edited by hand. The canonical
+  request path is `npm run renovate:request-run` followed by
+  `npm run renovate:request-run -- --apply` only after the dry run passes.
+- The Renovate validation workflow runs the request script's self-test and watches the
+  script path, so its fail-closed cases are checked whenever the guard changes.
+
+#### Guard and hosted evidence
+
+| Check                           | Result                                                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Request-script self-test        | pass; healthy plus five fail-closed mutations                                                                                |
+| Local/remote Renovate config    | pass; Git blob `9257d62af62d43ff1bab5fffcfc78c64bb518109` on local and remote `main`                                         |
+| Remote main                     | `8c791695e33ca6feaac06492adf863a25bdab091`, protected and current                                                            |
+| Required checks                 | strict; exactly `Build`, `CLI`, `Lint & Validate`, `Test Suite`                                                              |
+| Actions policy                  | enabled with full-SHA enforcement                                                                                            |
+| Current-main workflow evidence  | all four protected checks, Renovate validation, and Release Please passed                                                    |
+| Dry run                         | pass; no GitHub mutation                                                                                                     |
+| Apply/read-back                 | pass; exact dashboard marker checked at `2026-08-12T10:20:01Z`                                                               |
+| Hosted consumption              | pass; Mend reset the marker and refreshed the dashboard at `2026-08-12T10:21:14Z`                                            |
+| Manual exclusions after refresh | PRs #205–#208 remain open with no platform auto-merge request                                                                |
+| Eligible canary after refresh   | PR #194 remains open with four checks passing; its stale pending status exposed the timestamp-less synthetic-update mismatch |
+
+The pending canary is not an age timer that can eventually clear: lock maintenance
+has no update-level release timestamp. The corrected policy retains the three-day npm
+resolution cutoff while allowing only the synthetic maintenance update to omit a
+timestamp. Phase 7 may move its final hosted proof from `migrating` to `canonical`
+only after that policy lands and a later Renovate run merges PR #194.
+
+#### Local validation
+
+| Check                                  | Result                                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `node --check`                         | pass                                                                                               |
+| Scoped Prettier and `git diff --check` | pass                                                                                               |
+| `renovate:request-run:self-test`       | pass                                                                                               |
+| Guarded live dry run                   | pass                                                                                               |
+| Server typecheck                       | pass                                                                                               |
+| Server lint ratchet                    | pass; 3,200 errors / 1,020 warnings, no regression                                                 |
+| Server unit/CI tests                   | pass; 178 suites / 2,201 tests                                                                     |
+| `validate:all`                         | 33/34 pass; only `validate:format` fails on concurrent plan relocations and unrelated format drift |
+
+The malformed validation-harness frontmatter is repaired and `plans:retire:check`
+passes. `validate:format` still receives source paths that the concurrent plan
+relocation has removed from the worktree, and it reports unrelated format drift in
+`plans/adaptive-chain-runtime-2026-08-09.md`. The scoped format and diff checks for
+this remediation pass; those concurrent files remain otherwise untouched.

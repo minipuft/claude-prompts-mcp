@@ -7,8 +7,8 @@ tags: []
 
 # Renovate and Dependency-Maintenance Remediation Plan
 
-**Status:** in progress  
-**Lifecycle:** current configuration = `migrating`; remediated configuration = `canonical` only after Phase 7  
+**Status:** Phase 7 policy and guarded run activation are implemented; the lock-maintenance timestamp fix awaits deployment and hosted proof
+**Lifecycle:** activation script = `canonical`; lock-maintenance policy and hosted automerge proof = `migrating` until the timestamp fix lands and PR #194 merges through a Renovate run
 **Baseline verified:** local `main` at `2ddd763f` on 2026-08-01  
 **Owner:** repository maintainer  
 **Risk:** high — merge protection, release triggering, dependency supply chain, and published artifacts
@@ -93,6 +93,8 @@ The individual mechanisms exist, but the contract between them is incomplete:
 8. **Make local extraction blocking while Renovate is pinned.** The local platform is documented as experimental, so a Renovate bump must update the parser and evidence atomically if output shape changes.
 9. **Do not add npm `min-release-age` now.** Renovate remains the age gate. Reconsider only when every supported CI line uses a verified compatible npm and an emergency-exclusion procedure exists.
 10. **Automerge follows evidence.** First deploy with automerge disabled; enable only stable nonmajor development and lock refreshes after hosted proof plus an explicit maintainer risk decision.
+11. **Keep dependency intake separate from publication.** Eligible development and lock updates use hidden `chore(deps)` commits: they enter the source state accumulated by an existing Release Please PR but do not independently bump a version. Server production dependencies remain manual `fix(deps)` updates because those commits create patch-release inputs. The Release Please PR remains a maintainer-controlled publication boundary.
+12. **Request hosted runs through one guarded script.** `npm run renovate:request-run` is dry-run-only. Its `-- --apply` form may edit the dashboard request checkbox only when local policy matches remote `main`, strict branch protection has exactly four required checks, full-SHA enforcement is active, the Renovate and Release Please checks passed on current `main`, and the exact unchecked dashboard marker is present once.
 
 ### Primary references
 
@@ -223,31 +225,42 @@ hosted evidence; a Renovate PR cannot merge until all four protected checks pass
 
 ### Phase 7 — Bounded automerge and migration closeout
 
-| #   | Target                   | Change                                                                                                                                               | Depends | Verification                                  |
-| --- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
-| 7.1 | Observation ledger       | Record the Phase 6 hosted cycle and the maintainer's explicit decision to accelerate the second-cycle guard based on prior dependency-bot operation. | Phase 6 | Dated PR/check evidence plus deviation record |
-| 7.2 | `.github/renovate.json5` | Enable Renovate-controlled PR automerge only for stable nonmajor dev dependencies and lock maintenance, with 14-day age and explicit exclusions.     | 7.1     | Resolved config plus canary dev patch         |
-| 7.3 | `.github/renovate.json5` | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                        | 7.2     | Config search and resolved config             |
-| 7.4 | Plan and notes           | Mark every superseded path removed and the new path canonical. Do not close with a migrating item.                                                   | 7.2–7.3 | Final removal matrix and clean tree           |
+**Status:** guarded activation is canonical as of 2026-08-12. The hosted run exposed
+that `lockFileMaintenance` is a timestamp-less synthetic update: inheriting the
+default `timestamp-required` behavior leaves `renovate/stability-days` pending
+indefinitely even though npm's three-day resolution cutoff has elapsed. The policy
+fix is explicit `minimumReleaseAge: "3 days"` plus
+`minimumReleaseAgeBehaviour: "timestamp-optional"`; final lifecycle closeout waits
+for that fix to land and a later Renovate run to merge PR #194.
 
-**Gate:** canary merges only after four checks and its Renovate stability status pass; full validation passes; removal searches are clean; lifecycle table contains only `canonical` or `removed`.
+| #   | Target                              | Change                                                                                                                                                                                                                                          | Depends | Verification                                        |
+| --- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------- |
+| 7.1 | Observation ledger                  | Record the Phase 6 hosted cycle and the maintainer's explicit decision to accelerate the second-cycle guard based on prior dependency-bot operation.                                                                                            | Phase 6 | Dated PR/check evidence plus deviation record       |
+| 7.2 | `.github/renovate.json5`            | Enable Renovate-controlled PR automerge only for stable nonmajor dev dependencies and lock maintenance; use a 14-day dev soak and a three-day npm lock-resolution cutoff with timestamp-optional handling for the synthetic maintenance update. | 7.1     | Resolved config plus canary dev patch               |
+| 7.3 | `.github/renovate.json5`            | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                                                                                                                   | 7.2     | Config search and resolved config                   |
+| 7.4 | Request script + validator workflow | Replace manual dashboard editing with dry-run-first activation guarded by remote policy, checks, SHA enforcement, config parity, and exact markers; run its self-test in Renovate validation CI.                                                | 7.2–7.3 | Hosted self-test, dry run, then `--apply` read-back |
+| 7.5 | Hosted canary                       | Request a hosted run without bypassing npm's three-day resolution cutoff; verify PR #194's synthetic update is not held indefinitely for lacking its own release timestamp.                                                                     | 7.4     | Dashboard cycle plus PR status/merge evidence       |
+| 7.6 | Plan and notes                      | Mark every superseded path removed and the new path canonical. Do not close while hosted automerge proof remains migrating.                                                                                                                     | 7.5     | Final removal matrix and clean tree                 |
+
+**Gate:** canary merges only after four checks pass and Renovate has generated its npm lockfiles with the configured three-day cutoff; the synthetic maintenance update must not remain pending solely because it has no release timestamp. The guarded request script and full validation pass; removal searches are clean; lifecycle table contains only `canonical` or `removed`.
 
 ## 5. Validation Strategy
 
 ### Testing strategy
 
-| What to test                         | Type                      | Location                                      | Why                                                  |
-| ------------------------------------ | ------------------------- | --------------------------------------------- | ---------------------------------------------------- |
-| Config schema and deprecations       | Contract                  | Renovate validator workflow                   | Rejects invalid or migrated options.                 |
-| Manager coverage and effective rules | Integration               | local Renovate extraction + new validator     | Proves discovery and merged policy, not only syntax. |
-| Extraction validator parser          | Unit/self-test            | `validate-renovate-extraction.js --self-test` | Locks parser behavior to the pinned Renovate output. |
-| Action pin syntax                    | Static policy + self-test | `validate-github-action-pins.js`              | Rejects mutable executable references.               |
-| Required check names                 | Contract                  | existing required-context validator           | Keeps workflow names and SSOT aligned.               |
-| Live required checks                 | External integration      | GitHub branch protection + canary PR          | Proves settings, not only files.                     |
-| Extension dependency closure         | Contract/integration      | existing extension validator + staged tree    | Proves required/excluded dependencies agree.         |
-| Extension reproducibility            | Artifact comparison       | two clean MCPB builds                         | Detects unlocked resolution or staging drift.        |
-| Release semantics                    | Hosted integration        | representative Renovate PR + Release Please   | Proves `fix(deps)` reaches release machinery.        |
-| Node support                         | Matrix/system             | server 22/24; CLI supported floor             | Proves the documented deliverable boundaries.        |
+| What to test                         | Type                      | Location                                      | Why                                                               |
+| ------------------------------------ | ------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| Config schema and deprecations       | Contract                  | Renovate validator workflow                   | Rejects invalid or migrated options.                              |
+| Manager coverage and effective rules | Integration               | local Renovate extraction + new validator     | Proves discovery and merged policy, not only syntax.              |
+| Extraction validator parser          | Unit/self-test            | `validate-renovate-extraction.js --self-test` | Locks parser behavior to the pinned Renovate output.              |
+| Action pin syntax                    | Static policy + self-test | `validate-github-action-pins.js`              | Rejects mutable executable references.                            |
+| Required check names                 | Contract                  | existing required-context validator           | Keeps workflow names and SSOT aligned.                            |
+| Live required checks                 | External integration      | GitHub branch protection + canary PR          | Proves settings, not only files.                                  |
+| Extension dependency closure         | Contract/integration      | existing extension validator + staged tree    | Proves required/excluded dependencies agree.                      |
+| Extension reproducibility            | Artifact comparison       | two clean MCPB builds                         | Detects unlocked resolution or staging drift.                     |
+| Release semantics                    | Hosted integration        | representative Renovate PR + Release Please   | Proves `fix(deps)` reaches release machinery.                     |
+| Hosted run activation                | Boundary + self-test      | `scripts/request-renovate-run.js`             | Prevents stale or weakened remote policy from being run manually. |
+| Node support                         | Matrix/system             | server 22/24; CLI supported floor             | Proves the documented deliverable boundaries.                     |
 
 ### Commands
 
@@ -269,6 +282,10 @@ Run from repository root:
 ```bash
 npm ci
 npm run mcpb:validate
+npm run renovate:request-run:self-test
+npm run renovate:request-run
+# Only after the dry run passes and the maintainer requests a hosted run:
+npm run renovate:request-run -- --apply
 renovate-config-validator --strict .github/renovate.json5
 renovate --platform=local --dry-run=extract
 node server/scripts/validate-renovate-extraction.js < extraction.jsonl
@@ -281,16 +298,16 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 
 ### Done criteria
 
-| Criterion                | Validation                       | Pass condition                                                   |
-| ------------------------ | -------------------------------- | ---------------------------------------------------------------- |
-| Release-aware PRs        | Extraction plus hosted PR        | Production = `fix(deps)`; other audited classes = `chore(deps)`. |
-| Full extraction          | Extraction validator             | Every expected dependency source found exactly once.             |
-| Immutable Actions        | Static validator + GitHub policy | No mutable external ref; workflows pass.                         |
-| Protected delivery       | Branch API + canary PR           | Four exact checks required and enforced.                         |
-| Deterministic MCPB       | Two clean builds                 | Same locked dependency/file inventory; MCPB validation passes.   |
-| Accurate runtime support | Search + matrix                  | No stale server-18 claim; server 22/24 and CLI contract pass.    |
-| Safe automation          | Hosted evidence + canary         | Only eligible dev/lock PR auto-merges after four checks.         |
-| Migration closed         | Removal matrix                   | No `migrating` artifact or superseded path remains.              |
+| Criterion                | Validation                         | Pass condition                                                                                                 |
+| ------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Release-aware PRs        | Extraction plus hosted PR          | Production = `fix(deps)`; other audited classes = `chore(deps)`.                                               |
+| Full extraction          | Extraction validator               | Every expected dependency source found exactly once.                                                           |
+| Immutable Actions        | Static validator + GitHub policy   | No mutable external ref; workflows pass.                                                                       |
+| Protected delivery       | Branch API + canary PR             | Four exact checks required and enforced.                                                                       |
+| Deterministic MCPB       | Two clean builds                   | Same locked dependency/file inventory; MCPB validation passes.                                                 |
+| Accurate runtime support | Search + matrix                    | No stale server-18 claim; server 22/24 and CLI contract pass.                                                  |
+| Safe automation          | Guarded activation + hosted canary | Only eligible dev/lock PR auto-merges after four checks and Renovate's age decision; publication stays manual. |
+| Migration closed         | Removal matrix                     | No `migrating` artifact or superseded path remains.                                                            |
 
 ### Documentation updates
 
@@ -307,14 +324,15 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 
 ### Risks and rollback
 
-| Risk                                    | Impact                         | Mitigation                                              | Rollback                                                                                                   |
-| --------------------------------------- | ------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Production rule loses during merge      | Missing release                | Put specific rule after defaults; assert effective type | Disable Renovate PR creation and restore last known config commit.                                         |
-| Pin uses incorrect SHA                  | Compromised or failed workflow | Verify upstream tag object and repository origin        | Revert the individual pin to the previously recorded SHA, not a mutable tag.                               |
-| Local extraction format changes         | False CI failure               | Pin Renovate and self-test parser                       | Revert Renovate bump; do not bypass the extraction gate.                                                   |
-| Locked staging omits runtime dependency | Broken MCPB                    | Required/excluded validator and unpacked smoke          | Revert packaging tier to last known artifact process while keeping MCPB exact; reopen plan before release. |
-| Four checks deadlock merge              | Blocked PRs                    | Require only recently reporting stable job names        | Restore captured before-state protection JSON, diagnose, and reapply all four before closeout.             |
-| Automerge scope widens                  | Unreviewed change              | Later explicit exclusions and hosted canary             | Set top/rule automerge false immediately; keep observation evidence.                                       |
+| Risk                                    | Impact                                    | Mitigation                                                                      | Rollback                                                                                                   |
+| --------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Production rule loses during merge      | Missing release                           | Put specific rule after defaults; assert effective type                         | Disable Renovate PR creation and restore last known config commit.                                         |
+| Pin uses incorrect SHA                  | Compromised or failed workflow            | Verify upstream tag object and repository origin                                | Revert the individual pin to the previously recorded SHA, not a mutable tag.                               |
+| Local extraction format changes         | False CI failure                          | Pin Renovate and self-test parser                                               | Revert Renovate bump; do not bypass the extraction gate.                                                   |
+| Locked staging omits runtime dependency | Broken MCPB                               | Required/excluded validator and unpacked smoke                                  | Revert packaging tier to last known artifact process while keeping MCPB exact; reopen plan before release. |
+| Four checks deadlock merge              | Blocked PRs                               | Require only recently reporting stable job names                                | Restore captured before-state protection JSON, diagnose, and reapply all four before closeout.             |
+| Automerge scope widens                  | Unreviewed change                         | Later explicit exclusions and hosted canary                                     | Set top/rule automerge false immediately; keep observation evidence.                                       |
+| Dashboard request races a bot update    | Lost dashboard state or wrong run request | Re-read `updated_at` and the complete body after preflight; abort on any change | Run the dry-run command again against the new dashboard snapshot.                                          |
 
 ### Mandatory legacy-removal matrix
 
@@ -330,6 +348,7 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 | Two-check live protection                    | All four contexts have recent runs                                                                                  | Protection GET + canary                         | `removed`   |
 | Collapsed Node 18–24 server claim            | Docs and matrix agree                                                                                               | Stale-claim search                              | `removed`   |
 | Rollout-only eligible-rule `automerge:false` | Maintainer accepts accelerated rollout and canary succeeds                                                          | Hosted canary                                   | `removed`   |
+| Manual dashboard checkbox editing            | Guarded request script passes its self-test, dry run, apply read-back, and hosted refresh                           | Exact-body mutation plus dashboard/PR evidence  | `removed`   |
 | TypeScript 7 `allowedVersions` hold          | ts-jest and typescript-eslint admit 7, and architecture validation cruises a non-zero module graph under 7          | Peer-range evidence plus hosted full CI         | `canonical` |
 | CLI TypeScript 6 `allowedVersions` hold      | A dedicated CLI migration passes typecheck, build, integration tests, and the full protected matrix on TypeScript 6 | Hosted PR #192 failure plus future migration CI | `canonical` |
 
@@ -344,6 +363,7 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 - [x] Capture the pattern “dependency automation is a delivery contract, not a bot config” after implementation evidence confirms it.
 - [ ] Record whether pinned local extraction remains stable across the next Renovate upgrade.
 - [x] Record the server/CLI Node support distinction in the tracked operator handbook after Phase 4 found the packaged/runtime mismatch.
+- [x] Record the compound pattern “automation activation must validate the remote policy it will execute, not only the local config.”
 - [ ] Feed any user correction into the owning workflow skill and observation ledger immediately.
 
 ## 7. Execution Notes
