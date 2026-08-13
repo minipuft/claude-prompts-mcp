@@ -131,6 +131,18 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 05:56 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 05:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -5` · ran
+- 2026-08-13 05:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -6` · ran
+- 2026-08-13 05:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write scripts/lib/substrate.js scripts/run-valid` · ran
+- 2026-08-13 05:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --input-type=module -e " import {readFileSync,writeFileSyn` · ran
+- 2026-08-13 05:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --input-type=module -e " import {readFileSync,writeFileSyn` · ran
+- 2026-08-13 05:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -12` · ran
+- 2026-08-13 05:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== E8(1) validate:readme ===" && npm run validate:readme` · ran
+- 2026-08-13 04:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 04:51 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 04:51 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx jest tests/unit/scripts/validation-self-tests.test.ts 2>&1 ` · ran
+- 2026-08-13 04:49 · `cd /home/minipuft/Applications/claude-prompts-mcp npm --prefix server run plans:retire:self-test --silent 2>&1 | tail -2` · ran
 - 2026-08-12 19:26 · `cd /home/minipuft/Applications/claude-prompts-mcp ls -la plans/subagent-delegation-contract-2026-08-12*.md echo "=== all` · ran
 - 2026-08-12 19:25 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/adaptive-chain-runtime-2026-08-09.md >/dev/` · ran
 - 2026-08-12 19:23 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:plans/adaptive-chain-runtime-2026-08-09.md > plans/zz-he` · ran
@@ -790,3 +802,32 @@ exception declaring that something consumes you.
   modified with ~20 plan moves in flight; the frontmatter change queues both files for its next
   pass, which rewrites inbound links transactionally. Hand-moving would have broken
   `plans/features/plan-retirement-federation-2026-08-03.md`'s relative link into federation.
+
+## Deviations — retirement executed (2026-08-13), DEV-ABS-5 closed
+
+Ran `--apply` once the concurrent session's moves landed. Findings belong here because plan
+retirement is the tooling Tier 7 absorbed from federation; the code fixes are committed
+(`107d11fc`, `18fa3fe5`, `2e143f8d`) and are not tier rows.
+
+- **DEV-ABS-6** — `rewriteLinks` required a `./` or `../` prefix, matching the form its own
+  docblock assumed. Plans cite same-directory peers as a bare `sibling.md`, so the first live run
+  re-based one prefixed citation and left **eight** bare ones pointing at vacated paths — five
+  inbound, three outbound. Prefix is now optional; absolute paths and URLs rejected; the existing
+  `existsSync` guard makes the widening safe.
+- **DEV-ABS-7** — every self-test case carried the prefix, so a green suite predicted a broken run.
+  Same shape as the phantom-column gate: **a test written against the author's mental model rather
+  than the corpus.** Two cases added, both falsified.
+- **DEV-ABS-8** — I verified inbound citations, declared clean, and missed the outbound three. The
+  scan ran while the moved files were still untracked, so `git ls-files` never showed them to it.
+  **A scan keyed on tracked files is blind to the files a move just created** — check after the
+  commit, not before.
+- **DEV-ABS-9** — the plan-row self-test named a live plan to get its "exists on disk" precondition,
+  with a comment asserting the coupling was required. Retirement moved that plan the next day and
+  the case failed, blocking a push. The gate was right; the fixture was load-bearing on a path
+  every plan is free to leave. It now writes its own file. **A fixture must not depend on where
+  the repository's own documents happen to live.**
+- **DEV-ABS-10** — three ad-hoc link scans in one session, three separate breakages found. **There
+  is no link gate**, which is why the class keeps recurring. Not built here: `docs/` and
+  `server/README.md` carry 11 pre-existing broken links that would need target rulings first, and a
+  gate that starts red is a gate nobody turns on. Open — flips when those 11 are resolved or
+  exempted.
