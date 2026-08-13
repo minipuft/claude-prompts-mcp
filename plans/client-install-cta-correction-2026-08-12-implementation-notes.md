@@ -1,7 +1,7 @@
 ---
 title: "Client Install CTA Correction — Implementation Notes"
 date: 2026-08-12
-status: reference
+status: done
 tags: [docs, readme, install]
 ---
 

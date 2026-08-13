@@ -1,7 +1,7 @@
 ---
 title: "Documentation Governance — Implementation Notes"
 date: 2026-08-12
-status: reference
+status: done
 tags: [docs, governance, chains]
 ---
 

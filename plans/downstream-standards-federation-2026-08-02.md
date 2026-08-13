@@ -10,6 +10,12 @@ tags: []
 **Status:** RETIRED to reference 2026-08-12 — the contract layer shipped; the open remainder moved
 to [`agent-plugins-migration-2026-08-08.md`](agent-plugins-migration-2026-08-08.md) **Tier 7**.
 
+**Companion:**
+[`downstream-standards-federation-2026-08-02-implementation-notes.md`](downstream-standards-federation-2026-08-02-implementation-notes.md)
+— the deviation log. Retained as `reference` alongside this file rather than archived: it records
+why several hold points were satisfied without anyone noticing, which is the evidence Tier 7
+inherited.
+
 **What shipped and still stands** (do not re-derive from this file — it is the record, not the
 queue): `minipuft/repository-standards` v1.1.0 at an immutable SHA, a required
 `Consumer Contract / Consumer Contract` on gemini-prompts, opencode-prompts and minipuft-plugins,
