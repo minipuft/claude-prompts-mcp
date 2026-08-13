@@ -16,15 +16,20 @@ Configuration reference for `chainSteps` in `prompt.yaml`.
 
 A chain is a list of steps defined in `chainSteps`.
 
-| Field           | Type     | Required | Description                                                                          |
-| --------------- | -------- | -------- | ------------------------------------------------------------------------------------ |
-| `promptId`      | `string` | **Yes**  | The ID of the prompt to execute.                                                     |
-| `stepName`      | `string` | **Yes**  | Display name for logs and mapping references.                                        |
-| `inputMapping`  | `object` | No       | Maps previous outputs to this step's arguments.                                      |
-| `outputMapping` | `object` | No       | Renames this step's output for downstream use.                                       |
-| `retries`       | `number` | No       | Retry attempts on failure (default 0).                                               |
-| `subagentModel` | `enum`   | No       | Model tier for delegation: `heavy`, `standard`, `fast`. Overrides prompt-level hint. |
-| `agentType`     | `string` | No       | Which agent to spawn for this step. Overrides the prompt-level default.              |
+| Field           | Type      | Required | Description                                                                                                                                              |
+| --------------- | --------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `promptId`      | `string`  | **Yes**  | The ID of the prompt to execute.                                                                                                                         |
+| `stepName`      | `string`  | **Yes**  | Display name for logs and mapping references.                                                                                                            |
+| `id`            | `string`  | No       | Stable kebab-case node identity. Auto-minted from `stepName` when omitted; explicit ids must be unique within the chain.                                 |
+| `inputMapping`  | `object`  | No       | Maps previous outputs to this step's arguments.                                                                                                          |
+| `outputMapping` | `object`  | No       | Renames this step's output for downstream use.                                                                                                           |
+| `retries`       | `number`  | No       | Retry attempts on failure (default 0).                                                                                                                   |
+| `subagentModel` | `enum`    | No       | Model tier for delegation: `heavy`, `standard`, `fast`. Overrides prompt-level hint.                                                                     |
+| `agentType`     | `string`  | No       | Which agent to spawn for this step. Overrides the prompt-level default.                                                                                  |
+| `framework`     | `string`  | No       | Framework this step runs under, overriding the run-wide selection. An unrecognized id falls back to the run-wide framework rather than failing the load. |
+| `inlineGateIds` | `array`   | No       | Inline gate ids for this step. Accepted by the schema but not yet wired to the gate pipeline — declaring it has no runtime effect.                       |
+| `visibility`    | `object`  | No       | Per-step policy (`withhold`/`expose`) for which chain-run context items this step's render sees. See [Visibility](#visibility).                          |
+| `delegation`    | `boolean` | No       | Marks this step for skills-sync export as a delegated skill. Read only by the skills-sync exporter, not the execution pipeline.                          |
 
 ### Subagent Model
 
@@ -50,6 +55,27 @@ plugin-provided type). Bare names are namespaced to this plugin at render time; 
 containing `:` is passed through unchanged. The server does not validate the name against the
 host's registry, because it cannot see one: an unknown agent surfaces as an error from the client,
 naming the agent it could not find.
+
+### Visibility
+
+Controls which chain-run context items are withheld from or exposed to a step's render, consumed
+by `decideVisibility` at the operator render and delegation-envelope chokepoints. An item may
+appear in `withhold` or `expose`; the schema does not reject the same item in both — `expose` is
+only meaningful against a prior step's `withhold`.
+
+| Item                   | Meaning                                  |
+| ---------------------- | ---------------------------------------- |
+| `previous_step_output` | The immediately preceding step's result. |
+| `chain_history`        | Accumulated history of prior steps.      |
+| `unknowns_ledger`      | The run's declared-unknowns ledger.      |
+
+```yaml
+chainSteps:
+  - promptId: draft_step
+    stepName: Draft
+    visibility:
+      withhold: [chain_history]
+```
 
 ### Example
 

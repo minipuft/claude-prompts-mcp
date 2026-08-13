@@ -606,8 +606,8 @@ resource_manager(
   description:"Generates formatted weekly status report",
   user_message_template:"Generate a weekly report for {{team}} covering {{date_range}}",
   arguments:[
-    {"name":"team", "required":true},
-    {"name":"date_range", "required":true}
+    {"name":"team", "type":"string", "required":true},
+    {"name":"date_range", "type":"string", "required":true, "defaultValue":"this_week"}
   ]
 )
 
@@ -623,6 +623,55 @@ resource_manager(resource_type:"prompt", action:"analyze_type", id:"my_prompt")
 # Get gate suggestions
 resource_manager(resource_type:"prompt", action:"analyze_gates", id:"my_prompt")
 ```
+
+If `category` isn't shipped in the repo — excluded by `server/resources/prompts/.gitignore` —
+`create` and `update` still succeed, and the response appends a warning naming the file and the
+exact `!<category>/` and `!<category>/**` lines to add to ship it. A workspace overlay with no
+`.gitignore` of its own never warns.
+
+#### Patch Mode (Partial Update)
+
+`action:"update"` accepts a `patch` array instead of (or alongside) full-body parameters — edit
+one anchor in a text field without retransmitting the whole template:
+
+```bash
+resource_manager(
+  resource_type:"prompt",
+  action:"update",
+  id:"weekly_report",
+  patch:[
+    {"field":"user_message_template", "old_string":"{{team}}", "new_string":"{{team_name}}"}
+  ],
+  dry_run:true
+)
+```
+
+Each operation is `{field, old_string, new_string, replace_all?}`:
+
+| Field         | Type                                                               | Notes                                                                    |
+| ------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `field`       | enum: `user_message_template` \| `system_message` \| `description` | which text body to edit                                                  |
+| `old_string`  | string, min length 1                                               | must match the current text exactly and (without `replace_all`) uniquely |
+| `new_string`  | string                                                             | replacement text — empty string deletes the anchor                       |
+| `replace_all` | boolean, optional                                                  | replace every occurrence instead of rejecting an ambiguous anchor        |
+
+Operations apply in order, each against the previous one's output. A patch that cannot be applied
+is rejected as a whole — nothing is written and no version is consumed:
+
+| Rejection reason   | Cause                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| `empty_old_string` | `old_string` was empty                                         |
+| `target_absent`    | the prompt has no text for that field                          |
+| `anchor_not_found` | the anchor does not occur in the field's current text          |
+| `anchor_ambiguous` | the anchor occurs more than once and `replace_all` was not set |
+
+`patch` cannot be combined with the full-body parameter it targets in the same call: sending
+`user_message_template` or `system_message` alongside any `patch` operation is rejected, and
+sending `description` alongside a patch that targets `description` is rejected the same way — send
+one or the other. `dry_run:true` renders the produced text and a diff without writing anything or
+consuming a version; resend the same call without `dry_run` to apply it. Both `patch` and
+`dry_run` are update-only — `action:"create"` rejects either explicitly, since there is no
+existing prompt to patch or diff against.
 
 ### Gates
 
@@ -687,14 +736,38 @@ resource_manager(
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                  |
-| ----------------------- | ---------------------------------------- |
-| `category`              | Prompt category tag                      |
-| `user_message_template` | Prompt body with `{{variables}}`         |
-| `system_message`        | Optional system message                  |
-| `arguments`             | Array of `{name, required, description}` |
-| `chain_steps`           | Chain step definitions                   |
-| `gate_configuration`    | Gate include/exclude lists               |
+| Parameter               | Purpose                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                          |
+| `user_message_template` | Prompt body with `{{variables}}`                                                             |
+| `system_message`        | Optional system message                                                                      |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)            |
+| `dry_run`               | Preview an `update` (or patch) without writing — no version consumed                         |
+| `chain_steps`           | Chain step definitions                                                                       |
+| `gate_configuration`    | Gate include/exclude lists                                                                   |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`          |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default** |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**          |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                        |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                   |
+
+`type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
+block execution — enforcement only arms when the argument also declares a `validation` block
+(`pattern`, `minLength`, `maxLength`).
+
+The last five are written into `prompt.yaml` verbatim and are otherwise carried forward untouched:
+supply one and it is set, omit it and the prompt keeps whatever it already declared. Two of them
+carry a one-way cost. `register_with_mcp` and `mcp_prompt_mode` are normally **resolved** through
+prompt → category → global → built-in default, and setting either writes an explicit prompt-level
+value that outranks all of them permanently — the prompt stops following any later change to its
+category or global default, and only another explicit call moves it again. Set them when this
+prompt must differ from its category; leave them out when it should follow along.
+
+Rollback restores `injection`, `subagent_model` and `agent_type` from the target version's
+snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk value across a
+rollback — a recorded value for those two cannot be distinguished from an inherited default in
+older history rows, so restoring one could silently freeze a prompt that never declared it.
 
 **Gate Parameters:**
 
@@ -866,7 +939,7 @@ The server injects guidance into prompts. Control this per-execution or globally
 | Type             | What It Adds        | Default         |
 | ---------------- | ------------------- | --------------- |
 | `system-prompt`  | Framework           | Every 2 steps   |
-| `gate-guidance`  | Quality criteria    | Every step      |
+| `gate-guidance`  | Quality criteria    | First step only |
 | `style-guidance` | Response formatting | First step only |
 
 ### Quick Control with Modifiers
@@ -1080,7 +1153,12 @@ prompt_engine(command:"investigation target:'incident'")
 <details>
 <summary><strong>Version History</strong></summary>
 
-All resources (prompts, gates, frameworks) automatically track version history. Each update saves a snapshot before changes, enabling rollback and comparison.
+All resources (prompts, gates, frameworks) automatically track version history. Each edit records
+the state it _produces_ — version N holds what edit N produced, so the newest version always
+equals what `inspect` shows (go-forward numbering). If the latest stored snapshot doesn't match
+the resource's live state before the edit (the first edit after this behavior shipped, or an
+out-of-band file change), a self-healing "Bridge" row is recorded first so no state becomes
+unreachable.
 
 ### Configuration
 
@@ -1131,7 +1209,11 @@ resource_manager(
 )
 ```
 
-**Safety:** Current state is automatically saved as a new version before rollback. You can always rollback-from-rollback.
+**Safety:** The target version is validated before anything is written — an invalid version number
+is refused and consumes no version. The restored content is then recorded as a new version
+(described as `Rollback to vN`), not a separate "pre-rollback snapshot" — under go-forward
+numbering the live state before rollback is already the previous version. You can always
+rollback-from-rollback.
 
 ### Compare Versions
 
