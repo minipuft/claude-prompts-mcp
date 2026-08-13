@@ -165,6 +165,14 @@ plans/claude-prompts.code-workspace
 # Large assets (moodboards, design files)
 assets/moodboard.png
 
+# Mascot design studies. Working scratch for logo/mascot iteration: SVG explorations,
+# raster comparison frames, and third-party artist reference images gathered for study.
+# Deliberately not published — this is a public repository, so tracking them would put
+# other artists' work in every clone, and the raster frames alone are ~1.5 MB of history
+# that no consumer of an MCP server needs. Published artwork lives in assets/ directly
+# (logo.png, icon-512.png); only the iteration scratch is ignored.
+assets/studies/
+
 # CLI config files (user-specific)
 opencode.json
 state.db
