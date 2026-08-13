@@ -1,0 +1,12 @@
+# Search-tool visibility override — NOT a git file.
+#
+# ripgrep/fd read `.ignore` at HIGHER precedence than `.gitignore`, so these negations restore
+# visibility to search tools while git keeps ignoring the paths for push hygiene.
+#
+# WHY: `/resources/` (.gitignore:84) and `server/resources/prompts/*` (its own .gitignore) are
+# ignored deliberately — to keep the published repo free of a large, redundant prompt corpus, not
+# to hide it from tooling. But `rg`/`fd` honor .gitignore by default, so agents probing the repo
+# measured 20 prompts across 4 categories when 119 across 17 are present, and concluded fixtures
+# were missing that exist. That wrong inventory reached a subagent brief before it was caught.
+!resources/
+!server/resources/

@@ -147,6 +147,8 @@
     "validate:no-phantom-columns": "tsx scripts/validate-no-phantom-columns.ts",
     "validate:no-phantom-columns:self-test": "tsx scripts/validate-no-phantom-columns.ts --self-test",
     "validate:hooks-registered": "node ../scripts/validate-hook-registration.js",
+    "hook-harness": "node ../scripts/hook-harness.mjs",
+    "validate:hook-harness:self-test": "node ../scripts/hook-harness.mjs --self-test",
     "validate:suite-membership": "node scripts/validate-suite-membership.js",
     "validate:suite-membership:self-test": "node scripts/validate-suite-membership.js --self-test",
     "validate:hooks-registered:self-test": "node ../scripts/validate-hook-registration.js --self-test",

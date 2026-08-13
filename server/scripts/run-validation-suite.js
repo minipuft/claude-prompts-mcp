@@ -81,6 +81,7 @@ export const SUITE = [
   { script: 'validate:table-contracts', io: 'read' },
   { script: 'validate:no-phantom-columns', io: 'read' },
   { script: 'validate:hooks-registered', io: 'read' },
+  { script: 'validate:hook-harness:self-test', io: 'read' },
   { script: 'validate:suite-membership', io: 'read' },
   { script: 'validate:agent-plugins', io: 'read' },
   { script: 'validate:db-claim-order', io: 'read' },

@@ -131,6 +131,35 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-12 19:26 · `cd /home/minipuft/Applications/claude-prompts-mcp ls -la plans/subagent-delegation-contract-2026-08-12*.md echo "=== all` · ran
+- 2026-08-12 19:25 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/adaptive-chain-runtime-2026-08-09.md >/dev/` · ran
+- 2026-08-12 19:23 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:plans/adaptive-chain-runtime-2026-08-09.md > plans/zz-he` · ran
+- 2026-08-12 19:23 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:plans/adaptive-chain-runtime-2026-08-09.md > plans/.acr-` · ran
+- 2026-08-12 19:22 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== was it dirty BEFORE my edit? (compare against the staged/HEA` · ran
+- 2026-08-12 19:22 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== plan lint on all three ===" python3 ~/.claude/hooks/planning` · ran
+- 2026-08-12 18:57 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write scripts/hook-harness.mjs >/dev/null 2>&1 npx pret` · ran
+- 2026-08-12 18:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import json, pathlib, re p = pathlib.Path("pac` · ran
+- 2026-08-12 18:22 · `cd ~/.claude echo '{"tool_name":"Bash","tool_input":{"command":"npm run typecheck --prefix /nonexistent 2>&1 | head -2"}` · ran
+- 2026-08-12 18:21 · `H=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad/hook-h` · ran
+- 2026-08-12 18:10 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write scripts/validate-hook-registration.js >/dev/null ` · ran
+- 2026-08-12 18:10 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:scripts/validate-hook-registration.js > /tmp/claude-1000` · ran
+- 2026-08-12 18:10 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff --stat hooks/hooks.json && echo "hooks.json: byte-identical t` · ran
+- 2026-08-12 18:07 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== is it in validate:all / CI? ==="; rg -n 'hook-registration' ` · ran
+- 2026-08-12 17:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:format 2>&1 | grep -E '^\[warn\]' | head -6 ec` · ran
+- 2026-08-12 17:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E '^(──|✔|✖)|of [0-9]+ passed` · ran
+- 2026-08-12 17:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | rg -E '^(──|✔|✖|PASS|FAIL|[0-9]+/[0` · ran
+- 2026-08-12 17:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server rg -n 'plan-row-tracking:self-test' scripts/run-validation-suit` · ran
+- 2026-08-12 17:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== eslint (custom rule) ==="; npx eslint scripts/validat` · ran
+- 2026-08-12 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== wired into validate:all? ==="; rg -o 'validate:plan-r` · ran
+- 2026-08-12 17:44 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path("plans/agent-plugins-` · ran
+- 2026-08-12 17:43 · `cd ~/.claude && bash scripts/check-rules.sh 2>&1 | rg -i 'cleanup|FAIL|SUMMARY'` · ran
+- 2026-08-12 17:34 · `cd ~/.claude && bash scripts/check-rules.sh 2>&1 | tail -20` · ran
+- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --check plans/agent-plugins-migration-2026-08-08.md plans` · ran
+- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path("plans/agent-plugins-` · ran
+- 2026-08-12 17:15 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/agent-plugins-migration-2026-08-08.md >/dev` · ran
+- 2026-08-12 16:54 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/agent-plugins-migration-2026-08-08.md plans` · ran
+- 2026-08-12 16:54 · `cd /home/minipuft/Applications/claude-prompts-mcp tmp=$(mktemp -d) for f in plans/agent-plugins-migration-2026-08-08.md ` · ran
+- 2026-08-12 16:54 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== are the 4 frontmatter-less files foreign? ===" git status --` · ran
 - 2026-08-12 16:22 · `cd /home/minipuft/Applications/claude-prompts-mcp git worktree remove --force /tmp/idxcheck 2>/dev/null; git worktree pr` · ran
 - 2026-08-12 16:22 · `cd /tmp/headcheck/server && npm run test:e2e 2>&1 | grep -E "^Tests:|^Test Suites:" git worktree remove --force /tmp/hea` · ran
 - 2026-08-12 16:22 · `cd /tmp/headcheck/server npm run validate:all 2>&1 | tail -3 npm run test:ci 2>&1 | grep -E "^Tests:|^Test Suites:" npm ` · ran
@@ -733,3 +762,31 @@ exception declaring that something consumes you.
 - **DEV-BB-6** — `verify:claims` failed BECAUSE the 0.5.24 fix worked: the row's own
   `known_divergence` block became false and the corpus's satisfied-exception check refused it. The
   failure was the correct outcome; the block was deleted and the `claim_source` re-quoted.
+
+### Deviations — plan absorption, 2026-08-12
+
+- **DEV-ABS-1** — the owner asked to mark two plans "superseded". **There is no such status.**
+  `scripts/retire-done-plans.js:69` publishes exactly four — `active | backlog | done | reference`
+  — and the door a finished plan leaves by is decided by **inbound links**, not by whether
+  something replaced it. Both went to `reference`: federation has two citers, and codex-prompts-port
+  gained one when Tier 4.1 started citing its spike results. Filing either as `done` would have sent
+  it to gitignored `plans/archive/`.
+- **DEV-ABS-2** — the two retirements are **not the same kind of event**, and treating them alike
+  would have lost work. codex-prompts-port was COMPLETE with a stale `status: active` frontmatter —
+  a bookkeeping defect. Federation was genuinely unfinished with 9 unchecked completion items, so
+  retiring it required absorbing the live remainder first (Tier 7) rather than after.
+- **DEV-ABS-3 (the finding)** — federation hold point #4 waited on `downstream-sync.yml` producing
+  sync PRs; this plan's row 3.2 **deletes that workflow**. Its exit condition was already
+  unreachable, and it read as "still waiting" — indistinguishable from blocked, from inside either
+  plan. **Two plans, each internally consistent, can compose into an unsatisfiable condition that
+  neither one's gates can see.** Nothing detects this class; it surfaced only because the
+  retirement question forced a read of both. Same shape as E11 (a ✓ that means "I edited" not "it
+  is committed") — a status that stops tracking the thing it names.
+- **DEV-ABS-4** — Tier 7's rows are all OWNER-only settings and credentials. That is _why_
+  federation stalled ten days: they were the only non-code rows in a code plan, and nothing
+  surfaced them. Recorded on the tier itself so the next reader does not re-diagnose the stall as
+  neglect.
+- **DEV-ABS-5** — did NOT run `retire-done-plans.js --apply`. A concurrent session has that script
+  modified with ~20 plan moves in flight; the frontmatter change queues both files for its next
+  pass, which rewrites inbound links transactionally. Hand-moving would have broken
+  `plans/features/plan-retirement-federation-2026-08-03.md`'s relative link into federation.
