@@ -307,6 +307,7 @@ prompt_engine(command:"%judge analysis_report")
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                         |
 | `options`       | object  | Optional execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) to help delegation strategy selection when transport metadata is unavailable.                              |
 | `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                       |
+| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                             |
 
 </details>
 
@@ -449,6 +450,52 @@ A delegated (`==>`) step's envelope excludes withheld items and reports their na
 manifest line so the sub-agent knows what it does not have. See [Visibility
 Policy](../concepts/chains-lifecycle.md#visibility-policy) for full semantics, the per-item
 meaning, and its honest ceiling.
+
+### Workflow Submission
+
+`prompt_engine` accepts a **third command source** beside a command string and a chain resume: a
+structured Workflow IR on the `workflow` parameter. It expresses what the string grammar cannot —
+stable node ids, per-step visibility, gate bindings, delegation hints, input/output mappings and a
+declared budget.
+
+```bash
+prompt_engine(workflow:{
+  version: 1,
+  nodes: [
+    { id: "research", promptId: "research_docs", args: { topic: "caching" } },
+    { id: "review",   promptId: "code_review",   subagentModel: "fast",
+      visibility: { withhold: ["chain_history"] } }
+  ],
+  edges: [{ from: "research", to: "review" }],
+  gates: [{ id: "source-quality", target_step_id: "research" }],
+  budget: { maxInsertions: 1, declaredCostCeiling: 50000 }
+})
+```
+
+The call returns the run's first step and a `chain_id`; resume it like any other chain. An accepted
+workflow **is** an ordinary chain run — the `chain_runs` and `chain_run_nodes` rows are
+structurally identical to an equivalent `>>chain`'s, and node ids are the same id space
+`target_step_id` addresses (see [Chain Step Targeting](#chain-step-targeting)).
+
+| Rule                         | Behavior                                                                                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Exactly one source**       | `command`, `chain_id` and `workflow` are mutually exclusive. Two of them is a rejection, never a precedence decision.                                       |
+| **Edges are order**          | Edges are dependencies, linearized into one run order (ties broken by declaration order). There is no branching. With no edges the order is `nodes[]`.      |
+| **Caps narrow only**         | `maxNodes` (32), `maxFanOut` (8), `maxInsertions` (3) are enforced; a budget asking for more is rejected, never clamped. `declaredCostCeiling` is recorded. |
+| **Rejection writes nothing** | An invalid workflow returns one addressed line per problem and creates no run, no session, no version.                                                      |
+| **`gates` still works**      | A workflow's own `gates` and the `gates` parameter are concatenated, not exclusive.                                                                         |
+
+A rejection names its subject and its rule:
+
+```
+❌ Workflow rejected — 2 problems found. Nothing was executed and no run was created.
+
+• [unknown-prompt] node "draft": Node "draft" references prompt "write_summry", which is not registered
+• [cap-exceeded] workflow: budget.maxNodes of 64 exceeds the server cap of 32; a declared budget may only narrow a cap, never widen it
+```
+
+Full field reference, the linearization rule, and the complete rejection vocabulary:
+[Workflow IR Reference](./workflow-ir.md).
 
 ### Shell Verification Gates (Ralph Mode)
 

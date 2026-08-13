@@ -223,11 +223,11 @@ chain-run context items later steps do or don't see by default. The vocabulary i
 `previous_step_output | chain_history | unknowns_ledger` (`VisibilityItem`) — and an unrecognized
 item is rejected when the prompt loads, naming the allowed values.
 
-| Item                   | Governs                                                                                                                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `previous_step_output` | The `{{previous_step_output}}` / `{{previous_step_result}}` template context. Withheld → a neutral `**[CONTEXT WITHHELD]**` instruction takes its place                                  |
-| `chain_history`        | The `step_results`, `previous_step_results`, and `step{N}_result` template context — stripped before `inputMapping` runs, so an alias can't re-publish a withheld entry under a new name |
-| `unknowns_ledger`      | The [Unknowns Ledger](#unknowns-ledger) section rendered into a step's instructions — suppressed entirely, not summarized, on both the normal render and the gate-review render          |
+| Item                   | Governs                                                                                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `previous_step_output` | The `{{previous_step_output}}` / `{{previous_step_result}}` template context. Withheld → a neutral `**[CONTEXT WITHHELD]**` instruction takes its place                                              |
+| `chain_history`        | The `step_results`, `previous_step_results`, `step{N}_result` and `outputs.*` template context — stripped before `inputMapping` runs, so an alias can't re-publish a withheld entry under a new name |
+| `unknowns_ledger`      | The [Unknowns Ledger](#unknowns-ledger) section rendered into a step's instructions — suppressed entirely, not summarized, on both the normal render and the gate-review render                      |
 
 **Semantics**: a step's `withhold` withholds those items from every LATER step's default render;
 a later step's own `expose` overrides that withhold for itself only — a step's own `withhold`
@@ -235,9 +235,13 @@ never affects its own render, and `expose`-ing an item nobody withheld is a harm
 `visibility` declared anywhere in a chain renders byte-identically to a build without this
 feature.
 
-**v1 boundary**: `outputMapping` named outputs (e.g. `{{findings}}`) are spread into the same flat
-context as ordinary arguments and carry no marker distinguishing them from an argument, so
-`chain_history` withholding does not cover them.
+**Named outputs are covered.** `outputMapping` names are published under the reserved `outputs`
+object (`{{outputs.findings}}`, never `{{findings}}`), so withholding `chain_history` removes them
+with the rest of the history. They are deliberately NOT removed by `previous_step_output`: a named
+output is the same content `step{N}_result` publishes positionally, and that item leaves the
+positional keys in place — withholding the alias but not the thing it aliases would make the rule
+depend on which name the author chose. See
+[Named outputs](../reference/chain-schema.md#named-outputs).
 
 ### What Visibility Cannot Do
 
@@ -260,6 +264,13 @@ Steps can be handed off to sub-agents using the `==>` operator. Delegated steps 
 prompt_engine(command:">>research ==> >>analyze --> >>summarize")
 ```
 
+**A step-level `subagentModel` also marks its step delegated on ANY chain invocation**, not only
+after `==>` — a plain `>>chain` call renders the same delegation CTA and handoff envelope for a
+step declaring `subagentModel` in `prompt.yaml` as a command that spells `==>` before it. This
+closed a gap where the YAML field parsed but produced no delegation on the direct invocation
+path. `agentType` alone does not have this effect — see
+[Subagent Model](../reference/chain-schema.md#subagent-model).
+
 A delegated step's envelope also carries the [visibility policy](#visibility-policy) result: any
 item a prior step withheld is excluded from the envelope, and the handoff reports the withheld
 item names on one manifest line —
@@ -269,6 +280,13 @@ CONTEXT WITHHELD (names only, values not provided): chain_history
 ```
 
 — names only, never the withheld values, across every client profile.
+
+**The handoff target is resolved by node id, not by position.** After an [adaptive
+mutation](#adaptive-mutation) inserts or skips a node, the step a positional offset would name is
+no longer the step the run actually hands off to next; the run's live next-node id is asked for
+directly and matched back to the step it names, so the CTA, the envelope, and its visibility
+manifest all point at the step that will really execute. Legacy chains whose steps carry no `id`
+(and calls made with no active run to ask) keep the pre-existing positional answer unchanged.
 
 ### Model Selection
 
@@ -306,5 +324,6 @@ Names are host-defined and are not validated by the server.
 
 - **[Chain Authoring Example](../guides/chain-authoring-example.md)** — Build a real multi-step pipeline
 - **[Chain Schema Reference](../reference/chain-schema.md)** — `chainSteps` configuration, input mapping, retries
+- **[Workflow IR Reference](../reference/workflow-ir.md)** — submit a structured, node-addressed multi-step run through `prompt_engine`'s `workflow` parameter; compiles to an ordinary chain run through this same lifecycle
 - **[MCP Tools Reference](../reference/mcp-tools.md)** — `prompt_engine` chain parameters, [Visibility Policy schema](../reference/mcp-tools.md#visibility-policy)
 - **[Gates Guide](../guides/gates.md)** — Add validation between chain steps
