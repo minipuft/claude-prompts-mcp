@@ -1,11 +1,24 @@
 ---
 title: "codex-prompts: Codex CLI Downstream Port"
 date: 2026-08-03
-status: active
+status: reference
 tags: []
 ---
 
 # codex-prompts: Codex CLI Downstream Port — Implementation Plan (2026-08-03)
+
+**Retired to reference 2026-08-12.** The plan is finished, not abandoned: every tier executed and
+its upstream seams are live and **client-agnostic** — the `PLUGIN_ROOT` branch in `workspace.py`,
+`SpawnConfig.client`, `CodexModelStrategy`, and the structured-`gate_verdict` enforcement fix,
+which repaired a defect that had silently disabled object-shaped verdicts on _every_ client
+including Claude Code. None of that retires with the repo it was built for.
+
+**Superseded only in distribution.** [`agent-plugins-migration-2026-08-08.md`](agent-plugins-migration-2026-08-08.md)
+Tier 4.2 archives the codex-prompts repo in favour of a native Agent Plugins package. Kept at
+`reference` rather than archived because Tier 4.1 cites §Spike Results: those four measurements
+against codex-cli 0.146 are the only record of what Codex actually does, and the `.mcp.json`
+interpolation finding in particular is a constraint on the native pilot, not a fact about the
+retired repo.
 
 **Status**: COMPLETE — all tiers (0-5) executed 2026-08-03, plus a user-requested isolation validation (global MCP server disabled) that passed end-to-end under sandbox bypass and surfaced a third divergence pair: Codex sandboxes MCP server children under a fixed profile, and the packaged claude-prompts server writes package-relative, ignoring `MCP_WORKSPACE` (upstream defect → backlog). All four spikes answered; Tier 3 surfaced + fixed the gate-enforce structured-verdict bug. Commits pending user approval in all three repos. Details: implementation-notes deviations 16-17.
 **Origin**: `>>implementation_plan` chain `chain-implementation_plan#1`, grounded in a 3-repo inventory sweep + official Codex docs research (2026-08-03).

@@ -1,13 +1,29 @@
 ---
 title: "Downstream Standards Federation Implementation Plan"
 date: 2026-08-02
-status: active
+status: reference
 tags: []
 ---
 
 # Downstream Standards Federation Implementation Plan
 
-**Status:** In progress — implementation landed through guarded external hold points
+**Status:** RETIRED to reference 2026-08-12 — the contract layer shipped; the open remainder moved
+to [`agent-plugins-migration-2026-08-08.md`](agent-plugins-migration-2026-08-08.md) **Tier 7**.
+
+**What shipped and still stands** (do not re-derive from this file — it is the record, not the
+queue): `minipuft/repository-standards` v1.1.0 at an immutable SHA, a required
+`Consumer Contract / Consumer Contract` on gemini-prompts, opencode-prompts and minipuft-plugins,
+SHA-pinned Actions across all three, opencode's exact-tarball publication path, auto-merge-only
+release synchronization upstream (`validate-release-workflow.js` accepts nothing else), and a
+fleet drift auditor that passed authenticated with zero unexplained drift.
+
+**Why it retired unfinished.** The five external hold points below are settings and credentials,
+not code, and they did not move for ten days inside a plan whose every other row was code. Three
+became downstream of the agent-plugins tiers; a fourth — hold point #4, waiting on
+`downstream-sync.yml` producing sync PRs — became **unreachable** when that plan's row 3.2 deleted
+the workflow. Tier 7 carries the live remainder and names the four rows that are superseded rather
+than pending. The Completion Checklist and hold points below are kept as written, and are now
+**historical**: read Tier 7 for current state.
 **Date:** 2026-08-02 (America/Denver)
 **Risk:** High — cross-repository CI, publishing, protection, credential, and dependency-writer changes
 **Lifecycle:** upstream release synchronization = canonical product writer; downstream Dependabot automation = legacy; shared standards = proposed; local downstream adapters = canonical after shadow validation

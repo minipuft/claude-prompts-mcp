@@ -1,7 +1,7 @@
 ---
 title: "Downstream Standards Federation — Implementation Notes"
 date: 2026-08-02
-status: active
+status: reference
 tags: []
 ---
 

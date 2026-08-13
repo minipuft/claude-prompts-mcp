@@ -1,7 +1,7 @@
 ---
 title: "codex-prompts Port — Implementation Notes"
 date: 2026-08-03
-status: active
+status: reference
 tags: []
 ---
 
