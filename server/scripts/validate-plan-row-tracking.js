@@ -1,9 +1,38 @@
 #!/usr/bin/env node
 
 /**
- * A plan row marked ✓ must not name a file that exists on disk but is absent from git.
+ * Plan rows must be checkable in BOTH polarities: a ✓ must not name an untracked file, and a ☐
+ * must carry the stamp that makes it re-checkable.
  *
- * WHY THIS EXISTS
+ * WHY THE SECOND RULE EXISTS
+ * The first rule shipped 2026-08-12 and was measured one day later against the same plan. Five
+ * rows read ☐ while their deliverables were at HEAD, and this gate was green across all five —
+ * correctly, because each lie pointed the way it does not look.
+ *
+ * `✓` and `☐` are not symmetric. `✓` is the MARKED form: it asserts, so it carries a date and
+ * evidence, and a gate can read it. `☐` is UNMARKED — what a row looks like when nobody has
+ * spoken — so it means "measured, still open" AND "never re-checked" with nothing separating
+ * them. Every gate reads the asserting half because only the asserting half contains a claim.
+ *
+ * The tempting fix is an inverse gate that re-derives whether each ☐ is still open. That costs
+ * what the original determination cost and yields circumstantial evidence (a file can change for
+ * unrelated reasons). So this checks NOTATION, not world state: an open row must name its own
+ * falsifier, which is nearly free to write and expensive to reconstruct a week later.
+ *
+ * Rule scope is `status: active` plans only. A reference or archived plan is a record, and a
+ * backlog plan is speculative; stamping either is work with no reader.
+ *
+ * WHY NOT DIFF-SCOPED: the motivating case went stale precisely BECAUSE nobody touched it — five
+ * hold points sat satisfied for nine days. A gate firing only on changed files could not have
+ * caught it, so this re-reads every graded plan on every run.
+ *
+ * "Graded" is narrower than "every plan", in two ways worth stating rather than discovering:
+ * `planFiles()` lists TRACKED files, so a plan that is not yet committed is invisible here — the
+ * same HEAD-orientation the rest of this gate family has, and the reason an in-flight plan owned
+ * by another session cannot be reddened by it. And `status: active` excludes reference, archived
+ * and backlog plans by design.
+ *
+ * WHY THIS EXISTS (rule 1)
  * A 2026-08 audit of the Agent Plugins migration plan found SEVEN rows marked ✓ whose deliverables
  * had never been committed. `validate:all` measured 32/34 in the working tree and 7/34 at
  * HEAD for three days, because every gate read the working tree while CI checks out the commit.
@@ -38,6 +67,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { auditExceptions, reportExceptionAudit, VERDICT } from './lib/exception-hygiene.js';
+
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(SERVER, '..');
 
@@ -61,6 +92,40 @@ const PATH_IN_BACKTICKS = /`([A-Za-z0-9_.\-/]+\.(?:ts|js|mjs|cjs|json|ya?ml|md|p
 
 /** Paths that are legitimately absent from git; naming one in a ✓ row is not a finding. */
 const IGNORED_PREFIXES = ['node_modules/', 'server/dist/', 'cli/dist/'];
+
+/** The unmarked status. Rule 2 makes it carry a proposition. */
+const OPEN_MARK = '☐';
+
+/**
+ * The stamp that turns an open marker into something re-checkable.
+ *
+ * Both halves are required and both are structural. The date alone answers "how old is this
+ * belief" but not "what would change it", and the falsifier alone cannot be aged. Requiring an
+ * exact phrasing is the point of a NOTATION gate: it is checkable without knowing the domain.
+ */
+const OPEN_STAMP = /as of (\d{4}-\d{2}-\d{2})\s*[·|-]\s*flips when\s+\S/;
+
+/** Frontmatter status; only `active` plans are graded by rule 2. */
+function planStatus(content) {
+  const match = content.match(/^---\r?\n[\s\S]*?^status:\s*(\S+)\s*$/m);
+  return match ? match[1] : null;
+}
+
+/**
+ * Open rows that predate rule 2, kept passing so the gate could land without editing plans owned
+ * by concurrent work. Each entry is itself a marker and therefore carries what retires it.
+ *
+ * `auditGrandfathered()` below FAILS when an entry stops being necessary — the exception list is
+ * the exact structure this gate's own rule warns about, and a list that only grows is how a green
+ * run stops meaning anything. It delegates to the shared `exception-hygiene` vocabulary rather
+ * than hand-rolling the verdicts, because that module already separates `satisfied` (delete) from
+ * `unreachable` (do NOT delete — widen the scan first).
+ */
+const GRANDFATHERED_OPEN_ROWS = [
+  // Retired 2026-08-13: the P5 visibility-policy entry's closedBy arrived — every row in that
+  // plan is now ✓ (rows 4.4/4.5/5.5 landed), so the exception was satisfied and deleted the same
+  // day, per the satisfied-exception rule this gate itself enforces.
+];
 
 function trackedFiles() {
   const output = execFileSync('git', ['ls-files'], {
@@ -122,35 +187,145 @@ export function auditPlanText(planPath, content, tracked) {
   return { violations, skipped, checked };
 }
 
-function run() {
-  const tracked = trackedFiles();
+/**
+ * Rule 2 — an open row in an ACTIVE plan must carry `as of <date> · flips when <observation>`.
+ *
+ * Pure, like rule 1, so the self-test feeds it fabricated plans.
+ *
+ * @returns {{violations: string[], stamped: number, graded: boolean}}
+ */
+export function auditOpenRows(planPath, content, grandfathered = GRANDFATHERED_OPEN_ROWS) {
   const violations = [];
-  let skipped = 0;
-  let checked = 0;
+  let stamped = 0;
 
-  for (const plan of planFiles()) {
-    const result = auditPlanText(plan, readFileSync(path.join(REPO, plan), 'utf8'), tracked);
-    violations.push(...result.violations);
-    skipped += result.skipped;
-    checked += result.checked;
+  if (planStatus(content) !== 'active') return { violations, stamped, graded: false };
+  if (grandfathered.some((entry) => entry.plan === planPath)) {
+    return { violations, stamped, graded: false };
   }
 
-  if (violations.length > 0) {
-    console.error(`✖ Plan rows marked ${DONE_MARK} name untracked files (${violations.length}):`);
-    for (const violation of violations) console.error(`  - ${violation}`);
+  for (const [index, line] of content.split('\n').entries()) {
+    if (!line.startsWith('|') || !line.includes(OPEN_MARK)) continue;
+
+    if (OPEN_STAMP.test(line)) {
+      stamped += 1;
+      continue;
+    }
+    violations.push(
+      `${planPath}:${index + 1}: a row marked ${OPEN_MARK} carries no stamp. An unmarked status ` +
+        'means "still open" and "never re-checked" at the same time — add ' +
+        '`(as of YYYY-MM-DD · flips when <observation>)`.'
+    );
+  }
+
+  return { violations, stamped, graded: true };
+}
+
+/**
+ * Classifies one grandfathered entry against the shared exception vocabulary.
+ *
+ * The `unreachable` branch is the one worth reading. A grandfathered plan can go inert two ways
+ * that look identical from here: its rows got stamped (SATISFIED — delete), or it stopped being
+ * tracked and this gate can no longer see it at all (UNREACHABLE — do NOT delete, or the
+ * suppression re-arms the moment it is committed again). A hand-rolled check written for this file
+ * collapsed both into "delete the entry", which is the wrong remedy for the second.
+ *
+ * @param {{plan: string, reason: string, closedBy: string}} entry
+ * @param {Map<string, string>} planTexts   Tracked plans only — the gate's actual reach.
+ */
+function classifyGrandfathered(entry, planTexts) {
+  const content = planTexts.get(entry.plan);
+
+  if (content === undefined) {
+    return existsSync(path.join(REPO, entry.plan))
+      ? { verdict: VERDICT.UNREACHABLE, detail: 'present on disk but untracked, so never scanned' }
+      : { verdict: VERDICT.SUBJECT_MISSING, detail: 'no such plan file' };
+  }
+
+  const status = planStatus(content);
+  if (status !== 'active') {
+    return { verdict: VERDICT.SATISFIED, detail: `plan is now \`${status}\`, which rule 2 skips` };
+  }
+
+  const bare = content
+    .split('\n')
+    .filter((line) => line.startsWith('|') && line.includes(OPEN_MARK))
+    .filter((line) => !OPEN_STAMP.test(line));
+
+  return bare.length > 0
+    ? { verdict: VERDICT.LOAD_BEARING }
+    : { verdict: VERDICT.SATISFIED, detail: 'every open row is stamped' };
+}
+
+/** @param {Map<string, string>} planTexts */
+export function auditGrandfathered(planTexts, entries = GRANDFATHERED_OPEN_ROWS) {
+  return auditExceptions({
+    gate: 'plan-row-tracking',
+    entries,
+    describe: (entry) => entry.plan,
+    closedBy: (entry) => entry.closedBy,
+    classify: (entry) => classifyGrandfathered(entry, planTexts),
+  });
+}
+
+function run() {
+  const tracked = trackedFiles();
+  const doneViolations = [];
+  const openViolations = [];
+  const planTexts = new Map();
+  let skipped = 0;
+  let checked = 0;
+  let stamped = 0;
+  let gradedPlans = 0;
+
+  for (const plan of planFiles()) {
+    const content = readFileSync(path.join(REPO, plan), 'utf8');
+    planTexts.set(plan, content);
+
+    const done = auditPlanText(plan, content, tracked);
+    doneViolations.push(...done.violations);
+    skipped += done.skipped;
+    checked += done.checked;
+
+    const open = auditOpenRows(plan, content);
+    openViolations.push(...open.violations);
+    stamped += open.stamped;
+    if (open.graded) gradedPlans += 1;
+  }
+
+  const exceptionAudit = auditGrandfathered(planTexts);
+
+  if (doneViolations.length > 0) {
+    console.error(
+      `✖ Plan rows marked ${DONE_MARK} name untracked files (${doneViolations.length}):`
+    );
+    for (const violation of doneViolations) console.error(`  - ${violation}`);
     console.error(
       `\nEither commit the file, or correct the row — a ${DONE_MARK} that means "I made the edit" ` +
         'is what let seven rows diverge from HEAD for three days.'
     );
-    return 1;
   }
 
-  // Report the skip count rather than printing a bare success. A gate that checked nothing and a
-  // gate that checked everything print the same "OK" otherwise, which is how a scope regression
-  // hides — the same silent-pass shape this whole gate exists to catch.
+  if (openViolations.length > 0) {
+    console.error(`\n✖ Open rows in active plans carry no stamp (${openViolations.length}):`);
+    for (const violation of openViolations) console.error(`  - ${violation}`);
+    console.error(
+      `\nA ${OPEN_MARK} asserts nothing, so nothing can re-check it. Five rows here read ` +
+        `${OPEN_MARK} while their work sat at HEAD, and this gate was green on all five.`
+    );
+  }
+
+  const exceptionProblems = reportExceptionAudit('plan-row-tracking', exceptionAudit);
+
+  if (doneViolations.length + openViolations.length + exceptionProblems > 0) return 1;
+
+  // Report counts rather than a bare success. A gate that checked nothing and a gate that checked
+  // everything print the same "OK" otherwise, which is how a scope regression hides — the same
+  // silent-pass shape this whole gate exists to catch.
   console.log(
     `✔ Plan rows: ${checked} path(s) named by ${DONE_MARK} rows are tracked ` +
-      `(${skipped} not on disk — renamed, deleted, or external; not decidable here).`
+      `(${skipped} not on disk — renamed, deleted, or external; not decidable here); ` +
+      `${stamped} ${OPEN_MARK} row(s) stamped across ${gradedPlans} active plan(s) ` +
+      `(${GRANDFATHERED_OPEN_ROWS.length} grandfathered).`
   );
   return 0;
 }
@@ -229,6 +404,128 @@ function selfTest() {
     failures += 1;
   } else {
     console.log('✔ self-test: the path matcher still resolves a real repo path');
+  }
+
+  // ---- Rule 2: the open row must carry its own falsifier -------------------------------------
+  const ACTIVE = '---\ntitle: "t"\ndate: 2026-08-12\nstatus: active\ntags: []\n---\n';
+  const openCase = (name, text, expectFail, planPath = 'plans/fake.md') => {
+    const { violations } = auditOpenRows(planPath, text);
+    const failed = violations.length > 0;
+    if (failed !== expectFail) {
+      console.error(
+        `✖ self-test: "${name}" — expected ${expectFail ? 'a finding' : 'clean'}, got the opposite`
+      );
+      failures += 1;
+    } else {
+      console.log(`✔ self-test: ${name}`);
+    }
+  };
+
+  openCase('a bare ☐ row in an active plan is caught', `${ACTIVE}| 1.1 | ☐ | do a thing |`, true);
+  openCase(
+    'a stamped ☐ row passes',
+    `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12 · flips when the token exists) | do a thing |`,
+    false
+  );
+  openCase(
+    'a date with no falsifier is still a finding — half a stamp is not a stamp',
+    `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12) | do a thing |`,
+    true
+  );
+  openCase(
+    'a falsifier with no date is still a finding — an unaged belief cannot be triaged',
+    `${ACTIVE}| 1.1 | ☐ (flips when the token exists) | do a thing |`,
+    true
+  );
+  openCase(
+    'a reference plan is not graded',
+    '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ☐ | x |',
+    false
+  );
+  // Synthetic fixture: the live GRANDFATHERED_OPEN_ROWS list is empty in the healthy steady
+  // state (2026-08-13: its one entry retired the day its closedBy arrived), so the self-test
+  // carries its own entry. The path must be a real tracked plan — the unreachable case below
+  // distinguishes on-disk-but-unscanned from vanished via existsSync.
+  const SYNTHETIC_GRANDFATHERED = {
+    plan: 'plans/adaptive-chain-runtime-p5-visibility-policy-2026-08-12.md',
+    reason: 'self-test fixture',
+    closedBy: 'n/a — synthetic self-test entry',
+  };
+  {
+    const { graded } = auditOpenRows(SYNTHETIC_GRANDFATHERED.plan, `${ACTIVE}| 1.1 | ☐ | x |`, [
+      SYNTHETIC_GRANDFATHERED,
+    ]);
+    if (graded !== false) {
+      console.error('✖ self-test: a grandfathered plan should not be graded');
+      failures += 1;
+    } else {
+      console.log('✔ self-test: a grandfathered plan is not graded');
+    }
+  }
+
+  // ---- The satisfied-exception check must itself be able to fail -----------------------------
+  const g = SYNTHETIC_GRANDFATHERED.plan;
+  const exceptionCase = (name, texts, expectedVerdict) => {
+    const { counts } = auditGrandfathered(new Map(texts), [SYNTHETIC_GRANDFATHERED]);
+    if ((counts[expectedVerdict] ?? 0) !== 1) {
+      console.error(
+        `✖ self-test: "${name}" — expected verdict ${expectedVerdict}, got ${JSON.stringify(counts)}`
+      );
+      failures += 1;
+    } else {
+      console.log(`✔ self-test: ${name}`);
+    }
+  };
+
+  exceptionCase(
+    'a grandfathered plan that still has bare open rows stays load-bearing',
+    [[g, `${ACTIVE}| 1.1 | ☐ | x |`]],
+    VERDICT.LOAD_BEARING
+  );
+  exceptionCase(
+    'a grandfathered plan whose rows are ALL stamped is satisfied — delete the entry',
+    [[g, `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12 · flips when x) | x |`]],
+    VERDICT.SATISFIED
+  );
+  exceptionCase(
+    'a grandfathered plan that left `active` is satisfied',
+    [[g, '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ☐ | x |']],
+    VERDICT.SATISFIED
+  );
+  // The distinction the hand-rolled version got wrong: absent from the scan is NOT cleanliness.
+  // p5 exists on disk here, so an empty map means "untracked", which must never say "delete".
+  exceptionCase(
+    'a grandfathered plan the scan cannot reach is unreachable, NOT satisfied',
+    [],
+    VERDICT.UNREACHABLE
+  );
+
+  const missing = auditExceptions({
+    gate: 'self-test',
+    entries: [{ plan: 'plans/does-not-exist.md', closedBy: 'n/a' }],
+    describe: (entry) => entry.plan,
+    closedBy: (entry) => entry.closedBy,
+    classify: (entry) => classifyGrandfathered(entry, new Map()),
+  });
+  if ((missing.counts[VERDICT.SUBJECT_MISSING] ?? 0) !== 1) {
+    console.error('✖ self-test: a vanished plan should be subject-missing');
+    failures += 1;
+  } else {
+    console.log('✔ self-test: a grandfathered plan that vanished is subject-missing');
+  }
+
+  const noClosedBy = auditExceptions({
+    gate: 'self-test',
+    entries: [{ plan: g, closedBy: '' }],
+    describe: (entry) => entry.plan,
+    closedBy: (entry) => entry.closedBy,
+    classify: () => ({ verdict: VERDICT.LOAD_BEARING }),
+  });
+  if (noClosedBy.problems.length !== 1) {
+    console.error('✖ self-test: an entry with no closedBy must be a problem');
+    failures += 1;
+  } else {
+    console.log('✔ self-test: an exception with no closedBy is refused');
   }
 
   return failures === 0 ? 0 : 1;
