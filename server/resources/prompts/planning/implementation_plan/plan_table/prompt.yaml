@@ -9,13 +9,13 @@ description: >-
 userMessageTemplateFile: user-message.md
 arguments:
   - name: feature
-    required: true
-    description: The feature or functionality to implement
     type: string
+    description: The feature or functionality to implement
+    required: true
   - name: design_mode
-    required: false
+    type: string
     description: >-
       Design Enrichment toggle: auto | on | off. Default auto — keyword-detects
       visual/creative/UI intent from the feature text. When active, design
-      Decisions from Phase 1 land in the plan. Generic, no methodology name.
-    type: string
+      Decisions from Phase 1 land in the plan. Generic, no framework name.
+    required: false

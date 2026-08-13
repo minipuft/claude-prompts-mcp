@@ -58,8 +58,8 @@ arguments:
       auto — keyword-detects design intent from the feature text (design,
       visual, UI, shader, animation, theme, css, aesthetic, layout, palette,
       color, art). 'on' forces it; 'off' emits nothing (zero-change). Generic —
-      names no specific methodology. Distinct from the chain's Design &
-      Pre-flight step (Step 2).
+      names no specific framework. Distinct from the chain's Design & Pre-flight
+      step (Step 2).
     required: false
 gateConfiguration:
   include:

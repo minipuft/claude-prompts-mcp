@@ -27,6 +27,6 @@ arguments:
     type: string
     description: >-
       Design Enrichment toggle: auto | on | off. Default auto — keyword-detects
-      visual/creative/UI intent from the feature text. Generic, no methodology
+      visual/creative/UI intent from the feature text. Generic, no framework
       name. Distinct from the chain's Design & Pre-flight step (Step 2).
     required: false

@@ -20,12 +20,12 @@ Each step has a RESULT block. The step is not complete until every field is fill
 
 INVOKE these skills when their gates fire — this chain enforces output structure, skills provide depth:
 
-| BEFORE                              | INVOKE         | For                                        |
-| ----------------------------------- | -------------- | ------------------------------------------ |
-| Searching the codebase              | `/search`      | Progressive search workflow                |
-| Running pre-flight checks           | `/refactoring` | Pre-flight methodology, compound diagnosis |
-| Choosing between external libraries | `/docs`        | API freshness verification via context7    |
-| Planning tests                      | `/testing`     | Test type decisions, mock boundaries       |
+| BEFORE                              | INVOKE         | For                                     |
+| ----------------------------------- | -------------- | --------------------------------------- |
+| Searching the codebase              | `/search`      | Progressive search workflow             |
+| Running pre-flight checks           | `/refactoring` | Pre-flight protocol, compound diagnosis |
+| Choosing between external libraries | `/docs`        | API freshness verification via context7 |
+| Planning tests                      | `/testing`     | Test type decisions, mock boundaries    |
 | {#- Design Enrichment gate.         |
 
     Nunjucks `in` on a string is a SUBSTRING test, not a word match. The previous condition

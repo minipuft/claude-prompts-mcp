@@ -22,7 +22,7 @@
 
 Using the discovery findings from Step 1, run the pre-flight checklist and produce the design artifacts. The pre-flight runs AFTER identification — describe what you're building before checking it.
 
-Invoke `/refactoring` for pre-flight methodology if needed.
+Invoke `/refactoring` for pre-flight protocol if needed.
 
 ## RESULT (Step 2 — design is not complete without this)
 
