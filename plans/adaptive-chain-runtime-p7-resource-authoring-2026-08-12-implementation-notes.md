@@ -116,6 +116,9 @@ Copy these into each tier brief verbatim.
 
 ## Validation runs
 
+- 2026-08-13 03:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20 && echo "=== TYPECHECK DON` · ran
+- 2026-08-13 03:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all 2>&1 | tail -55` · ran
+- 2026-08-13 03:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all 2>&1 | tail -150` · ran
 - 2026-08-13 03:41 · `cd /home/minipuft/Applications/claude-prompts-mcp git add plans/adaptive-chain-runtime-2026-08-09-implementation-notes.m` · ran
 - 2026-08-13 03:39 · `cd /home/minipuft/Applications/claude-prompts-mcp git commit -m "$(cat <<'EOF' fix(scripts): widen eslint ratchet target` · ran
 - 2026-08-13 03:39 · `cd /home/minipuft/Applications/claude-prompts-mcp git add server/scripts/eslint-ratchet.js server/.eslint-ratchet-baseli` · ran
