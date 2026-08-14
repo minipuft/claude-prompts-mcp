@@ -1,14 +1,14 @@
 # Release Process
 
-Ship releases to npm, update the `dist` branch, and sync downstream extensions—automatically.
+Ship releases to npm and update the `dist` branch automatically; downstream projects pick the release up through their npm dependency.
 
 ## Why This Matters
 
-| Problem                                  | Solution                          | Result                   |
-| ---------------------------------------- | --------------------------------- | ------------------------ |
-| Manual version bumps across 4 files      | release-please automation         | Merge PR → versions sync |
-| Downstream projects need latest runtime  | npm dependency + daily Dependabot | Auto-PRs within 24h      |
-| Non-conventional commits break changelog | commitlint + commit-msg hook      | Enforced at commit time  |
+| Problem                                  | Solution                     | Result                   |
+| ---------------------------------------- | ---------------------------- | ------------------------ |
+| Manual version bumps across 4 files      | release-please automation    | Merge PR → versions sync |
+| Downstream projects need latest runtime  | npm dependency + Renovate    | Auto-PRs, auto-merged    |
+| Non-conventional commits break changelog | commitlint + commit-msg hook | Enforced at commit time  |
 
 ---
 
@@ -71,19 +71,35 @@ The `dist` branch is **force-pushed** after each release for the desktop extensi
 
 ### Downstream Consumers
 
-Both extension projects use `claude-prompts` as an **npm dependency**:
+Every downstream project consumes the engine as an **npm dependency** — none of them is a generated
+or rendered copy of this repository. They own their own source, their own client adapters, and their
+own release toolchain; what they share is the published package.
 
-| Project                                                          | Distribution                   | Update Mechanism                     |
-| ---------------------------------------------------------------- | ------------------------------ | ------------------------------------ |
-| [gemini-prompts](https://github.com/minipuft/gemini-prompts)     | Gemini CLI extension (private) | Daily Dependabot                     |
-| [opencode-prompts](https://github.com/minipuft/opencode-prompts) | npm package + OpenCode plugin  | Daily Dependabot + upstream dispatch |
+| Project                                                          | Distribution                               | Update Mechanism                             |
+| ---------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------- |
+| [gemini-prompts](https://github.com/minipuft/gemini-prompts)     | Gemini CLI extension (npm pkg unpublished) | Renovate → auto-merge                        |
+| [opencode-prompts](https://github.com/minipuft/opencode-prompts) | npm package + OpenCode plugin              | Renovate → auto-merge                        |
+| [codex-prompts](https://github.com/minipuft/codex-prompts)       | Codex CLI plugin                           | **vendored tarball — not yet fleet-audited** |
+| [minipuft-plugins](https://github.com/minipuft/minipuft-plugins) | Marketplace index only, no plugin content  | validated PR, merged immediately             |
 
 ```json
-// package.json (both projects)
-{ "dependencies": { "claude-prompts": "^1.x" } }
+// package.json (gemini-prompts, opencode-prompts)
+{ "dependencies": { "claude-prompts": "^3.0.0" } }
 ```
 
-Dependabot creates PRs daily when new versions are published. Centralized release synchronization also opens validated PRs. Protected downstream repositories use GitHub auto-merge; the unprotected marketplace repository merges its validated PR immediately. No workflow pushes directly to a downstream default branch.
+Renovate opens PRs when a new version is published; protected downstream repositories auto-merge
+them, and the unprotected marketplace repository merges its validated PR immediately. **No workflow
+pushes directly to a downstream default branch**, and no workflow dispatches to one either — the
+upstream→downstream dispatch path and its lock-synchronization script were removed, so the npm
+version range is the only channel.
+
+Drift is watched centrally rather than per-repo: `minipuft/repository-standards` runs a weekly
+`Fleet Drift Audit` over the repositories listed in its `fleet.json`, comparing each one's resolved
+`node_modules/claude-prompts` version against this repository's published version.
+
+**codex-prompts is the exception on both counts.** It consumes a vendored `file:` tarball instead of
+the registry, so it has no resolved lock version for the auditor to read, and it is absent from
+`fleet.json` — which is why it can fall several minor versions behind without anything reporting it.
 
 ---
 
@@ -122,10 +138,18 @@ Push to main
      │
      ▼
 ┌────────────────────────────────────┐
-│  Downstream (daily Dependabot)     │
+│  Downstream (Renovate)             │
 │  • marketplace: validated merge    │
 │  • gemini-prompts: auto-merge PR   │
 │  • opencode-prompts: auto-merge PR │
+│  • codex-prompts: vendored, manual │
+└────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────┐
+│  Fleet Drift Audit (weekly)        │
+│  repository-standards/fleet.json   │
+│  • fails the job on drift          │
 └────────────────────────────────────┘
 ```
 
