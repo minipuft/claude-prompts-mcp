@@ -18,7 +18,11 @@
       },
       "gate_action": {
         "description": "<present>",
-        "enum": ["retry", "skip", "abort"],
+        "enum": [
+          "retry",
+          "skip",
+          "abort"
+        ],
         "type": "string"
       },
       "gate_verdict": {
@@ -26,7 +30,10 @@
           {
             "properties": {
               "overall": {
-                "enum": ["PASS", "FAIL"],
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ],
                 "type": "string"
               },
               "per_gate": {
@@ -46,7 +53,11 @@
                       "type": "string"
                     }
                   },
-                  "required": ["index", "passed", "rationale"],
+                  "required": [
+                    "index",
+                    "passed",
+                    "rationale"
+                  ],
                   "type": "object"
                 },
                 "type": "array"
@@ -57,7 +68,10 @@
                 "type": "string"
               }
             },
-            "required": ["overall", "rationale"],
+            "required": [
+              "overall",
+              "rationale"
+            ],
             "type": "object"
           },
           {
@@ -85,7 +99,10 @@
                   "type": "string"
                 }
               },
-              "required": ["name", "description"],
+              "required": [
+                "name",
+                "description"
+              ],
               "type": "object"
             },
             {
@@ -133,15 +150,33 @@
                   "type": "array"
                 },
                 "scope": {
-                  "enum": ["execution", "session", "chain", "step"],
+                  "enum": [
+                    "execution",
+                    "session",
+                    "chain",
+                    "step"
+                  ],
                   "type": "string"
                 },
                 "severity": {
-                  "enum": ["critical", "high", "medium", "low"],
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low"
+                  ],
                   "type": "string"
                 },
                 "source": {
-                  "enum": ["manual", "automatic", "analysis"],
+                  "enum": [
+                    "manual",
+                    "automatic",
+                    "analysis"
+                  ],
+                  "type": "string"
+                },
+                "target_step_id": {
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\\d+$",
                   "type": "string"
                 },
                 "target_step_number": {
@@ -154,10 +189,82 @@
                   "type": "string"
                 },
                 "type": {
-                  "enum": ["validation", "guidance"],
+                  "enum": [
+                    "validation",
+                    "guidance"
+                  ],
                   "type": "string"
                 }
               },
+              "type": "object"
+            }
+          ]
+        },
+        "type": "array"
+      },
+      "observations": {
+        "description": "<present>",
+        "items": {
+          "oneOf": [
+            {
+              "properties": {
+                "blocking": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "statement": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "target_step_id": {
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\\d+$",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "unknown_discovered",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "statement"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "resolution": {
+                  "enum": [
+                    "answered",
+                    "irrelevant"
+                  ],
+                  "type": "string"
+                },
+                "statement": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": {
+                  "const": "unknown_resolved",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "statement",
+                "resolution"
+              ],
               "type": "object"
             }
           ]
@@ -176,6 +283,299 @@
         "description": "<present>",
         "minLength": 1,
         "type": "string"
+      },
+      "workflow": {
+        "additionalProperties": false,
+        "description": "<present>",
+        "properties": {
+          "budget": {
+            "additionalProperties": false,
+            "properties": {
+              "declaredCostCeiling": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "maxFanOut": {
+                "exclusiveMinimum": 0,
+                "maximum": 8,
+                "type": "integer"
+              },
+              "maxInsertions": {
+                "maximum": 3,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxNodes": {
+                "exclusiveMinimum": 0,
+                "maximum": 32,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "edges": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "to": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "gates": {
+            "items": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "properties": {
+                    "description": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "apply_to_steps": {
+                      "items": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "type": "array"
+                    },
+                    "context": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "criteria": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "guidance": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "pass_criteria": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "enum": [
+                        "execution",
+                        "session",
+                        "chain",
+                        "step"
+                      ],
+                      "type": "string"
+                    },
+                    "severity": {
+                      "enum": [
+                        "critical",
+                        "high",
+                        "medium",
+                        "low"
+                      ],
+                      "type": "string"
+                    },
+                    "source": {
+                      "enum": [
+                        "manual",
+                        "automatic",
+                        "analysis"
+                      ],
+                      "type": "string"
+                    },
+                    "target_step_id": {
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\\d+$",
+                      "type": "string"
+                    },
+                    "target_step_number": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    "template": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "validation",
+                        "guidance"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "agentType": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "args": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "framework": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "id": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "inlineGateIds": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "inputMapping": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "outputMapping": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "promptId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "retries": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "stepName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "subagentModel": {
+                  "enum": [
+                    "heavy",
+                    "standard",
+                    "fast"
+                  ],
+                  "type": "string"
+                },
+                "visibility": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "expose": {
+                      "items": {
+                        "enum": [
+                          "previous_step_output",
+                          "chain_history",
+                          "unknowns_ledger"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "withhold": {
+                      "items": {
+                        "enum": [
+                          "previous_step_output",
+                          "chain_history",
+                          "unknowns_ledger"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "id",
+                "promptId"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "version",
+          "nodes"
+        ],
+        "type": "object"
       }
     },
     "type": "object"
@@ -209,20 +609,71 @@
         },
         "type": "object"
       },
+      "agent_type": {
+        "minLength": 1,
+        "type": "string"
+      },
       "arguments": {
         "items": {
           "properties": {
+            "defaultValue": {},
             "description": {
               "type": "string"
             },
             "name": {
               "type": "string"
             },
+            "required": {
+              "type": "boolean"
+            },
             "type": {
+              "enum": [
+                "string",
+                "number",
+                "boolean",
+                "object",
+                "array"
+              ],
               "type": "string"
+            },
+            "validation": {
+              "properties": {
+                "allowedValues": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "maxLength": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "minLength": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "pattern": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
             }
           },
-          "required": ["name", "type", "description"],
+          "required": [
+            "name"
+          ],
           "type": "object"
         },
         "type": "array"
@@ -236,6 +687,24 @@
           "agentType": {
             "minLength": 1,
             "type": "string"
+          },
+          "delegation": {
+            "type": "boolean"
+          },
+          "framework": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "inlineGateIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
           },
           "inputMapping": {
             "additionalProperties": {
@@ -269,11 +738,46 @@
             "type": "string"
           },
           "subagentModel": {
-            "enum": ["heavy", "standard", "fast"],
+            "enum": [
+              "heavy",
+              "standard",
+              "fast"
+            ],
             "type": "string"
+          },
+          "visibility": {
+            "additionalProperties": false,
+            "properties": {
+              "expose": {
+                "items": {
+                  "enum": [
+                    "previous_step_output",
+                    "chain_history",
+                    "unknowns_ledger"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "withhold": {
+                "items": {
+                  "enum": [
+                    "previous_step_output",
+                    "chain_history",
+                    "unknowns_ledger"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
           }
         },
-        "required": ["promptId", "stepName"],
+        "required": [
+          "promptId",
+          "stepName"
+        ],
         "type": "object"
       },
       "chain_step_index": {
@@ -282,7 +786,12 @@
         "type": "integer"
       },
       "chain_step_operation": {
-        "enum": ["add", "remove", "reorder", "replace"],
+        "enum": [
+          "add",
+          "remove",
+          "reorder",
+          "replace"
+        ],
         "type": "string"
       },
       "chain_step_order": {
@@ -300,6 +809,24 @@
             "agentType": {
               "minLength": 1,
               "type": "string"
+            },
+            "delegation": {
+              "type": "boolean"
+            },
+            "framework": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "id": {
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "inlineGateIds": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
             },
             "inputMapping": {
               "additionalProperties": {
@@ -333,11 +860,46 @@
               "type": "string"
             },
             "subagentModel": {
-              "enum": ["heavy", "standard", "fast"],
+              "enum": [
+                "heavy",
+                "standard",
+                "fast"
+              ],
               "type": "string"
+            },
+            "visibility": {
+              "additionalProperties": false,
+              "properties": {
+                "expose": {
+                  "items": {
+                    "enum": [
+                      "previous_step_output",
+                      "chain_history",
+                      "unknowns_ledger"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "withhold": {
+                  "items": {
+                    "enum": [
+                      "previous_step_output",
+                      "chain_history",
+                      "unknowns_ledger"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
             }
           },
-          "required": ["promptId", "stepName"],
+          "required": [
+            "promptId",
+            "stepName"
+          ],
           "type": "object"
         },
         "type": "array"
@@ -349,8 +911,14 @@
         "type": "string"
       },
       "detail": {
-        "enum": ["summary", "full"],
+        "enum": [
+          "summary",
+          "full"
+        ],
         "type": "string"
+      },
+      "dry_run": {
+        "type": "boolean"
       },
       "enabled": {
         "type": "boolean"
@@ -359,14 +927,21 @@
         "type": "boolean"
       },
       "execution_hint": {
-        "enum": ["single", "chain"],
+        "enum": [
+          "single",
+          "chain"
+        ],
         "type": "string"
       },
       "filter": {
         "type": "string"
       },
       "format": {
-        "enum": ["table", "json", "text"],
+        "enum": [
+          "table",
+          "json",
+          "text"
+        ],
         "type": "string"
       },
       "framework": {
@@ -383,7 +958,10 @@
         "type": "object"
       },
       "gate_type": {
-        "enum": ["validation", "guidance"],
+        "enum": [
+          "validation",
+          "guidance"
+        ],
         "type": "string"
       },
       "gates": {
@@ -399,14 +977,172 @@
       "id": {
         "type": "string"
       },
+      "injection": {
+        "additionalProperties": false,
+        "properties": {
+          "gate-guidance": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "frequency": {
+                "properties": {
+                  "interval": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "mode": {
+                    "enum": [
+                      "every",
+                      "first-only",
+                      "never"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ],
+                "type": "object"
+              },
+              "target": {
+                "enum": [
+                  "steps",
+                  "gates",
+                  "both"
+                ],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "style-guidance": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "frequency": {
+                "properties": {
+                  "interval": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "mode": {
+                    "enum": [
+                      "every",
+                      "first-only",
+                      "never"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ],
+                "type": "object"
+              },
+              "target": {
+                "enum": [
+                  "steps",
+                  "gates",
+                  "both"
+                ],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "system-prompt": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "frequency": {
+                "properties": {
+                  "interval": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "mode": {
+                    "enum": [
+                      "every",
+                      "first-only",
+                      "never"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ],
+                "type": "object"
+              },
+              "target": {
+                "enum": [
+                  "steps",
+                  "gates",
+                  "both"
+                ],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
       "limit": {
         "type": "number"
+      },
+      "mcp_prompt_mode": {
+        "enum": [
+          "expand",
+          "launch"
+        ],
+        "type": "string"
       },
       "name": {
         "type": "string"
       },
       "pass_criteria": {
         "items": {},
+        "type": "array"
+      },
+      "patch": {
+        "items": {
+          "properties": {
+            "field": {
+              "enum": [
+                "user_message_template",
+                "system_message",
+                "description"
+              ],
+              "type": "string"
+            },
+            "new_string": {
+              "type": "string"
+            },
+            "old_string": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "replace_all": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "field",
+            "old_string",
+            "new_string"
+          ],
+          "type": "object"
+        },
         "type": "array"
       },
       "persist": {
@@ -419,8 +1155,15 @@
       "reason": {
         "type": "string"
       },
+      "register_with_mcp": {
+        "type": "boolean"
+      },
       "resource_type": {
-        "enum": ["prompt", "gate", "framework"],
+        "enum": [
+          "prompt",
+          "gate",
+          "framework"
+        ],
         "type": "string"
       },
       "retry_config": {
@@ -435,6 +1178,14 @@
       },
       "skip_version": {
         "type": "boolean"
+      },
+      "subagent_model": {
+        "enum": [
+          "heavy",
+          "standard",
+          "fast"
+        ],
+        "type": "string"
       },
       "system_message": {
         "type": "string"
@@ -463,7 +1214,10 @@
         "type": "number"
       }
     },
-    "required": ["resource_type", "action"],
+    "required": [
+      "resource_type",
+      "action"
+    ],
     "type": "object"
   },
   "system_control": {
@@ -514,7 +1268,9 @@
         "type": "string"
       }
     },
-    "required": ["action"],
+    "required": [
+      "action"
+    ],
     "type": "object"
   }
 }
