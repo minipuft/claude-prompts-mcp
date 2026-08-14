@@ -1042,3 +1042,39 @@ changed repository tooling.
   `version` field**. Codex took it from the plugin's own `.codex-plugin/plugin.json`, which is exactly
   what the audit predicted and why deleting the listing field was safe for Codex. The prediction was
   made from binary strings and OpenAI's cachebuster script; this is the direct observation.
+- **DEV-T4-36** — **4.3 could not be marked satisfied, because a later row had deleted its criterion.**
+  The Verify read "listed version matches the published one"; 4.10 removed the `version` field entirely
+  hours earlier. Marking it ✓ against the old text would have recorded a match that cannot exist, and
+  marking it ☐ would have implied outstanding work. Neither polarity was right — the row had to be
+  **re-derived**: freshness is now carried by `ref: dist`, which `publish-dist.yml` force-pushes on
+  every push to codex-prompts' `main`, so there is no synchronization step left to forget. A criterion
+  is not a constant; a row that another row invalidates has to be re-earned, not re-graded.
+- **DEV-T4-37** — **4.13 was closed on step-level evidence, not on a green badge.** The SIGPIPE lived in
+  the **Publish** step, and that step exits early at "No changes to publish" — so a run could be green
+  without ever reaching the line that failed. Read the dispatched run's log: orphan commit created,
+  `--error-unmatch` assertion passed, `+ 73380c0...eb5b5b3 dist -> dist (forced update)`. Three green
+  runs now. The mechanism is deleted rather than merely unobserved, which is what actually closes a
+  race — three passes at 270 files would not.
+- **DEV-T4-38** — **adopting the consumer contract surfaced a gap the auditor's own list cannot see.**
+  The fleet auditor fetches four artifacts per member; codex-prompts was missing all four. Supplying
+  them exposed a fifth problem with no checker: **27 adapter tests existed and no workflow ran them**,
+  so `localValidationWorkflow` had nothing honest to point at. `publish-dist.yml` drives the server and
+  one hook, so it _looks_ like validation — naming it would have satisfied the contract while the suite
+  stayed unrun, making the field a label rather than a claim. Added `ci.yml`; 27/27. **A contract can be
+  satisfied by the nearest plausible file, and that is how a contract becomes ceremony.**
+- **DEV-T4-39** — **the contract check was falsified before it was trusted.** It PASSED on the first
+  attempt, which this initiative has learned to distrust: cloned standards at the pinned `bb7c4fa8`,
+  ran its own `verify-consumer.mjs` (PASSED), then seeded a missing `requiredPath` and confirmed
+  `CONTRACT: required path is missing` with a non-zero exit. A first-try green and a live check are
+  different claims.
+- **DEV-T4-40** — **two `repository-standards` changes were deliberately NOT made, both for the same
+  reason: they would have been green for the wrong reason.** (1) The `fleet.json` entry is audited
+  against the **upstream `main`** copy of `extension-publish.yml`, and the codex matrix leg is still on
+  `release-3.1.0-final`. It would have passed anyway — via the `??= "auto"` fallback that exists for
+  repos the workflow does not name — recording a merge mode nobody wrote. (2) 4.12's fix is not "make
+  the marketplace block an array": `validateMarketplace` **requires a SemVer `version`** on the entry,
+  which is precisely the field 4.10 deleted because nothing writes it. Extending the contract as
+  written would reintroduce the defect the same day it was closed, with the contract enforcing it.
+  Both ordered after the release. **The 4.11 lesson generalizes past pushes**: a check and the fact it
+  reads can live in different repositories and move at different times, and the failure mode is a pass,
+  not an error.
