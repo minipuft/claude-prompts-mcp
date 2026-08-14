@@ -91,6 +91,19 @@ heapdump-*
 
 # Claude-Code setup
 plans/archive/
+# Machine-written validation ledger, one line per validation command, appended by
+# ~/.claude/hooks/validation/validation-flush.py beside the plan it belongs to.
+#
+# It lived inside the tracked `*-implementation-notes.md` until 2026-08-14 and had grown
+# to 3,610 lines across this repo's plans — 596 in one file, ~40% of one active
+# initiative's notes. Every validation command dirtied a tracked file, so the choice was
+# commit noise or a permanently dirty tree, and a dirty notes file is exactly what the
+# Stop gate asks about: the two fed each other.
+#
+# Ignored rather than deleted, and a SIDECAR rather than a temp dir, so it still sits
+# next to its plan and `ls plans/` finds it. Authored content — deviations, findings,
+# rulings — stays in the notes and stays tracked.
+*.validation-log.md
 CLAUDE.md
 # No trailing slash: matches both a stray `.codex` file and a `.codex/` directory.
 # A trailing slash matches directories ONLY, which let a zero-byte `.codex` file

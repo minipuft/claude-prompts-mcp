@@ -42,6 +42,20 @@ const { execFileSync } = require("child_process");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const PLANS_DIR = path.join(REPO_ROOT, "plans");
+
+/**
+ * The machine-written validation ledger sidecar (`~/.claude/hooks/validation/validation-flush.py`
+ * appends one line per validation command). It is markdown living in `plans/`, so every
+ * "plans are .md under plans/" filter sees it — and it is gitignored, so a `git ls-files`
+ * scan does NOT. That disagreement is the tracked-vs-walk substrate split this repo has been
+ * bitten by before, and it surfaced immediately here: the frontmatter walker below reported
+ * the sidecar as "a plan with no frontmatter" the first time one was created.
+ *
+ * The tracked scan near the end of this file needs no such guard, and deliberately has none —
+ * a gitignored path cannot appear in `git ls-files` output at all.
+ */
+const VALIDATION_LOG_SUFFIX = ".validation-log.md";
+const isValidationLog = (file) => file.endsWith(VALIDATION_LOG_SUFFIX);
 const ARCHIVE_DIRNAME = "archive";
 const REFERENCE_DIRNAME = "reference";
 
@@ -156,6 +170,7 @@ function collect() {
 
   for (const file of walk(PLANS_DIR)) {
     if (!file.endsWith(".md")) continue;
+    if (isValidationLog(file)) continue;
     if (isSegregated(file)) continue;
 
     const rel = path.relative(REPO_ROOT, file);
@@ -347,8 +362,8 @@ function applyMoves(moves) {
   // Markdown only. `server/src` and `.github` are scanned for CITATIONS, but rewriting a
   // `](...)` sequence inside TypeScript or YAML would be editing code on a text match.
   const candidates = new Set(
-    LINK_SOURCES.flatMap((dir) => walk(path.join(REPO_ROOT, dir))).filter((f) =>
-      f.endsWith(".md"),
+    LINK_SOURCES.flatMap((dir) => walk(path.join(REPO_ROOT, dir))).filter(
+      (f) => f.endsWith(".md") && !isValidationLog(f),
     ),
   );
   for (const move of moves) candidates.add(move.from);
