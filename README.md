@@ -1,21 +1,25 @@
 <!-- maintainers: this README is governed by docs/portfolio/readme-charter.md — run `cd server && npm run validate:readme` before committing changes -->
 
-# Claude Prompts
-
 <div align="center">
 
-<img src="assets/logo.png" alt="Claude Prompts logo" width="200" />
+<img src="assets/brand/claude-prompts-avatar.svg" alt="Claude Prompts mascot, an asymmetric curled creature forming a C-shaped counter with two directional eyes" width="160" />
 
-[![npm version](https://img.shields.io/npm/v/claude-prompts.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts)
-[![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Set up Claude Code](https://img.shields.io/badge/Claude_Code-Setup_Plugin-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](#claude-code-recommended)
-[![Set up Codex](https://img.shields.io/badge/Codex-Set_up-111111?style=for-the-badge)](#codex-install)
+<h1>Claude Prompts</h1>
 
-**A Model Context Protocol (MCP) server for prompt workflows.** _Written once, always followed._
+**The portable workflow layer beside your AI coding harness.**
 
-Craft reusable prompt templates with quality gates and reasoning guidance.<br>
-Orchestrate multi-step workflow chains with a composable operator syntax.<br>
-Export as native skills to any client.
+<p>Your client executes with its own tools, agents, and context.<br>
+Claude Prompts adds reusable prompt resources, composable chains, validation gates, and client-native skill export.</p>
+
+<p>
+<a href="#claude-code-recommended"><img src="https://img.shields.io/badge/Claude_Code-Set_up_plugin-D97757?style=flat-square&amp;logo=anthropic&amp;logoColor=white&amp;labelColor=111715" alt="Set up the Claude Code plugin"></a>
+<a href="#codex-install"><img src="https://img.shields.io/badge/Codex-Set_up_experimental-2A8F83?style=flat-square&amp;logo=openai&amp;logoColor=white&amp;labelColor=111715" alt="Set up the experimental Codex plugin"></a>
+</p>
+
+<p>
+<a href="https://www.npmjs.com/package/claude-prompts"><img src="https://img.shields.io/npm/v/claude-prompts.svg?style=flat-square&amp;logo=npm&amp;logoColor=white&amp;labelColor=111715&amp;color=2A8F83" alt="npm version"></a>
+<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-555E5A.svg?style=flat-square&amp;labelColor=111715" alt="MIT license"></a>
+</p>
 
 [Quick Start](#quick-start) · [What You Get](#what-you-get) · [Compose Workflows](#compose-workflows) · [Run Anywhere](#run-anywhere) · [Docs](#documentation)
 
