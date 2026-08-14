@@ -848,3 +848,35 @@ changed repository tooling.
   when its author commits it; **left untracked, because adding another session's in-progress plan to
   git is their decision**. The `assets/` and `scripts/generate-brand-assets.py` changes beside it were
   not touched.
+
+## Deviations — codex-prompts dependency fix (2026-08-14)
+
+- **DEV-T4-8** — **the dependency was not stale, it was absent.** Row 4.0.1 framed the problem as a
+  vendored tarball needing a bump. Measured: `package.json` declared
+  `file:vendor/claude-prompts-3.1.2.tgz` while `.gitignore` excluded `vendor/*.tgz`, so the repo's only
+  dependency was never in the repo. The framing mattered — "refresh the tarball" would have produced a
+  new uncommittable tarball and left the defect exactly where it was.
+- **DEV-T4-9** — **my first test said it was fine, and it was measuring my machine.** Cloning the repo
+  and running `npm install` succeeded, installing `claude-prompts@3.1.0` with `dist/index.js` present,
+  and I nearly reported the concern as unfounded. npm had resolved the `file:` tarball out of
+  `~/.npm/_cacache`, because this machine had packed it before. Re-run with `--cache` pointed at an
+  empty directory: install fails and `node_modules/claude-prompts` is absent. **Anyone who had ever
+  built the tarball locally would have concluded the repo was healthy** — the warm cache made the
+  broken state indistinguishable from the working one on exactly the machines most likely to check.
+- **DEV-T4-10** — **the retirement condition was written down, came true, and nobody noticed.** The
+  README said "until `claude-prompts@3.1.0` is on npm … after publish, switch the dependency". 3.1.0,
+  3.1.1, 3.2.0 and 3.2.1 all published. The workaround outlived its own stated exit by four versions.
+  This is the `retirement-condition-needs-a-detector` pattern again, and here the condition was
+  checkable by one `npm view` — the cost was never the checking, it was that nothing scheduled it.
+- **DEV-T4-11** — **fixing 4.0.1 unblocked 4.4 for free.** The fleet auditor reads a resolved
+  `node_modules/claude-prompts` lock version; a `file:` tarball has none, which is precisely why this
+  repo could drift three minors unobserved. Moving to the registry gives the lockfile a
+  `registry.npmjs.org` resolution, so joining `fleet.json` is now an entry rather than a profile
+  redesign. **The unauditability and the uninstallability had one cause**, which the two rows had
+  recorded as separate problems.
+- **DEV-T4-12** — **a second install path is still unmeasured, and is rowed rather than assumed.** A
+  fresh clone has no `node_modules`, and Codex installs by copying a plugin's source. The dev
+  marketplace works because its source symlinks a checkout that has one; a git-sourced install has
+  nothing to copy. That predicts a marketplace install with no server — but verifying it means
+  installing `codex-prompts@minipuft` alongside the enabled dev install on this machine, so it is
+  filed as 4.5 with its evidence and explicitly not claimed as measured.
