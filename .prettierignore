@@ -9,6 +9,7 @@
 CHANGELOG.md
 manifest.json
 .claude-plugin/plugin.json
+plugin.json
 
 # Written by pyrefly (`validate:python` regenerates it with --baseline). It emits no
 # trailing newline, which prettier requires — so the file oscillates between the two
