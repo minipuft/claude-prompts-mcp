@@ -165,6 +165,7 @@ export class TemporaryGateRegistry {
       const cleanupTimeout = setTimeout(() => {
         this.removeTemporaryGate(gateId);
       }, tempGate.expires_at - now);
+      cleanupTimeout.unref();
 
       this.cleanupTimers.set(gateId, cleanupTimeout);
     }
