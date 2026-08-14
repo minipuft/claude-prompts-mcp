@@ -143,23 +143,28 @@ produced a wrong site twice on this initiative and a wrong premise once on 1.4. 
 call sites answered _who could bypass the resolver_; only running the binary answered _whether
 anything did_. See Growth capture.
 
-## Retirement matrix (RESOLVED — was the plan's core open question)
+## Retirement matrix (RESOLVED, then SUPERSEDED in 3 of 4 rows by owner rulings 2026-08-14)
 
-| Repo             | Evidence                                                          | Decision                                                                |
-| ---------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| codex-prompts    | Its client (Codex) is a launch consumer of the standard           | **RETIRE** — archive after native-package pilot passes owner validation |
-| gemini-prompts   | Gemini CLI not on the standard; Tier 2b listing URLs pin the repo | **DEMOTE** to rendered artifact (GENERATED banner + hand-edit CI check) |
-| opencode-prompts | Same, plus a real `tsc` build the renderer must run               | **DEMOTE** to rendered artifact                                         |
-| minipuft-plugins | 2-file marketplace index; installed URL has no redirect mechanism | **FREEZE** as index — version bumps arrive only via render              |
+**Three of these four decisions have been overridden by the owner and the original text is kept beside
+the replacement.** This matrix was the plan's core open question, so a silent rewrite would erase the
+fact that the answer changed — and the answer changed because execution measured the consumption
+model rather than inferring it. Only the `minipuft-plugins` FREEZE decision stands unamended.
+
+| Repo             | Evidence                                                          | Decision                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| codex-prompts    | Its client (Codex) is a launch consumer of the standard           | ~~**RETIRE** — archive after native-package pilot~~ → **SUPERSEDED 2026-08-14 (owner): KEEP and ship the latest.** Refresh its vendored tarball to current, publish the plugin, and add it to `fleet.json` so the auditor sees it. Archiving would have discarded the uncommitted `bin/start-mcp.mjs` launcher that solves Codex MCP bundling (Tier 4 rows 4.0.2 / 4.2 / 4.4) |
+| gemini-prompts   | Gemini CLI not on the standard; Tier 2b listing URLs pin the repo | ~~**DEMOTE** to rendered artifact~~ → **SUPERSEDED 2026-08-14 (owner ruling (a)): KEEP as an npm consumer.** It declares `node_modules/claude-prompts/{dist,hooks}` in its own contract and symlinks `hooks/lib` into the package; it is not a render (Tier 5)                                                                                                                |
+| opencode-prompts | Same, plus a real `tsc` build the renderer must run               | ~~**DEMOTE** to rendered artifact~~ → **SUPERSEDED 2026-08-14 (owner ruling (a)): KEEP as an npm consumer.** Its `buildStep` is its own build, never wired to the renderer, and it publishes to npm with provenance (Tier 5)                                                                                                                                                  |
+| minipuft-plugins | 2-file marketplace index; installed URL has no redirect mechanism | **FREEZE** as index — version bumps arrive only via render                                                                                                                                                                                                                                                                                                                    |
 
 ## Alignment matrix (the four surfaces the owner named)
 
-| Surface                            | Today                                                | During migration                                                         | End state                                                         |
-| ---------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| **npm package** (`claude-prompts`) | The engine                                           | UNCHANGED — public API out of scope                                      | `mcp.json` declares it; still the single engine                   |
-| **Hooks**                          | Root `hooks/` (Claude Code) + hand copies in 3 repos | Root `hooks/` stays (live CI surface); renderer MAPS into namespace dirs | One source per client namespace, rendered to native locations     |
-| **Marketplaces**                   | Listings pin downstream repo URLs                    | URLs never change                                                        | Rendered repos keep URLs; standard clients get the native package |
-| **GitHub workflows**               | Release train ends at version-sync PRs               | Render jobs replace sync (same-PR retirement)                            | npm → extensions → dist → render all → drift check                |
+| Surface                            | Today                                             | During migration                              | End state                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **npm package** (`claude-prompts`) | The engine                                        | UNCHANGED — public API out of scope           | `mcp.json` declares it; still the single engine                                                                                                                                                                                                                                                            |
+| **Hooks**                          | Root `hooks/` (Claude Code) + adapters in 3 repos | Root `hooks/` stays (live CI surface)         | **Corrected 2026-08-14**: root `hooks/` is the one source, consumed through npm. Gemini and Codex ship thin ADAPTERS over it (their events differ); opencode tracks none. Nothing is rendered into a namespace dir — Agent Plugins 1.0.0 defines no core hooks and no client namespace string is published |
+| **Marketplaces**                   | Listings pin downstream repo URLs                 | URLs never change                             | **Corrected 2026-08-14**: `minipuft-plugins` stays the 2-file index listing `claude-prompts` (from this repo's `dist` ref) and `codex-prompts`; URLs never change                                                                                                                                          |
+| **GitHub workflows**               | Release train ends at version-sync PRs            | Render jobs replace sync (same-PR retirement) | **Corrected 2026-08-14**: npm → extensions → dist → render the Claude Code projections → drift check. "Render all" overstated it: only one target is a projection; the other three are canonical or npm consumers                                                                                          |
 
 ## Implementation tiers (chain Phase 3 output — supersedes the original P0–P6)
 
@@ -358,7 +363,7 @@ dependency-range bump `extension-publish.yml`'s `sync-downstream` job already pe
 substrate class as E7 and E11: the check read an available stand-in, and the stand-in became the
 definition.
 
-### Tier 3 — Workflow integration (3.1 landed; 3.2/3.3 premises falsified)
+### Tier 3 — Workflow integration — ✓ 4 of 6 LANDED 2026-08-13; 3.2/3.3 ⚠ premises falsified, gate owner-blocked
 
 **Three of these four rows rested on "renders supersede the sync path". They do not: the sync path
 does not sync content, and the renderer does not target the repos it was supposed to supersede.**
@@ -388,51 +393,108 @@ reads `2b PREPARED, fires at ship` while its own checklist records steps 0, 3 an
 exactly the class E11's inverse describes. Tier 3 as landed touches no listing URL and no
 published artifact — it adds a pre-publish check — so nothing here can race 2b regardless.
 
-### Tier 4 — Codex native pilot + retirement (OWNER gate)
+### Tier 4 — Codex native pilot; codex-prompts KEPT and refreshed (OWNER gate)
 
-| #     | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Depends                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Verify                                                                  |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 4.0   | **npm stays the engine — OWNER-CONFIRMED 2026-08-13 ("We will use Npm"), and not a Tier 4 decision in any case.** Retiring or demoting the `claude-prompts` npm package is not available to this tier, because three consumers bind to it independently: `gemini-prompts` invokes **`npx claude-prompts` at RUNTIME** (`gemini-extension.json` `command: npx`), so it is a live per-session dependency and not a build-time one; the **Official MCP Registry entry IS an npm entry** (`server.json` `registryType: npm`, and publish validates the tarball via `mcpName`), with PulseMCP proxying it; and the **fleet auditor defines drift in npm terms** — it reads each downstream's resolved `node_modules/claude-prompts` lock version. The native package BUNDLES `server/dist`, which serves a different install model rather than replacing npm. The alignment matrix already said this ("still the single engine"); it is rowed here so Tier 4 cannot re-open it by accident | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | no change; recorded so 4.1–4.3 are scoped to codex-prompts alone        |
-| 4.0.1 | ☐ (as of 2026-08-13 · flips when codex-prompts is archived per 4.2, or its vendored tarball is refreshed and it joins `fleet.json`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **codex-prompts is live, three versions stale, and audited by nothing — which raises 4.2's priority rather than lowering it.** Measured on its REMOTE, not a local checkout: its only dependency is `"claude-prompts": "file:vendor/claude-prompts-3.1.0.tgz"` — a **vendored tarball**, so it is the one consumer that does not go through npm at all, while upstream ships **3.2.1**. It is absent from `fleet.json` (gemini, opencode, minipuft-plugins only), so the scheduled auditor never sees it, and `minipuft-plugins` marketplace lists it at 0.1.0 today. Retiring it therefore removes a stale unaudited copy rather than a live consumer — and until 4.2 lands, the marketplace serves a 3-minor-old engine to anyone installing it | 4.2                                                                     | archived, or lock-audited like its siblings |
-| 4.1   | native target → release asset + Codex install path (P0-researched)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 3.1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | OWNER installs in Codex: hooks fire, server boots, state in PLUGIN_DATA |
-| 4.2   | archive codex-prompts; README pointer to native package                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 4.1 OWNER PASS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | archived; instructions verified                                         |
-| 4.3   | marketplace.json codex entry → native package or removed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 4.2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | rendered index valid                                                    |
+| #     | Status                                                                                                                               | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Depends    | Verify                                                                                                                                               |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4.0   | ✓ 2026-08-13                                                                                                                         | **npm stays the engine — OWNER-CONFIRMED 2026-08-13 ("We will use Npm"), and not a Tier 4 decision in any case.** Retiring or demoting the `claude-prompts` npm package is not available to this tier, because three consumers bind to it independently: `gemini-prompts` invokes **`npx claude-prompts` at RUNTIME** (`gemini-extension.json` `command: npx`), so it is a live per-session dependency and not a build-time one; the **Official MCP Registry entry IS an npm entry** (`server.json` `registryType: npm`, and publish validates the tarball via `mcpName`), with PulseMCP proxying it; and the **fleet auditor defines drift in npm terms** — it reads each downstream's resolved `node_modules/claude-prompts` lock version. The native package BUNDLES `server/dist`, which serves a different install model rather than replacing npm. The alignment matrix already said this ("still the single engine"); it is rowed here so Tier 4 cannot re-open it by accident. **Re-measured 2026-08-14**: all three bindings unchanged (`command: npx` at `gemini-extension.json:8`; `registryType: npm` + `3.2.1` in `server.json`; `fleet.json` lists gemini/opencode/minipuft-plugins) | —          | no change; recorded so 4.1–4.3 are scoped to codex-prompts alone                                                                                     |
+| 4.0.1 | ☐ (as of 2026-08-14 · flips when codex-prompts' vendored tarball is refreshed to current and it joins `fleet.json` per 4.4)          | **codex-prompts is live, stale, and audited by nothing — and the owner has ruled it KEPT, so this is a refresh backlog rather than an argument for archiving it.** Its REMOTE (`origin/main`, re-read 2026-08-14) is version **0.1.0** with one dependency, `"claude-prompts": "file:vendor/claude-prompts-3.1.0.tgz"` — a **vendored tarball**, so it is the one consumer that does not go through npm at all, while upstream ships **3.2.1**. It is absent from `fleet.json` (gemini, opencode, minipuft-plugins only), so the scheduled auditor never sees it, and `minipuft-plugins` marketplace lists it at 0.1.0 today (re-read 2026-08-14 from `origin/main`: `claude-prompts 3.2.1`, `codex-prompts 0.1.0`). `repos/minipuft/codex-prompts` reads `archived: false`, `pushed_at: 2026-08-05`. **Authored "three versions stale" → measured: the REMOTE is; the working tree is not** — see 4.0.2                                                                                                                                                                                                                                                                                           | 4.4        | lock-audited like its siblings                                                                                                                       |
+| 4.0.2 | ☐ (as of 2026-08-14 · flips when the uncommitted codex-prompts working tree is committed and pushed)                                 | **Owner ruled 2026-08-14 that codex-prompts is KEPT and ships the latest, so this work must land rather than be abandoned — it is the repo's current state.** `/home/minipuft/Applications/codex-prompts` is a local checkout whose HEAD equals `origin/main` (`git log origin/main..HEAD` empty) but whose **working tree is uncommitted at 0.1.3 / `vendor/claude-prompts-3.1.2.tgz`**: 7 modified files (`.codex-plugin/plugin.json`, `.mcp.json`, `hooks/_codex_bootstrap.py`, `hooks/session-skills.py`, `package.json`, `package-lock.json`, `tests/test_adapters.py`) plus 2 untracked (`bin/`, `hooks/_skill_catalog.py`). `bin/start-mcp.mjs` is the **working solution to the problem 4.1 exists to solve** — it boots the bundled server from plugin config using a relative `cwd`, no placeholder interpolation, and pins `MCP_WORKSPACE` into a tmpdir. Under the superseded archive plan this tree was at risk of being discarded; under the ruling it is the thing being released. Not touched by this execution: another session's uncommitted state, and committing it is the owner's call                                                                                        | —          | committed and pushed; `origin/main` reads the refreshed version                                                                                      |
+| 4.1   | ⚠ ☐ (as of 2026-08-14 · flips when the owner installs the native target in Codex and reports hooks fired + server booted)            | **Premise re-measured against codex-cli 0.147.0 on 2026-08-14 — the blocking constraint changed shape, and the Verify column was falsified.** The 0.146 record said a bundled server "can never start from plugin config". Measured on 0.147 with a throwaway probe plugin (installed, spawned, removed; `codex mcp list` / `codex plugin list` residual 0): `${CLAUDE_PLUGIN_ROOT}` is **still not interpolated in `.mcp.json`** (the literal string reaches argv AND env values) and `CLAUDE_PLUGIN_ROOT` / `PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` / `PLUGIN_DATA` are **all unset in the MCP child** — but the spawn cwd is now the **plugin cache root**, resolved from `"cwd": "."`, not the session dir. So a bundled server **can** start from plugin config, via cwd anchoring rather than interpolation. Whether that is a 0.147 change or a gap in the 0.146 probe (which tested interpolation, never relative cwd) is undetermined and not worth re-deriving. Scope is therefore: native target → release asset + Codex install path, anchored on relative cwd                                                                                                                            | 3.1, 4.1.1 | OWNER installs in Codex: hooks fire, server boots, **state at a cwd-anchored or explicitly-injected path — NOT read from `PLUGIN_DATA`** (see 4.1.1) |
+| 4.1.1 | ☐ (as of 2026-08-14 · flips when the native target declares a state path that does not read `PLUGIN_DATA` from the MCP child's env)  | **NEW — `PLUGIN_DATA` is reachable by hooks and unreachable by the server, and 4.1's original Verify assumed the opposite.** Measured 0.147: the **hook** child receives `CLAUDE_PLUGIN_ROOT`, `PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA` and `PLUGIN_DATA` all set, with `PLUGIN_DATA = ~/.codex/plugins/data/<plugin>-<marketplace>` (the first concrete value this plan has held), and `${CLAUDE_PLUGIN_ROOT}` interpolated in the hook `command` and its args; the **MCP** child receives none of them. A write probe from the MCP child found `~/.codex`, the plugin cache, `/tmp` and the session workdir all writable on 0.147, so the 0.146 sandbox constraint did not reproduce — but writability was never the blocker: **addressability** is. The server cannot name `PLUGIN_DATA` because it is not in its environment. Either the launcher computes the path (the `bin/start-mcp.mjs` pattern in 4.0.2) or a hook injects it                                                                                                                                                                                                                                                                 | 4.0.2      | the declared state path resolves without the server reading `PLUGIN_DATA` from `process.env`                                                         |
+| 4.2   | ⊘ SUPERSEDED 2026-08-14                                                                                                              | ~~archive codex-prompts; README pointer to native package~~ → **OWNER RULING: codex-prompts is KEPT and set to release the latest plugin.** The retirement matrix's RETIRE decision is superseded with it. What replaces this row is 4.0.2 (land the refresh), 4.4 (join the fleet) and a normal release of the plugin; the native target in 4.1 becomes an additional install path rather than codex-prompts' replacement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | —          | ⊘ — see 4.0.2 and 4.4                                                                                                                                |
+| 4.3   | ☐ (as of 2026-08-14 · flips when the marketplace codex entry reads the refreshed codex-prompts version)                              | marketplace.json codex entry → **kept, pointed at the refreshed codex-prompts**. `minipuft-plugins` lists it at `0.1.0` today while the working tree is `0.1.3`; the entry stays and its version follows the release rather than being removed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 4.0.2      | rendered index valid; listed version matches the published one                                                                                       |
+| 4.4   | ☐ (as of 2026-08-14 · flips when `fleet.json` lists `minipuft/codex-prompts` and a scheduled `Fleet Drift Audit` run has covered it) | **NEW — keeping codex-prompts means auditing it.** It is the only consumer outside `fleet.json` and the only one that bypasses npm (vendored tarball), so the weekly auditor has never seen it — which is exactly why it drifted three minors without anyone noticing. Add it to `minipuft/repository-standards` `fleet.json` with a profile matching how it consumes the engine. Note the auditor defines drift as the resolved `node_modules/claude-prompts` lock version, so a vendored `file:` tarball may need either a profile that reads the tarball version or a move to the npm dependency                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 4.0.2      | a `schedule` run of `Fleet Drift Audit` reports codex-prompts                                                                                        |
 
-**4.1's "P0-researched" is partly already paid.** The retired
+**Gate**: ⚠ **BLOCKED — owner-only, not passed.** 4.1's criterion is an owner install in Codex, which
+no automated check substitutes for. The blocking rows are **4.1** (owner install) and **4.0.2** (the
+uncommitted working tree that 4.3 and 4.4 both depend on). What the 2026-08-14 execution closed is the
+premise — every 0.146 spike claim Tier 4 rests on was re-measured against 0.147 — and the owner ruling
+of the same date closed the retirement question: **4.2 is ⊘ superseded, codex-prompts is kept.** Note
+what that ruling did to the shape of the tier: 4.3 and 4.4 no longer chain off the owner install at
+all. They depend only on 4.0.2, so the Codex lane now has work that can proceed before the pilot is
+validated, where under the archive plan everything queued behind it.
+
+**4.1's "P0-researched" is partly already paid — and now re-measured.** The retired
 [`codex-prompts-port-2026-08-03`](reference/codex-prompts-port-2026-08-03.md) §Spike Results holds four
-measured answers against codex-cli 0.146 — the tool-name table, the SubagentStop envelope, the
-directive size budget, and the one that binds hardest here: **plugin `.mcp.json` placeholder
-interpolation does not exist on that release**, so a bundled server cannot start from plugin
-config and global registration with absolute paths was the only working path. Re-measure against
-the current Codex before trusting it, but do not re-derive it from scratch.
+measured answers against codex-cli 0.146. ~~Re-measure against the current Codex before trusting it~~
+— **done 2026-08-14 against 0.147.0**; the results supersede the two spawn-side claims and live in rows
+4.1 and 4.1.1. Superseded, not deleted: the 0.146 file stays `reference` because its `.mcp.json`
+interpolation finding still holds, and the divergence between the two runs is itself the reusable
+lesson — a probe that exercises one mechanism cannot clear a second one it never touched. The
+tool-name table, the SubagentStop envelope and the directive size budget were **not** re-measured here
+and remain 0.146 facts.
 
-### Tier 5 — Demote gemini-prompts, then opencode-prompts (one per PR, OWNER gate each)
+**The native target does not exist yet (measured 2026-08-14).** `scripts/render-targets.json` contains
+zero occurrences of "codex" and this repo has no `.codex-plugin/`. Row 4.1's "native target" is work to
+be built, not a target to be pointed at. The registry's `unresolved.clientNamespaces` entry names
+resolving the Codex namespace as a 4.1 prerequisite; the probe above makes it **non-blocking for the
+pilot** — a plugin using the legacy `.codex-plugin/plugin.json` + `hooks/hooks.json` layout installed
+and fired its `SessionStart` hook on 0.147 with no reverse-domain namespace directory present anywhere.
+The namespace string is still unpublished; the pilot no longer waits on it.
 
-**⚠ BOTH ROWS REST ON THE PREMISE TIER 2 FALSIFIED.** They say "render `--check` green", which
-assumes these repos are rendered artifacts. Measured 2026-08-13: they are **npm consumers**, not
-renders. `gemini-prompts/hooks/lib` is a symlink into `node_modules/claude-prompts/hooks/lib` and
-its adapters legitimately DIFFER (Gemini CLI fires `BeforeAgent`/`BeforeTool`); `opencode-prompts`
-tracks no `hooks/` and no `server/` at all. Their own `downstream-contract.json` files declare the
+### Tier 5 — gemini-prompts and opencode-prompts stay npm consumers — ✓ CLOSED 2026-08-14 (OWNER RULING (a))
+
+**⚠ BOTH ROWS RESTED ON THE PREMISE TIER 2 FALSIFIED, and the owner has now ruled on it.** They said
+"render `--check` green", which assumes these repos are rendered artifacts. Measured 2026-08-13 and
+**re-measured 2026-08-14**: they are **npm consumers**, not renders. `gemini-prompts/hooks/lib` is a
+symlink to `../node_modules/claude-prompts/hooks/lib` (`readlink`, not a path-exists check) and it
+tracks 9 hooks files of its own, whose adapters legitimately DIFFER (Gemini CLI fires
+`BeforeAgent`/`BeforeTool`); `opencode-prompts` tracks **0** files under `hooks/` and **0** under
+`server/` (`git ls-files`, the tracked property — a `readdir` would have counted `node_modules`
+content and answered the opposite question). Their own `downstream-contract.json` files declare the
 model outright — `requiredPaths` lists `node_modules/claude-prompts/dist` and
-`node_modules/claude-prompts/hooks`. "Demote to a rendered artifact" would mean **generating
-another repo's TypeScript**, which the renderer does not do and which nothing has established is
-wanted. Rewritten below rather than left ☐, which would present falsified work as ready to run.
+`node_modules/claude-prompts/hooks` in both. "Demote to a rendered artifact" would mean **generating
+another repo's TypeScript**, which the renderer does not do and which nothing established was wanted.
 
-| #     | Status                                                                                                                                                                 | Change                                                                                                                                                                                                                                                                                                                                                                         | Verify                                                                                                         |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| 5.0   | ☐ (as of 2026-08-13 · flips when the owner rules render-vs-consumer for these two repos)                                                                               | **OWNER RULING REQUIRED, and it precedes 5.1/5.2.** Is the end state (a) leave both as npm consumers — already standards-conformant, already fleet-audited, zero work; or (b) genuinely convert them to generated repos, which means the renderer emitting another project's source and is a far larger change than "GENERATED banner + CI check" implies                      | a recorded decision; 5.1/5.2 rewritten to match it                                                             |
-| 5.1 ⚠ | ☐ (as of 2026-08-13 · flips when 5.0 is ruled — under (a) this row becomes ⊘ no-op, under (b) it is re-scoped and re-estimated against the measured consumption model) | **Was**: "gemini-prompts: GENERATED banner + hand-edit CI check; local release-please/renovate retired." Retiring its release-please/renovate is only correct under ruling (b) — under (a) it owns its own version and toolchain by design, and Tier 7.6 already found nothing left to remove                                                                                  | blocked on 5.0. Under (a) this row is ⊘ no-op; under (b) `render --check` green + OWNER installs the extension |
-| 5.2 ⚠ | ☐ (as of 2026-08-13 · flips when 5.0 is ruled — under (a) this row becomes ⊘ no-op, under (b) it is re-scoped and re-estimated against the measured consumption model) | **Was**: "opencode-prompts: same + tsc buildStep; dist/ committed by render only." `buildStep` in `render-targets.json` is that repo's build of its OWN source, not a step this renderer runs — recorded for reference, never wired. It also publishes to npm with a trusted publisher and a real SLSA attestation (7.4), which "dist/ committed by render only" would disturb | blocked on 5.0                                                                                                 |
+**OWNER RULING 2026-08-14: option (a) — leave both as npm consumers.** That is the end state, not an
+interim. 5.1 and 5.2 are therefore ⊘ no-ops rather than deferred work, and the retirement matrix's
+DEMOTE decision for both repos is superseded (see that section).
 
-### Tier 6 — Freeze index + docs
+| #   | Status             | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Verify                                        |
+| --- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 5.0 | ✓ RULED 2026-08-14 | **OWNER RULING: (a) — both repos remain npm consumers.** The alternative (b), converting them to generated repos, would require the renderer to emit another project's source and was never established as wanted. Ruling (a)'s premise was verified before recording it rather than assumed from the 2026-08-13 measurement: both repos declare npm consumption in their own `downstream-contract.json`; both carry `Consumer Contract / Consumer Contract` as a **required** status check on `main` (gemini `["validate", "Consumer Contract / Consumer Contract"]`, opencode `["validate", "validate-plugin", "Consumer Contract / Consumer Contract"]` — matching `fleet.json` exactly); both are in `fleet.json` with `dependencyAutomation: renovate`; and the fleet auditor is genuinely enforcing, not merely green | recorded here; 5.1 and 5.2 rewritten to match |
+| 5.1 | ⊘ NO-OP 2026-08-14 | **Was**: "gemini-prompts: GENERATED banner + hand-edit CI check; local release-please/renovate retired." Under ruling (a) gemini owns its version and toolchain by design, so retiring its release-please/renovate would remove working automation and gain nothing. Tier 7.6 already found nothing left to remove on the CI side. Its workflows today are `ci.yml`, `consumer-contract.yml`, `release-please.yml` — all three legitimately its own                                                                                                                                                                                                                                                                                                                                                                         | ⊘ — no change is the correct end state        |
+| 5.2 | ⊘ NO-OP 2026-08-14 | **Was**: "opencode-prompts: same + tsc buildStep; dist/ committed by render only." `buildStep` in `render-targets.json` is that repo's build of its OWN source, recorded for reference and never wired. It also publishes to npm with a trusted publisher and provenance (7.4), which "dist/ committed by render only" would disturb. Its workflows are `ci.yml`, `consumer-contract.yml`, `npm-publish.yml`, `release-please.yml`                                                                                                                                                                                                                                                                                                                                                                                          | ⊘ — no change is the correct end state        |
 
-| #   | Change                                                                     | Verify                              |
-| --- | -------------------------------------------------------------------------- | ----------------------------------- |
-| 6.1 | minipuft-plugins frozen as 2-file index                                    | marketplace URL still resolves      |
-| 6.2 | docs/ + CLAUDE.md + downstream READMEs: rendered model, current state only | rg stale hand-edit instructions = 0 |
-| 6.3 | this plan: date each landed tier                                           | plan reflects reality               |
+**Gate**: ✓ **PASSED 2026-08-14.** The criterion for a ruling tier is that the decision is recorded and
+the dependent rows are rewritten to match it, which is what 5.0/5.1/5.2 above do. The conformance
+claims ruling (a) rests on were each probed rather than carried forward: symlink type by `readlink`,
+tracked-file counts by `git ls-files`, required checks by the branch-protection API, and the auditor
+by reading its workflow rather than its badge. **No file in either downstream repo was touched, which
+is the ruling's whole content** — a tier that correctly changes nothing still has to prove that
+changing nothing is right.
 
-### Tier 7 — Fleet closeout (absorbed from `downstream-standards-federation-2026-08-02`, 2026-08-12)
+**The auditor's `continue-on-error` is not the dead-chain pattern.** `fleet-drift-audit.yml` marks its
+audit step `continue-on-error: true`, the same shape that made Tier 3's dispatch chain silently dead.
+Here a later step re-raises — `Enforce audit result` runs `if: steps.audit.outcome != 'success'` and
+exits 1 — so the flag exists to let the dashboard issue update on a drifting fleet before the job
+fails. Checked because the shape matched a known trap, recorded because it did not turn out to be one:
+`continue-on-error` is only a defect when nothing downstream reads the outcome. Cron is
+`17 6 * * 1` (weekly, Monday); the most recent `schedule` run succeeded 2026-08-10, so a four-day-old
+last run is the cadence, not a missed schedule.
+
+### Tier 6 — Freeze index + docs — ✓ LANDED 2026-08-14
+
+| #   | Status                             | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Verify                                                                                                                                                                        |
+| --- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6.1 | ✓ 2026-08-14 (criterion corrected) | **minipuft-plugins is frozen as an index — but it is a 4-file repo, not a 2-file one.** Measured on `main` via the git tree API (tracked blobs, not a checkout listing): `.claude-plugin/marketplace.json`, `README.md`, `downstream-contract.json`, `.github/workflows/consumer-contract.yml`. **Authored "2-file index" → measured 4.** The two extra files are the governance pair federation added (its contract declaration and the required check), not plugin content, so the freeze holds and the count does not. The criterion is restated as the property that actually matters, because "2 files" would now fail for the right repo in the wrong way                                                                                                                                                                                                                     | ✓ the repo holds **no plugin content** — index + README + governance only; marketplace URL resolves and lists `claude-prompts` and `codex-prompts`                            |
+| 6.2 | ✓ 2026-08-14                       | **docs corrected to the model each repo actually has.** The authored greps ("rendered", "hand-edit") returned **zero across 37 doc files and all four downstream READMEs** — and that clean result was misleading: `docs/guides/release-process.md` described the downstream model in vocabulary the plan never used. Corrected there: "daily Dependabot" → Renovate (Tier 7.2 measured `dependabot.yml` 404 in both repos); "upstream dispatch" and "centralized release synchronization" removed (3.5 deleted that path); dependency range `^1.x` → the measured `^3.0.0`; gemini's "(private)" disambiguated to an unpublished npm package in a public repo; the consumer table extended from 2 rows to 4 (codex-prompts and minipuft-plugins were absent); a `Fleet Drift Audit` box added to the workflow chain; and the lead sentence's "sync downstream extensions" replaced | `rg -i "dependabot\|downstream-sync\|upstream dispatch\|sync downstream"` over `docs/ CLAUDE.md README.md CONTRIBUTING.md` = 0; no doc calls gemini/opencode/codex "rendered" |
+| 6.3 | ✓ 2026-08-14                       | **every tier heading now carries its state and date.** Three were undated: Tier 3 (partially landed, so dated as "4 of 6 LANDED 2026-08-13" rather than a bare ✓ that would overstate it), Tier 7 (closed 2026-08-12, re-verified today), Tier 0.5b (landed across 08-09/08-12). Tier 4 and Tier 6 deliberately carry no landed date while open                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `rg "^### Tier "` — every heading states landed/closed/open with a date, or is open by design                                                                                 |
+
+**Gate**: ✓ **PASSED 2026-08-14.** All three rows verified against the artifacts they name, and each
+Verify command reads a file this tier wrote or measured — the 6.2 sweep greps the corrected doc, the
+6.3 check greps the corrected headings, and 6.1 reads the remote tree rather than a local checkout.
+
+**6.2's clean grep is the finding, not the pass.** The criterion was authored as "rg stale hand-edit
+instructions = 0", and that grep was already zero before any work — while the doc it was meant to
+protect carried four falsified claims about the downstream model. The sweep searched for the
+_plan's_ vocabulary ("rendered", "hand-edit"); the staleness was written in the _doc's_ vocabulary
+("Dependabot", "dispatch"). Same class as this initiative's other probe failures, on a fifth
+substrate: **a criterion inherits the blind spots of whoever chose its search terms**, and a
+zero-result grep proves the terms are absent, never that the property holds.
+
+### Tier 7 — Fleet closeout — ✓ CLOSED 2026-08-12, re-verified 2026-08-14 (absorbed from `downstream-standards-federation-2026-08-02`)
 
 That plan **succeeded at its core**: `minipuft/repository-standards` v1.1.0 is released at an
 immutable SHA, all three downstream repos carry a required `Consumer Contract / Consumer Contract`
@@ -470,6 +532,12 @@ through a separate `renovatePresetVersion: v1.0.1` reference that is already cur
 added the **fleet auditor**, which runs inside the standards repo and is not called through the
 consumer pin. Re-pinning would change no behavior and cost three PRs. **Version distance is not
 drift when the delta lives in a surface the consumer never calls.**
+
+**Re-verified 2026-08-14** — the ✓ rows were probed 2026-08-12 and a two-day-old ✓ is a claim, not a
+state. Spot-checked: `.github/dependabot.yml` still returns **404** in both consumers (7.2); opencode's
+`npm-publish.yml` still carries `id-token: write`, `environment: npm` and `--provenance` with no
+`NPM_TOKEN` (7.4); Renovate's Dependency Dashboard issues **#39 and #40** are open and authored by
+`app/renovate` (7.1); `fleet.json` reads `dependencyAutomation: renovate` for both (7.5). All hold.
 
 **Tier 7 closes with no owner action.** What federation carried as five open external hold points
 was a record of work that had already landed — the fleet one **nine days** before it was asked
@@ -514,13 +582,13 @@ have read as "still waiting" indefinitely.
 
 ## Risks
 
-| Risk                           | Impact                              | Mitigation                                               | Rollback                                          |
-| ------------------------------ | ----------------------------------- | -------------------------------------------------------- | ------------------------------------------------- |
-| Spec point-release churn       | renders invalid vs live clients     | vendored pins; deliberate re-pin only                    | pins make no-op                                   |
-| Render bug ships broken plugin | every client install breaks at once | zero-diff gate + dry-run + drift check                   | dist branch/repos are git — revert render commit  |
-| Auto-push to wrong repo state  | downstream clobber                  | state==MERGED verify + BEHIND self-heal (proven pattern) | git revert on target                              |
-| Codex namespace unknown        | native hooks don't fire             | P0 research before Tier 4; pilot gated on owner install  | codex-prompts un-archived (archive is reversible) |
-| opencode tsc inside our CI     | render job fails                    | buildStep isolated per target; probe in Tier 2           | keep opencode hand-maintained until solved        |
+| Risk                           | Impact                              | Mitigation                                                                                                                                                                                                                                                                                                   | Rollback                                          |
+| ------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| Spec point-release churn       | renders invalid vs live clients     | vendored pins; deliberate re-pin only                                                                                                                                                                                                                                                                        | pins make no-op                                   |
+| Render bug ships broken plugin | every client install breaks at once | zero-diff gate + dry-run + drift check                                                                                                                                                                                                                                                                       | dist branch/repos are git — revert render commit  |
+| Auto-push to wrong repo state  | downstream clobber                  | state==MERGED verify + BEHIND self-heal (proven pattern)                                                                                                                                                                                                                                                     | git revert on target                              |
+| Codex namespace unknown        | ⊘ RETIRED for the pilot 2026-08-14  | Measured on codex-cli 0.147: a plugin using the legacy `.codex-plugin/plugin.json` + `hooks/hooks.json` layout installs and fires `SessionStart` with no reverse-domain namespace directory present. The namespace string is still unpublished; the pilot does not wait on it. Owner install still gates 4.1 | codex-prompts un-archived (archive is reversible) |
+| opencode tsc inside our CI     | render job fails                    | buildStep isolated per target; probe in Tier 2                                                                                                                                                                                                                                                               | keep opencode hand-maintained until solved        |
 
 ## Documentation
 
@@ -616,7 +684,7 @@ PRESENT in the corpus, not that the corpus AGREES with the README about it. `%gu
 the corpus as a rejection scenario, so a README claiming `%guided` works would pass this gate and
 be caught only by the suite itself. The two checks are complementary; neither alone is sufficient.
 
-### Tier 0.5b — Close the claim-coverage gaps (owner-directed 2026-08-09)
+### Tier 0.5b — Close the claim-coverage gaps — ✓ LANDED 2026-08-09/12 (owner-directed 2026-08-09)
 
 **Position**: immediately after 0.5, before Tier 2. Absorbs rows 0.5.6–0.5.14, which were filed
 during 0.5's execution and are re-expressed here as three owner-named workstreams.
@@ -1115,3 +1183,167 @@ failure hint contained the literal `npm run`, which is indistinguishable by shap
 script executes. The honest resolution was to reword the hint, not to declare a substrate the
 renderer does not have: an over-report is cheap everywhere except in the ledger it maintains,
 where a wrong entry is worse than a missing one. Second unprompted catch for that mechanism.
+
+## Execution record — Tier 4, 2026-08-14
+
+**Tier 4 is owner-gated by design and did not pass.** No repository file changed. What this
+execution produced is a premise: every claim Tier 4 rests on was re-measured, three of them
+against a live codex-cli rather than against the 0.146 record, and two came back different.
+
+### What the re-measurement changed before any code was written
+
+| Assertion (authored)                                                            | Measured 2026-08-14                                                                     | Effect                           |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------- |
+| gemini `npx` runtime binding, `registryType: npm`, fleet-auditor npm definition | all three unchanged                                                                     | 4.0 ✓, npm ruling holds          |
+| codex-prompts at 0.1.0 / `3.1.0.tgz`, absent from `fleet.json`                  | remote confirmed; `archived: false`, `pushed_at 2026-08-05`; marketplace still 0.1.0    | 4.0.1 stands                     |
+| (unstated) codex-prompts has no local checkout                                  | local checkout exists, **uncommitted at 0.1.3 / `3.1.2.tgz`**, 7 modified + 2 untracked | **new row 4.0.2**                |
+| "native target → release asset"                                                 | `render-targets.json` has zero "codex"; no `.codex-plugin/` here                        | 4.1 is build work, not wiring    |
+| `.mcp.json` `${CLAUDE_PLUGIN_ROOT}` not interpolated (0.146)                    | **holds** on 0.147 — literal in argv AND in env values                                  | constraint survives              |
+| MCP spawn cwd = session dir (0.146)                                             | **falsified** — cwd is the plugin cache root, resolved from `"cwd": "."`                | 4.1's blocking premise dissolves |
+| MCP child cannot write `~/.codex` (0.146)                                       | **did not reproduce** — cache, `~/.codex`, `/tmp`, workdir all writable                 | not the blocker anyway           |
+| 4.1 Verify: "state in PLUGIN_DATA"                                              | `PLUGIN_DATA` **unset in the MCP child**, set in the hook child                         | **falsified → new row 4.1.1**    |
+| Risk: "Codex namespace unknown" blocks native hooks                             | legacy layout installed and fired `SessionStart` with no namespace dir                  | risk retired for the pilot       |
+
+### The asymmetry that row 4.1 was written without
+
+Codex 0.147 gives a plugin's **hook** child everything and its **MCP** child almost nothing:
+
+|                                          | hook child                                   | MCP child                                 |
+| ---------------------------------------- | -------------------------------------------- | ----------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` in config        | interpolated (command + args)                | **literal passthrough**                   |
+| `CLAUDE_PLUGIN_ROOT` / `PLUGIN_ROOT` env | set                                          | **unset**                                 |
+| `CLAUDE_PLUGIN_DATA` / `PLUGIN_DATA` env | set — `~/.codex/plugins/data/<plugin>-<mkt>` | **unset**                                 |
+| cwd                                      | session dir                                  | **plugin cache root** (from `"cwd": "."`) |
+
+Every row of that table is the opposite of the one above or below it, which is why a probe written
+for one child says nothing about the other. The 0.146 spike measured interpolation and concluded
+"cannot start from plugin config"; it never tried a relative `cwd`, and that is the mechanism that
+works. **A probe that exercises one mechanism does not clear a second one it never touched** — the
+same shape as this initiative's tracked-vs-walk and substrate-vs-subject findings, now on a third
+substrate.
+
+### What the plan asked for that was not run
+
+The tier's Verify column for 4.1 is an owner install. Nothing here substitutes for it, and no
+partial ✓ was recorded. 4.2 and 4.3 were not attempted: both chain off that install, and 4.2 in
+particular would archive a repository whose working tree carries uncommitted work — captured as
+4.0.2 rather than worked around.
+
+### Probe hygiene
+
+The measurements ran through a throwaway plugin in the job scratch directory, served by its own
+marketplace so the existing `codex-prompts-dev` marketplace was never edited. Removal verified by
+count, not by assumption: `codex mcp list`, `codex plugin list` and the plugin cache all read 0
+occurrences afterwards, and `codex-prompts@codex-prompts-dev` remained installed and enabled.
+
+## Execution record — Tier 5, 2026-08-14
+
+**Tier 5 closed by ruling, not by work, and the ruling made three of the plan's four retirement
+decisions wrong.** Owner ruled option (a): gemini-prompts and opencode-prompts remain npm consumers.
+Separately, the owner ruled codex-prompts KEPT and set to release the latest plugin, which supersedes
+the RETIRE decision Tier 4 was built around. No file in any downstream repo changed.
+
+### The premise was verified before the ruling was recorded
+
+Ruling (a) is worded as "already conformant, zero work" — a claim, not a fact, and a tier that
+changes nothing has to prove that changing nothing is right. Each leg was probed, and each probe
+names the property rather than a token that co-occurs with it:
+
+| Claim                                              | Property probed                                         | Result                                                       |
+| -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| gemini's `hooks/lib` is a symlink into the package | link target via `readlink`, not path existence          | `../node_modules/claude-prompts/hooks/lib`                   |
+| gemini keeps its own adapters                      | `git ls-files hooks` (tracked, not readdir)             | 9 files                                                      |
+| opencode tracks no `hooks/` or `server/`           | `git ls-files` on both                                  | 0 and 0                                                      |
+| both declare npm consumption                       | their own `downstream-contract.json` `requiredPaths`    | `node_modules/claude-prompts/{dist,hooks}` in both           |
+| both carry the required contract check             | branch-protection API `required_status_checks.contexts` | present in both, matching `fleet.json` exactly               |
+| the fleet is audited                               | the auditor's workflow source, not its badge            | weekly cron, last `schedule` run succeeded, and it re-raises |
+
+A `readdir` on opencode's tree would have counted `node_modules` content and answered the opposite
+question — the same tracked-vs-walk split this initiative has now hit on four different file sets.
+
+### A shape that matched a known trap and was not one
+
+`fleet-drift-audit.yml` marks its audit step `continue-on-error: true`. That is precisely what made
+Tier 3's dispatch chain dead, so it was read rather than assumed. A later step re-raises
+(`if: steps.audit.outcome != 'success'` → `exit 1`), and the flag exists so the drift dashboard issue
+updates before the job fails. **`continue-on-error` is a defect only when nothing downstream reads the
+outcome** — worth recording as a negative result, because the previous finding trained the wrong
+reflex.
+
+### What the rulings invalidated elsewhere
+
+Neither ruling is confined to its own tier, and a ruling recorded only where it was made leaves the
+rest of the document asserting the opposite:
+
+| Location                              | Was                              | Now                                                                         |
+| ------------------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
+| Retirement matrix, codex-prompts      | RETIRE — archive after the pilot | SUPERSEDED — keep and ship the latest                                       |
+| Retirement matrix, gemini + opencode  | DEMOTE to rendered artifact      | SUPERSEDED — keep as npm consumers                                          |
+| Alignment matrix, Hooks end state     | "rendered to native locations"   | one npm source + per-client adapters; nothing rendered into a namespace dir |
+| Alignment matrix, Workflows end state | "render all"                     | one projection target; the other three are canonical or npm consumers       |
+| Tier 4.2                              | archive codex-prompts            | ⊘ superseded; replaced by 4.0.2, 4.3 and new row 4.4                        |
+| Tier 6.2                              | "rendered model" across all docs | per-repo model, or the docs would enshrine the superseded plan              |
+
+### The ruling changed the tier's dependency shape, not just its rows
+
+Under the archive plan every remaining Codex row queued behind the owner install. With codex-prompts
+kept, **4.3 and 4.4 depend only on 4.0.2** — landing the uncommitted refresh — so the Codex lane now
+has work available before the pilot is validated. New row 4.4 exists because keeping a consumer means
+auditing it: codex-prompts is the only one absent from `fleet.json` and the only one bypassing npm,
+which is why it drifted three minors unobserved. That row also carries the one thing that may not fit
+the existing profile — the auditor defines drift as a resolved `node_modules` lock version, and a
+vendored `file:` tarball has none.
+
+## Execution record — Tier 6 + Tier 7 re-verification, 2026-08-14
+
+Tier 6 landed all three rows. Tier 7 was already closed and was re-probed rather than carried
+forward. One doc file changed: `docs/guides/release-process.md`.
+
+### The authored criterion passed before the work, and the doc was still wrong
+
+6.2's Verify was `rg stale hand-edit instructions = 0`. That grep returned **zero across 37 doc
+files and all four downstream READMEs** before anything was touched — a clean pass on a criterion
+whose subject was broken. `docs/guides/release-process.md` was describing:
+
+| Doc claimed                                                    | Measured 2026-08-14                                                       |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| gemini + opencode update via "Daily Dependabot"                | `.github/dependabot.yml` returns 404 in both; both are on Renovate        |
+| opencode also via "upstream dispatch"                          | that workflow was deleted at 3.5, and the dispatch job removed downstream |
+| "Centralized release synchronization also opens validated PRs" | the sync path and its lock script no longer exist                         |
+| `{ "claude-prompts": "^1.x" }`                                 | both declare `^3.0.0`                                                     |
+| 2 downstream consumers                                         | 4 — codex-prompts and minipuft-plugins were absent entirely               |
+
+The grep searched for the **plan's** vocabulary — "rendered", "hand-edit". The staleness was written
+in the **doc's** vocabulary — "Dependabot", "dispatch". A criterion inherits the blind spots of
+whoever chose its search terms, and a zero-result grep proves the terms are absent, never that the
+property holds. Fifth substrate for this initiative's recurring probe failure, and the first where
+the probe was _authored into the plan as the gate itself_.
+
+What proves the corrected grep does observe: after the consumer table was fixed it still returned a
+hit — the lead sentence's "sync downstream extensions" — which was then fixed too. A check that
+finds something and is acted on has demonstrated it reads the file; a check that finds nothing has
+demonstrated only that it ran.
+
+### 6.1's count was wrong and its intent was right
+
+`minipuft-plugins` is authored as a "2-file index" and measured (git tree API, tracked blobs) at
+**4**: the marketplace JSON, the README, and the governance pair federation added
+(`downstream-contract.json` + `consumer-contract.yml`). The freeze holds — the repo carries no
+plugin content — so the row passes on a restated criterion. Left as "2 files" it would have failed
+the right repository for the wrong reason.
+
+### Dating was not bookkeeping
+
+6.3 found three undated tier headings. Tier 3 is the one that mattered: it is **4 of 6 landed** with
+two falsified rows and an owner-blocked gate, and a bare "✓ LANDED" would have overstated it at
+exactly the altitude a reader scans first. Tier 4 and Tier 6 carry no landed date on purpose while
+open — an undated heading is only a defect when the tier has a state to report.
+
+### Tier 7 re-verified rather than trusted
+
+Its ✓ rows were probed 2026-08-12; each was re-run today and all hold (7.1 dashboards #39/#40 by
+`app/renovate`, 7.2 dependabot 404 in both, 7.4 trusted publishing intact, 7.5 renovate in
+`fleet.json`). Worth noting how 7.1 nearly read as regressed: the first query filtered issues on the
+title `Dependency Dashboard` and returned nothing, but the real title is `📦 Dependency Updates
+Dashboard`. **A zero-result probe was wrong about the string, not about the world** — the third time
+this session, which is why none of them was reported before being re-queried without the filter.

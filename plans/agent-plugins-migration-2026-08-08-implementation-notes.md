@@ -657,3 +657,154 @@ three files and reading any one of them alone misrepresents it.
 
 The split is the point: a guard living only in workflow YAML is deletable in one line by anyone,
 which is exactly how its predecessor vanished. Neither of the first two files is sufficient alone.
+
+- **DEV-T3-14** — the validation-ledger move (`8b9203fa` here, `6e2de1c` in `~/.claude`) is
+  **framework tooling, not a row of this plan** — but it belongs in this log because executing
+  this plan is what surfaced it, and because it changed `scripts/retire-done-plans.js`, which
+  Tier 7 absorbed. The ledger appended to this very notes file: 330 lines, ~40% of the document,
+  one write per validation command. Recorded here rather than only in the commit because the next
+  reader of this file will notice 330 lines vanished and should find why in the same place.
+- **DEV-T3-15** — **the tracked-vs-walk split fired again, on a file I created.** The new sidecar
+  is markdown under `plans/` and gitignored, so filesystem walkers see it and `git ls-files` scans
+  cannot. `retire-done-plans` reported it as "a plan with no frontmatter" within a minute of the
+  first one existing. This is E12's family — a predicate reading an available stand-in ("is it
+  `.md` under `plans/`?") for the real question ("is it a plan?"). Guarded at both walkers and
+  falsified by removing the guard; the tracked scan needed none, and deliberately has none.
+- **DEV-T3-16** — I fixed the mislabeling in `validation-tracker.py` and nearly stopped, but the
+  ledger a human actually reads is written by `validation-flush.py`, which still recorded the raw
+  prefix. **Two hooks on the same matcher, deliberately independent, and I patched the one that
+  was not the symptom's source.** The helper now lives in the shared lib for that reason: two
+  copies would drift, and the drifted copy would be the one nobody was reading at the time.
+
+## Deviations — Tier 4 execution (2026-08-14)
+
+Tier 4 changed no repository file: its gate is an owner install and it did not pass. These rows
+record what re-measurement found, because the finding is the deliverable.
+
+- **DEV-T4-1** — **the plan told me to re-measure and the re-measurement inverted the row.** Tier 4
+  carried "Re-measure against the current Codex before trusting it" as an aside under the table.
+  Run against codex-cli 0.147, two of the four 0.146 spike claims came back different, and the one
+  that changed — MCP spawn cwd resolves `"cwd": "."` against the plugin root, not the session dir —
+  is precisely the claim that made 4.1 look impossible. An aside carrying a row's whole premise is
+  the shape to watch: had it stayed an aside, 4.1 would have been executed against a dissolved
+  blocker or skipped for a reason that had expired.
+- **DEV-T4-2** — **I probed one child and would have reported it as the plugin's behavior.** The
+  first probe measured the MCP child: no interpolation, no `PLUGIN_ROOT`, no `PLUGIN_DATA`. The
+  natural write-up is "Codex does not expose plugin paths". The hook child receives all four, with
+  `${CLAUDE_PLUGIN_ROOT}` interpolated. Two children of one plugin, opposite on every axis. The
+  0.146 spike made the mirror-image error in the other direction, which is how "a bundled server
+  can never start from plugin config" survived a year of citation. Same family as E12 and the
+  substrate findings: **the probe defines the answer, so name which subject it ran against.**
+- **DEV-T4-3** — **`state in PLUGIN_DATA` was falsified by addressability, not by permission.** The
+  0.146 record blamed a sandbox; on 0.147 the MCP child wrote `~/.codex`, `/tmp`, the plugin cache
+  and the session workdir without complaint. Chasing the recorded reason would have concluded the
+  constraint was lifted. The real constraint is that `PLUGIN_DATA` is not in the server's
+  environment — it cannot name the directory it is allowed to write. Recorded as row 4.1.1 with the
+  concrete value (`~/.codex/plugins/data/<plugin>-<marketplace>`) the plan had never held.
+- **DEV-T4-4** — **the plan measured a remote and a working tree disagreed with it.** Row 4.0.1 was
+  authored from `gh api` against `origin/main` — deliberately, and it says so. A local checkout
+  exists at `~/Applications/codex-prompts`, HEAD equal to origin, working tree uncommitted at 0.1.3
+  with a `bin/start-mcp.mjs` that solves the exact problem 4.1 is scoped to solve. Row 4.2 would
+  have archived the repository and taken that with it. Filed as 4.0.2 and left untouched — it is
+  another session's uncommitted state.
+- **DEV-T4-5** — **a risk retired itself under measurement.** `render-targets.json` names the
+  unresolved Codex client namespace as a 4.1 prerequisite, and the risk table gave it "native hooks
+  don't fire". A probe plugin using the legacy `.codex-plugin/` + `hooks/hooks.json` layout fired
+  `SessionStart` on 0.147 with no reverse-domain directory anywhere. The namespace is still
+  unpublished; the pilot simply never needed it. Marked ⊘ retired-for-the-pilot rather than deleted,
+  so the distinction between "answered" and "routed around" survives.
+- **DEV-T4-6** — the probes ran in the job scratch directory behind their own throwaway marketplace
+  so the existing `codex-prompts-dev` marketplace was never edited, and removal was verified by
+  counting residual entries in `codex mcp list`, `codex plugin list` and the plugin cache rather
+  than assumed from the remove command's exit code. A broken MCP server left registered would have
+  degraded every later Codex session on this machine.
+- **DEV-T4-7** — **the falsified claims lived in a skill, not in this plan, and the skill is what the
+  next session reads.** `~/.claude/skills/codex-plugins/SKILL.md` carried both 0.146 statements this
+  execution disproved — "session cwd" for the MCP child, and the sandbox constraint — as unqualified
+  present-tense facts under a single "Verified against v0.146" stamp. Correcting only the plan would
+  have left the wrong version in the artifact that actually fires at the next Codex task. Updated in
+  place: the MCP Bundling section now leads with cwd anchoring, a hook-child-vs-MCP-child table
+  replaces the single-row divergence claim, the sandbox paragraph records that it did not reproduce
+  and that addressability was the real constraint, and the header tells the reader to re-probe rather
+  than trust a version stamp. Framework tooling, not a row of this plan — logged here because this
+  plan's execution is what falsified it. Note the file is UNTRACKED in `~/.claude` (another session's
+  in-progress skill), so the edit is left unstaged.
+
+## Rulings — 2026-08-14 (owner)
+
+Recorded here per the tier-execute contract: rulings precede the tiers that depend on them, and a
+ruling that lives only in a chat message is not executable.
+
+- **R1 — Tier 5.0: option (a).** gemini-prompts and opencode-prompts remain **npm consumers**. This is
+  the end state, not an interim. 5.1 and 5.2 become ⊘ no-ops; the retirement matrix's DEMOTE decision
+  for both repos is superseded.
+- **R2 — codex-prompts: KEEP and release the latest.** Supersedes the RETIRE decision. Tier 4.2 (archive)
+  becomes ⊘; the refresh must land (4.0.2), the marketplace entry follows the release (4.3), and the
+  repo joins the fleet auditor (new 4.4).
+
+## Deviations — Tier 5 execution (2026-08-14)
+
+- **DEV-T5-1** — **the ruling's blast radius was larger than the tier that received it.** Both rulings
+  arrived against Tier 5 and Tier 4 rows, but three of the four rows in the plan's **retirement
+  matrix** — the document's own "core open question, RESOLVED" — became wrong, plus two alignment
+  matrix end-states and Tier 6.2's doc instruction. Had the writeback stopped at the tier tables, the
+  next reader would have found a resolved matrix saying RETIRE and DEMOTE and executed it. **A ruling
+  invalidates premises, and premises live above the tier that cites them.**
+- **DEV-T5-2** — **a no-op tier still needs its premise probed.** Ruling (a) is worded "already
+  conformant, zero work", which invites recording the decision and moving on. Six separate probes were
+  run instead, each naming the property rather than a co-occurring token — `readlink` for the symlink,
+  `git ls-files` for tracked counts, the branch-protection API for required checks. On opencode a
+  `readdir` would have counted `node_modules` and answered the opposite question, which is the fourth
+  file set this initiative has seen that split on tracked-vs-walk. **The cost of verifying a no-op is
+  six commands; the cost of a wrong no-op is a tier closed on an assumption.**
+- **DEV-T5-3** — **I checked a shape because it matched a known trap, and it was not one.** The fleet
+  auditor marks its audit step `continue-on-error: true`, exactly what made Tier 3's dispatch chain
+  silently dead. Here a later step re-raises on the recorded outcome, so the flag is there to update
+  the drift dashboard before failing. Recorded as a negative result on purpose: the earlier finding
+  trains a reflex that `continue-on-error` means dead, and the actual rule is narrower —
+  **it is a defect only when nothing downstream reads the outcome.**
+- **DEV-T5-4** — **R2 changed the tier's dependency graph, not just its statuses.** Under the archive
+  plan, 4.2 → 4.3 chained behind the owner install, so everything Codex-side was blocked on one
+  owner action. Keeping codex-prompts detached 4.3 and 4.4 from the pilot entirely — they depend only
+  on landing the refresh. Rewriting statuses without re-deriving `Depends` would have left the plan
+  reporting work as blocked that the ruling had just unblocked.
+- **DEV-T5-5** — new row 4.4 exists because **keeping a consumer means auditing it**, and it carries a
+  problem the existing fleet profiles may not cover: the auditor defines drift as the resolved
+  `node_modules/claude-prompts` lock version, and codex-prompts consumes a vendored `file:` tarball
+  that has no such resolution. Rowed with that named rather than assumed to be a config line — the
+  same class as Tier 3's "the sync path does not sync content".
+
+## Deviations — Tier 6 + Tier 7 re-verification (2026-08-14)
+
+- **DEV-T6-1** — **the gate was green before the work, and the thing it guarded was broken.** 6.2's
+  Verify is `rg stale hand-edit instructions = 0`; it returned zero across 37 doc files and four
+  downstream READMEs before a single edit. `docs/guides/release-process.md` meanwhile claimed daily
+  Dependabot (404 in both repos), upstream dispatch (deleted at 3.5), centralized sync PRs (path
+  removed), a `^1.x` range (measured `^3.0.0`), and listed 2 of 4 consumers. The grep searched the
+  **plan's** words; the staleness was in the **doc's** words. This is the fifth substrate for the same
+  failure in this initiative and the first where the bad probe _was the plan's own gate_ — which makes
+  it the worst variant: a criterion cannot be caught by running it.
+- **DEV-T6-2** — **what made the corrected grep credible was that it caught something.** After the
+  consumer table was rewritten the sweep still returned one hit, the lead sentence's "sync downstream
+  extensions", which was then fixed. A check that finds a real instance and gets acted on has shown it
+  reads the file. A check that finds nothing has shown only that it ran — and the pre-work zero above
+  is what that looks like.
+- **DEV-T6-3** — **6.1's count was authored at 2 and measured at 4, and the intent still held.**
+  `minipuft-plugins` carries the marketplace index, its README, and the two governance files
+  federation added. The freeze is about plugin content, not file count. Restated the criterion rather
+  than either failing the row or quietly editing the number — "2 files" would fail the correct
+  repository for the wrong reason, and dropping to "≈4" would lose why it grew.
+- **DEV-T6-4** — **dating Tier 3 forced a judgment, not a lookup.** It is 4 of 6 landed with two
+  falsified rows and an owner-blocked gate. `✓ LANDED 2026-08-13` would have been the natural stamp
+  and would have overstated it at the altitude readers scan first. Dated as "4 of 6 LANDED … gate
+  owner-blocked". Tier 4 and Tier 6 stay undated while open on purpose: an undated heading is a defect
+  only when the tier has a state to report.
+- **DEV-T7-1** — **a zero-result probe was wrong about the string, not the world.** Re-verifying 7.1,
+  I queried open issues matching the title `Dependency Dashboard` and got nothing, which reads as
+  "Renovate regressed". The actual title is `📦 Dependency Updates Dashboard`. Re-queried without the
+  filter: #39 and #40, open, authored by `app/renovate`. Third time this session a zero result came
+  from the query rather than the repository, which is now a standing rule — **never report a negative
+  from a filtered query without re-running it unfiltered.**
+- **DEV-T7-2** — Tier 7's ✓ rows were two days old and were re-probed rather than carried forward.
+  All four held. Recorded because the re-check cost four API calls and the plan's own
+  cleanup-standards lesson is that a ✓ is a claim with a date, not a state.
