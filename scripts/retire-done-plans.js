@@ -38,6 +38,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const PLANS_DIR = path.join(REPO_ROOT, "plans");
@@ -208,6 +209,37 @@ function collect() {
 }
 
 /**
+ * Queue entries whose on-disk state git has not fully committed.
+ *
+ * This guards the ARCHIVE path only. Archiving moves a plan into gitignored
+ * `plans/archive/`, where git history is the only surviving copy — so an untracked plan
+ * would be destroyed outright, and uncommitted modifications would be missing from the
+ * history that is supposed to preserve them. `reference` relocations stay tracked and
+ * carry their content with them, so they need no guard. The release workflow never hits
+ * this (a CI checkout is clean); the guard exists so `--apply` is equally safe run by
+ * hand between releases, e.g. at phase completion.
+ *
+ * Fails closed: if git itself cannot answer (not installed, not a repository), archiving
+ * is refused rather than assumed safe — the same posture as the frontmatter and link
+ * checks, where an unanswerable question is an error, never a pass.
+ */
+function uncommittedPlans(records, root = REPO_ROOT) {
+  if (records.length === 0) return [];
+  const output = execFileSync(
+    "git",
+    ["status", "--porcelain", "--", ...records.map((r) => r.rel)],
+    { cwd: root, encoding: "utf8" },
+  );
+  const dirty = new Set(
+    output
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.slice(3).trim()),
+  );
+  return records.filter((r) => dirty.has(r.rel));
+}
+
+/**
  * Rewrite one file's relative markdown links, accounting for files that are moving.
  *
  * Two independent shifts have to compose: the CITING file may change depth (fromDir → toDir),
@@ -219,7 +251,18 @@ function collect() {
  */
 function rewriteLinks(text, fromDir, toDir, moveMap = new Map()) {
   return text.replace(
-    /\]\((\.\.?\/[^)\s#]+)(#[^)\s]*)?\)/g,
+    // The `./` prefix is OPTIONAL. Requiring it matched the form this file's own docblock
+    // assumes (`./sibling.md`) and missed the form plans actually use — a bare `sibling.md`
+    // for a same-directory peer. Measured 2026-08-13: the first live --apply re-based one
+    // `../`-prefixed citation correctly and left five bare ones pointing at vacated paths,
+    // in the two active plans that cite the relocating set. The self-test passed throughout,
+    // because every case it exercised carried the prefix.
+    //
+    // `:` is excluded from the target so `https://`, `mailto:` and friends cannot match, and
+    // a leading `/` is rejected outright — both are absolute, neither re-bases. The
+    // existsSync/moveMap guard below is what makes widening safe: a target that resolves to
+    // no real file is returned untouched, so prose in parentheses is never rewritten.
+    /\]\((?!\/)((?:\.\.?\/)?[^)\s#:]+)(#[^)\s]*)?\)/g,
     (whole, target, hash) => {
       const absolute = path.resolve(fromDir, target);
       const destination =
@@ -378,6 +421,41 @@ function selfTest() {
       `anchor dropped: ${anchored}`,
     );
 
+    // 3b. THE MOTIVATING CASE: a BARE same-directory citation follows its relocating target.
+    // Cases 1-3 all carry a `./` or `../` prefix, so they passed against a regex that required
+    // one — and the live run still left five links pointing at vacated paths. This mirrors that
+    // shape exactly: the citing plan stays in plans/, the cited plan moves to reference/, and
+    // the link is written the way plans actually write it.
+    const staying = path.join(sandbox, "cite.md");
+    fs.writeFileSync(staying, fm("active") + "\nSee [sib](moving.md).\n");
+    const movingFrom = path.resolve(path.join(sandbox, "moving.md"));
+    fs.writeFileSync(movingFrom, fm("reference"));
+    const bare = rewriteLinks(
+      fs.readFileSync(staying, "utf8"),
+      sandbox,
+      sandbox,
+      new Map([
+        [movingFrom, path.resolve(path.join(sandbox, REFERENCE_DIRNAME, "moving.md"))],
+      ]),
+    );
+    assert(
+      bare.includes(`](./${REFERENCE_DIRNAME}/moving.md)`),
+      `bare same-directory link did not follow its target: ${bare}`,
+    );
+
+    // 3c. Widening the regex must not capture what is not a re-basable relative path.
+    // Absolute paths and URLs have no relative form; a target matching no real file is prose
+    // or a dead link, and rewriting either would be a regression introduced by 3b's fix.
+    const untouched = rewriteLinks(
+      "[a](https://example.com/x.md) [b](/abs/x.md) [c](does-not-exist.md) [d](#anchor)",
+      sandbox,
+      path.join(sandbox, REFERENCE_DIRNAME),
+    );
+    assert(
+      untouched === "[a](https://example.com/x.md) [b](/abs/x.md) [c](does-not-exist.md) [d](#anchor)",
+      `rewrote a link that has no relative form: ${untouched}`,
+    );
+
     // 4. Frontmatter defects are reported, not silently skipped.
     const bad = path.join(sandbox, "bad.md");
     fs.writeFileSync(bad, "# no frontmatter\n");
@@ -416,9 +494,35 @@ function selfTest() {
       "inbound link from the sibling not detected",
     );
 
+    // 7. The archive guard flags untracked and modified plans, and clears committed ones.
+    const repo = path.join(sandbox, "guard-repo");
+    fs.mkdirSync(repo);
+    const git = (...gitArgs) =>
+      execFileSync("git", gitArgs, { cwd: repo, encoding: "utf8" });
+    git("init", "-q");
+    fs.writeFileSync(path.join(repo, "plan.md"), fm("done"));
+    const record = [{ rel: "plan.md" }];
+    assert(
+      uncommittedPlans(record, repo).length === 1,
+      "untracked plan not flagged by the archive guard",
+    );
+    git("add", "plan.md");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "t");
+    assert(
+      uncommittedPlans(record, repo).length === 0,
+      "committed plan wrongly flagged by the archive guard",
+    );
+    fs.appendFileSync(path.join(repo, "plan.md"), "drift\n");
+    assert(
+      uncommittedPlans(record, repo).length === 1,
+      "modified plan not flagged by the archive guard",
+    );
+
     console.log(
       "retire-done-plans self-test OK — validates frontmatter, detects an inbound citation, " +
-        "re-bases a relative link for the added archive depth, and follows a co-moving target.",
+        "re-bases a relative link for the added archive depth, follows a co-moving target " +
+        "whether or not the citation carries a ./ prefix, leaves URLs and absolute paths " +
+        "alone, and refuses to archive an uncommitted plan.",
     );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
@@ -497,6 +601,30 @@ function main() {
     console.log(
       "Run with --apply (the release workflow does this) to move them.",
     );
+    return;
+  }
+
+  let dirtyQueue;
+  try {
+    dirtyQueue = uncommittedPlans(queue);
+  } catch (error) {
+    console.error(
+      `[retire-done-plans] cannot verify the queue is committed (${error.message}); refusing to archive.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (dirtyQueue.length > 0) {
+    console.error(
+      "[retire-done-plans] `status: done` but not fully committed:\n",
+    );
+    for (const { rel } of dirtyQueue) console.error(`  ${rel}`);
+    console.error(
+      "\nArchiving moves a plan into gitignored plans/archive/, where git history is the only\n" +
+        "surviving copy. Commit these first — archiving an untracked or modified plan destroys\n" +
+        "the uncommitted content.",
+    );
+    process.exitCode = 1;
     return;
   }
 

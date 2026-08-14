@@ -94,4 +94,25 @@ describe('ArgumentHistoryTracker', () => {
     expect(reviewContext.previousResults[2]).toBe('Result step 2');
     expect(reviewContext.previousResults[1]).toBe('Result step 1');
   });
+
+  test('totalSteps comes from the run’s size, never from the highest step seen', async () => {
+    for (const step of [1, 2]) {
+      await tracker.trackExecution({
+        promptId: 'chain',
+        sessionId: 'chain-total',
+        originalArgs: {},
+        nodeId: `n${step}`,
+        stepNumber: step,
+        stepResult: `Result ${step}`,
+      });
+    }
+
+    // The caller owns the node list and passes its size. Without the override this method
+    // used `max(stepNumber) + 1` — 1-based ordinals read as a cardinality, so two completed
+    // steps of a five-step chain reported 3, and a finished chain reported one more than it had.
+    expect(tracker.buildReviewContext('chain-total', 2, 5).totalSteps).toBe(5);
+
+    // No override: distinct steps actually seen. A lower bound, not an off-by-one.
+    expect(tracker.buildReviewContext('chain-total', 2).totalSteps).toBe(2);
+  });
 });

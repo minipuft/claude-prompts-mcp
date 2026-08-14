@@ -39,15 +39,22 @@
  * MECHANISM: script — reach — scans `../cli/src` alongside `src/`, outside the ESLint root
  */
 
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { VERDICT, auditExceptions, reportExceptionAudit } from './lib/exception-hygiene.js';
+import { assertNonEmptyScope, trackedFilesUnder } from './lib/tracked-scope.js';
 
 const SERVER = new URL('..', import.meta.url).pathname;
 
-/** The shipping surface. `tests/` is excluded on purpose — see the header. */
+/**
+ * The shipping surface. `tests/` is excluded on purpose — see the header.
+ *
+ * Enumerated via git, not walked (plan row E6): rg pointed at a directory admits untracked files,
+ * so an unrelated session's uncommitted module can red this gate, and skips dot-paths, so a
+ * tracked file can hide from it.
+ */
 const SCOPE = ['src', '../cli/src'];
 
 /**
@@ -121,20 +128,24 @@ export function classify(file, line) {
   return null;
 }
 
+/**
+ * Argument array rather than a shell string: the scope is now ~450 explicit paths, which no
+ * quoting scheme survives intact, and bypassing the shell means the OS argument limit (~2 MB)
+ * applies instead of the shell's.
+ */
 function ripgrep(pattern, paths) {
-  try {
-    return execSync(`rg -n --no-heading '${pattern}' ${paths.join(' ')}`, {
-      encoding: 'utf8',
-      cwd: SERVER,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      maxBuffer: 16 * 1024 * 1024,
-    })
-      .split('\n')
-      .filter((l) => l.trim() !== '');
-  } catch (error) {
-    if (error.status === 1) return []; // rg: no matches
-    throw error;
+  const result = spawnSync('rg', ['-n', '--no-heading', pattern, ...paths], {
+    encoding: 'utf8',
+    cwd: SERVER,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+
+  if (result.status === 1) return []; // rg: no matches
+  if (result.status !== 0) {
+    throw new Error(result.stderr?.trim() || `rg exited ${result.status}`);
   }
+
+  return result.stdout.split('\n').filter((l) => l.trim() !== '');
 }
 
 function splitHit(hit) {
@@ -245,8 +256,11 @@ function main() {
   }
 
   const terms = [...FORBIDDEN.map((f) => f.pattern), ...SCOPED].join('|');
+  const scopeFiles = trackedFilesUnder(SCOPE, { cwd: SERVER });
+  assertNonEmptyScope(scopeFiles, SCOPE, 'validate:no-llm-client');
+
   const violations = [];
-  for (const hit of ripgrep(terms, SCOPE)) {
+  for (const hit of ripgrep(terms, scopeFiles)) {
     const { file, text } = splitHit(hit);
     const reason = classify(file, text);
     if (reason !== null) violations.push(`  ${file}\n    ${text.trim()}\n    ${reason}`);

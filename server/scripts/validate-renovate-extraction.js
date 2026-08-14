@@ -95,8 +95,15 @@ function validateConfig(config, errors) {
     errors.push('resolved global automerge policy must be fail-closed and use Renovate PR merge');
   }
   if (!same(config.schedule, ['* 0-5 * * 1'])) errors.push('resolved maintenance schedule changed');
-  if (config.lockFileMaintenance?.automerge !== true) {
-    errors.push('lock-file maintenance must be eligible for automerge');
+  const lockMaintenance = config.lockFileMaintenance ?? {};
+  if (
+    lockMaintenance.automerge !== true ||
+    lockMaintenance.minimumReleaseAge !== '3 days' ||
+    lockMaintenance.minimumReleaseAgeBehaviour !== 'timestamp-optional'
+  ) {
+    errors.push(
+      'lock-file maintenance must retain automerge, the npm cooldown, and timestamp-optional synthetic-update handling'
+    );
   }
   const alerts = config.vulnerabilityAlerts ?? {};
   if (!same(alerts.addLabels, ['security', 'vulnerability']) || alerts.automerge !== false) {
@@ -229,7 +236,11 @@ function fixtureRows() {
     platformAutomerge: false,
     automergeType: 'pr',
     schedule: ['* 0-5 * * 1'],
-    lockFileMaintenance: { automerge: true },
+    lockFileMaintenance: {
+      automerge: true,
+      minimumReleaseAge: '3 days',
+      minimumReleaseAgeBehaviour: 'timestamp-optional',
+    },
     vulnerabilityAlerts: { addLabels: ['security', 'vulnerability'], automerge: false },
     packageRules: RULES.map(([description, expected]) => ({
       description: [description],
@@ -284,6 +295,10 @@ function main() {
     platformAutomerge[0].config.platformAutomerge = true;
     if (!validateRows(platformAutomerge).length)
       throw new Error('platform automerge bypass passed');
+    const blockedLockMaintenance = fixtureRows();
+    delete blockedLockMaintenance[0].config.lockFileMaintenance.minimumReleaseAgeBehaviour;
+    if (!validateRows(blockedLockMaintenance).length)
+      throw new Error('timestamp-required lock maintenance passed');
     const missingExclusion = fixtureRows();
     const typescriptRule = missingExclusion[0].config.packageRules.find((rule) =>
       rule.description.includes('TypeScript - require manual review')

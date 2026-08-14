@@ -1,0 +1,7 @@
+id: semantic-discoverability
+name: Semantic Discoverability
+type: guidance
+description: >-
+  Guides documentation toward consistent reader terminology and factual search
+  semantics without keyword stuffing.
+guidanceFile: guidance.md

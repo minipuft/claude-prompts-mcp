@@ -130,6 +130,15 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
                 if gate_labels:
                     state["pending_gate"] = ", ".join(g.strip() for g in gate_labels)
 
+        # Sentinel: a review was required but neither extraction found gate ids.
+        # Leaving pending_gate as None here would make state claim "no review
+        # pending" while the server is still waiting for a verdict — that gap
+        # let downstream callers (e.g. delegation arming) act as if the gate
+        # had already cleared. "review" is not indexed as a gate id anywhere;
+        # it is only ever formatted into reminder/denial text or truth-tested.
+        if not state["pending_gate"]:
+            state["pending_gate"] = "review"
+
         # Extract attempt info: (attempt X/Y)
         attempt_match = re.search(r"\(attempt\s+(\d+)/(\d+)\)", content)
         if attempt_match:

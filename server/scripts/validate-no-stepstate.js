@@ -19,20 +19,44 @@
  * i.e. when `StepLifecycle` + `StepMilestone` have been the only vocabulary for a full release.
  *
  * MECHANISM: script — reach — scans `tests/` as well as `src/`, and ESLint globally ignores `tests/` — an AST port would silently halve the scope
+ *
+ * SCOPE: git-tracked files under the targets, not a filesystem walk (plan row E6). Pointing rg at
+ * a directory let untracked files into the scan — measured 2026-08-12, 13 of them under these two
+ * roots alone, mostly a concurrent session's in-flight work. Nobody can act on a gate reddened by
+ * someone else's uncommitted file.
  */
 
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+
+import { assertNonEmptyScope, trackedFilesUnder } from './lib/tracked-scope.js';
 
 const PATTERN = 'StepState';
 const STANDALONE = /(?<![A-Za-z])StepState(?![A-Za-z])/;
 const TARGETS = ['src', 'tests'];
 
 function runCheck() {
-  try {
-    const output = execSync(`rg -n "${PATTERN}" ${TARGETS.join(' ')}`, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+  const files = trackedFilesUnder(TARGETS);
+  assertNonEmptyScope(files, TARGETS, 'validate:no-stepstate');
+
+  // Argument array, not a shell string: ~670 paths survive no quoting scheme intact, and
+  // bypassing the shell means the OS argument limit applies instead of the shell's.
+  const result = spawnSync('rg', ['-n', PATTERN, ...files], {
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  });
+
+  // rg exits 1 on "no matches" — the passing case for this guard.
+  if (result.status === 1) {
+    console.log('No retired StepState enum usage found.');
+    process.exit(0);
+  }
+  if (result.status !== 0) {
+    console.error(result.stderr?.trim() || `rg exited ${result.status}`);
+    process.exit(1);
+  }
+
+  {
+    const output = result.stdout;
 
     const offenders = output
       .trim()
@@ -49,17 +73,7 @@ function runCheck() {
       process.exit(1);
     }
 
-    console.log('No retired StepState enum usage found.');
-  } catch (error) {
-    // rg exits 1 on "no matches" — the passing case for this guard.
-    if (error.status === 1) {
-      console.log('No retired StepState enum usage found.');
-      process.exit(0);
-    }
-
-    const stderr = typeof error.stderr === 'string' ? error.stderr.trim() : '';
-    console.error(stderr !== '' ? stderr : String(error));
-    process.exit(1);
+    console.log(`No retired StepState enum usage found (${files.length} tracked files scanned).`);
   }
 }
 

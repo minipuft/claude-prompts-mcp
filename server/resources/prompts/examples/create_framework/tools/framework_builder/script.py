@@ -89,8 +89,7 @@ def validate_tier2_quality(data: dict[str, Any]) -> tuple[int, list[str]]:
     missing = []
 
     # Framework Gates (15%)
-    # `methodology_gates` is the pre-rename spelling; drafts written before the rename still score.
-    gates = data.get('framework_gates', data.get('methodology_gates', []))
+    gates = data.get('framework_gates', [])
     if not isinstance(gates, list):
         missing.append("[Tier 2 - Gates] framework_gates must be an array")
     elif len(gates) < 2:
@@ -130,7 +129,7 @@ def validate_tier3_authoring(data: dict[str, Any]) -> tuple[int, list[str]]:
     missing = []
 
     # Framework Elements (10%)
-    elements = data.get('framework_elements', data.get('methodology_elements', {}))
+    elements = data.get('framework_elements', {})
     if not isinstance(elements, dict) or not elements:
         missing.append("[Tier 3 - Elements] Missing framework_elements")
     else:
@@ -341,7 +340,7 @@ def validate_phase_consistency(data: dict[str, Any]) -> tuple[list[str], list[st
     valid_references = phase_ids | phase_names
 
     # Check framework_gates reference valid phases
-    for gate in data.get("framework_gates", data.get("methodology_gates", [])):
+    for gate in data.get("framework_gates", []):
         area = gate.get("frameworkArea")
         if area and area not in valid_references:
             errors.append(
@@ -514,7 +513,7 @@ def build_summary(data: dict[str, Any]) -> dict[str, Any]:
     """Build summary of framework contents."""
     return {
         "phases": len(data.get("phases", [])),
-        "framework_gates": len(data.get("framework_gates", data.get("methodology_gates", []))),
+        "framework_gates": len(data.get("framework_gates", [])),
         "processing_steps": len(data.get("processing_steps", [])),
         "execution_steps": len(data.get("execution_steps", [])),
         "quality_indicator_phases": len(data.get("quality_indicators", {})),

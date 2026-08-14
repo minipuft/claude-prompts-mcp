@@ -50,7 +50,11 @@ Repeat until all steps complete.
 
 Chains persist across messages. You don't need to feed the entire history back to the model.
 
-- **Storage**: SQLite database (`runtime-state/state.db`, table `chain_sessions`)
+- **Storage**: SQLite database (`runtime-state/state.db`) — a per-run row in `chain_runs` (header
+  facts: chain id, run owner, status, current node) plus one row per step in `chain_run_nodes`
+  (position, prompt, step lifecycle), both PID-scoped to the owning server process. `chain_sessions`
+  is a derived read-projection of those two tables, rebuilt in the same transaction — the row
+  Python hooks and cross-language consumers actually read.
 - **Resume**: Just provide `chain_id` + `user_response`.
 - **Debug**: Use `system_control(action: "status")` to inspect active sessions.
 
@@ -58,8 +62,196 @@ Chains persist across messages. You don't need to feed the entire history back t
 
 The MCP server recognizes active sessions. If you reply to a chain step, it automatically routes your response to the running session, restoring the execution context.
 
+Resuming a run that already completed returns an "already complete" notice instead of re-opening
+it. Resuming a run parked on its final step without an explicit `chain_id` no longer restarts it
+from step 1 — only an explicit `force_restart` does.
+
 > [!NOTE]
 > Chain sessions are scoped per workspace when [Identity Scope](../guides/identity-scope.md) is configured. Each workspace sees only its own active chains.
+
+---
+
+## Step Identity
+
+Each step in a chain has a stable node id, not just a position. Internally, steps are addressed by
+this id — integer step numbers (`current_step`/`total_steps` in the hook dict, `chain_sessions`
+state-blob keys, the `v_execution_status` view) are a **derived projection** computed from the node
+id at those three boundaries, kept byte-identical to what position-only chains produced before.
+
+- **YAML chains**: a step may declare `id:` explicitly (kebab-case, unique within the chain). When
+  omitted, the id defaults to a slug of `stepName`.
+- **Symbolic chains** (`>>step1 --> >>step2`, no YAML): the parser mints frozen `n1`, `n2`, …
+  ids once at parse time. These never renumber for the life of the run.
+
+Gates may target a step by `target_step_id` in addition to `target_step_number` — see
+[MCP Tools Reference](../reference/mcp-tools.md#chain-step-targeting).
+
+> [!NOTE]
+> **`step{N}_result` template variables are 1-indexed by ordinal, not by step number.** A step's
+> result renders as `step{ordinal+1}_result` — the first step's output is `step2_result`, not
+> `step1_result`. `{{step1_result}}` never resolves for a real chain. This is existing,
+> unchanged arithmetic (`buildChainVariables`), not something P3 introduced or fixed; it is
+> documented here because it is easy to assume otherwise. Prefer `{{step_results}}` (the full map)
+> or `steps.{StepName}.result` in `inputMapping` — both are unaffected.
+
+---
+
+## Completion Semantics
+
+A chain **completes on its final step's PASS gate verdict**, not one call earlier. Concretely:
+
+- The footer on the final step, before its verdict is submitted, states the run is awaiting that
+  verdict — it does not claim completion early.
+- The run's status transitions to `completed` only once the final step's PASS verdict is
+  processed.
+- The first step is ledgered in `execution_records` on the chain-start call, so
+  `system_control(action: "execution_history")` reports the step as planned and executed from the
+  first response onward rather than undercounting by one.
+
+---
+
+## Unknowns Ledger
+
+Steps declare typed unknowns via the `observations` parameter on `prompt_engine`. The server
+accumulates them into a per-run ledger — a two-state machine (`active` <-> `resolved`) keyed by
+a stable `id` — and surfaces it back into every later step's rendered context.
+
+| Transition                       | Effect                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| Discover, new id                 | Appends an active entry stamped at the current step                              |
+| Discover, active id              | Idempotent refresh — statement/blocking update, `discoveredAtStep` unchanged     |
+| Discover, resolved id            | **Re-open** — the unknown returned; re-stamps `discoveredAtStep`                 |
+| Resolve, active id               | Closes the entry — records `resolution`, `resolutionStatement`, `resolvedAtStep` |
+| Resolve, resolved id             | Idempotent refresh — original `resolvedAtStep` is kept, not overwritten          |
+| Resolve, id with no ledger entry | Rejected — surfaces as a tool-result error, not a thrown exception               |
+
+A batch is all-or-nothing: the first invalid observation rejects the whole call before any entry
+is mutated. Observations within one batch apply in order, so a discover immediately followed by a
+resolve for the same `id` in a single call closes that entry right away. The ledger is capped at
+200 entries per run.
+
+**Context surfacing**: the ledger is exposed to templates as `unknowns_ledger` on the chain
+context — present only while non-empty. Each subsequent step's rendered instructions include an
+"Unknowns Ledger" section (blocking-active entries first, then active, then resolved in compact
+one-line form), so later steps see what remains open without re-reading prior step output.
+
+See the [MCP Tools Reference](../reference/mcp-tools.md#unknowns-ledger) for the `observations`
+parameter shape and validation rules.
+
+---
+
+## Adaptive Mutation
+
+A blocking unknown or an irrelevant resolution can change the run's remaining node list — the
+server decides, deterministically, whether and how. The model never edits the graph itself; it
+only ever declares typed observations (D2), and the effect on the run is advisory by construction
+(D6): a mutation is a reaction to what was declared, never a prediction of what should happen next.
+
+**Flow**: observation (via `observations`) -> ledger entry (open/close) -> policy decision ->
+insert or skip -> rendering follows the mutated node list.
+
+| Trigger                                                                                        | Effect                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `unknown_discovered` with `blocking:true`                                                      | Inserts exactly ONE investigation node (prompt `investigate_unknown`) immediately after the current node |
+| `unknown_resolved` with `resolution:"irrelevant"` and a ledger entry carrying `target_step_id` | Skips that target node — but only if it is still strictly ahead of the current step                      |
+
+- **Insertion target is fixed**: the investigation step always lands right after the node where
+  the unknown was declared, regardless of what (if anything) `target_step_id` names — a discovered
+  entry's `target_step_id` only ever feeds the skip side, later, on resolution.
+- **The current node can never be skipped.** A target at or behind the current step is rejected
+  (`target-passed`); this keeps the client's already-rendered view from silently going stale with
+  no way to signal it.
+- **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
+  observation mutates nothing — the call still succeeds, it just has no side effect on the graph.
+- **Skipped nodes are retired, not deleted**: the row stays (`milestone:"skipped"`), so the
+  footer's step count and the ledger's row count share one ordinal scale across the whole run.
+- **Same call, no extra round-trip**: the policy fires inside the observation-carrying call, right
+  after the ledger is updated — an inserted node is already the run's next `chain_id` resume
+  target and next CTA by the time the response goes out.
+
+**What a client sees**: after an insertion, the CTA and rendered body name the new
+`investigate_unknown` step, not whatever previously sat at that position. After a skip, the
+skipped node never renders — the run proceeds straight to the next live node. Rendering, gate
+targeting, step totals, the CTA footer, and the Python hook projection all re-derive from the
+run's current (possibly mutated) node list rather than the original parse-time step list.
+
+**Gates under mutation**: a gate whose `target_step_id` resolves to a node that later gets
+skipped never fires. A step-targeted gate also enters gate REVIEW only on the step it targets —
+an untargeted gate still reviews every step, run-wide inheritance unchanged. Known residual: a
+mutation-inserted node standing as the current step matches no parse-time step, so review falls
+back to run-wide for that step. Inserted investigation nodes carry no gates in v1 — their only
+output is observations, so adding review friction to them would work against the point of
+inserting one.
+
+**Audit trail**: a run's terminal `execution_records` row also carries `nodes_inserted` and
+`nodes_skipped` — how many mutations of each kind happened over the life of the run. See
+[Run Telemetry](#run-telemetry-record-only) below and the
+[MCP Tools Reference](../reference/mcp-tools.md#run-telemetry-line).
+
+---
+
+## Run Telemetry (record-only)
+
+When a run reaches a terminal state, the server stamps complexity facts onto that run's terminal
+`execution_records` row: steps planned, steps executed, gate verdict submissions, the FAIL subset
+of those submissions, unknowns opened / closed, and — since schema v23 — how many nodes the
+adaptive mutation policy inserted and skipped over the run's life (`nodes_inserted`,
+`nodes_skipped`; see [Adaptive Mutation](#adaptive-mutation) above).
+
+They are written at the moment they are true because the state they come from does not survive:
+`chain_sessions`, `chain_runs`, and `chain_run_nodes` are PID-scoped and deleted when the owning
+server exits, and `pendingGateReview.attemptCount` is destroyed the moment a PASS clears the
+review. The ledger row is the only place these numbers persist.
+
+**Recorded, never modeled.** No coefficient, score, threshold, or routing decision is derived from
+any of them, and nothing in the runtime branches on their values. That is a deliberate constraint,
+not an unfinished feature: a scoring model with no named consumer is a guess that ossifies. When a
+consumer exists, it gets built against real history rather than against invented weights.
+
+Both terminal paths carry them — a run that fails mid-chain records the same facts as one that
+completes. Non-terminal per-step rows leave them empty by design.
+
+See [MCP Tools Reference → Run telemetry line](../reference/mcp-tools.md#run-telemetry-line) for
+how they render and exactly what each one counts.
+
+---
+
+## Visibility Policy
+
+A chain step may declare `visibility: { withhold?, expose? }` in `prompt.yaml`, naming which
+chain-run context items later steps do or don't see by default. The vocabulary is fixed —
+`previous_step_output | chain_history | unknowns_ledger` (`VisibilityItem`) — and an unrecognized
+item is rejected when the prompt loads, naming the allowed values.
+
+| Item                   | Governs                                                                                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `previous_step_output` | The `{{previous_step_output}}` / `{{previous_step_result}}` template context. Withheld → a neutral `**[CONTEXT WITHHELD]**` instruction takes its place                                              |
+| `chain_history`        | The `step_results`, `previous_step_results`, `step{N}_result` and `outputs.*` template context — stripped before `inputMapping` runs, so an alias can't re-publish a withheld entry under a new name |
+| `unknowns_ledger`      | The [Unknowns Ledger](#unknowns-ledger) section rendered into a step's instructions — suppressed entirely, not summarized, on both the normal render and the gate-review render                      |
+
+**Semantics**: a step's `withhold` withholds those items from every LATER step's default render;
+a later step's own `expose` overrides that withhold for itself only — a step's own `withhold`
+never affects its own render, and `expose`-ing an item nobody withheld is a harmless no-op. No
+`visibility` declared anywhere in a chain renders byte-identically to a build without this
+feature.
+
+**Named outputs are covered.** `outputMapping` names are published under the reserved `outputs`
+object (`{{outputs.findings}}`, never `{{findings}}`), so withholding `chain_history` removes them
+with the rest of the history. They are deliberately NOT removed by `previous_step_output`: a named
+output is the same content `step{N}_result` publishes positionally, and that item leaves the
+positional keys in place — withholding the alias but not the thing it aliases would make the rule
+depend on which name the author chose. See
+[Named outputs](../reference/chain-schema.md#named-outputs).
+
+### What Visibility Cannot Do
+
+The server cannot unsee the client's own conversation. Withholding applies only to the context
+items the server itself renders into a step (the table above) — anything already sitting in the
+client's context window from an earlier turn stays visible to whatever model reads it there.
+True isolation is the `==>` delegation operator below, which builds the sub-agent a fresh
+context rather than filtering an existing one.
+
+See [MCP Tools Reference](../reference/mcp-tools.md#visibility-policy) for the YAML schema.
 
 ---
 
@@ -71,6 +263,30 @@ Steps can be handed off to sub-agents using the `==>` operator. Delegated steps 
 # Step 2 runs in a sub-agent
 prompt_engine(command:">>research ==> >>analyze --> >>summarize")
 ```
+
+**A step-level `subagentModel` also marks its step delegated on ANY chain invocation**, not only
+after `==>` — a plain `>>chain` call renders the same delegation CTA and handoff envelope for a
+step declaring `subagentModel` in `prompt.yaml` as a command that spells `==>` before it. This
+closed a gap where the YAML field parsed but produced no delegation on the direct invocation
+path. `agentType` alone does not have this effect — see
+[Subagent Model](../reference/chain-schema.md#subagent-model).
+
+A delegated step's envelope also carries the [visibility policy](#visibility-policy) result: any
+item a prior step withheld is excluded from the envelope, and the handoff reports the withheld
+item names on one manifest line —
+
+```
+CONTEXT WITHHELD (names only, values not provided): chain_history
+```
+
+— names only, never the withheld values, across every client profile.
+
+**The handoff target is resolved by node id, not by position.** After an [adaptive
+mutation](#adaptive-mutation) inserts or skips a node, the step a positional offset would name is
+no longer the step the run actually hands off to next; the run's live next-node id is asked for
+directly and matched back to the step it names, so the CTA, the envelope, and its visibility
+manifest all point at the step that will really execute. Legacy chains whose steps carry no `id`
+(and calls made with no active run to ask) keep the pre-existing positional answer unchanged.
 
 ### Model Selection
 
@@ -108,5 +324,6 @@ Names are host-defined and are not validated by the server.
 
 - **[Chain Authoring Example](../guides/chain-authoring-example.md)** — Build a real multi-step pipeline
 - **[Chain Schema Reference](../reference/chain-schema.md)** — `chainSteps` configuration, input mapping, retries
-- **[MCP Tools Reference](../reference/mcp-tools.md)** — `prompt_engine` chain parameters
+- **[Workflow IR Reference](../reference/workflow-ir.md)** — submit a structured, node-addressed multi-step run through `prompt_engine`'s `workflow` parameter; compiles to an ordinary chain run through this same lifecycle
+- **[MCP Tools Reference](../reference/mcp-tools.md)** — `prompt_engine` chain parameters, [Visibility Policy schema](../reference/mcp-tools.md#visibility-policy)
 - **[Gates Guide](../guides/gates.md)** — Add validation between chain steps

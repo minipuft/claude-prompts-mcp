@@ -29,13 +29,15 @@ export type prompt_engineParamName =
   | 'gate_action'
   | 'gates'
   | 'force_restart'
-  | 'options';
+  | 'options'
+  | 'observations'
+  | 'workflow';
 export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'command',
     type: 'string',
     description:
-      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset',
+      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset',
     required: false,
     status: 'working',
     compatibility: 'canonical',
@@ -110,6 +112,7 @@ export const prompt_engineParameters: ToolParameter[] = [
     notes: [
       'RECOMMENDED: Quick Gates {name, description} auto-default to severity:medium, type:validation.',
       'Full schema: id, name, severity, criteria[], pass_criteria[], guidance, apply_to_steps[].',
+      "Chain step targeting: target_step_number (1-based position) or target_step_id (stable node id, e.g. 'draft-outline' or 'n2'). Either addresses one step; supply whichever you have.",
       'Shell Verification: Use presets for common patterns. loop:true enables autonomous retry until pass.',
       'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
     ],
@@ -117,7 +120,8 @@ export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'force_restart',
     type: 'boolean',
-    description: 'Restart chain from step 1, ignoring cached state.',
+    description:
+      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id.",
     status: 'working',
     compatibility: 'canonical',
   },
@@ -128,13 +132,50 @@ export const prompt_engineParameters: ToolParameter[] = [
     status: 'working',
     compatibility: 'canonical',
   },
+  {
+    name: 'observations',
+    type: 'array<{type,id,statement,blocking?,target_step_id?,resolution?}>',
+    description:
+      "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false, target_step_id?:'...'}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement). `target_step_id` on a discovered entry names the downstream step (stable node id, e.g. 'draft-outline' or 'n3') the adaptive mutation policy skips if this unknown later resolves 'irrelevant'.",
+    status: 'working',
+    compatibility: 'canonical',
+    examples: [
+      '[{"type": "unknown_discovered", "id": "cache-ttl-unknown", "statement": "TTL for the new cache layer is undecided", "blocking": false, "target_step_id": "draft-outline"}]',
+      '[{"type": "unknown_resolved", "id": "cache-ttl-unknown", "statement": "TTL confirmed at 300s per ops runbook", "resolution": "answered"}]',
+    ],
+    notes: [
+      "Applied to the run's unknowns ledger at capture time, in the same call that carries the observation — no extra round-trip.",
+      '`id` must be kebab-case and stable within the run so re-discovery of the same id updates rather than duplicates.',
+      "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
+      "A blocking `unknown_discovered` (with or without `target_step_id`) inserts one `investigate_unknown` step immediately after the current node; `target_step_id` instead governs the skip side — a later `unknown_resolved` with resolution 'irrelevant' skips that ledger entry's target once it is strictly ahead of the current step. Capped at 1 insertion per unknown id and 3 per run. The server never infers a target and only ever mutates in reaction to an observation — enforcement stays advisory.",
+    ],
+  },
+  {
+    name: 'workflow',
+    type: '{version,nodes[],edges?,gates?,budget?}',
+    description:
+      "Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with 'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by precedence. SHAPE: `{version:1, nodes:[{id:'kebab-case', promptId:'...', stepName?:'...', args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:[...], expose?:[...]}, subagentModel?:'heavy'|'standard'|'fast', agentType?:'...', framework?:'...', retries?:0, inlineGateIds?:['gate-id']}], edges?:[{from:'node-a', to:'node-b'}], gates?:[<same shapes as the 'gates' parameter>], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>}}`. Full field reference: docs/reference/workflow-ir.md.",
+    status: 'working',
+    compatibility: 'canonical',
+    examples: [
+      '{"version": 1, "nodes": [{"id": "research", "promptId": "research_docs"}, {"id": "draft", "promptId": "write_summary"}], "edges": [{"from": "research", "to": "draft"}]}',
+      '{"version": 1, "nodes": [{"id": "gather", "promptId": "research_docs", "args": {"topic": "caching"}, "outputMapping": {"findings": "gather"}}, {"id": "review", "promptId": "code_review", "subagentModel": "fast", "visibility": {"withhold": ["chain_history"]}}], "edges": [{"from": "gather", "to": "review"}], "gates": [{"id": "source-quality", "target_step_id": "gather"}], "budget": {"maxInsertions": 1, "declaredCostCeiling": 50000}}',
+    ],
+    notes: [
+      "EDGES ARE DEPENDENCIES, NOT BRANCHES. There is no branching runtime; edges are linearized into one total order (Kahn's algorithm, ties broken by declaration order). With no edges the run order is nodes[] exactly as written, so a client that already knows its order can simply write it.",
+      "Node ids are the SAME id space as a gate's target_step_id and an observation's target_step_id. A workflow gate binds to a node by declaring target_step_id: '<node id>'.",
+      'Structural caps (maxNodes, maxFanOut, maxInsertions) are ENFORCED and may only NARROW the server defaults — asking for a wider cap is rejected, never silently clamped. declaredCostCeiling is RECORDED on the run and never enforced: the server does not meter client tokens.',
+      'Rejection is all-or-nothing and writes nothing: an invalid workflow returns one addressed line per problem ([reason] node "x": detail) and creates no run, no session and no version. Every reason names the node or edge it is about.',
+      'Never state-narrowed. Unlike the three gate parameters, this one is advertised in every reachable shape, so it can never be silently dropped from a call.',
+    ],
+  },
 ];
 
 export const prompt_engineCommands: ToolCommand[] = [
   {
     id: 'chain-resume',
     summary: 'Resume chain via chain_id + user_response/gate_verdict/gate_action',
-    parameters: ['chain_id', 'user_response', 'gate_verdict', 'gate_action'],
+    parameters: ['chain_id', 'user_response', 'gate_verdict', 'gate_action', 'observations'],
     status: 'working',
   },
 ];

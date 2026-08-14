@@ -1,21 +1,78 @@
-# Skills Sync Configuration
-# Used by: tsx scripts/skills-sync.ts export|diff|pull
+# Skills Sync — worked example
 #
-# Copy this file to skills-sync.yaml and customize your exports list.
-#   cp skills-sync.example.yaml skills-sync.yaml
+# This file is DOCUMENTATION. Nothing reads it; `skills-sync.yaml` beside it is the live config.
+# Copy the block you want out of here and into that file.
 #
-# Client knowledge (adapters, output dirs, capabilities) is built into the CLI.
-# This file controls WHAT to export. The CLI handles HOW.
+# WHY IT EXISTS
+# Every `registrations` entry exports on every `npm run skills:export`, so an entry committed to
+# this repository becomes the default for everyone who installs it. Which resources a given
+# installation should ship is a local choice — one team wants its chain prompts as skills, another
+# wants none — so the shipped `skills-sync.yaml` registers nothing for `agent-plugins` and this
+# file carries the syntax you need when you decide to.
+#
+# The export OUTPUT is gitignored for the same reason (see .gitignore `skills/`). Re-run the
+# export rather than committing what it produced.
 
-# Opt-in resource allow-list. Only listed resources are exported.
-# Format: {resourceType}:{category}/{id} for prompts, {resourceType}:{id} for others.
-# Set to 'all' to export everything.
-exports:
-  - prompt:development/validate_work
-  - prompt:development/review
+# ── The grammar ────────────────────────────────────────────────────────────────────────────────
+#
+# registrations:
+#   <client-id>:  'all' | { user?: [<key>...], project?: [<key>...] }
+#
+# A client id that is ABSENT, commented out, or mapped to anything else resolves to
+# `unregistered` and is skipped with a message — it is not an error.
+#
+# <key> is `prompt:<category>/<id>` — exactly what `manifestKey` builds (service.ts:1269).
+# Run `npm run skills:diff` to see the keys available in your workspace before guessing one.
 
-# Optional: override default output directories per client.
-# Omit entirely to use conventions (~/.{client}/skills/, etc.)
+# ── Client ids and where each writes ───────────────────────────────────────────────────────────
+#
+# | client id     | user scope                 | project scope   | scripts | refs | assets | subagents |
+# | ------------- | -------------------------- | --------------- | ------- | ---- | ------ | --------- |
+# | claude-code   | ~/.claude/skills           | .claude/skills  | yes     | yes  | no     | yes       |
+# | cursor        | ~/.cursor/skills           | .cursor/skills  | yes     | yes  | yes    | yes       |
+# | codex         | ~/.codex/skills            | .codex/skills   | yes     | yes  | yes    | no        |
+# | opencode      | ~/.config/opencode/skills  | .opencode/skills| no      | no   | no     | yes       |
+# | agent-plugins | ~/.agent-plugins/skills    | skills          | yes     | yes  | yes    | no        |
+#
+# A capability marked `no` is dropped during export, not an error — an opencode skill loses its
+# scripts and references because the client cannot load them.
+
+# ── Example: enabling the Agent Plugins native package ─────────────────────────────────────────
+#
+# Use `project` scope ONLY for agent-plugins. The Agent Plugins 1.0.0 spec fixes skills at
+# `skills/<name>/SKILL.md` relative to the PLUGIN root, so `project` is a bare `skills` directory
+# beside plugin.json. A `user` export would write to ~/.agent-plugins/skills, outside the plugin,
+# and would never be shipped in the package.
+
+registrations:
+  agent-plugins:
+    project:
+      - prompt:examples/reference_demo
+      - prompt:development/dev-workflow
+
+  # ── Example: export everything to one client ─────────────────────────────────────────────────
+  # `all` ignores scope filtering and exports every discoverable resource. Convenient locally,
+  # noisy in a package — an installer gets every prompt this workspace happens to contain.
+  #
+  # cursor: all
+
+  # ── Example: different sets per scope ────────────────────────────────────────────────────────
+  # `user` installs into your home directory (available in every project); `project` installs into
+  # this repository (available to anyone who checks it out). The same key may appear in both.
+  #
+  # claude-code:
+  #   user:
+  #     - prompt:development/dev-workflow
+  #   project:
+  #     - prompt:examples/reference_demo
+
+# ── Overriding where a client's skills land ────────────────────────────────────────────────────
+#
+# Output directories come from the built-in client registry (the table above). Override per client
+# and per scope when a client is installed somewhere non-standard. Omit the block entirely to use
+# the conventions; an omitted scope keeps its default, so you can override `user` without
+# restating `project`.
+#
 # overrides:
 #   claude-code:
 #     outputDir:
@@ -23,3 +80,19 @@ exports:
 #   cursor:
 #     outputDir:
 #       project: .cursor/custom-skills
+
+# ── Commands ───────────────────────────────────────────────────────────────────────────────────
+#
+#   npm run skills:diff                  what WOULD change — run this first
+#   npm run skills:export                write the skills for every registered client
+#   npx tsx scripts/skills-sync.ts sync  export, then PRUNE what this file no longer registers
+#
+# Only `export`, `diff` and `pull` have npm aliases; `sync` and `patch` dispatch but must be
+# invoked through the script directly. Add `--dry-run` to any of them.
+#
+# `sync` DELETES: it removes previously-exported directories that are no longer registered, using
+# the manifest in state.db (`skills_sync_manifests`). Removing a key here and running sync is how
+# you deregister a skill — deleting the directory by hand leaves the manifest stale, and the
+# manifest is what prune reads.
+#
+# Full guide: docs/guides/skills-sync.md

@@ -521,9 +521,8 @@ A file is considered "type-safe compliant" when:
 
 ## Related Documents
 
-- [TypeScript Style Guide](./TYPESCRIPT_STYLE_GUIDE.md) - Coding standards and patterns
-- [Contributing Guide](./contributing.md) - Development workflow
-- [Architecture](./architecture.md) - System design and patterns
+- [Contributing Guide](../../../CONTRIBUTING.md) - Development workflow
+- [Architecture](../../../docs/architecture/overview.md) - System design and patterns
 
 ---
 

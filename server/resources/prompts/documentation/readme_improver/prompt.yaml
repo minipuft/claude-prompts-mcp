@@ -1,0 +1,38 @@
+id: readme_improver
+name: Documentation Writer (Diátaxis)
+category: documentation
+description: >-
+  Writes or refactors documentation following the Diátaxis framework. Supports
+  all 4 quadrants: tutorials (learning), how-to guides (tasks), reference
+  (lookup), and explanation (understanding). Also handles hybrid READMEs that
+  combine elements. Includes a prose-hygiene pass that strips AI-cadence tells
+  (em-dash connectors, aphorism overuse, triad flourishes) and enforces
+  voice-through-diction over voice-through-devices.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: doc_type
+    required: true
+    description: >-
+      Document type (Diátaxis quadrant): • tutorial - Learning-oriented, guided
+      lessons ("Let's build...") • howto - Task-oriented, solve specific
+      problems ("To do X, run Y") • reference - Information-oriented, lookup
+      tables, API specs (dry, precise) • explanation - Understanding-oriented,
+      concepts and "why" (conversational) • readme - Hybrid for root READMEs
+      (hook + quick start + features + links)
+    type: string
+  - name: content
+    required: false
+    description: The existing content to refactor, or a feature list/notes to document.
+    type: string
+  - name: context
+    required: false
+    description: >-
+      Location and purpose (e.g., "Root README", "API reference for auth
+      module", "Tutorial for first-time users", "Internal dev guide").
+    type: string
+  - name: audience
+    required: false
+    description: >-
+      Target audience: beginner | intermediate | expert | mixed. Affects depth
+      and assumed knowledge.
+    type: string

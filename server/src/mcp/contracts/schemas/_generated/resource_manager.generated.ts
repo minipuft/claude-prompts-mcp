@@ -34,9 +34,16 @@ export type resource_managerParamName =
   | 'user_message_template'
   | 'system_message'
   | 'arguments'
+  | 'patch'
+  | 'dry_run'
   | 'chain_steps'
   | 'tools'
   | 'gate_configuration'
+  | 'injection'
+  | 'register_with_mcp'
+  | 'mcp_prompt_mode'
+  | 'subagent_model'
+  | 'agent_type'
   | 'execution_hint'
   | 'filter'
   | 'format'
@@ -62,7 +69,7 @@ export type resource_managerParamName =
 export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'resource_type',
-    type: 'enum[prompt|gate|framework|checkpoint]',
+    type: 'enum[prompt|gate|framework]',
     description: 'Type of resource to manage. Routes to appropriate handler.',
     required: true,
     status: 'working',
@@ -72,7 +79,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]',
     description:
-      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/framework). Checkpoint: create/rollback/list/delete/clear.',
+      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework). Versioning: history/rollback/compare (prompt/gate/framework).',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -109,7 +116,8 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'confirm',
     type: 'boolean',
-    description: 'Safety confirmation for delete operation.',
+    description:
+      'Required `true` for destructive actions — `delete` and `rollback` both refuse without it. Deletion cannot be undone: rollback cannot restore a deleted prompt.',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -146,8 +154,27 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'arguments',
-    type: 'array<{name,required?,description?,type?}>',
-    description: '[Prompt] Argument definitions for the prompt.',
+    type: 'array<{name,required?,description?,type?,defaultValue?,validation?}>',
+    description:
+      "[Prompt] Argument definitions for the prompt. `type` is one of string|number|boolean|array|object. `required` and `defaultValue` are persisted to the prompt's YAML; `validation` accepts pattern/minLength/maxLength and is what arms required-argument enforcement at execution.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'patch',
+    type: 'array<{field,old_string,new_string,replace_all?}>',
+    description:
+      '[Prompt] Anchored edits applied server-side on `update`, so one section can be changed without resending the rest. `field` is user_message_template|system_message|description; `old_string` must match the current text EXACTLY (whitespace included) and uniquely, otherwise the update is rejected naming the anchor and its occurrence count; `new_string` may be empty to delete. Operations apply in order. Pass `replace_all: true` to accept a multi-occurrence anchor. Mutually exclusive with `user_message_template`/`system_message` in the same call. Combine with `dry_run: true` to preview.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'dry_run',
+    type: 'boolean',
+    description:
+      '[Prompt] Preview an `update`: returns the resulting text bodies and the diff without writing the file or recording a version. Works for a full update as well as a `patch`.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -174,6 +201,50 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'object',
     description:
       '[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'injection',
+    type: 'object',
+    description:
+      "[Prompt] Prompt-level injection control. Keys: system-prompt, gate-guidance, style-guidance; each takes {enabled?: boolean, frequency?: {mode: every|first-only|never, interval?: number}, target?: steps|gates|both}. A prompt's own declaration outranks the chain or category it runs inside. Omit to leave the prompt's existing block untouched.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'register_with_mcp',
+    type: 'boolean',
+    description:
+      '[Prompt] Whether this prompt registers as a native MCP prompt. FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'mcp_prompt_mode',
+    type: 'enum[expand|launch]',
+    description:
+      '[Prompt] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'subagent_model',
+    type: 'enum[heavy|standard|fast]',
+    description: "[Prompt] Client-agnostic capability hint for this prompt's ==> delegated steps.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'agent_type',
+    type: 'string',
+    description:
+      "[Prompt] Default host agent for this prompt's ==> delegated steps. A step's own agentType overrides it; neither present falls back to chain-executor.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -377,6 +448,11 @@ export const resource_managerCommands: ToolCommand[] = [
       'chain_steps',
       'tools',
       'gate_configuration',
+      'injection',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+      'subagent_model',
+      'agent_type',
       'execution_hint',
     ],
     status: 'working',
@@ -397,6 +473,11 @@ export const resource_managerCommands: ToolCommand[] = [
       'chain_steps',
       'tools',
       'gate_configuration',
+      'injection',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+      'subagent_model',
+      'agent_type',
     ],
     status: 'working',
   },
@@ -545,36 +626,6 @@ export const resource_managerCommands: ToolCommand[] = [
     id: 'common:compare',
     summary: 'Compare two versions of a resource.',
     parameters: ['resource_type', 'action', 'id', 'from_version', 'to_version'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:create',
-    summary: 'Create a git checkpoint (stash) before risky operations.',
-    parameters: ['resource_type', 'action', 'name', 'description'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:rollback',
-    summary: 'Rollback to a previously created checkpoint.',
-    parameters: ['resource_type', 'action', 'name', 'confirm'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:list',
-    summary: 'List all active checkpoints.',
-    parameters: ['resource_type', 'action'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:delete',
-    summary: 'Delete a checkpoint without restoring changes.',
-    parameters: ['resource_type', 'action', 'name', 'confirm'],
-    status: 'working',
-  },
-  {
-    id: 'checkpoint:clear',
-    summary: 'Clear all checkpoints.',
-    parameters: ['resource_type', 'action', 'confirm'],
     status: 'working',
   },
 ];

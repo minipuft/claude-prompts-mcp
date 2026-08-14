@@ -6,6 +6,9 @@
  * MCP tool requests, validation, and execution context types.
  */
 
+import type { WorkflowIR } from '#modules/workflow-ir/types.js';
+import type { UnknownObservation } from './chain-session.js';
+
 /** Scope for gate validation application */
 export type GateScope = 'execution' | 'session' | 'chain' | 'step';
 
@@ -50,6 +53,12 @@ export type TemporaryGateInput =
       readonly source?: 'manual' | 'automatic' | 'analysis';
       /** Target specific step number in chain execution */
       readonly target_step_number?: number;
+      /**
+       * Target a specific step by its stable node id (kebab-case, or `nK` for symbolic chains).
+       * Sibling of `target_step_number`, not a replacement — a gate may carry either, and the
+       * registrar fills in whichever was not supplied.
+       */
+      readonly target_step_id?: string;
       /** Apply to multiple steps in chain execution */
       readonly apply_to_steps?: readonly number[];
     };
@@ -138,6 +147,26 @@ export interface McpToolRequest {
 
   /** Additional execution options forwarded to downstream stages */
   readonly options?: Record<string, unknown>;
+
+  /**
+   * Typed unknowns discovered/resolved by the current step, feeding the
+   * per-run unknowns ledger. Tier 1/2: threaded through unchanged; not yet
+   * consumed by the pipeline (lands in Tier 3).
+   */
+  readonly observations?: readonly UnknownObservation[];
+
+  /**
+   * A planner-submitted Workflow IR (P6 Tier 5) — the third command source, beside a command
+   * string and a chain resume. Mutually exclusive with `command` and `chain_id`: a request
+   * carrying more than one is a typed rejection, not a precedence puzzle.
+   *
+   * Typed by direct reference to `modules/workflow-ir/` rather than restated structurally here.
+   * The restatement would be a fifth hand-maintained copy of a shape that already has four
+   * (P6-F8), and the shape is the Zod schema's SSOT — a divergent copy in `shared/` would be
+   * invisible to `tsc` on the one path that matters. The import is type-only, so it lands under
+   * `shared-cross-layer-type-only` (warn, tracked) and not the value-import error.
+   */
+  readonly workflow?: WorkflowIR;
 
   /** Raw MCP SDK extra payload (authInfo, headers, sessionId) captured at tool boundary */
   readonly _extra?: Record<string, unknown>;

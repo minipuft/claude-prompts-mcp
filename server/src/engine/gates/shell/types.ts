@@ -25,7 +25,8 @@
  * - :full     → max:5, timeout:300  (CI-style)
  * - :extended → max:10, timeout:600 (long tests)
  *
- * Checkpoint/rollback functionality is available via resource_manager.
+ * Checkpoint/rollback was removed in the 4.0 line: it wrapped `git stash`, its handler was
+ * never constructed, and exposing stash operations to a client is unsafe in a shared worktree.
  */
 export interface ShellVerifyGate {
   /** The shell command to execute for verification */

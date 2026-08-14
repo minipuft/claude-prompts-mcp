@@ -196,12 +196,6 @@
           "default": true,
           "description": "Apply framework-specific quality gates"
         },
-        "methodologyGates": {
-          "type": "boolean",
-          "default": true,
-          "deprecated": true,
-          "description": "Deprecated pre-rename spelling of frameworkGates; still read, folded forward by ConfigManager"
-        },
         "evaluation": {
           "type": "object",
           "description": "Judge evaluation defaults. Gates with evaluation.mode 'judge' use context-isolated review via delegation.",

@@ -1,5 +1,6 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
 import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
+import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -11,6 +12,7 @@ import type { ChainOperatorExecutor } from '../../operators/chain-operator-execu
 import type { ChainStepRenderResult } from '../../operators/types.js';
 import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';
 
+import { isRunComplete } from '#shared/types/chain-session.js';
 import { processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
@@ -55,20 +57,22 @@ export class StepExecutionStage extends BasePipelineStage {
     }
 
     // Session-completion check for ANY session-based execution (chains and gated single prompts).
-    // After gate verdict PASS, advanceStep() moves currentStep beyond totalSteps.
-    // Without this check, single prompts re-render instead of completing.
-    if (context.sessionContext) {
-      const { currentStep = 1 } = context.sessionContext;
-      const totalSteps = context.sessionContext.totalSteps ?? 0;
-      if (totalSteps > 0 && currentStep > totalSteps) {
-        context.state.session.chainComplete = true;
-        context.executionResults = {
-          content: 'Execution complete.',
-          generatedAt: Date.now(),
-        };
-        this.logExit({ skipped: 'Session complete', currentStep, totalSteps });
-        return;
-      }
+    // Latched on run identity (terminal runStatus, or the run standing past its last node),
+    // never on `currentStep > totalSteps`: that arithmetic cannot distinguish "on the final
+    // step, verdict outstanding" from "finished", and reading it as finished is what made the
+    // footer promise completion one call early.
+    if (context.sessionContext && this.isRunFinished(context)) {
+      context.state.session.chainComplete = true;
+      context.executionResults = {
+        content: 'Execution complete.',
+        generatedAt: Date.now(),
+      };
+      this.logExit({
+        skipped: 'Session complete',
+        currentStep: context.sessionContext.currentStep,
+        totalSteps: context.sessionContext.totalSteps,
+      });
+      return;
     }
 
     // Execute the prompt/chain step regardless of pending review
@@ -80,6 +84,29 @@ export class StepExecutionStage extends BasePipelineStage {
     }
 
     await this.executeSinglePrompt(context);
+  }
+
+  /**
+   * Has this run finished?
+   *
+   * The store is authoritative — it latches `runStatus` the moment `advanceStep` moves past the
+   * terminal node. Where the session cannot be read (single prompts with no run, formatter-only
+   * harnesses), the pipeline's own `currentNodeId === null` carries the same fact, set by the
+   * session stage and by the verdict processor from `advanceStep`'s return. An *undefined*
+   * `currentNodeId` means "unknown", not "complete", so it deliberately reads as unfinished.
+   */
+  private isRunFinished(context: ExecutionContext): boolean {
+    const sessionContext = context.sessionContext;
+    if (sessionContext === undefined) return false;
+
+    const session = this.chainSessionStore.getSession(
+      sessionContext.sessionId,
+      context.getScopeOptions()
+    );
+    if (session !== undefined) {
+      return isRunComplete(session);
+    }
+    return sessionContext.currentNodeId === null;
   }
 
   private async executeChainStep(context: ExecutionContext): Promise<void> {
@@ -100,43 +127,40 @@ export class StepExecutionStage extends BasePipelineStage {
       throw new Error('Execution plan not available for chain execution');
     }
 
-    const totalSteps = steps.length;
-    const currentStepNumber = session.currentStep ?? 1;
-    const isChainComplete = totalSteps > 0 && currentStepNumber > totalSteps;
-    const normalizedStepNumber = totalSteps > 0 ? Math.min(currentStepNumber, totalSteps) : 1;
-    const currentStepIndex = Math.max(0, normalizedStepNumber - 1);
+    // Render order comes from the RUN's node list, not from the parse-time array (P4 row 3.4,
+    // DEV-T3-7). Indexing `steps` by the run's ordinal was correct only while the two lists were
+    // the same length: after an adaptive insertion every later node rendered the prompt one
+    // ordinal early, and the `Math.min` clamp that used to live here made the last real node
+    // unreachable. `parsedCommand.steps` is still what carries per-step authoring data — it is
+    // now looked up by node id inside the projection instead of by position.
+    const scopeOptions = context.getScopeOptions();
+    const run = this.chainSessionStore.getSession(session.sessionId, scopeOptions);
+    const plan = planNodeDrivenRender({
+      nodes: run?.state.nodes ?? [],
+      parseSteps: steps,
+      // The store's own view wins over the pipeline's copy, which can lag by a call.
+      currentNodeId: run?.state.currentNodeId ?? session.currentNodeId,
+      fallbackOrdinal: session.currentStep ?? 1,
+      ledger: run?.unknownsLedger,
+    });
+    const renderSteps = plan.steps;
+    const currentStepIndex = plan.currentIndex;
 
-    // Persist completion awareness for downstream stages/formatting
-    if (isChainComplete) {
-      context.state.session.chainComplete = true;
-      context.executionResults = {
-        content:
-          'Chain already complete. No further user_response is required unless a gate review is pending.',
-        metadata: {
-          promptId: 'chain-complete',
-          promptName: 'chain-complete',
-          stepNumber: normalizedStepNumber,
-          totalSteps,
-          callToAction: 'Chain complete. Provide gate_verdict only if requested.',
-        },
-        generatedAt: Date.now(),
-      };
-      this.logExit({
-        skipped: 'Chain already complete',
-        currentStep: currentStepNumber,
-        totalSteps,
-      });
-      return;
-    }
+    // A second, ordinal-derived completion branch used to live here, emitting
+    // "Chain already complete. No further user_response is required…". It was the same
+    // `currentStep > totalSteps` inference the stage entry point now makes from run identity,
+    // so it can only be reached after that check has already returned. Removed rather than
+    // rewritten: two completion decisions is how the rendered contract came to disagree with
+    // the stored run status.
 
-    const currentStep = steps[currentStepIndex];
+    const currentStep = renderSteps[currentStepIndex];
     if (!currentStep) {
       this.handleError(new Error('Current step not found during execution'));
       return;
     }
     const chainContextSnapshot = this.chainSessionStore.getChainContext(
       session.sessionId,
-      context.getScopeOptions()
+      scopeOptions
     );
 
     const normalizedStepArgs = currentStep.args ?? {};
@@ -148,7 +172,7 @@ export class StepExecutionStage extends BasePipelineStage {
 
     const renderResult = await this.chainOperatorExecutor.renderStep({
       executionType: 'normal',
-      stepPrompts: steps,
+      stepPrompts: renderSteps,
       currentStepIndex,
       chainContext: {
         ...chainContextSnapshot,
@@ -160,6 +184,12 @@ export class StepExecutionStage extends BasePipelineStage {
         clientProfile: context.state.identity.context?.clientProfile,
         promptArgs: normalizedStepArgs,
         currentStepArgs: normalizedStepArgs,
+        // `getChainContext` derives `input` by indexing the BLUEPRINT's step array with the run
+        // ordinal — the same positional read this stage just stopped making. Overriding it with
+        // the resolved node's own args keeps `{{input}}` on the node-driven answer. Only when
+        // there are args to publish: an empty override would introduce an `input` key on runs
+        // that never had one.
+        ...(Object.keys(normalizedStepArgs).length > 0 ? { input: normalizedStepArgs } : {}),
         suppressFrameworkInjection, // Pass injection decision to chain executor
         injectionState: context.state.injection, // Also pass full injection state
       },
@@ -174,11 +204,16 @@ export class StepExecutionStage extends BasePipelineStage {
         sessionId: session.sessionId,
         chainId: session.chainId,
         stepNumber: renderResult.stepNumber,
+        // Identity of the rendered step. `currentStep.nodeId` is the id minted at parse time on
+        // the very step object just handed to the renderer, so it cannot disagree with what was
+        // rendered — `session.currentNodeId` is the store's view and can lag by a call. Optional
+        // per D4/D10, so a chain parsed before minting binds NULL rather than a guess.
+        ...(currentStep.nodeId !== undefined ? { nodeId: currentStep.nodeId } : {}),
         promptId: renderResult.promptId,
         status: 'working',
         substate: { renderedAt },
         startedAt: renderedAt,
-        scope: context.getScopeOptions(),
+        scope: scopeOptions,
       });
     }
 
@@ -189,6 +224,9 @@ export class StepExecutionStage extends BasePipelineStage {
       promptId: renderResult.promptId,
       contentLength: renderResult.content.length,
       gateCount: executionPlan.gates?.length ?? 0,
+      // Whether the run's node list drove this render, or the parse-time array did. A chain
+      // parsed before node-id minting falls back positionally and cannot render an insertion.
+      nodeDriven: plan.nodeDriven,
     });
 
     this.logExit({ stepRendered: renderResult.stepNumber });

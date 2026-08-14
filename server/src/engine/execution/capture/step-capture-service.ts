@@ -4,7 +4,20 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 
+import { currentOrdinal, nodeIdAt, totalOf } from '#shared/utils/node-order.js';
+
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
+
+/**
+ * The step a capture call is acting on, carried as identity + position together.
+ *
+ * Both are needed and neither derives the other cheaply here: the store is addressed by
+ * `nodeId`, while placeholder text, output mappings and diagnostics are all positional.
+ */
+interface StepTarget {
+  readonly ordinal: number;
+  readonly nodeId: string;
+}
 
 /**
  * Input from verdict processing that affects step capture behavior.
@@ -51,18 +64,12 @@ export class StepCaptureService {
         : undefined;
     const hasUserResponseForCapture = captureResponse !== undefined;
 
-    // Determine target step number:
-    // - If user_response provided: capture for CURRENT step (the one just rendered)
-    // - Otherwise: capture placeholder for PREVIOUS step
-    const targetStepNumber = hasUserResponseForCapture
-      ? currentStepAtStart
-      : currentStepAtStart - 1;
-
-    if (!this.shouldCaptureStep(targetStepNumber, session.state.totalSteps)) {
+    const target = this.resolveTarget(session, currentStepAtStart, hasUserResponseForCapture);
+    if (target === undefined) {
       return;
     }
 
-    const existingState = this.chainSessionStore.getStepState(sessionId, targetStepNumber);
+    const existingState = this.chainSessionStore.getStepState(sessionId, target.nodeId);
     if (existingState?.state === 'completed' && !existingState.isPlaceholder) {
       return;
     }
@@ -74,7 +81,7 @@ export class StepCaptureService {
           sessionId,
           session,
           sessionContext,
-          targetStepNumber,
+          target,
           captureResponse,
           input.passClearedThisCall
         );
@@ -88,7 +95,7 @@ export class StepCaptureService {
           context,
           sessionId,
           session,
-          targetStepNumber,
+          target,
           captureResponse,
           input.passClearedThisCall
         );
@@ -96,8 +103,8 @@ export class StepCaptureService {
         await this.capturePlaceholder(
           sessionId,
           session.chainId,
-          targetStepNumber,
-          session.state.totalSteps
+          target,
+          totalOf(session.state.nodes)
         );
       }
 
@@ -110,31 +117,46 @@ export class StepCaptureService {
     }
   }
 
-  private shouldCaptureStep(stepNumber: number | undefined, totalSteps: number): boolean {
-    if (stepNumber === undefined || stepNumber < 1) {
-      return false;
+  /**
+   * Resolve which step this call captures for, as BOTH the identity the store addresses by and
+   * the position everything else in the pipeline still speaks.
+   *
+   * - user_response present: capture for the CURRENT step (the one just rendered)
+   * - otherwise: capture a placeholder for the PREVIOUS step
+   *
+   * Returns undefined when the position falls outside the run — before its first step, past its
+   * last, or on no node at all. All three mean "nothing to capture", and collapsing them here
+   * keeps the decision in one place instead of three guards at the call site.
+   */
+  private resolveTarget(
+    session: ChainSession,
+    currentStepAtStart: number,
+    hasUserResponseForCapture: boolean
+  ): StepTarget | undefined {
+    const ordinal = hasUserResponseForCapture ? currentStepAtStart : currentStepAtStart - 1;
+    const totalSteps = totalOf(session.state.nodes);
+    if (totalSteps > 0 && ordinal > totalSteps) {
+      return undefined;
     }
-    if (totalSteps > 0 && stepNumber > totalSteps) {
-      return false;
-    }
-    return true;
+    const nodeId = nodeIdAt(session.state.nodes, ordinal);
+    return nodeId === null ? undefined : { ordinal, nodeId };
   }
 
   private async capturePlaceholder(
     sessionId: string,
     chainId: string,
-    stepNumber: number,
+    target: StepTarget,
     totalSteps: number
   ): Promise<void> {
-    const placeholderContent = this.buildPlaceholderContent(chainId, stepNumber, totalSteps);
+    const placeholderContent = this.buildPlaceholderContent(chainId, target.ordinal, totalSteps);
 
-    await this.chainSessionStore.updateSessionState(sessionId, stepNumber, placeholderContent, {
+    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, placeholderContent, {
       isPlaceholder: true,
       placeholderSource: PLACEHOLDER_SOURCE,
       capturedAt: Date.now(),
     });
 
-    await this.chainSessionStore.completeStep(sessionId, stepNumber, {
+    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: true,
     });
   }
@@ -142,26 +164,26 @@ export class StepCaptureService {
   private async captureRealResponse(
     sessionId: string,
     chainId: string,
-    stepNumber: number,
+    target: StepTarget,
     responseContent: string,
     outputMapping?: Record<string, string>
   ): Promise<void> {
     this.logger.debug(
-      `Capturing real response for step ${stepNumber} in chain ${chainId}: ${responseContent.substring(0, 50)}...`
+      `Capturing real response for step ${target.ordinal} (${target.nodeId}) in chain ${chainId}: ${responseContent.substring(0, 50)}...`
     );
 
-    await this.chainSessionStore.updateSessionState(sessionId, stepNumber, responseContent, {
+    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, responseContent, {
       isPlaceholder: false,
       source: 'user_response',
       capturedAt: Date.now(),
       outputMapping,
     });
 
-    await this.chainSessionStore.completeStep(sessionId, stepNumber, {
+    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
     });
 
-    this.logger.debug(`Step ${stepNumber} completed with real response`);
+    this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
   }
 
   getStepOutputMapping(
@@ -191,19 +213,19 @@ export class StepCaptureService {
     sessionId: string,
     session: ChainSession,
     sessionContext: SessionContext,
-    targetStepNumber: number,
+    target: StepTarget,
     captureResponse: string,
     passClearedThisCall: boolean
   ): Promise<void> {
     this.logger.debug(
-      `User response detected for step ${targetStepNumber}, replacing placeholder with real content`
+      `User response detected for step ${target.ordinal} (${target.nodeId}), replacing placeholder with real content`
     );
 
-    const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
+    const outputMapping = this.getStepOutputMapping(context, target.ordinal);
     await this.captureRealResponse(
       sessionId,
       session.chainId,
-      targetStepNumber,
+      target,
       captureResponse,
       outputMapping
     );
@@ -212,13 +234,13 @@ export class StepCaptureService {
     const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const hasPendingReview = pendingReview !== undefined;
     if (!hasPendingReview && !passClearedThisCall) {
-      await this.chainSessionStore.advanceStep(sessionId, targetStepNumber);
+      await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
     } else if (hasPendingReview) {
       context.diagnostics.info(
         'StepCaptureService',
         'Response captured but advancement blocked by pending gate review',
         {
-          capturedStep: targetStepNumber,
+          capturedStep: target.ordinal,
           gateIds: pendingReview.gateIds,
           attemptCount: pendingReview.attemptCount,
           maxAttempts: pendingReview.maxAttempts,
@@ -237,15 +259,15 @@ export class StepCaptureService {
     context: ExecutionContext,
     sessionId: string,
     session: ChainSession,
-    targetStepNumber: number,
+    target: StepTarget,
     captureResponse: string,
     passClearedThisCall: boolean
   ): Promise<void> {
-    const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
+    const outputMapping = this.getStepOutputMapping(context, target.ordinal);
     await this.captureRealResponse(
       sessionId,
       session.chainId,
-      targetStepNumber,
+      target,
       captureResponse,
       outputMapping
     );
@@ -253,13 +275,13 @@ export class StepCaptureService {
     const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const hasPendingReview = pendingReview !== undefined;
     if (!hasPendingReview && !passClearedThisCall) {
-      await this.chainSessionStore.advanceStep(sessionId, targetStepNumber);
+      await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
     } else if (hasPendingReview) {
       context.diagnostics.info(
         'StepCaptureService',
         'Response captured but advancement blocked by pending gate review',
         {
-          capturedStep: targetStepNumber,
+          capturedStep: target.ordinal,
           gateIds: pendingReview.gateIds,
           attemptCount: pendingReview.attemptCount,
           maxAttempts: pendingReview.maxAttempts,
@@ -279,8 +301,9 @@ export class StepCaptureService {
     if (updatedSession !== undefined) {
       context.sessionContext = {
         ...sessionContext,
-        currentStep: updatedSession.state.currentStep,
-        totalSteps: updatedSession.state.totalSteps,
+        currentStep: currentOrdinal(updatedSession.state.nodes, updatedSession.state.currentNodeId),
+        totalSteps: totalOf(updatedSession.state.nodes),
+        currentNodeId: updatedSession.state.currentNodeId,
       };
       context.state.session.chainContext = this.chainSessionStore.getChainContext(
         sessionId,

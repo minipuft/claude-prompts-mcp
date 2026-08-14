@@ -75,14 +75,17 @@ Without WAL mode, readers would block writers and vice versa. WAL allows concurr
 - Python hooks check PID liveness via `os.kill(pid, 0)` before trusting session data
 - At startup, `cleanupStalePidRows()` removes rows from dead processes (crash recovery)
 
-**Dual-write pattern**: Sessions are written to both:
+**Storage**: A live run is one row in `chain_runs` (header facts: chain id, run owner, status,
+current node) plus one row per step in `chain_run_nodes` (position, prompt, step lifecycle) —
+the per-row SSOT. `chain_sessions` is a derived read-projection of those two tables, rebuilt in
+the same transaction, giving hooks a fast query path (SELECT by `run_owner_pid`) without a second
+independently-written copy. An earlier design wrote a PID-scoped JSON blob (`chain_run_registry`)
+alongside the per-row table as a transactional backup; that blob was retired once the per-row
+tables became the sole SSOT, since a second writer of the same facts is exactly the drift risk the
+project's table-contract gates exist to catch.
 
-1. `chain_run_registry` — PID-scoped blob for backward compatibility
-2. `chain_sessions` — per-row format for fast hook queries
-
-This gives hooks a fast query path (SELECT by tenant_id) while maintaining a transactional blob backup.
-
-**Evidence**: `server/src/modules/chains/manager.ts` — PID capture at line 83, dual-write at lines 285-330, stale cleanup at lines 395-430.
+**Evidence**: `server/src/modules/chains/manager.ts` and `server/src/modules/chains/run-registry.ts`
+— PID capture, per-row persistence, and stale-PID cleanup.
 
 ---
 

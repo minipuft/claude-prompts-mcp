@@ -93,6 +93,24 @@ export function findYamlPromptInCategory(
   categoryDir: string,
   promptId: string
 ): YamlPromptInfo | null {
+  // Nested prompts ({category}/{parent}/{child}/prompt.yaml) are invisible to the
+  // one-level directory scan, so qualified ids resolve by direct path instead.
+  if (promptId.includes('/')) {
+    const segments = promptId.split('/');
+    if (segments.some((s) => s === '' || s === '.' || s === '..')) {
+      return null;
+    }
+    const nestedDir = path.join(categoryDir, ...segments);
+    if (existsSync(path.join(nestedDir, 'prompt.yaml'))) {
+      return { id: promptId, path: nestedDir, format: 'directory' };
+    }
+    const nestedFile = `${nestedDir}.yaml`;
+    if (existsSync(nestedFile)) {
+      return { id: promptId, path: nestedFile, format: 'file' };
+    }
+    return null;
+  }
+
   const prompts = discoverYamlPromptsInCategory(categoryDir);
   return prompts.find((p) => p.id === promptId) ?? null;
 }

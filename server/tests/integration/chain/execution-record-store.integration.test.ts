@@ -43,6 +43,7 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       session_id TEXT NOT NULL,
       chain_id TEXT,
       step_number INTEGER,
+      node_id TEXT,
       prompt_id TEXT,
       status TEXT NOT NULL,
       substate_json TEXT,
@@ -52,6 +53,13 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       error_message TEXT,
       started_at INTEGER NOT NULL,
       completed_at INTEGER,
+      steps_planned INTEGER,
+      gates_fired INTEGER,
+      gate_retries INTEGER,
+      unknowns_opened INTEGER,
+      unknowns_closed INTEGER,
+      nodes_inserted INTEGER,
+      nodes_skipped INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX idx_execution_records_session ON execution_records(session_id);

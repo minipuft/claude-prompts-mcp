@@ -19,6 +19,7 @@ import { SHELL_VERIFY_DEFAULT_TIMEOUT } from '../../gates/constants.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { ValidationError } from '#shared/utils/index.js';
+import { mintSequentialIds } from '#shared/utils/node-order.js';
 
 /**
  * Parser responsible for detecting and structuring symbolic command operators.
@@ -337,7 +338,14 @@ export class SymbolicCommandParser {
               maxRetries: 5,
               shellVerify: {
                 command: namedColonText,
-                timeout: verifyOptions.timeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT,
+                // Left UNDEFINED when the user gave no explicit `timeout:N`, exactly as
+                // `maxIterations` already is. Defaulting it here made the preset timeouts dead
+                // code: `setupShellVerification` resolves `config.timeout ?? preset.timeout`, so a
+                // non-null default upstream always won and `:fast` ran with 300s instead of the 30s
+                // the README claims. `maxIterations` was left undefined and therefore worked —
+                // that asymmetry is what hid this. The default now lives at the single place that
+                // resolves presets (measured 2026-08-11, plan row 0.5.22).
+                ...(verifyOptions.timeout != null ? { timeout: verifyOptions.timeout } : {}),
                 loop: verifyOptions.loop,
                 maxIterations: verifyOptions.maxIterations,
                 preset: verifyOptions.preset,
@@ -474,17 +482,14 @@ export class SymbolicCommandParser {
       };
     });
 
-    const hasDelegation = steps.some((s) => s.delegated === true);
-
     this.logger.debug(
-      `[parseChainOperator] Final steps array length: ${steps.length}${hasDelegation ? ' (has delegation)' : ''}`
+      `[parseChainOperator] Final steps array length: ${steps.length}${steps.some((s) => s.delegated === true) ? ' (has delegation)' : ''}`
     );
 
     return {
       type: 'chain',
       steps,
       contextPropagation: 'automatic',
-      ...(hasDelegation ? { hasDelegation: true } : {}),
     };
   }
 
@@ -737,9 +742,13 @@ export class SymbolicCommandParser {
 
     const chainOp = detection.operators.find((op): op is ChainOperator => op.type === 'chain');
     if (chainOp) {
+      // Frozen at mint — symbolic chains have no stable step names, so `n1..nK` (positional at
+      // mint time) is the only available identity source. Never re-minted after creation.
+      const nodeIds = mintSequentialIds(chainOp.steps.length);
       chainOp.steps.forEach((step, index) => {
         steps.push({
           stepNumber: index + 1,
+          nodeId: nodeIds[index],
           type: 'prompt',
           promptId: step.promptId,
           args: step.args,
@@ -749,8 +758,10 @@ export class SymbolicCommandParser {
         });
       });
     } else {
+      const [nodeId] = mintSequentialIds(1);
       steps.push({
         stepNumber: 1,
+        nodeId,
         type: 'prompt',
         promptId: basePromptId,
         args: baseArgs,

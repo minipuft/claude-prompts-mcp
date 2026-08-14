@@ -90,6 +90,14 @@ jobs:
         working-directory: server
         run: npm run test:ci
 
+      # `test:ci` is unit-only, so nothing above this line exercises the documented surface over a
+      # real transport. A release is exactly the moment overstated claims become public, and Tier
+      # 3a found 9 of them by hand — this makes that class a red job instead of a reading task.
+      # Costs no tokens: the suite scripts the client the LLM would otherwise play.
+      - name: Verify documented claims
+        working-directory: server
+        run: npm run verify:claims
+
       - name: Publish to npm (OIDC Trusted Publishing)
         working-directory: server
         run: |

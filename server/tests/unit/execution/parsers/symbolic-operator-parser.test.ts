@@ -82,11 +82,39 @@ describe('SymbolicCommandParser', () => {
     expect(result.executionPlan.steps).toHaveLength(2);
     expect(result.executionPlan.steps[0].promptId).toBe('plan_one');
     expect(result.executionPlan.steps[1].promptId).toBe('plan_two');
+    // P3 Tier 1: frozen sequential node ids minted alongside stepNumber — proves
+    // mintSequentialIds actually ran at this site, not just that the field exists.
+    expect(result.executionPlan.steps[0].nodeId).toBe('n1');
+    expect(result.executionPlan.steps[1].nodeId).toBe('n2');
     const gateOp = operators.operators.find((op) => op.type === 'gate');
     expect(gateOp?.type).toBe('gate');
     if (gateOp?.type === 'gate') {
       expect(gateOp.parsedCriteria).toEqual(['quality']);
     }
+  });
+
+  test('generateExecutionPlan mints unique frozen node ids for a multi-step symbolic chain', () => {
+    // Discriminating probe (criterion 6): asserts uniqueness AND the exact n1..nK sequence,
+    // not merely that a nodeId field is present.
+    const operators = parser.detectOperators('>>a --> b --> c');
+    const result = parser.buildParseResult('>>a --> b --> c', operators, 'a', '');
+
+    const nodeIds = result.executionPlan.steps.map((step) => step.nodeId);
+    expect(nodeIds).toEqual(['n1', 'n2', 'n3']);
+    expect(new Set(nodeIds).size).toBe(nodeIds.length);
+  });
+
+  test('generateExecutionPlan mints n1 for a single-step (no-chain) execution plan', () => {
+    const operators = parser.detectOperators('>>solo_task input="value"');
+    const result = parser.buildParseResult(
+      '>>solo_task input="value"',
+      operators,
+      'solo_task',
+      'input="value"'
+    );
+
+    expect(result.executionPlan.steps).toHaveLength(1);
+    expect(result.executionPlan.steps[0].nodeId).toBe('n1');
   });
 
   test('detectOperators handles parallel commands when no chain operator is present', () => {

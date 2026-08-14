@@ -27,7 +27,9 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
-import type { McpToolRequest } from '#shared/types/execution.js';
+import type { UnknownObservation } from '#shared/types/chain-session.js';
+import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
+import type { WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
@@ -408,6 +410,14 @@ export class PromptExecutor {
       /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
       gates?: import('#shared/types/execution.js').GateSpecification[];
       options?: Record<string, unknown>;
+      /** Typed unknowns discovered/resolved by the current step. Threaded through unchanged (Tier 3 consumes it). */
+      observations?: UnknownObservation[];
+      /**
+       * A planner-submitted Workflow IR (P6 Tier 5). Mutually exclusive with `command` and
+       * `chain_id`; the conflict is rejected by the tool schema's refinement and, for callers
+       * that bypass the schema, by stage 04.
+       */
+      workflow?: WorkflowIR;
     },
     extra: any
   ): Promise<ToolResponse> {
@@ -434,6 +444,26 @@ export class PromptExecutor {
     const chainIdValue =
       args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined);
 
+    // A workflow's own `gates` ride the SAME request channel as the `gates` parameter, rather
+    // than a second IR-specific gate path (OQ-P6-8). That channel is already node-addressed:
+    // `temporary-gate-registrar` reconciles `target_step_id` against the run's node ids, which
+    // for an IR run ARE the node ids the submission declared. Concatenated rather than
+    // substituted so a caller supplying both keeps both — `gates` and `workflow` are not
+    // mutually exclusive, only the three command sources are.
+    //
+    // Written as two pushes rather than `[...(args.gates ?? []), …]`: the `no-restricted-syntax`
+    // guard added 2026-08-06 matches the SHAPE `args.gates` coalesced onto anything, because the
+    // defect it exists for (`args.gate_configuration ?? args.gates`) came back once already after
+    // a guard that pinned literal expressions. Defaulting to `[]` is not that defect, but a guard
+    // narrowed to admit it would stop matching the shape it was widened to catch.
+    const mergedGates: GateSpecification[] = [];
+    if (args.gates !== undefined) {
+      mergedGates.push(...args.gates);
+    }
+    if (args.workflow?.gates !== undefined) {
+      mergedGates.push(...args.workflow.gates);
+    }
+
     const request = {
       ...(commandValue && { command: commandValue }),
       ...(chainIdValue && { chain_id: chainIdValue }),
@@ -441,13 +471,15 @@ export class PromptExecutor {
       ...(args.gate_action && { gate_action: args.gate_action }),
       ...(args.user_response && { user_response: args.user_response }),
       ...(args.force_restart !== undefined && { force_restart: args.force_restart }),
-      ...(args.gates && { gates: args.gates }),
+      ...(mergedGates.length > 0 && { gates: mergedGates }),
+      ...(args.workflow != null && { workflow: args.workflow }),
       ...(args.options && { options: args.options }),
+      ...(args.observations != null ? { observations: args.observations } : {}),
       ...(sdkExtra != null ? { _extra: sdkExtra as Record<string, unknown> } : {}),
     } as McpToolRequest;
 
     this.logger.info('[PromptExecutor] Executing request', {
-      command: request.command ?? '<resume>',
+      command: request.command ?? (args.workflow != null ? '<workflow>' : '<resume>'),
     });
 
     const pipeline = this.getPromptExecutionPipeline();

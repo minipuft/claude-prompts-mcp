@@ -4,10 +4,20 @@ import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
-import { FileOperations } from '../operations/file-operations.js';
+import { FileOperations, PRESERVED_PROMPT_YAML_KEYS } from '../operations/file-operations.js';
+import {
+  PATCH_TARGET_FIELDS,
+  applyTemplatePatches,
+  findPatchParameterConflict,
+  type PatchTargetField,
+  type TemplatePatchOperation,
+} from '../operations/template-patch.js';
 import {
   UPDATE_FIELDS,
+  type PromptWriteDefect,
   applyChainStepOperation,
+  canonicalPromptSnapshot,
+  diagnosePromptWrite,
   normalizePromptId,
   validateChainStepReferences,
   validatePromptId,
@@ -17,6 +27,7 @@ import {
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData } from '#modules/prompts/types.js';
+import type { CategoryShipStatus } from '../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { ToolResponse } from '#shared/types/index.js';
@@ -38,6 +49,26 @@ export class PromptLifecycleProcessor {
   }
 
   async createPrompt(args: any): Promise<ToolResponse> {
+    // OQ-P7-9: `patch` and `dry_run` are update-only verbs — `patch` targets an existing
+    // prompt's stored template, and `dry_run` previews a diff against one. Neither has a
+    // referent on `create`. The schema accepts both on every action (P7 row 3.4/3.5 kept them
+    // action-agnostic there), so silent acceptance here would be the exact accepted-here/
+    // ignored-there asymmetry P7-D4 exists to kill. Checked first, before any side effect —
+    // ahead of even required-field validation.
+    if (args?.patch !== undefined) {
+      throw new PromptError(
+        '\'patch\' is not valid on action:"create" — there is no existing prompt to patch. ' +
+          'Supply the full template via `user_message_template`, or create the prompt first and ' +
+          'patch it with action:"update".'
+      );
+    }
+    if (args?.dry_run !== undefined) {
+      throw new PromptError(
+        '\'dry_run\' is not valid on action:"create" — there is no existing prompt to diff ' +
+          'against. Create the prompt, then use action:"update" with `dry_run` to preview edits.'
+      );
+    }
+
     validateRequiredFields(args, ['id', 'name', 'description', 'user_message_template']);
     const rawId = String(args.id);
     validatePromptId(rawId);
@@ -121,6 +152,24 @@ export class PromptLifecycleProcessor {
       gateConfiguration: args['gate_configuration'],
     };
 
+    // OQ-P7-8: the same five fields `update` can set, on `create` too — a field settable only
+    // after the prompt exists forces a create-then-update dance for something authorable in one
+    // call, and leaves `create` and `update` accepting different vocabularies (the
+    // accepted-here/ignored-there asymmetry P7-D4 exists to kill). Written through the same
+    // `UPDATE_FIELDS` map so the two paths cannot drift, and only for parameters actually
+    // supplied: an undefined value here would be a key the writer's preservation resolver has to
+    // ignore, and on `create` there is no on-disk file to fall back to anyway.
+    // Narrowed once rather than reaching into `any` per access, matching `updatePrompt`'s
+    // `suppliedArgs`/`promptFields` pair below.
+    const suppliedArgs = args as Record<string, unknown>;
+    const promptFields = promptData as Record<string, unknown>;
+    const preservedKeys = PRESERVED_PROMPT_YAML_KEYS as readonly string[];
+    for (const [argKey, dataKey] of Object.entries(UPDATE_FIELDS)) {
+      if (preservedKeys.includes(dataKey) && suppliedArgs[argKey] !== undefined) {
+        promptFields[dataKey] = suppliedArgs[argKey];
+      }
+    }
+
     // Chain step reference validation (non-blocking warnings)
     let chainIntegrityWarnings: string[] = [];
     if (promptData.chainSteps.length > 0) {
@@ -131,7 +180,7 @@ export class PromptLifecycleProcessor {
       ).warnings;
     }
 
-    await this.fileOperations.updatePromptImplementation(promptData);
+    const writeResult = await this.fileOperations.updatePromptImplementation(promptData);
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n`;
@@ -195,6 +244,8 @@ export class PromptLifecycleProcessor {
       }
     }
 
+    response += this.buildCategoryShipWarning(writeResult.categoryShipStatus);
+
     await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
 
     return {
@@ -208,7 +259,13 @@ export class PromptLifecycleProcessor {
 
     const currentPrompt = this.getConvertedPrompts().find((prompt) => prompt.id === args.id);
     let beforeAnalysis = null;
-    const beforeContent = currentPrompt !== undefined ? { ...currentPrompt } : null;
+    // Projected, not spread: a raw ConvertedPrompt carries loader-resolved runtime keys the
+    // recorded snapshot shape never has, which would make recordEditResult's bridge check see
+    // every post-reload edit as out-of-band (see canonicalPromptSnapshot).
+    const beforeContent =
+      currentPrompt !== undefined
+        ? (canonicalPromptSnapshot(args.id, currentPrompt) as unknown as ConvertedPrompt)
+        : null;
 
     if (currentPrompt) {
       beforeAnalysis = await this.promptAnalyzer.analyzePrompt(currentPrompt);
@@ -230,18 +287,12 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    // Build base from existing prompt, then override only explicitly provided fields
+    // Build base from existing prompt, then override only explicitly provided fields. The base
+    // is the same projection `beforeContent` uses, so the bridge check and every diff compare
+    // like against like; `tools` rides on top because it only ever arrives via `args.tools`.
     const promptData: any = {
-      id: args.id,
-      name: currentPrompt?.name ?? args.id,
-      category: currentPrompt?.category ?? 'general',
-      description: currentPrompt?.description ?? '',
-      systemMessage: currentPrompt?.systemMessage,
-      userMessageTemplate: currentPrompt?.userMessageTemplate ?? '',
-      arguments: currentPrompt?.arguments ?? [],
-      chainSteps: currentPrompt?.chainSteps ?? [],
+      ...canonicalPromptSnapshot(args.id, currentPrompt),
       tools: args.tools,
-      gateConfiguration: currentPrompt?.gateConfiguration,
     };
 
     for (const [argKey, dataKey] of Object.entries(UPDATE_FIELDS)) {
@@ -253,6 +304,51 @@ export class PromptLifecycleProcessor {
     // hand-written special case here until 2026-08-06 (row 1.6) whose only purpose was accepting
     // the [Framework] `gates` parameter as an alias — accepted on update, silently ignored on
     // create. That asymmetry is what settled it as unintended rather than designed.
+
+    // Anchored patches (P7 row 3.4) apply AFTER the UPDATE_FIELDS merge and BEFORE reference
+    // validation, the version record and the write. That placement is what makes acceptance (c)
+    // hold: `promptData` reaches `recordEditResult` already patched, so a patch and the equivalent
+    // full update record the identical snapshot and diff. Any hook after the version record would
+    // version the unpatched state.
+    // Narrowed once rather than reaching into `any` at each use, matching `deletePrompt` below.
+    // `promptData` is read through an indexed `Record` for the same reason.
+    const { patch: patchArgument } = args as { patch?: TemplatePatchOperation[] };
+    const suppliedArgs = args as Record<string, unknown>;
+    const promptFields = promptData as Record<string, unknown>;
+    const patchOperations = patchArgument ?? [];
+    const patchedFields: PatchTargetField[] = [];
+    if (patchOperations.length > 0) {
+      const suppliedBodyParameters = PATCH_TARGET_FIELDS.filter(
+        (parameter) => suppliedArgs[parameter] !== undefined
+      );
+      const conflict = findPatchParameterConflict(suppliedBodyParameters, patchOperations);
+      if (conflict !== undefined) {
+        return this.blockedUpdate(`❌ **Prompt update blocked**: ${conflict}`);
+      }
+
+      const patchResult = applyTemplatePatches(
+        {
+          user_message_template: promptFields['userMessageTemplate'] as string | undefined,
+          system_message: promptFields['systemMessage'] as string | undefined,
+          description: promptFields['description'] as string | undefined,
+        },
+        patchOperations
+      );
+
+      if (!patchResult.ok) {
+        return this.blockedUpdate(
+          `❌ **Prompt update blocked** — patch not applied (${patchResult.rejection.reason}):\n\n${patchResult.rejection.message}\n\n💡 Nothing was written and no version was consumed. Use \`action:"inspect"\` to read the current text, or \`dry_run: true\` to test an anchor.`
+        );
+      }
+
+      for (const [field, value] of Object.entries(patchResult.values)) {
+        // `UPDATE_FIELDS` already owns the parameter-name → promptData-key mapping for all three
+        // patch targets; a second map here would be the drift this file has fixed twice.
+        const dataKey = UPDATE_FIELDS[field] as string;
+        promptFields[dataKey] = value;
+        patchedFields.push(field as PatchTargetField);
+      }
+    }
 
     // Chain step-level operations (add/remove/reorder)
     if (args.chain_step_operation && args.chain_step_operation !== 'replace') {
@@ -275,9 +371,13 @@ export class PromptLifecycleProcessor {
       ).warnings;
     }
 
-    // Reference validation for template changes
+    // Reference validation for template changes. A patch changes a template without any full-body
+    // parameter arriving, so the patched fields have to arm this the same way — otherwise a patch
+    // could introduce a `{{ref:missing}}` that a full update would have been refused for.
     const hasTemplateChange =
-      typeof args.user_message_template === 'string' || typeof args.system_message === 'string';
+      typeof args.user_message_template === 'string' ||
+      typeof args.system_message === 'string' ||
+      patchedFields.some((field) => field !== 'description');
     if (hasTemplateChange) {
       const refValidator = new PromptReferenceValidator(this.getConvertedPrompts());
       const refValidation = refValidator.validate(
@@ -302,6 +402,32 @@ export class PromptLifecycleProcessor {
       }
     }
 
+    // Produced-state validation (P7 row 3.5). Runs BEFORE the version record, so a rejected update
+    // consumes nothing — the write path's own `ResourceVerificationService` check
+    // (file-operations.ts:183) only fires after a version has already been spent, and it cannot see
+    // a template-syntax error at all because YAML schema validation does not compile Nunjucks.
+    const diagnosis = diagnosePromptWrite(beforeContent, promptData);
+    if (diagnosis.blocking.length > 0) {
+      const details = diagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
+      return this.blockedUpdate(
+        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n💡 Nothing was written and no version was consumed.`
+      );
+    }
+    if (diagnosis.preExisting.length > 0) {
+      this.context.dependencies.logger.warn(
+        `Prompt ${promptData.id} has pre-existing template defects (not introduced by this edit): ${diagnosis.preExisting
+          .map((defect) => defect.message)
+          .join('; ')}`
+      );
+    }
+
+    // `dry_run` returns the produced bodies and the diff and stops here — ahead of the version
+    // record and the write, so neither happens. It is the operator's pre-check that an anchor
+    // matched before a version is spent.
+    if (suppliedArgs['dry_run'] === true) {
+      return this.renderDryRun(beforeContent, promptData, patchedFields, diagnosis.preExisting);
+    }
+
     let versionSaved: number | undefined;
     const skipVersion = args.skip_version === true;
     if (
@@ -312,25 +438,48 @@ export class PromptLifecycleProcessor {
       const diffForVersion = this.textDiffService.generatePromptDiff(beforeContent, promptData);
       const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
 
-      const versionResult = await this.context.versionHistoryService.saveVersion(
-        'prompt',
-        promptData.id,
-        beforeContent,
-        {
-          description: args.version_description ?? 'Update via resource_manager',
-          diff_summary: diffSummary,
-        }
-      );
+      // `recordEditResult` throws on persistence failure (P7-D2, OQ-P7-6). The update ABORTS here
+      // rather than proceeding: `version_history` is durable and nothing regenerates its rows, so
+      // writing the new content past a failed snapshot leaves an unrecoverable gap while reporting
+      // success. Caught here rather than at the router boundary only to state the one fact the
+      // operator needs — that nothing was written, because the write is still ahead of this point.
+      // Go-forward numbering (OQ-P7-3): the recorded snapshot is the state this edit PRODUCES, so
+      // the newest version equals what `inspect` shows; any unrecorded prior state gets a bridge
+      // row first (era transition, out-of-band edit).
+      try {
+        const versionResult = await this.context.versionHistoryService.recordEditResult(
+          'prompt',
+          promptData.id,
+          beforeContent as unknown as Record<string, unknown>,
+          { ...promptData },
+          {
+            description: args.version_description ?? 'Update via resource_manager',
+            diff_summary: diffSummary,
+          }
+        );
 
-      if (versionResult.success) {
         versionSaved = versionResult.version;
         this.context.dependencies.logger.debug(
           `Saved version ${versionSaved} for prompt ${promptData.id}`
         );
-      } else {
-        this.context.dependencies.logger.warn(
-          `Failed to save version for prompt ${promptData.id}: ${versionResult.error}`
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.context.dependencies.logger.error(
+          `Aborting update of prompt ${promptData.id}: ${message}`
         );
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text:
+                `❌ **Prompt update aborted**: the version snapshot could not be saved.\n\n` +
+                `${message}\n\n` +
+                `💡 No changes were written to '${promptData.id}'. Retry, or pass ` +
+                `\`skip_version: true\` to update without recording a version.`,
+            },
+          ],
+          isError: true,
+        };
       }
     }
 
@@ -340,6 +489,10 @@ export class PromptLifecycleProcessor {
 
     let response = `✅ **Prompt Updated**: ${promptData.name} (${args.id})\n\n`;
     response += `${result.message}\n\n`;
+
+    if (patchedFields.length > 0) {
+      response += `🩹 **Patched**: ${patchedFields.map((field) => `\`${field}\``).join(', ')} (${patchOperations.length} operation(s))\n\n`;
+    }
 
     if (versionSaved !== undefined) {
       response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
@@ -377,6 +530,8 @@ export class PromptLifecycleProcessor {
       }
     }
 
+    response += this.buildCategoryShipWarning(result.categoryShipStatus);
+
     await this.handleSystemRefresh(args.full_restart, `Prompt updated: ${args.id}`);
 
     return {
@@ -388,14 +543,50 @@ export class PromptLifecycleProcessor {
   async deletePrompt(args: any): Promise<ToolResponse> {
     validateRequiredFields(args, ['id']);
 
-    const promptToDelete = this.getPromptsData().find((prompt) => prompt.id === args.id);
+    // Narrowed once, immediately after the required-field check, rather than reaching into `any`
+    // at each use. The parameter type is pre-existing; this at least keeps the destructive path
+    // reading typed values, and stops every new reference adding another unsafe access.
+    const { id, confirm } = args as { id: string; confirm?: boolean };
+
+    const promptToDelete = this.getPromptsData().find((prompt) => prompt.id === id);
     if (!promptToDelete) {
-      throw new PromptError(`Prompt not found: ${args.id}`);
+      throw new PromptError(`Prompt not found: ${id}`);
     }
 
-    const dependencies = this.findPromptDependencies(args.id);
+    const dependencies = this.findPromptDependencies(id);
 
-    let response = `🗑️ **Deleting Prompt**: ${promptToDelete.name} (${args.id})\n\n`;
+    // BREAKING (major): `confirm` is now enforced on delete, as its schema text has always claimed.
+    //
+    // It was read on `rollback` and ignored here — the gate was on the RECOVERABLE verb and absent
+    // from the unrecoverable one. Delete has no undo through the tool surface: the prompt's
+    // `version_history` rows survive (nothing calls `deleteHistory` on this path), but
+    // `handleRollback` returns "Prompt not found" when the prompt is gone, so those snapshots are
+    // unreachable by any action.
+    //
+    // The dependency list is computed BEFORE the gate so the refusal can name what would break.
+    // Reporting the blast radius and then proceeding anyway — the previous behaviour — told the
+    // caller exactly why to stop, after stopping was no longer possible.
+    if (confirm !== true) {
+      const blastRadius =
+        dependencies.length > 0
+          ? `\n\n⚠️ ${dependencies.length} prompt(s) reference it and would break:\n` +
+            dependencies.map((dep) => `- ${dep.name} (${dep.id})`).join('\n')
+          : '';
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `⚠️ Deletion requires confirmation.\n\n` +
+              `To delete prompt '${id}', set confirm: true.\n` +
+              `This cannot be undone — rollback cannot restore a deleted prompt.${blastRadius}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    let response = `🗑️ **Deleting Prompt**: ${promptToDelete.name} (${id})\n\n`;
 
     if (dependencies.length > 0) {
       response += `⚠️ **Warning**: This prompt is referenced by ${dependencies.length} other prompts:\n`;
@@ -413,6 +604,77 @@ export class PromptLifecycleProcessor {
 
     return {
       content: [{ type: 'text' as const, text: response }],
+      isError: false,
+    };
+  }
+
+  /**
+   * P7-D4: `create`/`update` write successfully regardless of whether the target category ships
+   * in the published repo — `server/resources/prompts/.gitignore` allowlists categories, and the
+   * write path never consulted it, so success read identically either way. OQ-P7-4 ruled warn,
+   * not refuse — 103/131 prompts live in untracked categories, so refusing would break the
+   * operator-local workflow. This never fires for a workspace overlay with no `.gitignore` of its
+   * own: `FileOperations` reports `ships: true` when no allowlist file exists to restrict it.
+   */
+  private buildCategoryShipWarning(status: CategoryShipStatus | undefined): string {
+    if (status === undefined || status.ships) {
+      return '';
+    }
+    return (
+      `\n⚠️ **Category not tracked in repo**: '${status.category}' is excluded by ` +
+      '`server/resources/prompts/.gitignore` and will not ship with the repo — it stays local ' +
+      'to this workspace.\n' +
+      'To ship it, add these lines to `server/resources/prompts/.gitignore`:\n' +
+      `    !${status.category}/\n` +
+      `    !${status.category}/**\n`
+    );
+  }
+
+  /** One shape for every pre-write refusal on the update path: error response, nothing written. */
+  private blockedUpdate(text: string): ToolResponse {
+    return {
+      content: [{ type: 'text' as const, text }],
+      isError: true,
+    };
+  }
+
+  /**
+   * Render what an update WOULD produce. Reached only from the `dry_run` branch, which sits ahead
+   * of both the version record and the file write, so this method is the whole effect of the call.
+   */
+  private renderDryRun(
+    beforeContent: ConvertedPrompt | null,
+    promptData: Record<string, unknown>,
+    patchedFields: readonly PatchTargetField[],
+    preExisting: readonly PromptWriteDefect[]
+  ): ToolResponse {
+    const diff = this.textDiffService.generatePromptDiff(beforeContent, promptData);
+
+    let text = `🔍 **Dry run** — nothing written, no version recorded for \`${String(promptData['id'])}\`\n\n`;
+    if (patchedFields.length > 0) {
+      text += `🩹 Patched field(s): ${patchedFields.map((field) => `\`${field}\``).join(', ')}\n\n`;
+    }
+    text += diff.hasChanges
+      ? `${diff.formatted}\n\n`
+      : `No changes: the result is identical to the current prompt.\n\n`;
+
+    for (const field of PATCH_TARGET_FIELDS) {
+      const dataKey = UPDATE_FIELDS[field] as string;
+      const value = promptData[dataKey];
+      if (typeof value !== 'string' || value.length === 0) continue;
+      text += `**Resulting \`${field}\`**:\n\n\`\`\`\n${value}\n\`\`\`\n\n`;
+    }
+
+    if (preExisting.length > 0) {
+      text += `⚠️ **Pre-existing issues** (present before this edit, not blocking):\n`;
+      text += preExisting.map((defect) => `- ${defect.message}`).join('\n');
+      text += `\n\n`;
+    }
+
+    text += `💡 Re-send the same call without \`dry_run\` to apply it.`;
+
+    return {
+      content: [{ type: 'text' as const, text }],
       isError: false,
     };
   }

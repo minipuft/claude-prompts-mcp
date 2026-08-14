@@ -410,3 +410,70 @@ describe('UnifiedCommandParser hyphen-agnostic prompt resolution', () => {
     expect(result.promptId).toBe('hot_reload_test');
   });
 });
+
+describe('reserved operators (operators.json status: reserved)', () => {
+  let parser: UnifiedCommandParser;
+
+  const prompts: ConvertedPrompt[] = [
+    {
+      id: 'analyze',
+      name: 'Analyze',
+      description: 'Analyze content',
+      category: 'analysis',
+      arguments: [],
+      userMessageTemplate: 'Analyze {{input}}',
+    },
+    {
+      id: 'summarize',
+      name: 'Summarize',
+      description: 'Summarize content',
+      category: 'analysis',
+      arguments: [],
+      userMessageTemplate: 'Summarize {{input}}',
+    },
+  ] as ConvertedPrompt[];
+
+  beforeEach(() => {
+    parser = new UnifiedCommandParser(mockLogger);
+  });
+
+  // Before this rejection existed, both of these PARSED and returned the leading prompt —
+  // the reserved operator was tokenized and then silently dropped by every strategy.
+  test('rejects the parallel operator (+)', async () => {
+    await expect(parser.parseCommand('>>analyze + >>summarize', prompts)).rejects.toThrow(
+      /Operator "\+" is reserved and not implemented/
+    );
+  });
+
+  test('rejects the conditional operator in its documented form', async () => {
+    await expect(
+      parser.parseCommand(">>analyze ? 'has tests' : >>summarize", prompts)
+    ).rejects.toThrow(/Operator "\?" is reserved and not implemented/);
+  });
+
+  // The exclusions below come from the tokenizer, which this rejection deliberately reuses
+  // rather than re-matching the registry patterns. Each one is a case where the symbol is
+  // present but is NOT the operator.
+  test('allows + inside a quoted argument', async () => {
+    const result = await parser.parseCommand('>>analyze content:"R3F + Visx"', prompts);
+    expect(result.promptId).toBe('analyze');
+  });
+
+  // Was "allows + when a chain takes precedence" — inverted deliberately (plan row 0.5.15).
+  // Chain precedence exists so a `+` in a chain is not mis-read as a parallel STEP, which only
+  // matters for an operator something can execute. `+` is reserved, so the token had no consumer
+  // and suppressing it only meant the reserved check never saw it: the command ran as a 2-step
+  // chain with the `+` swallowed into argument text, while the standalone form errored and `?`
+  // was rejected in the same position. Silently dropping a documented-but-unimplemented symbol is
+  // the failure class this tier exists to close.
+  test('rejects + even when a chain is present', async () => {
+    await expect(
+      parser.parseCommand('>>analyze --> >>summarize + >>analyze', prompts)
+    ).rejects.toThrow(/Operator "\+" is reserved/);
+  });
+
+  test('allows a bare ? as natural language', async () => {
+    const result = await parser.parseCommand('>>analyze is there a bug?', prompts);
+    expect(result.promptId).toBe('analyze');
+  });
+});

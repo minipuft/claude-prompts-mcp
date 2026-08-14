@@ -45,7 +45,19 @@ export async function getAvailablePort(): Promise<number> {
  */
 export function startServerWithHttp(
   port: number,
-  options: { transport?: string; quiet?: boolean; debug?: boolean } = {}
+  options: {
+    transport?: string;
+    quiet?: boolean;
+    debug?: boolean;
+    /**
+     * Extra environment applied AFTER the defaults below, so a caller can redirect the server's
+     * writable roots. Added for the claims-conformance suite: its default of
+     * `MCP_WORKSPACE: PROJECT_ROOT` points every spawned server at the developer's live
+     * `state.db`, which is fine for read-only smoke checks and not fine for a suite that
+     * executes prompts and will soon exercise create/delete/rollback.
+     */
+    env?: Record<string, string>;
+  } = {}
 ): ChildProcess {
   // 'sse' was the default until the HTTP+SSE transport was removed with SDK v2.
   const transport = options.transport || 'streamable-http';
@@ -82,6 +94,7 @@ export function startServerWithHttp(
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
       // Note: NODE_ENV is NOT set - let server run in normal mode
+      ...(options.env ?? {}),
     },
     // Use 'ignore' for stdin to avoid triggering 'end' event handler
     // which exits the process (see logging/index.ts setupProcessEventHandlers)

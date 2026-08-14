@@ -166,7 +166,7 @@ server/src/
 │   │   └── services/           # FrameworkLifecycleProcessor, FrameworkDiscoveryProcessor, etc.
 │   └── system-control/         # System administration
 │       ├── core/               # Router + action handler base + types
-│       └── handlers/           # 10 action handlers (status, framework, gate, session, etc.)
+│       └── handlers/           # 11 action handlers (status, framework, gates, session, etc.)
 ├── execution/                  # Execution layer
 │   ├── pipeline/stages/        # 24 stage files (thin orchestrators)
 │   ├── pipeline/state/         # Accumulators (gates, diagnostics)
@@ -362,8 +362,8 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 │                                       versioning/validation │
 │                                                              │
 │  system_control ──► SystemControl Router                    │
-│                      └► 10 action handlers                  │
-│                         (status, framework, gate, session,  │
+│                      └► 11 action handlers                  │
+│                         (status, framework, gates, session, │
 │                          guide, analytics, config, etc.)    │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -374,7 +374,7 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
 | `prompt_engine`    | Execute prompts and chains                    | PromptExecutor → PipelineBuilder → PromptExecutionPipeline                       |
 | `resource_manager` | CRUD for prompts, gates, frameworks           | Router → Handler → Processors (lifecycle/discovery/versioning per resource type) |
-| `system_control`   | System status, framework switching, analytics | SystemControl router → 10 specialized action handlers                            |
+| `system_control`   | System status, framework switching, analytics | SystemControl router → 11 specialized action handlers                            |
 
 ### Why This Design?
 
@@ -385,7 +385,9 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 
 ### MCP Resources (Read-Only Discovery)
 
-In addition to tools, the server exposes **MCP Resources** for token-efficient read-only access:
+In addition to tools, the server can expose **MCP Resources** for token-efficient read-only access.
+This surface is **opt-in** — `resources.registerWithMcp` defaults to `false`, so a stock server
+advertises no resources at all:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -583,16 +585,16 @@ const review = chainSessionStore.getPendingGateReview(sessionId);
 
 Survives server restarts. All state persisted in `runtime-state/state.db` (SQLite via `node:sqlite`).
 
-| State               | Store                    | SQLite Table          |
-| ------------------- | ------------------------ | --------------------- |
-| Framework selection | `FrameworkStateStore`    | `framework_state`     |
-| Gate system enabled | `GateStateStore`         | `gate_system_state`   |
-| Chain sessions      | `ChainSessionStore`      | `chain_sessions`      |
-| Chain run tracking  | `ChainRunRegistry`       | `chain_run_registry`  |
-| Argument history    | `ArgumentHistoryTracker` | `argument_history`    |
-| Resource index      | `ResourceIndexer`        | `resource_index`      |
-| Resource hashes     | `ResourceIndexer`        | `resource_hash_cache` |
-| Resource changes    | `ResourceChangeTracker`  | `resource_changes`    |
+| State               | Store                    | SQLite Table                                                                                                          |
+| ------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Framework selection | `FrameworkStateStore`    | `framework_state`                                                                                                     |
+| Gate system enabled | `GateStateStore`         | `gate_system_state`                                                                                                   |
+| Chain sessions      | `ChainSessionStore`      | `chain_sessions`                                                                                                      |
+| Chain run tracking  | `ChainRunRegistry`       | `chain_runs` + `chain_run_nodes` (one row per run + one row per node; replaces the retired `chain_run_registry` blob) |
+| Argument history    | `ArgumentHistoryTracker` | `argument_history`                                                                                                    |
+| Resource index      | `ResourceIndexer`        | `resource_index`                                                                                                      |
+| Resource hashes     | `ResourceIndexer`        | `resource_hash_cache`                                                                                                 |
+| Resource changes    | `ResourceChangeTracker`  | `resource_changes`                                                                                                    |
 
 ### State Flow Diagram
 

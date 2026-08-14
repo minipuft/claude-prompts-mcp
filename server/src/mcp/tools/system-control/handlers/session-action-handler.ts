@@ -4,6 +4,8 @@ import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 
+import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
+
 export class SessionActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
     const operation = args.operation || 'list';
@@ -111,7 +113,7 @@ export class SessionActionHandler extends ActionHandler {
     let response = `🔍 **Session Inspection: \`${sessionId}\`**\n\n`;
     response += `**Chain ID**: \`${session.chainId}\`\n`;
     response += `**Prompt**: \`${session.blueprint?.parsedCommand?.promptId || 'unknown'}\`\n`;
-    response += `**Step**: ${session.state.currentStep} / ${session.state.totalSteps}\n`;
+    response += `**Step**: ${currentOrdinal(session.state.nodes, session.state.currentNodeId)} / ${totalOf(session.state.nodes)}\n`;
     response += `**Started**: ${new Date(session.startTime).toLocaleString()}\n`;
     response += `**Last Activity**: ${new Date(session.lastActivity).toLocaleString()}\n`;
     response += `**Lifecycle**: \`${session.lifecycle}\`\n\n`;

@@ -1,5 +1,5 @@
 // @lifecycle canonical - Type definitions for chain operator execution
-import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 
@@ -11,6 +11,16 @@ import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
  */
 export interface ChainStepPrompt {
   readonly stepNumber: number;
+  /**
+   * Stable node identity, minted at parse time and frozen for the run.
+   *
+   * Still optional (P3 D10): making it required reddened 40 duck-typed fixture literals across
+   * 7 test files, past the tier's escape-hatch threshold. Every production construction site
+   * sets it; `SessionManagementStage.buildChainNodes` warns and falls back to sequential ids
+   * when a parsed chain reaches the store without one, which is the detector this type-level
+   * requirement would otherwise have been.
+   */
+  readonly nodeId?: string;
   readonly promptId: string;
   readonly args: Record<string, unknown>;
   readonly inlineGateCriteria?: readonly string[];
@@ -31,6 +41,21 @@ export interface ChainStepPrompt {
   agentType?: string;
   /** Capability hint for delegation model selection (step-level override) */
   subagentModel?: 'heavy' | 'standard' | 'fast';
+  /**
+   * Declared per-step framework id from the chain YAML.
+   *
+   * Distinct from `frameworkContext` above: this is the author's REQUEST, a bare id carried from
+   * the resource; `frameworkContext` is the RESOLVED context that `12-framework-stage.ts` builds
+   * from it. Keeping both is what lets the stage fall back to the run-wide framework when the
+   * requested id is unknown — collapsing them would leave nothing to fall back from.
+   */
+  framework?: string;
+  /**
+   * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
+   * expose to this step's render. Mirrors `ChainStep.visibility` / `ChainStepSchema.visibility`.
+   * Additive only — nothing downstream consumes it yet (Tier 2-3).
+   */
+  visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
 }
 
 /**

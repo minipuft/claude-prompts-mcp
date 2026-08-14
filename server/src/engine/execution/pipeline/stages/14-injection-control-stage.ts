@@ -13,6 +13,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionContext } from '../../context/index.js';
+import type { ChainStepPrompt } from '../../operators/types.js';
 
 type InjectionConfigProvider = () => InjectionConfig;
 
@@ -58,11 +59,13 @@ export class InjectionControlStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // Skip if session blueprint was restored (decisions already made)
-    if (context.state.session.isBlueprintRestored) {
-      this.logExit({ skipped: 'Session blueprint restored' });
-      return;
-    }
+    // NO blueprint-restored skip. The sibling stages that skip on restore cache a one-time
+    // resolution the blueprint carries (parsedCommand, executionPlan, gateInstructions); this
+    // one decides per step from `sessionContext.currentStep`, and `SessionBlueprint` has no
+    // injection field, so skipping left `context.state.injection` undefined on every chain
+    // continuation. Its consumers read `?.inject === false` / `?? true`, so undefined means
+    // INJECT — the configured frequency (`frameworks.systemPromptFrequency`) and target were
+    // silently bypassed for steps 2..N and every gate-review retry.
 
     // Create authority if not already created
     if (!this.injectionService) {
@@ -230,12 +233,37 @@ export class InjectionControlStage extends BasePipelineStage {
    */
   private getPromptInjection(context: ExecutionContext): PromptInjectionConfig | undefined {
     if (context.hasChainCommand()) {
-      const currentStep = context.sessionContext?.currentStep ?? 1;
-      const step = context.parsedCommand.steps[currentStep - 1];
-      return step?.convertedPrompt?.injection;
+      return this.resolveCurrentChainStep(context)?.convertedPrompt?.injection;
     }
 
     return context.parsedCommand?.convertedPrompt?.injection;
+  }
+
+  /**
+   * The parse-time step for the node the run is standing at.
+   *
+   * Resolved by node id first (P4 row 3.4): the ordinal-indexed read this replaced named the
+   * wrong step for every node after an adaptive insertion, because the run's ordinal space and
+   * the parse-time array stop being the same list once a node is inserted. Positional lookup
+   * remains for chains parsed before node ids were minted (P3 D10 keeps `nodeId` optional).
+   *
+   * Returns undefined for a node with no parse-time counterpart — an INSERTED node. That node
+   * declares no prompt-tier injection of its own, and reading a neighbour's block would be a
+   * silent misattribution rather than a missing declaration.
+   */
+  private resolveCurrentChainStep(context: ExecutionContext): ChainStepPrompt | undefined {
+    const steps = context.parsedCommand?.steps ?? [];
+    const currentNodeId = context.sessionContext?.currentNodeId;
+
+    if (typeof currentNodeId === 'string') {
+      const hasNodeIds = steps.some((step) => typeof step.nodeId === 'string');
+      if (hasNodeIds) {
+        return steps.find((step) => step.nodeId === currentNodeId);
+      }
+    }
+
+    const currentStep = context.sessionContext?.currentStep ?? 1;
+    return steps[currentStep - 1];
   }
 
   /**
@@ -247,9 +275,7 @@ export class InjectionControlStage extends BasePipelineStage {
       return undefined;
     }
 
-    const currentStep = context.sessionContext?.currentStep ?? 1;
-    const steps = context.parsedCommand.steps;
-    const step = steps[currentStep - 1];
+    const step = this.resolveCurrentChainStep(context);
 
     // Try to get step type from metadata
     if (step?.metadata?.['stepType']) {

@@ -43,6 +43,7 @@ interface ExecutionRecordRow {
   session_id: string;
   chain_id: string | null;
   step_number: number | null;
+  node_id: string | null;
   prompt_id: string | null;
   status: string;
   substate_json: string | null;
@@ -52,12 +53,25 @@ interface ExecutionRecordRow {
   error_message: string | null;
   started_at: number;
   completed_at: number | null;
+  steps_planned: number | null;
+  gates_fired: number | null;
+  gate_retries: number | null;
+  unknowns_opened: number | null;
+  unknowns_closed: number | null;
+  nodes_inserted: number | null;
+  nodes_skipped: number | null;
 }
 
 export interface ExecutionRecordAppendInput {
   sessionId: string;
   chainId?: string;
   stepNumber?: number;
+  /**
+   * Stable node identity of the step this record describes. Omitted by the two run-level
+   * terminal writers, which describe a run rather than a node; `buildAppendParams` binds NULL
+   * for them explicitly rather than letting the column go unnamed.
+   */
+  nodeId?: string;
   promptId?: string;
   status: StepLifecycle;
   substate?: StepSubstate;
@@ -67,6 +81,24 @@ export interface ExecutionRecordAppendInput {
   errorMessage?: string;
   startedAt?: number;
   completedAt?: number;
+  /**
+   * Run-level telemetry, flat rather than nested: this file's existing flat-scalar style
+   * (sessionId/chainId/stepNumber/promptId) maps one field to one column, which is what keeps
+   * the column names literal in the INSERT below and therefore visible to
+   * `validate:no-phantom-columns`. Bound only by the two terminal-record call sites.
+   */
+  stepsPlanned?: number;
+  gatesFired?: number;
+  gateRetries?: number;
+  unknownsOpened?: number;
+  unknownsClosed?: number;
+  /**
+   * P4 adaptive-mutation counters. Same terminal-rows-only posture as the five above — they
+   * arrive on the same `getRunTelemetry` object both terminal writers spread, so a writer
+   * cannot pick up one group and miss the other.
+   */
+  nodesInserted?: number;
+  nodesSkipped?: number;
   scope?: StateStoreOptions;
 }
 
@@ -101,10 +133,12 @@ export class ExecutionRecordStore {
       this.db.run(
         `INSERT INTO execution_records (
           execution_id, tenant_id, organization_id, workspace_id,
-          session_id, chain_id, step_number, prompt_id, status,
+          session_id, chain_id, step_number, node_id, prompt_id, status,
           substate_json, input_required_json, evidence_json, gate_verdicts_json,
-          error_message, started_at, completed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          error_message, started_at, completed_at,
+          steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed,
+          nodes_inserted, nodes_skipped
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     } catch (error) {
@@ -180,6 +214,7 @@ export class ExecutionRecordStore {
       sessionId: row.session_id,
       chainId: row.chain_id ?? undefined,
       stepNumber: row.step_number ?? undefined,
+      nodeId: row.node_id ?? undefined,
       promptId: row.prompt_id ?? undefined,
       status: row.status as StepLifecycle,
       substate: parseJson<StepSubstate>(row.substate_json),
@@ -191,6 +226,13 @@ export class ExecutionRecordStore {
       completedAt: row.completed_at ?? undefined,
       organizationId: row.organization_id ?? undefined,
       workspaceId: row.workspace_id ?? undefined,
+      stepsPlanned: row.steps_planned ?? undefined,
+      gatesFired: row.gates_fired ?? undefined,
+      gateRetries: row.gate_retries ?? undefined,
+      unknownsOpened: row.unknowns_opened ?? undefined,
+      unknownsClosed: row.unknowns_closed ?? undefined,
+      nodesInserted: row.nodes_inserted ?? undefined,
+      nodesSkipped: row.nodes_skipped ?? undefined,
     };
   }
 }
@@ -210,6 +252,7 @@ function buildAppendParams(
     input.sessionId,
     input.chainId ?? null,
     input.stepNumber ?? null,
+    input.nodeId ?? null,
     input.promptId ?? null,
     input.status,
     input.substate !== undefined ? JSON.stringify(input.substate) : null,
@@ -219,6 +262,13 @@ function buildAppendParams(
     input.errorMessage ?? null,
     startedAt,
     input.completedAt ?? null,
+    input.stepsPlanned ?? null,
+    input.gatesFired ?? null,
+    input.gateRetries ?? null,
+    input.unknownsOpened ?? null,
+    input.unknownsClosed ?? null,
+    input.nodesInserted ?? null,
+    input.nodesSkipped ?? null,
   ];
 }
 

@@ -19,8 +19,13 @@ import type { GateService } from '#engine/gates/services/gate-service-interface.
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
+import { UnknownObservationProcessor } from '#engine/execution/capture/unknown-observation-processor.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
-import { ChainBlueprintResolver, SymbolicCommandBuilder } from '#engine/execution/parsers/index.js';
+import {
+  ChainBlueprintResolver,
+  SymbolicCommandBuilder,
+  WorkflowCommandBuilder,
+} from '#engine/execution/parsers/index.js';
 import { GateEnforcementAuthority } from '#engine/execution/pipeline/decisions/index.js';
 import {
   // Core pipeline
@@ -64,6 +69,7 @@ import { GateMetricsRecorder } from '#engine/gates/services/gate-metrics-recorde
 import { GateServiceFactory } from '#engine/gates/services/gate-service-factory.js';
 import { GateVerdictProcessor } from '#engine/gates/services/gate-verdict-processor.js';
 import { InlineGateProcessor } from '#engine/gates/services/inline-gate-processor.js';
+import { createRunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
 import {
   createShellVerifyExecutor,
@@ -72,6 +78,8 @@ import {
 import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
+import { compileWorkflowIR } from '#modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
 
 /**
  * Factory that constructs and wires the PromptExecutionPipeline.
@@ -131,13 +139,23 @@ export class PipelineBuilder {
       deps.logger
     );
     const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
+    // The composition root is the only layer that may name both sides: `engine/` cannot
+    // value-import `modules/workflow-ir/` (dependency-cruiser `engine-no-modules-or-mcp-value`,
+    // error severity), and these three functions are pure, so passing them as a port costs
+    // nothing at runtime and keeps the layer edge honest. Constructed per pipeline, holding no
+    // state — the Streamable HTTP transport rebuilds the server per request, so anything cached
+    // here would exist on STDIO and vanish on HTTP.
+    const workflowCommandBuilder = new WorkflowCommandBuilder(
+      { validate: validateWorkflowIR, compile: compileWorkflowIR },
+      deps.logger
+    );
     const commandParsingStage = new CommandParsingStage(
       deps.parsingSystem.commandParser,
       deps.parsingSystem.argumentParser,
       deps.getConvertedPrompts,
       deps.logger,
       symbolicCommandBuilder,
-      blueprintResolver
+      { blueprintResolver, workflowCommandBuilder }
     );
 
     const inlineGateProcessor = new InlineGateProcessor(
@@ -237,6 +255,10 @@ export class PipelineBuilder {
     );
 
     const gateService = this.createGateService();
+    // One read model of the live run, two consumers: the registrar resolves an ordinal target to
+    // a node id against it, and the enhancement service matches by that id and drops gates whose
+    // target node the mutation policy retired (P4 row 4.1 / OQ-P4-3).
+    const runStepViewProvider = createRunStepViewProvider(deps.chainSessionStore);
     const gateEnhancementService = new GateEnhancementService(
       gateService,
       temporaryGateRegistry,
@@ -244,12 +266,14 @@ export class PipelineBuilder {
       () => deps.gateManager,
       deps.lightweightGateSystem.gateLoader,
       new GateMetricsRecorder(deps.getAnalyticsService),
-      deps.logger
+      deps.logger,
+      runStepViewProvider
     );
     const temporaryGateRegistrar = new TemporaryGateRegistrar(
       temporaryGateRegistry,
       deps.gateReferenceResolver,
-      deps.logger
+      deps.logger,
+      runStepViewProvider
     );
     const gateStage = new GateEnhancementStage(
       gateEnhancementService,
@@ -273,10 +297,15 @@ export class PipelineBuilder {
       deps.notificationEmitter
     );
     const stepCaptureService = new StepCaptureService(deps.chainSessionStore, deps.logger);
+    const unknownObservationProcessor = new UnknownObservationProcessor(
+      deps.chainSessionStore,
+      deps.logger
+    );
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
       stepCaptureService,
       deps.chainSessionStore,
+      unknownObservationProcessor,
       deps.logger
     );
 
@@ -322,14 +351,20 @@ export class PipelineBuilder {
       deps.chainSessionStore,
       deps.lightweightGateSystem.gateLoader,
       deps.logger,
-      () => deps.configManager.getConfig().gates
+      () => deps.configManager.getConfig().gates,
+      deps.executionRecordStore
     );
-    const responseAssembler = new ResponseAssembler();
+    // Third consumer of the same run read model (P6 Tier 2): the handoff CTA and its P5
+    // visibility envelope resolve the handed-off step by node identity, so they need the run's
+    // node order and its retired nodes — the parse array alone answers a positional question the
+    // mutation policy has already invalidated (P6-F1).
+    const responseAssembler = new ResponseAssembler(runStepViewProvider);
     const formattingStage = new ResponseFormattingStage(
       deps.responseFormatter,
       responseAssembler,
       deps.logger,
-      deps.executionRecordStore
+      deps.executionRecordStore,
+      deps.chainSessionStore
     );
     const postFormattingStage = new PostFormattingCleanupStage(
       deps.chainSessionStore,
@@ -391,6 +426,7 @@ export class PipelineBuilder {
       // Stages take `| null`; PipelinePorts is uniformly optional, so normalize here
       // rather than admitting both empty representations into the ports interface.
       executionRecordStore: deps.executionRecordStore ?? undefined,
+      chainSessionStore: deps.chainSessionStore,
     });
   }
 

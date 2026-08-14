@@ -2,7 +2,7 @@
 
 # Gate Index
 
-21 gates across 7 groups.
+25 gates across 7 groups.
 
 For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
 
@@ -21,7 +21,11 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `
 | `api-documentation` | — | documentation, api, development | Ensures API documentation includes all required sections and follows best practices |
 | `code-quality` | — | development, code_generation, debugging | Ensures generated code follows best practices and quality standards |
 | `educational-clarity` | — | education, documentation, content_processing | Ensures educational content is clear, well-structured, and pedagogically sound |
+| `information-placement` | — | always | Blocks documentation changes that place content in the wrong reader journey or Diátaxis category. |
 | `intent-quality` | — | always | Validates that Intent Declaration is complete, properly formatted for workflow routing, and extracts acceptance criteria when a source spec exists |
+| `product-positioning-fidelity` | — | always | Blocks public documentation that misstates the boundary between the AI client and Claude Prompts. |
+| `prose-hygiene` | — | always | Guides public documentation away from formulaic AI cadence while preserving a direct technical voice. |
+| `semantic-discoverability` | — | always | Guides documentation toward consistent reader terminology and factual search semantics without keyword stuffing. |
 | `technical-accuracy` | — | development, analysis, research · explicit only | Ensures technical correctness, fact-checking, and precision in technical content |
 
 ## Security
@@ -66,4 +70,4 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `
 
 ---
 
-*Generated: 2026-07-31*
+*Generated: 2026-08-12*

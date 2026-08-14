@@ -208,12 +208,12 @@ describe('Tenant Isolation', () => {
 
     /**
      * Tier 4 writer conformance. `chain_sessions.run_owner_pid` is the server PID and
-     * `chain_run_registry.run_owner_pid` is the run owner — neither is a workspace, so the scope
+     * `chain_runs.run_owner_pid` is the run owner — neither is a workspace, so the scope
      * columns are the only thing that says which project a row belongs to. Both were written
      * NULL until a startup backfill repaired them on the next boot; these assert the writers
      * now emit scope themselves, which is what lets that backfill be deleted.
      */
-    test('stamps workspace scope on both the hook projection and the run registry', async () => {
+    test('stamps workspace scope on both the hook projection and the run rows', async () => {
       const scopedStore = new ChainSessionStore(
         logger,
         textReferenceManagerStub as any,
@@ -237,13 +237,14 @@ describe('Tenant Isolation', () => {
         // two meanings no longer share a name.
         expect(sessionRows.every((row) => row.run_owner_pid === String(process.pid))).toBe(true);
 
-        const registryRows = dbManager.query<{
+        const runRows = dbManager.query<{
           run_owner_pid: string;
           workspace_id: string | null;
-        }>(`SELECT run_owner_pid, workspace_id FROM chain_run_registry`);
+        }>(`SELECT run_owner_pid, workspace_id FROM chain_runs`);
 
-        expect(registryRows.length).toBeGreaterThan(0);
-        expect(registryRows.every((row) => row.workspace_id === 'ws-alpha')).toBe(true);
+        expect(runRows.length).toBeGreaterThan(0);
+        expect(runRows.every((row) => row.workspace_id === 'ws-alpha')).toBe(true);
+        expect(runRows.every((row) => row.run_owner_pid === String(process.pid))).toBe(true);
       } finally {
         await scopedStore.cleanup();
       }

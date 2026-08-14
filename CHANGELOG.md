@@ -5,8 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
+## [Unreleased]
 
+### Added
+
+- **Patch-mode prompt editing.** `resource_manager` `action:"update"` accepts `patch` — anchored `old_string`/`new_string` operations over `user_message_template`, `system_message`, and `description` — so a one-section edit no longer retransmits the whole prompt. Anchors are exact-match and uniqueness-checked with typed rejections (`empty_old_string`, `target_absent`, `anchor_not_found`, `anchor_ambiguous`); a rejected patch writes nothing and consumes no version. `dry_run: true` previews the produced text and diff without writing. Both are update-only — `create` rejects them explicitly.
+- **All five preserved prompt fields are now authorable through the tool.** `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type` join `resource_manager` create/update as optional parameters (additive, non-breaking). The two resolution-hierarchy fields carry an explicit freeze-hazard warning in their descriptions: setting them overrides category/global defaults permanently until unset.
+- **Category ship-signal.** Creating or updating a prompt in a category excluded by `server/resources/prompts/.gitignore` now appends a warning naming the allowlist file and the exact lines to add — previously the tool reported success identically whether the prompt would ship or stay workspace-local. The `planning/` category is now allowlisted, so the implementation-planning chain ships with the repo.
+- **Per-step visibility policy.** A chain step's YAML may declare `visibility: { withhold: [...], expose: [...] }` over three server-sourced context items — `previous_step_output`, `chain_history`, `unknowns_ledger`. A withheld item stays out of every later step's render (replaced by a named `[CONTEXT WITHHELD]` instruction) until a step explicitly `expose`s it, for that step only; a `==>` delegated step's handoff envelope excludes withheld items and carries a names-only manifest line instead. Withholding covers only what the server sources — the server cannot unsee the client's window, and true isolation remains the `==>` delegation operator; the docs now state that ceiling explicitly.
+- **`prompt_engine` accepts a `workflow` parameter** — a structured, node-addressed workflow IR, mutually exclusive with `command` and `chain_id`. It is validated server-side against schema and structural budget caps (`maxNodes` 32, `maxFanOut` 8, `maxInsertions` 3, enforced and narrow-only) and then compiled into an ordinary chain run — the resulting `chain_runs`/`chain_run_nodes` rows are structurally identical to an equivalent `>>chain`'s, and there is no IR-specific execution path. `edges` are dependencies, not branches: they linearize into one run order (Kahn's algorithm, ties broken by declaration order); there is no branching runtime. An invalid workflow is rejected with one addressed line per problem naming the offending node/edge and rule, and writes nothing — no run, no session, no version. IR nodes can carry every field the runtime consumes that the string command grammar cannot express — stable node ids, per-step `visibility`, gate bindings (`gates`, `inlineGateIds`), delegation hints (`subagentModel`, `agentType`), and `inputMapping`/`outputMapping`. A declared `declaredCostCeiling` is recorded on the run's terminal telemetry and never enforced. See [Workflow IR Reference](docs/reference/workflow-ir.md).
+
+### Fixed
+
+- **Version history now records what an edit produced, not what it replaced.** Version N holds the state edit N produced (go-forward numbering), so the newest version always equals what `inspect` shows; unrecorded prior state is bridged in automatically, rollback validates its target before writing anything, records the restored state as a new `Rollback to vN` row, and restores snapshots exactly — the old `snapshot ?? live` hybrid merge and the "Pre-rollback snapshot" rows are gone. A failed version save now aborts the update instead of logging and proceeding.
+- **Tool schema stopped silently discarding argument fields.** The `arguments` items on prompt create/update now accept `required`, `defaultValue`, and `validation`, and `type` is the loader's 5-value enum — previously Zod stripped them at the first boundary while 45 shipped prompts declared `required: true`.
+- **Chain step labels retired their stale phase vocabulary.** The implementation-planning chain's five `stepName` labels (and two prose references) now carry the sub-prompts' own `(Step N)` names instead of `(Phase N)` numbering that no longer exists.
+- **Step-targeted gates now review only their target step.** A gate bound to a node id (or step number) previously entered the run-wide review accumulator, so a gate "on step 3" reviewed every step — targeting scoped guidance injection only. Review participation is now carried per-step (`reviewGateIds`), with untargeted gates keeping their run-wide inheritance and single-prompt runs byte-identical. The two residual fallback paths are also closed: a mutation-inserted node inherits its triggering unknown's target gates, and a skipped step triggers no review at all.
+- **A step-level `subagentModel` now marks its step delegated on any chain invocation**, not only after a `==>` operator. `OperatorValidationStage` returned early on an empty operator set before delegation normalization ran; the direct (non-symbolic) `>>chain` path always has an empty operator set, so a YAML-declared `subagentModel` parsed but produced no delegation CTA or handoff envelope unless the command also spelled `==>`. Delegation normalization now runs before that exit. `agentType` alone still does not mark a step delegated — it only selects which agent a `==>`-delegated or `subagentModel`-marked step uses.
+- **Handoff visibility (and the delegation CTA/envelope it feeds) is now resolved by node identity instead of array position.** `resolveHandoffVisibility` indexed the parsed step blueprint by `nextStepIndex`, so after an adaptive mutation inserted or skipped a node, the visibility declarations resolved belonged to the wrong step. The run's live next-node id is now asked for directly and matched back to the step it names; a `withhold` declared by a step the mutation policy retired (skipped) no longer applies to a step that does run. Runs with no mutation and chains with no declared node ids are unaffected.
+- **Named outputs (`outputMapping`) now publish under a reserved `outputs.<name>` namespace** (`{{outputs.findings}}`) instead of a flat template key (`{{findings}}`), and are removed together with the rest of chain history when a step withholds `chain_history` — previously a withheld alias still leaked through because `stripChainHistory` could only delete regex-identifiable positional keys. `{{findings}}` is no longer published; existing authors must migrate to `{{outputs.findings}}`. No shipped chain declared `outputMapping` at the time of this change. Each key of `outputMapping` still receives the step's whole output — the declared value is not read (documented, not newly broken).
+
+### Removed
+
+- **BREAKING — the `checkpoint` resource type is gone.** `resource_manager(resource_type: "checkpoint", ...)` and the `clear` action are removed from the tool surface, along with the `GitCheckpoint` module behind them. Every checkpoint action returned "Checkpoint manager is not available" under every configuration: the handler was defined and exported but never constructed, so a quarter of the published `resource_type` enum could not succeed. Reinstating it was rejected rather than deferred — the actions were `git stash push`/`pop`/`drop` wrappers, and exposing stash manipulation to a client silently discards uncommitted work belonging to anyone else sharing the working tree. Nothing depended on it, since no call could ever have returned success.
+
+- **BREAKING — the pre-rename `methodology*` back-compat folds are retired.** The methodology→framework rename shipped in v3.0.0 with fold-forward support for the old spellings; those folds are now deleted. Six input spellings stop being accepted, and in every case but one they fail by silently falling back to the default rather than erroring:
+  - framework YAML `methodologyGates:` → use `frameworkGates:`
+  - gate YAML `pass_criteria.methodology:` → use `framework:`; and `type: methodology_compliance` → `framework_compliance` (this one throws at parse, being a closed enum)
+  - `config.json` `gates.methodologyGates` → `gates.frameworkGates`; the top-level `methodologies:` section and `resources.methodologies` are no longer adopted into their `frameworks` equivalents
+  - `resource_manager` authoring payload `methodology_gates` / `methodology_elements` → `framework_gates` / `framework_elements`
+  - prompt-template placeholder `{METHODOLOGY}` → `{FRAMEWORK_TYPE}`
+
+  Marked breaking because the framework/gate YAML schemas and `config.json` are declared API surface. Shipped in a minor by explicit maintainer decision — the pre-rename spellings have been unsupported since v3.0.0 (2026-07-31), and the only spelling measurably outside the declared contract was the `resource_manager` authoring payload. If you hold a workspace resource written before v3.0.0, rename the keys above before upgrading.
+
+### Added
+
+- Chain steps accept a `framework` field, selecting the framework for that step alone. It outranks the run-wide default and yields to an explicit `^Framework` operator on the command; an id the registry does not know falls back to the run-wide framework rather than failing the load.
+- Documentation governance now routes public-doc changes through a versioned `documentation_change` chain, with focused gates for product positioning, information placement, semantic discoverability, and prose hygiene.
+- `prompt_engine` accepts an optional `observations` parameter — chain steps declare typed unknowns (discovered/resolved) that accumulate in a per-run ledger and surface in subsequent step context.
+- `execution_records` now records per-run telemetry (steps planned/executed, gate verdict submissions, the FAIL subset of those submissions, unknowns opened/closed) as record-only facts on terminal rows, surfaced as one plain-text line per session by `system_control execution_history`. No scoring, weighting, or routing decision is derived from these fields. Schema v21 — `execution_records` is `ephemeral`, so existing rows do not survive the bump.
+- Adaptive chain mutation v1 — a blocking unknown inserts one investigation step; an irrelevant-resolved unknown skips its declared target step; both audited on the terminal execution record (`nodes_inserted`/`nodes_skipped`) and capped per run (1 insertion per unknown id, 3 per run). The model only ever declares typed observations; the server owns every graph edit, in reaction to a declared observation only. Schema v23 — `chain_run_nodes` gains `origin`/`origin_unknown_id` provenance columns.
+
+### Changed
+
+- **BREAKING — `confirm: true` is now required to delete a prompt.** `resource_manager(resource_type: "prompt", action: "delete")` refuses without it and names the chains that would break. The parameter's schema text has always described it as delete's safety gate, but only `rollback` read it — the guard sat on the recoverable verb and was absent from the unrecoverable one. Deletion has no undo through the tool surface: a deleted prompt's `version_history` rows survive, but `rollback` reports "Prompt not found" once the prompt is gone, so those snapshots are unreachable by any action. Scripts calling delete must add `confirm: true`.
+- **BREAKING — chain steps reject unknown keys.** `chainSteps` entries in prompt YAML are validated strictly; a key with no schema field now fails the prompt's load, naming the key and its step index, instead of being silently discarded. A typo like `framwork: ReACT` previously parsed to a normal-looking step and ran the chain under the wrong framework with no signal — the same silence left six `inlineGateIds` declarations dead across three shipped chains. Every key with a real consumer was declared first, including `delegation`, which no code in the prompt module reads but the skills-sync exporter reads straight off the YAML.
+- Renovate hosted reruns now use a dry-run-first request script that verifies local/remote config parity, strict protected checks, full-SHA Actions enforcement, successful Renovate and Release Please checks on `main`, and the exact dashboard request marker before changing GitHub state. Automated lock maintenance retains Renovate's three-day npm resolution cutoff while treating the timestamp-less synthetic maintenance update as timestamp-optional, preventing a permanent `renovate/stability-days` block.
+
+## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 
 ### Fixed
 
@@ -126,10 +172,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Maintenance
 
 * **server:** pin the next release to 3.2.0 ([e709a1c](https://github.com/minipuft/claude-prompts-mcp/commit/e709a1cd9f8eb97ce4ae7b1eab9a31b43a65d6ae))
-
-## [Unreleased]
-
-
 
 ## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
 
@@ -366,8 +408,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **server:** re-license from AGPL-3.0-only to MIT ([07f2f0a](https://github.com/minipuft/claude-prompts/commit/07f2f0ab1afe07f6f6d020aefd79ab20248dc2b1))
 
-## [Unreleased]
-
 ## [2.1.0](https://github.com/minipuft/claude-prompts/compare/v2.0.0...v2.1.0) (2026-03-19)
 
 ### Added
@@ -468,8 +508,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ⚠ BREAKING CHANGES
 
 - **runtime:** Individual per-resource env vars and CLI flags removed. Use MCP_WORKSPACE with resources/ subdirectory structure instead.
-
-## [Unreleased]
 
 ## [2.0.0](https://github.com/minipuft/claude-prompts/compare/v1.7.0...v2.0.0) (2026-03-11)
 

@@ -1,0 +1,7 @@
+id: product-positioning-fidelity
+name: Product Positioning Fidelity
+type: validation
+description: >-
+  Blocks public documentation that misstates the boundary between the AI client
+  and Claude Prompts.
+guidanceFile: guidance.md

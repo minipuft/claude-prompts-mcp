@@ -26,17 +26,17 @@ downstream repos consume it as an npm dependency and register thin adapters.
 
 ## Hook Event Mapping (measured 2026-08-03 against each repo's shipped config)
 
-| Behavior                  | Claude Code                                | Codex CLI                                                  | Gemini CLI                                             |
-| ------------------------- | ------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------ |
-| `>>` syntax detection     | `UserPromptSubmit`                         | `UserPromptSubmit`                                         | `BeforeAgent`                                          |
-| Gate verdict enforcement  | `PreToolUse` `.*prompt_engine`             | `PreToolUse` `.*prompt_engine`                             | `BeforeTool` `prompt_engine`                           |
-| Delegation enforcement    | `PreToolUse` `Edit\|Write\|Bash\|Task`     | `PreToolUse` `Bash\|apply_patch\|collaborationspawn_agent` | `BeforeTool` `write_file\|replace\|bash\|task_tool\|…` |
-| Chain/gate tracking       | `PostToolUse` `.*prompt_engine`            | `PostToolUse` `.*prompt_engine`                            | `AfterTool` `prompt_engine`                            |
-| Ralph telemetry           | `PostToolUse` `Edit\|Write\|Bash`          | `PostToolUse` `Bash\|apply_patch`                          | `AfterTool` `write_file\|replace\|bash\|task_tool`     |
-| Stop blocking (Ralph)     | `Stop`                                     | `Stop` (timeout 120s)                                      | `SessionEnd` (cleanup only)                            |
-| Compaction handling       | `SessionStart` (`compact`) — recover after | `SessionStart` (`compact`) — recover after                 | `PreCompress` (`manual\|auto`) — save before           |
-| Skill-first reminder      | unregistered                               | `SessionStart` (`startup\|resume`), catalog-free           | —                                                      |
-| Subagent gate enforcement | unregistered                               | not portable on 0.146 (encrypted inter-agent payloads)     | —                                                      |
+| Behavior                  | Claude Code                                   | Codex CLI                                                  | Gemini CLI                                             |
+| ------------------------- | --------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
+| `>>` syntax detection     | `UserPromptSubmit`                            | `UserPromptSubmit`                                         | `BeforeAgent`                                          |
+| Gate verdict enforcement  | `PreToolUse` `.*prompt_engine`                | `PreToolUse` `.*prompt_engine`                             | `BeforeTool` `prompt_engine`                           |
+| Delegation enforcement    | `PreToolUse` `Edit\|Write\|Bash\|Task\|Agent` | `PreToolUse` `Bash\|apply_patch\|collaborationspawn_agent` | `BeforeTool` `write_file\|replace\|bash\|task_tool\|…` |
+| Chain/gate tracking       | `PostToolUse` `.*prompt_engine`               | `PostToolUse` `.*prompt_engine`                            | `AfterTool` `prompt_engine`                            |
+| Ralph telemetry           | `PostToolUse` `Edit\|Write\|Bash`             | `PostToolUse` `Bash\|apply_patch`                          | `AfterTool` `write_file\|replace\|bash\|task_tool`     |
+| Stop blocking (Ralph)     | `Stop`                                        | `Stop` (timeout 120s)                                      | `SessionEnd` (cleanup only)                            |
+| Compaction handling       | `SessionStart` (`compact`) — recover after    | `SessionStart` (`compact`) — recover after                 | `PreCompress` (`manual\|auto`) — save before           |
+| Skill-first reminder      | unregistered                                  | `SessionStart` (`startup\|resume`), catalog-free           | —                                                      |
+| Subagent gate enforcement | unregistered                                  | not portable on 0.146 (encrypted inter-agent payloads)     | —                                                      |
 
 OpenCode is a behavioral port, not an adapter port — its event names and coverage live in
 `opencode-prompts` and are narrower (no prompt-submit, stop, or subagent hooks).

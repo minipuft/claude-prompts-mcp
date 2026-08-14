@@ -1,0 +1,141 @@
+# Claims-conformance corpus — MCP tool surface
+#
+# The three tools ARE the public API contract (CLAUDE.md § Public API Contract), so every action
+# they advertise is a claim. This file covers the READ-ONLY actions; mutating ones (create,
+# update, delete, rollback, clear, maintenance) are tracked as plan rows because they need an
+# isolated workspace per scenario before they can assert anything without corrupting state.
+#
+# Coverage source of truth:
+#   system_control    — 11 actions, from the router dispatch
+#   resource_manager  — 4 resource_types x 14 actions, from resource-manager.schema.ts
+#   frameworks        — 8 ids under resources/frameworks/
+
+version: 1
+
+scenarios:
+  # ── system_control: every read-only action answers ──────────────────────────
+  - id: sc-status
+    claim_source: 'system_control action: status — CLAUDE.md tool layer'
+    requests: [{ tool: system_control, args: { action: status } }]
+    expect: { ok: true }
+
+  - id: sc-framework-list
+    claim_source: 'system_control action: framework (list) — FrameworkManager is the authority'
+    requests: [{ tool: system_control, args: { action: framework, operation: list } }]
+    expect: { ok: true }
+
+  - id: sc-gates-list
+    claim_source: 'system_control action: gates (list) — docs/guides/gates.md'
+    requests: [{ tool: system_control, args: { action: gates, operation: list } }]
+    expect: { ok: true }
+
+  - id: sc-analytics
+    claim_source: 'system_control action: analytics — docs/guides/telemetry-observability.md'
+    requests: [{ tool: system_control, args: { action: analytics, operation: view } }]
+    expect: { ok: true }
+
+  - id: sc-config
+    claim_source: 'system_control action: config'
+    requests: [{ tool: system_control, args: { action: config } }]
+    expect: { ok: true }
+
+  - id: sc-guide
+    claim_source: 'system_control action: guide'
+    requests: [{ tool: system_control, args: { action: guide } }]
+    expect: { ok: true }
+
+  - id: sc-injection
+    claim_source: 'system_control action: injection — docs/guides/injection-control.md'
+    requests: [{ tool: system_control, args: { action: injection } }]
+    expect: { ok: true }
+
+  - id: sc-session
+    claim_source: 'system_control action: session'
+    requests: [{ tool: system_control, args: { action: session } }]
+    expect: { ok: true }
+
+  - id: sc-changes
+    claim_source: 'system_control action: changes — resource_changes tracking'
+    requests: [{ tool: system_control, args: { action: changes } }]
+    expect: { ok: true }
+
+  - id: sc-execution-history
+    claim_source: 'system_control action: execution_history — SEP-1686 ledger, v_execution_history'
+    requests: [{ tool: system_control, args: { action: execution_history } }]
+    expect: { ok: true }
+
+  - id: sc-unknown-action-rejects
+    claim_source: 'system_control advertises a closed action set — an unknown action must not pass'
+    requests: [{ tool: system_control, args: { action: definitely_not_an_action } }]
+    # Names the rejected action AND that a closed set exists — a generic failure cannot produce it.
+    expect: { error_contains: 'Unknown action: definitely_not_an_action. Valid actions:' }
+
+  # ── resource_manager: list answers for every advertised resource_type ───────
+  - id: rm-list-prompt
+    claim_source: 'resource-manager.schema.ts resource_type enum includes "prompt"'
+    requests: [{ tool: resource_manager, args: { resource_type: prompt, action: list } }]
+    expect: { ok: true }
+
+  - id: rm-list-gate
+    claim_source: 'resource-manager.schema.ts resource_type enum includes "gate"'
+    requests: [{ tool: resource_manager, args: { resource_type: gate, action: list } }]
+    expect: { ok: true }
+
+  - id: rm-list-framework
+    claim_source: 'resource-manager.schema.ts resource_type enum includes "framework"'
+    requests: [{ tool: resource_manager, args: { resource_type: framework, action: list } }]
+    expect: { ok: true }
+
+  - id: rm-unknown-type-rejects
+    claim_source: 'resource_type is a closed enum — an undeclared type must not pass'
+    requests: [{ tool: resource_manager, args: { resource_type: not_a_type, action: list } }]
+    # Schema-level enum rejection, quoting the permitted set.
+    expect: { error_contains: 'resource_type: Invalid option: expected one of' }
+
+  # ── Read-only resource_manager actions (Tier 0.5b row A2) ──────────────────
+  #
+  # Safe on the shared server BY CONSTRUCTION: every action below only reads. They were the largest
+  # uncovered part of the 14-action surface — `list` was the single action any scenario exercised.
+  # Each asserts a string only that action emits, so a row cannot pass on a generic success banner.
+  - id: resource-manager-prompt-guide
+    claim_source: >-
+      resource_manager contract — action `guide`, "phase-appropriate recommendations" for authoring.
+      CLAUDE.md § MCP Tool Layer names it one of the discovery actions.
+    requests: [{ tool: resource_manager, args: { resource_type: prompt, action: guide } }]
+    expect: { text_contains: 'Prompt Resource Guide' }
+
+  - id: resource-manager-prompt-analyze-type
+    claim_source: 'resource_manager contract — action `analyze_type` classifies a prompt as single or chain'
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: analyze_type, id: minimal_prompt }
+    # Asserts the CLASSIFICATION, not that the call answered. `minimal_prompt` has no chain steps,
+    # so `single` is the correct verdict and a misclassification would red this row.
+    expect: { text_contains: 'Normalized Execution Type**: single' }
+
+  - id: resource-manager-prompt-analyze-gates
+    claim_source: 'resource_manager contract — action `analyze_gates` reports gate configuration for a prompt'
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: analyze_gates, id: minimal_prompt }
+    expect: { text_contains: 'Gate Analysis' }
+
+  - id: resource-manager-gate-inspect
+    claim_source: >-
+      resource_manager contract — `inspect` "Returns full definition". Exercised on resource_type
+      `gate`, which no scenario read before.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: content-structure }
+    # The gate's own guidance body, not just its name — proves the definition was loaded and
+    # rendered rather than the id being echoed back.
+    expect: { text_contains: 'Content Structure Guidelines' }
+
+  - id: resource-manager-framework-inspect
+    claim_source: >-
+      resource_manager contract — `inspect` on resource_type `framework`. CLAUDE.md § Domain
+      Ownership: framework identity comes from FrameworkManager, never a hardcoded list.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: framework, action: inspect, id: cageerf }
+    expect: { text_contains: 'C.A.G.E.E.R.F Framework' }

@@ -203,8 +203,13 @@ def load_active_chain_state() -> dict | None:
          instead of inferring from current_step vs total_steps.
       2. chain_sessions per-row table — fallback for environments where the
          view query fails (e.g., column-shape divergence during rollout).
-      3. chain_run_registry blob — legacy fallback retained for one release;
-         Tier 10 removes both this method and the blob table.
+
+    A third fallback previously read the PID-scoped `chain_run_registry` blob
+    table, retired at schema v22 (P3 Tier 4) in favor of the per-row
+    `chain_runs` + `chain_run_nodes` tables that `chain_sessions` is derived
+    from in the same transaction. Removed rather than left guarded: at v22 the
+    table no longer exists, so the SELECT could only ever hit its
+    OperationalError branch and return None.
 
     All paths perform a PID liveness check on run_owner_pid so the hook only
     returns sessions belonging to a live server process. The column was named
@@ -220,11 +225,7 @@ def load_active_chain_state() -> dict | None:
         if result is not None:
             return result
 
-        result = _load_from_session_table(conn)
-        if result is not None:
-            return result
-
-        return _load_from_run_registry(conn)
+        return _load_from_session_table(conn)
     except (sqlite3.Error, json.JSONDecodeError, KeyError, TypeError):
         return None
     finally:
@@ -357,53 +358,6 @@ def _load_from_session_table(conn: sqlite3.Connection) -> dict | None:
         return _session_to_hook_state(session)
 
     return None
-
-
-def _load_from_run_registry(conn: sqlite3.Connection) -> dict | None:
-    """Fallback: read from PID-scoped chain_run_registry blob rows."""
-    try:
-        cursor = conn.execute("SELECT run_owner_pid, state FROM chain_run_registry")
-        rows = cursor.fetchall()
-    except sqlite3.OperationalError:
-        return None
-
-    if not rows:
-        return None
-
-    best = None
-    best_activity = 0
-
-    for row in rows:
-        run_owner_pid = row["run_owner_pid"]
-        # Only read blobs from live server processes
-        try:
-            pid = int(run_owner_pid)
-        except (ValueError, TypeError):
-            continue
-        if not _is_pid_alive(pid):
-            continue
-
-        state_json = row["state"]
-        if not state_json:
-            continue
-
-        registry = json.loads(state_json)
-        runs = registry.get("runs", {})
-
-        for session in runs.values():
-            if not isinstance(session, dict):
-                continue
-            if session.get("lifecycle") == "dormant":
-                continue
-            activity = session.get("lastActivity", 0)
-            if activity > best_activity:
-                best = session
-                best_activity = activity
-
-    if not best:
-        return None
-
-    return _session_to_hook_state(best)
 
 
 # Run statuses that mean the run is over. Kept next to the reader that enforces them so the

@@ -520,9 +520,11 @@ describe('MCP Resources Registration Integration', () => {
       sessionId: 'session-123',
       chainId: 'chain-abc',
       state: {
-        currentStep: 2,
-        totalSteps: 5,
-        stepStates: new Map<number, unknown>([[1, { status: 'completed' }]]),
+        // Node-keyed since P3 Tier 2; the resource still renders `currentStep 2 / totalSteps 5`,
+        // derived from this list rather than stored, so the assertions below are unchanged.
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }, { id: 'n4' }, { id: 'n5' }],
+        stepStates: new Map<string, unknown>([['n1', { status: 'completed' }]]),
       },
       startTime: Date.now() - 60000,
       lastActivity: Date.now() - 1000,

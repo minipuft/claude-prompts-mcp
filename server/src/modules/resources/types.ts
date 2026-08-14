@@ -182,9 +182,9 @@ export interface ResourceDependencies {
           sessionId: string;
           chainId: string;
           state: {
-            currentStep: number;
-            totalSteps: number;
-            stepStates?: Map<number, unknown>;
+            currentNodeId: string | null;
+            nodes: Array<{ id: string }>;
+            stepStates?: Map<string, unknown>;
           };
           startTime: number;
           lastActivity: number;
@@ -198,9 +198,9 @@ export interface ResourceDependencies {
           sessionId: string;
           chainId: string;
           state: {
-            currentStep: number;
-            totalSteps: number;
-            stepStates?: Map<number, unknown>;
+            currentNodeId: string | null;
+            nodes: Array<{ id: string }>;
+            stepStates?: Map<string, unknown>;
           };
           startTime: number;
           lastActivity: number;

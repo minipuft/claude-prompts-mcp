@@ -16,10 +16,12 @@ import { ArgumentHistoryTracker, TextReferenceStore } from '../text-refs/index.j
 import type {
   StepLifecycle,
   StepMilestone,
+  ChainNode,
   ChainRunStatus,
   GateReviewHistoryEntry,
   PendingGateReview,
   PendingShellVerificationSnapshot,
+  RunTelemetry,
   StepMetadata,
   GateReviewPrompt,
 } from '#shared/types/chain-execution.js';
@@ -30,14 +32,29 @@ import type {
   ChainSessionSummary,
   GateReviewOutcomeUpdate,
   ParsedCommandSnapshot,
-  PersistedChainRunRegistry,
   SessionBlueprint,
+  UnknownLedgerEntry,
+  UnknownObservation,
 } from '#shared/types/chain-session.js';
 import type { Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
+// Single owner of unknowns-ledger transition rules. Imported rather than restated here so
+// the rules cannot drift between the capture seam that validates and the store that persists.
+import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
+// Node identity is what the store addresses by; every integer position it emits is derived
+// here and nowhere else, so the projection arithmetic has exactly one definition.
+import {
+  currentOrdinal,
+  mintInsertionId,
+  mintSequentialIds,
+  nextAfter,
+  nodeIdAt,
+  ordinalOf,
+  totalOf,
+} from '#shared/utils/node-order.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
@@ -50,9 +67,28 @@ function lifecycleForMilestone(milestone: StepMilestone): StepLifecycle {
       return 'pending';
     case 'completed':
       return 'completed';
+    case 'skipped':
+      return 'skipped';
     default:
       return 'working';
   }
+}
+
+/**
+ * Step lifecycles that may not be transitioned out of.
+ *
+ * `completed` was the only one until P4; `skipped` joins it because a step the mutation policy
+ * retired must not be re-rendered by a later capture — the whole point of the skip is that the
+ * client never sees it again.
+ */
+const TERMINAL_STEP_LIFECYCLES: ReadonlySet<StepLifecycle> = new Set<StepLifecycle>([
+  'completed',
+  'skipped',
+]);
+
+/** Step lifecycles that mean "this step has already been rendered, run, or retired". */
+function hasStepStarted(state: StepLifecycle | undefined): boolean {
+  return state !== undefined && state !== 'pending';
 }
 
 /** Callback invoked when a session is cleared (cleanup or explicit). */
@@ -81,7 +117,6 @@ const DEFAULT_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_REVIEW_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_RUN_HISTORY = 10;
-const CHAIN_RUN_STORE_VERSION = 2;
 
 /**
  * Chain Session Store
@@ -110,7 +145,7 @@ export class ChainSessionStore implements ChainSessionService {
   private readonly workspaceScope: StateStoreOptions | undefined;
 
   /**
-   * Scope for `chain_run_registry` rows.
+   * Scope for `chain_runs` rows.
    *
    * Merged, not chosen: the PID decides `run_owner_pid` (which server owns the run) while the
    * workspace fills `workspace_id`/`organization_id` (which project it belongs to). They answer
@@ -165,6 +200,31 @@ export class ChainSessionStore implements ChainSessionService {
   setDatabasePort(db: DatabasePort): void {
     this.injectedDbEngine = db;
     this.resolvedDbEngine = db;
+    // The constructor's initialize() runs synchronously to its early return when no port
+    // was provided, permanently disabling persistence — and the runtime composition always
+    // late-binds the port through this setter, so without re-arming here every fresh
+    // server ran with chain-session persistence silently dead (observed live 2026-08-11:
+    // "Failed to save sessions: Cannot read properties of undefined (reading 'save')" on
+    // every persist, empty chain_runs/chain_sessions while a run was active). Chain onto
+    // initPromise so callers awaiting init observe the completed late load.
+    if (!this.runRegistry) {
+      this.initPromise = this.initPromise
+        .then(async () => {
+          if (this.runRegistry) return;
+          await db.initialize();
+          this.runRegistry = new DirectChainRunRegistry(db);
+          await this.runRegistry.ensureInitialized();
+          this.cleanupStalePidRows();
+          await this.loadSessions();
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `ChainSessionStore: late DatabasePort initialization failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
+    }
   }
 
   /**
@@ -230,46 +290,30 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private async loadSessions(): Promise<void> {
     try {
-      const parsed = await this.runRegistry.load(this.runScope);
+      const sessions = await this.runRegistry.load(this.runScope);
 
-      const persistedSessions = parsed.runs ?? parsed.sessions ?? {};
-      const persistedChainMapping = parsed.runMapping ?? parsed.chainMapping ?? {};
-      const persistedBaseMapping = parsed.baseRunMapping ?? parsed.baseChainMapping ?? {};
-
-      // Restore activeSessions Map
-      for (const [sessionId, session] of Object.entries(persistedSessions)) {
-        const chainSession = session as ChainSession;
-
-        // Deserialize stepStates Map from array format
-        if (chainSession.state.stepStates && Array.isArray(chainSession.state.stepStates)) {
-          chainSession.state.stepStates = new Map(chainSession.state.stepStates as any);
-        } else if (!chainSession.state.stepStates) {
-          chainSession.state.stepStates = new Map();
+      for (const session of sessions) {
+        if (!(session.state.stepStates instanceof Map)) {
+          session.state.stepStates = new Map();
         }
 
         // All persisted sessions become dormant until explicitly resumed
-        chainSession.lifecycle = 'dormant';
-        this.activeSessions.set(sessionId, chainSession);
+        session.lifecycle = 'dormant';
+        this.activeSessions.set(session.sessionId, session);
       }
 
-      // Restore chainSessionMapping Map
-      for (const [chainId, sessionIds] of Object.entries(persistedChainMapping)) {
-        this.chainSessionMapping.set(chainId, new Set(sessionIds));
-      }
-
+      // The three mapping dictionaries are rebuilt, not loaded — they are indexes over the chain
+      // ids the sessions already carry, and persisting a derivable index alongside its source is
+      // how the two come to disagree. `chainSessionMapping` inverts `session.chainId`;
+      // `ensureRunMappingConsistency` derives the base mappings from it via `stripRunNumber`,
+      // exactly as `registerRunHistory` does on the write path.
+      this.chainSessionMapping.clear();
       this.baseChainMapping.clear();
       this.runChainToBase.clear();
-      for (const [baseChainId, runChainIds] of Object.entries(persistedBaseMapping)) {
-        this.baseChainMapping.set(baseChainId, [...runChainIds]);
-      }
-
-      if (parsed.runToBase ?? parsed.runChainToBase) {
-        const runToBaseRecord = parsed.runToBase ?? parsed.runChainToBase;
-        for (const [runChainId, baseChainId] of Object.entries(runToBaseRecord ?? {})) {
-          if (typeof baseChainId === 'string') {
-            this.runChainToBase.set(runChainId, baseChainId);
-          }
-        }
+      for (const session of sessions) {
+        const sessionIds = this.chainSessionMapping.get(session.chainId) ?? new Set<string>();
+        sessionIds.add(session.sessionId);
+        this.chainSessionMapping.set(session.chainId, sessionIds);
       }
 
       this.ensureRunMappingConsistency();
@@ -293,58 +337,32 @@ export class ChainSessionStore implements ChainSessionService {
     await this.persistSessions();
   }
 
-  private serializeSessions(): PersistedChainRunRegistry {
-    const serializedSessions: Record<string, any> = {};
-    for (const [sessionId, session] of this.activeSessions) {
-      const sessionCopy: any = JSON.parse(JSON.stringify(session));
-      sessionCopy.lifecycle = session.lifecycle ?? 'canonical';
-      if (session.state?.stepStates instanceof Map) {
-        sessionCopy.state = sessionCopy.state ?? {};
-        sessionCopy.state.stepStates = Array.from(session.state.stepStates.entries());
-      }
-      serializedSessions[sessionId] = sessionCopy;
-    }
-
-    return {
-      version: CHAIN_RUN_STORE_VERSION,
-      runs: serializedSessions,
-      runMapping: Object.fromEntries(
-        Array.from(this.chainSessionMapping.entries()).map(([chainId, sessionIds]) => [
-          chainId,
-          Array.from(sessionIds),
-        ])
-      ),
-      baseRunMapping: Object.fromEntries(
-        Array.from(this.baseChainMapping.entries()).map(([baseChainId, runIds]) => [
-          baseChainId,
-          [...runIds],
-        ])
-      ),
-      runToBase: Object.fromEntries(this.runChainToBase.entries()),
-    };
-  }
-
   /**
-   * Persist chain sessions to durable storage. Wraps the SSOT blob save and the
-   * derived per-row hook view in a single SQLite transaction so the two stay in
+   * Persist chain sessions to durable storage. Wraps the SSOT per-row save and the
+   * derived hook view in a single SQLite transaction so the two stay in
    * lockstep — either both committed or both rolled back.
    *
-   * `chain_run_registry` (blob) is the SSOT; `chain_sessions` (per-row) is a
+   * `chain_runs` + `chain_run_nodes` are the SSOT; `chain_sessions` (per-row) is a
    * projection of the active hook-relevant subset. See `projectToHookView` for
    * the projection contract.
+   *
+   * The live session objects are handed to the registry rather than a deep clone: the
+   * registry writes columns and one residual document per run, so it reads each field once
+   * and nothing outstays the synchronous write. The clone existed to turn `stepStates` into
+   * an array for JSON, and `stepStates` is now rows.
    */
   private async persistSessions(): Promise<void> {
     const db = this.resolvedDbEngine;
     try {
-      const data = this.serializeSessions();
+      const sessions = Array.from(this.activeSessions.values());
       if (!db) {
         // No DB engine wired — fall back to non-transactional save (test contexts).
-        await this.runRegistry.save(data, this.runScope);
+        await this.runRegistry.save(sessions, this.runScope);
         return;
       }
       db.beginTransaction();
       try {
-        await this.runRegistry.save(data, this.runScope);
+        await this.runRegistry.save(sessions, this.runScope);
         this.projectToHookView(db);
         db.commit();
       } catch (txError) {
@@ -361,11 +379,11 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Project active canonical sessions into the per-row `chain_sessions` table.
    *
-   * `chain_sessions` is a derived hook-read view of the `chain_run_registry`
-   * blob (the SSOT). The blob carries the full data model (sessions + run
-   * mappings + base mappings); this projection writes the active hook-relevant
-   * subset in per-row form so Python hooks can do indexed PID-scoped queries
-   * without parsing the JSON blob.
+   * `chain_sessions` is a derived hook-read view of `chain_runs` + `chain_run_nodes`
+   * (the SSOT). Those carry the full data model; this projection writes the active
+   * hook-relevant subset as a single pre-shaped JSON row per run, so Python hooks get
+   * the whole answer from one indexed PID-scoped SELECT rather than joining two tables
+   * and re-deriving the ordinals themselves.
    *
    * Filter rule: a session is "active for hooks" if it has steps remaining or
    * a pending gate review / shell verification (see `isSessionActiveForHooks`).
@@ -422,8 +440,11 @@ export class ChainSessionStore implements ChainSessionService {
         state: JSON.stringify({
           sessionId: session.sessionId,
           chainId: session.chainId,
-          currentStep: session.state.currentStep,
-          totalSteps: session.state.totalSteps,
+          // Positions, not identities: this blob is read by Python hooks across three repos,
+          // and its integer keys are a cross-repo contract. Derived here so the store can be
+          // node-keyed without the projection changing a byte.
+          currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
+          totalSteps: totalOf(session.state.nodes),
           lastActivity: session.lastActivity,
           pendingGateReview: session.pendingGateReview ?? null,
           pendingShellVerification: session.pendingShellVerification ?? null,
@@ -438,7 +459,8 @@ export class ChainSessionStore implements ChainSessionService {
   /** Whether a session should be visible to hooks (in-progress or pending review). */
   private isSessionActiveForHooks(session: ChainSession): boolean {
     if (isTerminalRunStatus(session.runStatus)) return false;
-    const { currentStep, totalSteps } = session.state;
+    const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
+    const totalSteps = totalOf(session.state.nodes);
     if (currentStep > 0 && currentStep < totalSteps) return true;
     return (
       currentStep > 0 &&
@@ -470,9 +492,14 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Remove rows belonging to dead server processes from both chain_sessions
-   * and chain_run_registry tables. Called once at startup to prevent stale
-   * rows from blocking hooks or consuming storage.
+   * Remove rows belonging to dead server processes from `chain_sessions` and from the
+   * run tables. Called once at startup to prevent stale rows from blocking hooks or
+   * consuming storage.
+   *
+   * The run-table delete is delegated to the registry rather than issued here. This module
+   * deleting rows it does not own was a declared foreign-writer exception on the retired
+   * blob table; recreating it against the new tables would have carried the exception across
+   * a rewrite that could simply not need it.
    */
   private cleanupStalePidRows(): void {
     const db = this.resolvedDbEngine;
@@ -489,19 +516,16 @@ export class ChainSessionStore implements ChainSessionService {
         db.run('DELETE FROM chain_sessions WHERE run_owner_pid = ?', [pid]);
       }
 
-      // Clean chain_run_registry (PID-scoped blob rows). The former
-      // `WHERE tenant_id = 'default'` sweep is gone with the v20 rename: the column carries no
-      // DEFAULT, so nothing can mint a non-PID owner, and the bump drops the table outright.
-      const staleRegistry = this.collectDeadRunOwnerPids(
+      // Clean the PID-scoped run tables. The former `WHERE tenant_id = 'default'` sweep is gone
+      // with the v20 rename: the column carries no DEFAULT, so nothing can mint a non-PID owner.
+      const staleRuns = this.collectDeadRunOwnerPids(
         db,
-        'SELECT run_owner_pid FROM chain_run_registry',
+        'SELECT DISTINCT run_owner_pid FROM chain_runs',
         true
       );
-      for (const pid of staleRegistry) {
-        db.run('DELETE FROM chain_run_registry WHERE run_owner_pid = ?', [pid]);
-      }
+      this.runRegistry.deleteRunsForOwners(staleRuns);
 
-      const totalCleaned = staleSessions.length + staleRegistry.length;
+      const totalCleaned = staleSessions.length + staleRuns.length;
       if (totalCleaned > 0) {
         this.logger.debug(`Cleaned up ${totalCleaned} stale PID rows from session/registry tables`);
       }
@@ -530,19 +554,20 @@ export class ChainSessionStore implements ChainSessionService {
     chainId: string,
     totalSteps: number,
     originalArgs: Record<string, any> = {},
-    options?: StateStoreOptions & { blueprint?: SessionBlueprint }
+    options?: StateStoreOptions & { blueprint?: SessionBlueprint; nodes?: ChainNode[] }
   ): Promise<ChainSession> {
     await this.initPromise;
     const resolvedScope = options?.continuityScopeId ?? resolveContinuityScopeId(options);
+    const nodes = this.resolveCreationNodes(chainId, totalSteps, options?.nodes);
     const session: ChainSession = {
       sessionId,
       chainId,
       state: {
-        // Chain sessions track steps using 1-based indexing to align with pipeline expectations
-        currentStep: totalSteps > 0 ? 1 : 0,
-        totalSteps,
+        // A run starts standing at its first node; a zero-node run is complete on arrival.
+        currentNodeId: nodes[0]?.id ?? null,
+        nodes,
         lastUpdated: Date.now(),
-        stepStates: new Map<number, StepMetadata>(),
+        stepStates: new Map<string, StepMetadata>(),
       },
       executionOrder: [],
       startTime: Date.now(),
@@ -577,6 +602,43 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Resolve the frozen node list for a new run.
+   *
+   * Explicit `nodes` win — they carry the ids minted at parse time, which is the only way an
+   * authored `id:` reaches the store. Callers that know only a count (tests, gated single
+   * prompts, any path with no parsed chain) get synthetic `n1..nK`, which keeps the legacy
+   * `createSession(id, chain, totalSteps)` shape working. A mismatch between the two is a
+   * caller bug, so it is logged rather than silently reconciled.
+   */
+  private resolveCreationNodes(
+    chainId: string,
+    totalSteps: number,
+    explicitNodes?: ChainNode[]
+  ): ChainNode[] {
+    if (explicitNodes !== undefined && explicitNodes.length > 0) {
+      if (totalSteps > 0 && explicitNodes.length !== totalSteps) {
+        this.logger.warn(
+          `[ChainSessionStore] Node list length ${explicitNodes.length} disagrees with totalSteps ${totalSteps} for chain ${chainId}; using the node list`
+        );
+      }
+      // `origin` is normalized on entry rather than left for readers to default. The field is
+      // optional on `ChainNode` because four unrelated sites mint one, but the store owns the
+      // run's node list, so a node inside a session always carries its provenance — otherwise
+      // the same node reads `undefined` in memory and 'planned' after a cold load, and every
+      // consumer has to know which side of the round-trip it is holding.
+      return explicitNodes.map((node) => ({ ...node, origin: node.origin ?? 'planned' }));
+    }
+
+    const count = Math.max(0, totalSteps);
+    return mintSequentialIds(count).map((id, index) => ({
+      id,
+      promptId: chainId,
+      stepName: `Step ${index + 1}`,
+      origin: 'planned' as const,
+    }));
+  }
+
+  /**
    * Get session by ID
    */
   getSession(sessionId: string, scope?: StateStoreOptions): ChainSession | undefined {
@@ -589,11 +651,13 @@ export class ChainSessionStore implements ChainSessionService {
           return undefined;
         }
       }
-      if (
-        session.state.totalSteps > 0 &&
-        (!session.state.currentStep || session.state.currentStep < 1)
-      ) {
-        session.state.currentStep = 1;
+      // Repair a run pointing at a node that is not in its own list (corrupt or partially
+      // written state) by returning it to the first node — the position-keyed equivalent of
+      // the old `currentStep < 1` repair. `null` is left alone: that is a completed run, not
+      // a broken pointer.
+      const { nodes, currentNodeId } = session.state;
+      if (nodes.length > 0 && currentNodeId !== null && ordinalOf(nodes, currentNodeId) === -1) {
+        session.state.currentNodeId = nodes[0]?.id ?? null;
       }
       session.lastActivity = Date.now();
       this.promoteSessionLifecycle(session, 'session-id lookup');
@@ -606,7 +670,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   setStepState(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     milestone: StepMilestone,
     isPlaceholder: boolean = false
   ): boolean {
@@ -619,10 +683,10 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     if (!session.state.stepStates) {
-      session.state.stepStates = new Map<number, StepMetadata>();
+      session.state.stepStates = new Map<string, StepMetadata>();
     }
 
-    const existing = session.state.stepStates.get(stepNumber);
+    const existing = session.state.stepStates.get(nodeId);
     const now = Date.now();
 
     const metadata: StepMetadata = {
@@ -645,10 +709,10 @@ export class ChainSessionStore implements ChainSessionService {
           : {}),
     };
 
-    session.state.stepStates.set(stepNumber, metadata);
+    session.state.stepStates.set(nodeId, metadata);
 
     this.logger?.debug(
-      `[StepLifecycle] Step ${stepNumber} milestone ${milestone} -> state ${metadata.state} (placeholder: ${isPlaceholder})`
+      `[StepLifecycle] Step ${nodeId} milestone ${milestone} -> state ${metadata.state} (placeholder: ${isPlaceholder})`
     );
     return true;
   }
@@ -656,12 +720,12 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Get step state for a specific step
    */
-  getStepState(sessionId: string, stepNumber: number): StepMetadata | undefined {
+  getStepState(sessionId: string, nodeId: string): StepMetadata | undefined {
     const session = this.activeSessions.get(sessionId);
     if (!session?.state.stepStates) {
       return undefined;
     }
-    return session.state.stepStates.get(stepNumber);
+    return session.state.stepStates.get(nodeId);
   }
 
   /**
@@ -673,7 +737,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async transitionStepState(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     newMilestone: StepMilestone,
     isPlaceholder: boolean = false
   ): Promise<boolean> {
@@ -685,23 +749,29 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    const currentMetadata = this.getStepState(sessionId, stepNumber);
+    const currentMetadata = this.getStepState(sessionId, nodeId);
     const currentState = currentMetadata?.state;
 
-    // Stickiness: refuse to overwrite a terminal step state with a different state.
-    if (currentState === 'completed' && newMilestone !== 'completed') {
+    // Stickiness: refuse to overwrite a terminal step state with a different state. Re-asserting
+    // the same terminal value stays a no-op success, which is why the comparison is against the
+    // lifecycle the incoming milestone implies rather than against the milestone name.
+    if (
+      currentState !== undefined &&
+      TERMINAL_STEP_LIFECYCLES.has(currentState) &&
+      lifecycleForMilestone(newMilestone) !== currentState
+    ) {
       this.logger.warn(
-        `[StepLifecycle] Refusing to transition step ${stepNumber} from terminal ${currentState} to ${newMilestone} (session ${sessionId})`
+        `[StepLifecycle] Refusing to transition step ${nodeId} from terminal ${currentState} to ${newMilestone} (session ${sessionId})`
       );
       return false;
     }
 
     const fromLabel = currentState ?? 'NONE';
     this.logger.debug(
-      `[StepLifecycle] Transitioning step ${stepNumber} from ${fromLabel} to ${newMilestone}`
+      `[StepLifecycle] Transitioning step ${nodeId} from ${fromLabel} to ${newMilestone}`
     );
 
-    this.setStepState(sessionId, stepNumber, newMilestone, isPlaceholder);
+    this.setStepState(sessionId, nodeId, newMilestone, isPlaceholder);
 
     await this.saveSessions();
 
@@ -817,8 +887,8 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Check if a step is complete (not a placeholder and in COMPLETED state)
    */
-  isStepComplete(sessionId: string, stepNumber: number): boolean {
-    const metadata = this.getStepState(sessionId, stepNumber);
+  isStepComplete(sessionId: string, nodeId: string): boolean {
+    const metadata = this.getStepState(sessionId, nodeId);
     return metadata?.state === 'completed' && !metadata.isPlaceholder;
   }
 
@@ -828,7 +898,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async updateSessionState(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     stepResult: string,
     stepMetadata?: Record<string, any>
   ): Promise<boolean> {
@@ -852,14 +922,14 @@ export class ChainSessionStore implements ChainSessionService {
     const milestone: StepMilestone = isPlaceholder ? 'rendered' : 'responded';
 
     // Update step state tracking
-    this.setStepState(sessionId, stepNumber, milestone, isPlaceholder);
+    this.setStepState(sessionId, nodeId, milestone, isPlaceholder);
 
     // NOTE: Step advancement is now handled by advanceStep() which should be called
     // ONLY after gate validation passes (or if no gates are configured).
     // This prevents the bug where retry would skip to the next step.
     this.logger?.debug(
-      `[StepLifecycle] Step ${stepNumber} ${isPlaceholder ? 'rendered as placeholder' : 'response captured'}, ` +
-        `currentStep remains ${session.state.currentStep} (advancement deferred to advanceStep())`
+      `[StepLifecycle] Step ${nodeId} ${isPlaceholder ? 'rendered as placeholder' : 'response captured'}, ` +
+        `run remains at ${session.state.currentNodeId ?? 'complete'} (advancement deferred to advanceStep())`
     );
 
     session.state.lastUpdated = Date.now();
@@ -867,7 +937,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     await this.persistStepResult(
       session,
-      stepNumber,
+      nodeId,
       stepResult,
       metadataRecord,
       metadataRecord.isPlaceholder
@@ -884,7 +954,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async updateStepResult(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     stepResult: string,
     stepMetadata?: Record<string, any>
   ): Promise<boolean> {
@@ -897,7 +967,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const existingMetadata =
-      this.textReferenceStore.getChainStepMetadata(session.chainId, stepNumber) || {};
+      this.textReferenceStore.getChainStepMetadata(session.chainId, nodeId) || {};
 
     const mergedMetadata = {
       ...existingMetadata,
@@ -910,15 +980,15 @@ export class ChainSessionStore implements ChainSessionService {
 
     // Update step state: if we're replacing a placeholder with real content, transition to RESPONSE_CAPTURED
     if (!isPlaceholder) {
-      this.setStepState(sessionId, stepNumber, 'responded', false);
+      this.setStepState(sessionId, nodeId, 'responded', false);
       this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} updated with real response, state transitioned to responded`
+        `[StepLifecycle] Step ${nodeId} updated with real response, state transitioned to responded`
       );
     }
 
     await this.persistStepResult(
       session,
-      stepNumber,
+      nodeId,
       stepResult,
       mergedMetadata,
       mergedMetadata.isPlaceholder
@@ -937,7 +1007,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async completeStep(
     sessionId: string,
-    stepNumber: number,
+    nodeId: string,
     options?: { preservePlaceholder?: boolean }
   ): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
@@ -948,18 +1018,18 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    const existingMetadata = this.getStepState(sessionId, stepNumber);
+    const existingMetadata = this.getStepState(sessionId, nodeId);
     const preservePlaceholder = Boolean(options?.preservePlaceholder);
     const isPlaceholder = preservePlaceholder ? Boolean(existingMetadata?.isPlaceholder) : false;
 
     // Transition to COMPLETED state while respecting placeholder metadata when requested
-    this.setStepState(sessionId, stepNumber, 'completed', isPlaceholder);
+    this.setStepState(sessionId, nodeId, 'completed', isPlaceholder);
 
     // NOTE: Step advancement is now handled by advanceStep() which should be called
     // ONLY after gate validation passes. This prevents the retry-skip bug.
     this.logger?.debug(
-      `[StepLifecycle] Step ${stepNumber} marked COMPLETED${isPlaceholder ? ' (placeholder)' : ''}, ` +
-        `currentStep remains ${session.state.currentStep} (call advanceStep() to advance)`
+      `[StepLifecycle] Step ${nodeId} marked COMPLETED${isPlaceholder ? ' (placeholder)' : ''}, ` +
+        `run remains at ${session.state.currentNodeId ?? 'complete'} (call advanceStep() to advance)`
     );
 
     session.state.lastUpdated = Date.now();
@@ -970,17 +1040,20 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Advance to the next step after gate validation passes.
+   * Advance past `nodeId` after gate validation passes.
    * This should be called ONLY when:
    * - Gate review passes (PASS verdict)
    * - No gates are configured for this step
    * - Enforcement mode is advisory/informational (non-blocking)
    *
    * @param sessionId - The session identifier
-   * @param stepNumber - The step that was completed (will advance to stepNumber + 1)
-   * @returns true if advanced successfully, false if session not found
+   * @param nodeId - The node that was completed (the run moves to the node after it)
+   * @returns the node now current plus its derived ordinal, or false if session not found
    */
-  async advanceStep(sessionId: string, stepNumber: number): Promise<number | false> {
+  async advanceStep(
+    sessionId: string,
+    nodeId: string
+  ): Promise<{ nodeId: string | null; ordinal: number } | false> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
       this.logger?.warn(
@@ -989,28 +1062,232 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    // Only advance if we're at or before this step (prevent double-advancement)
-    if (session.state.currentStep > stepNumber) {
+    const nodes = session.state.nodes;
+    const here = currentOrdinal(nodes, session.state.currentNodeId);
+    const target = ordinalOf(nodes, nodeId);
+
+    // Double-advance guard, now a position comparison between two derived ordinals rather than
+    // a comparison against a stored counter. An unresolvable `nodeId` scores -1 and so lands in
+    // this branch, reproducing the old no-op-on-garbage behaviour rather than advancing blind.
+    if (here > target) {
       this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} already passed, currentStep is ${session.state.currentStep}`
+        `[StepLifecycle] Node ${nodeId || '(unresolved)'} already passed, run is at ordinal ${here}`
       );
-      return session.state.currentStep;
+      return { nodeId: session.state.currentNodeId, ordinal: here };
     }
 
-    session.state.currentStep = stepNumber + 1;
-    if (!session.executionOrder.includes(stepNumber)) {
-      session.executionOrder.push(stepNumber);
+    // `null` when `nodeId` is terminal: the run has moved past its last node.
+    //
+    // P4: skipped nodes are passed over here, INSIDE the single traversal owner, so the
+    // completion latch below still sees the real end of the run — a run whose trailing nodes were
+    // all skipped completes on this advance rather than parking on a node nothing will ever
+    // render. Skipped nodes are deliberately NOT appended to `executionOrder`: that list is the
+    // record of what the run actually executed, and it is read to reconstruct step results, so a
+    // node with no result in it would read as an executed step with a missing response.
+    let next = nextAfter(nodes, nodeId);
+    let skippedPast = 0;
+    while (next !== null && session.state.stepStates?.get(next)?.state === 'skipped') {
+      skippedPast += 1;
+      next = nextAfter(nodes, next);
+    }
+    if (skippedPast > 0) {
+      this.logger.debug(
+        `[StepLifecycle] Passed ${skippedPast} skipped node(s) after ${nodeId} (session ${sessionId})`
+      );
+    }
+
+    session.state.currentNodeId = next;
+    if (!session.executionOrder.includes(nodeId)) {
+      session.executionOrder.push(nodeId);
     }
 
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
+    const ordinal = currentOrdinal(nodes, next);
     this.logger?.debug(
-      `[StepLifecycle] Advanced from step ${stepNumber} to step ${session.state.currentStep}`
+      `[StepLifecycle] Advanced past node ${nodeId} to ${next ?? 'run-complete'} (ordinal ${ordinal})`
     );
 
     await this.saveSessions();
-    return session.state.currentStep;
+
+    // The single decision point for run completion. Advancing past the terminal node is the
+    // only event that ends a run normally, so the latch lives here rather than in whichever
+    // pipeline stage happens to notice the ordinal went out of range — that inference ran in
+    // three places and disagreed with the rendered footer, which is what let a client abandon
+    // a run that still owed its final gate verdict. `transitionRunStatus` owns terminal
+    // stickiness and idempotency, so re-advancing past the same node is a no-op here too.
+    if (next === null) {
+      await this.transitionRunStatus(sessionId, 'completed');
+    }
+
+    return { nodeId: next, ordinal };
+  }
+
+  /**
+   * Insert a new node immediately after `afterNodeId` (P4 adaptive mutation).
+   *
+   * Lives beside `advanceStep` because the run's node list has exactly one owner, and an
+   * insertion is a traversal-affecting write: the inserted node becomes the natural `nextAfter`
+   * of the node the run is standing at, which is what makes it the next CTA with no extra
+   * round-trip.
+   *
+   * Returns the minted node, or `null` when the insertion was refused. `null` rather than a
+   * throw matches this store's posture everywhere else (`advanceStep`, `completeStep`,
+   * `setStepState` all return a falsy value and warn) — but it is still an OBSERVABLE failure,
+   * which a silent no-op returning a fabricated node would not be.
+   *
+   * Refused when:
+   *  - the session does not exist
+   *  - the run is in a terminal status (nothing will ever reach the new node)
+   *  - `afterNodeId` is not in the run's node list
+   *  - `afterNodeId` sits strictly BEHIND the node the run is standing at, which would place the
+   *    new node before `currentNodeId` where traversal has already passed. Inserting after the
+   *    CURRENT node is the intended case and is allowed.
+   *
+   * The new id is minted through `mintInsertionId`, so existing node ids are never renumbered —
+   * every gate target, execution record and `executionOrder` entry addressed by id stays valid.
+   */
+  async insertNodeAfter(
+    sessionId: string,
+    afterNodeId: string,
+    spec: {
+      stepName: string;
+      promptId: string;
+      origin?: 'planned' | 'inserted';
+      /** The declared unknown that motivated the insertion; stored so the per-unknown-id
+       *  insertion cap can be recomputed from persisted rows after a cold load. */
+      unknownId?: string;
+    }
+  ): Promise<ChainNode | null> {
+    const session = this.activeSessions.get(sessionId);
+    if (session === undefined) {
+      this.logger.warn(
+        `[ChainMutation] Cannot insert node into non-existent session: ${sessionId}`
+      );
+      return null;
+    }
+
+    if (isTerminalRunStatus(session.runStatus)) {
+      this.logger.warn(
+        `[ChainMutation] Refusing to insert after ${afterNodeId}: session ${sessionId} is terminal ('${session.runStatus ?? 'unknown'}')`
+      );
+      return null;
+    }
+
+    const nodes = session.state.nodes;
+    const anchor = ordinalOf(nodes, afterNodeId);
+    if (anchor === -1) {
+      this.logger.warn(
+        `[ChainMutation] Refusing to insert: node ${afterNodeId} is not in session ${sessionId}`
+      );
+      return null;
+    }
+
+    const here = currentOrdinal(nodes, session.state.currentNodeId);
+    if (anchor < here) {
+      this.logger.warn(
+        `[ChainMutation] Refusing to insert after ${afterNodeId} (ordinal ${anchor}): run is already at ordinal ${here}, so the new node would never be reached`
+      );
+      return null;
+    }
+
+    const nodeId = mintInsertionId(
+      spec.unknownId !== undefined ? `inv-${spec.unknownId}` : spec.stepName,
+      nodes.map((node) => node.id)
+    );
+    const inserted: ChainNode = {
+      id: nodeId,
+      promptId: spec.promptId,
+      stepName: spec.stepName,
+      origin: spec.origin ?? 'inserted',
+    };
+    if (spec.unknownId !== undefined) {
+      inserted.originUnknownId = spec.unknownId;
+    }
+
+    // `anchor` is 1-based, so it is already the array index one past the anchor node.
+    nodes.splice(anchor, 0, inserted);
+
+    session.state.lastUpdated = Date.now();
+    session.lastActivity = Date.now();
+
+    this.logger.debug(
+      `[ChainMutation] Inserted node ${nodeId} after ${afterNodeId} at ordinal ${anchor + 1} of ${totalOf(nodes)} (session ${sessionId}, unknown ${spec.unknownId ?? 'none'})`
+    );
+
+    await this.saveSessions();
+    return inserted;
+  }
+
+  /**
+   * Retire a not-yet-executed node ahead of the run (P4 adaptive mutation).
+   *
+   * The node ROW is preserved — this is a lifecycle assertion, not a deletion — so ordinals of
+   * the nodes around it do not shift and anything already addressed by id stays valid.
+   * `advanceStep` is what makes the skip observable: it passes over `skipped` nodes when choosing
+   * the next current node.
+   *
+   * `unknownId` is the resolution that motivated the skip. It is recorded in the log and NOT
+   * persisted as a column: skips are uncapped in v1 (OQ-P4-5), so no reader needs to recover it,
+   * and a column nothing reads is the value-dead class this schema has already produced twice.
+   *
+   * Returns `false` (and warns) rather than throwing, matching the sibling operations. Refused
+   * when the session does not exist, the node is not in the run, the node has already started
+   * (rendered / responded / completed — a step the client has seen cannot be un-shown), or the
+   * node is not STRICTLY ahead of the current node (OQ-P4-2). Re-skipping an already-skipped node
+   * is idempotent and returns `true`.
+   */
+  async markNodeSkipped(sessionId: string, nodeId: string, unknownId: string): Promise<boolean> {
+    const session = this.activeSessions.get(sessionId);
+    if (session === undefined) {
+      this.logger.warn(`[ChainMutation] Cannot skip node in non-existent session: ${sessionId}`);
+      return false;
+    }
+
+    const nodes = session.state.nodes;
+    const target = ordinalOf(nodes, nodeId);
+    if (target === -1) {
+      this.logger.warn(
+        `[ChainMutation] Refusing to skip: node ${nodeId} is not in session ${sessionId}`
+      );
+      return false;
+    }
+
+    const existing = this.getStepState(sessionId, nodeId)?.state;
+    if (existing === 'skipped') {
+      return true;
+    }
+    if (hasStepStarted(existing)) {
+      this.logger.warn(
+        `[ChainMutation] Refusing to skip node ${nodeId}: already in state '${existing}' (session ${sessionId})`
+      );
+      return false;
+    }
+
+    // OQ-P4-2: strictly ahead only. The current node is already rendered client-side, so
+    // skipping it would desynchronize the client's view from run state with no way to signal
+    // it. `currentOrdinal` returns `nodes.length + 1` once the run has advanced past its last
+    // node, so a finished run rejects every target through this same comparison.
+    const here = currentOrdinal(nodes, session.state.currentNodeId);
+    if (target <= here) {
+      this.logger.warn(
+        `[ChainMutation] Refusing to skip node ${nodeId} (ordinal ${target}): run is at ordinal ${here}, and only strictly-ahead nodes may be skipped`
+      );
+      return false;
+    }
+
+    this.setStepState(sessionId, nodeId, 'skipped');
+
+    session.state.lastUpdated = Date.now();
+    session.lastActivity = Date.now();
+
+    this.logger.debug(
+      `[ChainMutation] Skipped node ${nodeId} (ordinal ${target}) in session ${sessionId}, resolved unknown ${unknownId}`
+    );
+
+    await this.saveSessions();
+    return true;
   }
 
   /**
@@ -1018,7 +1295,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private async persistStepResult(
     session: ChainSession,
-    stepNumber: number,
+    nodeId: string,
     stepResult: string,
     metadata: Record<string, any>,
     isPlaceholder: boolean
@@ -1028,11 +1305,16 @@ export class ChainSessionStore implements ChainSessionService {
       isPlaceholder,
     };
 
+    // The containers key by node id; the ordinal rides along because the *rendered* contract
+    // (`stepN_result`, `previous_step_results` keys) is positional and must not shift.
+    const ordinal = ordinalOf(session.state.nodes, nodeId);
+
     this.textReferenceStore.storeChainStepResult(
       session.chainId,
-      stepNumber,
+      nodeId,
       stepResult,
-      metadataPayload
+      metadataPayload,
+      ordinal === -1 ? undefined : ordinal
     );
 
     if (this.argumentHistoryTracker && !isPlaceholder) {
@@ -1041,7 +1323,8 @@ export class ChainSessionStore implements ChainSessionService {
           promptId: session.chainId,
           sessionId: session.sessionId,
           originalArgs: session.originalArgs || {},
-          stepNumber,
+          nodeId,
+          ...(ordinal === -1 ? {} : { stepNumber: ordinal }),
           stepResult,
           metadata: {
             executionType: 'chain',
@@ -1052,7 +1335,7 @@ export class ChainSessionStore implements ChainSessionService {
       } catch (error) {
         this.logger?.error('[ChainSessionStore] Failed to track argument history entry', {
           chainId: session.chainId,
-          stepNumber,
+          nodeId,
           error,
         });
       }
@@ -1088,7 +1371,8 @@ export class ChainSessionStore implements ChainSessionService {
       try {
         reviewContext = this.argumentHistoryTracker.buildReviewContext(
           sessionId,
-          session.state.currentStep
+          currentOrdinal(session.state.nodes, session.state.currentNodeId),
+          totalOf(session.state.nodes)
         );
         argumentContext = reviewContext.originalArgs;
       } catch (error) {
@@ -1110,9 +1394,12 @@ export class ChainSessionStore implements ChainSessionService {
       // Core session info
       chain_run_id: sessionId,
       chain_id: session.chainId,
-      current_step: session.state.currentStep,
-      total_steps: session.state.totalSteps,
-      execution_order: session.executionOrder,
+      current_step: currentOrdinal(session.state.nodes, session.state.currentNodeId),
+      total_steps: totalOf(session.state.nodes),
+      // Ordinals, not node ids: this lands in the rendering context, whose shape templates
+      // already depend on. The node ids live on `session.executionOrder`.
+      execution_order: session.executionOrder.map((id) => ordinalOf(session.state.nodes, id)),
+      current_node_id: session.state.currentNodeId,
 
       // Chain variables (step results, etc.) from TextReferenceStore
       ...chainVariables,
@@ -1124,6 +1411,14 @@ export class ChainSessionStore implements ChainSessionService {
 
     if (reviewContext && Object.keys(reviewContext.previousResults).length > 0) {
       contextData['previous_step_results'] = { ...reviewContext.previousResults };
+    }
+
+    // Omitted entirely while empty so a template can branch on presence, matching
+    // previous_step_results above. Entries are copies: template consumers must not be
+    // able to mutate live session state through the rendering context.
+    const unknownsLedger = session.unknownsLedger;
+    if (unknownsLedger !== undefined && unknownsLedger.length > 0) {
+      contextData['unknowns_ledger'] = unknownsLedger.map((entry) => ({ ...entry }));
     }
 
     const currentStepArgs = this.getCurrentStepArgs(session);
@@ -1144,6 +1439,46 @@ export class ChainSessionStore implements ChainSessionService {
       } context variables (including ${Object.keys(argumentContext).length} original arguments)`
     );
     return contextData;
+  }
+
+  /**
+   * Project the run's record-only complexity facts. Pure read — no mutation, no persistence,
+   * and no derived score of any kind (master decision D4).
+   *
+   * `unknownsOpened`/`unknownsClosed` are derived from the ledger rather than from their own
+   * counters because the ledger is already cumulative: entries are never deleted, only
+   * transitioned active -> resolved. A parallel counter would be a second, driftable source.
+   *
+   * `nodesInserted`/`nodesSkipped` (P4) follow the same rule against the node list: `origin`
+   * and the step lifecycle already ARE the record of what the mutation policy did, and both
+   * reconstruct from persisted rows on a cold load, so a resumed run reports the same numbers
+   * a continuously-live one does. A skipped node is still IN the list, so a skip never lowers
+   * `stepsPlanned`.
+   *
+   * This is the one telemetry source BOTH terminal-record writers read
+   * (`21-formatting-stage.ts` on the completed/cancelled path, `prompt-execution-pipeline.ts`
+   * on the failed path). Deriving a field anywhere else would give failed runs NULLs while
+   * completed runs carried values — the partial-fix shape the run-telemetry suite rejects.
+   */
+  getRunTelemetry(sessionId: string, _scope?: StateStoreOptions): RunTelemetry | undefined {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const ledger = session.unknownsLedger ?? [];
+    const stepStates = session.state.stepStates;
+    return {
+      stepsPlanned: totalOf(session.state.nodes),
+      gatesFired: session.gatesFiredCount ?? 0,
+      gateRetries: session.gateRetriesCount ?? 0,
+      unknownsOpened: ledger.length,
+      unknownsClosed: ledger.filter((entry) => entry.state === 'resolved').length,
+      nodesInserted: session.state.nodes.filter((node) => node.origin === 'inserted').length,
+      nodesSkipped: session.state.nodes.filter(
+        (node) => stepStates?.get(node.id)?.state === 'skipped'
+      ).length,
+    };
   }
 
   /**
@@ -1363,6 +1698,14 @@ export class ChainSessionStore implements ChainSessionService {
     review.previousResponse = outcome.rawVerdict;
     review.attemptCount = (review.attemptCount ?? 0) + 1;
 
+    // Run-cumulative counterparts to attemptCount, which is destroyed with the pending review
+    // when a PASS clears it and so cannot answer "how many across the whole run". Record-only
+    // (D4): nothing branches on these values.
+    session.gatesFiredCount = (session.gatesFiredCount ?? 0) + 1;
+    if (outcome.verdict === 'FAIL') {
+      session.gateRetriesCount = (session.gateRetriesCount ?? 0) + 1;
+    }
+
     let result: 'cleared' | 'pending';
     if (outcome.verdict === 'PASS') {
       delete session.pendingGateReview;
@@ -1537,8 +1880,9 @@ export class ChainSessionStore implements ChainSessionService {
       const summary: ChainSessionSummary = {
         sessionId: session.sessionId,
         chainId: session.chainId,
-        currentStep: session.state.currentStep,
-        totalSteps: session.state.totalSteps,
+        // Summaries are a display projection: ints computed here, never stored.
+        currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
+        totalSteps: totalOf(session.state.nodes),
         pendingReview: Boolean(session.pendingGateReview),
         lastActivity: session.lastActivity,
         startTime: session.startTime,
@@ -1832,7 +2176,12 @@ export class ChainSessionStore implements ChainSessionService {
     let oldestSessionTime = Date.now();
 
     for (const session of this.activeSessions.values()) {
-      totalSteps += session.state.currentStep;
+      // Was `+= session.state.currentStep` — an identity/cardinality coercion. The only
+      // consumer is `averageStepsPerChain` (observability-resources.ts:210), which asks how
+      // many STEPS a chain holds, not how far along it happens to be; summing positions made
+      // the average drift with progress and never reached the true count until every run
+      // finished. Node count is the cardinality that question wants.
+      totalSteps += totalOf(session.state.nodes);
       if (session.startTime < oldestSessionTime) {
         oldestSessionTime = session.startTime;
       }
@@ -1865,6 +2214,49 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     return { valid: issues.length === 0, issues };
+  }
+
+  /**
+   * Apply a batch of typed unknown observations to the session's ledger.
+   *
+   * Transition rules are NOT restated here — `computeUnknownLedger` is their single
+   * owner. This method owns only lookup, in-memory mutation and persistence, in that
+   * order: an invalid batch throws before `session.unknownsLedger` is touched, and a
+   * persist failure throws rather than reporting a success the disk does not back.
+   */
+  async applyUnknownObservations(
+    sessionId: string,
+    nodeId: string,
+    observations: UnknownObservation[]
+  ): Promise<UnknownLedgerEntry[]> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      throw new Error(
+        `Cannot apply unknown observations: session not found: ${sessionId}. The chain run may have been cleared.`
+      );
+    }
+
+    // `discoveredAtStep`/`resolvedAtStep` are ordinals-at-write — a historical stamp of where
+    // the run stood, not an address into it. Resolved here so the ledger keeps its number
+    // shape while the caller addresses by identity.
+    const stepOrdinal = ordinalOf(session.state.nodes, nodeId);
+
+    // Throws on an invalid transition or cap overflow — before any mutation below.
+    const nextLedger = computeUnknownLedger(
+      session.unknownsLedger ?? [],
+      observations,
+      stepOrdinal === -1
+        ? currentOrdinal(session.state.nodes, session.state.currentNodeId)
+        : stepOrdinal
+    );
+
+    session.unknownsLedger = nextLedger;
+    session.state.lastUpdated = Date.now();
+    session.lastActivity = Date.now();
+
+    await this.saveSessions();
+
+    return nextLedger.map((entry) => ({ ...entry }));
   }
 
   /**
@@ -1925,8 +2317,9 @@ export class ChainSessionStore implements ChainSessionService {
     const baseMetadata: Record<string, any> = {
       chainId: session.chainId,
       chainRunId: session.sessionId,
-      totalSteps: session.state.totalSteps,
-      currentStep: session.state.currentStep,
+      totalSteps: totalOf(session.state.nodes),
+      currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
+      currentNodeId: session.state.currentNodeId,
     };
 
     if (!blueprint) {
@@ -1986,8 +2379,7 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
 
-    const currentStep =
-      typeof session.state.currentStep === 'number' ? session.state.currentStep : 1;
+    const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId) || 1;
     const maxIndex = blueprintSteps.length - 1;
     const resolvedIndex = Math.min(Math.max(currentStep - 1, 0), maxIndex);
     const args = blueprintSteps[resolvedIndex]?.args;

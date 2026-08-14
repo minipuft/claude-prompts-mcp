@@ -11,8 +11,6 @@
 
 // ===== Import Domain-Specific Types =====
 
-import type { StateStoreOptions } from './persistence.js';
-
 export type { StateStoreOptions, StateStore, DatabasePort, ToolIndexEntry } from './persistence.js';
 export type { McpToolRequest } from './execution.js';
 
@@ -34,7 +32,6 @@ export {
   type ChainSessionSummary,
   type GateReviewOutcomeUpdate,
   type ParsedCommandSnapshot,
-  type PersistedChainRunRegistry,
   type SessionBlueprint,
 } from './chain-session.js';
 
@@ -46,7 +43,9 @@ export {
   type GateReviewPrompt,
   type PendingGateReview,
   type FormatterExecutionContext,
+  type ChainNode,
   type ChainState,
+  type VisibilityItem,
 } from './chain-execution.js';
 
 // Core configuration and protocol types (canonical source: ./core-config.ts)
@@ -59,7 +58,9 @@ import type {
   ScriptExecutionResult,
   ToolDetectionMatch,
 } from './automation.js';
+import type { VisibilityItem } from './chain-execution.js';
 import type { ContentAnalysisResult } from './core-config.js';
+import type { StateStoreOptions } from './persistence.js';
 
 export type {
   AdvancedConfig,
@@ -638,6 +639,11 @@ export interface ChainStep {
   promptId: string;
   /** Name/identifier of this step */
   stepName: string;
+  /**
+   * Stable node identity (kebab-case), mirroring `ChainStepSchema.id` (P3 Tier 1). Optional —
+   * defaults to a slug of `stepName` at mint time when omitted. Additive only; not yet consumed.
+   */
+  id?: string;
   /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
   inputMapping?: Record<string, string>;
   /** Name this step's output for downstream steps */
@@ -648,6 +654,26 @@ export interface ChainStep {
   subagentModel?: 'heavy' | 'standard' | 'fast';
   /** Host agent to spawn for this step, overriding the prompt-level default */
   agentType?: string;
+  /**
+   * Framework this step runs under, overriding the run-wide selection. Resolved by
+   * `12-framework-stage.ts`; an id the registry does not know falls back to the run-wide choice.
+   */
+  framework?: string;
+  /**
+   * Inline gate ids applied to this step (P6 Tier 4, OQ-P6-8 — WIRED).
+   *
+   * Carried from `ChainStepSchema.inlineGateIds` through `normalizeChainSteps` and the stage-04
+   * projection onto `ChainStepPrompt.inlineGateIds`, where `GateEnhancementService.
+   * enhanceChainSteps` already read it (as `inlineOperatorGateIds`, rank `inline-operator`) — the
+   * reader predated the producer, so wiring meant removing two strippers, not adding a consumer.
+   */
+  inlineGateIds?: string[];
+  /**
+   * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
+   * expose to this step's render. Mirrors `ChainStepSchema.visibility`. Additive only — threaded
+   * through parsing and persistence, nothing downstream consumes it yet (Tier 2-3).
+   */
+  visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
 }
 
 /**

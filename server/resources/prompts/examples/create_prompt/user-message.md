@@ -293,13 +293,13 @@ chainSteps:
 
 ### Chain Step Properties
 
-| Property        | Type   | Required | Description                       |
-| --------------- | ------ | -------- | --------------------------------- |
-| `promptId`      | string | Yes      | Prompt to execute                 |
-| `stepName`      | string | Yes      | Display name                      |
-| `inputMapping`  | object | No       | Map previous outputs to step args |
-| `outputMapping` | object | No       | Name this step's output           |
-| `retries`       | number | No       | Retry attempts (0-5)              |
+| Property        | Type   | Required | Description                                                             |
+| --------------- | ------ | -------- | ----------------------------------------------------------------------- |
+| `promptId`      | string | Yes      | Prompt to execute                                                       |
+| `stepName`      | string | Yes      | Display name                                                            |
+| `inputMapping`  | object | No       | Map previous outputs to step args                                       |
+| `outputMapping` | object | No       | Publish this step's output as `{% raw %}{{outputs.<name>}}{% endraw %}` |
+| `retries`       | number | No       | Retry attempts (0-5)                                                    |
 
 ### Input/Output Mapping
 
@@ -314,17 +314,18 @@ chainSteps:
     stepName: 'Synthesize'
     inputMapping:
       data: steps.analyze.result # Reference previous step
-      findings: '{% raw %}{{findings}}{% endraw %}' # Or use named output
+      findings: '{% raw %}{{outputs.findings}}{% endraw %}' # Or use the named output
 ```
 
 ### Template Variables (Chain Steps)
 
-| Variable                                        | Description              |
-| ----------------------------------------------- | ------------------------ |
-| `{% raw %}{{input}}{% endraw %}`                | Current step's arguments |
-| `{% raw %}{{step1_result}}{% endraw %}`         | Output from step 1       |
-| `{% raw %}{{previous_step_result}}{% endraw %}` | Most recent step output  |
-| `{% raw %}{{chain_id}}{% endraw %}`             | Current chain session ID |
+| Variable                                        | Description                           |
+| ----------------------------------------------- | ------------------------------------- |
+| `{% raw %}{{input}}{% endraw %}`                | Current step's arguments              |
+| `{% raw %}{{step1_result}}{% endraw %}`         | Output from step 1                    |
+| `{% raw %}{{previous_step_result}}{% endraw %}` | Most recent step output               |
+| `{% raw %}{{chain_id}}{% endraw %}`             | Current chain session ID              |
+| `{% raw %}{{outputs.<name>}}{% endraw %}`       | A prior step's `outputMapping` output |
 
 ### Create Chain Prompt
 

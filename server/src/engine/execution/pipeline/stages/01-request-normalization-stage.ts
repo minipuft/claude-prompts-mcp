@@ -46,8 +46,13 @@ export class RequestNormalizationStage extends BasePipelineStage {
 
     const command = context.mcpRequest.command?.trim() ?? '';
     const hasResumeIdentifier = this.hasResumeIdentifier(context);
+    // A workflow submission is the third command source (P6 Tier 5) and carries neither a command
+    // string nor a resume token. Recognized here so the missing-parameters guard below does not
+    // reject it; its own validation and its mutual exclusivity with the other two sources belong
+    // to stage 04, which owns command-source resolution.
+    const hasWorkflowSubmission = context.mcpRequest.workflow !== undefined;
 
-    if (!command && !hasResumeIdentifier) {
+    if (!command && !hasResumeIdentifier && !hasWorkflowSubmission) {
       context.setResponse(
         this.buildErrorResponse(
           `❌ Error: Missing required parameters.

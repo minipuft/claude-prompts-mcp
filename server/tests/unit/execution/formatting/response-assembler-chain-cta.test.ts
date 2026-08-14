@@ -36,6 +36,13 @@ function createChainContext(overrides: {
   blockedGateIds?: string[];
   responseBlocked?: boolean;
   gateInstructions?: string;
+  /**
+   * The run-completion latch StepExecutionStage sets from the store's `runStatus`. The
+   * assembler reads THIS, not `currentStep >= totalSteps`: standing on the final step is not
+   * the same fact as having finished, and conflating them printed a completion banner one call
+   * before the run could complete.
+   */
+  chainComplete?: boolean;
 }): ExecutionContext {
   const context = new ExecutionContext({
     command: `>>${overrides.promptId ?? 'demo-prompt'}`,
@@ -92,6 +99,10 @@ function createChainContext(overrides: {
 
   if (overrides.gateInstructions != null) {
     context.gateInstructions = overrides.gateInstructions;
+  }
+
+  if (overrides.chainComplete === true) {
+    context.state.session.chainComplete = true;
   }
 
   return context;
@@ -198,11 +209,12 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
   });
 
   describe('buildFinalStepMessage + isFinalChainStep', () => {
-    test('renders completion on final chain step', () => {
+    test('renders completion once the run has actually completed', () => {
       const context = createChainContext({
         currentStep: 3,
         totalSteps: 3,
         strategy: 'chain',
+        chainComplete: true,
       });
 
       const result = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
@@ -239,6 +251,7 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
         currentStep: 3,
         totalSteps: 3,
         strategy: 'chain',
+        chainComplete: true,
       });
 
       const result = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
@@ -260,7 +273,39 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(footer).toContain('Progress 2/4');
     });
 
-    test('completion line on final step', () => {
+    test('completion line once the run has completed', () => {
+      const context = createChainContext({
+        currentStep: 3,
+        totalSteps: 3,
+        chainComplete: true,
+      });
+
+      const footer = assembler.buildChainFooter(context);
+
+      expect(footer).toContain('Chain complete (3/3)');
+      expect(footer).toContain('No user_response needed');
+    });
+
+    test('final step with a verdict outstanding does not claim completion', () => {
+      // The P2 live-drive defect: at 3/3 with a gate review open the footer said
+      // "Chain complete" and "No user_response needed", so a banner-obeying client stopped
+      // driving and the run stayed `working` forever.
+      const context = createChainContext({
+        currentStep: 3,
+        totalSteps: 3,
+        pendingReview: makePendingReview(),
+      });
+
+      const footer = assembler.buildChainFooter(context);
+
+      expect(footer).not.toContain('Chain complete');
+      expect(footer).not.toContain('No user_response needed');
+      expect(footer).toContain('Final step 3/3');
+      expect(footer).toContain('awaiting gate verdict');
+      expect(footer).toContain('gate_verdict');
+    });
+
+    test('final step with no review still asks for the step output', () => {
       const context = createChainContext({
         currentStep: 3,
         totalSteps: 3,
@@ -268,7 +313,20 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
 
       const footer = assembler.buildChainFooter(context);
 
-      expect(footer).toContain('Chain complete (3/3)');
+      expect(footer).not.toContain('Chain complete');
+      expect(footer).toContain('Progress 3/3');
+      expect(footer).toContain('user_response="<your step output>"');
+    });
+
+    test('the final-step message waits for the latch too', () => {
+      const onFinalStep = createChainContext({
+        currentStep: 3,
+        totalSteps: 3,
+        strategy: 'chain',
+      });
+      expect(
+        assembler.formatChainResponse(onFinalStep, { isChainFormatting: true } as any)
+      ).not.toContain('Chain execution complete');
     });
 
     test('gate review next line when pendingReview exists', () => {
@@ -380,6 +438,62 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
 
       expect(result).toContain('Advisory Gate Warnings');
       expect(result).toContain('Phase guard warning: check structure');
+    });
+  });
+
+  describe('node-driven fallback readers (P4 row 5.4)', () => {
+    type PrivateReaders = {
+      findNextDelegatedStep: (
+        context: ReturnType<typeof createChainContext>
+      ) => { promptId: string } | undefined;
+      resolveCurrentPrompt: (
+        context: ReturnType<typeof createChainContext>
+      ) => { id?: string } | undefined;
+    };
+    const readers = assembler as unknown as PrivateReaders;
+
+    // A 3-step chain after one insertion: node ordinals are draft=1, inv-x=2, analyze=3,
+    // review=4, while the parse-time stepNumbers are still 1..3. The two fallback readers
+    // used to look parse steps up by the NODE ordinal, naming the step one early.
+    const mutatedSteps = [
+      { stepNumber: 1, nodeId: 'draft', promptId: 'draft', args: {} },
+      { stepNumber: 2, nodeId: 'analyze', promptId: 'analyze', args: {} },
+      {
+        stepNumber: 3,
+        nodeId: 'review',
+        promptId: 'review',
+        args: {},
+        delegated: true,
+        convertedPrompt: { id: 'review' },
+      },
+    ] as never[];
+
+    function mutatedContext(currentStep: number, currentNodeId: string) {
+      const context = createChainContext({ currentStep, totalSteps: 4 });
+      (context.parsedCommand as { steps?: unknown }).steps = mutatedSteps;
+      (context.sessionContext as { currentNodeId?: string }).currentNodeId = currentNodeId;
+      return context;
+    }
+
+    it('standing on a PLANNED node post-insertion, the next delegated step is found by node id, not by the shifted ordinal', () => {
+      // Node ordinal 3 = analyze; ordinal lookup would find stepNumber 3 (review) and report
+      // ITS successor (none), missing the delegation entirely.
+      const result = readers.findNextDelegatedStep(mutatedContext(3, 'analyze'));
+      expect(result?.promptId).toBe('review');
+    });
+
+    it('standing on an INSERTED node, delegation is conservatively absent rather than one step early', () => {
+      // Node ordinal 2 = inv-x; ordinal lookup would find stepNumber 2 (analyze) and claim its
+      // successor review is the next step — wrong, the run's next node is analyze.
+      const result = readers.findNextDelegatedStep(mutatedContext(2, 'inv-x'));
+      expect(result).toBeUndefined();
+    });
+
+    it('resolveCurrentPrompt finds the completed final step by node id when its node ordinal exceeds every stepNumber', () => {
+      const context = mutatedContext(4, 'review');
+      (context.parsedCommand as { convertedPrompt?: unknown }).convertedPrompt = undefined;
+      const prompt = readers.resolveCurrentPrompt(context);
+      expect(prompt?.id).toBe('review');
     });
   });
 });

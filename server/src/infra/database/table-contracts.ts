@@ -134,7 +134,8 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     owner: 'src/modules/chains/manager.ts',
     posture: 'derived',
     rebuiltFrom:
-      'chain_run_registry, via ChainSessionStore.projectToHookView in the same transaction',
+      'chain_runs + chain_run_nodes, via ChainSessionStore.projectToHookView in the same ' +
+      'transaction that writes them',
     scope: 'run-owner-pid',
     retention: 'unbounded-justified',
     retentionRationale:
@@ -268,29 +269,55 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'Not closed by any current tier — the posture comparison against version_history is ' +
       'recorded, but the zero-reader question is open.',
   },
+  // `chain_run_registry` was deleted at v22 (P3 Tier 4). It held one JSON blob per owning
+  // process — every run, every node, every step's lifecycle, plus three chain-id mapping dicts
+  // that were a second copy of facts the sessions already carried. Nothing about it was
+  // queryable. The two tables below replace it. Its `acceptedForeignWriters` entry (manager.ts
+  // deleting registry rows during stale-PID cleanup) is gone with it: the cleanup now asks the
+  // owner to do the delete, so the exception has no subject rather than merely no deadline.
   {
-    table: 'chain_run_registry',
+    table: 'chain_runs',
     owner: 'src/modules/chains/run-registry.ts',
     posture: 'ephemeral',
     scope: 'run-owner-pid',
     retention: 'unbounded-justified',
-    retentionRationale: 'One blob row per owning process; cleared when that process exits.',
-    readers: ['hooks/lib/db_reader.py', 'src/modules/chains/manager.ts'],
-    finding:
-      'Retired wholesale by the execution-ledger initiative at its Tier 10, which replaces the ' +
-      'blob with per-row tables. Do not remediate here.',
-    acceptedForeignWriters: [
-      {
-        subject: 'src/modules/chains/manager.ts',
-        reason:
-          'Deletes registry rows during stale-PID cleanup rather than asking the registry to do ' +
-          'it, so cleanup and write live in different modules.',
-        closedBy: 'execution-ledger Tier 10',
-      },
-    ],
-    // Phantom exceptions removed by Tier 4: the INSERT now names both scope columns, and the
-    // caller passes a merged scope (PID for run_owner_pid, workspace for the scope columns)
-    // rather than the pid-only scope that left them NULL.
+    retentionRationale:
+      'One row per live run of one owning process. Rows are DELETEd per-PID on every save and ' +
+      'purged for dead owners at startup, so growth is bounded by concurrent runs, not by time.',
+    readers: ['src/modules/chains/manager.ts'],
+    // No Python reader: hooks read `chain_sessions` (and `v_execution_status` over it), which
+    // projectToHookView rebuilds from these rows in the same transaction. `db_reader.py` keeps a
+    // guarded legacy fallback naming the retired blob table; it catches OperationalError and
+    // returns None, so the dropped table degrades to "no fallback row" rather than to an error.
+  },
+  {
+    table: 'chain_run_nodes',
+    owner: 'src/modules/chains/run-registry.ts',
+    posture: 'ephemeral',
+    scope: 'run-owner-pid',
+    retention: 'unbounded-justified',
+    retentionRationale:
+      'One row per node of a live run; deleted with its run. Bounded by concurrent runs times ' +
+      'chain length.',
+    readers: ['src/modules/chains/manager.ts'],
+    // Scope columns are deliberately absent rather than declared-and-unwritten: a node belongs
+    // to exactly one run, and that run's row already carries run_owner_pid/workspace_id. A
+    // duplicated scope here would be a second copy nothing keeps in step — and, on the evidence
+    // of `execution_records.workspace_id`, the copy that ends up NULL.
+    //
+    // P4 (v23) added two provenance columns, both written by the owner's INSERT:
+    //   origin            — 'planned' | 'inserted'. NOT NULL, and deliberately WITHOUT a DDL
+    //                       DEFAULT: `validate:no-phantom-columns` exempts defaulted columns, so
+    //                       a default would make this column unobservable to the very gate that
+    //                       exists to catch a writer dropping it. Without one, the same mistake
+    //                       fails on the NOT NULL constraint instead of quietly reading 'planned'.
+    //   origin_unknown_id — the declared unknown that caused an insertion; NULL on planned rows.
+    //                       Partial population BY ROW TYPE (the v21 execution_records pattern),
+    //                       not the value-dead pattern: the writer binds a real id on every row
+    //                       where the fact exists. It is a column rather than a substring of
+    //                       node_id because `mintInsertionId` slugifies and collision-suffixes,
+    //                       which has no decodable inverse.
+    // Neither needs an `acceptedPhantomColumns` entry — both appear in the owner's INSERT list.
   },
   {
     table: 'execution_records',
@@ -314,7 +341,20 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'organization_id were declared and indexed but structurally unwritable. ' +
       'Closed by Tier 3 (reader + direct view + terminal records), 4.1 (scope), 6.4 (retention). ' +
       "Posture is 'ephemeral' deliberately: the SCHEMA_VERSION 16 note records that v15 rows " +
-      'decode to a lifecycle outside StepLifecycle, so these rows must not survive a bump.',
+      'decode to a lifecycle outside StepLifecycle, so these rows must not survive a bump. ' +
+      'P2 (v21) added steps_planned, gates_fired, gate_retries, unknowns_opened and ' +
+      'unknowns_closed. These are populated ONLY on terminal rows, by the two terminal-record ' +
+      'writers (21-formatting-stage.ts, prompt-execution-pipeline.ts), and are NULL on per-step ' +
+      '`working` rows. That is intentional partial population BY ROW TYPE — not the value-dead ' +
+      'pattern F2 named: a writer binds a real number on every row where the fact exists. They ' +
+      'are record-only (master decision D4): no consumer scores, weights, or routes on them. ' +
+      'P3 (v22) added node_id: bound by the two per-step writers (18-execution-stage, ' +
+      '20-gate-review-stage) and bound NULL explicitly by the two run-level terminal writers ' +
+      '(21-formatting-stage, prompt-execution-pipeline), which describe a run rather than a node. ' +
+      'P4 (v23) added nodes_inserted and nodes_skipped on the same terminal-rows-only terms: ' +
+      'they ride the same getRunTelemetry object both terminal writers spread, so neither ' +
+      'writer can bind the v21 group and miss these. They are the surviving audit of adaptive ' +
+      'mutation once chain_run_nodes (ephemeral, PID-deleted at cleanup) is gone.',
   },
 ];
 
@@ -332,6 +372,15 @@ export const VIEW_CONTRACTS: readonly ViewContract[] = [
     view: 'v_execution_history',
     sourceTable: 'execution_records',
     readers: ['src/mcp/tools/system-control/handlers/execution-history-action-handler.ts'],
+    finding:
+      'The declared reader does not actually read this view: measured 2026-08-11, ' +
+      'execution-history-action-handler.ts sources rows via ExecutionRecordStore.queryRecent() ' +
+      'against the raw table, and rg across src/ and hooks/ finds no other reader — only this ' +
+      'contract entry and the DDL. The view therefore has zero code readers today. P2 ' +
+      'deliberately did NOT project its five new columns here, nor add a steps_executed ' +
+      'aggregate: columns on a reader-less view are the value-dead defect class this table has ' +
+      'already produced twice (F2). The view gains columns when a real consumer exists, and ' +
+      'this finding retires when that consumer lands or the view is deleted.',
   },
 ];
 

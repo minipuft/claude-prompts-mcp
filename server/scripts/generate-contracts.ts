@@ -55,6 +55,28 @@ async function loadContracts(): Promise<ToolContract[]> {
   return contracts;
 }
 
+/**
+ * A contract that describes the SHAPE OF A VALUE rather than an MCP tool's parameter list.
+ *
+ * `tooling/contracts/workflow-ir.json` is the first (OQ-P6-10, 2026-08-13). It declares no
+ * `toolDescription`, because it is not a tool — nothing registers a `workflow_ir` tool and
+ * nothing should advertise one. Two consequences, and both are the point:
+ *
+ *  - it is EXCLUDED from `tool-descriptions.contracts.json`, so no phantom tool reaches
+ *    `ToolDescriptionLoader`. That exclusion is automatic: `generateToolDescriptions` already
+ *    skips every contract without a `toolDescription`.
+ *  - it still EMITS its parameter metadata to `_generated/`, which the pre-existing
+ *    `!toolDescription -> continue` guard would otherwise suppress. That guard exists to skip
+ *    DEPRECATED tools, and "deprecated tool" and "not a tool" are different things that happened
+ *    to share a shape.
+ *
+ * Opt-in rather than inferred: a contract missing `toolDescription` by accident should keep
+ * being skipped and logged, exactly as before.
+ */
+function isResourceShapeContract(contract: ToolContract): boolean {
+  return contract.metadata?.['artifactKind'] === 'resource-shape';
+}
+
 async function readJsonIfExists(filePath: string): Promise<ToolDescriptionsConfig | null> {
   try {
     const content = await readFile(filePath, 'utf-8');
@@ -63,7 +85,6 @@ async function readJsonIfExists(filePath: string): Promise<ToolDescriptionsConfi
     return null;
   }
 }
-
 
 async function writeFileIfChanged(
   filePath: string,
@@ -164,8 +185,10 @@ async function main(): Promise<void> {
   let changed = false;
 
   for (const contract of contracts) {
-    // Skip .generated.ts for contracts without toolDescription (deprecated tools)
-    if (!contract.toolDescription) {
+    // Skip .generated.ts for contracts without toolDescription (deprecated tools).
+    // Resource-shape contracts are not tools and legitimately have none — see
+    // isResourceShapeContract.
+    if (!contract.toolDescription && !isResourceShapeContract(contract)) {
       console.log(
         `[generate-contracts] Skipping ${contract.tool} (no toolDescription - deprecated)`
       );

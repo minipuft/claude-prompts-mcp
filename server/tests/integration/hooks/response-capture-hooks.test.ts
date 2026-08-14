@@ -17,6 +17,7 @@ import { noopLogger } from '../../../src/infra/logging/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
+import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
 import type { ChainSessionService } from '../../../src/shared/types/chain-session.js';
 import type {
@@ -48,7 +49,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       getPendingGateReview: jest.fn(),
       isRetryLimitExceeded: jest.fn(),
       recordGateReviewOutcome: jest.fn(),
-      advanceStep: jest.fn().mockResolvedValue(2),
+      advanceStep: jest.fn().mockResolvedValue({ nodeId: 'n3', ordinal: 3 }),
       clearPendingGateReview: jest.fn(),
       resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
@@ -71,6 +72,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       ),
       new StepCaptureService(mockChainSessionStore, noopLogger),
       mockChainSessionStore,
+      new UnknownObservationProcessor(mockChainSessionStore, noopLogger),
       noopLogger
     );
   });
@@ -89,7 +91,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
-      state: { currentStep: 1, totalSteps: 2 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       pendingGateReview: {
         gateIds: ['code-quality'],
         attemptCount: 1,
@@ -124,7 +126,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
-      state: { currentStep: 1, totalSteps: 2 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       pendingGateReview: {
         gateIds: ['code-quality'],
         attemptCount: 1,
@@ -174,7 +176,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
-      state: { currentStep: 1, totalSteps: 2 },
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       pendingGateReview: {
         gateIds: ['code-quality'],
         attemptCount: 2,
@@ -264,7 +266,7 @@ describe('gate events reach a port-only collaborator', () => {
       getSession: jest.fn().mockReturnValue({
         sessionId,
         chainId: 'test-chain',
-        state: { currentStep: 1, totalSteps: 2 },
+        state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
         pendingGateReview: { gateIds: ['code-quality'], attemptCount: 1, maxAttempts: 2 },
       }),
       getPendingGateReview: jest.fn().mockReturnValue({
@@ -279,7 +281,7 @@ describe('gate events reach a port-only collaborator', () => {
       // `jest.fn(impl)` infers its signature; the bare `jest.fn().mockResolvedValue(x)`
       // form used above resolves to `never` under the tests tsconfig.
       recordGateReviewOutcome: jest.fn(async () => 'pending'),
-      advanceStep: jest.fn(async () => 2),
+      advanceStep: jest.fn(async () => ({ nodeId: 'n3', ordinal: 3 })),
       clearPendingGateReview: jest.fn(),
       resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
@@ -292,6 +294,7 @@ describe('gate events reach a port-only collaborator', () => {
       new GateVerdictProcessor(sessionStore, noopLogger, hooks, notifications),
       new StepCaptureService(sessionStore, noopLogger),
       sessionStore,
+      new UnknownObservationProcessor(sessionStore, noopLogger),
       noopLogger
     );
 

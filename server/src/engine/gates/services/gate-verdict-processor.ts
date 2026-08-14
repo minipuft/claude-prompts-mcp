@@ -14,6 +14,8 @@ import type { ExecutionContext, SessionContext } from '../../execution/context/i
 import type { GateAction } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
+import { nodeIdAt } from '#shared/utils/node-order.js';
+
 /**
  * Result of processing gate verdicts for a request.
  */
@@ -33,6 +35,17 @@ export interface VerdictProcessingResult {
  * Extracted from StepResponseCaptureStage.
  */
 export class GateVerdictProcessor {
+  /**
+   * Translate the position this stage was handed into the node id the store addresses by.
+   *
+   * Returns `''` when no node sits at that position — the store treats an unresolvable id as
+   * already-passed and leaves the run untouched, which is what the previous `currentStep ?? 0`
+   * guard achieved by arithmetic. Never invents a node.
+   */
+  private resolveNodeId(session: ChainSession, ordinal: number): string {
+    return nodeIdAt(session.state.nodes, ordinal) ?? '';
+  }
+
   constructor(
     private readonly chainSessionStore: ChainSessionService,
     private readonly logger: Logger,
@@ -155,12 +168,6 @@ export class GateVerdictProcessor {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
     }
 
-    // Extract per-gate verdicts from gate_verdict (GATE_VERDICTS block)
-    const gateVerdicts = authority.parseGateVerdicts(gateVerdictInput);
-    if (gateVerdicts.length > 0) {
-      context.state.gates.perGateVerdicts = gateVerdicts;
-    }
-
     const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
     const outcome = await authority.recordOutcome(sessionId, verdictPayload, enforcementMode);
 
@@ -172,9 +179,13 @@ export class GateVerdictProcessor {
 
     let passClearedThisCall = false;
     if (outcome.status === 'cleared') {
-      const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStepAtStart);
-      if (newStep !== false) {
-        sessionContext.currentStep = newStep;
+      const advanced = await this.chainSessionStore.advanceStep(
+        sessionId,
+        this.resolveNodeId(session, currentStepAtStart)
+      );
+      if (advanced !== false) {
+        sessionContext.currentStep = advanced.ordinal;
+        sessionContext.currentNodeId = advanced.nodeId;
       }
       context.sessionContext = { ...sessionContext };
       context.diagnostics.info(
@@ -182,7 +193,7 @@ export class GateVerdictProcessor {
         'Gate PASS (no prior review) - advanced step',
         {
           stepToAdvance: currentStepAtStart,
-          advancedTo: newStep,
+          advancedTo: advanced === false ? false : advanced.ordinal,
         }
       );
       passClearedThisCall = true;
@@ -227,12 +238,6 @@ export class GateVerdictProcessor {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
     }
 
-    // Extract per-gate verdicts from gate_verdict (GATE_VERDICTS block)
-    const perGateVerdicts = context.gateEnforcement?.parseGateVerdicts(gateVerdictInput ?? '');
-    if (perGateVerdicts != null && perGateVerdicts.length > 0) {
-      context.state.gates.perGateVerdicts = perGateVerdicts;
-    }
-
     const outcome = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {
       verdict: verdictPayload.verdict,
       rationale: verdictPayload.rationale,
@@ -245,13 +250,17 @@ export class GateVerdictProcessor {
     let passClearedThisCall = false;
 
     if (outcome === 'cleared') {
-      const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStepAtStart);
-      if (newStep !== false) {
-        sessionContext.currentStep = newStep;
+      const advanced = await this.chainSessionStore.advanceStep(
+        sessionId,
+        this.resolveNodeId(session, currentStepAtStart)
+      );
+      if (advanced !== false) {
+        sessionContext.currentStep = advanced.ordinal;
+        sessionContext.currentNodeId = advanced.nodeId;
       }
       context.diagnostics.info('GateVerdictProcessor', 'Gate PASS - advanced step', {
         stepToAdvance: currentStepAtStart,
-        advancedTo: newStep,
+        advancedTo: advanced === false ? false : advanced.ordinal,
       });
       delete sessionContext.pendingReview;
       passClearedThisCall = true;
@@ -312,6 +321,7 @@ export class GateVerdictProcessor {
       case 'advisory':
         this.handleAdvisoryFail(
           context,
+          session,
           sessionId,
           sessionContext,
           capturedGateIds,
@@ -377,6 +387,7 @@ export class GateVerdictProcessor {
 
   private async handleAdvisoryFail(
     context: ExecutionContext,
+    session: ChainSession,
     sessionId: string,
     sessionContext: SessionContext,
     capturedGateIds: string[],
@@ -391,10 +402,15 @@ export class GateVerdictProcessor {
 
     await this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
     await this.chainSessionStore.clearPendingGateReview(sessionId);
+    // `currentNodeId` when the context already carries it; otherwise translate the position.
+    // A context with neither yields '' and the store no-ops, exactly as `?? 0` did before.
     const currentStep = context.sessionContext?.currentStep ?? 0;
-    const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStep);
-    if (newStep !== false) {
-      sessionContext.currentStep = newStep;
+    const nodeId =
+      context.sessionContext?.currentNodeId ?? this.resolveNodeId(session, currentStep);
+    const advanced = await this.chainSessionStore.advanceStep(sessionId, nodeId ?? '');
+    if (advanced !== false) {
+      sessionContext.currentStep = advanced.ordinal;
+      sessionContext.currentNodeId = advanced.nodeId;
     }
     delete sessionContext.pendingReview;
   }
@@ -416,10 +432,15 @@ export class GateVerdictProcessor {
 
     await this.emitGateEvents(context, 'failed', infoGateIds, verdictPayload.rationale);
     await this.chainSessionStore.clearPendingGateReview(sessionId);
+    // `currentNodeId` when the context already carries it; otherwise translate the position.
+    // A context with neither yields '' and the store no-ops, exactly as `?? 0` did before.
     const currentStep = context.sessionContext?.currentStep ?? 0;
-    const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStep);
-    if (newStep !== false) {
-      sessionContext.currentStep = newStep;
+    const nodeId =
+      context.sessionContext?.currentNodeId ?? this.resolveNodeId(session, currentStep);
+    const advanced = await this.chainSessionStore.advanceStep(sessionId, nodeId ?? '');
+    if (advanced !== false) {
+      sessionContext.currentStep = advanced.ordinal;
+      sessionContext.currentNodeId = advanced.nodeId;
     }
     delete sessionContext.pendingReview;
   }

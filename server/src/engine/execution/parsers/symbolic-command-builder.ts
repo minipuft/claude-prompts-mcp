@@ -224,6 +224,10 @@ export class SymbolicCommandBuilder {
 
       stepPrompts.push({
         stepNumber: step.stepNumber ?? stepPrompts.length + 1,
+        // Propagated from the ExecutionStep minted upstream in symbolic-operator-parser.ts —
+        // never re-minted here (would diverge from the frozen n1..nK if this site's fallback
+        // stepNumber path is ever taken for a step the parser didn't number).
+        ...(step.nodeId != null ? { nodeId: step.nodeId } : {}),
         promptId: convertedPrompt.id,
         convertedPrompt,
         args: resolvedArgs.processedArgs,

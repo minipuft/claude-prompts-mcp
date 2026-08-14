@@ -310,6 +310,7 @@ describe('Symbolic pipeline coverage', () => {
         chainId: 'chain-stage_one#1',
         totalSteps: 2,
         currentStep: 1,
+        currentNodeId: 'n1',
       })
     );
     expect(context.state.session.lifecycleDecision).toBe('create-new');

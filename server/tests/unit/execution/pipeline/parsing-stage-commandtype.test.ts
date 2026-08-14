@@ -95,6 +95,17 @@ describe('CommandParsingStage - commandType Integration', () => {
       expect(context.parsedCommand!.steps).toBeDefined();
       expect(context.parsedCommand!.steps?.length).toBe(chainConverted.chainSteps?.length);
     });
+
+    test('round-trips byte-identical when no step declares visibility (negative control, P5 Tier 1)', async () => {
+      const context = new ExecutionContext({
+        command: '>>chain_test',
+      });
+
+      await stage.execute(context);
+
+      expect(context.parsedCommand!.steps?.[0]?.visibility).toBeUndefined();
+      expect(context.parsedCommand!.steps?.[1]?.visibility).toBeUndefined();
+    });
   });
 
   describe('Symbolic command parsing', () => {

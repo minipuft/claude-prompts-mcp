@@ -10,19 +10,22 @@ describe('Delegation field in prompt schemas', () => {
   describe('ChainStepSchema', () => {
     const baseStep = { promptId: 'test-step', stepName: 'Test Step' };
 
-    test('accepts delegation: true', () => {
+    // ChainStepSchema is now `.strict()`, and `delegation` is now DECLARED. Both halves matter:
+    // it used to be accepted-and-stripped, so `result.data.delegation` came back undefined even
+    // though the skills-sync exporter reads the field straight off the YAML. It now survives.
+    test('accepts delegation and preserves the value', () => {
       const result = ChainStepSchema.safeParse({ ...baseStep, delegation: true });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.delegation).toBeUndefined();
+        expect(result.data.delegation).toBe(true);
       }
     });
 
-    test('accepts delegation: false', () => {
+    test('preserves delegation: false rather than collapsing it to absent', () => {
       const result = ChainStepSchema.safeParse({ ...baseStep, delegation: false });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.delegation).toBeUndefined();
+        expect(result.data.delegation).toBe(false);
       }
     });
 
@@ -34,12 +37,9 @@ describe('Delegation field in prompt schemas', () => {
       }
     });
 
-    test('strips non-schema delegation values', () => {
+    test('rejects a non-boolean delegation value instead of silently dropping it', () => {
       const result = ChainStepSchema.safeParse({ ...baseStep, delegation: 'yes' });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.delegation).toBeUndefined();
-      }
+      expect(result.success).toBe(false);
     });
 
     test('carries agentType through as a string', () => {
@@ -55,7 +55,7 @@ describe('Delegation field in prompt schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    test('accepts delegation with agentType together', () => {
+    test('accepts delegation with agentType together, keeping both', () => {
       const result = ChainStepSchema.safeParse({
         ...baseStep,
         delegation: true,
@@ -63,7 +63,7 @@ describe('Delegation field in prompt schemas', () => {
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.delegation).toBeUndefined();
+        expect(result.data.delegation).toBe(true);
         expect(result.data.agentType).toBe('Explore');
       }
     });
@@ -182,7 +182,7 @@ describe('Delegation field in prompt schemas', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.delegation).toBe(true);
-        expect(result.data.chainSteps?.[1].delegation).toBeUndefined();
+        expect(result.data.chainSteps?.[1].delegation).toBe(false);
       }
     });
 
@@ -215,7 +215,7 @@ describe('Delegation field in prompt schemas', () => {
         expect(result.data.delegation).toBe(true);
         expect(result.data.delegationAgent).toBe('general-purpose');
         expect(result.data.chainSteps?.[1].agentType).toBe('code-reviewer');
-        expect(result.data.chainSteps?.[2].delegation).toBeUndefined();
+        expect(result.data.chainSteps?.[2].delegation).toBe(false);
       }
     });
   });

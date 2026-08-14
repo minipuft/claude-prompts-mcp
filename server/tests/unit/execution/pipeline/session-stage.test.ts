@@ -48,8 +48,8 @@ const createChainSession = (overrides: Partial<ChainSession> = {}): ChainSession
   sessionId: 'session-1',
   chainId: 'chain-chain_prompt#1',
   state: {
-    currentStep: 1,
-    totalSteps: 2,
+    currentNodeId: 'n1',
+    nodes: [{ id: 'n1' }, { id: 'n2' }],
     stepStates: new Map(),
     lastUpdated: Date.now(),
   },
@@ -130,6 +130,7 @@ describe('SessionManagementStage', () => {
       chainId: 'chain-chain_prompt#1',
       isChainExecution: true,
       currentStep: 1,
+      currentNodeId: 'n1',
       totalSteps: 2,
     });
     expect(context.state.session.lifecycleDecision).toBe('create-new');
@@ -141,8 +142,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-active',
       chainId: 'chain-chain_prompt#2',
       state: {
-        currentStep: 2,
-        totalSteps: 3,
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -164,6 +165,7 @@ describe('SessionManagementStage', () => {
       chainId: 'chain-chain_prompt#2',
       isChainExecution: true,
       currentStep: 2,
+      currentNodeId: 'n2',
       totalSteps: 3,
       pendingReview: undefined,
     });
@@ -175,8 +177,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-from-chain',
       chainId: 'chain-chain_prompt#5',
       state: {
-        currentStep: 1,
-        totalSteps: 2,
+        currentNodeId: 'n1',
+        nodes: [{ id: 'n1' }, { id: 'n2' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -202,6 +204,7 @@ describe('SessionManagementStage', () => {
       chainId: 'chain-chain_prompt#5',
       isChainExecution: true,
       currentStep: 1,
+      currentNodeId: 'n1',
       totalSteps: 2,
       pendingReview: undefined,
     });
@@ -213,8 +216,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-history',
       chainId: 'chain-chain_prompt#4',
       state: {
-        currentStep: 2,
-        totalSteps: 3,
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -240,8 +243,8 @@ describe('SessionManagementStage', () => {
       sessionId: 'sess-old',
       chainId: 'chain-chain_prompt#3',
       state: {
-        currentStep: 2,
-        totalSteps: 2,
+        currentNodeId: 'n2',
+        nodes: [{ id: 'n1' }, { id: 'n2' }],
         stepStates: new Map(),
         lastUpdated: Date.now(),
       },
@@ -308,5 +311,53 @@ describe('SessionManagementStage', () => {
     expect(manager.createSession).toHaveBeenCalledTimes(1);
     expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
     expect(context.sessionContext?.pendingReview).toBeDefined();
+  });
+
+  // --- P5 Tier 4 / P4-F3: the review this stage opens is scoped to the step -------------------
+  //
+  // This is the review feed that actually BLOCKS a chain: `formatChainResponse` renders
+  // `buildGateReviewCTA` from `pendingReview.gateIds`, which is the list built here. The two
+  // tests above, which write only `accumulatedGateIds`, are the fallback guard — they must stay
+  // green, and their expectations are unchanged.
+
+  test('scopes the pending review to reviewGateIds when the enhancement stage published one', async () => {
+    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
+    context.parsedCommand = createParsedCommand();
+
+    context.state.gates.hasBlockingGates = true;
+    // Run-wide: both gates have been accumulated by now. Step-scoped: only beta applies here.
+    context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
+    context.state.gates.reviewGateIds = ['gate-beta'];
+    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
+
+    manager.getRunHistory.mockReturnValue([]);
+
+    await stage.execute(context);
+
+    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(context.sessionContext?.pendingReview?.gateIds).toEqual(['gate-beta']);
+  });
+
+  test('opens no review at all when no gate applies to this step', async () => {
+    // `hasBlockingGates` is run-wide (`totalGatesApplied > 0`), so it is still true on a step
+    // whose own gate list is empty. Before scoping, that step blocked on gates bound to other
+    // nodes; the empty scope is what stops it.
+    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
+    context.parsedCommand = createParsedCommand();
+
+    context.state.gates.hasBlockingGates = true;
+    context.state.gates.accumulatedGateIds = ['gate-alpha'];
+    context.state.gates.reviewGateIds = [];
+    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
+
+    manager.getRunHistory.mockReturnValue([]);
+
+    await stage.execute(context);
+
+    expect(manager.createSession).toHaveBeenCalledTimes(1);
+    expect(manager.setPendingGateReview).not.toHaveBeenCalled();
+    expect(context.sessionContext?.pendingReview).toBeUndefined();
   });
 });

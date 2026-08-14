@@ -207,8 +207,6 @@ export interface GatesConfig {
   enableFrameworkGates?: boolean;
   /** config.json key: enable framework-specific quality gates */
   frameworkGates?: boolean;
-  /** @deprecated Pre-rename spelling of `frameworkGates`; folded forward by ConfigManager. */
-  methodologyGates?: boolean;
   /** Judge evaluation defaults — gates with `evaluation.mode: 'judge'` use context-isolated review */
   evaluation?: {
     defaultMode?: 'self' | 'judge';

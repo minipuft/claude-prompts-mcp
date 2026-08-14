@@ -16,3 +16,11 @@ export {
   resourceManagerInputSchema,
   type ResourceManagerInput,
 } from './resource-manager.schema.js';
+
+export {
+  workflowIRSchema,
+  workflowNodeSchema,
+  workflowEdgeSchema,
+  workflowBudgetSchema,
+  type WorkflowIRInput,
+} from './workflow-ir.schema.js';

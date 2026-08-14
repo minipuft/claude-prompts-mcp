@@ -11,9 +11,15 @@
  * a write to disk from outside that module fails a stronger structural check than this grep.
  *
  * MECHANISM: script — reach — scans `../cli/src`, `../hooks`, `../docs/guides` and `../docs/reference`, all outside the ESLint root
+ *
+ * SCOPE: git-tracked files under the targets, not a filesystem walk (plan row E6). A directory
+ * handed to rg admits untracked files, so a concurrent session's uncommitted sidecar would red
+ * this gate for everyone; and rg skips dot-paths, so a tracked one could hide.
  */
 
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+
+import { assertNonEmptyScope, trackedFilesUnder } from './lib/tracked-scope.js';
 
 const PATTERN = [
   'verify-active\\.json',
@@ -26,27 +32,31 @@ const PATTERN = [
 const TARGETS = ['src', '../cli/src', '../hooks', '../docs/guides', '../docs/reference'];
 
 function runCheck() {
-  try {
-    const output = execSync(`rg -n "${PATTERN}" ${TARGETS.join(' ')}`, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    if (output.trim() !== '') {
-      console.error('Legacy sidecar references found:');
-      console.error(output.trim());
-      process.exit(1);
-    }
-    console.log('No legacy sidecar references found.');
-  } catch (error) {
-    if (error.status === 1) {
-      // rg exit 1 means no matches
-      console.log('No legacy sidecar references found.');
-      process.exit(0);
-    }
-    const stderr = typeof error.stderr === 'string' ? error.stderr.trim() : '';
-    console.error(stderr !== '' ? stderr : String(error));
+  const files = trackedFilesUnder(TARGETS);
+  assertNonEmptyScope(files, TARGETS, 'validate:no-legacy-sidecars');
+
+  const result = spawnSync('rg', ['-n', PATTERN, ...files], {
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  });
+
+  // rg exits 1 when nothing matched — the passing case for this guard.
+  if (result.status === 1) {
+    console.log(`No legacy sidecar references found (${files.length} tracked files scanned).`);
+    process.exit(0);
+  }
+  if (result.status !== 0) {
+    console.error(result.stderr?.trim() || `rg exited ${result.status}`);
     process.exit(1);
   }
+
+  const output = result.stdout.trim();
+  if (output !== '') {
+    console.error('Legacy sidecar references found:');
+    console.error(output);
+    process.exit(1);
+  }
+  console.log(`No legacy sidecar references found (${files.length} tracked files scanned).`);
 }
 
 runCheck();

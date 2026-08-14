@@ -227,16 +227,11 @@ export class FrameworkFileWriter {
     }
 
     // Map phases-related fields (may come from phases.yaml or framework.yaml)
-    // YAML uses camelCase (frameworkGates); methodologyGates is the pre-rename YAML spelling and
-    // framework_gates the snake_case authoring-payload key (methodology_gates its pre-rename
-    // form). Accept all four on read.
+    // YAML uses camelCase (frameworkGates); framework_gates is the snake_case authoring-payload
+    // key. Accept both on read.
     const phasesSource = phases ?? framework;
     const rawPhases = phasesSource['phases'];
-    const rawFrameworkGates =
-      framework['frameworkGates'] ??
-      framework['methodologyGates'] ??
-      phasesSource['framework_gates'] ??
-      phasesSource['methodology_gates'];
+    const rawFrameworkGates = framework['frameworkGates'] ?? phasesSource['framework_gates'];
     const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
     const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
     const rawQualityIndicators =
@@ -245,9 +240,7 @@ export class FrameworkFileWriter {
       phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
     const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
     const rawFrameworkElements =
-      framework['frameworkElements'] ??
-      phasesSource['framework_elements'] ??
-      phasesSource['methodology_elements'];
+      framework['frameworkElements'] ?? phasesSource['framework_elements'];
     const rawArgumentSuggestions =
       framework['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
     const rawTemplateSuggestions =

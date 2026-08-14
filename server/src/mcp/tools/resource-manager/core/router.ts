@@ -6,7 +6,7 @@
  * based on the resource_type parameter.
  */
 
-import { PROMPT_ONLY_ACTIONS, FRAMEWORK_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
+import { PROMPT_ONLY_ACTIONS, FRAMEWORK_ONLY_ACTIONS } from './types.js';
 
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
@@ -24,8 +24,6 @@ import type {
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
 import type { GateManagerActionId, GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
-import type { CheckpointToolHandler } from '../checkpoint/index.js';
-import type { CheckpointManagerInput, CheckpointAction } from '../checkpoint/types.js';
 
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -38,14 +36,12 @@ export class ResourceManagerRouter {
   private readonly promptResourceHandler: PromptResourceHandlerPort;
   private readonly gateManager: GateToolHandler;
   private readonly frameworkManager: FrameworkToolHandler;
-  private readonly checkpointManager?: CheckpointToolHandler;
 
   constructor(deps: ResourceManagerDependencies) {
     this.logger = deps.logger;
     this.promptResourceHandler = deps.promptResourceHandler;
     this.gateManager = deps.gateManager;
     this.frameworkManager = deps.frameworkManager;
-    this.checkpointManager = deps.checkpointManager;
 
     this.logger.debug('ResourceManagerRouter initialized');
   }
@@ -88,8 +84,6 @@ export class ResourceManagerRouter {
           return await this.routeToGateManager(args, enrichedContext);
         case 'framework':
           return await this.routeToFrameworkManager(args, enrichedContext);
-        case 'checkpoint':
-          return await this.routeToCheckpointManager(args, enrichedContext);
         default:
           return this.createErrorResponse(`Unknown resource_type: ${resource_type}`);
       }
@@ -128,14 +122,6 @@ export class ResourceManagerRouter {
       };
     }
 
-    // Check checkpoint-only actions
-    if (CHECKPOINT_ONLY_ACTIONS.includes(action) && resourceType !== 'checkpoint') {
-      return {
-        valid: false,
-        error: `Action "${action}" is only valid for resource_type: "checkpoint"`,
-      };
-    }
-
     return { valid: true };
   }
 
@@ -157,6 +143,10 @@ export class ResourceManagerRouter {
       user_message_template: args.user_message_template,
       system_message: args.system_message,
       arguments: args.arguments,
+      // Pass-through, no renaming (mcp-contracts.md): the processor reads `patch`/`dry_run` under
+      // the names the caller sent.
+      patch: args.patch,
+      dry_run: args.dry_run,
       chain_steps: args.chain_steps,
       chain_step_operation: args.chain_step_operation,
       chain_step_index: args.chain_step_index,
@@ -164,6 +154,14 @@ export class ResourceManagerRouter {
       chain_step_order: args.chain_step_order,
       tools: args.tools,
       gate_configuration: args.gate_configuration,
+      // OQ-P7-8. Pass-through, no renaming: `UPDATE_FIELDS` owns the single snake_case →
+      // camelCase mapping these take on their way into the YAML, so a second translation here
+      // would be the hidden router transformation mcp-contracts.md bans.
+      injection: args.injection,
+      register_with_mcp: args.register_with_mcp,
+      mcp_prompt_mode: args.mcp_prompt_mode,
+      subagent_model: args.subagent_model,
+      agent_type: args.agent_type,
       execution_hint: args.execution_hint,
       filter: args.filter,
       format: args.format,
@@ -336,21 +334,17 @@ export class ResourceManagerRouter {
     }
 
     // Advanced framework parameters (pass-through)
-    // The input schema is `.passthrough()`, so a pre-rename client key arrives intact but no
-    // typed consumer reads it. Fold here rather than downstream so only this boundary knows
-    // both spellings exist. NOTE: `framework_gates` here is a framework authoring payload
-    // (array of FrameworkGate). The identically-named key inside a *prompt's*
-    // `gate_configuration` is an unrelated boolean toggle — same token, different concept.
-    const frameworkGatesArg = args.framework_gates ?? args.methodology_gates;
-    if (frameworkGatesArg) {
-      frameworkArgs.framework_gates = frameworkGatesArg;
+    // NOTE: `framework_gates` here is a framework authoring payload (array of FrameworkGate).
+    // The identically-named key inside a *prompt's* `gate_configuration` is an unrelated boolean
+    // toggle — same token, different concept.
+    if (args.framework_gates) {
+      frameworkArgs.framework_gates = args.framework_gates;
     }
     if (args.template_suggestions) {
       frameworkArgs.template_suggestions = args.template_suggestions;
     }
-    const frameworkElementsArg = args.framework_elements ?? args.methodology_elements;
-    if (frameworkElementsArg) {
-      frameworkArgs.framework_elements = frameworkElementsArg;
+    if (args.framework_elements) {
+      frameworkArgs.framework_elements = args.framework_elements;
     }
     if (args.argument_suggestions) {
       frameworkArgs.argument_suggestions = args.argument_suggestions;
@@ -397,32 +391,6 @@ export class ResourceManagerRouter {
     }
 
     return await this.frameworkManager.handleAction(frameworkArgs, context);
-  }
-
-  /**
-   * Route to checkpoint manager
-   */
-  private async routeToCheckpointManager(
-    args: ResourceManagerInput,
-    context: Record<string, unknown>
-  ): Promise<ToolResponse> {
-    if (this.checkpointManager == null) {
-      return this.createErrorResponse(
-        'Checkpoint manager is not available. Ensure checkpoint support is enabled.'
-      );
-    }
-
-    // Transform args to checkpoint_manager format
-    const checkpointArgs: CheckpointManagerInput = {
-      action: args.action as CheckpointAction,
-    };
-
-    if (args.name != null) checkpointArgs.name = args.name;
-    if (args.description != null) checkpointArgs.description = args.description;
-    if (args.confirm != null) checkpointArgs.confirm = args.confirm;
-    if (args.reason != null) checkpointArgs.reason = args.reason;
-
-    return await this.checkpointManager.handleAction(checkpointArgs, context);
   }
 
   /**

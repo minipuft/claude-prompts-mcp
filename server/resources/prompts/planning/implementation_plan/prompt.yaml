@@ -1,0 +1,78 @@
+id: implementation_plan
+name: Implementation Plan
+category: planning
+description: >-
+  5-step implementation planning chain aligned with the dev-workflow. Step 1
+  Discovery: search, sibling patterns, intent declaration. Step 2 Design:
+  pre-flight checklist RESULT, identification, interfaces. Step 3 Verify-Paths:
+  verified_paths block (wc -l, grep, shim detection). Step 4 Plan-Table:
+  tier-gated task rows with Status column and verification. Step 5 Completion:
+  testing, docs, risks, release. Each step produces required output structure —
+  fields the agent fills to complete it, forcing the reasoning that advisory
+  text cannot. Vocabulary: master plans have PHASES (P0, P1...), the plan file
+  this chain emits has TIERS, tiers have TASK rows — this chain's own
+  progression is STEPS, never phases. Design Enrichment is keyword-gated via
+  design_mode (auto|on|off).
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: feature
+    type: string
+    description: The feature or functionality to implement
+    required: true
+  - name: existing_systems
+    type: string
+    description: Known existing systems/files that might be relevant (comma-separated)
+    required: false
+  - name: constraints
+    type: string
+    description: >-
+      Hard limits — bundle size, no new deps, backwards compat, performance
+      budgets
+    required: false
+  - name: non_goals
+    type: string
+    description: >-
+      What this plan explicitly does NOT cover. Prevents agents from adding
+      unrequested features (e.g., "no auth, no admin UI, no real-time
+      WebSocket"). Agents cannot infer boundaries from omission.
+    required: false
+  - name: research_focus
+    type: string
+    description: >-
+      Specific areas to research before planning (e.g., "chart libraries", "auth
+      patterns"). Triggers web research and library discovery. Results are
+      captured as Decisions (chosen + rejected + why) not just options.
+    required: false
+  - name: tech_stack
+    type: string
+    description: >-
+      Current technology stack for compatibility assessment (e.g., "Next.js 15,
+      TypeScript, Prisma")
+    required: false
+  - name: design_mode
+    type: string
+    description: >-
+      Whether to run the Design Enrichment path (modern technique + library/doc
+      research) for visual/creative/UI work. Values: auto | on | off. Default
+      auto — keyword-detects design intent from the feature text (design,
+      visual, UI, shader, animation, theme, css, aesthetic, layout, palette,
+      color, art). 'on' forces it; 'off' emits nothing (zero-change). Generic —
+      names no specific framework. Distinct from the chain's Design & Pre-flight
+      step (Step 2).
+    required: false
+gateConfiguration:
+  include:
+    - code-quality
+    - plan-quality
+chainSteps:
+  - promptId: implementation_plan/discovery
+    stepName: Discovery & Triage (Step 1)
+  - promptId: implementation_plan/design
+    stepName: Design & Pre-flight (Step 2)
+  - promptId: implementation_plan/verification
+    stepName: Verify-Paths (Step 3)
+  - promptId: implementation_plan/plan_table
+    stepName: Plan-Table (Step 4)
+  - promptId: implementation_plan/completion
+    stepName: Validation & Completion (Step 5)

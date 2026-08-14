@@ -20,6 +20,10 @@ const files = [
   { path: join(serverDir, 'package.json'), name: 'server/package.json' },
   { path: join(repoRoot, 'manifest.json'), name: 'manifest.json' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), name: '.claude-plugin/plugin.json' },
+  // Agent Plugins 1.0.0 canonical manifest. Registered with the manifest it was promoted from,
+  // not deferred to the renderer tier: a versioned manifest that no gate reads can drift from
+  // the moment it exists, and the render pipeline that will own the rest is not built yet.
+  { path: join(repoRoot, 'plugin.json'), name: 'plugin.json (Agent Plugins)' },
   { path: join(repoRoot, 'server.json'), name: 'server.json' },
 ];
 

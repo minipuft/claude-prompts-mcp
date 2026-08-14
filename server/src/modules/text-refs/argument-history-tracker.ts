@@ -113,6 +113,9 @@ export class ArgumentHistoryTracker {
     promptId: string;
     sessionId?: string;
     originalArgs: Record<string, any>;
+    /** Stable node id of the step (chain executions). */
+    nodeId?: string;
+    /** Position the step held at write time; drives the positional `previousResults` keys. */
     stepNumber?: number;
     stepResult?: string;
     metadata?: Record<string, any>;
@@ -122,7 +125,7 @@ export class ArgumentHistoryTracker {
       await this.initialize();
     }
 
-    const { promptId, sessionId, originalArgs, stepNumber, stepResult, metadata } = options;
+    const { promptId, sessionId, originalArgs, nodeId, stepNumber, stepResult, metadata } = options;
 
     // Generate unique entry ID
     const entryId = `entry_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -140,6 +143,9 @@ export class ArgumentHistoryTracker {
 
     if (sessionId !== undefined) {
       entry.sessionId = sessionId;
+    }
+    if (nodeId !== undefined) {
+      entry.nodeId = nodeId;
     }
     if (stepNumber !== undefined) {
       entry.stepNumber = stepNumber;
@@ -217,7 +223,16 @@ export class ArgumentHistoryTracker {
   /**
    * Build execution context for gate review
    */
-  buildReviewContext(sessionId: string, currentStepNumber?: number): ReviewContext {
+  /**
+   * @param totalStepsOverride - The run's node count, supplied by callers that own the run's
+   *   node list. Without it this method could only guess the chain's size from the entries it
+   *   happens to hold, and its guess was wrong by construction (see below).
+   */
+  buildReviewContext(
+    sessionId: string,
+    currentStepNumber?: number,
+    totalStepsOverride?: number
+  ): ReviewContext {
     const history = this.getSessionHistory(sessionId);
 
     if (history.length === 0) {
@@ -245,16 +260,22 @@ export class ArgumentHistoryTracker {
     const originalArgs = { ...latestEntry.originalArgs };
 
     const previousResults: Record<number, string> = {};
-    let maxStepNumber = -1;
+    const stepsWithResults = new Set<number>();
 
     history.forEach((entry) => {
       if (entry.stepNumber !== undefined && entry.stepResult) {
         previousResults[entry.stepNumber] = entry.stepResult;
-        maxStepNumber = Math.max(maxStepNumber, entry.stepNumber);
+        stepsWithResults.add(entry.stepNumber);
       }
     });
 
-    const totalSteps = maxStepNumber >= 0 ? maxStepNumber + 1 : undefined;
+    // Was `maxStepNumber + 1` — the highest step ORDINAL seen, read as a cardinality. Step
+    // numbers are 1-based, so a 3-step chain with two results reported `totalSteps: 3` and a
+    // finished one reported 4; the value tracked progress, not size. The run's node count is
+    // the only honest answer, so callers that own the node list pass it; the fallback counts
+    // distinct steps actually seen, which is a lower bound rather than an off-by-one.
+    const totalSteps =
+      totalStepsOverride ?? (stepsWithResults.size > 0 ? stepsWithResults.size : undefined);
 
     const reviewContext: ReviewContext = {
       originalArgs,

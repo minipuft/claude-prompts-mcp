@@ -16,6 +16,7 @@ import { ExecutionContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type {
   MetricsCollector,
   PipelineStageStatus,
@@ -50,6 +51,14 @@ export interface PipelinePorts {
    * stages 18 and 21 receive it. Emission is best-effort by design — see `append`.
    */
   executionRecordStore?: ExecutionRecordStore;
+
+  /**
+   * Read-only source of the run-level telemetry stamped onto the terminal record this
+   * pipeline emits on the failure path. Present here as well as on stage 21 because both
+   * are terminal-record writers: wiring only one leaves failed runs with NULL telemetry
+   * while completed runs carry it.
+   */
+  chainSessionStore?: ChainSessionService;
 }
 
 export class PromptExecutionPipeline {
@@ -59,6 +68,7 @@ export class PromptExecutionPipeline {
   private readonly hookRegistry: HookRegistryPort | undefined;
   private readonly gateEnforcement: GateEnforcementAuthority | undefined;
   private readonly executionRecordStore: ExecutionRecordStore | undefined;
+  private readonly chainSessionStore: ChainSessionService | undefined;
 
   /**
    * @param stages Executed in array order. The caller owns the ordering and its
@@ -83,6 +93,7 @@ export class PromptExecutionPipeline {
     this.hookRegistry = ports.hookRegistry;
     this.gateEnforcement = ports.gateEnforcement;
     this.executionRecordStore = ports.executionRecordStore;
+    this.chainSessionStore = ports.chainSessionStore;
   }
 
   /**
@@ -99,14 +110,22 @@ export class PromptExecutionPipeline {
     if (store === undefined || session === undefined) return;
 
     const failedAt = Date.now();
+    const telemetry = this.chainSessionStore?.getRunTelemetry(
+      session.sessionId,
+      context.getScopeOptions()
+    );
     store.append({
       sessionId: session.sessionId,
       chainId: session.chainId,
+      // `nodeId` deliberately omitted: this closes out the RUN from the pipeline's single error
+      // boundary, which sees every failure but not which node was mid-render. `buildAppendParams`
+      // binds the column NULL for it.
       status: 'failed',
       errorMessage: failure.message,
       startedAt: failedAt,
       completedAt: failedAt,
       scope: context.getScopeOptions(),
+      ...(telemetry ?? {}),
     });
   }
 

@@ -1,8 +1,9 @@
 /**
- * Pins the `{METHODOLOGY}` -> `{FRAMEWORK_TYPE}` placeholder rename (plan row 5.1).
+ * Pins the `{METHODOLOGY}` -> `{FRAMEWORK_TYPE}` placeholder rename (plan row 5.1) and, since
+ * 5.7, the RETIREMENT of the back-compat fold that accepted the old spelling.
  *
- * The deprecated-spelling case is the negative-verified one: delete the
- * `DEPRECATED_FRAMEWORK_TYPE_PLACEHOLDER` replace in `template-variables.ts` and it must fail.
+ * NEGATIVE-VERIFY TARGET: restore the `DEPRECATED_FRAMEWORK_TYPE_PLACEHOLDER` replace in
+ * `template-variables.ts` and the "no longer substitutes" case must fail.
  */
 
 import {
@@ -40,14 +41,13 @@ describe('substituteTemplateVariables', () => {
     expect(substituteTemplateVariables(template, VALUES)).not.toMatch(/\{[A-Z_]+\}/);
   });
 
-  // NEGATIVE-VERIFY TARGET: fails if the deprecated-spelling fold is removed.
-  it('still renders a template authored with the pre-rename {METHODOLOGY} spelling', () => {
-    expect(substituteTemplateVariables('type={METHODOLOGY}', VALUES)).toBe('type=CAGEERF');
+  it('no longer substitutes the pre-rename {METHODOLOGY} spelling', () => {
+    expect(substituteTemplateVariables('type={METHODOLOGY}', VALUES)).toBe('type={METHODOLOGY}');
   });
 
-  it('resolves both spellings to the same value so a mixed template is consistent', () => {
+  it('leaves the retired spelling literal while the canonical one still resolves', () => {
     expect(substituteTemplateVariables('{METHODOLOGY} vs {FRAMEWORK_TYPE}', VALUES)).toBe(
-      'CAGEERF vs CAGEERF'
+      '{METHODOLOGY} vs CAGEERF'
     );
   });
 

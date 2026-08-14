@@ -1,0 +1,192 @@
+# Claims-conformance corpus — symbolic command language
+#
+# Each scenario asserts something the PUBLISHED SURFACE claims (README, docs/, or a contract
+# registry). The driver executes it against a real spawned server. A red scenario means the
+# documentation and the server disagree — which is the finding, not a flake.
+#
+# `claim_source` is mandatory and must name where the claim lives. A scenario nobody can trace to
+# a published claim is a unit test wearing the wrong hat; put it in tests/unit instead.
+#
+# expect:
+#   ok: true                 — the call succeeds (isError false/absent)
+#   error_contains: "…"      — the call fails AND the message contains this substring.
+#                              Substring, not equality: the exact wording is not a published
+#                              claim, but the DISTINCTION the message draws is.
+#
+# The reserved-operator rows come free from operators.json `status: reserved` — that field is the
+# claim, so `+` and `?` must reject. When one is implemented, its row flips to `ok: true` in the
+# same commit that implements it.
+
+version: 1
+
+scenarios:
+  # ── Modifiers: the 3a defect class ──────────────────────────────────────────
+  # VALID_MODIFIERS (command-parser.ts:39-43) is the registry; the README advertises the set.
+  - id: modifier-clean
+    claim_source: 'command-parser.ts:39 VALID_MODIFIERS + README symbolic syntax'
+    requests: [{ tool: prompt_engine, args: { command: '%clean >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: modifier-lean
+    claim_source: 'command-parser.ts:39 VALID_MODIFIERS'
+    requests: [{ tool: prompt_engine, args: { command: '%lean >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: modifier-judge
+    claim_source: 'command-parser.ts:39 VALID_MODIFIERS'
+    requests: [{ tool: prompt_engine, args: { command: '%judge >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: modifier-unknown-rejects
+    claim_source: 'command-parser.ts:117-121 — unknown modifier is a ValidationError'
+    # This is the %guided defect reproduced as a POSITIVE assertion: the server must say so.
+    requests: [{ tool: prompt_engine, args: { command: '%guided >>minimal_prompt' } }]
+    expect: { error_contains: 'Unknown execution modifier' }
+
+  - id: modifier-stacking-rejects
+    claim_source: 'command-parser.ts:125-128 — one modifier per command'
+    requests: [{ tool: prompt_engine, args: { command: '%clean %lean >>minimal_prompt' } }]
+    expect: { error_contains: 'Only one %modifier is allowed' }
+
+  # ── Reserved operators: status field in operators.json IS the claim ─────────
+  #
+  # Both rows assert the DISTINCTIVE reserved-operator message, not a bare rejection. That is not
+  # cosmetic: the original `+` row used a fixture with a required argument, omitted it, and passed
+  # on the unrelated "Missing required field: text" — so it read green while `+` was in fact being
+  # accepted. A bare rejection cannot tell those two apart, which is why the driver no longer
+  # accepts one (plan rows 0.5.11 + 0.5.12).
+  - id: operator-plus-reserved
+    claim_source: 'tooling/contracts/registries/operators.json — "+" status: reserved'
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt + >>minimal_prompt' } }]
+    expect: { error_contains: 'Operator "+" is reserved and not implemented' }
+
+  # The same reservation, in the position where it used to be SWALLOWED.
+  #
+  # `>>a --> >>b + >>c` was accepted and ran as a 2-step chain with the `+` absorbed into argument
+  # text (measured 2026-08-11), because the tokenizer suppressed the `parallel` token whenever a
+  # chain was present, so the reserved check never saw one. `?` was rejected in the identical
+  # position, which is what made the inconsistency visible. Chain precedence protects a chain from
+  # having its `+` consumed as a parallel STEP — meaningless while nothing may consume it — so the
+  # suppression now applies only once `+` is implemented (plan row 0.5.15).
+  - id: operator-plus-reserved-inside-chain
+    claim_source: >-
+      tooling/contracts/registries/operators.json — "+" status: reserved. The registry declares the
+      status of the SYMBOL; it does not exempt any position from it.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>minimal_prompt --> >>minimal_prompt + >>minimal_prompt' }
+    expect: { error_contains: 'Operator "+" is reserved and not implemented' }
+
+  # The exclusion that keeps the row above from eating ordinary chains. Without it, a fix that
+  # rejected every `+` — including a quoted one — would pass the rejection row and break real
+  # commands. `R3F + Visx` is argument TEXT and must survive.
+  - id: chain-with-quoted-plus-still-runs
+    claim_source: >-
+      command-tokenizer.ts — operator detection is quote-aware; a `+` inside a quoted argument is
+      text, not an operator.
+    requests:
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"R3F + Visx"' }
+    expect: { text_contains: 'R3F + Visx' }
+
+  # Uses the DOCUMENTED conditional form (`? ''cond'' : target`), which is what operators.json
+  # declares. The previous row probed `>>a ? >>b` — a bare `?` that the registry pattern does not
+  # match and the tokenizer deliberately ignores so natural language ("is there a bug?") still
+  # parses. That row measured argument-text fall-through, not the reserved operator.
+  - id: operator-conditional-reserved
+    claim_source: 'tooling/contracts/registries/operators.json — "?" status: reserved'
+    requests:
+      [{ tool: prompt_engine, args: { command: ">>minimal_prompt ? 'cond' : >>minimal_prompt" } }]
+    expect: { error_contains: 'Operator "?" is reserved and not implemented' }
+
+  # The exclusion that keeps the rejection above from eating ordinary input. The "?" is
+  # deliberately OUTSIDE quotes: an earlier version of this row quoted it, and quoting made
+  # `findMatchesOutsideQuotes` skip the character before the conditional pattern ever ran — so
+  # the row went green against a tokenizer mutated to treat every bare "?" as the operator.
+  # It measured the quoting exclusion, not the natural-language one it names.
+  - id: operator-bare-question-is-text
+    claim_source: 'command-tokenizer.ts — bare "?" is natural language, not the conditional operator'
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt ?' } }]
+    expect: { ok: true }
+
+  # ── Tool surface: the three tools are the public contract (CLAUDE.md) ───────
+  - id: tools-list-exposes-three
+    claim_source: 'CLAUDE.md Public API Contract — prompt_engine, resource_manager, system_control'
+    requests: [{ method: tools/list }]
+    expect: { tools_include: [prompt_engine, resource_manager, system_control] }
+
+  - id: unknown-prompt-rejects
+    claim_source: 'docs/reference/mcp-tools.md — unknown prompt id is an error, not a silent pass'
+    requests: [{ tool: prompt_engine, args: { command: '>>definitely_not_a_real_prompt_id_xyz' } }]
+    expect: { error_contains: 'Unknown prompt "definitely_not_a_real_prompt_id_xyz"' }
+
+  # ── %framework: the one modifier with no negative coverage (plan row 0.5.7) ──
+  #
+  # It is a BOOLEAN modifier — `VALID_MODIFIERS` maps it to `framework: true` and the tool
+  # description documents it as bare ("%framework (force framework, no gates)"). The plan row
+  # assumed it "takes a value in real use"; measured 2026-08-11, it does not, and both value
+  # forms are errors. These rows pin that.
+  - id: modifier-framework
+    claim_source: 'command-parser.ts:39 VALID_MODIFIERS + README'
+    # `ok: true` cannot see a modifier that parses and then does nothing, so this asserts the
+    # claimed EFFECT — framework guidance actually present in the response.
+    requests: [{ tool: prompt_engine, args: { command: '%framework >>minimal_prompt' } }]
+    expect: { text_contains: 'C.A.G.E.E.R.F' }
+
+  - id: modifier-framework-colon-value-rejects
+    claim_source: 'command-parser.ts:113 — modifier regex takes no value; %framework is boolean'
+    requests: [{ tool: prompt_engine, args: { command: '%framework:cageerf >>minimal_prompt' } }]
+    expect: { error_contains: 'Parse error: ":cageerf' }
+
+  - id: modifier-framework-space-value-rejects
+    claim_source: 'command-parser.ts:113 — a value after %framework is read as the prompt id'
+    requests: [{ tool: prompt_engine, args: { command: '%framework cageerf >>minimal_prompt' } }]
+    expect: { error_contains: 'Unknown prompt "cageerf"' }
+
+  # ── Style and repetition: advertised in the README, previously unexercised ──
+  #
+  # Both are named in the README's primitives table / operator set, and both had ZERO scenarios
+  # until 2026-08-11 (plan row 0.5.19). `validate-readme`'s claim-coverage check could not see
+  # them: it scanned a hardcoded ['-->', '==>', '::'] plus %modifiers, so the two symbols the
+  # README shows in its own table were exactly the two it never looked for (row 0.5.21).
+  - id: operator-style
+    claim_source: 'README primitives table — Style `#`, "Output formatting and tone", `#analytical`'
+    # Asserts the style's OWN text reached the response. `ok: true` would pass on a `#` that parsed
+    # and was then dropped, which is the defect shape this corpus exists to catch.
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt #analytical' } }]
+    expect: { text_contains: 'systematic analysis' }
+
+  - id: operator-repetition
+    claim_source: >-
+      README — "the full operator set including `*`, `%`, and `#`"; prompt_engine description —
+      ">>prompt * N  # Repeat N times (chain shorthand)" and "* N unfolds to chain with SAME args".
+    # The claim is that it UNFOLDS INTO A CHAIN, so the chain progress counter is the evidence.
+    # A `*` that parsed and ran the prompt once would satisfy `ok: true` and fail this.
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt * 2' } }]
+    expect: { text_contains: 'Progress 1/2' }
+
+  # ── Delimiter operators the README advertises ──────────────────────────────
+  - id: operator-chain-arrow
+    claim_source: 'README symbolic syntax — ">>step1 --> >>step2" chains steps'
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt --> >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: operator-delegation
+    claim_source: 'README symbolic syntax — "==>" delegates a step to a subagent'
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt ==> >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: operator-gate
+    # Verbatim from the README rather than a paraphrase: the published string IS the claim, and a
+    # scenario that "fixes" the syntax on the way in tests something no reader ever types.
+    claim_source: 'README symbolic syntax — ">>prompt :: ''cite sources''" attaches a gate'
+    # Fixture is `minimal_prompt`: no arguments, no tools, no includes, so the gate operator is
+    # the only thing that can fail here.
+    requests:
+      [
+        {
+          tool: prompt_engine,
+          args: { command: '>>minimal_prompt text="hello" :: ''cite sources''' },
+        },
+      ]
+    expect: { ok: true }

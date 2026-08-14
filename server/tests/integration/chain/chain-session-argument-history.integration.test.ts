@@ -42,8 +42,12 @@ const createLogger = (): Logger =>
 
 /**
  * Creates a mock DatabasePort that stores data in-memory, simulating SQLite.
- * Supports the chain_run_registry table and the kv_state shared table
- * (used by argument history via key='arg_history').
+ * Supports the kv_state shared table (used by argument history via key='arg_history').
+ *
+ * Chain-run persistence is deliberately NOT simulated: since v22 the store writes
+ * chain_runs/chain_run_nodes through `db.run` and reads them through `db.query`, which
+ * returns [] here. This file asserts the argument-history round trip, so an empty run
+ * table is the correct stand-in rather than a gap.
  */
 const createMockDb = (): DatabasePort => {
   const tables = new Map<string, Map<string, string>>();
@@ -61,10 +65,6 @@ const createMockDb = (): DatabasePort => {
         const state = tables.get('kv_state')?.get(argHistoryKey(tenantId));
         return state ? { state } : null;
       }
-      if (sql.includes('chain_run_registry')) {
-        const state = tables.get('chain_run_registry')?.get(tenantId);
-        return state ? { state } : null;
-      }
       return null;
     }),
     query: jest.fn().mockReturnValue([]),
@@ -77,12 +77,6 @@ const createMockDb = (): DatabasePort => {
         // params: [tenant_id, key, state]
         const state = (params?.[2] as string) ?? '{}';
         tables.get('kv_state')!.set(argHistoryKey(tenantId), state);
-      }
-      if (sql.includes('INSERT OR REPLACE INTO chain_run_registry')) {
-        if (!tables.has('chain_run_registry')) tables.set('chain_run_registry', new Map());
-        tables
-          .get('chain_run_registry')!
-          .set((params?.[0] as string) ?? 'default', (params?.[1] as string) ?? '{}');
       }
     }),
     transaction: jest
@@ -153,10 +147,10 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
     await manager.createSession('sess-1', 'chain-ctx', 2, { input: 'alpha' });
 
     // Simulate placeholder then real response for step 1
-    await manager.updateSessionState('sess-1', 1, 'placeholder', { isPlaceholder: true });
-    await manager.updateStepResult('sess-1', 1, 'REAL-OUTPUT-1');
-    await manager.completeStep('sess-1', 1, { preservePlaceholder: false });
-    await manager.advanceStep('sess-1', 1);
+    await manager.updateSessionState('sess-1', 'n1', 'placeholder', { isPlaceholder: true });
+    await manager.updateStepResult('sess-1', 'n1', 'REAL-OUTPUT-1');
+    await manager.completeStep('sess-1', 'n1', { preservePlaceholder: false });
+    await manager.advanceStep('sess-1', 'n1');
 
     const context = manager.getChainContext('sess-1');
     // Original args should be present via ArgumentHistoryTracker (merged at root)

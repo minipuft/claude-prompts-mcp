@@ -8,6 +8,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { FormatterExecutionContext, StepLifecycle } from '#shared/types/chain-execution.js';
+import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { ResponseFormatterPort } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { SinglePromptFormattingContext } from '../../formatting/formatting-context.js';
@@ -33,7 +34,13 @@ export class ResponseFormattingStage extends BasePipelineStage {
     private readonly responseFormatter: ResponseFormatterPort,
     private readonly responseAssembler: ResponseAssembler,
     logger: Logger,
-    private readonly executionRecordStore: ExecutionRecordStore | null = null
+    private readonly executionRecordStore: ExecutionRecordStore | null = null,
+    /**
+     * Read-only source of the run-level telemetry stamped onto terminal records.
+     * Optional, matching the store above: where it is absent the record is still
+     * written, just without the telemetry fields.
+     */
+    private readonly chainSessionStore: ChainSessionService | null = null
   ) {
     super(logger);
   }
@@ -47,13 +54,20 @@ export class ResponseFormattingStage extends BasePipelineStage {
     if (status === undefined) return;
 
     const completedAt = Date.now();
+    const telemetry = this.chainSessionStore?.getRunTelemetry(
+      session.sessionId,
+      context.getScopeOptions()
+    );
     this.executionRecordStore.append({
       sessionId: session.sessionId,
       chainId: session.chainId,
+      // `nodeId` deliberately omitted: this record describes the RUN reaching a terminal
+      // status, not a node. `buildAppendParams` binds the column NULL for it.
       status,
       startedAt: completedAt,
       completedAt,
       scope: context.getScopeOptions(),
+      ...(telemetry ?? {}),
     });
   }
 
@@ -131,6 +145,22 @@ export class ResponseFormattingStage extends BasePipelineStage {
   }
 
   /**
+   * How many of the run's nodes have actually been advanced past.
+   *
+   * Undefined when the store is unavailable or the session cannot be read (single prompts,
+   * test harnesses wiring only a formatter) — the caller then keeps the position-derived
+   * value rather than reporting a confident zero.
+   */
+  private countExecutedSteps(context: ExecutionContext): number | undefined {
+    const sessionId = context.sessionContext?.sessionId;
+    if (this.chainSessionStore === null || sessionId === undefined) {
+      return undefined;
+    }
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    return session?.executionOrder.length;
+  }
+
+  /**
    * Build the FormatterExecutionContext from pipeline state.
    * This is orchestration-level context wiring, not domain logic.
    */
@@ -152,7 +182,14 @@ export class ResponseFormattingStage extends BasePipelineStage {
       formatterContext.frameworkUsed = frameworkUsed;
     }
 
-    if (sessionContext?.currentStep !== undefined) {
+    // Was `sessionContext.currentStep` — the position the run is standing at, reported as a
+    // count of work done. Those differ by one on a run that has not started its current step,
+    // and they stop tracking each other entirely once a step can be skipped or revisited.
+    // `executionOrder` records the nodes actually advanced past, so its length IS the count.
+    const executedCount = this.countExecutedSteps(context);
+    if (executedCount !== undefined) {
+      formatterContext.stepsExecuted = executedCount;
+    } else if (sessionContext?.currentStep !== undefined) {
       formatterContext.stepsExecuted = sessionContext.currentStep;
     }
 

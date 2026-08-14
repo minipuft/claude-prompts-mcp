@@ -11,6 +11,7 @@ Parses the response to:
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -67,15 +68,22 @@ def main():
     # Save state for this session
     save_session_state(session_id, state)
 
-    # Detect delegation: command contains ==> and chain has remaining steps
-    command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+    # Detect delegation: RESPONSE (not command prose) contains a delegation CTA
+    # and the chain has remaining steps. The server only renders these markers
+    # (strategy.ts formatToolCall/getHandoffFooterInstruction) when the next step
+    # is actually delegated — a command that merely mentions "==>" in prose must
+    # not arm enforcement.
     chain_id = state.get("chain_id", "")
     pending_gate = state.get("pending_gate")
     step = state.get("current_step", 0)
     total = state.get("total_steps", 0)
 
-    if "==>" in command and step > 0 and step < total and not pending_gate:
+    subagent_match = re.search(r'subagent_type:\s*"([^"]+)"', content)
+    has_delegation_cta = bool(subagent_match) or "Handoff via Task tool" in content
+
+    if has_delegation_cta and step > 0 and step < total and not pending_gate:
         state["pending_delegation"] = True
+        state["delegation_agent_type"] = subagent_match.group(1) if subagent_match else "chain-executor"
         save_session_state(session_id, state)
 
     if pending_gate:

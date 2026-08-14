@@ -28,6 +28,10 @@ describe('GateReviewStage', () => {
         maxAttempts: 3,
       }),
       getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
+      // The review body is resolved against the RUN's node list now (P4 row 3.4), so the double
+      // has to answer for the run. `undefined` is a real answer — a formatter-only harness with
+      // no session — and exercises the projection's parse-time fallback.
+      getSession: jest.fn().mockReturnValue(undefined),
     } as any;
 
     const stage = new GateReviewStage(chainOperatorExecutor, chainSessionStore, null, {

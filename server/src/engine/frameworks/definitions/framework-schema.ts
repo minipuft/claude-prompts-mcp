@@ -140,8 +140,6 @@ export const FrameworkSchema = z
       })
       .optional(),
     frameworkGates: z.array(FrameworkGateSchema).optional(),
-    /** @deprecated Pre-rename spelling of `frameworkGates`; folded in by the preprocess below. */
-    methodologyGates: z.array(FrameworkGateSchema).optional(),
 
     // File references (validated separately for existence)
     phasesFile: z.string().optional(),
@@ -152,16 +150,7 @@ export const FrameworkSchema = z
     toolDescriptions: z.record(z.string(), z.unknown()).optional(),
     templateSuggestions: z.array(TemplateSuggestionSchema).optional(),
   })
-  .passthrough() // Allow additional fields not in schema
-  // Fold the pre-rename spelling into the canonical one so a definition authored before the
-  // framework rename keeps its gates. Without this the old key parses (passthrough keeps it) but
-  // no typed consumer reads it, so the gates vanish with no error raised anywhere.
-  .transform((data) => {
-    if (data.frameworkGates === undefined && data.methodologyGates !== undefined) {
-      return { ...data, frameworkGates: data.methodologyGates };
-    }
-    return data;
-  });
+  .passthrough(); // Allow additional fields not in schema
 
 export type FrameworkYaml = z.infer<typeof FrameworkSchema>;
 

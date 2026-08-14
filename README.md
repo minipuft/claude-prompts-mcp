@@ -8,8 +8,8 @@
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=claude-prompts&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22claude-prompts%40latest%22%5D%7D&quality=stable)
-[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-F14F21?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==)
+[![Set up Claude Code](https://img.shields.io/badge/Claude_Code-Setup_Plugin-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](#claude-code-recommended)
+[![Set up Codex](https://img.shields.io/badge/Codex-Set_up-111111?style=for-the-badge)](#codex-install)
 
 **A Model Context Protocol (MCP) server for prompt workflows.** _Written once, always followed._
 
@@ -72,7 +72,33 @@ Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 
 </details>
 
+<a id="codex-install"></a>
+
+### Codex (Experimental)
+
+Codex hooks require Codex CLI 0.117 or later and are unavailable on Windows. See the [codex-prompts requirements](https://github.com/minipuft/codex-prompts#requirements) for Python and Node.js prerequisites.
+
+Enable hooks in `~/.codex/config.toml`:
+
+```toml
+[features]
+hooks = true
+```
+
+Then install the plugin:
+
+```bash
+codex plugin marketplace add https://github.com/minipuft/minipuft-plugins.git
+codex plugin add codex-prompts@minipuft
+```
+
+Restart Codex, run `/hooks` to review the plugin hooks, then try `>>tech_evaluation_chain library:'zod' context:'API validation'`.
+
 ---
+
+<!-- diataxis: how-to -->
+
+## More Client Setups
 
 ### Claude Desktop
 
@@ -104,14 +130,12 @@ Add to your config file:
 
 Restart Claude Desktop and test: `>>research_chain topic:'remote team policies'`
 
----
-
 <details>
-<summary><strong>Other clients</strong>: VS Code · Cursor · OpenCode · Gemini CLI · Codex · Windsurf · Zed · From Source</summary>
+<summary><strong>Other clients</strong>: VS Code · Cursor · OpenCode · Gemini CLI · Windsurf · Zed · From Source</summary>
 
-**One-click install**: the VS Code and Cursor buttons at the top of this README register the server via `npx`.
+**Client setup:** VS Code, Cursor, and other MCP-only clients use the manual configuration guide below.
 
-**Plugin installers** (recommended, adds hooks):
+**Plugin installers** (recommended where available; adds hooks):
 
 ```bash
 # OpenCode (full hooks)
@@ -119,13 +143,9 @@ npm install -g opencode-prompts && opencode-prompts install
 
 # Gemini CLI (partial hooks)
 gemini extensions install https://github.com/minipuft/gemini-prompts
-
-# Codex (experimental hooks; requires hooks = true under [features] in ~/.codex/config.toml)
-codex plugin marketplace add https://github.com/minipuft/minipuft-plugins.git
-codex plugin add codex-prompts@minipuft
 ```
 
-**Manual config** for VS Code, Cursor, OpenCode (no hooks), Gemini CLI (no hooks), Codex, Windsurf, Zed: see [Client Integration Guide](docs/guides/client-integration.md) for per-client config locations, JSON examples, and `--client` preset matrix. [Client Capabilities Reference](docs/reference/client-capabilities.md) covers profile mapping and limits.
+**Manual config** for VS Code, Cursor, OpenCode (no hooks), Gemini CLI (no hooks), Codex (no plugin hooks), Windsurf, and Zed: see [Client Integration Guide](docs/guides/client-integration.md) for per-client config locations, JSON examples, and `--client` preset matrix. [Client Capabilities Reference](docs/reference/client-capabilities.md) covers profile mapping and limits.
 
 **From source** (developers):
 
@@ -146,7 +166,7 @@ Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` 
 
 ## What You Get
 
-Four primitives you author, version, and compose. The bundled set ships 120+ prompts across 17 categories. All hot-reloadable, all versioned with rollback.
+Four primitives you author, version, and compose. The bundled set ships 37 prompts across 7 categories — a starting library, not the ceiling: your AI writes new prompts and chains through `resource_manager` as it works, so the set grows around what you actually do. All hot-reloadable, all versioned with rollback.
 
 | Primitive       | Symbol | What it is                                                                                                                                                                                                               | Example                                      |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
@@ -191,7 +211,7 @@ Read top-to-bottom:
 - `--> security_scan :: verify:"npm test"` chains to step 2, which must pass `npm test` before producing output.
 - `==> implementation` hands the final step off to a client-native agent (a subagent in Claude Code).
 
-Validation runs between steps, not only at the end. For the full operator set including `*`, `%`, and `#`, see the **Syntax Reference** details block near the bottom.
+Validation runs between steps, not only at the end. For the full operator grammar and examples, see [MCP Tools Reference](docs/reference/mcp-tools.md).
 
 <div align="center">
 
@@ -289,33 +309,6 @@ Hooks ship with the plugin install. Full support on Claude Code (this repo) and 
 
 ---
 
-<details>
-<summary><strong>Syntax Reference</strong></summary>
-
-| Symbol | Name      | What It Does              | Example                |
-| :----: | :-------- | :------------------------ | :--------------------- |
-|  `>>`  | Prompt    | Execute template          | `>>code_review`        |
-| `-->`  | Chain     | Pipe to next step         | `step1 --> step2`      |
-| `==>`  | Handoff   | Route step to agent       | `step1 ==> agent_step` |
-|  `*`   | Repeat    | Run prompt N times        | `>>brainstorm * 5`     |
-|  `@`   | Framework | Inject reasoning guidance | `@ReACT`               |
-|  `::`  | Gate      | Add validation criteria   | `:: 'cite sources'`    |
-|  `%`   | Modifier  | Toggle behavior           | `%clean`, `%judge`     |
-|  `#`   | Style     | Apply formatting          | `#analytical`          |
-
-**Modifiers** (one per command, placed first):
-
-- `%clean` — No framework/gate/style injection
-- `%lean` — Gates only, skip framework and style
-- `%framework` — Framework injection only
-- `%judge` — AI recommends resources; you confirm
-
-→ [MCP Tools Reference](docs/reference/mcp-tools.md) for full command documentation.
-
-</details>
-
----
-
 <!-- diataxis: explanation -->
 
 ## How It Works
@@ -330,7 +323,7 @@ Full request lifecycle, pipeline stages, and subsystem diagrams: [Architecture O
 
 ## Documentation
 
-Full docs index, organized by Diátaxis quadrant (tutorials, how-to, reference, concepts):
+Choose a guide based on what you want to do: learn by building, complete a task, look up syntax, or understand the design.
 
 → **[docs/README.md](docs/README.md)**
 

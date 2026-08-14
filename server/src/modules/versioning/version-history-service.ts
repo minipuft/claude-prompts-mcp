@@ -110,6 +110,14 @@ export class VersionHistoryService {
 
   /**
    * Save a version snapshot before an update.
+   *
+   * **Throws on persistence failure.** `version_history` is a DURABLE table whose rows nothing
+   * regenerates, so a snapshot that fails to persist is an unrecoverable gap — and the previous
+   * posture returned `{success:false}`, which every caller logged and then proceeded past, telling
+   * the operator the update had succeeded (architecture.md: persistence throws, the caller
+   * decides). `SaveVersionResult.success` is still `true` on the disabled path and is retained
+   * because `cli-shared/version-history.ts`, the accepted second writer of this table, shares the
+   * type and keeps its own result-returning posture.
    */
   async saveVersion(
     resourceType: ResourceType,
@@ -186,7 +194,10 @@ export class VersionHistoryService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to save version for ${resourceId}: ${message}`);
-      return { success: false, error: message };
+      throw new Error(
+        `Failed to persist version snapshot for ${resourceType}/${resourceId}: ${message}`,
+        { cause: error }
+      );
     }
   }
 
@@ -291,10 +302,72 @@ export class VersionHistoryService {
   }
 
   /**
+   * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
+   *
+   * Go-forward numbering (P7-D2 mechanism 1, OQ-P7-3): version N holds the state edit N
+   * produced, so the newest version always equals what `inspect` shows. Rows written under the
+   * old semantics (version N = state BEFORE edit N) are left untouched — the eras are told apart
+   * by description convention: post-fix rows describe the action that produced them ("Update via
+   * resource_manager", "Rollback to vN"), bridge rows say so explicitly, and old-era rows carry
+   * the historical "Pre-rollback snapshot…" / pre-edit descriptions.
+   *
+   * The bridge is what makes the transition need no migration: whenever the latest recorded
+   * snapshot differs from the live pre-edit state (first post-fix edit of any resource, or an
+   * out-of-band file edit), that live state is recorded first so it stays rollback-reachable.
+   * Steady state records exactly one row per edit.
+   *
+   * Called BEFORE the file write, with the state about to be produced — a persistence failure
+   * therefore still aborts the edit with nothing written (OQ-P7-6 posture, row 2.3).
+   */
+  async recordEditResult(
+    resourceType: ResourceType,
+    resourceId: string,
+    priorLiveSnapshot: Record<string, unknown>,
+    producedSnapshot: Record<string, unknown>,
+    options?: SaveVersionOptions
+  ): Promise<SaveVersionResult & { bridged: boolean }> {
+    if (!this.isEnabled()) {
+      return { success: true, version: 0, bridged: false };
+    }
+
+    const bridged = !(await this.latestSnapshotMatches(
+      resourceType,
+      resourceId,
+      priorLiveSnapshot
+    ));
+    if (bridged) {
+      await this.saveVersion(resourceType, resourceId, priorLiveSnapshot, {
+        description: 'Bridge: prior live state (era transition or out-of-band edit)',
+        diff_summary: '',
+      });
+    }
+
+    const result = await this.saveVersion(resourceType, resourceId, producedSnapshot, options);
+    return { ...result, bridged };
+  }
+
+  /** True when the newest recorded snapshot structurally equals the given live state. */
+  private async latestSnapshotMatches(
+    resourceType: ResourceType,
+    resourceId: string,
+    live: Record<string, unknown>
+  ): Promise<boolean> {
+    const latest = await this.getLatestVersion(resourceType, resourceId);
+    if (latest === 0) return false;
+    const entry = await this.getVersion(resourceType, resourceId, latest);
+    if (entry === null) return false;
+    return JSON.stringify(entry.snapshot) === JSON.stringify(live);
+  }
+
+  /**
    * Rollback to a previous version.
    *
-   * Saves the current state as a new version, then returns the snapshot
-   * of the requested version for the caller to restore.
+   * Go-forward semantics (OQ-P7-3): the target is validated BEFORE anything is written, so a
+   * refused rollback consumes no version number (DEV-T2-6's defect). The restored state is then
+   * recorded as the newest version — a rollback is an edit, and version N holds what edit N
+   * produced. The live pre-rollback state needs no dedicated "Pre-rollback snapshot" row: under
+   * these semantics it is already the previous version, and when it is not (old-era rows,
+   * out-of-band edits) the bridge records it.
    */
   async rollback(
     resourceType: ResourceType,
@@ -312,18 +385,23 @@ export class VersionHistoryService {
         return { success: false, error: `Version ${targetVersion} not found` };
       }
 
-      // Save current state as new version before rollback
-      const saveResult = await this.saveVersion(resourceType, resourceId, currentSnapshot, {
-        description: `Pre-rollback snapshot (before reverting to v${targetVersion})`,
-        diff_summary: '',
-      });
-
-      if (!saveResult.success) {
-        return { success: false, error: `Failed to save current state: ${saveResult.error}` };
-      }
+      // Record the RESTORED state as the newest version, bridging the live state first if it is
+      // not already recorded. A persistence failure throws and is caught below — a rollback that
+      // reports failure and restores nothing, with the target validated above so the refusal
+      // path writes no rows at all.
+      const saveResult = await this.recordEditResult(
+        resourceType,
+        resourceId,
+        currentSnapshot,
+        targetEntry.snapshot,
+        {
+          description: `Rollback to v${targetVersion}`,
+          diff_summary: '',
+        }
+      );
 
       this.logger.info(
-        `Rollback ${resourceType}/${resourceId}: saved v${saveResult.version}, restoring v${targetVersion}`
+        `Rollback ${resourceType}/${resourceId}: recorded v${saveResult.version} (restored from v${targetVersion}${saveResult.bridged ? ', live state bridged' : ''})`
       );
 
       return {

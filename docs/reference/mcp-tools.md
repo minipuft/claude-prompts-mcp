@@ -42,6 +42,11 @@ resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 
 ## MCP Resources — Token-Efficient Discovery
 
+> **Off by default.** `resources.registerWithMcp` ships as `false`, because the tools cover the same
+> discovery more cheaply. Until you enable it, `resources/list` returns an empty list and every URI
+> below answers `Resource not found`. Turn it on with `cpm enable resources`, or set
+> `resources.registerWithMcp: true` in `config.json`, then restart the server.
+
 MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
 
 - **Discover** available prompts, gates, and frameworks without consuming execution tokens
@@ -301,12 +306,22 @@ prompt_engine(command:"%judge analysis_report")
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                            |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                         |
 | `options`       | object  | Optional execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) to help delegation strategy selection when transport metadata is unavailable.                              |
+| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                       |
+| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                             |
 
 </details>
 
 ### Chain Execution
 
 For step schemas, input mapping, and retries, see the [Chain Schema Reference](./chain-schema.md).
+
+Each step is addressed internally by a stable node id, not by its position. A YAML step may set
+`id:` explicitly (kebab-case, unique within the chain); when omitted, the id defaults to a slug of
+`stepName`. Symbolic chains (`>>step1 --> >>step2`, no YAML) have no step names to slug, so the
+parser mints frozen `n1`, `n2`, … ids once at parse time instead. Either form is a stable node id
+you can hand to `target_step_id` — see [Chain Step Targeting](#chain-step-targeting) below. Client
+integrations that only track position are unaffected: `chain_id`, resume, and every response shape
+still speak integer step numbers.
 
 **Start a chain:**
 
@@ -375,6 +390,112 @@ prompt_engine(command:"code_review", gates:[
 - Trackable gate IDs in output (shows as "security" not "Inline Validation Criteria")
 - Multiple distinct validation criteria in one command
 - Self-documenting commands that LLMs can parse unambiguously
+
+### Chain Step Targeting
+
+A full gate definition may target one chain step by 1-based position (`target_step_number`) or by
+its stable node id (`target_step_id`) — supply whichever you have. A position target is
+cross-resolved to a node id once, at gate registration, against the node list as it exists at
+that moment; from then on the gate is bound to that node id, and selection matches on node id
+first, falling back to the ordinal only for gates or chains carrying no node id. This matters once
+a run can mutate (see [Adaptive Mutation](#adaptive-mutation)): binding by node id means an
+insertion ahead of the gate's target cannot silently retarget it to whatever step now sits at that
+ordinal. A gate whose target node is later skipped never fires — see below.
+
+```bash
+# Target by position
+prompt_engine(command:"draft-outline --> draft --> polish", gates:[
+  {
+    "name": "Outline covers required sections",
+    "description": "Every required section is listed before drafting begins",
+    "target_step_number": 1
+  }
+])
+
+# Same target, addressed by the step's node id instead
+prompt_engine(command:"draft-outline --> draft --> polish", gates:[
+  {
+    "name": "Outline covers required sections",
+    "description": "Every required section is listed before drafting begins",
+    "target_step_id": "draft-outline"
+  }
+])
+```
+
+An unresolvable `target_step_id` (no step in the run carries it) is warned and selects nothing —
+it is never silently widened to apply to every step. A `target_step_id` that resolves to a node
+later retired by the adaptive mutation policy (`milestone:"skipped"`) also selects nothing — the
+guard is checked per-call against the run's live node list, not just once at registration.
+
+### Visibility Policy
+
+A `chainSteps` entry in `prompt.yaml` may declare `visibility`, withholding or exposing named
+chain-run context items from later steps' default render:
+
+```yaml
+chainSteps:
+  - promptId: analyze
+    stepName: Analyze (step 1)
+    visibility:
+      withhold: [previous_step_output]
+```
+
+`withhold` and `expose` each take zero or more items from the fixed vocabulary
+`previous_step_output | chain_history | unknowns_ledger`. An unrecognized item fails the prompt's
+load, naming the allowed values. A step's `withhold` affects every LATER step's default render,
+never its own; a later step's `expose` overrides that withhold for itself only. No `visibility`
+declared anywhere in a chain renders byte-identically to a build without this feature.
+
+A delegated (`==>`) step's envelope excludes withheld items and reports their names on one
+manifest line so the sub-agent knows what it does not have. See [Visibility
+Policy](../concepts/chains-lifecycle.md#visibility-policy) for full semantics, the per-item
+meaning, and its honest ceiling.
+
+### Workflow Submission
+
+`prompt_engine` accepts a **third command source** beside a command string and a chain resume: a
+structured Workflow IR on the `workflow` parameter. It expresses what the string grammar cannot —
+stable node ids, per-step visibility, gate bindings, delegation hints, input/output mappings and a
+declared budget.
+
+```bash
+prompt_engine(workflow:{
+  version: 1,
+  nodes: [
+    { id: "research", promptId: "research_docs", args: { topic: "caching" } },
+    { id: "review",   promptId: "code_review",   subagentModel: "fast",
+      visibility: { withhold: ["chain_history"] } }
+  ],
+  edges: [{ from: "research", to: "review" }],
+  gates: [{ id: "source-quality", target_step_id: "research" }],
+  budget: { maxInsertions: 1, declaredCostCeiling: 50000 }
+})
+```
+
+The call returns the run's first step and a `chain_id`; resume it like any other chain. An accepted
+workflow **is** an ordinary chain run — the `chain_runs` and `chain_run_nodes` rows are
+structurally identical to an equivalent `>>chain`'s, and node ids are the same id space
+`target_step_id` addresses (see [Chain Step Targeting](#chain-step-targeting)).
+
+| Rule                         | Behavior                                                                                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Exactly one source**       | `command`, `chain_id` and `workflow` are mutually exclusive. Two of them is a rejection, never a precedence decision.                                       |
+| **Edges are order**          | Edges are dependencies, linearized into one run order (ties broken by declaration order). There is no branching. With no edges the order is `nodes[]`.      |
+| **Caps narrow only**         | `maxNodes` (32), `maxFanOut` (8), `maxInsertions` (3) are enforced; a budget asking for more is rejected, never clamped. `declaredCostCeiling` is recorded. |
+| **Rejection writes nothing** | An invalid workflow returns one addressed line per problem and creates no run, no session, no version.                                                      |
+| **`gates` still works**      | A workflow's own `gates` and the `gates` parameter are concatenated, not exclusive.                                                                         |
+
+A rejection names its subject and its rule:
+
+```
+❌ Workflow rejected — 2 problems found. Nothing was executed and no run was created.
+
+• [unknown-prompt] node "draft": Node "draft" references prompt "write_summry", which is not registered
+• [cap-exceeded] workflow: budget.maxNodes of 64 exceeds the server cap of 32; a declared budget may only narrow a cap, never widen it
+```
+
+Full field reference, the linearization rule, and the complete rejection vocabulary:
+[Workflow IR Reference](./workflow-ir.md).
 
 ### Shell Verification Gates (Ralph Mode)
 
@@ -532,8 +653,8 @@ resource_manager(
   description:"Generates formatted weekly status report",
   user_message_template:"Generate a weekly report for {{team}} covering {{date_range}}",
   arguments:[
-    {"name":"team", "required":true},
-    {"name":"date_range", "required":true}
+    {"name":"team", "type":"string", "required":true},
+    {"name":"date_range", "type":"string", "required":true, "defaultValue":"this_week"}
   ]
 )
 
@@ -549,6 +670,55 @@ resource_manager(resource_type:"prompt", action:"analyze_type", id:"my_prompt")
 # Get gate suggestions
 resource_manager(resource_type:"prompt", action:"analyze_gates", id:"my_prompt")
 ```
+
+If `category` isn't shipped in the repo — excluded by `server/resources/prompts/.gitignore` —
+`create` and `update` still succeed, and the response appends a warning naming the file and the
+exact `!<category>/` and `!<category>/**` lines to add to ship it. A workspace overlay with no
+`.gitignore` of its own never warns.
+
+#### Patch Mode (Partial Update)
+
+`action:"update"` accepts a `patch` array instead of (or alongside) full-body parameters — edit
+one anchor in a text field without retransmitting the whole template:
+
+```bash
+resource_manager(
+  resource_type:"prompt",
+  action:"update",
+  id:"weekly_report",
+  patch:[
+    {"field":"user_message_template", "old_string":"{{team}}", "new_string":"{{team_name}}"}
+  ],
+  dry_run:true
+)
+```
+
+Each operation is `{field, old_string, new_string, replace_all?}`:
+
+| Field         | Type                                                               | Notes                                                                    |
+| ------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `field`       | enum: `user_message_template` \| `system_message` \| `description` | which text body to edit                                                  |
+| `old_string`  | string, min length 1                                               | must match the current text exactly and (without `replace_all`) uniquely |
+| `new_string`  | string                                                             | replacement text — empty string deletes the anchor                       |
+| `replace_all` | boolean, optional                                                  | replace every occurrence instead of rejecting an ambiguous anchor        |
+
+Operations apply in order, each against the previous one's output. A patch that cannot be applied
+is rejected as a whole — nothing is written and no version is consumed:
+
+| Rejection reason   | Cause                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| `empty_old_string` | `old_string` was empty                                         |
+| `target_absent`    | the prompt has no text for that field                          |
+| `anchor_not_found` | the anchor does not occur in the field's current text          |
+| `anchor_ambiguous` | the anchor occurs more than once and `replace_all` was not set |
+
+`patch` cannot be combined with the full-body parameter it targets in the same call: sending
+`user_message_template` or `system_message` alongside any `patch` operation is rejected, and
+sending `description` alongside a patch that targets `description` is rejected the same way — send
+one or the other. `dry_run:true` renders the produced text and a diff without writing anything or
+consuming a version; resend the same call without `dry_run` to apply it. Both `patch` and
+`dry_run` are update-only — `action:"create"` rejects either explicitly, since there is no
+existing prompt to patch or diff against.
 
 ### Gates
 
@@ -613,14 +783,38 @@ resource_manager(
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                  |
-| ----------------------- | ---------------------------------------- |
-| `category`              | Prompt category tag                      |
-| `user_message_template` | Prompt body with `{{variables}}`         |
-| `system_message`        | Optional system message                  |
-| `arguments`             | Array of `{name, required, description}` |
-| `chain_steps`           | Chain step definitions                   |
-| `gate_configuration`    | Gate include/exclude lists               |
+| Parameter               | Purpose                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                          |
+| `user_message_template` | Prompt body with `{{variables}}`                                                             |
+| `system_message`        | Optional system message                                                                      |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)            |
+| `dry_run`               | Preview an `update` (or patch) without writing — no version consumed                         |
+| `chain_steps`           | Chain step definitions                                                                       |
+| `gate_configuration`    | Gate include/exclude lists                                                                   |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`          |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default** |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**          |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                        |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                   |
+
+`type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
+block execution — enforcement only arms when the argument also declares a `validation` block
+(`pattern`, `minLength`, `maxLength`).
+
+The last five are written into `prompt.yaml` verbatim and are otherwise carried forward untouched:
+supply one and it is set, omit it and the prompt keeps whatever it already declared. Two of them
+carry a one-way cost. `register_with_mcp` and `mcp_prompt_mode` are normally **resolved** through
+prompt → category → global → built-in default, and setting either writes an explicit prompt-level
+value that outranks all of them permanently — the prompt stops following any later change to its
+category or global default, and only another explicit call moves it again. Set them when this
+prompt must differ from its category; leave them out when it should follow along.
+
+Rollback restores `injection`, `subagent_model` and `agent_type` from the target version's
+snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk value across a
+rollback — a recorded value for those two cannot be distinguished from an inherited default in
+older history rows, so restoring one could silently freeze a prompt that never declared it.
 
 **Gate Parameters:**
 
@@ -701,6 +895,33 @@ Records that never reached a terminal state are called out in the output. Termin
 emitted on completion, on user abort, and on failure — a run that predates that emission may show
 as `working` permanently.
 
+#### Run telemetry line
+
+A session whose newest record is terminal also renders one line of run-level facts:
+
+```
+planned 3 / executed 3 · gates fired 2 (retries 1) · unknowns opened 1 / closed 1
+```
+
+| Fact              | Means                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `planned`         | `totalSteps` the run was created with                                              |
+| `executed`        | Distinct step numbers present in the returned page — a clamped page reports fewer  |
+| `gates fired`     | **Gate verdict submissions**, not distinct gate ids: two verdicts on one gate is 2 |
+| `retries`         | The subset of those submissions whose verdict was `FAIL`                           |
+| `unknowns opened` | Entries in the run's unknowns ledger (cumulative — resolving does not decrement)   |
+| `unknowns closed` | Ledger entries in state `resolved`                                                 |
+
+Schema v23 added two more terminal-row facts alongside these six — `nodes_inserted` and
+`nodes_skipped`, the [adaptive mutation](#adaptive-mutation) audit counters. They are persisted
+the same terminal-row-only way and returned by `ExecutionRecordStore.queryRecent`, but this
+handler's rendered line above does not include them yet; read them via a direct store query.
+
+**These are recorded, never modeled.** Nothing in the server scores, weights, ranks, or routes on
+them; they exist so history is available to reason about later. The line is omitted entirely for a
+session with no terminal record yet, and for records written before these fields existed — an
+absent line means "not measured", never "zero".
+
 ### Session Operations
 
 ```bash
@@ -765,7 +986,7 @@ The server injects guidance into prompts. Control this per-execution or globally
 | Type             | What It Adds        | Default         |
 | ---------------- | ------------------- | --------------- |
 | `system-prompt`  | Framework           | Every 2 steps   |
-| `gate-guidance`  | Quality criteria    | Every step      |
+| `gate-guidance`  | Quality criteria    | First step only |
 | `style-guidance` | Response formatting | First step only |
 
 ### Quick Control with Modifiers
@@ -826,6 +1047,92 @@ prompt_engine(
 
 - Rationale is always required
 - `gate_verdict` takes precedence over parsed `user_response`
+
+---
+
+## Unknowns Ledger
+
+Chain steps declare typed unknowns via the `observations` parameter. The server accumulates
+them into a per-run ledger and surfaces it back into every subsequent step's context — see
+[Unknowns Ledger lifecycle](../concepts/chains-lifecycle.md#unknowns-ledger) for the full
+transition table.
+
+```bash
+prompt_engine(
+  chain_id:"chain-research#2",
+  user_response:"Step 2 output...",
+  observations:[
+    {"type":"unknown_discovered", "id":"cache-ttl-unknown", "statement":"TTL for the new cache layer is undecided", "blocking":true}
+  ]
+)
+```
+
+**Observation shapes:**
+
+| Type                 | Required fields                 | Optional fields              | Effect                             |
+| -------------------- | ------------------------------- | ---------------------------- | ---------------------------------- |
+| `unknown_discovered` | `id`, `statement`               | `blocking`, `target_step_id` | Opens (or re-opens) a ledger entry |
+| `unknown_resolved`   | `id`, `statement`, `resolution` | —                            | Closes a ledger entry              |
+
+- `id` — stable **kebab-case** slug, unique within the run (e.g. `cache-ttl-unknown`).
+- `resolution` — `"answered"` or `"irrelevant"`, required when `type` is `unknown_resolved`.
+- `blocking` — discovered-only, defaults to `false`; blocking entries render first.
+- `target_step_id` — discovered-only, optional. A stable node id (see
+  [Chain Step Targeting](#chain-step-targeting)) naming the downstream step the adaptive mutation
+  policy skips if this unknown later resolves `"irrelevant"`. Does not affect insertion — see
+  below.
+- **Cap:** 200 entries per run. A batch that would open a 201st unknown is rejected — an
+  observation on an unknown id that doesn't exist in the ledger, or resolving without
+  `resolution`, is a validation error surfaced as a tool-result error (`isError: true`), never a
+  thrown exception. A rejected batch is all-or-nothing: nothing in it is applied.
+
+### Adaptive Mutation
+
+Two observation shapes drive a deterministic server-side policy that can insert or skip a node in
+the run's remaining step list. The model only ever declares typed observations (D2); the server
+owns every graph edit, and only ever makes one in reaction to a declared observation — never
+predictively (D6, advisory by construction). Full lifecycle:
+[Adaptive Mutation](../concepts/chains-lifecycle.md#adaptive-mutation).
+
+**Insert** — a blocking discovery inserts one investigation step (prompt `investigate_unknown`)
+immediately after the current node, regardless of whether `target_step_id` was supplied:
+
+```bash
+prompt_engine(
+  chain_id:"chain-draft#4",
+  user_response:"Step 1 output...",
+  observations:[
+    {"type":"unknown_discovered", "id":"cache-ttl-unknown", "statement":"TTL for the new cache layer is undecided", "blocking":true, "target_step_id":"review"}
+  ]
+)
+# -> response's CTA now names the inserted `investigate_unknown` step, not whatever
+#    would otherwise have run next.
+```
+
+**Skip** — resolving that same unknown `"irrelevant"` skips the node its ledger entry's
+`target_step_id` named, provided that node is still strictly ahead of the current step:
+
+```bash
+prompt_engine(
+  chain_id:"chain-draft#4",
+  user_response:"Investigation output...",
+  observations:[
+    {"type":"unknown_resolved", "id":"cache-ttl-unknown", "statement":"Caching is out of scope for this draft", "resolution":"irrelevant"}
+  ]
+)
+# -> the `review` node named by the discovery's target_step_id is retired
+#    (never rendered); the run proceeds past it.
+```
+
+- **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
+  observation still applies to the ledger — it just mutates nothing in the node list.
+- The current node can never be a skip target — only strictly-ahead, not-yet-executed nodes.
+- A run's terminal `execution_records` row carries two more terminal-row facts for this: how many
+  nodes were inserted and how many were skipped over the run's life (`nodes_inserted`,
+  `nodes_skipped` — same terminal-row-only pattern as the [run telemetry line](#run-telemetry-line)
+  facts). They are persisted and returned by `ExecutionRecordStore.queryRecent`; the
+  `execution_history` action's rendered telemetry line does not include them yet — query the store
+  directly to read them today.
 
 ---
 
@@ -893,7 +1200,12 @@ prompt_engine(command:"investigation target:'incident'")
 <details>
 <summary><strong>Version History</strong></summary>
 
-All resources (prompts, gates, frameworks) automatically track version history. Each update saves a snapshot before changes, enabling rollback and comparison.
+All resources (prompts, gates, frameworks) automatically track version history. Each edit records
+the state it _produces_ — version N holds what edit N produced, so the newest version always
+equals what `inspect` shows (go-forward numbering). If the latest stored snapshot doesn't match
+the resource's live state before the edit (the first edit after this behavior shipped, or an
+out-of-band file change), a self-healing "Bridge" row is recorded first so no state becomes
+unreachable.
 
 ### Configuration
 
@@ -944,7 +1256,11 @@ resource_manager(
 )
 ```
 
-**Safety:** Current state is automatically saved as a new version before rollback. You can always rollback-from-rollback.
+**Safety:** The target version is validated before anything is written — an invalid version number
+is refused and consumes no version. The restored content is then recorded as a new version
+(described as `Rollback to vN`), not a separate "pre-rollback snapshot" — under go-forward
+numbering the live state before rollback is already the previous version. You can always
+rollback-from-rollback.
 
 ### Compare Versions
 

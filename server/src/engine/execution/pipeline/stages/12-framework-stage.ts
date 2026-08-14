@@ -12,7 +12,7 @@ import type { FrameworkManager } from '../../../frameworks/framework-manager.js'
 import type { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ExecutionContext } from '../../context/index.js';
-import type { FrameworkDecisionInput } from '../decisions/index.js';
+import type { FrameworkDecision, FrameworkDecisionInput } from '../decisions/index.js';
 
 type FrameworkEnabledProvider = () => boolean;
 
@@ -138,7 +138,12 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
     try {
       if (context.hasChainCommand()) {
-        const result = this.resolveChainFrameworks(context, frameworkGateIds, decision.frameworkId);
+        const result = this.resolveChainFrameworks(
+          context,
+          frameworkGateIds,
+          decision.frameworkId,
+          decision.source
+        );
         this.logExit(result);
         return;
       }
@@ -223,16 +228,72 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * @param context - Execution context
    * @param authorityFrameworkId - Framework ID from FrameworkDecisionAuthority (already resolved)
    */
+  /**
+   * A step's own framework declaration, or undefined when it cannot take effect.
+   *
+   * An unresolvable id must not become the preference: `getFramework` is the only authority on
+   * validity, and a renamed id passed through would silently produce a context for nothing. The
+   * step degrades to the run-wide choice rather than failing the whole chain.
+   *
+   * `enabled` is part of the test, not just existence — `generateExecutionContext` honours a
+   * `userPreference` only when the resolved framework is enabled, so checking existence alone
+   * would count a disabled framework as applied and report a step that never took effect.
+   *
+   * Extracted rather than inlined because the loop it came from was already at cognitive
+   * complexity 15 and this pushed it to 23.
+   */
+  private resolveStepDeclaredFramework(step: {
+    promptId: string;
+    framework?: string;
+  }): string | undefined {
+    const declared = step.framework;
+    if (declared === undefined) return undefined;
+
+    if (this.frameworkManager.getFramework(declared)?.enabled === true) return declared;
+
+    this.logger.warn(
+      `[FrameworkStage] Step '${step.promptId}' declares framework '${declared}', which is not a ` +
+        'known enabled framework — falling back to the run-wide framework.'
+    );
+    return undefined;
+  }
+
+  /**
+   * Which framework a step actually runs under, and whether the step's own declaration won.
+   *
+   * The precedence itself is described at the call site. Returned as a pair because the caller
+   * needs both answers and deriving the second from the first (`preference === declared`) reads
+   * as an equality check when it is really a provenance question.
+   */
+  private selectStepFramework(
+    step: { promptId: string; framework?: string },
+    override: string | undefined,
+    operatorWins: boolean
+  ): { preference: string | undefined; fromStep: boolean } {
+    const declared = this.resolveStepDeclaredFramework(step);
+    const preference = operatorWins ? (override ?? declared) : (declared ?? override);
+    return { preference, fromStep: declared !== undefined && preference === declared };
+  }
+
   private resolveChainFrameworks(
     context: ExecutionContext,
     frameworkGateIds: ReadonlySet<string>,
-    authorityFrameworkId?: string
+    authorityFrameworkId?: string,
+    authoritySource?: FrameworkDecision['source']
   ): Record<string, unknown> {
     const steps = context.requireChainSteps();
 
     // Use framework ID from authority decision (already resolved with proper priority)
     const frameworkOverride = authorityFrameworkId;
+    // A step's declared framework slots BETWEEN the two ranks the authority already
+    // documents: below `^ReACT` on the command line (explicit user intent, source 'operator'),
+    // above the global active framework (a system default nobody chose for this run). So a
+    // declaration yields to an operator and outranks the default — which is also why this needs
+    // the decision's SOURCE and not just its id: the id alone cannot distinguish "the user asked
+    // for CAGEERF" from "CAGEERF happens to be active".
+    const operatorWins = authoritySource === 'operator';
     const resolvedSteps: string[] = [];
+    const stepDeclared: string[] = [];
 
     for (const step of steps) {
       // Check step-level modifiers for per-step framework control
@@ -252,9 +313,18 @@ export class FrameworkResolutionStage extends BasePipelineStage {
         throw new Error('Chain step missing converted prompt for framework resolution');
       }
 
+      const { preference, fromStep } = this.selectStepFramework(
+        step,
+        frameworkOverride,
+        operatorWins
+      );
+      if (fromStep) {
+        stepDeclared.push(step.promptId);
+      }
+
       const frameworkContext = this.frameworkManager.generateExecutionContext(
         step.convertedPrompt,
-        frameworkOverride ? { userPreference: frameworkOverride } : {}
+        preference ? { userPreference: preference } : {}
       );
 
       step.frameworkContext = frameworkContext;
@@ -276,6 +346,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       chainSteps: steps.length,
       frameworksApplied: resolvedSteps.length,
       override: Boolean(frameworkOverride),
+      stepDeclaredFrameworks: stepDeclared.length,
       source: 'authority-decision',
     };
   }

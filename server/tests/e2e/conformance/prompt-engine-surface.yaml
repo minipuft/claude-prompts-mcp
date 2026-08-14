@@ -1,0 +1,104 @@
+# Claims-conformance corpus — prompt_engine claims beyond the symbolic delimiters
+#
+# The prompt_engine TOOL DESCRIPTION is itself a published claim surface, and an unusually
+# load-bearing one: it is what the calling LLM reads to construct invocations. A syntax it
+# advertises that does not work produces a failed tool call on a real user's first attempt —
+# which is exactly the %guided defect, one layer up.
+#
+# Claims covered here: @framework selection, gate presets (:fast/:full/:extended), named
+# arguments, and the resource:// read surface.
+
+version: 1
+
+scenarios:
+  # ── @framework selection (8 ids under resources/frameworks/) ────────────────
+  - id: framework-cageerf
+    claim_source: 'prompt_engine tool description — "@CAGEERF >>prompt" applies a framework'
+    requests: [{ tool: prompt_engine, args: { command: '@CAGEERF >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-react
+    claim_source: 'resources/frameworks/ declares "react" — FrameworkManager is the authority'
+    requests: [{ tool: prompt_engine, args: { command: '@ReAct >>minimal_prompt' } }]
+    expect: { ok: true }
+
+  - id: framework-unknown-rejects
+    claim_source: >-
+      CLAUDE.md § Key Constraints — "Always frameworkManager.getFramework(id), never hardcode".
+      A closed framework set means an unknown id must not silently pass through.
+    # `text` is supplied so the ONLY remaining reason to reject is the unknown framework id.
+    # Without it this row still went green — but via the fixture's own argument validation, which
+    # would have kept passing even if unknown frameworks were silently accepted.
+    requests: [{ tool: prompt_engine, args: { command: '@NotARealFramework >>minimal_prompt' } }]
+    # Pins the offending command, so a parse failure for any OTHER reason cannot satisfy it.
+    expect: { error_contains: 'Parse error: "@NotARealFramework >>minimal_prompt"' }
+
+  # ── Named arguments ────────────────────────────────────────────────────────
+  # The ONE row that keeps `reference_demo`: its claim IS argument passing, so it needs a fixture
+  # that declares an argument. `minimal_prompt` declares none and tolerates undeclared ones
+  # silently, so it could not tell a passed argument from an ignored one. Asserting the rendered
+  # value rather than `ok: true` — the template interpolates `text`, so the word appearing in the
+  # response is the evidence the argument arrived.
+  - id: named-arguments
+    claim_source: 'prompt_engine tool description — ">>prompt_id key:\"value\"" passes arguments'
+    requests: [{ tool: prompt_engine, args: { command: '>>reference_demo text:"hello world"' } }]
+    expect: { text_contains: 'hello world' }
+
+  # ── Gate presets: the README table states the retry counts AND timeouts ─────
+  #
+  # These three rows asserted `ok: true` until 2026-08-11 and could assert nothing more: the
+  # presets expanded internally and NOTHING rendered the result, so `:fast` and `:extended`
+  # returned byte-identical text. Three published numbers with no observable difference is the
+  # unfalsifiable shape row 0.5.12 outlawed. The response now publishes the resolved budget
+  # (`appendVerifyBudget`), so each row asserts its OWN cell of the README table — and the rows
+  # are now distinguishable from each other, which is the property that was missing.
+  - id: gate-preset-fast
+    claim_source: >-
+      README § Gate presets — "| `:fast` | 1 | 30s |". shell-presets.yaml declares
+      maxIterations 1 / timeout 30000.
+    requests:
+      [{ tool: prompt_engine, args: { command: '>>minimal_prompt :: verify:"true" :fast' } }]
+    expect: { text_contains: 'Verify budget: 1 attempt / 30s timeout (preset: fast)' }
+
+  - id: gate-preset-full
+    claim_source: >-
+      README § Gate presets — "| `:full` | 5 | 5 min |". shell-presets.yaml declares
+      maxIterations 5 / timeout 300000.
+    requests:
+      [{ tool: prompt_engine, args: { command: '>>minimal_prompt :: verify:"true" :full' } }]
+    expect: { text_contains: 'Verify budget: 5 attempts / 300s timeout (preset: full)' }
+
+  - id: gate-preset-extended
+    claim_source: >-
+      README § Gate presets — "| `:extended` | 10 | 10 min |". shell-presets.yaml declares
+      maxIterations 10 / timeout 600000.
+    requests:
+      [{ tool: prompt_engine, args: { command: '>>minimal_prompt :: verify:"true" :extended' } }]
+    expect: { text_contains: 'Verify budget: 10 attempts / 600s timeout (preset: extended)' }
+
+  # ── resource:// surface (plan row 0.5.8) ───────────────────────────────────
+  #
+  # This row asserted `ok: true` and was blind for the whole life of the resource surface. The
+  # server answers `resources/list` on a stock config with `{resources: []}` — every URI printed in
+  # docs/reference/mcp-tools.md returned "Resource not found" (measured 2026-08-11) — and `ok`
+  # cannot tell that apart from a fully registered surface. The docs now state the opt-in, so the
+  # DEFAULT is the claim, and `resources_empty` is what observes it. The read surface itself is
+  # exercised in workspace-and-mutations.yaml, on a server that enables it.
+  - id: resources-list-is-opt-in-and-empty-by-default
+    claim_source: >-
+      docs/reference/mcp-tools.md § MCP Resources — "Off by default. `resources.registerWithMcp`
+      ships as `false` ... `resources/list` returns an empty list". config/index.ts:186.
+    requests: [{ method: resources/list }]
+    expect: { resources_empty: true }
+
+  # README Verification Loops — ":: verify:\"npm test\" loop:true", "keeps iterating until tests
+  # pass". Advertised since Tier 3a and unexercised until 2026-08-11 (plan row 0.5.19).
+  #
+  - id: gate-verify-loop
+    claim_source: >-
+      README Verification Loops — ">>implement-feature :: verify:\"npm test\" loop:true" and
+      "The AI keeps iterating until tests pass"; prompt_engine description —
+      ":: verify:\"cmd\" loop:true  # Autonomous until pass".
+    requests:
+      [{ tool: prompt_engine, args: { command: '>>minimal_prompt :: verify:"true" loop:true' } }]
+    expect: { text_contains: 'Loop mode: autonomous retry' }

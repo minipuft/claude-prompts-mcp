@@ -1,9 +1,12 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
+import { applyVisibilityToEnvelope } from '../delegation/envelope-visibility.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
+import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
+import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type {
@@ -13,10 +16,22 @@ import type {
 import type { ExecutionContext } from '../context/index.js';
 import type { DelegationPayload, ExecutionEnvelope, RenderingHints } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
+import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
 /** Max gates to list in the GATE_VERDICTS template */
 const MAX_GATE_VERDICT_ENTRIES = 10;
+
+/**
+ * The decision for "no declarations anywhere". A shared frozen constant rather than a fresh
+ * `{ withheld: [], exposed: [], manifest: [] }` per call: it is returned on the hot path every
+ * chain without `visibility:` takes, and `applyVisibilityToEnvelope` only reads its lengths.
+ */
+const EMPTY_VISIBILITY_DECISION: VisibilityDecision = Object.freeze({
+  withheld: [],
+  exposed: [],
+  manifest: [],
+});
 
 /**
  * Assembles response content sections for different execution types.
@@ -28,7 +43,14 @@ const MAX_GATE_VERDICT_ENTRIES = 10;
  * Extracted from ResponseFormattingStage.
  */
 export class ResponseAssembler {
-  constructor() {}
+  /**
+   * @param runStepViewProvider The live run's node order and retired-node list (P6 Tier 2).
+   *   Optional, and absent means "answer from the parse array alone" — the pre-P6 behavior,
+   *   byte-identical. The same narrow-view + provider seam the gate layer uses
+   *   (`GateEnhancementService`, `TemporaryGateRegistrar`): the assembler needs two facts about
+   *   the run, not a session store, so the dependency stays a function type.
+   */
+  constructor(private readonly runStepViewProvider?: RunStepViewProvider) {}
 
   /**
    * Formats response for chain execution with session tracking.
@@ -228,6 +250,17 @@ export class ResponseAssembler {
   }
 
   /**
+   * The run-completion latch, as the pipeline recorded it.
+   *
+   * Single reader of `state.session.chainComplete` for footer purposes so the progress line and
+   * the CTA line cannot disagree — they were two independent `currentStep >= totalSteps`
+   * computations before.
+   */
+  private isRunLatchedComplete(context: ExecutionContext): boolean {
+    return context.state.session.chainComplete === true;
+  }
+
+  /**
    * Builds chain footer with session and progress tracking.
    */
   buildChainFooter(context: ExecutionContext): string {
@@ -236,14 +269,31 @@ export class ResponseAssembler {
     const chainIdentifier = sessionContext.chainId ?? sessionContext.sessionId;
     lines.push(`Chain: ${chainIdentifier}`);
 
+    const hasPendingReview = context.hasPendingReview();
+
+    // Completion is the LATCHED run fact (StepExecutionStage sets it from the store's
+    // runStatus), not `currentStep >= totalSteps`. Those two differ on exactly one state —
+    // the run standing on its final step with work still owed — and reading the ordinal there
+    // printed "✓ Chain complete (N/N) · No user_response needed" while the run was still
+    // `working`, so a client that obeyed the banner never sent the call that finished it.
+    const isComplete = this.isRunLatchedComplete(context);
+
     if (sessionContext.currentStep && sessionContext.totalSteps) {
       const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
       const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
-      const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
-      lines.push(isComplete ? `✓ Chain complete (${progress})` : `→ Progress ${progress}`);
+      const onFinalStep = normalizedStep === sessionContext.totalSteps;
+      if (isComplete) {
+        lines.push(`✓ Chain complete (${progress})`);
+      } else if (onFinalStep && hasPendingReview) {
+        // The one state whose text changes: still the final step, still owing a verdict.
+        // "step N/N" keeps the downstream step-indicator regexes matching (hooks/lib
+        // /session_state.py and the opencode mirror both key on step|progress + N/N).
+        lines.push(`→ Final step ${progress} — awaiting gate verdict`);
+      } else {
+        lines.push(`→ Progress ${progress}`);
+      }
     }
 
-    const hasPendingReview = context.hasPendingReview();
     const nextStepDelegated = this.isNextStepDelegated(context);
 
     if (nextStepDelegated) {
@@ -255,7 +305,6 @@ export class ResponseAssembler {
         `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
-      const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
       if (isComplete) {
         lines.push('Next: Chain complete. No user_response needed.');
       } else {
@@ -275,7 +324,6 @@ export class ResponseAssembler {
    */
   private buildHandoffSection(context: ExecutionContext): string | null {
     const metadata = context.executionResults?.metadata ?? {};
-    const envelope = this.buildHandoffEnvelope(context);
 
     // Read step info from metadata (StepExecutionStage) or fall back to parsed steps
     const stepNumber =
@@ -288,6 +336,7 @@ export class ResponseAssembler {
     const nextStep = this.findNextDelegatedStep(context);
     const agentType = nextStep?.agentType ?? 'chain-executor';
     const subagentModel = nextStep?.subagentModel;
+    const envelope = this.buildHandoffEnvelope(context, nextStep?.index);
 
     const gateCount = context.gates.getAll().length;
     const clientProfile = this.resolveClientProfile(context);
@@ -322,9 +371,17 @@ export class ResponseAssembler {
 
   /**
    * Builds an ExecutionEnvelope from gate instructions and framework context.
-   * Returns null when neither source has content.
+   * Returns null when no source has content and nothing is withheld.
+   *
+   * `nextStepIndex` is the index of the step being handed off within
+   * `context.parsedCommand.steps`; when present, the P5 visibility decision for that step
+   * filters the envelope and supplies its withheld manifest (Tier 3.2). Absent index (no
+   * delegated step located) leaves the envelope exactly as it was before P5.
    */
-  private buildHandoffEnvelope(context: ExecutionContext): ExecutionEnvelope | null {
+  private buildHandoffEnvelope(
+    context: ExecutionContext,
+    nextStepIndex?: number
+  ): ExecutionEnvelope | null {
     const gateInstructions =
       context.gateInstructions != null && context.gateInstructions.length > 0
         ? context.gateInstructions
@@ -335,11 +392,45 @@ export class ResponseAssembler {
         ? context.frameworkContext.systemPrompt
         : undefined;
 
-    if (gateInstructions === undefined && frameworkGuidance === undefined) {
-      return null;
-    }
+    const base =
+      gateInstructions === undefined && frameworkGuidance === undefined
+        ? null
+        : { gateInstructions, frameworkGuidance };
 
-    return { gateInstructions, frameworkGuidance };
+    return applyVisibilityToEnvelope(base, this.resolveHandoffVisibility(context, nextStepIndex));
+  }
+
+  /**
+   * Resolve the P5 visibility decision for the handed-off step.
+   *
+   * Reads declarations off `context.parsedCommand.steps` — the parse-time blueprint, which is
+   * where visibility lives (OQ-P5-5: definition-time facts, re-derived rather than persisted as
+   * run state). Returns an empty decision when there is no delegated step or no parsed steps,
+   * which keeps the envelope byte-identical for every chain that declares nothing.
+   *
+   * `nextStepIndex` now names the step the RUN hands off to (`resolveNextStepIndex`), so the
+   * target is correct after a mutation. The prior declarations are additionally filtered against
+   * the run's retired nodes: a `withhold` declared by a step the mutation policy skipped never
+   * took effect, and carrying it into the decision would withhold context on the authority of a
+   * step that did not run.
+   */
+  private resolveHandoffVisibility(
+    context: ExecutionContext,
+    nextStepIndex?: number
+  ): VisibilityDecision {
+    const steps = context.parsedCommand?.steps;
+    if (steps === undefined || nextStepIndex === undefined || nextStepIndex < 0) {
+      return EMPTY_VISIBILITY_DECISION;
+    }
+    const target = steps[nextStepIndex];
+    const retiredNodeIds = this.resolveRunStepView(context)?.skippedNodeIds ?? [];
+    return decideVisibility({
+      step: target?.visibility != null ? { visibility: target.visibility } : {},
+      priorDeclarations: steps
+        .slice(0, nextStepIndex)
+        .filter((step) => step.nodeId === undefined || !retiredNodeIds.includes(step.nodeId))
+        .map((step) => (step.visibility != null ? { visibility: step.visibility } : {})),
+    });
   }
 
   /**
@@ -413,27 +504,133 @@ export class ResponseAssembler {
   }
 
   /**
-   * Finds the next step in parsed command steps that has `delegated: true`.
+   * Finds the parse-time step the run hands off to next, when that step is `delegated: true`.
    * Returns undefined if no delegation is found.
    */
   private findNextDelegatedStep(
     context: ExecutionContext
-  ): { promptId: string; agentType?: string; subagentModel?: string } | undefined {
+  ): { promptId: string; agentType?: string; subagentModel?: string; index: number } | undefined {
     const steps = context.parsedCommand?.steps;
     if (!steps || steps.length === 0) {
       return undefined;
     }
-    const currentStep = context.sessionContext?.currentStep ?? 1;
-    const currentIndex = steps.findIndex((s) => s.stepNumber === currentStep);
-    const nextStep = currentIndex >= 0 ? steps[currentIndex + 1] : undefined;
-    if (nextStep?.delegated === true) {
+    const nextIndex = this.resolveNextStepIndex(context, steps);
+    const nextStep = nextIndex === undefined ? undefined : steps[nextIndex];
+    if (nextIndex !== undefined && nextStep?.delegated === true) {
       return {
         promptId: nextStep.promptId,
         agentType: nextStep.agentType,
         subagentModel: nextStep.subagentModel,
+        // Carried so the P5 visibility decision for the handed-off step can be resolved from
+        // the same lookup that found it — recomputing the index elsewhere would give the
+        // node-id/ordinal fallback two implementations that could disagree.
+        index: nextIndex,
       };
     }
     return undefined;
+  }
+
+  /**
+   * Which parse-time step the run hands off to next (P6-F1).
+   *
+   * **Node address first, and asked of the RUN.** The previous implementation resolved the
+   * current step by node id and then took `currentIndex + 1` — a node-addressed anchor followed
+   * by a positional step. That offset is only correct while the parse array and the run's node
+   * list are the same list, which stops being true the moment the P4 mutation policy inserts or
+   * retires a node: after a skip the run's next node is two parse positions ahead, so the handoff
+   * (and the visibility declarations resolved from it) resolved against a step that will never
+   * execute; after an insertion the run's next node is the inserted one, and the handoff rendered
+   * a planned step's CTA a step early. The run is the only thing that knows which node comes
+   * next, so it is asked, and its answer is matched back into the parse array by identity.
+   *
+   * A node id with no parse step — the shape every inserted node has — yields `undefined`, i.e.
+   * no delegation. That is correct rather than conservative: only planned steps carry `delegated`.
+   *
+   * The ordinal branch survives for the two cases that have no node address to use: a legacy
+   * chain whose steps carry no `nodeId` (P3 D10 keeps it optional), and a call with no run view
+   * to ask (no provider injected, or the request names no chain). Those keep the pre-P6 answer
+   * exactly, which is what leaves an unmutated run byte-identical.
+   */
+  private resolveNextStepIndex(
+    context: ExecutionContext,
+    steps: readonly { nodeId?: string; stepNumber: number }[]
+  ): number | undefined {
+    const nodeAddressed = steps.some((step) => step.nodeId != null);
+
+    if (nodeAddressed) {
+      const nextNodeId = this.resolveNextRunNodeId(context);
+      if (nextNodeId === null) {
+        // The run is standing at its last live node: there is no next step to hand off to.
+        return undefined;
+      }
+      if (nextNodeId !== undefined) {
+        const index = steps.findIndex((step) => step.nodeId === nextNodeId);
+        return index >= 0 ? index : undefined;
+      }
+      // `undefined` = no run view to ask. Fall through to the pre-P6 offset.
+    }
+
+    const currentNodeId = context.sessionContext?.currentNodeId;
+    const currentStep = context.sessionContext?.currentStep ?? 1;
+    const currentIndex =
+      currentNodeId != null && nodeAddressed
+        ? steps.findIndex((step) => step.nodeId === currentNodeId)
+        : steps.findIndex((step) => step.stepNumber === currentStep);
+    return currentIndex >= 0 ? currentIndex + 1 : undefined;
+  }
+
+  /**
+   * The node the run stands at NEXT, read off the live run.
+   *
+   * Three distinct answers, deliberately not collapsed (the `filterGatesForTarget` split):
+   * a **string** is the next live node; **null** is "resolved, and there is none" — the run is on
+   * its last node or has walked off the end; **undefined** is "no run to ask", which is the only
+   * one that licenses the ordinal fallback. Collapsing `null` into `undefined` would make a
+   * finished run silently fall back to the positional offset and render a handoff for a step the
+   * run already passed.
+   *
+   * Retired nodes are filtered out before the successor is taken, for the same reason
+   * `filterGatesForTarget` refuses to fire a gate whose target was skipped: a step that will not
+   * execute cannot be the step being handed off to.
+   */
+  private resolveNextRunNodeId(context: ExecutionContext): string | null | undefined {
+    const view = this.resolveRunStepView(context);
+    if (view === undefined) {
+      return undefined;
+    }
+
+    const liveNodeIds = view.nodeIds.filter((nodeId) => !view.skippedNodeIds.includes(nodeId));
+    const currentNodeId = view.currentNodeId ?? context.sessionContext?.currentNodeId;
+    if (currentNodeId === null) {
+      return null;
+    }
+    if (currentNodeId === undefined) {
+      return undefined;
+    }
+
+    const currentIndex = liveNodeIds.indexOf(currentNodeId);
+    if (currentIndex < 0) {
+      // The run is standing somewhere this view cannot place — do not invent a successor.
+      return undefined;
+    }
+    return liveNodeIds[currentIndex + 1] ?? null;
+  }
+
+  /**
+   * The live run behind this request, or undefined when there is none to ask.
+   *
+   * Resolved per call rather than memoized: the assembler holds no per-request state, the answer
+   * cannot change while one response is being assembled, and the provider reads already-loaded
+   * session maps.
+   */
+  private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
+    if (this.runStepViewProvider === undefined) {
+      return undefined;
+    }
+    const chainId = context.getRequestedChainId();
+    return chainId === undefined
+      ? undefined
+      : this.runStepViewProvider(chainId, context.getScopeOptions());
   }
 
   /**
@@ -486,10 +683,16 @@ export class ResponseAssembler {
   }
 
   /**
-   * Builds completion message for the final chain step when no gate review is pending.
+   * Builds the completion message for a run that has actually finished.
+   *
+   * Gated on the latch rather than on `isFinalChainStep`, which is true from the moment the
+   * final step is *rendered*. Under the old guard this printed "✅ Chain execution complete.
+   * You may now respond to the user." on the call that handed the client its last step to do —
+   * the same one-call-early claim the footer made, on a second surface. With the footer now
+   * honest the two would have contradicted each other inside one payload.
    */
   private buildFinalStepMessage(context: ExecutionContext): string | null {
-    if (!this.isFinalChainStep(context)) {
+    if (!this.isFinalChainStep(context) || !this.isRunLatchedComplete(context)) {
       return null;
     }
     const completion = '\n\n✅ Chain execution complete. You may now respond to the user.';
@@ -625,6 +828,7 @@ export class ResponseAssembler {
     }
 
     this.appendVerifyHint(lines, context);
+    this.appendVerifyBudget(lines, context);
     this.appendLoopHint(lines, context);
 
     if (!hasPrimaryAction) {
@@ -639,7 +843,12 @@ export class ResponseAssembler {
   /** Appends gate verdict CTA when gates are active and a session exists. */
   private appendGateAction(lines: string[], context: ExecutionContext): boolean {
     const chainId = context.sessionContext?.chainId;
-    const gateIds = context.state.gates.accumulatedGateIds ?? [];
+    // Review is scoped to the step being rendered (P4-F3): a gate bound to another node has no
+    // business in this step's verdict template. `accumulatedGateIds` is the fallback, not the
+    // preference — the single-prompt path writes no `reviewGateIds`, and its output must stay
+    // byte-identical.
+    const gateIds =
+      context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [];
     if (gateIds.length === 0 || chainId == null || chainId.length === 0) return false;
 
     const pendingReview = context.sessionContext?.pendingReview;
@@ -675,6 +884,33 @@ export class ResponseAssembler {
     lines.push(`Verification: ${formatted} runs automatically on each attempt`);
   }
 
+  /**
+   * Publishes the RESOLVED attempt budget for a shell-verify gate.
+   *
+   * The preset table in the README claims `:fast` = 1 try/30s, `:full` = 5/5min, `:extended` =
+   * 10/10min, and until this line existed none of it was observable: the presets expand inside
+   * `InlineGateProcessor.setupShellVerification`, which logs the resolved values and stores them on
+   * `state.gates.pendingShellVerification`, but nothing rendered them. `:fast` and `:extended`
+   * therefore produced BYTE-IDENTICAL responses, so a conformance scenario for either could assert
+   * nothing beyond "the syntax parsed" — three published numbers with no way to check them (plan
+   * row 0.5.22).
+   *
+   * Read from the pending state rather than the parsed operator on purpose: the operator carries
+   * what the USER typed, which for a bare `:fast` is `maxIterations: undefined`. That is exactly
+   * how `appendLoopHint` came to print the global default for every preset.
+   */
+  private appendVerifyBudget(lines: string[], context: ExecutionContext): void {
+    const budget = context.state?.gates?.shellVerifyBudget;
+    if (budget == null) return;
+
+    const { maxAttempts: attempts, timeoutMs, preset } = budget;
+
+    const parts = [`${attempts} attempt${attempts === 1 ? '' : 's'}`];
+    if (timeoutMs != null) parts.push(`${Math.round(timeoutMs / 1000)}s timeout`);
+    const suffix = preset != null ? ` (preset: ${preset})` : '';
+    lines.push(`Verify budget: ${parts.join(' / ')}${suffix}`);
+  }
+
   /** Appends Ralph loop hint when :: verify:"cmd" loop:true is active. */
   private appendLoopHint(lines: string[], context: ExecutionContext): void {
     const operators = context.parsedCommand?.operators?.operators;
@@ -685,7 +921,13 @@ export class ResponseAssembler {
     );
     if (loopGate?.shellVerify == null) return;
 
-    const max = loopGate.shellVerify.maxIterations ?? SHELL_VERIFY_DEFAULT_MAX_ITERATIONS;
+    // Prefer the resolved budget over the typed one: a bare `:fast` leaves `maxIterations`
+    // undefined on the operator, so reading it here printed the global default no matter which
+    // preset was named. The pending state holds what the gate will actually enforce.
+    const max =
+      context.state?.gates?.shellVerifyBudget?.maxAttempts ??
+      loopGate.shellVerify.maxIterations ??
+      SHELL_VERIFY_DEFAULT_MAX_ITERATIONS;
     lines.push(`Loop mode: autonomous retry (max ${max} iterations)`);
   }
 
@@ -734,7 +976,13 @@ export class ResponseAssembler {
     const steps = context.parsedCommand?.steps;
     const currentStep = context.sessionContext?.currentStep;
     if (steps != null && currentStep != null && currentStep > 0) {
-      const step = steps.find((s) => s.stepNumber === currentStep);
+      // Node id first (P4 row 5.4): post-mutation the node ordinal in `currentStep` no longer
+      // names parse step N. An inserted node has no parse step; fall back to the ordinal so the
+      // pre-mutation behavior is preserved for legacy chains without node ids.
+      const currentNodeId = context.sessionContext?.currentNodeId;
+      const byNode =
+        currentNodeId != null ? steps.find((s) => s.nodeId === currentNodeId) : undefined;
+      const step = byNode ?? steps.find((s) => s.stepNumber === currentStep);
       return step?.convertedPrompt;
     }
 
@@ -790,12 +1038,12 @@ export class ResponseAssembler {
   private resolveFrameworkToken(context: ExecutionContext): string | null {
     const fwDecision = context.frameworkAuthority.getCachedDecision();
     if (fwDecision?.source === 'operator' && fwDecision.frameworkId != null) {
-      return `@${fwDecision.frameworkId}`;
+      return `^${fwDecision.frameworkId}`;
     }
     // Fallback: show @FRAMEWORK from parser when user typed it,
     // even if decision authority disabled it (e.g., implicit %clean on script-tool prompts)
     const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
-    return operatorOverride ? `@${operatorOverride.toLowerCase()}` : null;
+    return operatorOverride ? `^${operatorOverride.toLowerCase()}` : null;
   }
 
   /** Resolves the modifier token from execution modifiers. */

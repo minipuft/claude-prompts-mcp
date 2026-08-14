@@ -6,6 +6,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
 import type { GateResolutionInput } from './gate-set-resolver.js';
+import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
@@ -68,7 +69,13 @@ export class GateEnhancementService {
     private readonly gateManagerProvider: () => GateManager | undefined,
     private readonly gateLoader: GateDefinitionProvider | undefined,
     private readonly metricsRecorder: GateMetricsRecorder,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    /**
+     * The live run's step identities, when there is a run (P4 row 4.1). Optional: single prompts
+     * and the call that starts a chain have no run, and a chain that never mutates selects
+     * identically with or without it.
+     */
+    private readonly runStepViewProvider?: RunStepViewProvider
   ) {}
 
   /**
@@ -271,6 +278,8 @@ export class GateEnhancementService {
   ): Promise<void> {
     const gateService = this.requireGateService();
     const { steps } = gateContext;
+    const runStepView = this.resolveRunStepView(context);
+    const currentStepKey = this.resolveCurrentStepKey(runStepView);
     let totalGatesApplied = 0;
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
@@ -286,6 +295,14 @@ export class GateEnhancementService {
       }
 
       if (this.shouldSkip(step.executionPlan?.modifiers)) {
+        // Row 4.5 (P5-F4 residual, DEV-T4-10, owner-ruled 2026-08-13). A modifier-skipped step
+        // produces no output, so there is nothing to review. Write the same positive-empty-list
+        // convention the "no applicable gates" case below uses (line ~356) rather than leaving
+        // the field unset — unset is exactly what both readers' `?? accumulatedGateIds` fallback
+        // turns into a run-wide review, the last remaining fallback path this row closes.
+        if (this.isCurrentStep(step, currentStepKey)) {
+          context.state.gates.reviewGateIds = [];
+        }
         continue;
       }
 
@@ -332,7 +349,15 @@ export class GateEnhancementService {
         gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       }
 
-      gateIds = this.filterGatesByStepNumber(gateIds, step.stepNumber);
+      gateIds = this.filterGatesByStepTarget(gateIds, step, runStepView);
+
+      // P4-F3 / OQ-P5-4. The per-step list is what REVIEW must be scoped to, and it exists only
+      // here, transiently. Published before the empty-list `continue` on purpose: "this step has
+      // no applicable gates" is the finding, and leaving the field unwritten would hand its
+      // readers the run-wide list through their fallback — the exact defect being closed.
+      if (this.isCurrentStep(step, currentStepKey)) {
+        context.state.gates.reviewGateIds = gateIds;
+      }
 
       if (gateIds.length === 0) {
         continue;
@@ -374,6 +399,18 @@ export class GateEnhancementService {
 
     const allGateIds = [...context.gates.getAll()];
     context.state.gates.accumulatedGateIds = allGateIds;
+
+    // P5-F4 / row 4.4. An INSERTED node has no parse-time step, so the loop above never visited
+    // it and nothing above wrote a scope for it. Its review is INHERITED from the node its
+    // triggering unknown blocked (owner ruling 2026-08-12). Written after the loop and
+    // unconditionally within this branch — not behind an "unwritten" guard — because a chain
+    // whose parse steps carry no node ids falls back to ordinal matching in `isCurrentStep`,
+    // which can match some other step for an inserted current node; the run's own provenance is
+    // the authority, so it wins outright.
+    if (runStepView?.currentNodeOrigin !== undefined) {
+      context.state.gates.reviewGateIds = this.inheritedReviewGateIds(allGateIds, runStepView);
+    }
+
     context.state.gates.hasBlockingGates = totalGatesApplied > 0;
 
     if (!context.state.gates.enforcementMode && allGateIds.length > 0) {
@@ -490,7 +527,127 @@ export class GateEnhancementService {
     }
   }
 
-  private filterGatesByStepNumber(gateIds: string[], stepNumber: number): string[] {
+  /**
+   * The live run's step identities for this call, or undefined when there is no run.
+   *
+   * Resolved once per chain enhancement rather than per step: the answer cannot change while
+   * one call walks the step list, and a per-step lookup would let it appear to.
+   */
+  private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
+    if (this.runStepViewProvider === undefined) {
+      return undefined;
+    }
+    const chainId = context.getRequestedChainId();
+    return chainId === undefined
+      ? undefined
+      : this.runStepViewProvider(chainId, context.getScopeOptions());
+  }
+
+  /**
+   * Which step of the walk is the one the run is standing at.
+   *
+   * Gate enhancement is stage 11 and walks EVERY parse-time step, but only one of them is being
+   * rendered on this call. Read off the run's own `currentNodeId` — the same value stage 13
+   * publishes as `sessionContext.currentNodeId` and stage 14 resolves steps against — so this is
+   * that one notion of "current", asked one hop earlier rather than a second one invented here.
+   *
+   * With no run to ask (the call that STARTS a chain) the run stands at its first node, so
+   * ordinal 1. With `currentNodeId === null` the run has walked off its last node and no step is
+   * current: ordinal 0 matches nothing, which leaves `reviewGateIds` unwritten for a run that
+   * has no step left to review.
+   */
+  private resolveCurrentStepKey(view: RunStepView | undefined): {
+    nodeId?: string;
+    ordinal: number;
+  } {
+    if (view === undefined) {
+      return { ordinal: 1 };
+    }
+    const currentNodeId = view.currentNodeId;
+    if (currentNodeId === null) {
+      return { ordinal: 0 };
+    }
+    if (typeof currentNodeId === 'string' && currentNodeId.length > 0) {
+      const ordinal = view.nodeIds.indexOf(currentNodeId) + 1;
+      return { nodeId: currentNodeId, ordinal: ordinal > 0 ? ordinal : 1 };
+    }
+    return { ordinal: 1 };
+  }
+
+  /**
+   * Node id first, ordinal as fallback — the same precedence `filterGatesByStepTarget` and
+   * stage 14's `resolveCurrentChainStep` use, for the same reason: once a node has been inserted
+   * the run's ordinal space and the parse-time array stop being the same list.
+   */
+  private isCurrentStep(step: ChainStepPrompt, key: { nodeId?: string; ordinal: number }): boolean {
+    if (key.nodeId !== undefined && typeof step.nodeId === 'string' && step.nodeId.length > 0) {
+      return step.nodeId === key.nodeId;
+    }
+    return step.stepNumber === key.ordinal;
+  }
+
+  /** Which of the accumulated gates apply to THIS parse-time step. */
+  private filterGatesByStepTarget(
+    gateIds: string[],
+    step: ChainStepPrompt,
+    runStepView: RunStepView | undefined
+  ): string[] {
+    return this.filterGatesForTarget(
+      gateIds,
+      { nodeId: step.nodeId, stepNumber: step.stepNumber },
+      runStepView
+    );
+  }
+
+  /**
+   * The review scope for an INSERTED node (P5-F4, owner ruling row 4.4).
+   *
+   * The node the triggering unknown blocked is the review scope to inherit: an investigation node
+   * exists to unblock that step, so the gates its author bound to that step are the ones this
+   * step's output must answer to. The two rejected alternatives were `[]` (loses the review the
+   * investigation exists to serve) and the run-wide accumulator (the P4-F3 shape itself).
+   *
+   * Only the NODE address is supplied to the filter, never an ordinal. A gate addressed by
+   * ordinal alone (`target_step_number` / `apply_to_steps` with no `target_step_id`) names a
+   * parse-time position, and the run's ordinal space stopped agreeing with that array the moment
+   * a node was inserted — inheriting it would be the same silent retarget `filterGatesForTarget`
+   * exists to prevent. So those drop, which is the conservative direction.
+   *
+   * With no target to inherit (`unknownTargetNodeId` absent — the unknown named none, or its
+   * ledger entry is gone) the node address is `null`, which drops every step-addressed gate and
+   * keeps the untargeted ones. Run-wide inheritance is untouched either way: the ruling scopes
+   * only TARGETED gates, exactly as Tier 4 does for planned steps.
+   */
+  private inheritedReviewGateIds(gateIds: string[], runStepView: RunStepView): string[] {
+    const targetNodeId = runStepView.currentNodeOrigin?.unknownTargetNodeId;
+    const nodeId = targetNodeId !== undefined && targetNodeId.length > 0 ? targetNodeId : null;
+    return this.filterGatesForTarget(gateIds, { nodeId }, runStepView);
+  }
+
+  /**
+   * The per-gate targeting decision, shared by the per-step walk and the inherited scope.
+   *
+   * Node id first (OQ-P4-3). A step-targeted gate is bound to a node id at registration, and
+   * matching on that id is what makes the binding survive a mutation: matching on the ordinal
+   * instead would silently move the gate one step later the moment a node was inserted ahead of
+   * it, firing it against work its author never saw. The ordinal branch remains for gates and
+   * chains that carry no node id at all (P3 D10 keeps `nodeId` optional).
+   *
+   * A gate whose target node has been RETIRED (`milestone='skipped'`) fires nowhere: its step
+   * will not execute, and letting it fall through to the ordinal branch would attach it to
+   * whatever step now sits at that position.
+   *
+   * `nodeId: null` is NOT `nodeId: undefined`. `null` means "this target has no node identity and
+   * none can be inherited", so every node-addressed gate must drop; `undefined` means "this step
+   * carries no node id" (legacy chains — P3 D10 keeps `nodeId` optional), where the ordinal branch
+   * is the right answer. Collapsing the two would let an inherited scope with no target silently
+   * widen to every node-addressed gate.
+   */
+  private filterGatesForTarget(
+    gateIds: string[],
+    target: { readonly nodeId?: string | null; readonly stepNumber?: number },
+    runStepView: RunStepView | undefined
+  ): string[] {
     if (!this.temporaryGateRegistry) {
       return gateIds;
     }
@@ -500,11 +657,31 @@ export class GateEnhancementService {
       if (!tempGate) {
         return true;
       }
+
+      const targetNodeId = tempGate.target_step_id;
+      if (targetNodeId !== undefined) {
+        if (runStepView?.skippedNodeIds.includes(targetNodeId) === true) {
+          this.logger.debug('[GateEnhancementService] Gate target node is skipped — not firing', {
+            gateId,
+            targetNodeId,
+          });
+          return false;
+        }
+        if (target.nodeId === null) {
+          return false;
+        }
+        if (typeof target.nodeId === 'string' && target.nodeId.length > 0) {
+          return targetNodeId === target.nodeId;
+        }
+      }
+
       if (tempGate.target_step_number !== undefined) {
-        return tempGate.target_step_number === stepNumber;
+        return tempGate.target_step_number === target.stepNumber;
       }
       if (tempGate.apply_to_steps !== undefined && tempGate.apply_to_steps.length > 0) {
-        return tempGate.apply_to_steps.includes(stepNumber);
+        return (
+          target.stepNumber !== undefined && tempGate.apply_to_steps.includes(target.stepNumber)
+        );
       }
       return true;
     });

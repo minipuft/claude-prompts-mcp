@@ -78,10 +78,32 @@ if [ -n "$HOOK_CHANGES" ]; then
   npm --prefix "$SERVER_DIR" run -s validate:python
 fi
 
-# Run lint ratchet check (allow existing violations, block new ones)
-npm --prefix "$SERVER_DIR" run -s lint:ratchet
+# Route by CHANGED PATHS, using the same classifier pre-push and CI use.
+#
+# `scripts/classify-validation-scope.js` is the declared changed-path SSOT (CLAUDE.md § Validation
+# Gates). pre-push and ci.yml both consult it; this hook did not, so a markdown-only commit paid a
+# whole-`src` lint and a whole-project typecheck that examined zero changed lines. The classifier
+# is deliberately conservative: only documented handbooks/docs/plans/READMEs reach `docs`, only
+# `hooks/**` (plus docs) reaches `hooks`, and every empty, mixed, executable, config, dependency or
+# unrecognized change falls through to `full`.
+#
+# Scope by path CLASS, never by diff size: a 3-line concurrency fix is decision-bearing while a
+# 40-line generated update is mechanical, so a line-count threshold would gate the wrong thing.
+VALIDATION_SCOPE=$(printf '%s\n' "$STAGED_FILES" | node scripts/classify-validation-scope.js --scope)
+
+if [ "$VALIDATION_SCOPE" = "docs" ] || [ "$VALIDATION_SCOPE" = "hooks" ]; then
+  echo "✅ Pre-commit: $VALIDATION_SCOPE-only change — skipping typecheck (pre-push still runs it)."
+  exit 0
+fi
 
 # Typecheck. `ci-release.md` § Required Hooks lists this for pre-commit under a <10s
-# budget; it was absent. Measured at 4.1s wall clock on this repo, so the budget holds
-# and the hook was simply missing a step rather than the rule being unrealistic.
+# budget; measured at 6.1s wall clock on this repo, so the budget holds.
+#
+# `lint:ratchet` deliberately does NOT run here. It ran in this hook AND in pre-push, at 38s a
+# call, and it is a whole-project DIRECTION measure -- CLAUDE.md: "a project-wide ratchet measures
+# direction, not conformance". Direction is a push concern; per-commit conformance is `lint:staged`
+# above, which lints exactly what is staged. Running it per-commit also meant any unrelated
+# violation anywhere in `src` blocked every commit, which in a shared worktree blocks on work that
+# is not yours. Coverage is unchanged: pre-push runs it, CI runs it, and every local route stays a
+# strict subset of CI.
 npm --prefix "$SERVER_DIR" run -s typecheck

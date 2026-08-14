@@ -784,6 +784,11 @@ export class McpToolRouter {
                 : {}),
               ...(args.force_restart !== undefined ? { force_restart: args.force_restart } : {}),
               ...(args.options != null ? { options: args.options } : {}),
+              ...(args.observations != null ? { observations: args.observations } : {}),
+              // Passed through unchanged. Unlike `gates` below there is nothing to normalize:
+              // `workflowIRSchema` is `.strict()` at every level, so a parsed workflow carries
+              // exactly the declared keys and no unknown ones survived to be filtered here.
+              ...(args.workflow != null ? { workflow: args.workflow } : {}),
             };
 
             if (args.gates != null) {
@@ -843,6 +848,9 @@ export class McpToolRouter {
                   }
                   if (gate['target_step_number'] !== undefined) {
                     normalized['target_step_number'] = gate['target_step_number'];
+                  }
+                  if (gate['target_step_id'] !== undefined) {
+                    normalized['target_step_id'] = gate['target_step_id'];
                   }
                   if (gate['apply_to_steps'] !== undefined) {
                     normalized['apply_to_steps'] = gate['apply_to_steps'];

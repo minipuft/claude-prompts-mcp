@@ -158,10 +158,15 @@ re-base relative links for the added depth. Relocating a `reference` plan additi
 every **inbound** link to it, across `docs/` and the other link sources — which is why the workflow
 step stages those paths too, not just `plans/`.
 
-**A plan must be committed before it is retired.** `plans/archive/` is gitignored, so archiving an
-untracked plan deletes it outright; a tracked one survives in history. `plans/future/` is likewise
-gitignored and is left alone entirely — relocating out of it would silently commit a file the repo
-had chosen not to carry.
+**A plan must be committed before it is retired, and `--apply` enforces it.** `plans/archive/` is
+gitignored, so archiving an untracked plan deletes it outright and archiving a modified one loses
+the uncommitted delta from the history that is supposed to preserve it. `--apply` refuses to
+archive any queued plan that `git status` reports as untracked or modified — which is what makes
+it safe to run by hand between releases (e.g. at phase completion) rather than only on the release
+PR, where the checkout is clean by construction. `reference` relocations are not guarded: they
+stay tracked and carry their content with them. `plans/future/` is likewise gitignored and is left
+alone entirely — relocating out of it would silently commit a file the repo had chosen not to
+carry.
 
 It runs on the **release PR**, not on the created release. No workflow in this repo pushes to
 `main` — the release doc states that as a principle, and `main` is protected — so retirement that

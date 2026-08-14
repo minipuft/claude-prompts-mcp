@@ -24,9 +24,17 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { assertNonEmptyScope, trackedFilesUnder } from './lib/tracked-scope.js';
+
 const REPO = path.resolve(new URL('../..', import.meta.url).pathname);
 
-/** Docs that describe THIS project's interface. */
+/**
+ * Docs that describe THIS project's interface.
+ *
+ * Enumerated via git rather than walked (plan row E6). Both directions of the walk are wrong for
+ * a gate about SHIPPED surface: an untracked scratch doc would have its flags read as this
+ * project's published options, and a tracked dot-path would be skipped entirely.
+ */
 const DOC_PATHS = ['docs', 'README.md', 'server/README.md', 'CONTRIBUTING.md', 'cli/README.md'];
 
 /** Parsers whose `options:` table defines the real flag set. */
@@ -95,7 +103,9 @@ function parsedFlagsFrom(relPath) {
 function scriptDeclaredFlags() {
   const idiom = String.raw`(?:includes|indexOf|startsWith)\(\s*'(--[a-z][a-z0-9-]+)'|===\s*'(--[a-z][a-z0-9-]+)'`;
   const flags = new Set();
-  for (const hit of runRg(['-o', '--no-filename', '-e', idiom, ...SCRIPT_DIRS]).split('\n')) {
+  for (const hit of runRg(['-o', '--no-filename', '-e', idiom, ...trackedScope(SCRIPT_DIRS)]).split(
+    '\n'
+  )) {
     const match = hit.match(/'(--[a-z][a-z0-9-]+)'/);
     if (match) flags.add(match[1]);
   }
@@ -110,10 +120,21 @@ function readEnvVars() {
     'process\\.env\\[?[\'"]?(MCP_[A-Z_]+)',
     '-r',
     '$1',
-    'server/src',
-    'cli/src',
+    ...trackedScope(['server/src', 'cli/src']),
   ]);
   return new Set(output.split('\n').filter(Boolean));
+}
+
+/** Tracked files under the given roots, memoised — every scan runs from the repo root. */
+const scopeCache = new Map();
+function trackedScope(roots) {
+  const key = roots.join('\u0000');
+  if (!scopeCache.has(key)) {
+    const files = trackedFilesUnder(roots, { cwd: REPO });
+    assertNonEmptyScope(files, roots, 'validate:documented-options');
+    scopeCache.set(key, files);
+  }
+  return scopeCache.get(key);
 }
 
 /**
@@ -144,7 +165,7 @@ function runRg(args) {
  */
 function documentedMentions(pattern) {
   // `-e` is required: a pattern starting with `--` is otherwise read as a ripgrep flag.
-  return runRg(['-n', '--no-heading', '-e', pattern, ...DOC_PATHS])
+  return runRg(['-n', '--no-heading', '-e', pattern, ...trackedScope(DOC_PATHS)])
     .split('\n')
     .filter((line) => line.trim() !== '');
 }

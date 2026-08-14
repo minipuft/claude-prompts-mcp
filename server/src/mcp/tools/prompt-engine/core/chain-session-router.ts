@@ -12,6 +12,7 @@ import type {
 
 import { LightweightGateSystem } from '#engine/gates/core/index.js';
 import { ToolResponse } from '#shared/types/index.js';
+import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 
 /**
  * Detects whether an incoming command is a chain management operation.
@@ -162,7 +163,7 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
         `**Chain**: ${metadata?.['name'] ?? session.chainId}`,
         `**Chain ID**: ${session.chainId}`,
         `**Resume With**: \`chain_id=${session.chainId}\``,
-        `**Progress**: ${session.state.currentStep}/${session.state.totalSteps}`,
+        `**Progress**: ${currentOrdinal(session.state.nodes, session.state.currentNodeId)}/${totalOf(session.state.nodes)}`,
         `**Started**: ${new Date(session.startTime).toISOString()}`,
         `**Archive Run ID**: ${session.sessionId} (history only)`,
       ];

@@ -202,6 +202,55 @@ describe('MCP Server Smoke Tests', () => {
       await fs.rm(runtimeRoot, { recursive: true, force: true });
     }, 30000);
 
+    // The sibling above pins MCP_RUNTIME_ROOT, which every consumer reads through one resolver
+    // call. MCP_WORKSPACE is the path a plugin host actually sets (`.mcp.json` maps
+    // ${CLAUDE_PLUGIN_ROOT} onto it) and it reaches the same place only via getRuntimeRoot()'s
+    // fallback — a different branch, and the one that was never asserted. It stayed correct
+    // only because ResourceChangeTracker happened to claim the SqliteEngine singleton first;
+    // five of the six getInstance call sites pass no dbPath and fall back to the PACKAGE
+    // directory, which is read-only under a sandboxed MCP child.
+    it('writes state and logs beneath MCP_WORKSPACE when no runtime root is set', async () => {
+      const workspace = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-workspace-'));
+      const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
+        cwd: path.join(PROJECT_ROOT, 'server'),
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          NODE_OPTIONS: '',
+          JEST_WORKER_ID: undefined,
+          CI: 'false',
+          GITHUB_ACTIONS: 'false',
+          MCP_RUNTIME_ROOT: undefined,
+          MCP_WORKSPACE: workspace,
+          MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      startup.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      const exitCode = await new Promise<number | null>((resolve, reject) => {
+        startup.once('error', reject);
+        startup.once('exit', resolve);
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`Startup test exited ${exitCode}: ${stderr}`);
+      }
+      // Two behaviors, asserted separately: the database and the log file.
+      await fs.access(path.join(workspace, 'runtime-state', 'state.db'));
+      await fs.access(path.join(workspace, 'logs', 'mcp-server.log'));
+
+      // And nothing landed in the package directory — the assertion above passes either way if
+      // both locations get written, which is exactly what a half-fixed resolver would do.
+      const packageDb = path.join(PROJECT_ROOT, 'server', 'runtime-state', 'state.db');
+      const before = await fs.stat(packageDb).catch(() => null);
+      expect(before === null || before.mtimeMs < Date.now() - 5000).toBe(true);
+
+      await fs.rm(workspace, { recursive: true, force: true });
+    }, 30000);
+
     // TODO: Jest ESM mode has issues with spawned process stdio capture
     // The server responds correctly when tested manually (see npm run start:test)
     // Skip for now until we can debug the Jest/ESM/spawn interaction
@@ -668,5 +717,21 @@ describe('MCP Server Smoke Tests', () => {
       await setGateSystem('enable', 5);
       expect(await gateParamsFor(6)).toEqual(enabled);
     }, 40000);
+
+    /**
+     * `observations` (unknowns-ledger declarations) is not gated on runtime state
+     * the way the three gate parameters above are — it must always be advertised.
+     */
+    it('advertises the observations parameter on prompt_engine', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const listed = (await client.request('tools/list', {}, 1)) as {
+        tools: Array<{ name: string; inputSchema?: { properties?: Record<string, unknown> } }>;
+      };
+      const engine = listed.tools.find((t) => t.name === 'prompt_engine');
+      const props = Object.keys(engine?.inputSchema?.properties ?? {});
+
+      expect(props).toContain('observations');
+    }, 20000);
   });
 });

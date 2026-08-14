@@ -93,6 +93,10 @@ function createStageWithGates(
       }),
       getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
       clearPendingGateReview: jest.fn().mockResolvedValue(undefined),
+      // The review body resolves against the RUN's node list now (P4 row 3.4). `undefined` is a
+      // real answer for a judge-wiring harness that never creates a run, and it exercises the
+      // projection's parse-time fallback.
+      getSession: jest.fn().mockReturnValue(undefined),
     } as any);
 
   const stage = new GateReviewStage(

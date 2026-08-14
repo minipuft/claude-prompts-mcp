@@ -11,6 +11,7 @@ on:
       - ".node-version"
       - "package.json"
       - "package-lock.json"
+      - "scripts/request-renovate-run.js"
       - "cli/package.json"
       - "server/package.json"
       - "server/package-lock.json"
@@ -26,6 +27,7 @@ on:
       - ".node-version"
       - "package.json"
       - "package-lock.json"
+      - "scripts/request-renovate-run.js"
       - "cli/package.json"
       - "server/package.json"
       - "server/package-lock.json"
@@ -54,6 +56,9 @@ jobs:
 
       - name: Validate Renovate config
         run: renovate-config-validator --strict .github/renovate.json5
+
+      - name: Validate hosted-run request guards
+        run: npm run renovate:request-run:self-test
 
       - name: Validate resolved policy and extraction
         env:

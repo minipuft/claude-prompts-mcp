@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
 
 import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
+import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { PromptData } from './types.js';
 
 import { type Logger, PromptArgument } from '#shared/types/index.js';
@@ -54,11 +55,23 @@ export interface LoadedPromptFile {
   chainSteps?: Array<{
     promptId: string;
     stepName: string;
+    /** Stable node identity (P3 Tier 1) — mirrors `ChainStepSchema.id`. */
+    id?: string;
     inputMapping?: Record<string, string>;
     outputMapping?: Record<string, string>;
     retries?: number;
     subagentModel?: 'heavy' | 'standard' | 'fast';
     agentType?: string;
+    /** Per-step framework override — mirrors `ChainStepSchema.framework`. */
+    framework?: string;
+    /** Inline gate ids for this step — mirrors `ChainStepSchema.inlineGateIds`. Wired (P6 T4). */
+    inlineGateIds?: string[];
+    /**
+     * Per-step visibility policy (P5 Tier 1) — mirrors `ChainStepSchema.visibility`. Threaded and
+     * consumed at the render chokepoints (P5 Tiers 2-3); carried here since P5 Tier 1, ahead of
+     * `inlineGateIds` above, because an unread visibility declaration carried no behavioural risk.
+     */
+    visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
   }>;
 }
 
@@ -371,11 +384,26 @@ function normalizeChainSteps(
       promptId: step.promptId,
       stepName: step.stepName,
     };
+    if (step.id != null) normalized.id = step.id;
     if (step.inputMapping) normalized.inputMapping = step.inputMapping;
     if (step.outputMapping) normalized.outputMapping = step.outputMapping;
     if (typeof step.retries === 'number') normalized.retries = step.retries;
     if (step.subagentModel != null) normalized.subagentModel = step.subagentModel;
     if (step.agentType != null) normalized.agentType = step.agentType;
+    if (step.framework != null) normalized.framework = step.framework;
+    // `inlineGateIds` IS carried as of P6 Tier 4 (OQ-P6-8). This allowlist was the second of the
+    // two strippers described on `ChainStepSchema`, and it is removed together with the third
+    // (the stage-04 projection) exactly as the prior note here required — a field added at fewer
+    // than all three strippers is silently dead (P6-F7).
+    //
+    // The consumer already existed: `GateEnhancementService.enhanceChainSteps` reads
+    // `step.inlineGateIds` and feeds it to `GateSetResolver` at rank `inline-operator`. Wiring is
+    // therefore removal of two strippers, not addition of a reader.
+    if (step.inlineGateIds != null) normalized.inlineGateIds = step.inlineGateIds;
+    // `visibility` declares which context items a step's render may see. It was carried ahead of
+    // `inlineGateIds` because a preserved-but-unread declaration carried no risk of newly
+    // changing what a chain does (P5 Tier 1: additive/threading only); both are live now.
+    if (step.visibility != null) normalized.visibility = step.visibility;
     return normalized;
   });
 }

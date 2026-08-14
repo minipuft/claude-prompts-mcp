@@ -45,6 +45,12 @@ export interface TemporaryGateDefinition {
   scope_id?: string;
   /** Target specific step number in a chain (1-based) */
   target_step_number?: number;
+  /**
+   * Target a specific step by its stable node id. Resolved at registration alongside
+   * `target_step_number` — whichever the caller supplied fills in the other — so gate
+   * SELECTION stays positional (OQ5) while the identity survives on the definition.
+   */
+  target_step_id?: string;
   /** Target multiple specific steps in a chain (1-based) */
   apply_to_steps?: number[];
 }
@@ -123,6 +129,7 @@ export class TemporaryGateRegistry {
       pass_criteria,
       context,
       target_step_number,
+      target_step_id,
       apply_to_steps,
       ...defWithoutId
     } = definition;
@@ -141,6 +148,7 @@ export class TemporaryGateRegistry {
       ...(pass_criteria !== undefined ? { pass_criteria } : {}),
       ...(context !== undefined ? { context } : {}),
       ...(target_step_number !== undefined ? { target_step_number } : {}),
+      ...(target_step_id !== undefined ? { target_step_id } : {}),
       ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
     };
 
@@ -157,6 +165,7 @@ export class TemporaryGateRegistry {
       const cleanupTimeout = setTimeout(() => {
         this.removeTemporaryGate(gateId);
       }, tempGate.expires_at - now);
+      cleanupTimeout.unref();
 
       this.cleanupTimers.set(gateId, cleanupTimeout);
     }

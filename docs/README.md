@@ -49,6 +49,7 @@ _I need to look up syntax or API details._
 - **[MCP Tools](reference/mcp-tools.md)**: `prompt_engine`, `resource_manager`, `system_control`.
 - **[Prompt Schema](reference/prompt-yaml-schema.md)**: `prompt.yaml` configuration.
 - **[Chain Schema](reference/chain-schema.md)**: `chainSteps` configuration.
+- **[Workflow IR](reference/workflow-ir.md)**: Node/edge shape, caps, and rejection vocabulary for a submitted workflow.
 - **[Gate Configuration](reference/gate-configuration.md)**: `gate.yaml` configuration.
 - **[Template Syntax](reference/template-syntax.md)**: Nunjucks + custom extensions.
 - **[Client Capabilities](reference/client-capabilities.md)**: Client preset matrix, profile mapping, and integration limits.

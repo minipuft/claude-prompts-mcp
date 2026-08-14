@@ -244,6 +244,12 @@
   lockFileMaintenance: {
     enabled: true,
     schedule: ["* 0-5 * * 1"],
+    // lockFileMaintenance is a synthetic update and has no release timestamp, so
+    // timestamp-required would leave renovate/stability-days pending forever.
+    // Keep the age value so Renovate passes npm --before during the clean lock
+    // regeneration, but allow the synthetic update itself to omit a timestamp.
+    minimumReleaseAge: "3 days",
+    minimumReleaseAgeBehaviour: "timestamp-optional",
     automerge: true,
     commitMessageAction: "refresh",
   },

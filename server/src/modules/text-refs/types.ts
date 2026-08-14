@@ -24,7 +24,10 @@ export interface ArgumentHistoryEntry {
   /** Original arguments provided by user */
   originalArgs: Record<string, any>;
 
-  /** Step number (for chain executions) */
+  /** Stable node id of the step this entry belongs to (chain executions). */
+  nodeId?: string;
+
+  /** Position the step held when the entry was written (chain executions). */
   stepNumber?: number;
 
   /** Step result (if available) */

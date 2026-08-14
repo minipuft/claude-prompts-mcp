@@ -3,6 +3,7 @@
 // Usage: node server/scripts/validate-readme.js [--mode=block|warn] [--path=README.md]
 // Exit: 0 = clean (or warn-only mode), 1 = block-mode violations, 2 = invalid args
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,10 @@ const DIATAXIS_MARKER = /<!--\s*diataxis:\s*(tutorial|how-to|reference|explanati
 const ALLOW_COMMENT = /<!--\s*charter-allow:\s*([^>]+?)\s*-->/g;
 const LINK_PATTERN = /\[[^\]]+\]\(([^)]+)\)/g;
 const HEADING_H2 = /^## /;
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function parseArgs(argv) {
   const args = { mode: 'block', readme: DEFAULT_README };
@@ -164,6 +169,52 @@ function checkDiataxisMarkers(lines) {
   return violations;
 }
 
+function checkReaderFacingTerminology(lines) {
+  const violations = [];
+  let inComment = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let remaining = lines[i];
+    let visible = '';
+
+    while (remaining.length > 0) {
+      if (inComment) {
+        const end = remaining.indexOf('-->');
+        if (end === -1) {
+          remaining = '';
+          continue;
+        }
+        remaining = remaining.slice(end + 3);
+        inComment = false;
+        continue;
+      }
+
+      const start = remaining.indexOf('<!--');
+      if (start === -1) {
+        visible += remaining;
+        remaining = '';
+        continue;
+      }
+
+      visible += remaining.slice(0, start);
+      remaining = remaining.slice(start + 4);
+      inComment = true;
+    }
+
+    if (/\bdi[aá]taxis\b/i.test(visible)) {
+      violations.push({
+        line: i + 1,
+        category: 'terminology',
+        detail:
+          'Diátaxis is maintainer metadata, not reader-facing terminology (charter §6) — ' +
+          'describe the reader task instead',
+      });
+    }
+  }
+
+  return violations;
+}
+
 function checkInternalLinks(lines, readmeDir) {
   const violations = [];
   for (let i = 0; i < lines.length; i++) {
@@ -185,6 +236,170 @@ function checkInternalLinks(lines, readmeDir) {
     }
   }
   return violations;
+}
+
+/**
+ * Every symbolic construct the README advertises must have at least one conformance scenario.
+ *
+ * WHY: Tier 3a found 9 overstated README claims by hand — `%guided` threw a parse error for
+ * anyone who typed it. The conformance suite makes that class mechanically detectable, but only
+ * for constructs someone remembered to add. This closes the loop from the other side: documenting
+ * a NEW construct without a scenario fails here, so the corpus cannot silently fall behind the
+ * README.
+ *
+ * Scope is deliberately the CONSTRUCT, not the fenced block. Blocks are prose-shaped and
+ * arbitrary — two examples of `-->` are one claim, and a per-block rule would demand duplicate
+ * scenarios while still missing a construct mentioned only in a sentence.
+ *
+ * TWO DEFECTS FIXED 2026-08-11, both of which let advertised constructs ship unexercised:
+ *
+ * 1. The operator set was a hardcoded `['-->', '==>', '::']` plus `%modifiers`. It never checked
+ *    `#` style, `*` repetition, `^`/`@` framework, or `>>` — so `#` (one of the FOUR primitives
+ *    in the README's own table) and `*` both had ZERO scenarios while this check passed. The set
+ *    now comes from operators.json, the same registry the parser loads, so a symbol cannot be
+ *    advertised-and-unchecked unless it is absent from the SSOT too.
+ * 2. Matching was `corpus.includes(construct)` against every byte of every corpus file, so a
+ *    construct named in a YAML COMMENT satisfied it. Comments are stripped and only the `command:`
+ *    values are searched — the strings a scenario actually sends to the server.
+ */
+function checkClaimCoverage(lines) {
+  const corpusDir = path.join(__dirname, '..', 'tests', 'e2e', 'conformance');
+  if (!fs.existsSync(corpusDir)) return [];
+
+  // Only what scenarios SEND. A comment mentioning a symbol is not coverage of it.
+  const commands = fs
+    .readdirSync(corpusDir)
+    .filter((f) => f.endsWith('.yaml'))
+    .flatMap((f) =>
+      fs
+        .readFileSync(path.join(corpusDir, f), 'utf8')
+        .split('\n')
+        .filter((l) => !l.trim().startsWith('#'))
+        .flatMap((l) => [...l.matchAll(/command:\s*'([^']*)'/g)].map((m) => m[1]))
+    )
+    .join('\n');
+
+  // Symbols come from the registry the parser itself loads, not a list maintained here.
+  const registryPath = path.join(
+    __dirname,
+    '..',
+    'tooling',
+    'contracts',
+    'registries',
+    'operators.json'
+  );
+  const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+  // Detection runs on CODE SPANS only, and prefix operators require a following identifier.
+  // `#` and `*` are also markdown heading and emphasis syntax, so bare presence matched every
+  // heading in the file — the first run of this rewrite flagged `#` on the README's own H1.
+  // A symbol advertised in prose but never shown in code is not a syntax claim a user can type.
+  const detector = (symbol) => {
+    if (/^[A-Za-z]*[-=]|:/.test(symbol) || symbol.length > 1) {
+      return new RegExp(escapeRegExp(symbol));
+    }
+    if (symbol === '*') return /\*\s*\d/; // repetition takes a count
+    return new RegExp(`${escapeRegExp(symbol)}[A-Za-z_]`); // #style, ^Framework
+  };
+
+  const symbols = registry.operators
+    .filter((op) => op.status === 'implemented')
+    .map((op) => op.symbol)
+    .filter(Boolean);
+
+  const codeSpans = lines.map((line) =>
+    [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]).join(' ')
+  );
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*```/.test(lines[i])) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) codeSpans[i] = lines[i];
+  }
+
+  const advertised = new Set();
+  for (const code of codeSpans) {
+    if (!code) continue;
+    for (const m of code.matchAll(/%[a-z]+/g)) advertised.add(m[0]);
+    for (const op of symbols) if (detector(op).test(code)) advertised.add(op);
+  }
+
+  const violations = [];
+  for (const construct of [...advertised].sort()) {
+    if (commands.includes(construct)) continue;
+    // Report where the construct is ADVERTISED (a code span), not the first line containing the
+    // character — `#` would otherwise always point at the README's H1.
+    const detect = construct.startsWith('%')
+      ? new RegExp(escapeRegExp(construct))
+      : detector(construct);
+    const line = Math.max(1, codeSpans.findIndex((c) => c && detect.test(c)) + 1);
+    violations.push({
+      line,
+      category: 'claim-coverage',
+      detail:
+        `README advertises "${construct}" but no conformance scenario exercises it — ` +
+        'add one to server/tests/e2e/conformance/ so the claim is mechanically checked ' +
+        '(plan Tier 0.5)',
+    });
+  }
+  return violations;
+}
+
+/**
+ * The README's "ships N prompts across M categories" must match what npm actually packages.
+ *
+ * WHY: it read "120+ prompts across 17 categories" until 2026-08-11, when the tarball held 27
+ * across 4. Both numbers were real — 117/17 is what sits on the AUTHOR's machine, and
+ * `resources/prompts/.gitignore` whitelists four directories while no `.npmignore` exists, so npm
+ * falls back to it and ships only the whitelist. A hand-maintained count cannot survive that split,
+ * because the author's own checkout is the one place the inflated number looks correct.
+ *
+ * `git ls-files --cached --others --exclude-standard` is the same set npm resolves: tracked files
+ * plus untracked ones that .gitignore does not exclude. Verified equal to `npm pack --dry-run`
+ * (27 / 4) rather than assumed, and it costs a git call instead of a pack.
+ */
+function checkShippedPromptCount(lines) {
+  const claim = lines.findIndex((l) => /ships \d+ prompts across \d+ categor/.test(l));
+  if (claim === -1) return [];
+
+  const match = lines[claim].match(/ships (\d+) prompts across (\d+) categor/);
+  const claimedPrompts = Number(match[1]);
+  const claimedCategories = Number(match[2]);
+
+  let shipped;
+  try {
+    shipped = execFileSync(
+      'git',
+      ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'server/resources/prompts/'],
+      { cwd: REPO_ROOT, encoding: 'utf8' }
+    );
+  } catch {
+    // Outside a git checkout (a published tarball, say) there is nothing to compare against, and
+    // a lint that fails for lack of git would block work it cannot inform.
+    return [];
+  }
+
+  const paths = shipped.split('\n').filter(Boolean);
+  const actualPrompts = paths.filter((p) => p.endsWith('/prompt.yaml')).length;
+  const actualCategories = new Set(
+    paths
+      .map((p) => p.replace('server/resources/prompts/', '').split('/')[0])
+      .filter((c) => c && !c.startsWith('.'))
+  ).size;
+
+  if (actualPrompts === claimedPrompts && actualCategories === claimedCategories) return [];
+
+  return [
+    {
+      line: claim + 1,
+      category: 'claim-coverage',
+      detail:
+        `README claims ${claimedPrompts} prompts across ${claimedCategories} categories; ` +
+        `the package ships ${actualPrompts} across ${actualCategories}. Update the sentence, or ` +
+        'widen resources/prompts/.gitignore so the claim becomes true (plan row 0.5.20)',
+    },
+  ];
 }
 
 function main() {
@@ -211,7 +426,10 @@ function main() {
     ...checkSectionBudgets(lines),
     ...checkForbiddenWords(lines),
     ...checkDiataxisMarkers(lines),
+    ...checkReaderFacingTerminology(lines),
     ...checkInternalLinks(lines, readmeDir),
+    ...checkClaimCoverage(lines),
+    ...checkShippedPromptCount(lines),
   ];
 
   if (violations.length === 0) {

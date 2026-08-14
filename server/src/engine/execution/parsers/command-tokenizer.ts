@@ -8,6 +8,7 @@
  * Strategies consume TokenizedCommand instead of re-detecting operators.
  */
 
+import { RESERVED_OPERATORS } from './operator-patterns.js';
 import { isPositionInsideQuotes, findFrameworkOperatorOutsideQuotes } from './parser-utils.js';
 
 // ---------------------------------------------------------------------------
@@ -222,11 +223,24 @@ function detectModifiers(trimmed: string, operators: TokenizedOperator[]): void 
 
 /** Detect parallel (+) and conditional (? "cond" : branch) operators. */
 function detectStructural(trimmed: string, operators: TokenizedOperator[]): void {
-  // Parallel (+) — only when no chain/delegation operators (chains take precedence)
+  // Parallel (+) — chains take precedence, EXCEPT while `+` is reserved.
+  //
+  // The precedence rule exists so a `+` inside a chain is not mis-parsed as a parallel execution
+  // step. That reasoning only holds for an operator something can actually execute: `+` is
+  // `status: reserved` in operators.json, so no strategy may consume the token — `rejectReserved-
+  // Operators` throws before any of them run. Suppressing it therefore bought nothing and cost the
+  // rejection: `>>a --> >>b + >>c` swallowed the `+` into argument text and ran a 2-step chain,
+  // while the standalone form correctly errored and `?` was rejected in the same position
+  // (measured 2026-08-11, plan row 0.5.15). Emitting it lets the reserved check see it.
+  //
+  // The moment `+` is implemented its registry status changes, this condition goes false, and the
+  // original precedence rule applies again — which is why this is keyed on the registry rather
+  // than deleted outright.
+  const parallelIsReserved = RESERVED_OPERATORS.has('parallel');
   const hasChainOrDelegation = operators.some(
     (op) => op.type === 'chain' || op.type === 'delegation'
   );
-  if (!hasChainOrDelegation) {
+  if (!hasChainOrDelegation || parallelIsReserved) {
     for (const m of findMatchesOutsideQuotes(trimmed, /\+/g)) {
       operators.push({ type: 'parallel', raw: m[0], position: m.index });
     }

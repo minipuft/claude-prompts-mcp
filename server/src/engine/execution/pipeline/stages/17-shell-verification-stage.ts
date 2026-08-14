@@ -41,7 +41,8 @@ import type { ExecutionContext } from '../../context/index.js';
  * - VerifyActiveStateStore: State file for Stop hook
  * - createBounceBackFeedback/createEscalationFeedback: Message formatting
  *
- * Note: Checkpoint/rollback functionality is available via resource_manager.
+ * Note: checkpoint/rollback is no longer available — the resource_type was removed in the 4.0
+ * line; it wrapped `git stash` and its handler was never constructed.
  */
 export class ShellVerificationStage extends BasePipelineStage {
   readonly name = 'ShellVerification';
