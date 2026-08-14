@@ -1100,3 +1100,19 @@ changed repository tooling.
   The last number is worth noting: the baseline is 381, so the ratchet is reading a real improvement
   rather than the parse failure that nearly destroyed it earlier this session — the `--pretty false`
   fix is holding.
+- **DEV-REL-8** — **choosing 4.0.0 to stop breaking changes reaching consumers silently, then noticing
+  the sync auto-merges the major into all four of them anyway.** `extension-publish.yml`'s
+  `sync-downstream` matrix sets `merge_mode: auto` for every downstream and runs
+  `gh pr merge --merge --auto` unconditionally — there is no major/minor distinction. So on publish,
+  each downstream gets `^3.x → ^4.0.0` plus a regenerated lock and merges itself once its own checks
+  pass. Those checks are real but **shallow with respect to THIS release**: the consumer contract
+  proves `node_modules/claude-prompts/dist` exists and the lock matches, and codex-prompts' new
+  suite exercises hook adapters — none of them calls `resource_manager(action: "delete")` or loads a
+  chain step with an unknown key, which are the two things that actually broke. Green there means
+  "the engine installs", not "the engine still behaves". Not changed during a release: the behavior
+  is pre-existing and deliberate, and editing the publish workflow while cutting from it trades a
+  known risk for an unknown one. Surfaced to the owner as a decision — the mitigation is one
+  conditional (skip `--auto` when the major changes, leave the PR open) and costs nothing except a
+  manual merge per major. **The general shape: a version boundary only protects consumers who stop
+  at it, and automation that crosses boundaries on their behalf removes the protection the boundary
+  was chosen for.**
