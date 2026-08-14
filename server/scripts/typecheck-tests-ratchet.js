@@ -42,17 +42,67 @@ function getTscBinPath() {
   return path.resolve(process.cwd(), 'node_modules', '.bin', binName);
 }
 
+/**
+ * `--pretty false` is load-bearing, not cosmetic.
+ *
+ * Pretty output wraps the file path and the word `error` in ANSI escapes and switches the
+ * position separator from `file(12,34):` to `file:12:34 -`. Both patterns above then match
+ * NOTHING, so `summarize()` returns an empty `byFile` — and an empty parse is
+ * indistinguishable from a clean backlog unless something checks. Measured 2026-08-14 on
+ * TypeScript 6.0.3: a shell exporting `FORCE_COLOR=3` makes tsc emit pretty output even
+ * through a pipe, at which point `check` reports all 70 baselined files as "absent" and
+ * `update-baseline` writes `0 errors across 0 files` — destroying a 381-error ceiling and
+ * blinding the gate permanently. CI never exports it, so this failed only on developer
+ * machines, which is the worst place for it: the remedy the failure text recommends is the
+ * thing that does the damage.
+ *
+ * The env is scrubbed as well as the flag passed. Either alone would do today; both means a
+ * future default flip on one channel cannot re-open it through the other.
+ */
 function runTsc() {
-  const result = spawnSync(getTscBinPath(), ['--noEmit', '--project', PROJECT], {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const env = { ...process.env };
+  delete env.FORCE_COLOR;
+  const result = spawnSync(
+    getTscBinPath(),
+    ['--noEmit', '--pretty', 'false', '--project', PROJECT],
+    {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      env,
+    }
+  );
 
   if (result.error) {
     throw new Error(`[typecheck-tests-ratchet] Failed to run tsc: ${result.error.message}`);
   }
 
-  return `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  return {
+    output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
+    exitCode: result.status ?? 0,
+  };
+}
+
+/**
+ * Distinguish "read nothing" from "there was nothing to read".
+ *
+ * The FATAL_PATTERN guard above covers a compiler that stopped early with a config error.
+ * It does not cover a compiler that ran fine and produced output this script cannot parse,
+ * because that output does not match FATAL_PATTERN either — the ANSI case defeated both
+ * guards at once. This check needs no knowledge of what went wrong: tsc exiting non-zero
+ * means it had something to say, so parsing zero diagnostics AND zero fatals from a
+ * non-empty stream means the parser, not the codebase, is the thing that changed.
+ */
+function assertParsed(summary, fatals, tscOutput, exitCode) {
+  const parsedNothing = summary.totals.errors === 0 && fatals.length === 0;
+  const tscComplained = exitCode !== 0 && tscOutput.trim().length > 0;
+  if (parsedNothing && tscComplained) {
+    throw new Error(
+      `[typecheck-tests-ratchet] tsc exited ${exitCode} with ${tscOutput.split('\n').length} ` +
+        'line(s) of output, but no diagnostic matched the parser. That is a parse failure, ' +
+        'not a clean backlog — refusing to report or baseline it. First line was:\n  ' +
+        JSON.stringify(tscOutput.split('\n').find((l) => l.trim().length > 0) ?? '')
+    );
+  }
 }
 
 /**
@@ -148,7 +198,9 @@ function assertNoFatals(fatals) {
 }
 
 async function handleUpdateBaseline() {
-  const { summary, fatals } = summarize(runTsc());
+  const { output, exitCode } = runTsc();
+  const { summary, fatals } = summarize(output);
+  assertParsed(summary, fatals, output, exitCode);
   assertNoFatals(fatals);
 
   const baseline = {
@@ -179,7 +231,9 @@ async function handleCheck() {
     );
   }
 
-  const { summary, fatals } = summarize(runTsc());
+  const { output, exitCode } = runTsc();
+  const { summary, fatals } = summarize(output);
+  assertParsed(summary, fatals, output, exitCode);
   assertNoFatals(fatals);
 
   const { regressions, vanished } = compare(baseline, summary);
