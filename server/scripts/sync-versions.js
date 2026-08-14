@@ -21,6 +21,7 @@ const manifests = [
   { path: join(repoRoot, 'package.json'), key: 'version' },
   { path: join(repoRoot, 'manifest.json'), key: 'version' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), key: 'version' },
+  { path: join(repoRoot, 'plugin.json'), key: 'version' },
   { path: join(repoRoot, '.release-please-manifest.json'), key: '.' },
 ];
 
