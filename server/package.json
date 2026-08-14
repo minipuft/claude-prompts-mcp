@@ -156,9 +156,9 @@
     "validate:agent-plugins:self-test": "node scripts/validate-agent-plugins.js --self-test",
     "validate:db-claim-order": "node scripts/validate-db-claim-order.js",
     "validate:db-claim-order:self-test": "node scripts/validate-db-claim-order.js --self-test",
-    "plans:retire": "node ../scripts/retire-done-plans.js --apply",
-    "plans:retire:check": "node ../scripts/retire-done-plans.js",
-    "plans:retire:self-test": "node ../scripts/retire-done-plans.js --self-test"
+    "plans:retire": "retire-done-plans --repo .. --apply",
+    "plans:retire:check": "retire-done-plans --repo ..",
+    "plans:retire:self-test": "retire-done-plans --repo .. --self-test"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,cjs,mjs}": [
@@ -218,6 +218,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@minipuft/repository-standards-validation": "https://github.com/minipuft/repository-standards/archive/refs/tags/v1.2.0.tar.gz",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.0",
