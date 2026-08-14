@@ -312,6 +312,13 @@ jobs:
           - repo: minipuft/opencode-prompts
             name: opencode
             merge_mode: auto
+          # codex-prompts consumes the engine from the registry like its siblings, so the
+          # same range+lock sync applies. Its own publish-dist workflow fires on the merge
+          # and republishes the `dist` branch the marketplace installs from, which is what
+          # keeps the listed plugin at the released engine without further action.
+          - repo: minipuft/codex-prompts
+            name: codex
+            merge_mode: auto
     steps:
       - name: Checkout upstream (for version)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -385,6 +392,14 @@ jobs:
               # Update npm dependency range to match major
               jq --arg r "^${MAJOR}.0.0" '.dependencies["claude-prompts"] = $r' package.json > tmp.json && mv tmp.json package.json
               ;;
+
+            codex)
+              # Same range edit as its siblings. The plugin manifest version is NOT written
+              # here, for the reason spelled out in the gemini case: `.codex-plugin/plugin.json`
+              # carries codex-prompts' own identity, and stamping the engine's version onto it
+              # would create two version identities in one repo.
+              jq --arg r "^${MAJOR}.0.0" '.dependencies["claude-prompts"] = $r' package.json > tmp.json && mv tmp.json package.json
+              ;;
           esac
 
           # Regenerate the lockfile whenever package.json was touched.
@@ -448,6 +463,19 @@ jobs:
               jq empty package.json
               dep=$(jq -r '.dependencies["claude-prompts"]' package.json)
               echo "Dependency range updated to: $dep"
+              ;;
+
+            codex)
+              jq empty package.json
+              jq empty .codex-plugin/plugin.json
+              dep=$(jq -r '.dependencies["claude-prompts"]' package.json)
+              echo "Dependency range updated to: $dep"
+              # A `file:` range would silently reintroduce the defect this repo shipped for
+              # months: a vendored tarball is gitignored, so a clone cannot install it and the
+              # fleet auditor has no resolved lock version to read.
+              case "$dep" in
+                file:*) echo "ERROR: codex-prompts must consume the registry, not a file: tarball"; exit 1 ;;
+              esac
               ;;
           esac
 
