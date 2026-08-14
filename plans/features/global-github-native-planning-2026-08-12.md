@@ -187,8 +187,8 @@ repository-specific additions; unsupported assumptions are omitted until observe
 
 - **Name**: `<repository> Roadmap` (private during the pilot)
 - **Built-in fields used**: Status, Milestone, Labels, Assignees, Repository
-- **Base custom field**: Priority (`P0`, `P1`, `P2`, `P3`)
-- **`claude-prompts-mcp` custom field**: Area (`Prompt Engine`, `Resource Manager`, `System Control`, `Chains`, `Gates`, `Frameworks`, `CLI / Installation`, `Documentation`, `Other`)
+- **Base custom field**: Priority (`Urgent`, `High`, `Normal`, `Low`); unset means not yet prioritized and avoids collision with initiative phase identifiers such as `P7-F8`.
+- **`claude-prompts-mcp` custom field**: Area (`Prompt Engine`, `Resource Manager`, `System Control`, `Chains`, `Gates`, `Frameworks`, `CLI / Installation`, `Documentation`, `Repository Automation`, `Other`)
 - **Intentionally omitted**: Effort, Target release, Start date, Target date; Milestone owns release grouping, and date/effort fields require demonstrated scheduling demand.
 - **Views**:
   - Inbox — table filtered by `label:triage`
