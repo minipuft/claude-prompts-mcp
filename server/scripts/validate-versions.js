@@ -15,10 +15,12 @@
  * also compares each downstream's resolved `package-lock` version rather than the declared
  * dependency range, which is the stronger claim.
  *
- * One assertion had NO other home and was not silently dropped with the rest — the marketplace
- * `source.url` guard, which caught the repo operating under a rename redirect. It is filed as a
- * plan row against the fleet auditor rather than left here unreachable; see
- * `plans/agent-plugins-migration-2026-08-08.md` row 3.6.
+ * One assertion had NO other home and was NOT dropped with the rest — the marketplace
+ * `source.url` guard, which catches the listing resolving this repo through a rename redirect.
+ * It now lives in `extension-publish.yml`'s `sync-downstream` job, beside the step that edits the
+ * marketplace entry: that job runs on every release and blocks, where this file's copy was
+ * reachable only from a workflow that never ran. `validate-release-workflow.js` asserts it is
+ * still there, so it cannot be removed as quietly as this one was.
  */
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';

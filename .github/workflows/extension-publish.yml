@@ -327,9 +327,15 @@ jobs:
           # License is read from plugin.json, never hardcoded — a literal here
           # silently re-stamps stale licensing onto every downstream on release.
           license=$(node -p "require('./upstream/.claude-plugin/plugin.json').license")
+          # Canonical Agent Plugins manifest, for the marketplace source assertion below.
+          # Read from the SOURCE rather than the rendered `.claude-plugin/` copy: the two are
+          # byte-identical by `validate:render-drift`, so reading the source costs nothing and
+          # keeps the repository identity single-authored.
+          repository=$(node -p "require('./upstream/plugin.json').repository")
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "major=$major" >> $GITHUB_OUTPUT
           echo "license=$license" >> $GITHUB_OUTPUT
+          echo "repository=$repository" >> $GITHUB_OUTPUT
 
       - name: Checkout downstream
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -403,6 +409,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           LICENSE: ${{ steps.version.outputs.license }}
+          REPOSITORY: ${{ steps.version.outputs.repository }}
         run: |
           set -euo pipefail
 
@@ -412,6 +419,21 @@ jobs:
               [ "$actual" = "$VERSION" ] || { echo "ERROR: marketplace version $actual != $VERSION"; exit 1; }
               actual_license=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .license' .claude-plugin/marketplace.json)
               [ "$actual_license" = "$LICENSE" ] || { echo "ERROR: marketplace license $actual_license != $LICENSE"; exit 1; }
+              # Assert the marketplace resolves this repo by its REAL CURRENT NAME, not through a
+              # rename redirect. The install URL has no redirect mechanism of its own, so the day
+              # the old name is reclaimed by anyone, every install silently retargets — and this
+              # is the only check that would notice.
+              #
+              # Derived from the canonical plugin.json `repository`, never a literal: a second
+              # hardcoded slug is a second thing to update at the next rename, and the previous
+              # version of this guard hardcoded it. `.git` is appended because the marketplace
+              # source is a clone URL while `repository` is the web URL.
+              actual_url=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .source.url' .claude-plugin/marketplace.json)
+              [ "$actual_url" = "${REPOSITORY}.git" ] || { echo "ERROR: marketplace source url $actual_url != ${REPOSITORY}.git — the listing points at a rename redirect or the wrong repo"; exit 1; }
+              # `dist` is the branch publish-dist force-pushes. A listing on any other ref serves
+              # a tree that release never wrote.
+              actual_ref=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .source.ref' .claude-plugin/marketplace.json)
+              [ "$actual_ref" = "dist" ] || { echo "ERROR: marketplace source ref $actual_ref != dist"; exit 1; }
               jq empty .claude-plugin/marketplace.json
               ;;
 

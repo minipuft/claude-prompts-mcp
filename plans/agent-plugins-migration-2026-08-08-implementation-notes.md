@@ -131,6 +131,9 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 23:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -5 echo "=== action pins (new step ` · ran
+- 2026-08-13 23:04 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 -c " import yaml d=yaml.safe_load(open('.github/workflows/exte` · ran
+- 2026-08-13 23:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== self-test (falsification) ==="; npm run validate:rele` · ran
 - 2026-08-13 17:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -6 echo "=== typecheck ==="; npm ru` · ran
 - 2026-08-13 17:37 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
 - 2026-08-13 17:35 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
@@ -941,3 +944,26 @@ contains [file, spawn]`, because the renderer's failure hint contained the liter
   design. The fix already existed — `~/.claude/scripts/bind-plan.py` — and I did not find it
   because `plan_hygiene.py`'s docstring cites it bare, as though it sat beside the hooks. Session
   now pinned. **A tool referenced without its path reads as a tool that does not exist.**
+
+- **DEV-T3-10** — I deleted a guard and filed a row instead of rebuilding it, then reported that as
+  the careful option. It is not: `cleanup-standards.md` names "cleanup in a separate PR" as the
+  highest-deferral-rate anti-pattern, and a row is a promise where a check is a check. Corrected in
+  the same session — the marketplace source assertion now lives in the `sync-downstream` job that
+  already edits the entry, runs every release, and blocks. **Filing a finding is not fixing it, and
+  the fact that the deleted guard never ran is an argument for rebuilding it somewhere reachable,
+  not for leaving the gap open.**
+- **DEV-T3-11** — the rebuilt guard derives the URL from canonical `plugin.json.repository` rather
+  than hardcoding the slug, as the deleted one did. The hardcoded form is why `fleet.json` still
+  names `minipuft/claude-prompts`: a second literal is a second thing to update at the next rename,
+  and it was missed. `validate-release-workflow.js` has a self-test case for re-hardcoding
+  specifically, because that regression PASSES the url assertion while re-creating the drift.
+- **DEV-T3-12** — falsified the guard twice, deliberately. The self-test proves the three
+  assertions are _present_ (removing each reds one case); it says nothing about whether the shell
+  comparison WORKS. Ran the actual logic against a seeded pre-rename listing: rejected, while the
+  live listing was accepted. **A gate on workflow text checks that a check exists, not that it
+  catches anything** — that gap is how a green suite coexisted with the never-running original.
+- **DEV-T3-13** — read the LOCAL `minipuft-plugins` checkout after `git fetch` and nearly reported
+  the marketplace as stale at 3.1.1. It was 4e9f585 against origin's 69b0108; `origin/main` reads
+  3.2.1 and is correct. **`git fetch` updates refs, not the working tree** — same stale-base trap
+  as DEV-T3-8, twice in one session, and the second time I caught it only because the first had
+  just happened.
