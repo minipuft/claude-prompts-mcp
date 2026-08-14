@@ -449,6 +449,27 @@ jobs:
               # a tree that release never wrote.
               actual_ref=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .source.ref' .claude-plugin/marketplace.json)
               [ "$actual_ref" = "dist" ] || { echo "ERROR: marketplace source ref $actual_ref != dist"; exit 1; }
+
+              # The codex-prompts entry is listed in the same file and written by NOBODY —
+              # this job's jq above selects `claude-prompts` only, deliberately, because the
+              # engine's version is not codex-prompts' identity. Two invariants follow, and
+              # neither was checked until a stale listing nearly shipped:
+              #
+              #   ref must be `dist`, for the same reason as above — its `main` has no
+              #   node_modules, so a listing on any other ref serves a plugin whose MCP server
+              #   cannot start and whose hooks cannot launch.
+              #
+              #   version must be ABSENT. A field with no writer rots, and here it rots into a
+              #   real collision: Claude Code keys its install directory on the listing version
+              #   when one is present, so two different `dist` trees would land in one cache
+              #   directory. With no version it falls back to the commit SHA, which is correct
+              #   per push. Anthropic's and OpenAI's own marketplaces omit the field for exactly
+              #   the entries they do not version-sync.
+              codex_ref=$(jq -r '.plugins[] | select(.name == "codex-prompts") | .source.ref' .claude-plugin/marketplace.json)
+              [ "$codex_ref" = "dist" ] || { echo "ERROR: codex-prompts marketplace ref $codex_ref != dist"; exit 1; }
+              codex_version=$(jq -r '.plugins[] | select(.name == "codex-prompts") | has("version")' .claude-plugin/marketplace.json)
+              [ "$codex_version" = "false" ] || { echo "ERROR: the codex-prompts entry carries a version field, and nothing writes it. Remove it — Claude Code keys its install directory on that value and a stale one collides two dist trees into one cache dir."; exit 1; }
+
               jq empty .claude-plugin/marketplace.json
               ;;
 

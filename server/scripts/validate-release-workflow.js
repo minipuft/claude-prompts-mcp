@@ -67,6 +67,20 @@ function findViolations(source) {
   if (!source.includes('[ "$actual_ref" = "dist" ]')) {
     violations.push('marketplace source ref is not asserted to be the published dist branch');
   }
+
+  // The codex-prompts entry sits in the same marketplace file and no job writes it: the sync
+  // jq selects `claude-prompts` only. Both facts about it therefore need asserting here, or
+  // nothing does.
+  if (!source.includes('[ "$codex_ref" = "dist" ]')) {
+    violations.push(
+      'codex-prompts marketplace ref is not asserted to be its published dist branch'
+    );
+  }
+  // Absence, not a value. A version field nobody writes goes stale, and Claude Code keys its
+  // install directory on it — two dist trees would collide in one cache dir.
+  if (!source.includes('[ "$codex_version" = "false" ]')) {
+    violations.push('codex-prompts marketplace entry is not asserted to be version-free');
+  }
   // Derived, not hardcoded: a literal slug here is a second thing to update at the next rename,
   // which is how the previous guard's URL went stale in `fleet.json`.
   if (
@@ -106,6 +120,8 @@ function runSelfTest() {
       require('./upstream/plugin.json').repository
       [ "$actual_url" = "\${REPOSITORY}.git" ]
       [ "$actual_ref" = "dist" ]
+      [ "$codex_ref" = "dist" ]
+      [ "$codex_version" = "false" ]
       cpm-\${{ steps.version.outputs.version }}.js
       cpm-\${{ steps.version.outputs.version }}.js.sha256
       claude-prompts-\${{ steps.version.outputs.version }}-sourcemaps.tar.gz
@@ -113,6 +129,11 @@ function runSelfTest() {
   `;
   const cases = [
     ['missing merge mode', healthy.replace('            merge_mode: auto\n', '')],
+    ['codex marketplace ref unasserted', healthy.replace('      [ "$codex_ref" = "dist" ]\n', '')],
+    [
+      'codex version field left writable',
+      healthy.replace('      [ "$codex_version" = "false" ]\n', ''),
+    ],
     ['unknown merge mode', healthy.replace('merge_mode: auto', 'merge_mode: guess')],
     ['direct merge regression', healthy.replace('      auto)\n', '      auto)\n      direct)\n')],
     [
