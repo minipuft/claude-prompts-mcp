@@ -1,7 +1,8 @@
 ---
 title: "Plan Retirement Federation — Tier F4"
 date: 2026-08-03
-status: backlog
+status: active
+tracking: https://github.com/minipuft/claude-prompts-mcp/issues/210
 tags: []
 ---
 
@@ -73,19 +74,25 @@ So: **configuration absence must be an error, never an empty scan.**
 
 ## Subtiers
 
-| #    | Status | Step                                                                           | Files                                                   | Depends | Verification                                                            |
-| ---- | ------ | ------------------------------------------------------------------------------ | ------------------------------------------------------- | ------- | ----------------------------------------------------------------------- |
-| F4.1 | ☐      | Make link sources configurable, defaulting to nothing                          | `retire-done-plans.js`                                  | —       | No config → hard error naming the missing key, never a clean empty scan |
-| F4.2 | ☐      | Fail when a configured link source does not exist on disk                      | `retire-done-plans.js`                                  | F4.1    | Back-test: point a source at a missing dir → exit 1, not "0 findings"   |
-| F4.3 | ✓      | Publish the frontmatter convention to the standards repo as the citable source | `repository-standards`                                  | —       | Script and docs cite a public path; no `~/knowledge-hub` path in either |
-| F4.4 | ☐      | Move the script to the standards repo, versioned, runnable with no CI          | `repository-standards`                                  | F4.1-3  | Tagged release; runs from a clone in a repo with no workflows           |
-| F4.5 | ☐      | Migrate this repo to the shared version; delete the local copy                 | `scripts/`, `server/package.json`, `release-please.yml` | F4.4    | Queue still 7/0; back-test still exits 1 on a misclassified plan        |
-| F4.6 | ☐      | Onboard **cloudySky** — 131 plans, 49 `done`, no remote, no CI                 | cloudySky `plans/`, its release routine                 | F4.5    | Its queue is correct **and** a seeded misclassification exits 1         |
-| F4.7 | ☐      | _Optional_ — reusable workflow for the one repo that has CI                    | `repository-standards/.github/workflows`                | F4.5    | This repo's release-please step calls it and behaves identically        |
+| #    | Status                                                                                                             | Step                                                                           | Files                                                   | Depends | Verification                                                                                 |
+| ---- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| F4.1 | ✓                                                                                                                  | Make link sources configurable, defaulting to nothing                          | `repository-standards/bin/retire-done-plans.cjs`        | —       | No config → hard error naming `linkSources`; contract test passes                            |
+| F4.2 | ✓                                                                                                                  | Fail when a configured link source does not exist on disk                      | `repository-standards/bin/retire-done-plans.cjs`        | F4.1    | Missing-source back-test exits 1 before scanning                                             |
+| F4.3 | ✓                                                                                                                  | Publish the frontmatter convention to the standards repo as the citable source | `repository-standards`                                  | —       | Script and docs cite a public path; no `~/knowledge-hub` path in either                      |
+| F4.4 | ✓                                                                                                                  | Move the script to the standards repo, versioned, runnable with no CI          | `repository-standards`                                  | F4.1-3  | `v1.2.0`; PR #6 green and merged; executable runs from consumer clones                       |
+| F4.5 | ☐ (as of 2026-08-13 · flips when the isolated review branch is merged into the canonical repo)                     | Migrate this repo to the shared version; delete the local copy                 | `scripts/`, `server/package.json`, `release-please.yml` | F4.4    | Shared check/self-test report 0/0; local script deleted                                      |
+| F4.6 | ☐ (as of 2026-08-13 · flips when canonical cloudySky contains `plan-retirement.config.json` and check returns 0/0) | Onboard **cloudySky** — 131 plans, 49 `done`, no remote                        | cloudySky `plans/`, package scripts                     | F4.5    | Seeded misclassification exits 1; isolated result is 15 archived, 43 referenced, 0 remaining |
+| F4.7 | ✓                                                                                                                  | _Optional_ — composite action packaging for the CI consumer                    | `repository-standards/actions/retire-plans`             | F4.5    | Release Please calls the same executable at immutable SHA                                    |
 
 **Gate**: cloudySky retires its own finished plans by running the shared script, and a deliberately
 misclassified plan there exits 1 — proving the check measures in a repo with a different layout and
 no CI, not merely that it runs where it was written.
+
+**Current gate state (2026-08-13): not yet closed.** Both consumer migrations ran in independent
+clones because their canonical checkouts contain other sessions' uncommitted edits. The
+`claude-prompts-mcp` review branch and the validated CloudySky bundle are recorded in the sibling
+implementation notes. Both must land without losing or overwriting newer work before this gate
+closes.
 
 **F4.7 is last and optional on purpose.** It serves one repository out of six. Building it before
 F4.6 would prove the mechanism works in the environment it already worked in, which is not a

@@ -176,13 +176,14 @@ exactly four).
 
 The frontmatter schema, the status vocabulary, and the `done` vs `reference` test are defined
 once, publicly, at
-[`repository-standards/conventions/plan-frontmatter.md`](https://github.com/minipuft/repository-standards/blob/main/conventions/plan-frontmatter.md).
+[`repository-standards/conventions/plan-frontmatter.md`](https://github.com/minipuft/repository-standards/blob/v1.2.0/conventions/plan-frontmatter.md).
 This guide owns only how **this** repository runs the retirement — the workflow step, its
 placement on the release PR, and the local commands. Restating the convention here is what let it
 drift the last time it had two homes.
 
-`scripts/retire-done-plans.js --apply` clears finished work out of the working set by **two
-different doors**, because the two kinds of finished plan have different obligations:
+The versioned `retire-done-plans` executable from `repository-standards` clears finished work out
+of the working set by **two different doors**, because the two kinds of finished plan have
+different obligations:
 
 | Status      | Destination        | Tracked?        | Why                                                                                           |
 | ----------- | ------------------ | --------------- | --------------------------------------------------------------------------------------------- |
@@ -191,8 +192,13 @@ different doors**, because the two kinds of finished plan have different obligat
 
 Both preserve the subpath (`plans/techincal_debt/x.md` → `plans/<dest>/techincal_debt/x.md`) and
 re-base relative links for the added depth. Relocating a `reference` plan additionally rewrites
-every **inbound** link to it, across `docs/` and the other link sources — which is why the workflow
-step stages those paths too, not just `plans/`.
+every **inbound** link to it, across the sources declared by this repository. The workflow stages
+the complete retirement transaction rather than duplicating that source list in YAML.
+
+`plan-retirement.config.json` owns the consumer-specific citation corpus. Its `linkSources` array
+has no default: missing configuration, an empty key, or a source that does not exist is a hard
+error before the tool scans or moves a plan. An incomplete corpus could otherwise turn a live
+inbound citation into a destructive false negative.
 
 **A plan must be committed before it is retired, and `--apply` enforces it.** `plans/archive/` is
 gitignored, so archiving an untracked plan deletes it outright and archiving a modified one loses
@@ -228,8 +234,9 @@ misclassified in the opposite direction and is probably `done`, but whether the 
 a judgement the frontmatter author owns.
 
 ```bash
-npm run plans:retire:check   # report the queue; fail on misclassification
-node scripts/retire-done-plans.js --apply   # what the release PR runs
+npm --prefix server run plans:retire:check      # report queue; fail on misclassification
+npm --prefix server run plans:retire:self-test  # exercise safety against this corpus
+npm --prefix server run plans:retire            # apply the same operation as the release PR
 ```
 
 ## Configuration
@@ -241,6 +248,7 @@ node scripts/retire-done-plans.js --apply   # what the release PR runs
 | `.github/workflows/release-please.yml`    | Release PR automation              |
 | `.github/workflows/npm-publish.yml`       | npm + downstream dispatch          |
 | `.github/workflows/extension-publish.yml` | dist branch + desktop extension    |
+| `plan-retirement.config.json`             | Required local citation corpus     |
 
 ---
 

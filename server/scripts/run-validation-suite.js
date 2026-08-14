@@ -288,8 +288,9 @@ export const SUITE = [
   {
     script: 'plans:retire:check',
     io: 'read',
-    reads: ['file', 'spawn', 'tracked', 'walk'],
-    converse: 'unexamined',
+    reads: ['spawn'],
+    converse:
+      'CHECKED by the pinned shared executable — it rejects both cited done plans and orphaned configuration before this suite accepts the delegated verdict',
   },
   {
     script: 'validate:render-drift',
