@@ -15,7 +15,7 @@ tags:
 
 - **Lifecycle**: `active`; implementation began 2026-08-13 after the open questions were ruled.
 - **Governing repository**: `minipuft/claude-code-config` for global configuration; `minipuft/claude-prompts-mcp` is the first pilot.
-- **Implementation constraint**: local global-configuration and pilot edits are authorized. GitHub Project mutation remains deferred until the reviewed explicit-apply boundary.
+- **Implementation constraint**: local global-configuration and pilot edits are authorized. GitHub Project mutation requires a reviewed dry run and an explicit `--apply`; the pilot apply completed on 2026-08-14.
 - **Tracking**: added at the publish boundary after the pilot Issue exists. Plan lifecycle remains separate from Project Status.
 
 ## Step 1 — Intent and Discovery
@@ -38,7 +38,7 @@ Plans are locally durable and greppable, but folders alone do not provide a usef
 
 - **Discussion** for unresolved discovery, RFCs, and questions.
 - **Issue/sub-issue** for accepted work and hierarchy.
-- **GitHub Project** for table, kanban, roadmap, priority, area, effort, dates, and release targeting.
+- **GitHub Project** for a repository-specific portfolio projection: workflow status, priority, ownership context, release grouping, and focused views.
 - **`plans/*.md`** for detailed execution decisions and cross-session state.
 - **PR** for delivery evidence and accepted-work closure.
 
@@ -75,7 +75,7 @@ This must extend existing plan hygiene rather than create a second status system
 5. Published decision-bearing plans link to one accepted-work Issue or carry an enumerated exception when policy requires it.
 6. Local structural validation remains deterministic and network-free.
 7. Remote setup is dry-run first, discovers opaque identifiers, requires explicit apply, and is repeatable.
-8. The pilot provides board, table, and roadmap views with useful scheduling fields.
+8. The pilot provides six focused board/table views and only the custom fields justified by this repository; release grouping uses the built-in Milestone field.
 9. Current issue-form links and required labels validate against `claude-prompts-mcp`.
 10. Codex receives the new skill only through the existing sync script.
 11. Final acceptance includes global tests, the current repository build, and one useful live lifecycle drive.
@@ -84,18 +84,18 @@ This must extend existing plan hygiene rather than create a second status system
 
 ### Compound Diagnosis
 
-**Strong document hygiene without a provider-aware portfolio projection.** The current global system owns plan authoring, plan lifecycle, binding, deviation logs, and structural linting. It lacks a durable discovery-to-delivery projection that can be viewed as a board or roadmap. Adding another plan status, tracker file, or startup hook would duplicate ownership and increase token/network cost.
+**Strong document hygiene without a provider-aware portfolio projection.** The current global system owns plan authoring, plan lifecycle, binding, deviation logs, and structural linting. It lacks a durable discovery-to-delivery projection that can expose repository-specific queues and workflow views. Adding another plan status, tracker file, or startup hook would duplicate ownership and increase token/network cost.
 
 ### Semantic Ownership
 
-| Object               | Owns                                                                                    | Does not own                       |
-| -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------- |
-| GitHub Discussion    | Unresolved ideas, RFC conversation, questions, evidence gathering                       | Accepted implementation commitment |
-| GitHub Issue         | Accepted work, canonical tracking URL, assignee, hierarchy through sub-issues           | Detailed execution design          |
-| GitHub Project       | Portfolio projection: work status, priority, area, effort, target release, dates, views | Plan document lifecycle            |
-| `plans/*.md`         | Decisions, tier ordering, verified paths, open questions, execution contract            | Portfolio scheduling status        |
-| Implementation notes | Deviations, rulings, validation ledger                                                  | Plan contract                      |
-| Pull request         | Delivery evidence, review, Issue closure                                                | Discovery backlog                  |
+| Object               | Owns                                                                                                     | Does not own                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| GitHub Discussion    | Unresolved ideas, RFC conversation, questions, evidence gathering                                        | Accepted implementation commitment |
+| GitHub Issue         | Accepted work, canonical tracking URL, assignee, hierarchy through sub-issues                            | Detailed execution design          |
+| GitHub Project       | Portfolio projection: work status, priority, repository-specific classification, release grouping, views | Plan document lifecycle            |
+| `plans/*.md`         | Decisions, tier ordering, verified paths, open questions, execution contract                             | Portfolio scheduling status        |
+| Implementation notes | Deviations, rulings, validation ledger                                                                   | Plan contract                      |
+| Pull request         | Delivery evidence, review, Issue closure                                                                 | Discovery backlog                  |
 
 ### Lifecycle
 
@@ -180,17 +180,23 @@ Safety properties:
 - unsupported view mutations produce a precise guided checklist;
 - no secrets or auth tokens are written to plan files or cache records.
 
-### Standard Project Shape
+### Project Profile Contract
 
-- **Name**: `<repository> Roadmap`
-- **Fields**: Status, Priority, Area, Effort, Target release, Start date, Target date
+There is no universal field template. The automation owns a small base profile and permits explicit
+repository-specific additions; unsupported assumptions are omitted until observed work requires them.
+
+- **Name**: `<repository> Roadmap` (private during the pilot)
+- **Built-in fields used**: Status, Milestone, Labels, Assignees, Repository
+- **Base custom field**: Priority (`P0`, `P1`, `P2`, `P3`)
+- **`claude-prompts-mcp` custom field**: Area (`Prompt Engine`, `Resource Manager`, `System Control`, `Chains`, `Gates`, `Frameworks`, `CLI / Installation`, `Documentation`, `Other`)
+- **Intentionally omitted**: Effort, Target release, Start date, Target date; Milestone owns release grouping, and date/effort fields require demonstrated scheduling demand.
 - **Views**:
-  - Now — board/kanban
-  - Backlog — table
-  - Roadmap — timeline/roadmap
-  - Blocked
-  - Maintenance
-  - Recently completed
+  - Inbox — table filtered by `label:triage`
+  - Now — board filtered by `status:"In Progress"`
+  - Backlog — table filtered by `status:Todo -label:triage`
+  - Blocked — table filtered by `label:blocked`
+  - Releases — table filtered by `-no:milestone`
+  - Recently completed — table filtered by `status:Done updated:>@today-30d`
 
 ### Rollout Policy
 
@@ -317,14 +323,14 @@ Additional pilot inspection confirmed:
 
 ### Tier 5 — `claude-prompts-mcp` Pilot and Project Rollout
 
-| #   | St                                                                                                                                       | File                                             | Change                                                                                                                                                   | ~Lines | Depends               | Verify                                                             | Justification                                               |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: | --------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| 5.1 | ✓                                                                                                                                        | `.github/ISSUE_TEMPLATE/config.yml`              | Correct documentation and troubleshooting links to `minipuft/claude-prompts-mcp`.                                                                        |      4 | 2.3                   | YAML and repository-name check                                     | Existing links target the wrong repository.                 |
-| 5.2 | ✓                                                                                                                                        | `.github/ISSUE_TEMPLATE/bug_report.yml`          | Correct links and retain only labels validated or created by setup.                                                                                      |      4 | 2.3                   | YAML and live label validation                                     | Repair the existing form.                                   |
-| 5.3 | ✓                                                                                                                                        | `.github/ISSUE_TEMPLATE/feature_request.yml`     | Correct links and retain only labels validated or created by setup.                                                                                      |      4 | 2.3                   | YAML and live label validation                                     | Repair the existing form.                                   |
-| 5.4 | ✓                                                                                                                                        | `.github/DISCUSSION_TEMPLATE/idea.yml`           | Add structured unresolved-idea intake with decision criteria and conversion guidance.                                                                    |     75 | 2.2,2.3               | YAML/form/category validation                                      | Native Discussion intake cannot be modeled by Issue forms.  |
-| 5.5 | ☐ (as of 2026-08-14 · flips when a second `github_planning.py` dry-run reports zero mutations and live queries match the declared state) | GitHub remote state through `github_planning.py` | Dry-run then apply labels and a user-owned `claude-prompts-mcp Roadmap`; link repo; configure supported fields/automation; guide unavailable view steps. |      0 | 2.4,5.1-5.4,OQ-1,OQ-2 | Second dry-run is mutation-free; live queries match declared state | Remote state must use discovered IDs, not local hardcoding. |
-| 5.6 | ☐ (as of 2026-08-14 · flips when this plan's frontmatter reads `status: active` and it names its accepted-work Issue)                    | This plan                                        | On implementation start, change lifecycle to active and bind it to the accepted-work Issue; keep Project Status separate.                                |    2-3 | 3.1,5.5               | Local lint and live Issue validation                               | This initiative becomes the first migration exemplar.       |
+| #   | St                                                                                                                    | File                                             | Change                                                                                                                    | ~Lines | Depends               | Verify                                                                            | Justification                                                       |
+| --- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -----: | --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 5.1 | ✓                                                                                                                     | `.github/ISSUE_TEMPLATE/config.yml`              | Correct documentation and troubleshooting links to `minipuft/claude-prompts-mcp`.                                         |      4 | 2.3                   | YAML and repository-name check                                                    | Existing links target the wrong repository.                         |
+| 5.2 | ✓                                                                                                                     | `.github/ISSUE_TEMPLATE/bug_report.yml`          | Correct links and retain only labels validated or created by setup.                                                       |      4 | 2.3                   | YAML and live label validation                                                    | Repair the existing form.                                           |
+| 5.3 | ✓                                                                                                                     | `.github/ISSUE_TEMPLATE/feature_request.yml`     | Correct links and retain only labels validated or created by setup.                                                       |      4 | 2.3                   | YAML and live label validation                                                    | Repair the existing form.                                           |
+| 5.4 | ✓                                                                                                                     | `.github/DISCUSSION_TEMPLATE/idea.yml`           | Add structured unresolved-idea intake with decision criteria and conversion guidance.                                     |     75 | 2.2,2.3               | YAML/form/category validation                                                     | Native Discussion intake cannot be modeled by Issue forms.          |
+| 5.5 | ✓                                                                                                                     | GitHub remote state through `github_planning.py` | Apply the private repository profile: labels, Priority and Area fields, repository link, and six filtered views.          |      0 | 2.4,5.1-5.4,OQ-1,OQ-2 | Explicit apply succeeded; second dry-run is mutation-free; live validation passes | Remote state uses discovered IDs and a repository-specific profile. |
+| 5.6 | ☐ (as of 2026-08-14 · flips when this plan's frontmatter reads `status: active` and it names its accepted-work Issue) | This plan                                        | On implementation start, change lifecycle to active and bind it to the accepted-work Issue; keep Project Status separate. |    2-3 | 3.1,5.5               | Local lint and live Issue validation                                              | This initiative becomes the first migration exemplar.               |
 
 **Tier 5 gate**: `github_planning.py validate --repo minipuft/claude-prompts-mcp` plus local plan lint.
 
@@ -332,7 +338,7 @@ Additional pilot inspection confirmed:
 
 | #   | St                                                                                                                                                              | File                                 | Change                                                                                                                             | ~Lines | Depends      | Verify                                              | Justification                                                  |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -----: | ------------ | --------------------------------------------------- | -------------------------------------------------------------- |
-| 6.1 | ☐ (as of 2026-08-14 · flips when one RFC has traversed Discussion → Issue/sub-issues → Roadmap → PR with every transition inspectable and the records retained) | Current GitHub workflow              | Live-drive one useful RFC through Discussion, Issue/sub-issues, Roadmap fields, plan tracking, and PR linkage; retain the records. |      0 | 5.5,5.6,OQ-3 | Inspect every transition and canonical owner        | Fixtures cannot validate permissions or human-visible flow.    |
+| 6.1 | ☐ (as of 2026-08-14 · flips when one RFC has traversed Discussion → Issue/sub-issues → Project → PR with every transition inspectable and the records retained) | Current GitHub workflow              | Live-drive one useful RFC through Discussion, Issue/sub-issues, Project fields, plan tracking, and PR linkage; retain the records. |      0 | 5.5,5.6,OQ-3 | Inspect every transition and canonical owner        | Fixtures cannot validate permissions or human-visible flow.    |
 | 6.2 | ☐ (as of 2026-08-14 · flips when rule/index/hook tests, typecheck, lint ratchet, test:ci and build have all passed with the evidence in the notes)              | Global suites and `server/` build    | Run rule/index/hook tests, typecheck, lint ratchet, test CI, and build; record evidence in implementation notes.                   |      0 | 6.1          | All commands pass                                   | Final acceptance needs deterministic and real-client evidence. |
 | 6.3 | ☐ (as of 2026-08-14 · flips when the sibling implementation-notes file records the deviations, rulings, auth/API constraints and pilot measurements)            | Sibling implementation-notes file    | During execution, record deviations, rulings, auth/API constraints, validation ledger, and pilot measurements.                     |     40 | 6.1,6.2      | Plan-sync review                                    | Existing convention owns implementation evidence.              |
 | 6.4 | ☐ (as of 2026-08-14 · flips when three independent pilots are recorded and the advisory-vs-enforced decision is made)                                           | `plan_lint.py` and `dev-workflow.md` | After three independent pilots, decide whether to graduate publication enforcement from advisory.                                  |     10 | 6.3,OQ-4     | Evidence cites three repositories and updated tests | Enforcement strength follows measurement.                      |
@@ -396,22 +402,22 @@ Open-question rulings and rationales belong in the sibling implementation-notes 
 
 ### Done Criteria
 
-| Criterion                       | Validation                    | Pass condition                                                                                                                |
-| ------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Minimal global trigger          | Rule diff and line count      | At most twelve non-index always-loaded lines; detail lives under `/github-planning`.                                          |
-| Provider-aware activation       | Detection matrix              | Plain git is insufficient; verified GitHub capability activates; overrides and offline fallback work.                         |
-| No startup networking           | `settings.json` and hook scan | No GitHub detection command registered for SessionStart.                                                                      |
-| One lifecycle model             | Ownership and code review     | Plan status remains document lifecycle; Issue and Project own accepted work and scheduling.                                   |
-| Backward-compatible frontmatter | Plan-hygiene tests            | Legacy four-field plans pass during advisory rollout.                                                                         |
-| Safe setup                      | Two dry-runs around apply     | First dry-run is reviewable; writes require apply; second dry-run reports no changes.                                         |
-| No opaque ID hardcoding         | Source scan and setup logs    | IDs originate only from discovery responses/cache.                                                                            |
-| Useful Project                  | Live validation               | Required fields and Board/Table/Roadmap views exist, or unsupported view mutations have completed guided steps verified live. |
-| Repaired intake                 | Form validation               | Links target `claude-prompts-mcp`; referenced labels/categories exist.                                                        |
-| Cross-client consistency        | Sync verification             | Canonical Claude skills and copied Codex skills match after the existing sync.                                                |
-| End-to-end traceability         | Live record inspection        | One retained workflow connects Discussion, accepted Issue, Project item, plan, and PR without duplicate canonical owners.     |
-| Repository health               | Global tests and npm commands | All required suites and build pass, or a pre-existing failure is documented with evidence and no regression.                  |
-| Measured enforcement decision   | Three-pilot review            | Blocking is adopted only with three independent successful pilots and acceptable false-positive results.                      |
-| Migration closeout              | Scope and lifecycle review    | No alternate tracker, temporary hook, duplicated script, stale copy, or unexplained active plan remains.                      |
+| Criterion                       | Validation                    | Pass condition                                                                                                                                        |
+| ------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Minimal global trigger          | Rule diff and line count      | At most twelve non-index always-loaded lines; detail lives under `/github-planning`.                                                                  |
+| Provider-aware activation       | Detection matrix              | Plain git is insufficient; verified GitHub capability activates; overrides and offline fallback work.                                                 |
+| No startup networking           | `settings.json` and hook scan | No GitHub detection command registered for SessionStart.                                                                                              |
+| One lifecycle model             | Ownership and code review     | Plan status remains document lifecycle; Issue and Project own accepted work and scheduling.                                                           |
+| Backward-compatible frontmatter | Plan-hygiene tests            | Legacy four-field plans pass during advisory rollout.                                                                                                 |
+| Safe setup                      | Two dry-runs around apply     | First dry-run is reviewable; writes require apply; second dry-run reports no changes.                                                                 |
+| No opaque ID hardcoding         | Source scan and setup logs    | IDs originate only from discovery responses/cache.                                                                                                    |
+| Useful Project                  | Live validation               | Priority plus the repository Area field exist; Inbox, Now, Backlog, Blocked, Releases, and Recently completed match the declared layouts and filters. |
+| Repaired intake                 | Form validation               | Links target `claude-prompts-mcp`; referenced labels/categories exist.                                                                                |
+| Cross-client consistency        | Sync verification             | Canonical Claude skills and copied Codex skills match after the existing sync.                                                                        |
+| End-to-end traceability         | Live record inspection        | One retained workflow connects Discussion, accepted Issue, Project item, plan, and PR without duplicate canonical owners.                             |
+| Repository health               | Global tests and npm commands | All required suites and build pass, or a pre-existing failure is documented with evidence and no regression.                                          |
+| Measured enforcement decision   | Three-pilot review            | Blocking is adopted only with three independent successful pilots and acceptable false-positive results.                                              |
+| Migration closeout              | Scope and lifecycle review    | No alternate tracker, temporary hook, duplicated script, stale copy, or unexplained active plan remains.                                              |
 
 ### Documentation
 
@@ -436,7 +442,7 @@ Open-question rulings and rationales belong in the sibling implementation-notes 
 | ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | Remote apply creates duplicate or public state   | High   | Dry-run default, discovered IDs, explicit apply, private pilot, serialized executor  | Disable automation; archive/remove only generated state after explicit review. |
 | Active token lacks Project scopes                | High   | Detect scopes before setup and request minimum scopes only at apply                  | Defer live setup while retaining local plan workflow.                          |
-| Project view APIs lack safe mutation coverage    | Medium | Verify official APIs; automate supported primitives; emit a precise guided checklist | Keep fields/Project and configure views manually or defer views.               |
+| Project view mutation behavior changes           | Medium | Discover schema at runtime, cover setup in unit tests, and validate live after apply | Stop mutation and emit a precise manual recovery checklist.                    |
 | New metadata breaks existing plans               | High   | Additive optional fields, advisory rollout, legacy fixtures                          | Disable new findings and retain four-field contract.                           |
 | Network outage blocks ordinary planning          | High   | Boundary-only calls, cache, explicit offline/local reasons                           | Continue local plan lifecycle without provider operations.                     |
 | Project Status duplicates plan status            | High   | Ownership table, separate vocabularies, tests/docs                                   | Remove any mapping and restore document-only plan status.                      |
@@ -451,7 +457,7 @@ Open-question rulings and rationales belong in the sibling implementation-notes 
 - **Commit convention**: `feat(docs): pilot GitHub-native planning lifecycle`
 - **Scope**: `docs`
 - **Changelog section**: Added
-- **Changelog entry**: GitHub-native planning lifecycle with Discussion discovery, Issue tracking, Project roadmap views, safe setup automation, and local/offline exceptions.
+- **Changelog entry**: GitHub-native planning lifecycle with Discussion discovery, Issue tracking, repository-specific Project views, safe setup automation, and local/offline exceptions.
 
 ### Growth Capture
 
