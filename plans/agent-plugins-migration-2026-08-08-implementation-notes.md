@@ -1000,3 +1000,31 @@ changed repository tooling.
   The script would not even parse. **A textual anchor that appears in both the fixture and the tests
   that mutate the fixture is ambiguous by construction** — line-indexed insertion after asserting the
   line's content is the version that worked.
+
+## Deviations — the three pushes (2026-08-14)
+
+- **DEV-T4-30** — **the first real run of the new workflow failed, and the cause was a line added for
+  reassurance.** Exit 141 is SIGPIPE: `git ls-files node_modules/claude-prompts | head -1` — `head`
+  closes the pipe after one line, git takes the signal writing the remaining 269 paths, and
+  `set -o pipefail` converts that into a failed step. **It is a race**, which is the worse property: my
+  first local reproduction printed "no sigpipe" because with 270 files git usually finishes writing
+  first. I confirmed the mechanism instead of assuming it (`yes | head -1` under `pipefail` → 141)
+  rather than accepting a green local run as a refutation. A retry might have passed and left the flake
+  in place. The line asserted nothing the `--error-unmatch` line above it does not.
+- **DEV-T4-31** — **verifying between the pushes is what made the order worth having.** 4.11 said push
+  codex-prompts, confirm `dist`, then push the marketplace. Had I treated "pushed successfully" as
+  "`dist` exists", the marketplace would have gone out pointing at a branch the failed run never
+  created — the exact live breakage the row was written to prevent. **A push succeeding and the
+  workflow it triggers succeeding are different facts**, and only the second one is the precondition.
+- **DEV-T4-32** — **the main-repo push was rejected: my branch was 6 behind its own remote.** Another
+  session had advanced `release-3.1.0-final` (gate timers, a schema snapshot, a validation test). Not
+  force-pushed; merged, and their three files did not overlap mine so it resolved cleanly. Re-ran
+  `validate:all` (37/37) and `test:ci` (2480/2480) **after** the merge rather than trusting the
+  pre-merge greens — their commits touch source, so the earlier runs were evidence about a tree that no
+  longer existed.
+- **DEV-T4-33** — **the last link is deliberately unclosed.** `codex plugin add codex-prompts@minipuft`
+  against the live marketplace was not run: two Codex sessions are alive on the identically-named dev
+  install and it would collide. Everything upstream of that resolution is proven on the published
+  artifact — a fresh `clone --branch dist` answers `initialize` and runs the SessionStart adapter to
+  exit 0. Recorded as partial rather than done, because "the artifact is correct" and "Codex resolves
+  `ref: dist` to it" are separate claims and only one is measured.
