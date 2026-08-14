@@ -2,6 +2,7 @@
 title: "Plan Retirement Federation — Tier F4"
 date: 2026-08-03
 status: active
+tracking: https://github.com/minipuft/claude-prompts-mcp/issues/210
 tags: []
 ---
 
