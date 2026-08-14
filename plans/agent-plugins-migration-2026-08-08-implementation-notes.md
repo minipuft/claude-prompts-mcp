@@ -808,3 +808,43 @@ ruling that lives only in a chat message is not executable.
 - **DEV-T7-2** — Tier 7's ✓ rows were two days old and were re-probed rather than carried forward.
   All four held. Recorded because the re-check cost four API calls and the plan's own
   cleanup-standards lesson is that a ✓ is a claim with a date, not a state.
+
+## Deviations — release readiness sweep (2026-08-14)
+
+Not rows of this plan. Logged here because the release sweep ran under this plan's binding and
+changed repository tooling.
+
+- **DEV-REL-1** — **`typecheck:tests:ratchet` was blind, and its documented remedy was the damage.**
+  `validate:all` failed reporting baselined test files as "absent". The tail of that list showed 4
+  files, so the first reading was "4 files were fixed, lock it in" — the exact action the failure text
+  recommends. Running `typecheck:tests:ratchet:baseline` wrote **`0 errors across 0 files`**,
+  collapsing a 381-error ceiling across 70 files. Restored from a pre-copy immediately. The list was
+  never 4 files; it was all 70, and I had only seen its tail.
+  **Root cause**: `runTsc()` invoked `tsc` without `--pretty false`, and this shell exports
+  `FORCE_COLOR=3`, so TypeScript 6.0.3 emitted ANSI-wrapped diagnostics through the pipe
+  (`\e[96mtests/...\e[0m:\e[93m384\e[0m` instead of `tests/...(384,36):`). Both `DIAGNOSTIC_PATTERN`
+  and `FATAL_PATTERN` then matched nothing, and an empty parse is indistinguishable from a cleared
+  backlog. **CI never exports `FORCE_COLOR`, so this failed only on developer machines** — which is
+  the worst place for it, because the failure text hands the developer the destructive fix.
+- **DEV-REL-2** — **the existing guard anticipated the right failure and could not see this one.** The
+  script already documents that "the ratchet would read a dead compiler as a cleared backlog" and
+  guards it with `FATAL_PATTERN`. That guard is itself a parser, so the ANSI output defeated the check
+  and the thing it protected in one step. Added `assertParsed()`, which needs no knowledge of what
+  went wrong: tsc exiting non-zero with non-empty output while the parser found **zero** diagnostics
+  and **zero** fatals is a parse failure, not a clean run — refuse rather than report. Falsified both
+  ways: with the fix, `check` reads 377 errors under `FORCE_COLOR=3`; with `--pretty false` reverted,
+  the guard refuses and prints the offending first line.
+- **DEV-REL-3** — **I nearly confirmed the wrong reading from a polluted probe.** Asked whether the
+  four files had left the compiler's view, I ran `tsc --listFiles` and read `src/...` lines out of the
+  output as evidence they were still included. Those were diagnostic lines, not a file list — the flag
+  produced no list because tsc was erroring. The inference that saved it was arithmetic, not the
+  probe: 381 errors across 70 files does not become 0 across 0 because four files were fixed.
+  **A total that moves by orders of magnitude is a measurement failure until proven otherwise.**
+- **DEV-REL-4** — two plan-hygiene gates were red from other sessions' files, and only one could
+  reach CI. Six unstamped ☐ rows in the tracked `plans/features/global-github-native-planning-2026-08-12.md`
+  (committed at `a9b4df14`) would fail CI on push; stamped from each row's own Verify cell, so no flip
+  condition was invented. `plans/claude-prompts-brand-assets-2026-08-14.md` is **untracked**, so it
+  reddens local runs only — a clean CI checkout never sees it. Frontmatter added so it is conformant
+  when its author commits it; **left untracked, because adding another session's in-progress plan to
+  git is their decision**. The `assets/` and `scripts/generate-brand-assets.py` changes beside it were
+  not touched.
