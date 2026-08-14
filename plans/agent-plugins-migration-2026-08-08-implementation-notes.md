@@ -945,3 +945,28 @@ changed repository tooling.
   **3 commits behind**. Editing it would have produced a diff against a superseded base. Same trap as
   DEV-T3-13, one week apart, same repository — fast-forwarded first, then edited. **A local checkout
   is a cache, and this one goes stale quietly because nothing in the workflow pulls it.**
+- **DEV-T4-22** — **I wrote a false claim into a doc and it survived a 37/37 suite.** The Tier 6.2
+  rewrite of `release-process.md` said the upstream→downstream "lock-synchronization script was
+  removed". It was not: `synchronize-downstream-lock.js` exists and the live `sync-downstream` job
+  calls it on every release. What Tier 3 deleted was `downstream-sync.yml`, a **separate** dead
+  workflow with a `repository_dispatch` trigger. I collapsed two things with similar names into one
+  and stated the merged version as fact. Nothing caught it — validation checks formatting and links,
+  not whether a sentence about the release machinery is true. Corrected in `dcfc124e`, and the doc now
+  names both channels explicitly so the next reader cannot make the same merge.
+- **DEV-T4-23** — **4.4 was a one-line entry until I read the auditor.** The row said joining the
+  fleet "should be a `fleet.json` entry with the `node-consumer` profile its siblings use". Reading
+  `repositorySnapshot()` shows it fetches `downstream-contract.json`, `consumer-contract.yml`, branch
+  protection, `.node-version` and the lockfile from **every** member before comparing anything.
+  codex-prompts has one of five, and `main` returns `Branch not protected`. Adding the entry today
+  would redden the weekly audit on a missing file rather than on drift — **worse than being
+  unaudited, because it trains the operator to ignore a red fleet.** The row now says what it costs.
+- **DEV-T4-24** — **the sync closes its own loop, which is the part worth noticing.** Adding
+  codex-prompts to the matrix bumps its range and lock; merging that PR pushes `main`; that fires
+  `publish-dist.yml`; that republishes the `dist` branch the marketplace installs from. No step
+  reaches across a repo boundary to trigger the next — each is a local reaction to a local event,
+  which is why it does not need the `repository_dispatch` chain Tier 3 found dead.
+- **DEV-T4-25** — **`repository-standards` locally is 1 ahead and 4 behind origin/main**, with a clean
+  tree — a diverged history carrying someone's unpushed commit. `git merge --ff-only` refused, which
+  is the correct outcome and the reason I did not author the `fleet.json` entry there. Second stale
+  sibling checkout found today (DEV-T4-21 was `minipuft-plugins`, 3 behind). **A local checkout of a
+  fleet repo is a cache that nothing refreshes**, and two of three were wrong when read.
