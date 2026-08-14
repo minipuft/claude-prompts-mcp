@@ -131,6 +131,9 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 23:46 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 23:45 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' from pathlib import Path p = Path("plans/agent-plugin` · ran
+- 2026-08-13 23:42 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' from pathlib import Path p = Path("plans/agent-plugin` · ran
 - 2026-08-13 23:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -5 echo "=== action pins (new step ` · ran
 - 2026-08-13 23:04 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 -c " import yaml d=yaml.safe_load(open('.github/workflows/exte` · ran
 - 2026-08-13 23:03 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== self-test (falsification) ==="; npm run validate:rele` · ran
@@ -967,3 +970,17 @@ contains [file, spawn]`, because the renderer's failure hint contained the liter
   3.2.1 and is correct. **`git fetch` updates refs, not the working tree** — same stale-base trap
   as DEV-T3-8, twice in one session, and the second time I caught it only because the first had
   just happened.
+
+### Files carrying the rebuilt marketplace guard (row 3.6, commit `852830ba`)
+
+The reasoning is DEV-T3-10..13; this is the map, because the guard is deliberately split across
+three files and reading any one of them alone misrepresents it.
+
+| File                                          | Role                                                                                                                                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/extension-publish.yml`     | THE GUARD. `Extract version` derives `repository` from canonical `plugin.json`; `Validate update` asserts `source.url == "${REPOSITORY}.git"` and `ref == dist`. Runs every release, blocks     |
+| `server/scripts/validate-release-workflow.js` | THE GUARD ON THE GUARD. Asserts all three properties are still in the workflow, + a self-test case for re-hardcoding — the regression that passes the url assertion while re-creating the drift |
+| `server/scripts/validate-versions.js`         | The header records where the assertion WENT. Without it the next reader finds a deletion and no successor, which is how a removed check becomes a removed capability                            |
+
+The split is the point: a guard living only in workflow YAML is deletable in one line by anyone,
+which is exactly how its predecessor vanished. Neither of the first two files is sufficient alone.
