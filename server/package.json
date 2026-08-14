@@ -118,7 +118,7 @@
     "prepare:release-artifacts": "node scripts/prepare-release-artifacts.js",
     "prepare:release-artifacts:self-test": "node scripts/prepare-release-artifacts.js --self-test",
     "sync:versions": "node scripts/sync-versions.js",
-    "version": "npm run sync:versions && git add ../package.json ../.release-please-manifest.json ../manifest.json ../.claude-plugin/plugin.json ../server.json",
+    "version": "npm run sync:versions && git add ../package.json ../.release-please-manifest.json ../manifest.json ../.claude-plugin/plugin.json ../plugin.json ../server.json",
     "validate:extension-artifact": "node scripts/validate-extension-artifact.js",
     "validate:extension-artifact:self-test": "node scripts/validate-extension-artifact.js --self-test",
     "validate:github-action-pins": "node scripts/validate-github-action-pins.js",
