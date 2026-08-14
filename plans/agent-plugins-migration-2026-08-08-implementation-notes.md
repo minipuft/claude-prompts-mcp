@@ -900,3 +900,19 @@ changed repository tooling.
   so the earlier `rm -rf node_modules && npm install` in the working tree could not have reached them —
   verified via `/proc/<pid>/cwd` rather than assumed from the directory layout. Both were still alive
   after the probe and its cleanup.
+- **DEV-T4-16** — **the answer was already in the repo, in a mechanism it runs every release.** The
+  question "how does a copy-install get a runtime" reads as needing a new distribution design. This
+  repo's `origin/dist` already carries 200 files including `server/dist/index.js` **and**
+  `hooks/lib/*.py` as real files rather than a symlink — precisely the pair a Codex install cannot
+  otherwise obtain, materialized by a workflow that has been running for releases. The objection I was
+  about to raise against committing the dependency ("~9.3 MB per version bump, forever") **applies to
+  `main` and not to a force-pushed dist ref**, where each release replaces the previous tree. Checking
+  what the project already does changed the recommendation.
+- **DEV-T4-17** — **gemini-prompts looks healthy here for the same reason codex-prompts did.** Its
+  installed extension is `{"type": "link"}` at the local checkout — the dev tree with `node_modules` —
+  so nothing about `gemini extensions install <url>` has been observed. Its `hooks/lib` symlink and
+  `MCP_RESOURCES_PATH` both point into `node_modules`; its server uses `npx` and would survive, its
+  hooks probably would not. **Three install paths on this machine now share one illusion**: dev
+  marketplace symlink (codex), extension link (gemini), and my own warm npm cache. Each made an
+  unshippable state look shipped. Rowed as 4.7 and explicitly not asserted — measuring it needs a
+  machine without the checkout.
