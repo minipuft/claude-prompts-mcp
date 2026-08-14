@@ -21,6 +21,13 @@ const manifests = [
   { path: join(repoRoot, 'package.json'), key: 'version' },
   { path: join(repoRoot, 'manifest.json'), key: 'version' },
   { path: join(repoRoot, '.claude-plugin', 'plugin.json'), key: 'version' },
+  // The CANONICAL Agent Plugins manifest, and the source `.claude-plugin/plugin.json` is rendered
+  // from. It had no version writer until 2026-08-13: this list and release-please's `extra-files`
+  // both stamped only the rendered copy, so a bump left the source behind and the render inverted —
+  // the derived file became the newer one. Reproduced by running this script with an explicit
+  // version: `validate:versions` reported the mismatch and `validate:render-drift` reported
+  // `.claude-plugin/plugin.json` ahead of `plugin.json`. Both entries are required; dropping either
+  // one re-opens the same gap from the other direction.
   { path: join(repoRoot, 'plugin.json'), key: 'version' },
   { path: join(repoRoot, '.release-please-manifest.json'), key: '.' },
 ];

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://github.com/minipuft/claude-prompts/tree/main/docs
+    url: https://github.com/minipuft/claude-prompts-mcp/tree/main/docs
     about: Browse guides, reference docs, and tutorials before opening an issue.
   - name: Troubleshooting Guide
-    url: https://github.com/minipuft/claude-prompts/blob/main/docs/guides/troubleshooting.md
+    url: https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/troubleshooting.md
     about: Check common issues and solutions first.

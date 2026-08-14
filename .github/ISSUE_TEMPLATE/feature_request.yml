@@ -1,19 +1,19 @@
 name: Feature Request
 description: Suggest a new feature or improvement
-labels: ["enhancement", "triage"]
+labels: ["enhancement"]
 type: Feature
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a feature. Please check [existing requests](https://github.com/minipuft/claude-prompts/issues?q=is%3Aissue+label%3Aenhancement) first to avoid duplicates.
+        Thanks for suggesting a feature. Please check [existing requests](https://github.com/minipuft/claude-prompts-mcp/issues?q=is%3Aissue+label%3Aenhancement) first to avoid duplicates.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Preflight
       options:
-        - label: I searched [existing requests](https://github.com/minipuft/claude-prompts/issues?q=is%3Aissue+label%3Aenhancement) and this hasn't been requested
+        - label: I searched [existing requests](https://github.com/minipuft/claude-prompts-mcp/issues?q=is%3Aissue+label%3Aenhancement) and this hasn't been requested
           required: true
 
   - type: textarea

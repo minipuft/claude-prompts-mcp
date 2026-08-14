@@ -55,6 +55,42 @@ function findViolations(source) {
   if (!source.includes('[ "$installed" = "$VERSION" ]')) {
     violations.push('installed downstream version is not required to equal the release');
   }
+  // The marketplace install URL has no redirect mechanism, so a listing pointing at a rename
+  // redirect breaks every install the day the old name is reclaimed — and nothing else looks.
+  // This assertion previously lived in `validate-versions.js --distribution`, which was reachable
+  // only from a workflow with zero runs; it was deleted 2026-08-13 and rebuilt HERE, in the job
+  // that already edits the marketplace entry and can block the release. Guarded rather than
+  // merely written, because the last copy was removable without anything noticing.
+  if (!source.includes('[ "$actual_url" = "${REPOSITORY}.git" ]')) {
+    violations.push('marketplace source url is not asserted against the canonical repository');
+  }
+  if (!source.includes('[ "$actual_ref" = "dist" ]')) {
+    violations.push('marketplace source ref is not asserted to be the published dist branch');
+  }
+
+  // The codex-prompts entry sits in the same marketplace file and no job writes it: the sync
+  // jq selects `claude-prompts` only. Both facts about it therefore need asserting here, or
+  // nothing does.
+  if (!source.includes('[ "$codex_ref" = "dist" ]')) {
+    violations.push(
+      'codex-prompts marketplace ref is not asserted to be its published dist branch'
+    );
+  }
+  // Absence, not a value. A version field nobody writes goes stale, and Claude Code keys its
+  // install directory on it — two dist trees would collide in one cache dir.
+  if (!source.includes('[ "$codex_version" = "false" ]')) {
+    violations.push('codex-prompts marketplace entry is not asserted to be version-free');
+  }
+  // Derived, not hardcoded: a literal slug here is a second thing to update at the next rename,
+  // which is how the previous guard's URL went stale in `fleet.json`.
+  if (
+    source.includes('marketplace') &&
+    !source.includes("require('./upstream/plugin.json').repository")
+  ) {
+    violations.push(
+      'marketplace source url assertion does not derive the repository from plugin.json'
+    );
+  }
   for (const path of REQUIRED_RELEASE_PATHS) {
     if (!source.includes(path)) violations.push(`release asset is not explicit: ${path}`);
   }
@@ -80,6 +116,12 @@ function runSelfTest() {
       auto)
       synchronize-downstream-lock.js
       [ "$installed" = "$VERSION" ]
+      marketplace)
+      require('./upstream/plugin.json').repository
+      [ "$actual_url" = "\${REPOSITORY}.git" ]
+      [ "$actual_ref" = "dist" ]
+      [ "$codex_ref" = "dist" ]
+      [ "$codex_version" = "false" ]
       cpm-\${{ steps.version.outputs.version }}.js
       cpm-\${{ steps.version.outputs.version }}.js.sha256
       claude-prompts-\${{ steps.version.outputs.version }}-sourcemaps.tar.gz
@@ -87,6 +129,11 @@ function runSelfTest() {
   `;
   const cases = [
     ['missing merge mode', healthy.replace('            merge_mode: auto\n', '')],
+    ['codex marketplace ref unasserted', healthy.replace('      [ "$codex_ref" = "dist" ]\n', '')],
+    [
+      'codex version field left writable',
+      healthy.replace('      [ "$codex_version" = "false" ]\n', ''),
+    ],
     ['unknown merge mode', healthy.replace('merge_mode: auto', 'merge_mode: guess')],
     ['direct merge regression', healthy.replace('      auto)\n', '      auto)\n      direct)\n')],
     [
@@ -96,6 +143,20 @@ function runSelfTest() {
     [
       'missing exact installed version assertion',
       healthy.replace('      [ "$installed" = "$VERSION" ]\n', ''),
+    ],
+    [
+      'missing marketplace source url assertion',
+      healthy.replace('      [ "$actual_url" = "${REPOSITORY}.git" ]\n', ''),
+    ],
+    [
+      'missing marketplace source ref assertion',
+      healthy.replace('      [ "$actual_ref" = "dist" ]\n', ''),
+    ],
+    [
+      // The regression that matters most: re-hardcoding the slug. It passes the url assertion
+      // above while re-creating the drift that left `fleet.json` on the pre-rename name.
+      'marketplace url hardcoded instead of derived',
+      healthy.replace("      require('./upstream/plugin.json').repository\n", ''),
     ],
     [
       'missing release asset',

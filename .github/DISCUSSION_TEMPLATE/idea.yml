@@ -1,0 +1,56 @@
+title: "[Idea]: "
+category: Ideas
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for an unresolved idea or RFC. Once the problem and acceptance criteria are understood, convert the discussion to an Issue before implementation begins.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What is difficult today, and who experiences it?
+      placeholder: Describe the current situation without assuming a solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and examples
+      description: Provide concrete examples, links, measurements, or prior attempts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: direction
+    attributes:
+      label: Candidate direction
+      description: What approach should be explored, and what alternatives remain open?
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision criteria
+      description: What must be true before this becomes accepted implementation work?
+      placeholder: List observable acceptance criteria, constraints, and risks.
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and related work
+      description: Link related discussions, Issues, plans, pull requests, or external references.
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Intake check
+      options:
+        - label: This is unresolved discovery, not an implementation commitment.
+          required: true

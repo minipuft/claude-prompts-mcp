@@ -1,19 +1,19 @@
 name: Bug Report
 description: Report a bug in the Claude Prompts MCP server
-labels: ["bug", "triage"]
+labels: ["bug"]
 type: Bug
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting this bug. Please check [existing issues](https://github.com/minipuft/claude-prompts/issues?q=is%3Aissue+label%3Abug) and [troubleshooting](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/troubleshooting.md) first.
+        Thanks for reporting this bug. Please check [existing issues](https://github.com/minipuft/claude-prompts-mcp/issues?q=is%3Aissue+label%3Abug) and [troubleshooting](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/troubleshooting.md) first.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Preflight
       options:
-        - label: I searched [existing issues](https://github.com/minipuft/claude-prompts/issues?q=is%3Aissue+label%3Abug) and this hasn't been reported
+        - label: I searched [existing issues](https://github.com/minipuft/claude-prompts-mcp/issues?q=is%3Aissue+label%3Abug) and this hasn't been reported
           required: true
         - label: I'm using the [latest version](https://www.npmjs.com/package/claude-prompts)
           required: true

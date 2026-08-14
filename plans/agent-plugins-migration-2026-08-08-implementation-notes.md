@@ -131,301 +131,11 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
-- 2026-08-13 05:56 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
-- 2026-08-13 05:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -5` · ran
-- 2026-08-13 05:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -6` · ran
-- 2026-08-13 05:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write scripts/lib/substrate.js scripts/run-valid` · ran
-- 2026-08-13 05:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --input-type=module -e " import {readFileSync,writeFileSyn` · ran
-- 2026-08-13 05:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --input-type=module -e " import {readFileSync,writeFileSyn` · ran
-- 2026-08-13 05:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -12` · ran
-- 2026-08-13 05:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== E8(1) validate:readme ===" && npm run validate:readme` · ran
-- 2026-08-13 04:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
-- 2026-08-13 04:51 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
-- 2026-08-13 04:51 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx jest tests/unit/scripts/validation-self-tests.test.ts 2>&1 ` · ran
-- 2026-08-13 04:49 · `cd /home/minipuft/Applications/claude-prompts-mcp npm --prefix server run plans:retire:self-test --silent 2>&1 | tail -2` · ran
-- 2026-08-12 19:26 · `cd /home/minipuft/Applications/claude-prompts-mcp ls -la plans/subagent-delegation-contract-2026-08-12*.md echo "=== all` · ran
-- 2026-08-12 19:25 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/adaptive-chain-runtime-2026-08-09.md >/dev/` · ran
-- 2026-08-12 19:23 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:plans/adaptive-chain-runtime-2026-08-09.md > plans/zz-he` · ran
-- 2026-08-12 19:23 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:plans/adaptive-chain-runtime-2026-08-09.md > plans/.acr-` · ran
-- 2026-08-12 19:22 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== was it dirty BEFORE my edit? (compare against the staged/HEA` · ran
-- 2026-08-12 19:22 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== plan lint on all three ===" python3 ~/.claude/hooks/planning` · ran
-- 2026-08-12 18:57 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write scripts/hook-harness.mjs >/dev/null 2>&1 npx pret` · ran
-- 2026-08-12 18:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import json, pathlib, re p = pathlib.Path("pac` · ran
-- 2026-08-12 18:22 · `cd ~/.claude echo '{"tool_name":"Bash","tool_input":{"command":"npm run typecheck --prefix /nonexistent 2>&1 | head -2"}` · ran
-- 2026-08-12 18:21 · `H=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad/hook-h` · ran
-- 2026-08-12 18:10 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write scripts/validate-hook-registration.js >/dev/null ` · ran
-- 2026-08-12 18:10 · `cd /home/minipuft/Applications/claude-prompts-mcp git show HEAD:scripts/validate-hook-registration.js > /tmp/claude-1000` · ran
-- 2026-08-12 18:10 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff --stat hooks/hooks.json && echo "hooks.json: byte-identical t` · ran
-- 2026-08-12 18:07 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== is it in validate:all / CI? ==="; rg -n 'hook-registration' ` · ran
-- 2026-08-12 17:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:format 2>&1 | grep -E '^\[warn\]' | head -6 ec` · ran
-- 2026-08-12 17:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E '^(──|✔|✖)|of [0-9]+ passed` · ran
-- 2026-08-12 17:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | rg -E '^(──|✔|✖|PASS|FAIL|[0-9]+/[0` · ran
-- 2026-08-12 17:49 · `cd /home/minipuft/Applications/claude-prompts-mcp/server rg -n 'plan-row-tracking:self-test' scripts/run-validation-suit` · ran
-- 2026-08-12 17:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== eslint (custom rule) ==="; npx eslint scripts/validat` · ran
-- 2026-08-12 17:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== wired into validate:all? ==="; rg -o 'validate:plan-r` · ran
-- 2026-08-12 17:44 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path("plans/agent-plugins-` · ran
-- 2026-08-12 17:43 · `cd ~/.claude && bash scripts/check-rules.sh 2>&1 | rg -i 'cleanup|FAIL|SUMMARY'` · ran
-- 2026-08-12 17:34 · `cd ~/.claude && bash scripts/check-rules.sh 2>&1 | tail -20` · ran
-- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --check plans/agent-plugins-migration-2026-08-08.md plans` · ran
-- 2026-08-12 17:27 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path("plans/agent-plugins-` · ran
-- 2026-08-12 17:15 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/agent-plugins-migration-2026-08-08.md >/dev` · ran
-- 2026-08-12 16:54 · `cd /home/minipuft/Applications/claude-prompts-mcp npx prettier --write plans/agent-plugins-migration-2026-08-08.md plans` · ran
-- 2026-08-12 16:54 · `cd /home/minipuft/Applications/claude-prompts-mcp tmp=$(mktemp -d) for f in plans/agent-plugins-migration-2026-08-08.md ` · ran
-- 2026-08-12 16:54 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== are the 4 frontmatter-less files foreign? ===" git status --` · ran
-- 2026-08-12 16:22 · `cd /home/minipuft/Applications/claude-prompts-mcp git worktree remove --force /tmp/idxcheck 2>/dev/null; git worktree pr` · ran
-- 2026-08-12 16:22 · `cd /tmp/headcheck/server && npm run test:e2e 2>&1 | grep -E "^Tests:|^Test Suites:" git worktree remove --force /tmp/hea` · ran
-- 2026-08-12 16:22 · `cd /tmp/headcheck/server npm run validate:all 2>&1 | tail -3 npm run test:ci 2>&1 | grep -E "^Tests:|^Test Suites:" npm ` · ran
-- 2026-08-12 16:20 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/headcheck && git worktree add -q --detach /tmp/headcheck H` · ran
-- 2026-08-12 16:17 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== visibility leaked into 0e8b7875? ===" git show 0e8b7875 | gr` · ran
-- 2026-08-12 16:16 · `cd /tmp/idxcheck/server ln -sfn /home/minipuft/Applications/claude-prompts-mcp/server/node_modules ./node_modules 2>/dev` · ran
-- 2026-08-12 16:16 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path('/tmp/claude-1000/min` · ran
-- 2026-08-12 16:16 · `cd /home/minipuft/Applications/claude-prompts-mcp TREE=$(git write-tree) rm -rf /tmp/idxcheck git worktree add -q --deta` · ran
-- 2026-08-12 07:51 · `cd /home/minipuft/Applications/claude-prompts-mcp python3 - <<'PY' import pathlib p = pathlib.Path('plans/agent-plugins-` · ran
-- 2026-08-12 07:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "Validation suite|steps fai` · ran
-- 2026-08-12 07:48 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:e2e 2>&1 | grep -E "^Tests:|^Test Suites:|●" | hea` · ran
-- 2026-08-12 07:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | grep -E "^Tests:|^Test Suites:" npm run ` · ran
-- 2026-08-12 07:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run build >/dev/null 2>&1 npm run validate:all 2>&1 | grep ` · ran
-- 2026-08-12 07:42 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/mcp/tools` · ran
-- 2026-08-12 07:41 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src scripts eslint-rules --format json 2>/dev/null |` · ran
-- 2026-08-12 07:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node scripts/eslint-ratchet.js check 2>&1 | grep -A3 "prettier"` · ran
-- 2026-08-12 07:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint src tests scripts --ext .ts,.js --format compact 2>&` · ran
-- 2026-08-12 07:40 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/mcp/tools` · ran
-- 2026-08-12 07:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== prettier violation location ===" npx eslint src tests` · ran
-- 2026-08-12 07:38 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== who owns the new plan file? ==="; git status --porcelain pla` · ran
-- 2026-08-12 07:38 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== lint:ratchet ==="; npm run lint:ratchet 2>&1 | grep -` · ran
-- 2026-08-12 07:37 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run build >/dev/null 2>&1 && echo "build ok" npm run valida` · ran
-- 2026-08-12 07:36 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import json, pathlib p = pathlib.Path('.typech` · ran
-- 2026-08-12 07:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp .typecheck-tests-ratchet-baseline.json /tmp/tb.bak python3 -` · ran
-- 2026-08-12 07:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run typecheck:tests:ratchet 2>&1 | grep -E "FAIL|PASS|disap` · ran
-- 2026-08-12 07:35 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx tsc --noEmit -p tsconfig.json 2>&1 | head -5; echo "--- tsc` · ran
-- 2026-08-12 07:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('tooling/contr` · ran
-- 2026-08-12 07:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -n '9p' src/mcp/tools/resource-manager/core/router.ts pytho` · ran
-- 2026-08-12 07:30 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib, re p = pathlib.Path('src/mcp/t` · ran
-- 2026-08-12 07:29 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/mcp/tools` · ran
-- 2026-08-12 07:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('tests/unit/pr` · ran
-- 2026-08-12 07:28 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/modules/p` · ran
-- 2026-08-12 07:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
-- 2026-08-12 07:27 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
-- 2026-08-12 07:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
-- 2026-08-12 07:26 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('tests/unit/pr` · ran
-- 2026-08-12 07:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/modules/p` · ran
-- 2026-08-12 07:20 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "Validation suite|steps fai` · ran
-- 2026-08-12 07:17 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write src/modules/prompts/prompt-schema.ts >/dev` · ran
-- 2026-08-12 07:17 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== my prompt-schema additions ===" npx eslint src/module` · ran
-- 2026-08-12 07:16 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run lint:ratchet 2>&1 | grep -E "PASS|FAIL|increased|^- " |` · ran
-- 2026-08-12 07:16 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/engine/ex` · ran
-- 2026-08-12 07:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 - <<'PY' import pathlib p = pathlib.Path('src/engine/ex` · ran
-- 2026-08-12 07:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== 12-framework-stage: cognitive + my nullable-boolean =` · ran
-- 2026-08-12 07:14 · `cd /home/minipuft/Applications/claude-prompts-mcp/server for f in src/engine/execution/pipeline/stages/12-framework-stag` · ran
-- 2026-08-12 07:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run lint:ratchet 2>&1 | grep -A12 "Rules that increased" | ` · ran
-- 2026-08-12 07:13 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-plan-row-tracking.js src/modules/pr` · ran
-- 2026-08-12 07:11 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "Validation suite|steps fai` · ran
-- 2026-08-12 07:09 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write scripts/validate-plan-row-tracking.js scri` · ran
-- 2026-08-12 07:02 · `cd /home/minipuft/Applications/claude-prompts-mcp/server run() { NODE_OPTIONS=--experimental-vm-modules npx jest tests/u` · ran
-- 2026-08-12 07:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write src/modules/prompts/prompt-schema.ts >/dev` · ran
-- 2026-08-12 07:01 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -i 's/^describe(.ChainStepSchema — D11 strictness/describe(` · ran
-- 2026-08-12 06:58 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | grep -E "✕|● ChainStep|● Delegation|●.*›` · ran
-- 2026-08-12 06:57 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run test:ci 2>&1 | tail -20` · ran
-- 2026-08-12 06:56 · `cd /home/minipuft/Applications/claude-prompts-mcp/server names() { NODE_OPTIONS=--experimental-vm-modules npx jest tests` · ran
-- 2026-08-12 06:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server run() { NODE_OPTIONS=--experimental-vm-modules npx jest tests/u` · ran
-- 2026-08-12 06:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/prom` · ran
-- 2026-08-12 06:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server sed -i "s|import type { FrameworkDecisionInput } from '../decis` · ran
-- 2026-08-12 06:52 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write src/modules/prompts/prompt-schema.ts >/dev` · ran
-- 2026-08-12 06:48 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node scripts/validate-operator-registry-drift.js --self-test >/` · ran
-- 2026-08-12 06:47 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== who reads .examples downstream ==="; rg -rn "\.examples\b" h` · ran
-- 2026-08-12 06:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server python3 -c " import json,re d=json.load(open('tooling/contracts` · ran
-- 2026-08-12 06:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node scripts/validate-agent-plugins.js; echo "exit=$?" cd .. &&` · ran
-- 2026-08-12 04:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -A6 "steps failed" | head -20 ` · ran
-- 2026-08-12 04:46 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | grep -E "^(✔|✖|✅|❌|\[[0-9]+/[0-9]+\` · ran
-- 2026-08-12 04:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate:all at working tree ==="; npm run validate:a` · ran
-- 2026-08-12 02:35 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/final && git worktree add --detach --quiet /tmp/final HEAD` · ran
-- 2026-08-12 02:32 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== validate-versions with root plugin.json registered ==` · ran
-- 2026-08-12 02:27 · `cd /tmp/e10e/server echo "=== typecheck (committed state) ==="; npx tsc --noEmit -p tsconfig.json 2>&1 | grep -c "error ` · ran
-- 2026-08-12 02:23 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/int` · ran
-- 2026-08-12 02:04 · `cd /tmp/cpm-w/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "command-parsing-stage" | head -4 echo` · ran
-- 2026-08-12 02:04 · `cd /home/minipuft/Applications/claude-prompts-mcp git worktree remove --force /tmp/cpm-t 2>/dev/null; rm -rf /tmp/cpm-t ` · ran
-- 2026-08-12 02:03 · `cd /tmp/cpm-t/server && npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "claims-conformance" | head -5` · ran
-- 2026-08-12 01:43 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run -s typecheck:committed; echo "exit=$?" echo "=== lint t` · ran
-- 2026-08-12 01:42 · `cd /home/minipuft/Applications/claude-prompts-mcp # Reproduce the exact defect shape: commit a consumer, leave its provi` · ran
-- 2026-08-12 01:41 · `cd /home/minipuft/Applications/claude-prompts-mcp rm -rf /tmp/cpm-headcheck git worktree add --detach /tmp/cpm-headcheck` · ran
-- 2026-08-12 01:39 · `cd /home/minipuft/Applications/claude-prompts-mcp cp server/src/engine/execution/parsers/types/operator-types.ts /tmp/cp` · ran
-- 2026-08-12 01:39 · `cd /home/minipuft/Applications/claude-prompts-mcp cp server/src/shared/utils/node-order.ts /tmp/cpm-headcheck/server/src` · ran
-- 2026-08-12 01:38 · `cd /tmp/cpm-headcheck/server npx tsc --noEmit -p tsconfig.json 2>&1 | sed 's/(.*//' | sort -u echo "--- total errors at ` · ran
-- 2026-08-12 01:38 · `cd /tmp/cpm-headcheck/server ln -s /home/minipuft/Applications/claude-prompts-mcp/server/node_modules node_modules 2>/de` · ran
-- 2026-08-12 00:21 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --check ../plans/agent-plugins-migration-2026-08-0` · ran
-- 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx eslint scripts/validate-operator-registry-drift.js scripts/` · ran
-- 2026-08-12 00:15 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "### typecheck"; npx tsc --noEmit -p tsconfig.json 2>&1 | ` · ran
-- 2026-08-12 00:10 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cat > /tmp/d7probe.mjs <<'EOF' const { ChainStepSchema } = awai` · ran
-- 2026-08-12 00:09 · `cd /home/minipuft/Applications/claude-prompts-mcp echo "=== hooks pytest ==="; python3 -m pytest hooks/tests -q 2>&1 | t` · ran
-- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp /tmp/ops.bak tooling/contracts/registries/operators.json nod` · ran
-- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
-- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server cp tooling/contracts/registries/operators.json /tmp/ops.bak # M` · ran
-- 2026-08-12 00:05 · `cd /home/minipuft/Applications/claude-prompts-mcp/server rm -f tests/unit/execution/parsers/__probe_d9.test.ts node --ex` · ran
-- 2026-08-12 00:04 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx tsc --noEmit --project tsconfig.json 2>&1 | head -10; echo ` · ran
-- 2026-08-12 00:03 · `cd /home/minipuft/Applications/claude-prompts-mcp git diff --numstat server/tooling/contracts/registries/operators.json ` · ran
-- 2026-08-12 00:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
-- 2026-08-12 00:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
-- 2026-08-12 00:00 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --experimental-vm-modules node_modules/.bin/jest tests/uni` · ran
-- 2026-08-11 23:59 · `npx jest tests/unit/execution/parsers/__probe_d9.test.ts 2>&1 | tail -40` · ran
-- 2026-08-11 23:59 · `npx jest tests/unit/execution/parsers/__probe_d9.test.ts 2>&1 | grep -E 'REGISTRY|cmd|✓|✕|Tests:' | head -20` · ran
-- 2026-08-11 23:51 · `cd server && npx tsc --noEmit --project tsconfig.json 2>&1 | head -4; echo "exit=$?"` · ran
-- 2026-08-11 23:50 · `cd server && npm run -s validate:all 2>&1 | rg "steps failed|── |FAIL" | head -6; echo "=== e2e ==="; NODE_OPTIONS="--ex` · ran
-- 2026-08-11 23:48 · `rm -f tests/e2e/__probe6.test.ts; NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conform` · ran
-- 2026-08-11 23:47 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad cp te` · ran
-- 2026-08-11 23:47 · `SP=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad cp te` · ran
-- 2026-08-11 23:46 · `python3 - <<'PY' p='tests/e2e/conformance/workspace-and-mutations.yaml' s=open(p).read() s += """ # ── Framework switch ` · ran
-- 2026-08-11 23:46 · `python3 - <<'PY' p='tests/e2e/conformance/chain-lifecycle.yaml' s=open(p).read() s += """ # ── gate_action retry / abort` · ran
-- 2026-08-11 23:45 · `cd server && python3 - <<'PY' p='tests/e2e/conformance/tool-surface.yaml' s=open(p).read() s += """ # ── Read-only resou` · ran
-- 2026-08-11 23:44 · `echo "callers of createCheckpointToolHandler:"; rg -n "createCheckpointToolHandler" src/ --type ts | rg -v "manager.ts:3` · ran
-- 2026-08-11 23:43 · `cd server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe6.test.ts 2>&1 | rg "^ ### "` · ran
-- 2026-08-11 21:36 · `npx eslint src --format json 2>/dev/null | python3 -c " import json,sys,os d=json.load(sys.stdin) for f in d: hits=[m fo` · ran
-- 2026-08-11 21:35 · `cd server && npm run validate:format 2>&1 | tail -2; npm run lint:ratchet 2>&1 | tail -2` · ran
-- 2026-08-11 21:34 · `python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08.md' s=open(p).read() start=s.index("**RESUME-FROM-COLD STAT` · ran
-- 2026-08-11 21:33 · `cd .. && python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08.md' s=open(p).read() def swap(s, key, new): i=s.in` · ran
-- 2026-08-11 21:33 · `cd .. && npx --prefix server prettier --write plans/agent-plugins-migration-2026-08-08.md >/dev/null 2>&1 && cd server &` · ran
-- 2026-08-11 21:33 · `cd server && npm run validate:format 2>&1 | tail -3; echo "=== E4 check: does the vocab gate still walk gitignored promp` · ran
-- 2026-08-11 21:03 · `cd /home/minipuft/Applications/claude-prompts-mcp && echo "commits:"; git log --oneline -2; echo; echo "staged and waiti` · ran
-- 2026-08-11 21:02 · `date "+now: %H:%M:%S"; stat -c '%y %n' scripts/eslint-ratchet.js .eslint-ratchet.json 2>/dev/null | cut -d. -f1,3; git s` · ran
-- 2026-08-11 21:02 · `cd server && npx prettier --write src/infra/config/index.ts src/mcp/tools/framework-manager/services/framework-file-writ` · ran
-- 2026-08-11 21:00 · `npx eslint src --format json 2>/dev/null | python3 -c " import json,sys d=json.load(sys.stdin) for f in d: hits=[m for m` · ran
-- 2026-08-11 21:00 · `rg -n "eslint|execFile|spawn" scripts/eslint-ratchet.js | rg -i "cmd|args|exec|spawn" | head -8` · ran
-- 2026-08-11 20:59 · `npm run lint:ratchet 2>&1 | tail -4` · ran
-- 2026-08-11 20:59 · `cd server && npx eslint --format unix . 2>/dev/null | rg "prettier/prettier" | head -5` · ran
-- 2026-08-11 19:14 · `date "+now: %H:%M:%S"; for f in server/src/infra/database/sqlite-engine.ts server/src/engine/execution/formatting/respon` · ran
-- 2026-08-11 19:13 · `cd server && node -e "JSON.parse(require('fs').readFileSync('tooling/contracts/prompt-engine.json','utf8')); console.log` · ran
-- 2026-08-11 18:37 · `cd server && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e 2>&1 | tail -6; echo "=== validate ` · ran
-- 2026-08-11 18:30 · `npm run validate:all 2>&1 | rg "steps failed|── |FAIL" | head -10` · ran
-- 2026-08-11 18:29 · `npx prettier --write tests/e2e/conformance/*.yaml src/engine/execution/parsers/command-tokenizer.ts src/mcp/tools/schema` · ran
-- 2026-08-11 18:28 · `npm run test:ci 2>&1 | rg "●|Tests:|Suites:" | head -10` · ran
-- 2026-08-11 18:27 · `npm run validate:tool-schemas 2>&1 | rg "force_restart|^\s*[+-]|Refresh|snapshot|exit" | head -20` · ran
-- 2026-08-11 18:27 · `npm run build >/dev/null 2>&1; npm run validate:contracts 2>&1 | tail -3; npm run validate:tool-schemas 2>&1 | tail -5` · ran
-- 2026-08-11 18:27 · `python3 - <<'PY' import json p='tooling/contracts/prompt-engine.json' d=json.load(open(p)) for prm in d['parameters']: i` · ran
-- 2026-08-11 18:27 · `python3 - <<'PY' p='tests/e2e/conformance/chain-lifecycle.yaml' s=open(p).read() s=s.replace(""" command: '${cid}' user_` · ran
-- 2026-08-11 18:26 · `cp tests/e2e/conformance/chain-lifecycle.yaml /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8` · ran
-- 2026-08-11 18:26 · `python3 - <<'PY' p='src/engine/execution/parsers/command-tokenizer.ts' s=open(p).read() s=s.replace(" if (!hasChainOrDel` · ran
-- 2026-08-11 18:25 · `python3 - <<'PY' p='tests/e2e/conformance/chain-lifecycle.yaml' s=open(p).read() s += """ # ── force_restart (plan row 0` · ran
-- 2026-08-11 18:25 · `python3 - <<'PY' p='tests/e2e/conformance/symbolic-syntax.yaml' s=open(p).read() anchor = """ expect: { error_contains: ` · ran
-- 2026-08-11 18:24 · `rm tests/e2e/__probe5.test.ts; npm run test:ci 2>&1 | rg "●|✕|Tests:|Suites:" | head -25` · ran
-- 2026-08-11 18:23 · `python3 - <<'PY' p='tests/e2e/__probe5.test.ts' s=open(p).read() i=s.index(" // ── 0.5.16: force_restart") s=s[:i]+""" a` · ran
-- 2026-08-11 18:23 · `npm run build >/dev/null 2>&1 && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe5.test.t` · ran
-- 2026-08-11 18:22 · `npm run typecheck 2>&1 | tail -4 && npm run validate:arch 2>&1 | tail -4` · ran
-- 2026-08-11 18:21 · `python3 - <<'PY' p='tests/e2e/__probe5.test.ts' s=open(p).read() i=s.index(" // ── 0.5.17: gate_action skip") s=s[:i]+""` · ran
-- 2026-08-11 18:21 · `python3 - <<'PY' p='tests/e2e/__probe5.test.ts' s=open(p).read() s=s.replace(""" const cid = (t: string) => /chain_id="(` · ran
-- 2026-08-11 18:20 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe5.test.ts 2>&1 | rg -A 4 "^ ### " | head ` · ran
-- 2026-08-11 16:51 · `npm run validate:all 2>&1 | rg "steps failed|✅|All .* passed|plans:retire" | tail -6; echo "=== claims final ==="; NODE_` · ran
-- 2026-08-11 16:50 · `cd .. && npx --prefix server prettier --write plans/agent-plugins-migration-2026-08-08.md 2>&1 | tail -2 && cd server &&` · ran
-- 2026-08-11 16:50 · `npm run validate:all 2>&1 | rg -A 12 "steps failed" | head -30` · ran
-- 2026-08-11 16:49 · `npm run validate:all 2>&1 | rg "PASS|FAIL|steps failed|step time" | tail -12` · ran
-- 2026-08-11 16:47 · `npx prettier --write src/engine/execution/parsers/symbolic-operator-parser.ts src/engine/execution/formatting/response-a` · ran
-- 2026-08-11 16:47 · `npm run lint:ratchet 2>&1 | tail -3; npm run test:ci 2>&1 | tail -6` · ran
-- 2026-08-11 16:46 · `python3 - <<'PY' p='src/engine/execution/parsers/symbolic-operator-parser.ts' s=open(p).read() s=s.replace(" ...(verifyO` · ran
-- 2026-08-11 16:46 · `python3 - <<'PY' p='tests/e2e/conformance/prompt-engine-surface.yaml' s=open(p).read() s=s.replace("expect: { text_conta` · ran
-- 2026-08-11 16:45 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe4.test.ts 2>&1 | rg -A 3 "^ ### " | head ` · ran
-- 2026-08-11 16:44 · `python3 - <<'PY' p='src/engine/execution/formatting/response-assembler.ts' s=open(p).read() s=s.replace(""" const pendin` · ran
-- 2026-08-11 16:43 · `python3 - <<'PY' p='src/engine/execution/formatting/response-assembler.ts' s=open(p).read() s=s.replace(""" this.appendV` · ran
-- 2026-08-11 16:43 · `python3 - <<'PY' p='tests/e2e/conformance/prompt-engine-surface.yaml' s=open(p).read() old = """ # ── Gate presets: the ` · ran
-- 2026-08-11 16:42 · `npm run typecheck 2>&1 | tail -8` · ran
-- 2026-08-11 16:41 · `cd server && npm run test:ci 2>&1 | tail -12` · ran
-- 2026-08-11 16:39 · `cd server && npm run validate:all 2>&1 | tail -25` · ran
-- 2026-08-11 16:38 · `python3 - <<'PY' p='tests/e2e/conformance/prompt-engine-surface.yaml' s=open(p).read() s=s.replace(" expect: { resources` · ran
-- 2026-08-11 16:38 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conformance.test.ts 2>&1 | rg "●.*›|Tests` · ran
-- 2026-08-11 16:37 · `npm run typecheck 2>&1 | tail -5; echo "=== lint ==="; npm run lint:ratchet 2>&1 | tail -4` · ran
-- 2026-08-11 16:36 · `rg -n "validate:suite-membership" package.json | head -2; npm run validate:suite-membership 2>&1 | tail -6` · ran
-- 2026-08-11 16:36 · `python3 - <<'PY' import json,io,re p='package.json' s=open(p).read() s=s.replace(' "validate:readme": "node scripts/vali` · ran
-- 2026-08-11 16:36 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conformance.test.ts 2>&1 | rg "Tests:"; e` · ran
-- 2026-08-11 16:35 · `python3 - <<'PY' p='tests/e2e/conformance/workspace-and-mutations.yaml' s=open(p).read() s=s.replace(""" id: conformance` · ran
-- 2026-08-11 16:35 · `python3 - <<'PY' p='src/runtime/data-loader.ts' s=open(p).read() s=s.replace(" promptManager.clearLoaderCache();"," // M` · ran
-- 2026-08-11 16:35 · `npm run build 2>&1 | tail -3 && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conforman` · ran
-- 2026-08-11 16:33 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe3.test.ts 2>&1 | rg "### " | head -30` · ran
-- 2026-08-11 16:33 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conformance.test.ts -t "prompt-update-is-` · ran
-- 2026-08-11 16:33 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conformance.test.ts 2>&1 | rg "●.*›|Tests` · ran
-- 2026-08-11 16:32 · `python3 - <<'PY' p='tests/e2e/__probe2.test.ts' s=open(p).read() s=s.replace(""" const exec = (await c.request('tools/ca` · ran
-- 2026-08-11 16:31 · `python3 - <<'PY' p='tests/e2e/__probe2.test.ts' s=open(p).read() s=s.replace(""" console.log('\\n### on-disk prompt.yaml` · ran
-- 2026-08-11 16:31 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && python3 - <<'PY' p='tests/e2e/__probe2.test.ts' s=open(p).re` · ran
-- 2026-08-11 16:31 · `python3 - <<'PY' p='tests/e2e/__probe2.test.ts' s=open(p).read() s=s.replace(""" proc = startServerWithHttp(port, {""","` · ran
-- 2026-08-11 16:30 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe2.test.ts 2>&1 | rg -A 16 "^ ### " | head` · ran
-- 2026-08-11 16:29 · `python3 - <<'PY' p='tests/e2e/conformance/workspace-and-mutations.yaml' s=open(p).read() s=s.replace(""" id: conformance` · ran
-- 2026-08-11 16:29 · `python3 - <<'PY' p='tests/e2e/claims-conformance.test.ts' s=open(p).read() s=s.replace("cfg.resources = { ...(cfg.resour` · ran
-- 2026-08-11 16:29 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conformance.test.ts 2>&1 | rg "●.*›|✕" | ` · ran
-- 2026-08-11 16:29 · `cp tests/e2e/claims-conformance.test.ts /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a` · ran
-- 2026-08-11 16:28 · `rm tests/e2e/__probe.test.ts && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/claims-conforman` · ran
-- 2026-08-11 16:26 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe.test.ts 2>&1 | rg -A 14 "### (resources/` · ran
-- 2026-08-11 16:25 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe.test.ts 2>&1 | rg -A 12 "### resources/l` · ran
-- 2026-08-11 16:24 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe.test.ts 2>&1 | rg -B2 -A 20 "resources/l` · ran
-- 2026-08-11 16:24 · `NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/e2e/__probe.test.ts 2>&1 | tail -220` · ran
-- 2026-08-11 16:24 · `ls jest*.cjs jest*.js 2>/dev/null; rg -n "\"test:e2e\"" package.json` · ran
-- 2026-08-11 16:24 · `npx jest --config jest.config.e2e.cjs tests/e2e/__probe.test.ts 2>&1 | rg -A 30 "^### " | head -200` · ran
-- 2026-08-11 03:31 · `python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08-implementation-notes.md' s=open(p).read() anchor="- **'reso` · ran
-
-- 2026-08-11 03:29 · `npm run validate:no-methodology-vocab 2>&1 | tail -15` · ran
-- 2026-08-11 03:29 · `npm run validate:all 2>&1 | grep -E "All 32|steps failed|FAIL\(" | head -4; echo "=== claims ==="; npm run verify:claims` · ran
-
-- 2026-08-11 03:26 · `npm run validate:all 2>&1 | grep -E "All 32|steps failed|FAIL" | head -5; npm run typecheck 2>&1 | tail -1; npm run test` · ran
-- 2026-08-11 03:24 · `cd /home/minipuft/Applications/claude-prompts-mcp && echo "=== M1: wrong count in README ===" && sed -i 's/ships 27 prom` · ran
-- 2026-08-11 03:24 · `rm tests/e2e/conformance/zz-probe.yaml && python3 - <<'PY' p='tests/e2e/conformance/symbolic-syntax.yaml' s=open(p).read` · ran
-- 2026-08-11 03:22 · `python3 - <<'PY' p='scripts/validate-readme.js' s=open(p).read() old=" const line = Math.max(1, lines.findIndex((l) => l` · ran
-- 2026-08-11 03:22 · `python3 - <<'PY' p='scripts/validate-readme.js' s=open(p).read() if 'function escapeRegExp' not in s: s=s.replace("funct` · ran
-- 2026-08-11 03:22 · `npm run validate:readme 2>&1 | tail -20` · ran
-
-- 2026-08-11 03:02 · `cd server && npm run test:e2e 2>&1 | grep -E "Tests:|Test Suites:" ; npm run test:ci 2>&1 | grep -E "Test Suites:|Tests:` · ran
-- 2026-08-11 03:00 · `npm run validate:all 2>&1 | grep -E "FAIL|❌|All 32|steps failed|plans:" | head -10` · ran
-- 2026-08-11 02:59 · `npm run validate:all 2>&1 | tail -4; npm run typecheck 2>&1 | tail -1; npm run typecheck:tests:ratchet 2>&1 | tail -1` · ran
-- 2026-08-11 02:19 · `cd server && npm run validate:all 2>&1 | tail -4 && echo "=== claims ===" && npm run verify:claims 2>&1 | grep "Tests:" ` · ran
-
-- 2026-08-11 02:15 · `npm run typecheck 2>&1 | tail -2; npm run typecheck:tests:ratchet 2>&1 | tail -2; npm run test:e2e 2>&1 | grep -E "Tests` · ran
-- 2026-08-11 02:13 · `npx prettier --write tests/e2e/claims-conformance.test.ts >/dev/null 2>&1; npm run validate:all 2>&1 | tail -5` · ran
-- 2026-08-11 02:12 · `npx tsc --noEmit --project tsconfig.test.json 2>&1 | grep "claims-conformance" | head -5` · ran
-- 2026-08-11 02:12 · `npm run validate:all 2>&1 | tail -6` · ran
-- 2026-08-11 02:04 · `npm run typecheck 2>&1 | tail -2; npm run typecheck:tests:ratchet 2>&1 | tail -2; npm run test:e2e 2>&1 | grep -E "Tests` · ran
-- 2026-08-11 02:03 · `npm run validate:all 2>&1 | tail -5 && echo "=== claims ===" && npm run verify:claims 2>&1 | grep "Tests:" && echo "=== ` · ran
-- 2026-08-11 02:02 · `npm run lint:ratchet 2>&1 | tail -6; echo "=== script def ==="; rg -n '"lint:ratchet"|"lint"' package.json` · ran
-- 2026-08-11 02:01 · `npx eslint . --format json 2>/dev/null | python3 -c " import json,sys d=json.load(sys.stdin) for f in d: for m in f.get(` · ran
-- 2026-08-11 02:01 · `npx prettier --write tests/unit/execution/parsers/command-parser.test.ts >/dev/null 2>&1 && npm run lint:ratchet 2>&1 | ` · ran
-- 2026-08-11 02:00 · `npx prettier --check src/engine/execution/parsers/command-parser.ts src/engine/execution/parsers/operator-patterns.ts te` · ran
-- 2026-08-11 02:00 · `npx --prefix server prettier --write plans/agent-plugins-migration-2026-08-08.md plans/agent-plugins-migration-2026-08-0` · ran
-
-- 2026-08-11 01:58 · `npm run test:ci 2>&1 | tail -8` · ran
-- 2026-08-11 01:56 · `NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/execution/formatting/response-assembler-cta.test.ts 2>&1 | gr` · ran
-- 2026-08-11 01:56 · `npm run test:ci 2>&1 | tail -15` · ran
-- 2026-08-11 01:55 · `npm run typecheck:tests:ratchet 2>&1 | tail -6; echo "=== e2e ==="; npm run test:e2e 2>&1 | tail -8` · ran
-- 2026-08-11 01:55 · `npm run typecheck 2>&1 | tail -5 && echo "=== validate:all ===" && npm run validate:all 2>&1 | tail -20` · ran
-- 2026-08-11 01:54 · `cat >> tests/unit/execution/parsers/command-parser.test.ts <<'EOF' describe('reserved operators (operators.json status: ` · ran
-- 2026-08-11 01:46 · `sed -i 's|const r: any = (parser as any).parseCommand(cmd, basePrompts);|const r: any = await (parser as any).parseComma` · ran
-- 2026-08-11 01:46 · `cp /tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad/probe` · ran
-- 2026-08-11 01:36 · `git status --short | rg "adaptive-chain" | head -3; echo "--- validate:all ---"; cd server && npm run validate:all 2>&1 ` · ran
-- 2026-08-09 21:34 · `cd server && npm run validate:all 2>&1 | rg "^❌|^✅|── validate" | head -6; cd .. && echo "=== remaining format failure —` · ran
-- 2026-08-09 21:33 · `python3 - <<'PY' p='server/scripts/validate-no-methodology-vocab.js' s=open(p).read() a="return ripgrep('rg -n -i --no-h` · ran
-- 2026-08-09 21:32 · `cd /home/minipuft/Applications/claude-prompts-mcp && mv server/resources/prompts/.ignore /tmp/claude-1000/-home-minipuft` · ran
-- 2026-08-09 21:32 · `npm run validate:no-methodology-vocab 2>&1 | rg -o "prompts/[a-z_-]+/" | sort | uniq -c | head -8` · ran
-- 2026-08-09 21:32 · `cd server && npm run verify:claims 2>&1 | rg "Tests:" && npm run validate:all 2>&1 | rg "^❌|^✅|── validate" | head -8` · ran
-- 2026-08-09 21:30 · `npm run validate:all 2>&1 | grep -E "steps failed|All .* steps|── validate" | head -10; echo "=== live state.db untouche` · ran
-- 2026-08-09 21:29 · `npm run verify:claims 2>&1 | grep -E "Tests:"; echo "=== test:e2e ==="; npm run test:e2e 2>&1 | grep -E "Tests:|Suites:"` · ran
-- 2026-08-09 21:28 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --write plans/agent-plugins-migration-` · ran
-
-- 2026-08-09 21:26 · `npx prettier --check "tests/e2e/conformance/*.yaml" "tests/e2e/claims-conformance.test.ts" 2>&1 | tail -5; echo "=== whi` · ran
-- 2026-08-09 21:25 · `npm run validate:all 2>&1 | tail -45` · ran
-- 2026-08-09 21:25 · `npm run verify:claims 2>&1 | grep -E "Tests:|Suites:" ; echo "=== typecheck ==="; npm run typecheck 2>&1 | tail -5; echo` · ran
-- 2026-08-09 21:19 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08.md' s=` · ran
-- 2026-08-09 15:14 · `python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08.md' lines=open(p).read().split('\n') out=[] for l in lines:` · ran
-- 2026-08-09 15:13 · `npm run test:e2e 2>&1 | tail -5 && cd .. && python3 -m pytest hooks/tests/test_operator_detection.py -q 2>&1 | tail -4` · ran
-- 2026-08-09 15:13 · `npm run build 2>&1 | tail -1 && npm run typecheck 2>&1 | tail -2 && npm run verify:claims 2>&1 | rg "Tests:" && npm run ` · ran
-- 2026-08-09 06:18 · `python3 - <<'PY' p='plans/agent-plugins-migration-2026-08-08.md' lines=open(p).read().split('\n') for i,l in enumerate(l` · ran
-- 2026-08-09 06:11 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --write plans/agent-plugins-migration-` · ran
-- 2026-08-09 05:48 · `npx --prefix server prettier --write plans/agent-plugins-migration-2026-08-08.md >/dev/null 2>&1 && cd server && npm run` · ran
-- 2026-08-09 05:47 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --write plans/agent-plugins-migration-` · ran
-- 2026-08-09 05:46 · `cd server && npm run typecheck 2>&1 | tail -2 && npm run test:e2e 2>&1 | tail -5 && npm run validate:all 2>&1 | tail -3` · ran
-- 2026-08-09 05:35 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --write plans/agent-plugins-migration-` · ran
-- 2026-08-09 05:33 · `npx --prefix server prettier --write tests/e2e/conformance/*.yaml >/dev/null 2>&1; npm run validate:all 2>&1 | tail -4 &` · ran
-- 2026-08-09 05:25 · `npx --prefix server prettier --write plans/agent-plugins-migration-2026-08-08.md >/dev/null 2>&1 && cd server && npm run` · ran
-- 2026-08-09 05:24 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --write plans/agent-plugins-migration-` · ran
-- 2026-08-09 05:22 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --write plans/agent-plugins-migration-` · ran
-- 2026-08-09 05:21 · `npm run typecheck 2>&1 | tail -2 && npm run typecheck:tests:ratchet 2>&1 | tail -2 && npm run validate:all 2>&1 | tail -` · ran
-- 2026-08-09 05:20 · `SC=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad && cp` · ran
-- 2026-08-09 05:20 · `SC=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad && cp` · ran
-- 2026-08-09 05:20 · `SC=/tmp/claude-1000/-home-minipuft-Applications-claude-prompts-mcp/d1f0b94c-8cac-4a3c-a71b-a1c728c5aeb0/scratchpad && cp` · ran
-- 2026-08-09 05:19 · `npm run validate:readme 2>&1 | tail -8; echo "exit=$?"; echo "=== falsify: does it catch an undocumented-in-corpus const` · ran
-- 2026-08-09 05:11 · `cd /home/minipuft/Applications/claude-prompts-mcp && npx --prefix server prettier --check plans/agent-plugins-migration-` · ran
-- 2026-08-09 05:11 · `npm run validate:all 2>&1 | tail -10` · ran
+Moved out of this file 2026-08-14 → `agent-plugins-migration-2026-08-08.validation-log.md`
+(gitignored sidecar, beside this file). 330 machine-written lines lived here — ~40% of this
+document — and every validation command re-dirtied a tracked file, so the standing choice was
+commit noise or a permanently dirty tree. A dirty notes file is also what the Stop gate reads,
+so the two hooks fed each other. Deviations and findings stay here; shell telemetry does not.
 
 ## Deviations — isolated-workspace batch (2026-08-11)
 
@@ -831,3 +541,578 @@ retirement is the tooling Tier 7 absorbed from federation; the code fixes are co
   `server/README.md` carry 11 pre-existing broken links that would need target rulings first, and a
   gate that starts red is a gate nobody turns on. Open — flips when those 11 are resolved or
   exempted.
+
+## Deviations — Tier 2 + Tier 3 execution (2026-08-13)
+
+Section A re-measurement ran before any file was written. The rows below are logged as hit, not
+reconstructed afterwards.
+
+- **DEV-T2-1** — the tier's gate named four comparison trees; only one is a render. `gemini-prompts`
+  symlinks `hooks/lib` into `node_modules/claude-prompts/` and carries its own differing adapters,
+  `opencode-prompts` tracks no `hooks/` and no `server/`. Scope corrected in `render-targets.json`
+  with `renderKind` per target rather than deleting the entries — Tiers 4 and 5 still need them.
+- **DEV-T2-2** — serialization was measured, not chosen. Both published files are byte-exactly
+  `JSON.stringify(obj, null, 2) + "\n"`; both canonical sources are Prettier-formatted and are not.
+  `.claude-plugin/plugin.json` is prettierignored because release-please writes it, and
+  release-please emits that exact serialization. Choosing Prettier's would have put the renderer in
+  a rewrite war with the release bot on every release.
+- **DEV-T2-3** — 2.3's premise ran backwards. The rendered manifest was already version-gated and
+  predates this plan; the CANONICAL one had **no writer at all**, in neither
+  `release-please-config.json` nor `sync-versions.js`. Found by simulating a bump rather than by
+  reading the configs — reading tells you what is listed, running tells you what happens.
+- **DEV-T2-4** — my first restore list after that simulation omitted `server.json`, which
+  `sync-versions.js` also writes, so a `9.9.9` survived into the tree until the next `git status`.
+  **A restore list must be derived from what the command writes, not from what I remember passing
+  it.** Repaired by targeted rewrite rather than `git checkout` — the diff was verified to be
+  entirely mine first, and this is a shared worktree.
+- **DEV-T2-5** — the substrate gate reddened the new SUITE entry: `declares [file] but source
+contains [file, spawn]`, because the renderer's failure hint contained the literal `npm run`.
+  Reworded the hint. Declaring `spawn` would have been the cheaper fix and the wrong one — the
+  whole value of that ledger is that entries are true.
+- **DEV-T3-1** — `rg "downstream-release"` across this repo returned only an ASCII diagram, which
+  reads as "dead workflow, safe to delete". `repository_dispatch` is **cross-repo by construction**;
+  the dispatcher is `opencode-prompts/.github/workflows/release-please.yml:34-40`. A repo-scoped
+  probe cannot answer a cross-repo question, and this one would have deleted a live workflow.
+- **DEV-T3-2** — an earlier `rg` in the same session missed `.github/**` entirely, because ripgrep
+  skips dotted directories without `--hidden`. Same class as DEV-T3-1, smaller blast radius: both
+  are a probe whose scope silently excludes the subject.
+- **DEV-T3-3** — 3.3 would have deleted `synchronize-downstream-lock.js`, which is called at
+  `extension-publish.yml:384` and whose absence **fails `validate-release-workflow.js:52`**. The
+  row's "delete if empty" assumed absorption that never happened. Its existence traces to a real
+  months-long breakage: package.json/lockfile desync blocked opencode-prompts' publish path.
+- **DEV-T3-4** — `validate:renovate-extraction` reads stdin and throws when run bare. Its declared
+  Verify ("gate green") therefore names an invocation that cannot pass. Substituted with the
+  `--self-test` plus a direct inventory re-measurement.
+- **DEV-T2-6** — `validation-suite-runner.test.ts` was red **at HEAD before this tier began**,
+  attributed to `e582adc0` (the previous session's substrate commit). Its assertion regexed the
+  runner's source for `{ script: '…'` on one line; adding a second field made Prettier wrap every
+  entry, so zero of 37 matched. Fixed inside this tier because a gate nobody can pass blocks every
+  future one. The fix reads the `SUITE` export instead of the source text — the same substrate
+  correction the tier is about, applied to the tooling that measures it.
+
+## Deviations — dead-chain cleanup (2026-08-13, owner-directed after Tier 3)
+
+- **DEV-T3-5** — the `downstream-release` chain was dead in three independent ways, and only the
+  third was visible from source: `downstream-sync.yml` has **0 runs ever**;
+  `UPSTREAM_DISPATCH_TOKEN` is **absent from opencode-prompts' secrets** so the dispatch could
+  never authenticate; and both the dispatch step and the receiver's check carried
+  `continue-on-error`. **A workflow existing is not evidence it runs** — `gh api .../runs` answers
+  a question no amount of reading the YAML can.
+- **DEV-T3-6** — an in-code comment in `validate-versions.js` had already recorded "it never fired
+  because downstream-sync.yml runs on repository_dispatch and has zero runs". That measurement was
+  true, correct, sitting in the file the whole time, and **nothing acted on it** — the dead code
+  stayed for months. A finding written into a comment is not a finding written into a row.
+- **DEV-T3-7** — a blanket delete would have taken `assertMarketplaceSource` with it, whose own
+  comment says "this check is the only thing that would notice" a rename redirect. The fleet
+  auditor does NOT open `marketplace.json`. **Zero-writers has two readings**: the dependency-range
+  checks were a redundant channel (delete), the marketplace guard is a missing producer (file it).
+  Deleting both because they lived in the same function would have been the wrong call. Filed as
+  row 3.6 against the auditor rather than kept here unreachable.
+- **DEV-T3-8** — the local `opencode-prompts` checkout was **2 commits behind origin**. Editing it
+  would have diffed against a stale base. Fetched first, then built the change in an isolated
+  worktree so the owner's `main` checkout was never written to.
+- **DEV-T3-9** — removing the dispatch job orphaned the `outputs:` block on the `release-please`
+  job. Verified unconsumed before deleting: job outputs are readable only by a `needs:` dependent
+  in the same workflow, and `npm-publish.yml` reads `github.event.release.tag_name` — the release
+  EVENT payload, a different thing that merely shares the name.
+- **DEV-HOOK-1** — the plan-hygiene ledger wrote my validation runs into a DIFFERENT plan's notes.
+  Not a defect: `bound_active_plans` binds every `status: active` plan Read this session, by
+  design. The fix already existed — `~/.claude/scripts/bind-plan.py` — and I did not find it
+  because `plan_hygiene.py`'s docstring cites it bare, as though it sat beside the hooks. Session
+  now pinned. **A tool referenced without its path reads as a tool that does not exist.**
+
+- **DEV-T3-10** — I deleted a guard and filed a row instead of rebuilding it, then reported that as
+  the careful option. It is not: `cleanup-standards.md` names "cleanup in a separate PR" as the
+  highest-deferral-rate anti-pattern, and a row is a promise where a check is a check. Corrected in
+  the same session — the marketplace source assertion now lives in the `sync-downstream` job that
+  already edits the entry, runs every release, and blocks. **Filing a finding is not fixing it, and
+  the fact that the deleted guard never ran is an argument for rebuilding it somewhere reachable,
+  not for leaving the gap open.**
+- **DEV-T3-11** — the rebuilt guard derives the URL from canonical `plugin.json.repository` rather
+  than hardcoding the slug, as the deleted one did. The hardcoded form is why `fleet.json` still
+  names `minipuft/claude-prompts`: a second literal is a second thing to update at the next rename,
+  and it was missed. `validate-release-workflow.js` has a self-test case for re-hardcoding
+  specifically, because that regression PASSES the url assertion while re-creating the drift.
+- **DEV-T3-12** — falsified the guard twice, deliberately. The self-test proves the three
+  assertions are _present_ (removing each reds one case); it says nothing about whether the shell
+  comparison WORKS. Ran the actual logic against a seeded pre-rename listing: rejected, while the
+  live listing was accepted. **A gate on workflow text checks that a check exists, not that it
+  catches anything** — that gap is how a green suite coexisted with the never-running original.
+- **DEV-T3-13** — read the LOCAL `minipuft-plugins` checkout after `git fetch` and nearly reported
+  the marketplace as stale at 3.1.1. It was 4e9f585 against origin's 69b0108; `origin/main` reads
+  3.2.1 and is correct. **`git fetch` updates refs, not the working tree** — same stale-base trap
+  as DEV-T3-8, twice in one session, and the second time I caught it only because the first had
+  just happened.
+
+### Files carrying the rebuilt marketplace guard (row 3.6, commit `852830ba`)
+
+The reasoning is DEV-T3-10..13; this is the map, because the guard is deliberately split across
+three files and reading any one of them alone misrepresents it.
+
+| File                                          | Role                                                                                                                                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/extension-publish.yml`     | THE GUARD. `Extract version` derives `repository` from canonical `plugin.json`; `Validate update` asserts `source.url == "${REPOSITORY}.git"` and `ref == dist`. Runs every release, blocks     |
+| `server/scripts/validate-release-workflow.js` | THE GUARD ON THE GUARD. Asserts all three properties are still in the workflow, + a self-test case for re-hardcoding — the regression that passes the url assertion while re-creating the drift |
+| `server/scripts/validate-versions.js`         | The header records where the assertion WENT. Without it the next reader finds a deletion and no successor, which is how a removed check becomes a removed capability                            |
+
+The split is the point: a guard living only in workflow YAML is deletable in one line by anyone,
+which is exactly how its predecessor vanished. Neither of the first two files is sufficient alone.
+
+- **DEV-T3-14** — the validation-ledger move (`8b9203fa` here, `6e2de1c` in `~/.claude`) is
+  **framework tooling, not a row of this plan** — but it belongs in this log because executing
+  this plan is what surfaced it, and because it changed `scripts/retire-done-plans.js`, which
+  Tier 7 absorbed. The ledger appended to this very notes file: 330 lines, ~40% of the document,
+  one write per validation command. Recorded here rather than only in the commit because the next
+  reader of this file will notice 330 lines vanished and should find why in the same place.
+- **DEV-T3-15** — **the tracked-vs-walk split fired again, on a file I created.** The new sidecar
+  is markdown under `plans/` and gitignored, so filesystem walkers see it and `git ls-files` scans
+  cannot. `retire-done-plans` reported it as "a plan with no frontmatter" within a minute of the
+  first one existing. This is E12's family — a predicate reading an available stand-in ("is it
+  `.md` under `plans/`?") for the real question ("is it a plan?"). Guarded at both walkers and
+  falsified by removing the guard; the tracked scan needed none, and deliberately has none.
+- **DEV-T3-16** — I fixed the mislabeling in `validation-tracker.py` and nearly stopped, but the
+  ledger a human actually reads is written by `validation-flush.py`, which still recorded the raw
+  prefix. **Two hooks on the same matcher, deliberately independent, and I patched the one that
+  was not the symptom's source.** The helper now lives in the shared lib for that reason: two
+  copies would drift, and the drifted copy would be the one nobody was reading at the time.
+
+## Deviations — Tier 4 execution (2026-08-14)
+
+Tier 4 changed no repository file: its gate is an owner install and it did not pass. These rows
+record what re-measurement found, because the finding is the deliverable.
+
+- **DEV-T4-1** — **the plan told me to re-measure and the re-measurement inverted the row.** Tier 4
+  carried "Re-measure against the current Codex before trusting it" as an aside under the table.
+  Run against codex-cli 0.147, two of the four 0.146 spike claims came back different, and the one
+  that changed — MCP spawn cwd resolves `"cwd": "."` against the plugin root, not the session dir —
+  is precisely the claim that made 4.1 look impossible. An aside carrying a row's whole premise is
+  the shape to watch: had it stayed an aside, 4.1 would have been executed against a dissolved
+  blocker or skipped for a reason that had expired.
+- **DEV-T4-2** — **I probed one child and would have reported it as the plugin's behavior.** The
+  first probe measured the MCP child: no interpolation, no `PLUGIN_ROOT`, no `PLUGIN_DATA`. The
+  natural write-up is "Codex does not expose plugin paths". The hook child receives all four, with
+  `${CLAUDE_PLUGIN_ROOT}` interpolated. Two children of one plugin, opposite on every axis. The
+  0.146 spike made the mirror-image error in the other direction, which is how "a bundled server
+  can never start from plugin config" survived a year of citation. Same family as E12 and the
+  substrate findings: **the probe defines the answer, so name which subject it ran against.**
+- **DEV-T4-3** — **`state in PLUGIN_DATA` was falsified by addressability, not by permission.** The
+  0.146 record blamed a sandbox; on 0.147 the MCP child wrote `~/.codex`, `/tmp`, the plugin cache
+  and the session workdir without complaint. Chasing the recorded reason would have concluded the
+  constraint was lifted. The real constraint is that `PLUGIN_DATA` is not in the server's
+  environment — it cannot name the directory it is allowed to write. Recorded as row 4.1.1 with the
+  concrete value (`~/.codex/plugins/data/<plugin>-<marketplace>`) the plan had never held.
+- **DEV-T4-4** — **the plan measured a remote and a working tree disagreed with it.** Row 4.0.1 was
+  authored from `gh api` against `origin/main` — deliberately, and it says so. A local checkout
+  exists at `~/Applications/codex-prompts`, HEAD equal to origin, working tree uncommitted at 0.1.3
+  with a `bin/start-mcp.mjs` that solves the exact problem 4.1 is scoped to solve. Row 4.2 would
+  have archived the repository and taken that with it. Filed as 4.0.2 and left untouched — it is
+  another session's uncommitted state.
+- **DEV-T4-5** — **a risk retired itself under measurement.** `render-targets.json` names the
+  unresolved Codex client namespace as a 4.1 prerequisite, and the risk table gave it "native hooks
+  don't fire". A probe plugin using the legacy `.codex-plugin/` + `hooks/hooks.json` layout fired
+  `SessionStart` on 0.147 with no reverse-domain directory anywhere. The namespace is still
+  unpublished; the pilot simply never needed it. Marked ⊘ retired-for-the-pilot rather than deleted,
+  so the distinction between "answered" and "routed around" survives.
+- **DEV-T4-6** — the probes ran in the job scratch directory behind their own throwaway marketplace
+  so the existing `codex-prompts-dev` marketplace was never edited, and removal was verified by
+  counting residual entries in `codex mcp list`, `codex plugin list` and the plugin cache rather
+  than assumed from the remove command's exit code. A broken MCP server left registered would have
+  degraded every later Codex session on this machine.
+- **DEV-T4-7** — **the falsified claims lived in a skill, not in this plan, and the skill is what the
+  next session reads.** `~/.claude/skills/codex-plugins/SKILL.md` carried both 0.146 statements this
+  execution disproved — "session cwd" for the MCP child, and the sandbox constraint — as unqualified
+  present-tense facts under a single "Verified against v0.146" stamp. Correcting only the plan would
+  have left the wrong version in the artifact that actually fires at the next Codex task. Updated in
+  place: the MCP Bundling section now leads with cwd anchoring, a hook-child-vs-MCP-child table
+  replaces the single-row divergence claim, the sandbox paragraph records that it did not reproduce
+  and that addressability was the real constraint, and the header tells the reader to re-probe rather
+  than trust a version stamp. Framework tooling, not a row of this plan — logged here because this
+  plan's execution is what falsified it. Note the file is UNTRACKED in `~/.claude` (another session's
+  in-progress skill), so the edit is left unstaged.
+
+## Rulings — 2026-08-14 (owner)
+
+Recorded here per the tier-execute contract: rulings precede the tiers that depend on them, and a
+ruling that lives only in a chat message is not executable.
+
+- **R1 — Tier 5.0: option (a).** gemini-prompts and opencode-prompts remain **npm consumers**. This is
+  the end state, not an interim. 5.1 and 5.2 become ⊘ no-ops; the retirement matrix's DEMOTE decision
+  for both repos is superseded.
+- **R2 — codex-prompts: KEEP and release the latest.** Supersedes the RETIRE decision. Tier 4.2 (archive)
+  becomes ⊘; the refresh must land (4.0.2), the marketplace entry follows the release (4.3), and the
+  repo joins the fleet auditor (new 4.4).
+
+## Deviations — Tier 5 execution (2026-08-14)
+
+- **DEV-T5-1** — **the ruling's blast radius was larger than the tier that received it.** Both rulings
+  arrived against Tier 5 and Tier 4 rows, but three of the four rows in the plan's **retirement
+  matrix** — the document's own "core open question, RESOLVED" — became wrong, plus two alignment
+  matrix end-states and Tier 6.2's doc instruction. Had the writeback stopped at the tier tables, the
+  next reader would have found a resolved matrix saying RETIRE and DEMOTE and executed it. **A ruling
+  invalidates premises, and premises live above the tier that cites them.**
+- **DEV-T5-2** — **a no-op tier still needs its premise probed.** Ruling (a) is worded "already
+  conformant, zero work", which invites recording the decision and moving on. Six separate probes were
+  run instead, each naming the property rather than a co-occurring token — `readlink` for the symlink,
+  `git ls-files` for tracked counts, the branch-protection API for required checks. On opencode a
+  `readdir` would have counted `node_modules` and answered the opposite question, which is the fourth
+  file set this initiative has seen that split on tracked-vs-walk. **The cost of verifying a no-op is
+  six commands; the cost of a wrong no-op is a tier closed on an assumption.**
+- **DEV-T5-3** — **I checked a shape because it matched a known trap, and it was not one.** The fleet
+  auditor marks its audit step `continue-on-error: true`, exactly what made Tier 3's dispatch chain
+  silently dead. Here a later step re-raises on the recorded outcome, so the flag is there to update
+  the drift dashboard before failing. Recorded as a negative result on purpose: the earlier finding
+  trains a reflex that `continue-on-error` means dead, and the actual rule is narrower —
+  **it is a defect only when nothing downstream reads the outcome.**
+- **DEV-T5-4** — **R2 changed the tier's dependency graph, not just its statuses.** Under the archive
+  plan, 4.2 → 4.3 chained behind the owner install, so everything Codex-side was blocked on one
+  owner action. Keeping codex-prompts detached 4.3 and 4.4 from the pilot entirely — they depend only
+  on landing the refresh. Rewriting statuses without re-deriving `Depends` would have left the plan
+  reporting work as blocked that the ruling had just unblocked.
+- **DEV-T5-5** — new row 4.4 exists because **keeping a consumer means auditing it**, and it carries a
+  problem the existing fleet profiles may not cover: the auditor defines drift as the resolved
+  `node_modules/claude-prompts` lock version, and codex-prompts consumes a vendored `file:` tarball
+  that has no such resolution. Rowed with that named rather than assumed to be a config line — the
+  same class as Tier 3's "the sync path does not sync content".
+
+## Deviations — Tier 6 + Tier 7 re-verification (2026-08-14)
+
+- **DEV-T6-1** — **the gate was green before the work, and the thing it guarded was broken.** 6.2's
+  Verify is `rg stale hand-edit instructions = 0`; it returned zero across 37 doc files and four
+  downstream READMEs before a single edit. `docs/guides/release-process.md` meanwhile claimed daily
+  Dependabot (404 in both repos), upstream dispatch (deleted at 3.5), centralized sync PRs (path
+  removed), a `^1.x` range (measured `^3.0.0`), and listed 2 of 4 consumers. The grep searched the
+  **plan's** words; the staleness was in the **doc's** words. This is the fifth substrate for the same
+  failure in this initiative and the first where the bad probe _was the plan's own gate_ — which makes
+  it the worst variant: a criterion cannot be caught by running it.
+- **DEV-T6-2** — **what made the corrected grep credible was that it caught something.** After the
+  consumer table was rewritten the sweep still returned one hit, the lead sentence's "sync downstream
+  extensions", which was then fixed. A check that finds a real instance and gets acted on has shown it
+  reads the file. A check that finds nothing has shown only that it ran — and the pre-work zero above
+  is what that looks like.
+- **DEV-T6-3** — **6.1's count was authored at 2 and measured at 4, and the intent still held.**
+  `minipuft-plugins` carries the marketplace index, its README, and the two governance files
+  federation added. The freeze is about plugin content, not file count. Restated the criterion rather
+  than either failing the row or quietly editing the number — "2 files" would fail the correct
+  repository for the wrong reason, and dropping to "≈4" would lose why it grew.
+- **DEV-T6-4** — **dating Tier 3 forced a judgment, not a lookup.** It is 4 of 6 landed with two
+  falsified rows and an owner-blocked gate. `✓ LANDED 2026-08-13` would have been the natural stamp
+  and would have overstated it at the altitude readers scan first. Dated as "4 of 6 LANDED … gate
+  owner-blocked". Tier 4 and Tier 6 stay undated while open on purpose: an undated heading is a defect
+  only when the tier has a state to report.
+- **DEV-T7-1** — **a zero-result probe was wrong about the string, not the world.** Re-verifying 7.1,
+  I queried open issues matching the title `Dependency Dashboard` and got nothing, which reads as
+  "Renovate regressed". The actual title is `📦 Dependency Updates Dashboard`. Re-queried without the
+  filter: #39 and #40, open, authored by `app/renovate`. Third time this session a zero result came
+  from the query rather than the repository, which is now a standing rule — **never report a negative
+  from a filtered query without re-running it unfiltered.**
+- **DEV-T7-2** — Tier 7's ✓ rows were two days old and were re-probed rather than carried forward.
+  All four held. Recorded because the re-check cost four API calls and the plan's own
+  cleanup-standards lesson is that a ✓ is a claim with a date, not a state.
+
+## Deviations — release readiness sweep (2026-08-14)
+
+Not rows of this plan. Logged here because the release sweep ran under this plan's binding and
+changed repository tooling.
+
+- **DEV-REL-1** — **`typecheck:tests:ratchet` was blind, and its documented remedy was the damage.**
+  `validate:all` failed reporting baselined test files as "absent". The tail of that list showed 4
+  files, so the first reading was "4 files were fixed, lock it in" — the exact action the failure text
+  recommends. Running `typecheck:tests:ratchet:baseline` wrote **`0 errors across 0 files`**,
+  collapsing a 381-error ceiling across 70 files. Restored from a pre-copy immediately. The list was
+  never 4 files; it was all 70, and I had only seen its tail.
+  **Root cause**: `runTsc()` invoked `tsc` without `--pretty false`, and this shell exports
+  `FORCE_COLOR=3`, so TypeScript 6.0.3 emitted ANSI-wrapped diagnostics through the pipe
+  (`\e[96mtests/...\e[0m:\e[93m384\e[0m` instead of `tests/...(384,36):`). Both `DIAGNOSTIC_PATTERN`
+  and `FATAL_PATTERN` then matched nothing, and an empty parse is indistinguishable from a cleared
+  backlog. **CI never exports `FORCE_COLOR`, so this failed only on developer machines** — which is
+  the worst place for it, because the failure text hands the developer the destructive fix.
+- **DEV-REL-2** — **the existing guard anticipated the right failure and could not see this one.** The
+  script already documents that "the ratchet would read a dead compiler as a cleared backlog" and
+  guards it with `FATAL_PATTERN`. That guard is itself a parser, so the ANSI output defeated the check
+  and the thing it protected in one step. Added `assertParsed()`, which needs no knowledge of what
+  went wrong: tsc exiting non-zero with non-empty output while the parser found **zero** diagnostics
+  and **zero** fatals is a parse failure, not a clean run — refuse rather than report. Falsified both
+  ways: with the fix, `check` reads 377 errors under `FORCE_COLOR=3`; with `--pretty false` reverted,
+  the guard refuses and prints the offending first line.
+- **DEV-REL-3** — **I nearly confirmed the wrong reading from a polluted probe.** Asked whether the
+  four files had left the compiler's view, I ran `tsc --listFiles` and read `src/...` lines out of the
+  output as evidence they were still included. Those were diagnostic lines, not a file list — the flag
+  produced no list because tsc was erroring. The inference that saved it was arithmetic, not the
+  probe: 381 errors across 70 files does not become 0 across 0 because four files were fixed.
+  **A total that moves by orders of magnitude is a measurement failure until proven otherwise.**
+- **DEV-REL-4** — two plan-hygiene gates were red from other sessions' files, and only one could
+  reach CI. Six unstamped ☐ rows in the tracked `plans/features/global-github-native-planning-2026-08-12.md`
+  (committed at `a9b4df14`) would fail CI on push; stamped from each row's own Verify cell, so no flip
+  condition was invented. `plans/claude-prompts-brand-assets-2026-08-14.md` is **untracked**, so it
+  reddens local runs only — a clean CI checkout never sees it. Frontmatter added so it is conformant
+  when its author commits it; **left untracked, because adding another session's in-progress plan to
+  git is their decision**. The `assets/` and `scripts/generate-brand-assets.py` changes beside it were
+  not touched.
+
+## Deviations — codex-prompts dependency fix (2026-08-14)
+
+- **DEV-T4-8** — **the dependency was not stale, it was absent.** Row 4.0.1 framed the problem as a
+  vendored tarball needing a bump. Measured: `package.json` declared
+  `file:vendor/claude-prompts-3.1.2.tgz` while `.gitignore` excluded `vendor/*.tgz`, so the repo's only
+  dependency was never in the repo. The framing mattered — "refresh the tarball" would have produced a
+  new uncommittable tarball and left the defect exactly where it was.
+- **DEV-T4-9** — **my first test said it was fine, and it was measuring my machine.** Cloning the repo
+  and running `npm install` succeeded, installing `claude-prompts@3.1.0` with `dist/index.js` present,
+  and I nearly reported the concern as unfounded. npm had resolved the `file:` tarball out of
+  `~/.npm/_cacache`, because this machine had packed it before. Re-run with `--cache` pointed at an
+  empty directory: install fails and `node_modules/claude-prompts` is absent. **Anyone who had ever
+  built the tarball locally would have concluded the repo was healthy** — the warm cache made the
+  broken state indistinguishable from the working one on exactly the machines most likely to check.
+- **DEV-T4-10** — **the retirement condition was written down, came true, and nobody noticed.** The
+  README said "until `claude-prompts@3.1.0` is on npm … after publish, switch the dependency". 3.1.0,
+  3.1.1, 3.2.0 and 3.2.1 all published. The workaround outlived its own stated exit by four versions.
+  This is the `retirement-condition-needs-a-detector` pattern again, and here the condition was
+  checkable by one `npm view` — the cost was never the checking, it was that nothing scheduled it.
+- **DEV-T4-11** — **fixing 4.0.1 unblocked 4.4 for free.** The fleet auditor reads a resolved
+  `node_modules/claude-prompts` lock version; a `file:` tarball has none, which is precisely why this
+  repo could drift three minors unobserved. Moving to the registry gives the lockfile a
+  `registry.npmjs.org` resolution, so joining `fleet.json` is now an entry rather than a profile
+  redesign. **The unauditability and the uninstallability had one cause**, which the two rows had
+  recorded as separate problems.
+- **DEV-T4-12** — **a second install path is still unmeasured, and is rowed rather than assumed.** A
+  fresh clone has no `node_modules`, and Codex installs by copying a plugin's source. The dev
+  marketplace works because its source symlinks a checkout that has one; a git-sourced install has
+  nothing to copy. That predicts a marketplace install with no server — but verifying it means
+  installing `codex-prompts@minipuft` alongside the enabled dev install on this machine, so it is
+  filed as 4.5 with its evidence and explicitly not claimed as measured.
+- **DEV-T4-13** — **4.5 measured true, and the measurement cost zero Codex tokens.** The question was
+  whether a git-sourced marketplace install has a runtime. Rather than `codex exec` (model tokens) or
+  installing `codex-prompts@minipuft` (collides with the enabled install two live sessions were using),
+  the probe cloned local HEAD into a throwaway marketplace under a **renamed plugin id**. A clone is
+  exactly what a git marketplace serves — tracked files, no `node_modules` — so the reproduction is
+  faithful without touching anything live. Codex ran no install step; the server died with
+  `ERR_MODULE_NOT_FOUND`. **The positive control is what makes it evidence**: the same probe against the
+  dev install returned a full initialize result, so the failure is the install's, not the probe's.
+- **DEV-T4-14** — **the obvious fix would fix half of it.** An `npx`-based `.mcp.json`, the pattern
+  gemini-prompts already uses, removes the server's dependency on `node_modules` entirely. It does not
+  help the hooks: `hooks/lib` is a committed symlink into `node_modules`, Codex drops symlinks when it
+  copies, and `_codex_bootstrap.py`'s documented fallback points at the same missing directory. A plugin
+  that starts its server and blocks every hook event is not better than one that fails visibly —
+  **Codex treats a hook that cannot launch as a BLOCK on that event.** Recorded on the row so the
+  half-fix is not discovered halfway through.
+- **DEV-T4-15** — checked for live sessions before touching anything and found two, each with an MCP
+  child running since 2026-08-13. Both had cwd in the **cache copy**, which has its own `node_modules`,
+  so the earlier `rm -rf node_modules && npm install` in the working tree could not have reached them —
+  verified via `/proc/<pid>/cwd` rather than assumed from the directory layout. Both were still alive
+  after the probe and its cleanup.
+- **DEV-T4-16** — **the answer was already in the repo, in a mechanism it runs every release.** The
+  question "how does a copy-install get a runtime" reads as needing a new distribution design. This
+  repo's `origin/dist` already carries 200 files including `server/dist/index.js` **and**
+  `hooks/lib/*.py` as real files rather than a symlink — precisely the pair a Codex install cannot
+  otherwise obtain, materialized by a workflow that has been running for releases. The objection I was
+  about to raise against committing the dependency ("~9.3 MB per version bump, forever") **applies to
+  `main` and not to a force-pushed dist ref**, where each release replaces the previous tree. Checking
+  what the project already does changed the recommendation.
+- **DEV-T4-17** — **gemini-prompts looks healthy here for the same reason codex-prompts did.** Its
+  installed extension is `{"type": "link"}` at the local checkout — the dev tree with `node_modules` —
+  so nothing about `gemini extensions install <url>` has been observed. Its `hooks/lib` symlink and
+  `MCP_RESOURCES_PATH` both point into `node_modules`; its server uses `npx` and would survive, its
+  hooks probably would not. **Three install paths on this machine now share one illusion**: dev
+  marketplace symlink (codex), extension link (gemini), and my own warm npm cache. Each made an
+  unshippable state look shipped. Rowed as 4.7 and explicitly not asserted — measuring it needs a
+  machine without the checkout.
+
+## Deviations — shape (A) implementation (2026-08-14)
+
+- **DEV-T4-18** — **built the artifact by hand and tested it before writing the workflow that
+  generates it.** The alternative order — write the workflow, push, watch CI — would have encoded a
+  guessed file set and taken a round trip per wrong guess. Assembling the tree locally surfaced two
+  requirements no amount of reading would have: the server validates its own package root
+  (`Invalid package root … Missing: config.json`), so copying `dist`+`hooks`+`resources` is not
+  enough; and `ajv-formats`, which the bundle appears to require, **does not exist in the dependency
+  tree at all** — that `require` is unreachable, and chasing it as a missing dependency would have
+  been wasted work. The workflow now encodes a **proven** file set.
+- **DEV-T4-19** — **the `.gitignore` would have republished the exact defect being fixed.** The staged
+  dist tree inherits the source `.gitignore`, which excludes `node_modules/` — the one thing this tree
+  exists to ship. Simulated both ways locally: with it, `git add -A` stages **33 files and zero
+  runtime**; without it, 270 files including the runtime and 14 `hooks/lib` modules. A workflow that
+  looked correct and asserted files exist **on disk** would have force-pushed an empty runtime and
+  reported success. The publish step therefore asserts the runtime is **tracked**
+  (`git ls-files --error-unmatch`), not merely present — the tracked-vs-walk distinction that has now
+  produced findings six times in this initiative, here in the one place where it decides what ships.
+- **DEV-T4-20** — **path assertions do not prove a plugin runs, and both halves failed
+  independently**, so the workflow drives an `initialize` handshake and executes the SessionStart
+  adapter before pushing. A tree that cannot start is never published. This is the same reasoning that
+  made `verify:mcp` worth having upstream: a build that compiles and a server that answers are
+  different claims.
+- **DEV-T4-21** — **read a stale checkout and caught it before editing.** `minipuft-plugins` locally
+  showed the marketplace at `claude-prompts 3.1.1` while `origin/main` reads 3.2.1; the checkout was
+  **3 commits behind**. Editing it would have produced a diff against a superseded base. Same trap as
+  DEV-T3-13, one week apart, same repository — fast-forwarded first, then edited. **A local checkout
+  is a cache, and this one goes stale quietly because nothing in the workflow pulls it.**
+- **DEV-T4-22** — **I wrote a false claim into a doc and it survived a 37/37 suite.** The Tier 6.2
+  rewrite of `release-process.md` said the upstream→downstream "lock-synchronization script was
+  removed". It was not: `synchronize-downstream-lock.js` exists and the live `sync-downstream` job
+  calls it on every release. What Tier 3 deleted was `downstream-sync.yml`, a **separate** dead
+  workflow with a `repository_dispatch` trigger. I collapsed two things with similar names into one
+  and stated the merged version as fact. Nothing caught it — validation checks formatting and links,
+  not whether a sentence about the release machinery is true. Corrected in `dcfc124e`, and the doc now
+  names both channels explicitly so the next reader cannot make the same merge.
+- **DEV-T4-23** — **4.4 was a one-line entry until I read the auditor.** The row said joining the
+  fleet "should be a `fleet.json` entry with the `node-consumer` profile its siblings use". Reading
+  `repositorySnapshot()` shows it fetches `downstream-contract.json`, `consumer-contract.yml`, branch
+  protection, `.node-version` and the lockfile from **every** member before comparing anything.
+  codex-prompts has one of five, and `main` returns `Branch not protected`. Adding the entry today
+  would redden the weekly audit on a missing file rather than on drift — **worse than being
+  unaudited, because it trains the operator to ignore a red fleet.** The row now says what it costs.
+- **DEV-T4-24** — **the sync closes its own loop, which is the part worth noticing.** Adding
+  codex-prompts to the matrix bumps its range and lock; merging that PR pushes `main`; that fires
+  `publish-dist.yml`; that republishes the `dist` branch the marketplace installs from. No step
+  reaches across a repo boundary to trigger the next — each is a local reaction to a local event,
+  which is why it does not need the `repository_dispatch` chain Tier 3 found dead.
+- **DEV-T4-25** — **`repository-standards` locally is 1 ahead and 4 behind origin/main**, with a clean
+  tree — a diverged history carrying someone's unpushed commit. `git merge --ff-only` refused, which
+  is the correct outcome and the reason I did not author the `fleet.json` entry there. Second stale
+  sibling checkout found today (DEV-T4-21 was `minipuft-plugins`, 3 behind). **A local checkout of a
+  fleet repo is a cache that nothing refreshes**, and two of three were wrong when read.
+
+## Deviations — 4.10 closed by deletion (2026-08-14, two parallel audits)
+
+- **DEV-T4-26** — **the fix was to remove the field, and neither option under consideration was that.**
+  The question had narrowed to "which workflow writes the codex-prompts marketplace version" — upstream
+  sync (cheap, wrong trigger, same-run race) or codex's own publish (right trigger, needs a credential
+  that does not exist). Both automate a field that turned out to be **optional**: no marketplace schema
+  is vendored anywhere, the `$schema` URL in the file 404s, and **every entry in Anthropic's own
+  official marketplace omits `version`** and installs. Deleting it closes the gap with no new
+  credential, no new workflow, and no staleness surface. **When a field has no writer, "who should
+  write it" is the second question; the first is whether it should exist.**
+- **DEV-T4-27** — **the owner's instinct was right, and about a client nobody was examining.** The
+  suspicion was functional loss. For Codex it is cosmetic: the install cache directory takes its
+  version from the plugin's own `.codex-plugin/plugin.json` — the same file OpenAI's bundled
+  cachebuster rewrites, its own docs noting the flow "does not rewrite marketplace entries". For
+  **Claude Code**, which reads the same shared marketplace file, the listing version **becomes the
+  install directory name**, so a stale value collides two different `dist` trees into one cache dir.
+  The severity split by client, and the investigation was framed around Codex because that is what we
+  had been testing all session.
+- **DEV-T4-28** — **the guard asserts an absence, which is the unusual and correct shape here.** The
+  invariant is not "the version is current" — nothing can make that true without a writer — but "no
+  field without a writer". So the check is `has("version") == false`, and it fails loudly if anyone
+  re-adds the field without also adding the mechanism that maintains it. Falsified against the real
+  workflow rather than only the fixture: mutating the assertion reddens the validator.
+- **DEV-T4-29** — **a first fix attempt corrupted the validator, caught by running it.** Inserting the
+  fixture lines with `rindex` matched the LAST occurrence of the anchor, which was inside a
+  single-quoted self-test string rather than the template-literal fixture, producing a syntax error.
+  The script would not even parse. **A textual anchor that appears in both the fixture and the tests
+  that mutate the fixture is ambiguous by construction** — line-indexed insertion after asserting the
+  line's content is the version that worked.
+
+## Deviations — the three pushes (2026-08-14)
+
+- **DEV-T4-30** — **the first real run of the new workflow failed, and the cause was a line added for
+  reassurance.** Exit 141 is SIGPIPE: `git ls-files node_modules/claude-prompts | head -1` — `head`
+  closes the pipe after one line, git takes the signal writing the remaining 269 paths, and
+  `set -o pipefail` converts that into a failed step. **It is a race**, which is the worse property: my
+  first local reproduction printed "no sigpipe" because with 270 files git usually finishes writing
+  first. I confirmed the mechanism instead of assuming it (`yes | head -1` under `pipefail` → 141)
+  rather than accepting a green local run as a refutation. A retry might have passed and left the flake
+  in place. The line asserted nothing the `--error-unmatch` line above it does not.
+- **DEV-T4-31** — **verifying between the pushes is what made the order worth having.** 4.11 said push
+  codex-prompts, confirm `dist`, then push the marketplace. Had I treated "pushed successfully" as
+  "`dist` exists", the marketplace would have gone out pointing at a branch the failed run never
+  created — the exact live breakage the row was written to prevent. **A push succeeding and the
+  workflow it triggers succeeding are different facts**, and only the second one is the precondition.
+- **DEV-T4-32** — **the main-repo push was rejected: my branch was 6 behind its own remote.** Another
+  session had advanced `release-3.1.0-final` (gate timers, a schema snapshot, a validation test). Not
+  force-pushed; merged, and their three files did not overlap mine so it resolved cleanly. Re-ran
+  `validate:all` (37/37) and `test:ci` (2480/2480) **after** the merge rather than trusting the
+  pre-merge greens — their commits touch source, so the earlier runs were evidence about a tree that no
+  longer existed.
+- **DEV-T4-33** — **the last link is deliberately unclosed.** `codex plugin add codex-prompts@minipuft`
+  against the live marketplace was not run: two Codex sessions are alive on the identically-named dev
+  install and it would collide. Everything upstream of that resolution is proven on the published
+  artifact — a fresh `clone --branch dist` answers `initialize` and runs the SessionStart adapter to
+  exit 0. Recorded as partial rather than done, because "the artifact is correct" and "Codex resolves
+  `ref: dist` to it" are separate claims and only one is measured.
+- **DEV-T4-34** — **the live install closed 4.8 and immediately produced a new finding: same-name
+  plugins shadow silently.** With the dev install and the marketplace install both reading
+  `installed, enabled`, `codex mcp list` registered exactly one `codex-prompts` server — the dev copy,
+  identifiable only by its `cwd`. The marketplace copy's server never registered and nothing said so.
+  **`enabled` is not the same claim as `registered`**, and only the second one runs. Removing the dev
+  install flipped it over instantly. The sharp edge is that this repo's own README documents the
+  dev-marketplace flow, so following it leaves an install that outranks the published one — a
+  developer "verifying the release" can be exercising their checkout. Rowed as 4.14 and written into
+  the codex-plugins skill.
+- **DEV-T4-35** — **the install incidentally confirmed 4.10's reasoning by experiment.** The cache
+  directory is `.../minipuft/codex-prompts/0.1.3/` **even though the listing I published carries no
+  `version` field**. Codex took it from the plugin's own `.codex-plugin/plugin.json`, which is exactly
+  what the audit predicted and why deleting the listing field was safe for Codex. The prediction was
+  made from binary strings and OpenAI's cachebuster script; this is the direct observation.
+- **DEV-T4-36** — **4.3 could not be marked satisfied, because a later row had deleted its criterion.**
+  The Verify read "listed version matches the published one"; 4.10 removed the `version` field entirely
+  hours earlier. Marking it ✓ against the old text would have recorded a match that cannot exist, and
+  marking it ☐ would have implied outstanding work. Neither polarity was right — the row had to be
+  **re-derived**: freshness is now carried by `ref: dist`, which `publish-dist.yml` force-pushes on
+  every push to codex-prompts' `main`, so there is no synchronization step left to forget. A criterion
+  is not a constant; a row that another row invalidates has to be re-earned, not re-graded.
+- **DEV-T4-37** — **4.13 was closed on step-level evidence, not on a green badge.** The SIGPIPE lived in
+  the **Publish** step, and that step exits early at "No changes to publish" — so a run could be green
+  without ever reaching the line that failed. Read the dispatched run's log: orphan commit created,
+  `--error-unmatch` assertion passed, `+ 73380c0...eb5b5b3 dist -> dist (forced update)`. Three green
+  runs now. The mechanism is deleted rather than merely unobserved, which is what actually closes a
+  race — three passes at 270 files would not.
+- **DEV-T4-38** — **adopting the consumer contract surfaced a gap the auditor's own list cannot see.**
+  The fleet auditor fetches four artifacts per member; codex-prompts was missing all four. Supplying
+  them exposed a fifth problem with no checker: **27 adapter tests existed and no workflow ran them**,
+  so `localValidationWorkflow` had nothing honest to point at. `publish-dist.yml` drives the server and
+  one hook, so it _looks_ like validation — naming it would have satisfied the contract while the suite
+  stayed unrun, making the field a label rather than a claim. Added `ci.yml`; 27/27. **A contract can be
+  satisfied by the nearest plausible file, and that is how a contract becomes ceremony.**
+- **DEV-T4-39** — **the contract check was falsified before it was trusted.** It PASSED on the first
+  attempt, which this initiative has learned to distrust: cloned standards at the pinned `bb7c4fa8`,
+  ran its own `verify-consumer.mjs` (PASSED), then seeded a missing `requiredPath` and confirmed
+  `CONTRACT: required path is missing` with a non-zero exit. A first-try green and a live check are
+  different claims.
+- **DEV-T4-40** — **two `repository-standards` changes were deliberately NOT made, both for the same
+  reason: they would have been green for the wrong reason.** (1) The `fleet.json` entry is audited
+  against the **upstream `main`** copy of `extension-publish.yml`, and the codex matrix leg is still on
+  `release-3.1.0-final`. It would have passed anyway — via the `??= "auto"` fallback that exists for
+  repos the workflow does not name — recording a merge mode nobody wrote. (2) 4.12's fix is not "make
+  the marketplace block an array": `validateMarketplace` **requires a SemVer `version`** on the entry,
+  which is precisely the field 4.10 deleted because nothing writes it. Extending the contract as
+  written would reintroduce the defect the same day it was closed, with the contract enforcing it.
+  Both ordered after the release. **The 4.11 lesson generalizes past pushes**: a check and the fact it
+  reads can live in different repositories and move at different times, and the failure mode is a pass,
+  not an error.
+- **DEV-REL-5** — **the branch was 17 behind `main`, and one of those commits deleted a file this
+  branch had been fixing.** `main` had absorbed the plan-retirement federation (#209), which
+  migrates to the shared `repository-standards` executable and deletes the local
+  `scripts/retire-done-plans.js`. This branch had independently modified that same local script to
+  skip the gitignored validation-ledger sidecar. Accepting the deletion was right — the migration is
+  authoritative — but it silently dropped a real fix, which is the **functionality-lost-in-migration**
+  shape the owner flagged earlier in this initiative. Reproduced against the shared executable
+  before deciding anything: exit 1 on `plans/agent-plugins-migration-2026-08-08.validation-log.md`.
+  Fixed upstream in `repository-standards` PR #7 rather than re-patched locally. Full record in the
+  federation plan's notes.
+- **DEV-REL-6** — **the federation plan I read at the start of this session was stale, and I read it
+  from the branch.** It showed F4.1-F4.7 as backlog with one row done; `main`'s copy showed five of
+  seven ✓ and the script already migrated. Same class as the untrusted-inventory lesson, on a new
+  substrate: **a plan file is itself a measurement, and a branch holds an old one.** Re-measured
+  every claim against `origin/main` before acting. Had I not, the whole federation assessment would
+  have been written about work that shipped four days earlier.
+- **DEV-REL-7** — **release-readiness measured on the merged tree, not the pre-merge one.**
+  `validate:all` 36/37 (sole failure = the sidecar defect above), `test:ci` 2480/2480 across 190
+  suites, `lint:ratchet` no regressions, `typecheck:tests:ratchet` 377 errors and no regressions.
+  The last number is worth noting: the baseline is 381, so the ratchet is reading a real improvement
+  rather than the parse failure that nearly destroyed it earlier this session — the `--pretty false`
+  fix is holding.
+- **DEV-REL-8** — **choosing 4.0.0 to stop breaking changes reaching consumers silently, then noticing
+  the sync auto-merges the major into all four of them anyway.** `extension-publish.yml`'s
+  `sync-downstream` matrix sets `merge_mode: auto` for every downstream and runs
+  `gh pr merge --merge --auto` unconditionally — there is no major/minor distinction. So on publish,
+  each downstream gets `^3.x → ^4.0.0` plus a regenerated lock and merges itself once its own checks
+  pass. Those checks are real but **shallow with respect to THIS release**: the consumer contract
+  proves `node_modules/claude-prompts/dist` exists and the lock matches, and codex-prompts' new
+  suite exercises hook adapters — none of them calls `resource_manager(action: "delete")` or loads a
+  chain step with an unknown key, which are the two things that actually broke. Green there means
+  "the engine installs", not "the engine still behaves". Not changed during a release: the behavior
+  is pre-existing and deliberate, and editing the publish workflow while cutting from it trades a
+  known risk for an unknown one. Surfaced to the owner as a decision — the mitigation is one
+  conditional (skip `--auto` when the major changes, leave the PR open) and costs nothing except a
+  manual merge per major. **The general shape: a version boundary only protects consumers who stop
+  at it, and automation that crosses boundaries on their behalf removes the protection the boundary
+  was chosen for.**

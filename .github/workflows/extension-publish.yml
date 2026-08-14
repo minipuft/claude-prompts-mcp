@@ -164,6 +164,17 @@ jobs:
           done
           echo "All required files present."
 
+      # Present is not the same as current. Both files above are RENDERED from the canonical
+      # Agent Plugins manifests (root plugin.json / mcp.json), and both publishing jobs stage them
+      # verbatim into an artifact installers consume — the dist branch and the plugin archive. A
+      # stale render therefore ships a wrong version, license or server path to every installer,
+      # and the existence check above is structurally unable to see it.
+      #
+      # Runs before `npm ci` on purpose: the renderer uses only Node builtins, so a drifted render
+      # fails the release in seconds instead of after a full install and build.
+      - name: Verify rendered manifests match their canonical source
+        run: node scripts/render-distributions.mjs --check
+
       - name: Install and build server
         working-directory: server
         run: |
@@ -301,6 +312,13 @@ jobs:
           - repo: minipuft/opencode-prompts
             name: opencode
             merge_mode: auto
+          # codex-prompts consumes the engine from the registry like its siblings, so the
+          # same range+lock sync applies. Its own publish-dist workflow fires on the merge
+          # and republishes the `dist` branch the marketplace installs from, which is what
+          # keeps the listed plugin at the released engine without further action.
+          - repo: minipuft/codex-prompts
+            name: codex
+            merge_mode: auto
     steps:
       - name: Checkout upstream (for version)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -316,9 +334,15 @@ jobs:
           # License is read from plugin.json, never hardcoded — a literal here
           # silently re-stamps stale licensing onto every downstream on release.
           license=$(node -p "require('./upstream/.claude-plugin/plugin.json').license")
+          # Canonical Agent Plugins manifest, for the marketplace source assertion below.
+          # Read from the SOURCE rather than the rendered `.claude-plugin/` copy: the two are
+          # byte-identical by `validate:render-drift`, so reading the source costs nothing and
+          # keeps the repository identity single-authored.
+          repository=$(node -p "require('./upstream/plugin.json').repository")
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "major=$major" >> $GITHUB_OUTPUT
           echo "license=$license" >> $GITHUB_OUTPUT
+          echo "repository=$repository" >> $GITHUB_OUTPUT
 
       - name: Checkout downstream
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -368,6 +392,14 @@ jobs:
               # Update npm dependency range to match major
               jq --arg r "^${MAJOR}.0.0" '.dependencies["claude-prompts"] = $r' package.json > tmp.json && mv tmp.json package.json
               ;;
+
+            codex)
+              # Same range edit as its siblings. The plugin manifest version is NOT written
+              # here, for the reason spelled out in the gemini case: `.codex-plugin/plugin.json`
+              # carries codex-prompts' own identity, and stamping the engine's version onto it
+              # would create two version identities in one repo.
+              jq --arg r "^${MAJOR}.0.0" '.dependencies["claude-prompts"] = $r' package.json > tmp.json && mv tmp.json package.json
+              ;;
           esac
 
           # Regenerate the lockfile whenever package.json was touched.
@@ -392,6 +424,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           LICENSE: ${{ steps.version.outputs.license }}
+          REPOSITORY: ${{ steps.version.outputs.repository }}
         run: |
           set -euo pipefail
 
@@ -401,6 +434,42 @@ jobs:
               [ "$actual" = "$VERSION" ] || { echo "ERROR: marketplace version $actual != $VERSION"; exit 1; }
               actual_license=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .license' .claude-plugin/marketplace.json)
               [ "$actual_license" = "$LICENSE" ] || { echo "ERROR: marketplace license $actual_license != $LICENSE"; exit 1; }
+              # Assert the marketplace resolves this repo by its REAL CURRENT NAME, not through a
+              # rename redirect. The install URL has no redirect mechanism of its own, so the day
+              # the old name is reclaimed by anyone, every install silently retargets — and this
+              # is the only check that would notice.
+              #
+              # Derived from the canonical plugin.json `repository`, never a literal: a second
+              # hardcoded slug is a second thing to update at the next rename, and the previous
+              # version of this guard hardcoded it. `.git` is appended because the marketplace
+              # source is a clone URL while `repository` is the web URL.
+              actual_url=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .source.url' .claude-plugin/marketplace.json)
+              [ "$actual_url" = "${REPOSITORY}.git" ] || { echo "ERROR: marketplace source url $actual_url != ${REPOSITORY}.git — the listing points at a rename redirect or the wrong repo"; exit 1; }
+              # `dist` is the branch publish-dist force-pushes. A listing on any other ref serves
+              # a tree that release never wrote.
+              actual_ref=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .source.ref' .claude-plugin/marketplace.json)
+              [ "$actual_ref" = "dist" ] || { echo "ERROR: marketplace source ref $actual_ref != dist"; exit 1; }
+
+              # The codex-prompts entry is listed in the same file and written by NOBODY —
+              # this job's jq above selects `claude-prompts` only, deliberately, because the
+              # engine's version is not codex-prompts' identity. Two invariants follow, and
+              # neither was checked until a stale listing nearly shipped:
+              #
+              #   ref must be `dist`, for the same reason as above — its `main` has no
+              #   node_modules, so a listing on any other ref serves a plugin whose MCP server
+              #   cannot start and whose hooks cannot launch.
+              #
+              #   version must be ABSENT. A field with no writer rots, and here it rots into a
+              #   real collision: Claude Code keys its install directory on the listing version
+              #   when one is present, so two different `dist` trees would land in one cache
+              #   directory. With no version it falls back to the commit SHA, which is correct
+              #   per push. Anthropic's and OpenAI's own marketplaces omit the field for exactly
+              #   the entries they do not version-sync.
+              codex_ref=$(jq -r '.plugins[] | select(.name == "codex-prompts") | .source.ref' .claude-plugin/marketplace.json)
+              [ "$codex_ref" = "dist" ] || { echo "ERROR: codex-prompts marketplace ref $codex_ref != dist"; exit 1; }
+              codex_version=$(jq -r '.plugins[] | select(.name == "codex-prompts") | has("version")' .claude-plugin/marketplace.json)
+              [ "$codex_version" = "false" ] || { echo "ERROR: the codex-prompts entry carries a version field, and nothing writes it. Remove it — Claude Code keys its install directory on that value and a stale one collides two dist trees into one cache dir."; exit 1; }
+
               jq empty .claude-plugin/marketplace.json
               ;;
 
@@ -415,6 +484,19 @@ jobs:
               jq empty package.json
               dep=$(jq -r '.dependencies["claude-prompts"]' package.json)
               echo "Dependency range updated to: $dep"
+              ;;
+
+            codex)
+              jq empty package.json
+              jq empty .codex-plugin/plugin.json
+              dep=$(jq -r '.dependencies["claude-prompts"]' package.json)
+              echo "Dependency range updated to: $dep"
+              # A `file:` range would silently reintroduce the defect this repo shipped for
+              # months: a vendored tarball is gitignored, so a clone cannot install it and the
+              # fleet auditor has no resolved lock version to read.
+              case "$dep" in
+                file:*) echo "ERROR: codex-prompts must consume the registry, not a file: tarball"; exit 1 ;;
+              esac
               ;;
           esac
 
@@ -515,6 +597,17 @@ jobs:
             echo "  ✓ $file exists"
           done
           echo "All required files present."
+
+      # Present is not the same as current. Both files above are RENDERED from the canonical
+      # Agent Plugins manifests (root plugin.json / mcp.json), and both publishing jobs stage them
+      # verbatim into an artifact installers consume — the dist branch and the plugin archive. A
+      # stale render therefore ships a wrong version, license or server path to every installer,
+      # and the existence check above is structurally unable to see it.
+      #
+      # Runs before `npm ci` on purpose: the renderer uses only Node builtins, so a drifted render
+      # fails the release in seconds instead of after a full install and build.
+      - name: Verify rendered manifests match their canonical source
+        run: node scripts/render-distributions.mjs --check
 
       - name: Install and build server
         working-directory: server

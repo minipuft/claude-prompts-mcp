@@ -1,14 +1,14 @@
 ---
 title: "Renovate and Dependency-Maintenance Remediation Plan"
 date: 2026-08-01
-status: active
+status: done
 tags: []
 ---
 
 # Renovate and Dependency-Maintenance Remediation Plan
 
-**Status:** Phase 7 policy and guarded run activation are implemented; the lock-maintenance timestamp fix awaits deployment and hosted proof
-**Lifecycle:** activation script = `canonical`; lock-maintenance policy and hosted automerge proof = `migrating` until the timestamp fix lands and PR #194 merges through a Renovate run
+**Status:** COMPLETE 2026-08-14 — the lock-maintenance timestamp fix is on `main` and the hosted automerge canary landed itself
+**Lifecycle:** all `canonical`. The last `migrating` artifact closed when PR #194 merged; see Phase 7 for the evidence
 **Baseline verified:** local `main` at `2ddd763f` on 2026-08-01  
 **Owner:** repository maintainer  
 **Risk:** high — merge protection, release triggering, dependency supply chain, and published artifacts
@@ -225,22 +225,31 @@ hosted evidence; a Renovate PR cannot merge until all four protected checks pass
 
 ### Phase 7 — Bounded automerge and migration closeout
 
-**Status:** guarded activation is canonical as of 2026-08-12. The hosted run exposed
-that `lockFileMaintenance` is a timestamp-less synthetic update: inheriting the
-default `timestamp-required` behavior leaves `renovate/stability-days` pending
-indefinitely even though npm's three-day resolution cutoff has elapsed. The policy
-fix is explicit `minimumReleaseAge: "3 days"` plus
-`minimumReleaseAgeBehaviour: "timestamp-optional"`; final lifecycle closeout waits
-for that fix to land and a later Renovate run to merge PR #194.
+**Status:** ✓ **CLOSED 2026-08-14.** The hosted run had exposed that `lockFileMaintenance`
+is a timestamp-less synthetic update: inheriting the default `timestamp-required`
+behavior left `renovate/stability-days` pending indefinitely even though npm's
+three-day resolution cutoff had elapsed. The fix — explicit
+`minimumReleaseAge: "3 days"` plus `minimumReleaseAgeBehaviour: "timestamp-optional"`
+— is live on `main` (`.github/renovate.json5:251-252`), and **PR #194 merged itself**
+on 2026-08-14T11:11:58Z.
 
-| #   | Target                              | Change                                                                                                                                                                                                                                          | Depends | Verification                                        |
-| --- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------- |
-| 7.1 | Observation ledger                  | Record the Phase 6 hosted cycle and the maintainer's explicit decision to accelerate the second-cycle guard based on prior dependency-bot operation.                                                                                            | Phase 6 | Dated PR/check evidence plus deviation record       |
-| 7.2 | `.github/renovate.json5`            | Enable Renovate-controlled PR automerge only for stable nonmajor dev dependencies and lock maintenance; use a 14-day dev soak and a three-day npm lock-resolution cutoff with timestamp-optional handling for the synthetic maintenance update. | 7.1     | Resolved config plus canary dev patch               |
-| 7.3 | `.github/renovate.json5`            | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                                                                                                                   | 7.2     | Config search and resolved config                   |
-| 7.4 | Request script + validator workflow | Replace manual dashboard editing with dry-run-first activation guarded by remote policy, checks, SHA enforcement, config parity, and exact markers; run its self-test in Renovate validation CI.                                                | 7.2–7.3 | Hosted self-test, dry run, then `--apply` read-back |
-| 7.5 | Hosted canary                       | Request a hosted run without bypassing npm's three-day resolution cutoff; verify PR #194's synthetic update is not held indefinitely for lacking its own release timestamp.                                                                     | 7.4     | Dashboard cycle plus PR status/merge evidence       |
-| 7.6 | Plan and notes                      | Mark every superseded path removed and the new path canonical. Do not close while hosted automerge proof remains migrating.                                                                                                                     | 7.5     | Final removal matrix and clean tree                 |
+**Why that merge is the proof rather than merely a merge.** Verified four properties
+rather than the conclusion: the head branch was `renovate/lock-file-maintenance` (the
+synthetic update, not an ordinary dependency PR); its diff touched **only**
+`package-lock.json` and `server/package-lock.json`; all four protected checks passed
+(`Lint & Validate`, `CLI`, `Build`, `Test Suite`) alongside the Node 22.13.0/24 matrix;
+and both `author` and `mergedBy` read `app/renovate`. A maintainer merge would have
+produced the same green PR and proved nothing about automerge — the actor field is what
+separates "the policy works" from "someone clicked the button".
+
+| #   | Target                              | Change                                                                                                                                                                                                                                          | Depends | Verification                                                                                                                                                        |
+| --- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 7.1 | Observation ledger                  | Record the Phase 6 hosted cycle and the maintainer's explicit decision to accelerate the second-cycle guard based on prior dependency-bot operation.                                                                                            | Phase 6 | Dated PR/check evidence plus deviation record                                                                                                                       |
+| 7.2 | `.github/renovate.json5`            | Enable Renovate-controlled PR automerge only for stable nonmajor dev dependencies and lock maintenance; use a 14-day dev soak and a three-day npm lock-resolution cutoff with timestamp-optional handling for the synthetic maintenance update. | 7.1     | Resolved config plus canary dev patch                                                                                                                               |
+| 7.3 | `.github/renovate.json5`            | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                                                                                                                   | 7.2     | Config search and resolved config                                                                                                                                   |
+| 7.4 | Request script + validator workflow | Replace manual dashboard editing with dry-run-first activation guarded by remote policy, checks, SHA enforcement, config parity, and exact markers; run its self-test in Renovate validation CI.                                                | 7.2–7.3 | Hosted self-test, dry run, then `--apply` read-back                                                                                                                 |
+| 7.5 | Hosted canary ✓ 2026-08-14          | Request a hosted run without bypassing npm's three-day resolution cutoff; verify PR #194's synthetic update is not held indefinitely for lacking its own release timestamp.                                                                     | 7.4     | ✓ merged 2026-08-14T11:11:58Z; `author` and `mergedBy` both `app/renovate`; four protected checks green; diff is the two lockfiles only                             |
+| 7.6 | Plan and notes ✓ 2026-08-14         | Mark every superseded path removed and the new path canonical. Do not close while hosted automerge proof remains migrating.                                                                                                                     | 7.5     | ✓ the hold named here is satisfied — 7.5's automerge proof landed, so the last `migrating` entry becomes `canonical`; the removal matrix carries no `migrating` row |
 
 **Gate:** canary merges only after four checks pass and Renovate has generated its npm lockfiles with the configured three-day cutoff; the synthetic maintenance update must not remain pending solely because it has no release timestamp. The guarded request script and full validation pass; removal searches are clean; lifecycle table contains only `canonical` or `removed`.
 
@@ -361,10 +370,14 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 ### Growth capture
 
 - [x] Capture the pattern “dependency automation is a delivery contract, not a bot config” after implementation evidence confirms it.
-- [ ] Record whether pinned local extraction remains stable across the next Renovate upgrade.
+- [ ] Record whether pinned local extraction remains stable across the next Renovate upgrade
+      (as of 2026-08-14 · flips when PR #206 `update renovate to v44.23.3` lands — the next
+      upgrade is already open, and `Validate Renovate Configuration` answers this on that PR
+      without anyone remembering to look).
 - [x] Record the server/CLI Node support distinction in the tracked operator handbook after Phase 4 found the packaged/runtime mismatch.
 - [x] Record the compound pattern “automation activation must validate the remote policy it will execute, not only the local config.”
-- [ ] Feed any user correction into the owning workflow skill and observation ledger immediately.
+- [x] Feed any user correction into the owning workflow skill and observation ledger immediately
+      — standing practice, not a deliverable this plan can hold open.
 
 ## 7. Execution Notes
 
