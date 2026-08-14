@@ -1116,3 +1116,24 @@ changed repository tooling.
   manual merge per major. **The general shape: a version boundary only protects consumers who stop
   at it, and automation that crosses boundaries on their behalf removes the protection the boundary
   was chosen for.**
+- **DEV-REL-9** — **4.0.0 was verified, not predicted.** The first Release Please run after the merge
+  FAILED — a GitHub GraphQL timeout during commit backfill ("We couldn't respond to your request in
+  time"), not a config fault. Retried, which is legitimate here in a way it explicitly was not for
+  4.13's SIGPIPE: that was a race a rerun could paper over, this is a transient the error text tells
+  you to resubmit. The rerun produced `chore(main): release 4.0.0`, and the claim was then checked
+  against the artifact rather than the PR title — all five manifests
+  (`.release-please-manifest.json`, `server/package.json`, `manifest.json`, `plugin.json`,
+  `.claude-plugin/plugin.json`) read `4.0.0`, and the changelog header reads
+  `compare/v3.2.1...v4.0.0`. The first read of those files showed `3.3.0` and was **wrong because the
+  local ref was stale** — a fetch changed the answer. Same substrate lesson as DEV-REL-6, twice in one
+  session: a local ref is a cached measurement.
+- **DEV-REL-10** — **4.12's fix could not be "make it an array", and building it proved why.**
+  Extending `marketplace` to an array is the easy half; the blocking half is that
+  `validateMarketplace` **requires** a SemVer `version`, which is the field 4.10 deleted from the
+  codex entry hours earlier. Declaring that entry under the existing rule would have forced the
+  defect back with the contract enforcing it. Shipped `versionSource` (`listing` | `ref`) instead, so
+  an entry that tracks a self-republishing branch declares that its version must be **ABSENT**. The
+  general shape worth keeping: **a contract that can only express one freshness model will demand the
+  wrong one from anything that uses the other**, and the demand arrives wearing the authority of a
+  required check. Both new tests are self-falsifying — the multi-entry case breaks only the second
+  entry and requires failure, the versionSource case supplies a valid SemVer and requires failure.
