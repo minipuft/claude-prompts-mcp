@@ -18,8 +18,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { SUITE } from '../../../scripts/run-validation-suite.js';
-
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const RUNNER = path.join(SERVER_ROOT, 'scripts', 'run-validation-suite.js');
 
@@ -127,7 +125,11 @@ describe('validation suite runner', () => {
     const manifest = JSON.parse(readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8')) as {
       scripts?: Record<string, string>;
     };
-    const declared = SUITE.map((step) => step.script);
+    const source = readFileSync(
+      path.join(SERVER_ROOT, 'scripts', 'run-validation-suite.js'),
+      'utf8'
+    );
+    const declared = [...source.matchAll(/\bscript:\s*'([^']+)'/g)].map((match) => match[1]);
 
     expect(declared.length).toBeGreaterThan(0);
     const undefinedSteps = declared.filter((name) => !manifest.scripts?.[name]);
