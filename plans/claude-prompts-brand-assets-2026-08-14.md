@@ -9,9 +9,9 @@ tags:
 
 # Claude Prompts Brand Asset Promotion
 
-**Status:** complete  
-**Lifecycle:** scratch studies → canonical production assets  
-**Source study:** `assets/studies/claude-prompts-mark-finalization-study.svg`
+- **Status:** complete
+- **Lifecycle:** scratch studies → canonical production assets
+- **Source study:** `assets/studies/claude-prompts-mark-finalization-study.svg`
 
 ## Intent
 
