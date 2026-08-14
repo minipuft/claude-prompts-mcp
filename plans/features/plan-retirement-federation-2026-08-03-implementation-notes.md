@@ -20,7 +20,9 @@ Companion: [`plan-retirement-federation-2026-08-03.md`](plan-retirement-federati
 - The isolated `claude-prompts-mcp` review branch consumes the tagged archive for local commands and
   the same executable through the action at immutable SHA
   `d8cf765790dada41e03bfda4d2e533d5a0d23706`. Its local 738-line implementation is deleted; the
-  canonical branch remains unchanged until review and merge.
+  canonical branch remains unchanged until review and merge. Draft PR
+  [minipuft/claude-prompts-mcp#209](https://github.com/minipuft/claude-prompts-mcp/pull/209)
+  preserves the isolated result without mutating the active checkout.
 - `cloudySky` was migrated and exercised in an independent clone. Its canonical dirty checkout and
   repository metadata were not modified. Importing the validated bundle is the remaining F4.6 gate.
 
