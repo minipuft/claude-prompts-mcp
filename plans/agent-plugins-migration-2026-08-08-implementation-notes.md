@@ -880,3 +880,23 @@ changed repository tooling.
   nothing to copy. That predicts a marketplace install with no server — but verifying it means
   installing `codex-prompts@minipuft` alongside the enabled dev install on this machine, so it is
   filed as 4.5 with its evidence and explicitly not claimed as measured.
+- **DEV-T4-13** — **4.5 measured true, and the measurement cost zero Codex tokens.** The question was
+  whether a git-sourced marketplace install has a runtime. Rather than `codex exec` (model tokens) or
+  installing `codex-prompts@minipuft` (collides with the enabled install two live sessions were using),
+  the probe cloned local HEAD into a throwaway marketplace under a **renamed plugin id**. A clone is
+  exactly what a git marketplace serves — tracked files, no `node_modules` — so the reproduction is
+  faithful without touching anything live. Codex ran no install step; the server died with
+  `ERR_MODULE_NOT_FOUND`. **The positive control is what makes it evidence**: the same probe against the
+  dev install returned a full initialize result, so the failure is the install's, not the probe's.
+- **DEV-T4-14** — **the obvious fix would fix half of it.** An `npx`-based `.mcp.json`, the pattern
+  gemini-prompts already uses, removes the server's dependency on `node_modules` entirely. It does not
+  help the hooks: `hooks/lib` is a committed symlink into `node_modules`, Codex drops symlinks when it
+  copies, and `_codex_bootstrap.py`'s documented fallback points at the same missing directory. A plugin
+  that starts its server and blocks every hook event is not better than one that fails visibly —
+  **Codex treats a hook that cannot launch as a BLOCK on that event.** Recorded on the row so the
+  half-fix is not discovered halfway through.
+- **DEV-T4-15** — checked for live sessions before touching anything and found two, each with an MCP
+  child running since 2026-08-13. Both had cwd in the **cache copy**, which has its own `node_modules`,
+  so the earlier `rm -rf node_modules && npm install` in the working tree could not have reached them —
+  verified via `/proc/<pid>/cwd` rather than assumed from the directory layout. Both were still alive
+  after the probe and its cleanup.
