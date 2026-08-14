@@ -538,8 +538,18 @@ describe('resolveCategoryShipStatus vs `git check-ignore` ground truth (P7-D4)',
 
   const categories = realCategories();
 
-  it('discovered at least the 17 real categories this suite was written against', () => {
-    expect(categories.length).toBeGreaterThanOrEqual(17);
+  it('discovers every bundled top-level category', () => {
+    expect(categories).toEqual(
+      expect.arrayContaining([
+        'codebase-setup',
+        'development',
+        'documentation',
+        'examples',
+        'guidance',
+        'planning',
+        'workflow',
+      ])
+    );
   });
 
   for (const category of categories) {
