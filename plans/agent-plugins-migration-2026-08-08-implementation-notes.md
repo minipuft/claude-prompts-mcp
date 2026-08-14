@@ -1078,3 +1078,25 @@ changed repository tooling.
   Both ordered after the release. **The 4.11 lesson generalizes past pushes**: a check and the fact it
   reads can live in different repositories and move at different times, and the failure mode is a pass,
   not an error.
+- **DEV-REL-5** — **the branch was 17 behind `main`, and one of those commits deleted a file this
+  branch had been fixing.** `main` had absorbed the plan-retirement federation (#209), which
+  migrates to the shared `repository-standards` executable and deletes the local
+  `scripts/retire-done-plans.js`. This branch had independently modified that same local script to
+  skip the gitignored validation-ledger sidecar. Accepting the deletion was right — the migration is
+  authoritative — but it silently dropped a real fix, which is the **functionality-lost-in-migration**
+  shape the owner flagged earlier in this initiative. Reproduced against the shared executable
+  before deciding anything: exit 1 on `plans/agent-plugins-migration-2026-08-08.validation-log.md`.
+  Fixed upstream in `repository-standards` PR #7 rather than re-patched locally. Full record in the
+  federation plan's notes.
+- **DEV-REL-6** — **the federation plan I read at the start of this session was stale, and I read it
+  from the branch.** It showed F4.1-F4.7 as backlog with one row done; `main`'s copy showed five of
+  seven ✓ and the script already migrated. Same class as the untrusted-inventory lesson, on a new
+  substrate: **a plan file is itself a measurement, and a branch holds an old one.** Re-measured
+  every claim against `origin/main` before acting. Had I not, the whole federation assessment would
+  have been written about work that shipped four days earlier.
+- **DEV-REL-7** — **release-readiness measured on the merged tree, not the pre-merge one.**
+  `validate:all` 36/37 (sole failure = the sidecar defect above), `test:ci` 2480/2480 across 190
+  suites, `lint:ratchet` no regressions, `typecheck:tests:ratchet` 377 errors and no regressions.
+  The last number is worth noting: the baseline is 381, so the ratchet is reading a real improvement
+  rather than the parse failure that nearly destroyed it earlier this session — the `--pretty false`
+  fix is holding.

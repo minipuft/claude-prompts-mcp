@@ -77,3 +77,44 @@ Companion: [`plan-retirement-federation-2026-08-03.md`](plan-retirement-federati
    plan check, seeded failure, self-test, and `npm run validate`.
 4. Change F4.5 and F4.6 to ✓, mark both companion documents `reference`, and run retirement from the
    canonical `claude-prompts-mcp` checkout.
+
+## Closeout step 1 executed — 2026-08-14
+
+**Done**: `origin/main` (carrying #209) was merged into `release-3.1.0-final`, and the retirement
+check plus full validation were rerun there.
+
+**Result**: `validate:all` 36/37, `test:ci` 2480/2480, both ratchets green
+(`lint:ratchet` no regressions; `typecheck:tests:ratchet` 377 errors, no regressions). The single
+failure is `plans:retire:check`.
+
+**The migration exposed a defect it did not cause.** The local `retire-done-plans.js` carried a
+guard skipping `<plan-stem>.validation-log.md` — the gitignored, machine-written validation ledger
+this repo puts beside each plan. The shared executable has no such guard, so its filesystem walk
+reports the sidecar as "a plan with no frontmatter" and exits 1. Reproduced directly against
+`v1.2.0` before touching anything, then again through `npm run plans:retire:check`.
+
+**Why this was worth stopping for.** `plans:retire:check` is a `validate:all` step, and CI checks
+out fresh — so CI has no gitignored files and stays green while every developer machine goes red.
+That is the same asymmetry as the FORCE_COLOR ratchet incident: a gate that fails only where the
+fix would be applied, whose recommended remedy is the thing that does damage. Left alone it trains
+people to skip the suite.
+
+**Fixed upstream, not locally patched.** `repository-standards` PR #7 skips gitignored files via
+`git check-ignore --stdin -z`. That is more general than the suffix guard it replaces and is
+principled rather than a workaround: retirement's entire safety model is that git history is the
+surviving copy — the archive destination must be gitignored and `--apply` refuses uncommitted
+plans — so a gitignored file cannot be a retirable plan by construction.
+
+`--no-index` is deliberately omitted so a **committed** plan stays visible regardless of ignore
+rules, and the self-test asserts that direction too, because the dangerous failure is the filter
+removing something it should have kept. Verified: check exit 1 → 0, self-test 0, upstream
+`npm run validate` green (28 tests, workflows, renovate config, format).
+
+**Merge resolutions worth knowing** (the branch and `main` had both developed this feature):
+`scripts/retire-done-plans.js` accepted `main`'s deletion; `server/package.json` took `main`'s
+`retire-done-plans --repo ..` binary calls plus the branch's `render:*` scripts; the
+validation-suite test kept the branch's import of the real `SUITE` export over `main`'s regex
+scrape — both files export `SUITE`, and reading the declaration rather than its formatting is why
+`main` needed a regex fix in the first place.
+
+**Still open**: closeout steps 2-4 (CloudySky, F4.6) are untouched by this session.
