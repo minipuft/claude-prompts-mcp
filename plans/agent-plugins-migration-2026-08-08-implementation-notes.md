@@ -970,3 +970,33 @@ changed repository tooling.
   is the correct outcome and the reason I did not author the `fleet.json` entry there. Second stale
   sibling checkout found today (DEV-T4-21 was `minipuft-plugins`, 3 behind). **A local checkout of a
   fleet repo is a cache that nothing refreshes**, and two of three were wrong when read.
+
+## Deviations — 4.10 closed by deletion (2026-08-14, two parallel audits)
+
+- **DEV-T4-26** — **the fix was to remove the field, and neither option under consideration was that.**
+  The question had narrowed to "which workflow writes the codex-prompts marketplace version" — upstream
+  sync (cheap, wrong trigger, same-run race) or codex's own publish (right trigger, needs a credential
+  that does not exist). Both automate a field that turned out to be **optional**: no marketplace schema
+  is vendored anywhere, the `$schema` URL in the file 404s, and **every entry in Anthropic's own
+  official marketplace omits `version`** and installs. Deleting it closes the gap with no new
+  credential, no new workflow, and no staleness surface. **When a field has no writer, "who should
+  write it" is the second question; the first is whether it should exist.**
+- **DEV-T4-27** — **the owner's instinct was right, and about a client nobody was examining.** The
+  suspicion was functional loss. For Codex it is cosmetic: the install cache directory takes its
+  version from the plugin's own `.codex-plugin/plugin.json` — the same file OpenAI's bundled
+  cachebuster rewrites, its own docs noting the flow "does not rewrite marketplace entries". For
+  **Claude Code**, which reads the same shared marketplace file, the listing version **becomes the
+  install directory name**, so a stale value collides two different `dist` trees into one cache dir.
+  The severity split by client, and the investigation was framed around Codex because that is what we
+  had been testing all session.
+- **DEV-T4-28** — **the guard asserts an absence, which is the unusual and correct shape here.** The
+  invariant is not "the version is current" — nothing can make that true without a writer — but "no
+  field without a writer". So the check is `has("version") == false`, and it fails loudly if anyone
+  re-adds the field without also adding the mechanism that maintains it. Falsified against the real
+  workflow rather than only the fixture: mutating the assertion reddens the validator.
+- **DEV-T4-29** — **a first fix attempt corrupted the validator, caught by running it.** Inserting the
+  fixture lines with `rindex` matched the LAST occurrence of the anchor, which was inside a
+  single-quoted self-test string rather than the template-literal fixture, producing a syntax error.
+  The script would not even parse. **A textual anchor that appears in both the fixture and the tests
+  that mutate the fixture is ambiguous by construction** — line-indexed insertion after asserting the
+  line's content is the version that worked.
