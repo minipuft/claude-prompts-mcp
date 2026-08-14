@@ -1028,3 +1028,17 @@ changed repository tooling.
   artifact — a fresh `clone --branch dist` answers `initialize` and runs the SessionStart adapter to
   exit 0. Recorded as partial rather than done, because "the artifact is correct" and "Codex resolves
   `ref: dist` to it" are separate claims and only one is measured.
+- **DEV-T4-34** — **the live install closed 4.8 and immediately produced a new finding: same-name
+  plugins shadow silently.** With the dev install and the marketplace install both reading
+  `installed, enabled`, `codex mcp list` registered exactly one `codex-prompts` server — the dev copy,
+  identifiable only by its `cwd`. The marketplace copy's server never registered and nothing said so.
+  **`enabled` is not the same claim as `registered`**, and only the second one runs. Removing the dev
+  install flipped it over instantly. The sharp edge is that this repo's own README documents the
+  dev-marketplace flow, so following it leaves an install that outranks the published one — a
+  developer "verifying the release" can be exercising their checkout. Rowed as 4.14 and written into
+  the codex-plugins skill.
+- **DEV-T4-35** — **the install incidentally confirmed 4.10's reasoning by experiment.** The cache
+  directory is `.../minipuft/codex-prompts/0.1.3/` **even though the listing I published carries no
+  `version` field**. Codex took it from the plugin's own `.codex-plugin/plugin.json`, which is exactly
+  what the audit predicted and why deleting the listing field was safe for Codex. The prediction was
+  made from binary strings and OpenAI's cachebuster script; this is the direct observation.
