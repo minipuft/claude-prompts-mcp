@@ -35,6 +35,7 @@ Companion: [`plan-retirement-federation-2026-08-03.md`](plan-retirement-federati
 | DEV-F4-3 |      F4.6 | CloudySky's measured 49 `done` plans formed one archive queue.         | Citation closure reclassified 34 as `reference`; 15 remained archiveable. Nine pre-existing reference plans produced 43 relocations total. Two committed plans also lacked valid four-field frontmatter. | The isolated migration repaired frontmatter, moved 43 plans to `plans/reference/`, archived 15, and finished at 0 queued / 0 misclassified. |
 | DEV-F4-4 |      F4.7 | CI packaging could remain deferred.                                    | Installing the entire consumer dependency graph inside Release Please solely to reach one binary duplicates work and couples retirement to install health.                                               | Added a thin composite action that invokes the canonical executable; no second implementation exists.                                       |
 | DEV-F4-5 |      F4.5 | Suite substrate remained `file + tracked + walk + spawn`.              | After extraction, this repository directly spawns a pinned external executable; its internal substrate is owned and tested in repository-standards.                                                      | Updated the suite declaration to `spawn` and documented the checked converse.                                                               |
+| DEV-F4-6 |      F4.5 | The delivery PR alone could own accepted-work tracking.                | GitHub planning separates accepted work from delivery evidence, and PR #209 targets a non-default branch where closing keywords are ignored.                                                            | Issue #210 owns the work; PR #209 uses `Refs #210`, and the eventual release-to-`main` PR owns automatic closure.                            |
 
 ## CloudySky isolation artifact
 
@@ -64,6 +65,8 @@ Companion: [`plan-retirement-federation-2026-08-03.md`](plan-retirement-federati
 | CloudySky apply            | `npm run plans:retire` in isolated clone                  | PASS: 15 archive, 43 reference                                                                                                        |
 | CloudySky post-check       | check + self-test                                         | PASS: 0 queued / 0 misclassified; 115 tracked plans                                                                                   |
 | CloudySky repository suite | `npm run validate`                                        | PARTIAL: lint and typecheck passed; 160/161 Jest suites passed; unrelated timing test failed once and passed immediately in isolation |
+| Accepted-work tracking     | Issue #210 and private Project 1                          | PASS: exactly one Issue item; Status In Progress; Priority Normal; Area Repository Automation; Milestone unset                          |
+| Delivery linkage           | PR #209 body                                               | PASS: non-closing `Refs #210`; closure remains assigned to the release-to-`main` PR                                                     |
 
 ## Remaining closeout
 
