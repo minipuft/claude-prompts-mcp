@@ -916,3 +916,32 @@ changed repository tooling.
   marketplace symlink (codex), extension link (gemini), and my own warm npm cache. Each made an
   unshippable state look shipped. Rowed as 4.7 and explicitly not asserted — measuring it needs a
   machine without the checkout.
+
+## Deviations — shape (A) implementation (2026-08-14)
+
+- **DEV-T4-18** — **built the artifact by hand and tested it before writing the workflow that
+  generates it.** The alternative order — write the workflow, push, watch CI — would have encoded a
+  guessed file set and taken a round trip per wrong guess. Assembling the tree locally surfaced two
+  requirements no amount of reading would have: the server validates its own package root
+  (`Invalid package root … Missing: config.json`), so copying `dist`+`hooks`+`resources` is not
+  enough; and `ajv-formats`, which the bundle appears to require, **does not exist in the dependency
+  tree at all** — that `require` is unreachable, and chasing it as a missing dependency would have
+  been wasted work. The workflow now encodes a **proven** file set.
+- **DEV-T4-19** — **the `.gitignore` would have republished the exact defect being fixed.** The staged
+  dist tree inherits the source `.gitignore`, which excludes `node_modules/` — the one thing this tree
+  exists to ship. Simulated both ways locally: with it, `git add -A` stages **33 files and zero
+  runtime**; without it, 270 files including the runtime and 14 `hooks/lib` modules. A workflow that
+  looked correct and asserted files exist **on disk** would have force-pushed an empty runtime and
+  reported success. The publish step therefore asserts the runtime is **tracked**
+  (`git ls-files --error-unmatch`), not merely present — the tracked-vs-walk distinction that has now
+  produced findings six times in this initiative, here in the one place where it decides what ships.
+- **DEV-T4-20** — **path assertions do not prove a plugin runs, and both halves failed
+  independently**, so the workflow drives an `initialize` handshake and executes the SessionStart
+  adapter before pushing. A tree that cannot start is never published. This is the same reasoning that
+  made `verify:mcp` worth having upstream: a build that compiles and a server that answers are
+  different claims.
+- **DEV-T4-21** — **read a stale checkout and caught it before editing.** `minipuft-plugins` locally
+  showed the marketplace at `claude-prompts 3.1.1` while `origin/main` reads 3.2.1; the checkout was
+  **3 commits behind**. Editing it would have produced a diff against a superseded base. Same trap as
+  DEV-T3-13, one week apart, same repository — fast-forwarded first, then edited. **A local checkout
+  is a cache, and this one goes stale quietly because nothing in the workflow pulls it.**
