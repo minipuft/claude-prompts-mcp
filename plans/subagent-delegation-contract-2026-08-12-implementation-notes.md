@@ -49,6 +49,18 @@ Conservative option taken, logged, work continued.
 
 ## Validation runs
 
+- 2026-08-13 05:56 · `cd /home/minipuft/Applications/claude-prompts-mcp npx --prefix server prettier --write plans/agent-plugins-migration-202` · ran
+- 2026-08-13 05:55 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -5` · ran
+- 2026-08-13 05:54 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -6` · ran
+- 2026-08-13 05:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx prettier --write scripts/lib/substrate.js scripts/run-valid` · ran
+- 2026-08-13 05:50 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --input-type=module -e " import {readFileSync,writeFileSyn` · ran
+- 2026-08-13 05:47 · `cd /home/minipuft/Applications/claude-prompts-mcp/server node --input-type=module -e " import {readFileSync,writeFileSyn` · ran
+- 2026-08-13 05:25 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npm run validate:all 2>&1 | tail -12` · ran
+- 2026-08-13 05:24 · `cd /home/minipuft/Applications/claude-prompts-mcp/server echo "=== E8(1) validate:readme ===" && npm run validate:readme` · ran
+- 2026-08-13 04:53 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 04:51 · `cd /home/minipuft/Applications/claude-prompts-mcp/server NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit/scri` · ran
+- 2026-08-13 04:51 · `cd /home/minipuft/Applications/claude-prompts-mcp/server npx jest tests/unit/scripts/validation-self-tests.test.ts 2>&1 ` · ran
+- 2026-08-13 04:49 · `cd /home/minipuft/Applications/claude-prompts-mcp npm --prefix server run plans:retire:self-test --silent 2>&1 | tail -2` · ran
 - 2026-08-13 03:56 · `cd server && node scripts/validate-plan-row-tracking.js 2>&1 | tail -2 && npx prettier --check ../plans/*.md ../plans/te` · ran
 - 2026-08-13 03:45 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run typecheck 2>&1 | tail -20 && echo "=== TYPECHECK DON` · ran
 - 2026-08-13 03:44 · `cd /home/minipuft/Applications/claude-prompts-mcp/server && npm run validate:all 2>&1 | tail -55` · ran

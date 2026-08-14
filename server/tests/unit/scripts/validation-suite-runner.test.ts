@@ -2,9 +2,10 @@
  * Asserts the property `validate:all` did not have while it was a shell `&&` chain: that one
  * failing step does not hide the rest.
  *
- * WHY SPAWN RATHER THAN IMPORT: the runner calls `process.exit()` and spawns npm per step, so
- * importing it into a Jest worker would kill the worker. This mirrors `validation-self-tests.test.ts`
- * — the established shape for asserting a CLI checker in this repo.
+ * WHY SPAWN THE BEHAVIOUR TESTS: the runner's `main()` calls `process.exit()` and spawns npm per
+ * step, so invoking it inside a Jest worker would kill the worker. The exported `SUITE` is safe to
+ * import because `main()` is guarded. Spawning mirrors `validation-self-tests.test.ts` — the
+ * established shape for asserting a CLI checker in this repo.
  *
  * The broken steps are npm script names that do not exist. `npm run <missing>` exits non-zero
  * without touching the repo, which gives a genuine failing step without planting a broken check
@@ -128,7 +129,7 @@ describe('validation suite runner', () => {
       path.join(SERVER_ROOT, 'scripts', 'run-validation-suite.js'),
       'utf8'
     );
-    const declared = [...source.matchAll(/\{ script: '([^']+)'/g)].map((match) => match[1]);
+    const declared = [...source.matchAll(/\bscript:\s*'([^']+)'/g)].map((match) => match[1]);
 
     expect(declared.length).toBeGreaterThan(0);
     const undefinedSteps = declared.filter((name) => !manifest.scripts?.[name]);
