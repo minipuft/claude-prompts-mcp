@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/minipuft/repository-standards/v1.2.0/contracts/plan-retirement.schema.json",
+  "$schema": "https://raw.githubusercontent.com/minipuft/repository-standards/v1.3.0/contracts/plan-retirement.schema.json",
   "linkSources": [
     "plans",
     "docs",
