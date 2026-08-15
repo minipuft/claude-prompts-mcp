@@ -126,6 +126,8 @@
     "validate:release-workflow": "node scripts/validate-release-workflow.js",
     "validate:release-workflow:self-test": "node scripts/validate-release-workflow.js --self-test",
     "validate:downstream-lock-sync:self-test": "node scripts/synchronize-downstream-lock.js --self-test",
+    "verify:downstream-sync": "node scripts/verify-downstream-sync.js",
+    "verify:downstream-sync:self-test": "node scripts/verify-downstream-sync.js --self-test",
     "validate:renovate-extraction": "node scripts/validate-renovate-extraction.js",
     "validate:renovate-extraction:self-test": "node scripts/validate-renovate-extraction.js --self-test",
     "validate:push-scope:self-test": "node ../scripts/classify-validation-scope.js --self-test",

@@ -167,6 +167,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'verify:downstream-sync:self-test',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse:
+      'CHECKED both ways — a downstream behind the release is reported, and one at the release passes; the grace window suppresses drift findings but NOT unreadable ones, each proven separately',
+  },
+  {
     script: 'validate:readme',
     io: 'read',
     reads: ['file', 'index', 'spawn', 'tracked', 'walk'],

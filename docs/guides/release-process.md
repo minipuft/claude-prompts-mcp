@@ -114,6 +114,35 @@ Drift is watched centrally rather than per-repo: `minipuft/repository-standards`
 `Fleet Drift Audit` over the repositories listed in its `fleet.json`, comparing each one's resolved
 `node_modules/claude-prompts` version against this repository's published version.
 
+### Did it land, or was it only sent?
+
+Every gate above answers "we sent it". `sync-downstream` ends at `gh pr merge --auto`, and
+auto-merge lands the PR **when the downstream's own CI passes** — so a downstream whose CI fails,
+or whose sync PR is closed, stays on the old engine while the upstream release is already green.
+`fail-fast: false` gives the same silence to a leg that never got that far: the v4.0.0 run failed
+`codex-prompts` on a token permission while the other three synced, and the only signal was a
+workflow-level red indistinguishable from "the release broke".
+
+`Downstream Sync Audit` (`.github/workflows/downstream-sync-audit.yml`, daily) reads the **landed**
+state instead — the marketplace listing version for `minipuft-plugins`, the resolved lockfile
+version for the npm consumers — and fails when one is behind the published release. Two properties
+are load-bearing:
+
+- It derives its target list from `extension-publish.yml`'s sync matrix, so a downstream added
+  there cannot be silently unaudited. A downstream with no declared probe is an error, never a
+  skip.
+- It authenticates with the **default** workflow token, never `RELEASE_PLEASE_TOKEN`. That PAT
+  going stale is one of the conditions the audit detects, and a detector that dies with its
+  subject reports nothing.
+
+`--grace-hours` (default 24) keeps release day quiet, because auto-merge has legitimately not
+resolved yet. An **unreadable** downstream is reported regardless of the grace window — that is not
+"not landed yet", it is "this audit cannot see this repository".
+
+This overlaps the Fleet Drift Audit on resolved version and is deliberately not merged into it:
+`fleet.json` is a hand-maintained list in another repository and currently omits `codex-prompts`
+entirely, which is how the one downstream that actually failed a sync had no drift coverage.
+
 ---
 
 ## Workflow Chain

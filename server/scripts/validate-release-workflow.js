@@ -6,6 +6,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseDownstreamMatrix } from './lib/downstream-matrix.js';
+
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKFLOW = join(ROOT_DIR, '.github', 'workflows', 'extension-publish.yml');
 const MERGE_MODES = new Set(['auto']);
@@ -15,29 +17,9 @@ const REQUIRED_RELEASE_PATHS = [
   'claude-prompts-${{ steps.version.outputs.version }}-sourcemaps.tar.gz',
 ];
 
-function downstreamEntries(source) {
-  const matrixStart = source.indexOf('      matrix:\n');
-  const stepsStart = source.indexOf('    steps:\n', matrixStart);
-  if (matrixStart === -1 || stepsStart === -1) return [];
-  const matrix = source.slice(matrixStart, stepsStart);
-  const entries = [];
-  let current;
-  for (const line of matrix.split(/\r?\n/)) {
-    const repo = line.match(/^\s+- repo:\s*(\S+)\s*$/);
-    if (repo) {
-      current = { repo: repo[1] };
-      entries.push(current);
-      continue;
-    }
-    const mode = line.match(/^\s+merge_mode:\s*(\S+)\s*$/);
-    if (mode && current) current.mergeMode = mode[1];
-  }
-  return entries;
-}
-
 function findViolations(source) {
   const violations = [];
-  const entries = downstreamEntries(source);
+  const entries = parseDownstreamMatrix(source);
   if (entries.length === 0) violations.push('downstream matrix has no repositories');
   for (const entry of entries) {
     if (!entry.mergeMode) violations.push(`${entry.repo} has no merge_mode`);

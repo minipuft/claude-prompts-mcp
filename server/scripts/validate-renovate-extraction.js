@@ -8,6 +8,10 @@ const ACTION_FILES = [
   '.github/workflows/ci.yml',
   // `downstream-sync.yml` was removed here 2026-08-13 with the workflow itself. `fileCount` below
   // is a FILE count and line 159 asserts this exact set, so the two move together — 8 → 7.
+  // `downstream-sync-audit.yml` was added 2026-08-15, restoring 7 → 8 by the same pairing. Note
+  // it is a DIFFERENT workflow from the one removed above: that one was a dead
+  // `repository_dispatch` chain, this one reads downstream merge state on a schedule.
+  '.github/workflows/downstream-sync-audit.yml',
   '.github/workflows/extension-publish.yml',
   '.github/workflows/npm-publish.yml',
   '.github/workflows/registry-publish.yml',
@@ -15,7 +19,7 @@ const ACTION_FILES = [
   '.github/workflows/renovate-config-validator.yml',
 ];
 const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'];
-const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, regex: 5 };
+const EXPECTED_COUNTS = { 'github-actions': 8, nodenv: 1, npm: 3, regex: 5 };
 const EXPECTED_REGEX_IDENTITIES = [
   ['PyYAML', '.github/workflows/ci.yml'],
   ['pyrefly', '.github/workflows/ci.yml'],

@@ -96,6 +96,13 @@ const ALLOWED_OUTSIDE = [
     runBy: ['.github/workflows/npm-publish.yml'],
   },
   {
+    script: 'verify:downstream-sync',
+    reason:
+      'reads four other repositories over the network and grades their merge state; a suite that gates every commit cannot depend on downstream CI having finished',
+    closedBy: 'never, while the check is about repositories this suite does not control',
+    runBy: ['.github/workflows/downstream-sync-audit.yml'],
+  },
+  {
     script: 'validate:renovate-extraction',
     reason:
       'reads Renovate dry-run JSONL on stdin; a SUITE step runs with stdin ignored, so it is structurally ineligible',

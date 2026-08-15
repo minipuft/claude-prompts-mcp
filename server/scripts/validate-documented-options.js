@@ -57,6 +57,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--tags', // git push --tags
   '--title', // gh release create
   '--notes', // gh release create
+  '--auto', // gh pr merge --auto
   '--plugin-dir', // claude --plugin-dir
   '--print', // claude --print
   '--strict', // npm run validate:identity-backfill -- --strict

@@ -1,0 +1,60 @@
+name: Downstream Sync Audit
+
+# Asserts the FLEET, which no release-time gate does.
+#
+# `extension-publish.yml`'s sync-downstream job validates each downstream hard and then ends at
+# `gh pr merge --auto`. Auto-merge lands the PR when the DOWNSTREAM'S CI passes — so a downstream
+# whose CI fails, or whose sync PR is closed, stays on the old engine while the upstream release
+# is already green. That gap is invisible from upstream by construction.
+#
+# Scheduled rather than chained onto the release: the answer this asks ("did it land") is not
+# knowable at release time, because auto-merge has not resolved yet. A post-release run would
+# either block the release on four other repositories' CI or report a pending state as success.
+# A daily read answers it once it IS knowable, and `--grace-hours` keeps release day quiet.
+on:
+  schedule:
+    # 09:00 UTC daily. Four API reads; the cost of asking more often is not the API, it is that a
+    # check firing into an unresolved auto-merge window trains its own signal to be ignored.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to assert downstream (default: latest published release)"
+        required: false
+      grace_hours:
+        description: "Hours after publication before drift is blocking (default 24)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    # Fork courtesy: a fork auditing this repo's downstreams reports on repositories it does not
+    # own, which is noise in someone else's Actions tab rather than a finding.
+    if: github.repository == 'minipuft/claude-prompts-mcp'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+
+      # Proves the grader can still fail before trusting a green fleet read. The check is a
+      # relation between repositories, so nothing else in CI exercises it.
+      - name: Self-test the auditor
+        working-directory: server
+        run: npm run verify:downstream-sync:self-test
+
+      - name: Audit downstream sync state
+        working-directory: server
+        env:
+          # The DEFAULT token on purpose, never RELEASE_PLEASE_TOKEN. That PAT going stale is one
+          # of the conditions this audit exists to detect — authenticating with it would make the
+          # detector fail in the same breath as its subject. Every downstream is public.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm run verify:downstream-sync -- \
+            ${{ inputs.version && format('--version {0}', inputs.version) || '' }} \
+            --grace-hours ${{ inputs.grace_hours || '24' }}
