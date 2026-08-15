@@ -275,3 +275,67 @@ describe('ArgumentParser freeform text routing', () => {
     expect(result.processedArgs).toHaveProperty('purpose');
   });
 });
+
+// A colon is punctuation more often than it is a delimiter. The key-value strategy used to
+// claim any input matching /[\w-]+\s*[=:]\s*/, so a plain sentence containing a colon was
+// parsed as arguments: the word before the colon became an undeclared argument, the declared
+// required argument was left empty, and the user's sentence was lost.
+describe('ArgumentParser prose-vs-delimiter disambiguation', () => {
+  const createPrompt = (): ConvertedPrompt => ({
+    id: 'initial_scan',
+    name: 'Initial Scan',
+    description: '',
+    category: 'general',
+    userMessageTemplate: '{{topic}}',
+    arguments: [
+      { name: 'topic', required: true, type: 'string' },
+      { name: 'purpose', required: false, type: 'string' },
+    ],
+  });
+
+  test('freeform prose containing a colon routes to the primary argument', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments('fix the bug: parser breaks', createPrompt(), {});
+
+    expect(result.metadata.parsingStrategy).toBe('simple');
+    expect(result.processedArgs.topic).toBe('fix the bug: parser breaks');
+    expect(result.processedArgs).not.toHaveProperty('bug');
+    expect(result.validationResults.every((r) => r.valid)).toBe(true);
+  });
+
+  test('prose containing an equals sign is still prose', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments('why does a=b fail here', createPrompt(), {});
+
+    expect(result.metadata.parsingStrategy).toBe('simple');
+    expect(result.processedArgs.topic).toBe('why does a=b fail here');
+  });
+
+  test('a real declared key still selects the key-value strategy', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments('topic:"MCP parsers"', createPrompt(), {});
+
+    expect(result.metadata.parsingStrategy).toBe('keyvalue');
+    expect(result.processedArgs.topic).toBe('MCP parsers');
+  });
+
+  // Mixed input: one real key plus prose that trips the delimiter pattern. The strategy is
+  // correctly chosen here, so the screen in canHandle cannot help — the parse loop must drop
+  // the undeclared key itself.
+  test('an undeclared key alongside a real one is dropped, not emitted', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments(
+      'topic:"MCP parsers" bug: it breaks',
+      createPrompt(),
+      {}
+    );
+
+    expect(result.metadata.parsingStrategy).toBe('keyvalue');
+    expect(result.processedArgs.topic).toBe('MCP parsers');
+    expect(result.processedArgs).not.toHaveProperty('bug');
+  });
+});
