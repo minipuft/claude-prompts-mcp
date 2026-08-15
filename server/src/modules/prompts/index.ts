@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { PromptConverter } from './converter.js';
 import { PromptLoader } from './loader.js';
 import { discoverPromptDirectories, buildWatchTargets } from './prompt-watch-setup.js';
-import { PromptRegistry } from './registry.js';
+import { PromptRegistry, type PromptRegistryServer } from './registry.js';
 import {
   HotReloadObserver,
   createHotReloadObserver,
@@ -117,23 +117,30 @@ export class PromptAssetManager {
   }
 
   /**
-   * Register prompts with MCP server
+   * Register prompts onto a serving MCP server shell.
+   *
+   * `target` names the shell to bind: one is built per STDIO connection and per
+   * HTTP request, so the caller that owns the serving unit passes its own.
+   * Omitting it binds the shell handed in at construction, which is only
+   * meaningful before any serving unit exists.
    */
-  async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
+  async registerAllPrompts(
+    prompts: ConvertedPrompt[],
+    target?: PromptRegistryServer
+  ): Promise<number> {
     if (!this.registry) {
       throw new Error('MCP server not provided - cannot register prompts');
     }
-    return this.registry.registerAllPrompts(prompts);
+    return this.registry.registerAllPrompts(prompts, target);
   }
 
   /**
-   * Notify clients that prompt list has changed (for hot-reload)
+   * Publish the current prompt content without binding it to a shell.
+   *
+   * Load and hot reload go through here; binding is the serving unit's job.
    */
-  async notifyPromptsListChanged(): Promise<void> {
-    if (!this.registry) {
-      throw new Error('MCP server not provided - cannot send notifications');
-    }
-    await this.registry.notifyPromptsListChanged();
+  setLivePrompts(prompts: ConvertedPrompt[]): void {
+    this.registry?.setLivePrompts(prompts);
   }
 
   /**
@@ -183,21 +190,23 @@ export class PromptAssetManager {
     promptsData: PromptData[];
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
-    registeredCount: number;
+    loadedCount: number;
   }> {
     try {
       // Load and convert prompts
       const result = await this.loadAndConvertPrompts(configPath, basePath);
 
-      // Register with MCP server if available
-      let registeredCount = 0;
+      // Publish content only. Binding happens per serving unit, so registering
+      // here would target the construction-time shell that no client connects
+      // to — which is what made a loaded-but-unreachable prompt surface report
+      // itself as registered.
       if (this.registry) {
-        registeredCount = await this.registerAllPrompts(result.convertedPrompts);
+        this.setLivePrompts(result.convertedPrompts);
       } else {
         this.logger.warn('MCP server not available - skipping prompt registration');
       }
 
-      return { ...result, registeredCount };
+      return { ...result, loadedCount: result.convertedPrompts.length };
     } catch (error) {
       this.logger.error('Error initializing prompt system:', error);
       throw error;
@@ -214,7 +223,7 @@ export class PromptAssetManager {
     promptsData: PromptData[];
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
-    registeredCount: number;
+    loadedCount: number;
   }> {
     this.logger.info('Reloading prompt system...');
 

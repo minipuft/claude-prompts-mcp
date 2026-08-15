@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import {
+  publishPromptsChanged,
   publishResourcesChanged,
   publishToolsChanged,
 } from '../../../src/runtime/list-change-notifier.js';
@@ -34,17 +35,22 @@ function makeServer(): ListChangeServer {
   return {
     sendToolListChanged: jest.fn(),
     sendResourceListChanged: jest.fn(),
+    sendPromptListChanged: jest.fn(),
   };
 }
 
 function makeTargets(withHttp: boolean): {
   targets: ListChangeTargets;
   server: ListChangeServer;
-  publisher: { toolsChanged: jest.Mock; resourcesChanged: jest.Mock };
+  publisher: { toolsChanged: jest.Mock; resourcesChanged: jest.Mock; promptsChanged: jest.Mock };
   logger: Logger;
 } {
   const server = makeServer();
-  const publisher = { toolsChanged: jest.fn(), resourcesChanged: jest.fn() };
+  const publisher = {
+    toolsChanged: jest.fn(),
+    resourcesChanged: jest.fn(),
+    promptsChanged: jest.fn(),
+  };
   const logger = makeLogger();
   return {
     targets: {
@@ -133,6 +139,46 @@ describe('publishResourcesChanged', () => {
     publishToolsChanged(targets);
 
     expect(publisher.toolsChanged).toHaveBeenCalledTimes(1);
+    expect(publisher.resourcesChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('publishPromptsChanged', () => {
+  test('publishes through the HTTP notifier when HTTP is serving', () => {
+    const { targets, server, publisher } = makeTargets(true);
+
+    publishPromptsChanged(targets);
+
+    expect(publisher.promptsChanged).toHaveBeenCalledTimes(1);
+    expect(server.sendPromptListChanged).not.toHaveBeenCalled();
+  });
+
+  test('pushes from the pinned instance on the STDIO-only path', () => {
+    const { targets, server, publisher } = makeTargets(false);
+
+    publishPromptsChanged(targets);
+
+    expect(server.sendPromptListChanged).toHaveBeenCalledTimes(1);
+    expect(publisher.promptsChanged).not.toHaveBeenCalled();
+  });
+
+  test('swallows a publish failure so a hot reload cannot be aborted by it', () => {
+    const { targets, logger } = makeTargets(false);
+    (targets.pinnedServer.sendPromptListChanged as jest.Mock).mockImplementation(() => {
+      throw new Error('Connection closed');
+    });
+
+    expect(() => publishPromptsChanged(targets)).not.toThrow();
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  test('does not fire the sibling events', () => {
+    const { targets, publisher } = makeTargets(true);
+
+    publishPromptsChanged(targets);
+
+    expect(publisher.promptsChanged).toHaveBeenCalledTimes(1);
+    expect(publisher.toolsChanged).not.toHaveBeenCalled();
     expect(publisher.resourcesChanged).not.toHaveBeenCalled();
   });
 });

@@ -156,10 +156,13 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     promptManager.setExportedPromptIds(exportedPromptIds);
   }
 
-  // Register prompts with MCP server
-  await promptManager.registerAllPrompts(convertedPrompts);
+  // Publish content, do not bind. Binding is per serving unit — one shell per
+  // STDIO connection and per HTTP request — so `createMcpServerFactory` owns it.
+  // Registering here would target the construction-time shell no client attaches
+  // to, and report success for a prompt surface that answers nothing.
+  promptManager.setLivePrompts(convertedPrompts);
   if (!isQuiet) {
-    logger.info('🔄 Prompts registered with MCP server');
+    logger.info(`🔄 ${convertedPrompts.length} prompts published to the MCP prompt registry`);
   }
 
   return {

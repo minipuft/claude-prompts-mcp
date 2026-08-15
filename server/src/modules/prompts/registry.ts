@@ -17,19 +17,42 @@ import { isChainPrompt } from '#shared/utils/chainUtils.js';
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 /**
- * Prompt Registry class
+ * The slice of `McpServer` this module binds against.
+ *
+ * Exported because callers hand a specific serving shell to `registerAllPrompts`
+ * and need to name its type without reaching through `Parameters<>`.
  */
-type PromptRegistryServer = Pick<McpServer, 'registerPrompt'> & {
-  notification?: (notification: { method: string; params?: unknown }) => void;
-};
+export type PromptRegistryServer = Pick<McpServer, 'registerPrompt'>;
 
+/**
+ * Prompt Registry class
+ *
+ * Holds two pieces of state with different lifetimes, and the distinction is the
+ * whole design:
+ *
+ * - **Binding** is per serving unit. Protocol revision 2026-07-28 removed
+ *   protocol sessions, so `createMcpServerFactory` builds a fresh `McpServer`
+ *   per STDIO connection and per HTTP request. Each shell needs its own
+ *   `registerPrompt` calls, tracked in `registeredPromptIds`.
+ * - **Content** is one live singleton. `livePrompts` is replaced wholesale on
+ *   every load and hot reload, and handlers resolve through it at call time
+ *   rather than closing over the prompt they were registered with.
+ *
+ * Keeping content out of the closure is what makes an edited prompt take effect
+ * without re-registration — which the SDK rejects anyway once an id is bound.
+ */
 export class PromptRegistry {
   private logger: Logger;
   private mcpServer: PromptRegistryServer;
   private conversationStore: ConversationStore;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
-  private registeredPromptIds = new Set<string>(); // Track registered prompt IDs to prevent duplicates
+  // Dedup is per serving unit: the same prompt legitimately registers once on
+  // each shell, so a single flat Set would let the first unit's ids suppress
+  // registration on every later one.
+  private registeredPromptIds = new WeakMap<PromptRegistryServer, Set<string>>();
   private exportedPromptIds = new Set<string>(); // Prompt IDs exported as skills (auto-deregistered)
+  /** Current content for every loaded prompt, keyed by id. Replaced on reload. */
+  private livePrompts = new Map<string, ConvertedPrompt>();
 
   /**
    * Direct template processing method (minimal implementation)
@@ -55,6 +78,38 @@ export class PromptRegistry {
     // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   }
 
+  /** Registered-id set for one serving unit, created on first sight. */
+  private registeredIdsFor(target: PromptRegistryServer): Set<string> {
+    let ids = this.registeredPromptIds.get(target);
+    if (!ids) {
+      ids = new Set<string>();
+      this.registeredPromptIds.set(target, ids);
+    }
+    return ids;
+  }
+
+  /**
+   * Replace the live content every registered handler resolves through.
+   *
+   * Called on load and on every hot reload. Handlers registered against any
+   * shell — including ones bound before this call — serve the new content from
+   * their next invocation, which is why an edited prompt needs no re-binding.
+   */
+  setLivePrompts(prompts: ConvertedPrompt[]): void {
+    this.livePrompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+  }
+
+  /**
+   * Current content for a prompt id.
+   *
+   * Falls back to the definition captured at registration when the id is absent
+   * from the live map — a prompt deleted from disk keeps answering with its last
+   * known content rather than throwing at a client that still has it listed.
+   */
+  private resolveLivePrompt(registered: ConvertedPrompt): ConvertedPrompt {
+    return this.livePrompts.get(registered.id) ?? registered;
+  }
+
   /**
    * Set prompt IDs that have been exported as client skills via skills-sync.
    * Exported prompts are auto-deregistered from MCP to avoid duplication.
@@ -68,9 +123,13 @@ export class PromptRegistry {
    * Register individual prompts using MCP SDK registerPrompt API
    * This implements the standard MCP prompts protocol using the high-level API
    */
-  private registerIndividualPrompts(prompts: ConvertedPrompt[]): void {
+  private registerIndividualPrompts(
+    prompts: ConvertedPrompt[],
+    target: PromptRegistryServer
+  ): number {
     try {
       this.logger.info('Registering individual prompts with MCP SDK...');
+      const registeredIds = this.registeredIdsFor(target);
       let registeredCount = 0;
 
       for (const prompt of prompts) {
@@ -87,8 +146,8 @@ export class PromptRegistry {
           continue;
         }
 
-        // Skip if already registered (deduplication guard)
-        if (this.registeredPromptIds.has(prompt.id)) {
+        // Skip if already registered on THIS shell (deduplication guard)
+        if (registeredIds.has(prompt.id)) {
           this.logger.debug(`Skipping already registered prompt: ${prompt.id}`);
           continue;
         }
@@ -105,7 +164,7 @@ export class PromptRegistry {
         // Register the prompt using the correct MCP SDK API with error recovery
         // Use prompt.id for all MCP registration (slug-based, no spaces)
         try {
-          this.mcpServer.registerPrompt(
+          target.registerPrompt(
             prompt.id,
             {
               title: prompt.id,
@@ -114,12 +173,14 @@ export class PromptRegistry {
             },
             async (args: any) => {
               this.logger.debug(`Executing prompt '${prompt.id}' with args:`, args);
-              return await this.executePromptLogic(prompt, args || {});
+              // Resolve content now, not at registration: a hot reload replaces
+              // the live map, and this closure outlives it.
+              return await this.executePromptLogic(this.resolveLivePrompt(prompt), args || {});
             }
           );
 
           // Track the registered prompt
-          this.registeredPromptIds.add(prompt.id);
+          registeredIds.add(prompt.id);
           registeredCount++;
           this.logger.debug(`Registered prompt: ${prompt.id}`);
         } catch (error: any) {
@@ -128,7 +189,7 @@ export class PromptRegistry {
             this.logger.warn(
               `Prompt '${prompt.id}' already registered in MCP SDK, skipping re-registration`
             );
-            this.registeredPromptIds.add(prompt.id); // Track it anyway
+            registeredIds.add(prompt.id); // Track it anyway
             continue;
           } else {
             // Re-throw other errors
@@ -141,6 +202,7 @@ export class PromptRegistry {
       this.logger.info(
         `Successfully registered ${registeredCount} of ${prompts.length} prompts with MCP SDK`
       );
+      return registeredCount;
     } catch (error) {
       this.logger.error(
         'Error registering individual prompts:',
@@ -224,40 +286,32 @@ export class PromptRegistry {
   /**
    * Register all prompts with the MCP server using proper MCP protocol
    */
-  async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
+  async registerAllPrompts(
+    prompts: ConvertedPrompt[],
+    target: PromptRegistryServer = this.mcpServer
+  ): Promise<number> {
     try {
       this.logger.info(`Registering ${prompts.length} prompts with MCP SDK registerPrompt API...`);
 
-      // Register individual prompts using the correct MCP SDK API
-      this.registerIndividualPrompts(prompts);
+      // Content first: handlers bound below resolve through the live map, and
+      // handlers bound on earlier shells pick the new content up from here too.
+      this.setLivePrompts(prompts);
 
-      this.logger.info(`Successfully registered ${prompts.length} prompts with MCP SDK`);
-      return prompts.length;
+      // Returns what actually bound, which is lower than `prompts.length`
+      // whenever a prompt opts out or is exported as a skill. Reporting the
+      // input length instead is what let a fully dead prompt surface log as a
+      // success.
+      return this.registerIndividualPrompts(prompts, target);
     } catch (error) {
       this.logger.error(`Error registering prompts:`, error);
       throw error;
     }
   }
 
-  /**
-   * Send list_changed notification to clients (for hot-reload)
-   * This is the proper MCP way to notify clients about prompt updates
-   */
-  async notifyPromptsListChanged(): Promise<void> {
-    try {
-      // Send MCP notification that prompt list has changed
-      if (this.mcpServer && typeof this.mcpServer.notification === 'function') {
-        this.mcpServer.notification({
-          method: 'notifications/prompts/list_changed',
-        });
-        this.logger.info('✅ Sent prompts/list_changed notification to clients');
-      } else {
-        this.logger.debug("MCP server doesn't support notifications");
-      }
-    } catch (error) {
-      this.logger.warn('Could not send prompts/list_changed notification:', error);
-    }
-  }
+  // Announcing the list change is NOT this class's job: the registry only ever
+  // holds the shell it was constructed with, which no client connects to once
+  // binding became per serving unit. `runtime/list-change-notifier.ts` owns the
+  // transport choice for all three list kinds — see `publishPromptsChanged`.
 
   // Note: MCP SDK doesn't provide prompt unregistration
   // Hot-reload is handled through list_changed notifications to clients
