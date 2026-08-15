@@ -413,7 +413,22 @@ export class GateEnforcementAuthority {
           reviewCleared: true,
         };
 
-      case 'abort':
+      case 'abort': {
+        // Cancel the RUN, not just the request. `context.state.session.aborted` (set by the
+        // caller) is per-request state that stage 21 reads to write a `cancelled` execution
+        // record — it says the run ended without ending it. Until this call landed, runStatus
+        // stayed 'working', so the next prompt_engine call resumed the chain the user had just
+        // aborted, and the only real exit was `system_control session cancel`.
+        //
+        // `cancelChain` returns false for an already-terminal run (completed/failed). That is
+        // not a failure to report upward: the run is over either way, so the caller still takes
+        // the abort exit rather than re-rendering the step.
+        const cancelled = await this.chainSessionStore.cancelChain(sessionId);
+        if (!cancelled) {
+          this.logger.warn(
+            `[GateEnforcementAuthority] Abort requested for session ${sessionId}, but the run could not be cancelled (already terminal or out of scope)`
+          );
+        }
         this.logger.debug(
           `[GateEnforcementAuthority] User chose to abort chain after gate failure`,
           {
@@ -424,6 +439,7 @@ export class GateEnforcementAuthority {
           handled: true,
           sessionAborted: true,
         };
+      }
 
       default:
         this.logger.warn(`[GateEnforcementAuthority] Unknown gate action: ${action}`);

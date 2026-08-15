@@ -23,6 +23,7 @@ const createMockChainSessionStore = () => ({
   isRetryLimitExceeded: jest.fn().mockReturnValue(false),
   resetRetryCount: jest.fn(),
   recordGateReviewOutcome: jest.fn().mockReturnValue('cleared'),
+  cancelChain: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(true),
 });
 
 describe('GateEnforcementAuthority', () => {
@@ -591,6 +592,34 @@ GATE_REVIEW: FAIL - Tests missing`;
 
       expect(result.handled).toBe(true);
       expect(result.sessionAborted).toBe(true);
+    });
+
+    // Regression: abort used to set only the in-memory `state.session.aborted` flag, which
+    // stage 21 reads to write a `cancelled` execution record. Nothing transitioned the RUN,
+    // so `runStatus` stayed 'working' and the next call resumed the chain the user aborted —
+    // the ledger said cancelled while the run kept going.
+    test('abort cancels the chain run, not just the in-memory flag', async () => {
+      await authority.resolveAction('session-1', 'abort');
+
+      expect(mockSessionManager.cancelChain).toHaveBeenCalledWith('session-1');
+    });
+
+    test('abort still reports sessionAborted when the run is already terminal', async () => {
+      // cancelChain refuses completed/failed runs. That is not an error here: the run is
+      // already over, so the caller must still take the abort exit rather than re-render.
+      mockSessionManager.cancelChain.mockResolvedValue(false);
+
+      const result = await authority.resolveAction('session-1', 'abort');
+
+      expect(result.handled).toBe(true);
+      expect(result.sessionAborted).toBe(true);
+    });
+
+    test('retry and skip leave the run alive', async () => {
+      await authority.resolveAction('session-1', 'retry');
+      await authority.resolveAction('session-1', 'skip');
+
+      expect(mockSessionManager.cancelChain).not.toHaveBeenCalled();
     });
 
     test('handles unknown action', async () => {

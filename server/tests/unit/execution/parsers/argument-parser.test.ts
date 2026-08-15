@@ -207,3 +207,71 @@ describe('ArgumentParser dashed argument names', () => {
     expect(result.processedArgs['output-format']).toBe('xml');
   });
 });
+
+// Routing freeform text to a declared argument is the behavior that makes
+// `>>initial_scan some topic` work at all — without it the text is parsed as
+// nothing and every argument falls back to a default. It had no direct coverage:
+// every other case in this file supplies `key:"value"` pairs.
+describe('ArgumentParser freeform text routing', () => {
+  const createPrompt = (args: ConvertedPrompt['arguments']): ConvertedPrompt => ({
+    id: 'freeform-test',
+    name: 'Freeform Test',
+    description: '',
+    category: 'general',
+    userMessageTemplate: '{{topic}}',
+    arguments: args,
+  });
+
+  test('routes freeform text to the sole declared argument', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([{ name: 'topic', required: true, type: 'string' }]);
+
+    const result = await parser.parseArguments('quote-aware operator parsing', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('quote-aware operator parsing');
+    expect(result.metadata.contextSources.topic).toBe('user_provided');
+  });
+
+  // Priority is "first REQUIRED argument", not "first argument" — an optional
+  // argument declared ahead of the required one must not capture the text.
+  test('prefers the first required argument over an earlier optional one', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([
+      { name: 'purpose', required: false, type: 'string' },
+      { name: 'topic', required: true, type: 'string' },
+      { name: 'constraints', required: false, type: 'string' },
+    ]);
+
+    const result = await parser.parseArguments('MCP command parsers', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('MCP command parsers');
+    expect(result.metadata.contextSources.topic).toBe('user_provided');
+    expect(result.processedArgs.purpose).not.toBe('MCP command parsers');
+  });
+
+  test('falls back to the first argument when none are required', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([
+      { name: 'topic', required: false, type: 'string' },
+      { name: 'purpose', required: false, type: 'string' },
+    ]);
+
+    const result = await parser.parseArguments('no required args here', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('no required args here');
+    expect(result.metadata.contextSources.topic).toBe('user_provided');
+  });
+
+  test('leaves the remaining arguments defaulted rather than unset', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([
+      { name: 'topic', required: true, type: 'string' },
+      { name: 'purpose', required: false, type: 'string' },
+    ]);
+
+    const result = await parser.parseArguments('a topic', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('a topic');
+    expect(result.processedArgs).toHaveProperty('purpose');
+  });
+});

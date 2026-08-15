@@ -41,6 +41,7 @@ const createMockSessionService = (): ChainSessionService =>
     setPendingShellVerification: jest.fn().mockResolvedValue(undefined),
     getPendingShellVerification: jest.fn().mockReturnValue(undefined),
     clearPendingShellVerification: jest.fn().mockResolvedValue(undefined),
+    cancelChain: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
   }) as unknown as ChainSessionService;
 
 describe('ShellVerificationStage', () => {
@@ -232,6 +233,10 @@ describe('ShellVerificationStage', () => {
 
       // Should mark session as aborted
       expect(context.state.session.aborted).toBe(true);
+
+      // ...and cancel the run, so "Execution stopped by user" above is true rather than
+      // advisory. The flag alone left runStatus 'working' and the chain resumable.
+      expect(sessionService.cancelChain).toHaveBeenCalled();
 
       // Should NOT execute the verification command
       expect(executor.execute).not.toHaveBeenCalled();

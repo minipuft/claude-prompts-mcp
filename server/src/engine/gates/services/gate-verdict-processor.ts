@@ -128,6 +128,14 @@ export class GateVerdictProcessor {
       }
 
       case 'abort': {
+        // Mirrors GateEnforcementAuthority.resolveAction — see the note there. The flag alone
+        // only makes the abort visible in the ledger; cancelling the run is what makes it stick.
+        const cancelled = await this.chainSessionStore.cancelChain(sessionId);
+        if (!cancelled) {
+          this.logger.warn(
+            `[GateVerdictProcessor] Abort requested for session ${sessionId}, but the run could not be cancelled (already terminal or out of scope)`
+          );
+        }
         context.state.session.aborted = true;
         context.state.gates.retryLimitExceeded = false;
         context.state.gates.awaitingUserChoice = false;

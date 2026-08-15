@@ -273,6 +273,26 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /**
+   * Cancel the owning run, when there is one, so an abort is terminal rather than advisory.
+   *
+   * Shell verification also runs for single prompts, which have no run: no session id means
+   * there is nothing to cancel, and a `false` return means the run was already terminal.
+   * Neither is a defect, so neither warns.
+   */
+  private async cancelRunIfAny(context: ExecutionContext): Promise<void> {
+    const sessionId = context.getSessionId();
+    // Written strictly rather than as the `if (!sessionId)` its two neighbours use: the lint
+    // ratchet measures direction, and a baseline with slack would have absorbed a new violation.
+    if (sessionId === undefined || sessionId.length === 0) return;
+    const cancelled = await this.chainSessionService.cancelChain(sessionId);
+    if (!cancelled) {
+      this.logger.debug(
+        `[${this.name}] Abort requested for session ${sessionId}; no active run to cancel`
+      );
+    }
+  }
+
+  /**
    * Handle gate_action user decision (retry/skip/abort).
    */
   private async handleGateAction(
@@ -322,6 +342,11 @@ export class ShellVerificationStage extends BasePipelineStage {
         context.state.session.aborted = true;
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
+        // The response below tells the user "Execution stopped". Cancel the run so that is
+        // true — otherwise runStatus stays 'working' and the next call resumes the chain.
+        // Guarded on sessionId because shell verification also runs for single prompts, which
+        // have no run to cancel; that is not a failure worth warning about.
+        await this.cancelRunIfAny(context);
         context.diagnostics.info(
           this.name,
           'User chose to abort after shell verification failure',
