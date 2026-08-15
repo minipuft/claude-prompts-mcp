@@ -37,6 +37,14 @@ cp "$ROOT_DIR/manifest.json" "$STAGING_DIR/"
 cp "$ROOT_DIR/LICENSE" "$STAGING_DIR/"
 cp "$ROOT_DIR/.node-version" "$STAGING_DIR/" 2>/dev/null || true
 
+# The icon `manifest.json` names. Copied at its repository path so the manifest value
+# and the source file are the same string — a renamed staging copy would make the
+# manifest describe a file that exists nowhere in the repo. Not optional: the MCPB
+# manifest declares `icon`, so a missing file here ships an extension whose declared
+# artwork does not resolve, which is worse than the no-icon state it replaced.
+mkdir -p "$STAGING_DIR/assets"
+cp "$ROOT_DIR/assets/icon-512.png" "$STAGING_DIR/assets/icon-512.png"
+
 # Copy the exposed server runtime and resources. The cpm CLI is distributed through
 # npm and GitHub Releases; MCPB does not register a cpm executable.
 bash "$ROOT_DIR/scripts/stage-server-runtime.sh" \
@@ -78,6 +86,12 @@ grep -qx 'server/dist/index.js' <<<"$ARCHIVE_FILES" || {
   echo "ERROR: packed extension is missing server/dist/index.js" >&2
   exit 1
 }
+# No icon assertion here on purpose. `mcpb pack` validates `manifest.json`'s `icon` against
+# the staging tree and REFUSES to pack when the file is absent ("Icon validation failed:
+# Icon file not found at path: ..."), so an archive-level check can never fire. Measured
+# 2026-08-14: removing the copy above fails the build at pack time, and no arrangement of
+# `.mcpbignore` produced a packed archive whose declared icon was missing. A gate that
+# cannot fire reads as coverage while providing none.
 for forbidden in \
   'server/dist/cpm.js' \
   'server/dist/cpm.js.map' \
