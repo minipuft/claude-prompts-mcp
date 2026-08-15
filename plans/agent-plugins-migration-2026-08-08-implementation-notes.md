@@ -2,7 +2,7 @@
 title: "Agent Plugins Migration — Single Source Tree, Rendered Distributions — Implementation Notes"
 plan: agent-plugins-migration-2026-08-08.md
 date: 2026-08-09
-status: active
+status: reference
 tags: []
 ---
 
@@ -1169,3 +1169,46 @@ changed repository tooling.
   because it is the plan-retirement federation's central safety property — the false-negative
   asymmetry F4.1/F4.2 were written for — firing on a real case rather than a seeded one, three hours
   after that mechanism was migrated to the shared executable.
+
+## Release execution — 4.0.0 published 2026-08-15
+
+- **DEV-REL-15** — **the release published; two follow-on workflows went red, and only one was a
+  real failure.** npm serves 4.0.0, the tag exists, and the MCP registry serves it. `Publish
+Extensions` failed on ONE matrix leg (codex-prompts) and `Publish to MCP Registry` failed on a
+  check of something that had already succeeded. Both had to be opened before either could be
+  called a release problem — a red workflow after a publish is a claim about the workflow, not
+  automatically about the release.
+- **DEV-REL-16** — **the registry verify step could never have passed, and I nearly "fixed" it by
+  widening a timeout.** The owner asked to widen the poll window "considering how long it took". It
+  took no time at all: `publishedAt` on the 4.0.0 record equals the publish step's own success
+  timestamp to the millisecond, and all five attempts read `'3.2.1'` rather than `'nothing'`. The
+  check selects `[.servers[]?.server | select(.name==$n)][0].version` — the FIRST entry of a search
+  endpoint that serves every published version with no ordering contract. So it read the old
+  version, and would have read it through any number of additional attempts. **A timeout is the
+  most inviting wrong diagnosis available for an intermittent-looking check**: widening it is cheap,
+  plausible, and would have buried a selector bug that fails every release after the first. Fixed by
+  selecting on `isLatest`, which is also the stronger claim — "what clients now resolve" rather than
+  "exists somewhere in the list" — and verified against the live registry before committing: old
+  selector returns 3.2.1, new returns 4.0.0.
+- **DEV-REL-17** — **4.9 flipped, and its first exercise failed on a credential rather than on
+  logic.** `sync-downstream` opened and auto-merged PRs on gemini (#43), opencode (#51) and
+  minipuft-plugins (#9). The codex leg failed at `Create PR` with `403` — the release token reaches
+  the three older repos and not this one, which was created 2026-08-05. Every codex-specific
+  validation ran and passed BEFORE the 403 (ref, version-field, `file:` refusal, `npm ci`, resolved
+  version), so the leg added in `dcfc124e` is correct and only unauthorized. Synced by hand as
+  codex-prompts PR #1, verified against the major rather than assumed: 27/27 adapter tests,
+  `hooks/lib` resolving to 14 modules, and an MCP initialize handshake from the plugin launcher.
+- **DEV-REL-18** — **a second blocker sat behind the first, and fixing only the visible one would
+  have failed again next release.** codex-prompts had `allow_auto_merge: false` while all three
+  siblings had it `true`, so `gh pr merge --merge --auto` would have failed even with a correctly
+  scoped token. Found only by checking the repo setting rather than stopping at the 403 that was in
+  the log. **A failure reported at the first gate hides every gate behind it**; the fleet-consistency
+  question ("what do the other three have that this one does not") is what surfaced it. Enabled.
+- **DEV-REL-19** — **the auto-merge concern resolved empirically, against the general principle.** I
+  argued twice for a conditional holding majors from auto-merging into downstreams. Three downstreams
+  auto-merged 4.0.0 within minutes. The hand-run verification on codex-prompts then showed the two
+  breaking changes touch nothing the adapters call — 27/27 green against the major. So the guard
+  would have bought nothing this release. Recorded because the reasoning stands and the outcome does
+  not vindicate it: **a boundary only protects consumers who stop at it** remains true, and the
+  correct reading is that this release's blast radius was small, not that the automation is safe by
+  construction.
