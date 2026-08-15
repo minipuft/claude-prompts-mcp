@@ -17,6 +17,7 @@
   "display_name": "Claude Prompts",
   "documentation": "https://github.com/minipuft/claude-prompts-mcp#readme",
   "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+  "icon": "assets/icon-512.png",
   "keywords": [
     "mcp",
     "prompts",
