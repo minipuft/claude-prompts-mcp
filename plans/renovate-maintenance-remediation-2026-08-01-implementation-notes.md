@@ -1,7 +1,7 @@
 ---
 title: "Renovate Maintenance Remediation — Implementation Notes"
 date: 2026-08-01
-status: active
+status: done
 tags: []
 ---
 
