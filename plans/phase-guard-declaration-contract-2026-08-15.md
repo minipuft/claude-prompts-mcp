@@ -13,7 +13,7 @@ tags:
 **Area**: `server/src/engine/frameworks/phase-guards/`, `server/src/engine/execution/operators/chain-operator-executor.ts`, `resources/frameworks/*/phases.yaml`
 **Work type**: feature (secondary: bug_fix)
 **Confidence**: high — the defect reproduced on this plan's own authoring chain
-**Origin**: supersession review of the abandoned branch `feat/output-contract-unified-surface` (tip `f6da0841`… no — branch tip was 2026-05-13; deleted 2026-08-15 after its idea was captured here)
+**Origin**: supersession review of the abandoned branch `feat/output-contract-unified-surface` (tip `d11a0c27`, last commit 2026-05-13; deleted 2026-08-15 once its idea was captured here)
 
 ---
 
