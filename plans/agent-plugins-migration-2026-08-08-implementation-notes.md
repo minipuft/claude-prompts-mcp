@@ -1137,3 +1137,35 @@ changed repository tooling.
   wrong one from anything that uses the other**, and the demand arrives wearing the authority of a
   required check. Both new tests are self-falsifying — the multi-entry case breaks only the second
   entry and requires failure, the versionSource case supplies a valid SemVer and requires failure.
+- **DEV-REL-11** — **the brand assets shipped to the repository and were invisible in the product.**
+  `scripts/build-extension.sh` stages `manifest.json`, `LICENSE`, `.node-version`, `server/dist`,
+  `server/resources`, `config.json` and `skills` — never `assets/` — and `manifest.json` declared no
+  `icon` at all, though the MCPB schema supports one. So "the logo is in the release" was true of the
+  repository and false of the packaged desktop extension, which is the surface where a product logo
+  does its work. Fixed by declaring `assets/icon-512.png` (a verified true 512×512, read from the PNG
+  header rather than trusted from the filename) and staging it at its repository path so the manifest
+  value and the source file are the same string. **The general shape: "shipped" is relative to an
+  artifact, and an asset can land in every tracked tree while reaching no consumer.**
+- **DEV-REL-12** — **I added a gate to `build-extension.sh` that could not fire, and deleted it.**
+  The check asserted that the icon `manifest.json` declares resolves inside the packed archive.
+  Trying to falsify it, the build failed _earlier_: `mcpb pack` validates the declared icon against
+  the staging tree and refuses ("Icon validation failed: Icon file not found at path: ..."). No
+  arrangement of `.mcpbignore` produced a packed archive whose declared icon was missing either — the
+  root ignore file does not apply to the staged pack. So the assertion was unreachable by
+  construction. Deleted, with the measurement left in its place as a comment so the next author does
+  not re-add it. This is the same discipline the session applied to `validate:no-phantom-columns` and
+  to 4.13, arriving at the opposite verdict: **the test of a gate is whether it can fail, and one
+  that cannot is worse than absent because it reads as coverage.**
+- **DEV-REL-13** — **a `cp` ran from the wrong directory and produced a false experimental result.**
+  The shell was still in `server/`, so restoring a backup wrote the root build script to
+  `server/scripts/build-extension.sh` (a stray untracked file) while the real script stayed
+  falsified. The next pack then failed for a reason I nearly attributed to the experiment I thought I
+  was running. Caught by checking `git status` rather than trusting the error text; stray removed,
+  both files restored, experiment re-run correctly. Nothing reached a commit. **Persistent shell cwd
+  is state, and a relative path is a measurement taken against it.**
+- **DEV-REL-14** — **the retirement check refused my own lifecycle change, correctly.** Marking the
+  brand-asset plan `done` was rejected: these very notes cite it, and archiving into gitignored
+  `plans/archive/` would have broken the citation. Set to `reference` instead. Worth recording
+  because it is the plan-retirement federation's central safety property — the false-negative
+  asymmetry F4.1/F4.2 were written for — firing on a real case rather than a seeded one, three hours
+  after that mechanism was migrated to the shared executable.
