@@ -207,3 +207,135 @@ describe('ArgumentParser dashed argument names', () => {
     expect(result.processedArgs['output-format']).toBe('xml');
   });
 });
+
+// Routing freeform text to a declared argument is the behavior that makes
+// `>>initial_scan some topic` work at all — without it the text is parsed as
+// nothing and every argument falls back to a default. It had no direct coverage:
+// every other case in this file supplies `key:"value"` pairs.
+describe('ArgumentParser freeform text routing', () => {
+  const createPrompt = (args: ConvertedPrompt['arguments']): ConvertedPrompt => ({
+    id: 'freeform-test',
+    name: 'Freeform Test',
+    description: '',
+    category: 'general',
+    userMessageTemplate: '{{topic}}',
+    arguments: args,
+  });
+
+  test('routes freeform text to the sole declared argument', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([{ name: 'topic', required: true, type: 'string' }]);
+
+    const result = await parser.parseArguments('quote-aware operator parsing', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('quote-aware operator parsing');
+    expect(result.metadata.contextSources.topic).toBe('user_provided');
+  });
+
+  // Priority is "first REQUIRED argument", not "first argument" — an optional
+  // argument declared ahead of the required one must not capture the text.
+  test('prefers the first required argument over an earlier optional one', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([
+      { name: 'purpose', required: false, type: 'string' },
+      { name: 'topic', required: true, type: 'string' },
+      { name: 'constraints', required: false, type: 'string' },
+    ]);
+
+    const result = await parser.parseArguments('MCP command parsers', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('MCP command parsers');
+    expect(result.metadata.contextSources.topic).toBe('user_provided');
+    expect(result.processedArgs.purpose).not.toBe('MCP command parsers');
+  });
+
+  test('falls back to the first argument when none are required', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([
+      { name: 'topic', required: false, type: 'string' },
+      { name: 'purpose', required: false, type: 'string' },
+    ]);
+
+    const result = await parser.parseArguments('no required args here', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('no required args here');
+    expect(result.metadata.contextSources.topic).toBe('user_provided');
+  });
+
+  test('leaves the remaining arguments defaulted rather than unset', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const prompt = createPrompt([
+      { name: 'topic', required: true, type: 'string' },
+      { name: 'purpose', required: false, type: 'string' },
+    ]);
+
+    const result = await parser.parseArguments('a topic', prompt, {});
+
+    expect(result.processedArgs.topic).toBe('a topic');
+    expect(result.processedArgs).toHaveProperty('purpose');
+  });
+});
+
+// A colon is punctuation more often than it is a delimiter. The key-value strategy used to
+// claim any input matching /[\w-]+\s*[=:]\s*/, so a plain sentence containing a colon was
+// parsed as arguments: the word before the colon became an undeclared argument, the declared
+// required argument was left empty, and the user's sentence was lost.
+describe('ArgumentParser prose-vs-delimiter disambiguation', () => {
+  const createPrompt = (): ConvertedPrompt => ({
+    id: 'initial_scan',
+    name: 'Initial Scan',
+    description: '',
+    category: 'general',
+    userMessageTemplate: '{{topic}}',
+    arguments: [
+      { name: 'topic', required: true, type: 'string' },
+      { name: 'purpose', required: false, type: 'string' },
+    ],
+  });
+
+  test('freeform prose containing a colon routes to the primary argument', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments('fix the bug: parser breaks', createPrompt(), {});
+
+    expect(result.metadata.parsingStrategy).toBe('simple');
+    expect(result.processedArgs.topic).toBe('fix the bug: parser breaks');
+    expect(result.processedArgs).not.toHaveProperty('bug');
+    expect(result.validationResults.every((r) => r.valid)).toBe(true);
+  });
+
+  test('prose containing an equals sign is still prose', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments('why does a=b fail here', createPrompt(), {});
+
+    expect(result.metadata.parsingStrategy).toBe('simple');
+    expect(result.processedArgs.topic).toBe('why does a=b fail here');
+  });
+
+  test('a real declared key still selects the key-value strategy', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments('topic:"MCP parsers"', createPrompt(), {});
+
+    expect(result.metadata.parsingStrategy).toBe('keyvalue');
+    expect(result.processedArgs.topic).toBe('MCP parsers');
+  });
+
+  // Mixed input: one real key plus prose that trips the delimiter pattern. The strategy is
+  // correctly chosen here, so the screen in canHandle cannot help — the parse loop must drop
+  // the undeclared key itself.
+  test('an undeclared key alongside a real one is dropped, not emitted', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const result = await parser.parseArguments(
+      'topic:"MCP parsers" bug: it breaks',
+      createPrompt(),
+      {}
+    );
+
+    expect(result.metadata.parsingStrategy).toBe('keyvalue');
+    expect(result.processedArgs.topic).toBe('MCP parsers');
+    expect(result.processedArgs).not.toHaveProperty('bug');
+  });
+});

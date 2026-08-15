@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ChainSessionStore, type SessionBlueprint } from '../../../src/modules/chains/manager.js';
+import { isRunComplete } from '../../../src/shared/types/chain-session.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/shared/types/index.js';
@@ -358,6 +359,22 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(session.runStatus).toBe('cancelled');
     // Idempotent path does not re-stamp the timestamp
     expect(session.runCompletedAt).toBe(1234);
+  });
+
+  // The contract the gate-abort path depends on: `isRunComplete` is what
+  // `13-session-stage.ts` consults before resuming, so a cancelled run must read as
+  // finished there. Asserting `runStatus === 'cancelled'` alone would not prove the run
+  // is unreachable — this does.
+  test('a cancelled session reads as complete, so a resume is refused', async () => {
+    manager = newManager('cancel-not-resumable');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    const session = (manager as any).activeSessions.get('s1');
+    expect(isRunComplete(session)).toBe(false);
+
+    await manager.cancelChain('s1');
+
+    expect(isRunComplete(session)).toBe(true);
   });
 
   test('cancelChain refuses sessions in completed or failed terminal states', async () => {

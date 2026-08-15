@@ -30,6 +30,28 @@ import {
 type PromptDefinition = Pick<ConvertedPrompt, 'id' | 'arguments'>;
 
 /**
+ * The key/value pair grammar, written once.
+ *
+ * Both the strategy's claim check and its parse loop scan for pairs, and an earlier version of
+ * this file carried the literal twice; the two drifted, which truncated any value containing an
+ * apostrophe and injected phantom arguments. A single source with fresh `RegExp` objects per call
+ * removes both that drift and the `lastIndex` sharing a module-level global would introduce.
+ *
+ * The per-pair parse regex below is deliberately looser in its unquoted branch (`(.*)`), because
+ * it runs against an already-isolated pair rather than a whole command. Its key, delimiter and
+ * quote handling must still match this.
+ */
+const KEY_VALUE_PAIR_SOURCE = String.raw`([\w-]+)\s*[=:]\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s"']+(?:\s+(?![\w-]+\s*[=:])[^\s"']*)*))`;
+
+const keyValuePairScanner = (): RegExp => new RegExp(KEY_VALUE_PAIR_SOURCE, 'g');
+
+/** Every key that appears in `key:value` / `key=value` position, in order. */
+const scanKeyValueKeys = (rawArgs: string): string[] =>
+  [...rawArgs.matchAll(keyValuePairScanner())]
+    .map((match) => match[1])
+    .filter((key): key is string => key !== undefined);
+
+/**
  * Processing result with detailed metadata
  */
 export interface ArgumentParsingResult {
@@ -231,9 +253,17 @@ export class ArgumentParser {
   private createKeyValueStrategy(): ProcessingStrategy {
     return {
       name: 'keyvalue',
-      canHandle: (rawArgs: string) => {
-        // Detect both = and : delimiters, support dashes in argument names
-        return /[\w-]+\s*[=:]\s*/.test(rawArgs);
+      canHandle: (rawArgs: string, promptData: PromptDefinition) => {
+        // A colon is punctuation far more often than it is a delimiter. Claiming every input
+        // containing one meant `>>initial_scan fix the bug: parser breaks` parsed as
+        // `bug="parser breaks"` — an argument the prompt never declared — while the required
+        // `topic` was left empty and failed validation. The user's sentence was destroyed by
+        // its own punctuation.
+        //
+        // A key/value command is one that names at least one argument this prompt actually
+        // declares. Anything else is prose, and prose belongs to the simple strategy.
+        const declared = new Set(promptData.arguments.map((arg) => arg.name));
+        return scanKeyValueKeys(rawArgs).some((key) => declared.has(key));
       },
       process: (
         rawArgs: string,
@@ -245,16 +275,8 @@ export class ArgumentParser {
         const contextSources: Record<string, string> = {};
 
         // Parse key=value and key:value pairs with proper quote handling.
-        // Supports both = and : delimiters, and dashes in argument names.
-        // The quoted alternatives accept backslash escapes so a value may contain
-        // its own quote character — see serializeOptionValue/parseQuotedValue.
-        // This regex and the per-pair one below encode the SAME grammar and must
-        // be changed together; they previously diverged, which truncated any
-        // value containing an apostrophe and injected phantom arguments.
-        const pairs =
-          rawArgs.match(
-            /([\w-]+)\s*[=:]\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s"']+(?:\s+(?![\w-]+\s*[=:])[^\s"']*)*))/g
-          ) || [];
+        // Grammar lives in KEY_VALUE_PAIR_SOURCE — see the note there on why it is written once.
+        const pairs = rawArgs.match(keyValuePairScanner()) ?? [];
 
         for (const pair of pairs) {
           // Support both = and : delimiters, dashes in argument names
@@ -280,21 +302,27 @@ export class ArgumentParser {
 
             // Find argument definition for type coercion
             const argDef = promptData.arguments.find((arg) => arg.name === key);
-            if (argDef) {
-              const coercedValue = this.coerceArgumentType(trimmedValue, argDef);
-              if (coercedValue.wasCoerced) {
-                typeCoercions.push({
-                  arg: key,
-                  from: typeof trimmedValue,
-                  to: typeof coercedValue.value,
-                });
-              }
-              processedArgs[key] = coercedValue.value;
-              contextSources[key] = 'user_provided';
-            } else {
-              processedArgs[key] = trimmedValue;
-              contextSources[key] = 'user_provided';
+            if (argDef === undefined) {
+              // An undeclared key is prose that happened to sit before a colon — the same
+              // punctuation confusion `canHandle` screens for, surviving here in a command
+              // whose OTHER keys are real (`topic:"x" fix the bug: it breaks`). Emitting it
+              // put a phantom argument into the render context; the declared argument list is
+              // the contract, so anything outside it is dropped.
+              this.logger.debug(
+                `Ignoring undeclared argument "${key}" for prompt "${promptData.id}"`
+              );
+              continue;
             }
+            const coercedValue = this.coerceArgumentType(trimmedValue, argDef);
+            if (coercedValue.wasCoerced) {
+              typeCoercions.push({
+                arg: key,
+                from: typeof trimmedValue,
+                to: typeof coercedValue.value,
+              });
+            }
+            processedArgs[key] = coercedValue.value;
+            contextSources[key] = 'user_provided';
           }
         }
 

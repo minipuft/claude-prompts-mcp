@@ -273,6 +273,11 @@ After max attempts, user is prompted for `gate_action`:
 prompt_engine(chain_id:"chain-abc", gate_action:"retry")
 ```
 
+`abort` is terminal: the run moves to `cancelled`, and resuming that `chain_id` answers
+"Chain run already complete" instead of re-rendering the step. Start a fresh run with the chain
+command, or pass `force_restart`. To end a run that is not sitting at a gate, use
+`system_control(action:"session", operation:"cancel", session_id:"...")`.
+
 ## Combining Gates
 
 Gates can be combined with other operators:
