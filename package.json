@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts-root",
-  "version": "3.2.1",
+  "version": "4.0.0",
   "private": true,
   "description": "Root package for git hooks and workspace management",
   "//workspaces": "server/ is deliberately NOT a workspace — it keeps its own lockfile and CI installs it with `npm ci --prefix server`.",
