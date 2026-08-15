@@ -167,6 +167,20 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:renovate-preset-agreement',
+    io: 'read',
+    reads: ['file'],
+    converse:
+      'CHECKED both ways — an undeclared divergence from the shared preset is reported, AND a declared override whose value converged back to the preset is reported as stale',
+  },
+  {
+    script: 'validate:standards-pins',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse:
+      'CHECKED both ways — a reference naming a different version is reported, and finding NO reference at all is reported rather than passing vacuously; `plans/` and `CHANGELOG.md` are excluded as historical records and proven excluded',
+  },
+  {
     script: 'validate:readme',
     io: 'read',
     reads: ['file', 'index', 'spawn', 'tracked', 'walk'],

@@ -62,6 +62,22 @@ Formatting is covered by `validate:format` in the full route. `pre-push` checks 
 repo-level JSON/MD/YAML files in the push range. Anything a generator owns belongs in
 `.prettierignore` with a reason -- otherwise the generator and Prettier disagree.
 
+## Fleet Standards Upstream (`minipuft/repository-standards`)
+
+**Look there before writing any check that reads another repository, or any plan-status or dependency-policy rule.**
+
+It owns the consumer-contract workflow + profiles, the shared Renovate preset, the plan
+frontmatter/status vocabulary and `retire-done-plans`, and the **fleet drift audit** — which
+already compares every downstream's resolved `claude-prompts` lock version, weekly, exiting
+non-zero. This repo is the fleet's `upstream`, not a member; it consumes the standards as a pinned
+tarball, a SHA-pinned action, a `$schema`, and a doc link.
+
+A local downstream-version check was deleted here 2026-08-13 _because_ the fleet auditor does it
+better (`validate-versions.js` records why). Re-adding one re-splits a settled decision — the
+mistake was made and reverted on 2026-08-15. Two gates keep the relationship honest:
+`validate:standards-pins` (all four references name one version) and
+`validate:renovate-preset-agreement` (every preset key matches, or is a declared override).
+
 ## Documentation Map
 
 | Topic                                        | Doc                                      |
@@ -141,14 +157,14 @@ system_control → SystemControl Router → 11 action handlers
 
 ## Runtime State (SQLite -- never commit `state.db`)
 
-| Table               | Purpose                                                                                                                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kv_state`          | Consolidated key-value store (`key='framework'` active framework + switch history, `key='gates'` enable/disable, `key='arg_history'` argument tracking, `key='resource_hashes'` content hash cache)     |
-| `chain_runs`        | One row per live chain run (header facts: chain id, run owner, status, current node id, residual document). Primary SSOT for active runs -- replaces the retired `chain_run_registry` blob (schema v22) |
+| Table               | Purpose                                                                                                                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kv_state`          | Consolidated key-value store (`key='framework'` active framework + switch history, `key='gates'` enable/disable, `key='arg_history'` argument tracking, `key='resource_hashes'` content hash cache)                                                                             |
+| `chain_runs`        | One row per live chain run (header facts: chain id, run owner, status, current node id, residual document). Primary SSOT for active runs -- replaces the retired `chain_run_registry` blob (schema v22)                                                                         |
 | `chain_run_nodes`   | One row per step of a run (position, prompt id, step lifecycle, `origin`/`origin_unknown_id` provenance for nodes the adaptive mutation policy inserted, schema v23). Sibling to `chain_runs`; together they are what `chain_run_registry` used to serialize into one JSON blob |
-| `chain_sessions`    | Derived read-projection of `chain_runs` + `chain_run_nodes`, rebuilt in the same transaction, for Python hook + cross-language consumers                                                                |
-| `execution_records` | SEP-1686 append-only per-step execution log (ULID-sorted); source for `v_execution_status` view                                                                                                         |
-| `resource_index`    | Resource discovery cache                                                                                                                                                                                |
+| `chain_sessions`    | Derived read-projection of `chain_runs` + `chain_run_nodes`, rebuilt in the same transaction, for Python hook + cross-language consumers                                                                                                                                        |
+| `execution_records` | SEP-1686 append-only per-step execution log (ULID-sorted); source for `v_execution_status` view                                                                                                                                                                                 |
+| `resource_index`    | Resource discovery cache                                                                                                                                                                                                                                                        |
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates, but `version_history` and `skills_sync_manifests` are durable: `ensureSchema()` snapshots their rows, recreates, and restores by column intersection. Adding a `NOT NULL` column with no default to either makes the restore throw by design -- that change needs a real migration. Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 

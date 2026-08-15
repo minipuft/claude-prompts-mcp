@@ -176,7 +176,7 @@ exactly four).
 
 The frontmatter schema, the status vocabulary, and the `done` vs `reference` test are defined
 once, publicly, at
-[`repository-standards/conventions/plan-frontmatter.md`](https://github.com/minipuft/repository-standards/blob/v1.2.0/conventions/plan-frontmatter.md).
+[`repository-standards/conventions/plan-frontmatter.md`](https://github.com/minipuft/repository-standards/blob/v1.3.0/conventions/plan-frontmatter.md).
 This guide owns only how **this** repository runs the retirement — the workflow step, its
 placement on the release PR, and the local commands. Restating the convention here is what let it
 drift the last time it had two homes.
