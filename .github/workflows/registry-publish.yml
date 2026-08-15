@@ -78,15 +78,27 @@ jobs:
           set -euo pipefail
           expected=$(jq -r .version server.json)
           name=$(jq -r .name server.json)
-          for attempt in 1 2 3 4 5; do
+          # Select the entry the registry FLAGS as latest, not the first one the search happens
+          # to return. The search endpoint serves every published version of a server, and
+          # ordering is not a contract — measured 2026-08-15, `[0]` was 3.2.1 while 4.0.0 was
+          # already live, so all five attempts read the old version and the step failed a
+          # release that had in fact published. `publishedAt` on the 4.0.0 record equalled the
+          # publish step's own success timestamp to the millisecond, so there was never any
+          # propagation lag to wait out: widening the window would have failed identically,
+          # just later. `isLatest` is also the stronger claim — it distinguishes "this version
+          # exists somewhere in the list" from "this version is what clients now resolve".
+          for attempt in 1 2 3 4 5 6 7 8; do
             got=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
-              | jq -r --arg n "$name" '[.servers[]?.server | select(.name == $n)][0].version // empty') || got=""
+              | jq -r --arg n "$name" '[.servers[]?
+                  | select(.server.name == $n)
+                  | select(._meta["io.modelcontextprotocol.registry/official"].isLatest == true)
+                  | .server.version][0] // empty') || got=""
             if [ "$got" = "$expected" ]; then
-              echo "Registry serves ${name}@${got}"
+              echo "Registry serves ${name}@${got} as latest"
               exit 0
             fi
-            echo "attempt ${attempt}/5: registry serves '${got:-nothing}', want ${expected}"
+            echo "attempt ${attempt}/8: registry serves '${got:-nothing}' as latest, want ${expected}"
             sleep 30
           done
-          echo "ERROR: registry never served ${name}@${expected}"
+          echo "ERROR: registry never served ${name}@${expected} as latest"
           exit 1

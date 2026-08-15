@@ -1,7 +1,7 @@
 ---
 title: "Plan Retirement Federation — Implementation Notes"
 date: 2026-08-13
-status: active
+status: reference
 tags:
   - planning
   - migration
@@ -118,3 +118,43 @@ scrape — both files export `SUITE`, and reading the declaration rather than it
 `main` needed a regex fix in the first place.
 
 **Still open**: closeout steps 2-4 (CloudySky, F4.6) are untouched by this session.
+
+## F4.6 — cloudySky onboarded 2026-08-15
+
+**The generalization proof was organic, not seeded.** Writing
+`plan-retirement.config.json` against cloudySky's real layout (`plans`, `docs`, `src`, `tests`,
+`tools`, plus the three root handbooks) and running the check surfaced **30 `done` plans that were
+still cited**, 57 citations in all, from `src/**/*.ts`, `docs/` and sibling plans. The retired
+hardcoded `LINK_SOURCES` named `server/src` and `server/scripts` — paths that do not exist there —
+so the old scan would have reported a clean queue and archived all 30 into a gitignored directory in
+the one repo with **no remote**. F4.1/F4.2 were written for exactly this and they earned it on the
+first real run.
+
+**Reclassification cascades; budget for it.** 30, then 3, then 1 — converging after three passes.
+A plan reclassified to `reference` stops co-moving, so citations _from_ it begin blocking their own
+targets. A first-pass count understates the work, and an onboarding script that reclassifies once
+and declares victory would leave the tail misclassified.
+
+**Two prerequisites the plan never listed.** `plans/archive/` had to be gitignored before `--apply`
+would run at all (`assertArchiveDestinationIgnored` throws otherwise), and the config had to be
+written from an inspection of the repo's actual directories rather than copied from this repo's.
+Both are onboarding steps worth adding to any future consumer checklist.
+
+**Final: 15 archived / 43 referenced / 0 remaining** — matching F4.6's predicted numbers exactly,
+which is a stronger result than it looks: those numbers came from an isolated bundle, and the
+canonical checkout reproduced them.
+
+**The guard fired, and that is part of the proof.** `--apply` refused the entire batch because
+`plans/ocean-surface-cone-remediation-2026-07-21.md` is `done` with uncommitted changes. It refused
+_everything_ rather than applying partially — correct, since `plans/archive/` is gitignored and
+git history would be the only surviving copy, in a repo with no remote. Left alone: it is another
+session's work. Owner-held.
+
+**Observation for a future tier — a gitignored sidecar still counts as a citer.** v1.3.0 stopped the
+frontmatter walk reporting gitignored files as broken plans, but `inboundLinks` still scans them as
+documents whose citations must be preserved: retiring the agent-plugins plan listed
+`plans/agent-plugins-migration-2026-08-08.validation-log.md` among its citers. Harmless here — two
+legitimate citers existed anyway — and the failure direction is safe (a plan is held back rather
+than wrongly archived). But if a machine-written sidecar were ever the _only_ citer, a finished plan
+would be pinned open by telemetry that cites everything it logs. Not fixed: it needs its own
+release cycle and the safe direction makes it low priority.
