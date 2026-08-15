@@ -1,7 +1,7 @@
 ---
 title: "Claude Prompts Brand Asset Promotion"
 date: 2026-08-14
-status: active
+status: reference
 tags:
   - brand
   - assets
