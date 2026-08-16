@@ -1,0 +1,11 @@
+id: test_default
+name: Test Default Value
+category: examples
+description: Tests defaultValue rendering
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: count
+    required: false
+    description: Number of items
+    type: number
+    defaultValue: 42

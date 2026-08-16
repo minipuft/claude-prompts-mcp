@@ -1,0 +1,32 @@
+id: discovery
+name: Discovery & Triage (Step 1)
+category: planning
+description: >-
+  Step 1 of the implementation planning chain. Searches the codebase for
+  existing implementations, identifies domain ownership, finds sibling patterns,
+  and produces a structured intent declaration.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: feature
+    type: string
+    description: The feature or functionality to implement
+    required: true
+  - name: existing_systems
+    type: string
+    description: Known existing systems/files that might be relevant
+    required: false
+  - name: research_focus
+    type: string
+    description: Areas to research before planning
+    required: false
+  - name: tech_stack
+    type: string
+    description: Current technology stack
+    required: false
+  - name: design_mode
+    type: string
+    description: >-
+      Design Enrichment toggle: auto | on | off. Default auto — keyword-detects
+      visual/creative/UI intent from the feature text. Generic, no framework
+      name. Distinct from the chain's Design & Pre-flight step (Step 2).
+    required: false

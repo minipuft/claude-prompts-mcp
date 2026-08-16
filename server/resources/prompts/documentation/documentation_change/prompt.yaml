@@ -1,0 +1,49 @@
+id: documentation_change
+name: Documentation Change
+category: documentation
+description: >-
+  Canonical two-step workflow for placing and drafting public documentation,
+  then reviewing positioning, discoverability, and prose through the existing
+  documentation writer.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: request
+    required: false
+    description: The documentation change or new information to integrate
+    type: string
+  - name: doc_type
+    required: false
+    description: readme, tutorial, howto, reference, or explanation
+    type: string
+  - name: target
+    required: false
+    description: Target document path or public surface
+    type: string
+  - name: audience
+    required: false
+    description: Primary reader for the document
+    type: string
+  - name: reader_goal
+    required: false
+    description: Question or task the reader brings to this document
+    type: string
+  - name: content
+    required: false
+    description: Existing content, draft, or source notes
+    type: string
+  - name: context
+    required: false
+    description: Relevant charter, product boundary, or release context
+    type: string
+gateConfiguration:
+  include:
+    - product-positioning-fidelity
+    - information-placement
+    - semantic-discoverability
+    - prose-hygiene
+  framework_gates: false
+chainSteps:
+  - promptId: readme_improver
+    stepName: Documentation Placement and Draft (Step 1 of 2)
+  - promptId: readme_improver
+    stepName: Semantic and Voice Review (Step 2 of 2)

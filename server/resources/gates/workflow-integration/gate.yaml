@@ -1,0 +1,29 @@
+id: workflow-integration
+name: Integration Completion Verification
+type: validation
+severity: high
+description: >-
+  Validates that replaced systems are fully removed, integration points are
+  tested, and no orphaned references remain. Ensures clean state before
+  marking work complete.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    required_patterns:
+      - orphan
+      - integration
+  - type: inline_guidance
+    regex_patterns:
+      - 'replaced|removed|cleaned|verified'
+      - 'consumer|import|reference'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - workflow
+    - implementation
+  explicit_request: false

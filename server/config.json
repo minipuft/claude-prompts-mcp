@@ -1,0 +1,89 @@
+{
+  "$schema": "./config.schema.json",
+  "advanced": {
+    "sessions": {
+      "cleanupIntervalMinutes": 5,
+      "reviewTimeoutMinutes": 30,
+      "timeoutMinutes": 1440
+    }
+  },
+  "phaseGuards": {
+    "mode": "enforce",
+    "maxRetries": 2
+  },
+  "execution": {
+    "judge": true
+  },
+  "gates": {
+    "directory": "resources/gates",
+    "enabled": true,
+    "evaluation": {
+      "defaultMode": "self"
+    },
+    "frameworkGates": true,
+    "mode": "on"
+  },
+  "hooks": {
+    "expandedOutput": true
+  },
+  "logging": {
+    "directory": "./logs",
+    "level": "debug"
+  },
+  "frameworks": {
+    "dynamicToolDescriptions": true,
+    "enabled": true,
+    "systemPromptFrequency": 3,
+    "systemPromptTarget": "steps",
+    "gateGuidanceFrequency": 0,
+    "gateGuidanceTarget": "both",
+    "styleGuidance": true,
+    "styleGuidanceFrequency": 0,
+    "styleGuidanceTarget": "steps"
+  },
+  "prompts": {
+    "directory": "resources/prompts",
+    "registerWithMcp": true
+  },
+  "resources": {
+    "gates": {
+      "enabled": true
+    },
+    "logs": {
+      "defaultLevel": "info",
+      "enabled": true,
+      "maxEntries": 500
+    },
+    "frameworks": {
+      "enabled": true
+    },
+    "observability": {
+      "enabled": true,
+      "metrics": true,
+      "sessions": true
+    },
+    "prompts": {
+      "enabled": true
+    },
+    "registerWithMcp": false
+  },
+  "server": {
+    "name": "claude-prompts",
+    "port": 9090,
+    "transport": "stdio"
+  },
+  "verification": {
+    "inContextAttempts": 3,
+    "isolation": {
+      "enabled": true,
+      "maxBudget": 1,
+      "permissionMode": "delegate",
+      "timeout": 300
+    }
+  },
+  "versioning": {
+    "autoVersion": true,
+    "enabled": true,
+    "maxVersions": 50
+  }
+}

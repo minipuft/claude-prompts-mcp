@@ -1,0 +1,34 @@
+# Math-fidelity gate — a derivation card is only real when its discretization is MEASURED.
+# Born from the 2026-07-21 dry-run (cloudySky render-quality plan): a hand-estimated card got the
+# substrate's sampling regime BACKWARDS (assumed magnification, measured minification) and would
+# have shipped an SDF fix for an aliasing bug. Activation: explicit include only (shader_derivation
+# lists it in gate_configuration) — not a broad category gate.
+id: math-fidelity
+name: Math Fidelity (Derivation Card)
+type: validation
+gate_type: category
+severity: high
+description: >-
+  New shader/GL math must ship as a complete derivation card: optical model naming the finest
+  visible feature, continuous math with range contracts, MEASURED discretization (regime
+  classified from probed numbers, never eyeballed), a LOCK/identity contract, an offline
+  harness, and a live probe with a numeric threshold.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    required_patterns:
+      - DISCRETIZATION
+      - LOCK
+  - type: inline_guidance
+    regex_patterns:
+      - 'measured|probed|texel|footprint'
+      - 'minif|magnif|native'
+      - 'threshold|±|<=|>='
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  explicit_request: true

@@ -1,0 +1,23 @@
+id: test-suite
+name: Test Suite Verification
+type: validation
+description: Validates implementation by running the test suite. Uses shell verification for ground-truth validation via exit codes.
+severity: high
+gate_type: custom
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: shell_verify
+    shell_command: "npm test"
+    shell_timeout: 300000
+    shell_max_attempts: 3
+    shell_preset: full
+
+retry_config:
+  max_attempts: 3
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories: [code, development, implementation]
+  explicit_request: true

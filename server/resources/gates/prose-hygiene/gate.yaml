@@ -1,0 +1,7 @@
+id: prose-hygiene
+name: Prose Hygiene
+type: guidance
+description: >-
+  Guides public documentation away from formulaic AI cadence while preserving a
+  direct technical voice.
+guidanceFile: guidance.md

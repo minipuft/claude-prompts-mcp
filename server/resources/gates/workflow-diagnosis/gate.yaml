@@ -1,0 +1,30 @@
+id: workflow-diagnosis
+name: Diagnosis Card Quality
+type: validation
+severity: high
+description: >-
+  Validates that the Diagnosis Card synthesizes collected signals into a named
+  pattern before implementation. Required when pre-flight has 2+ failures,
+  multiple skills flag the same area, or multi-file changes are planned.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    required_patterns:
+      - Signals
+      - Pattern
+      - Justification
+  - type: inline_guidance
+    regex_patterns:
+      - 'diagnosis|compound|pattern'
+      - 'signal|observed|skill'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - workflow
+    - refactoring
+  explicit_request: false

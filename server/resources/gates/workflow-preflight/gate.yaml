@@ -1,0 +1,34 @@
+id: workflow-preflight
+name: Pre-Flight Checklist Completion
+type: validation
+severity: high
+description: >-
+  Validates that the mandatory pre-flight checklist from refactoring.md was
+  completed before implementation begins. Checks domain ownership, complexity,
+  layer identification, naming, and dependency analysis.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    required_patterns:
+      - domain
+      - complexity
+      - orchestration
+      - service
+  - type: inline_guidance
+    regex_patterns:
+      - 'step [0-9]|pre-flight|checklist'
+      - 'cognitive'
+    keyword_count:
+      layer: 1
+      types: 1
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - workflow
+    - refactoring
+  explicit_request: false
