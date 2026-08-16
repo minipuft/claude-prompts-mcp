@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
+
+
+### Fixed
+
+* **ci:** verify the registry entry flagged latest, not the first one returned ([5cef21e](https://github.com/minipuft/claude-prompts-mcp/commit/5cef21ec0205aa1d780c9d38a181323082031bdf))
+* make gate abort terminal, and stop prose punctuation parsing as arguments ([f4452ce](https://github.com/minipuft/claude-prompts-mcp/commit/f4452ced089163b5b507f901f00b73cbaca5b23a))
+* **prompts:** bind prompts per serving unit, resolve content at call time ([#227](https://github.com/minipuft/claude-prompts-mcp/issues/227)) ([e2297de](https://github.com/minipuft/claude-prompts-mcp/commit/e2297de7fdf95dd51d792a28a024f4e8c165e1fe))
+
+
+### Documentation
+
+* **docs:** correct the origin SHA in the phase-guard plan ([#221](https://github.com/minipuft/claude-prompts-mcp/issues/221)) ([06e88da](https://github.com/minipuft/claude-prompts-mcp/commit/06e88dace62bf6692d42c2ee8673445e248cbf9b))
+* **docs:** plan the phase-guard declaration contract ([4125d25](https://github.com/minipuft/claude-prompts-mcp/commit/4125d25a7e278f1aa04a9d606bf0bab282ba5e89))
+* **docs:** retire the agent-plugins and plan-retirement plans ([2b784e9](https://github.com/minipuft/claude-prompts-mcp/commit/2b784e9755c075ef625c5b8db4cdbb53b675fe85))
+* **docs:** retire the agent-plugins migration as reference ([00d1811](https://github.com/minipuft/claude-prompts-mcp/commit/00d1811ec24ed324f64871b616224d922a206935))
+* **docs:** retire the plan-retirement federation as reference ([ea74eee](https://github.com/minipuft/claude-prompts-mcp/commit/ea74eee4c48c2b978b92570f569f2959ede99eb0))
+
 ## [4.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.1...v4.0.0) (2026-08-15)
 
 ### Added
