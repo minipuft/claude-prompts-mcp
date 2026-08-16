@@ -17,7 +17,11 @@ import { loadPromptData } from './data-loader.js';
 import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
-import { publishResourcesChanged, publishToolsChanged } from './list-change-notifier.js';
+import {
+  publishPromptsChanged,
+  publishResourcesChanged,
+  publishToolsChanged,
+} from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
@@ -409,6 +413,13 @@ export class Application {
       // per-call `extra` the rest of the server reads does not exist yet.
       await this.mcpToolsManager.registerAllTools(server, resolveServingUnitScope(ctx));
       this.registerMcpResources(server);
+      // Prompts bind per unit for the same reason tools do. They were the one
+      // primitive left on the construction-time shell, so `prompts/list` came
+      // back empty on a live connection while startup logged them as
+      // registered.
+      if (this._convertedPrompts.length > 0) {
+        await this.promptManager.registerAllPrompts(this._convertedPrompts, server);
+      }
       return server;
     };
   }
@@ -807,7 +818,7 @@ export class Application {
 
       // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)
       // This follows MCP protocol - clients will re-query the server for the updated list
-      await this.promptManager.notifyPromptsListChanged();
+      publishPromptsChanged(this.listChangeTargets());
       this.logger.info('✅ Prompts list_changed notification sent to MCP clients.');
 
       // Step 5:  - Workflow registration removed
@@ -924,11 +935,16 @@ export class Application {
           this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
         }
 
-        if (this.mcpServer) {
-          const count = await this.promptManager.registerAllPrompts(this._convertedPrompts);
-          this.logger.info(`🔁 Re-registered ${count} prompts after hot reload.`);
-          await this.promptManager.notifyPromptsListChanged();
-        }
+        // Content refresh alone updates every already-bound handler, on every
+        // shell, because handlers resolve through the live map at call time.
+        // Re-binding still matters for ids that did not exist when the serving
+        // shell was built; the dedup guard makes it a no-op for the rest.
+        const count = await this.promptManager.registerAllPrompts(
+          this._convertedPrompts,
+          this.mcpServer
+        );
+        this.logger.info(`🔁 Refreshed prompts after hot reload (${count} newly bound).`);
+        publishPromptsChanged(this.listChangeTargets());
 
         // Prompt resources project `_convertedPrompts`, so a reload changes the
         // resource list too. Prompts were already announced above; resources

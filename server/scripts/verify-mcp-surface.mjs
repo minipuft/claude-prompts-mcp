@@ -428,6 +428,73 @@ async function runSurfaceChecks(baseUrl) {
     const verdict = check.expect(text);
     record(check.label, verdict === true, verdict === true ? `${text.length} chars` : verdict);
   }
+
+  await checkPromptProtocolSurface(client);
+}
+
+/**
+ * The native prompt primitives, reached as a client reaches them.
+ *
+ * Every check above travels through `tools/call`, and the tool layer reads an
+ * in-process array rather than anything bound to the serving `McpServer`. That
+ * is a different object graph from the one `prompts/list` answers out of, so a
+ * fully dead prompt surface — `prompts/list` returning `[]` and `prompts/get`
+ * answering -32602 on every id — scored a clean run here while the two tool
+ * listings agreed with each other perfectly. It shipped in 4.0.0 that way.
+ *
+ * Falsifiable the same way the tool checks are: the ids are compared as a SET
+ * against the catalogue the tool layer reports, so this passes only when the two
+ * independent renderings agree. A count alone is satisfied by two catalogues
+ * that disagree about every entry.
+ */
+function judgePromptProtocolListing(listed, viaTool) {
+  if (listed.length === 0) return 'protocol surface enumerates no prompts';
+  if (viaTool.length === 0) return 'no tool listing to compare against';
+  // Registration legitimately drops prompts the tool layer still lists —
+  // `registerWithMcp: false` and ids exported as client skills — so the
+  // protocol set is a SUBSET, not an equal set. Anything it lists that the tool
+  // layer does not is a real divergence.
+  const catalogue = new Set(viaTool);
+  const unknown = listed.filter((id) => !catalogue.has(id));
+  if (unknown.length > 0) {
+    return `lists ${unknown.length} prompt(s) the tool catalogue does not, e.g. "${unknown[0]}"`;
+  }
+  return true;
+}
+
+async function checkPromptProtocolSurface(client) {
+  const response = await client.send('prompts/list', {});
+  if (response?.error?.message) {
+    record('prompts/list (protocol)', false, response.error.message.slice(0, 90));
+    return;
+  }
+
+  const listed = (response?.result?.prompts ?? []).map((prompt) => prompt.name);
+  const viaTool = parseListedPromptIds(seen.get('prompt_engine listprompts') ?? '');
+  const verdict = judgePromptProtocolListing(listed, viaTool);
+  record(
+    'prompts/list (protocol)',
+    verdict === true,
+    verdict === true ? `${listed.length} of ${viaTool.length} bound` : verdict
+  );
+  if (verdict !== true) return;
+
+  // Listing a prompt and being able to fetch it are separate bindings: the
+  // registration that populates one populates the other, but a client that can
+  // only list is still broken.
+  const target = listed[0];
+  const fetched = await client.send('prompts/get', { name: target, arguments: {} });
+  if (fetched?.error?.message) {
+    record('prompts/get (protocol)', false, `${target}: ${fetched.error.message.slice(0, 70)}`);
+    return;
+  }
+  const messages = fetched?.result?.messages ?? [];
+  const hasText = messages.some((message) => (message?.content?.text ?? '').length > 0);
+  record(
+    'prompts/get (protocol)',
+    hasText,
+    hasText ? target : `${target} returned no message text`
+  );
 }
 
 /**
@@ -605,6 +672,36 @@ function runSelfTest() {
   }
 
   seen.clear();
+
+  // The protocol check is not a TOOL_CHECKS entry — it speaks `prompts/list`
+  // rather than `tools/call` — so it carries its own counterexamples. The first
+  // is the exact 4.0.0 shape: every tool check green, the native surface empty.
+  const protocolCounterexamples = [
+    { label: 'empty protocol listing', listed: [], viaTool: ['action_plan'] },
+    {
+      label: 'protocol lists an id the tool catalogue does not',
+      listed: ['action_plan', 'ghost_prompt'],
+      viaTool: ['action_plan'],
+    },
+  ];
+  for (const { label, listed, viaTool } of protocolCounterexamples) {
+    const verdict = judgePromptProtocolListing(listed, viaTool);
+    const rejected = verdict !== true;
+    record(
+      `prompts/list (protocol) — rejects ${label}`,
+      rejected,
+      rejected ? verdict : 'ACCEPTED IT'
+    );
+    if (!rejected) failures += 1;
+  }
+  // And it must still accept the healthy case: a strict subset is correct, not a finding.
+  const healthy = judgePromptProtocolListing(['action_plan'], ['action_plan', 'exported_as_skill']);
+  record(
+    'prompts/list (protocol) — accepts a legitimate subset',
+    healthy === true,
+    healthy === true ? 'subset accepted' : `REJECTED IT — ${healthy}`
+  );
+  if (healthy !== true) failures += 1;
 
   // Falsifiability answers "can this check fail?"; coverage answers "is there a check at all?".
   // A registry can grow past its gate while every existing predicate stays perfectly falsifiable,

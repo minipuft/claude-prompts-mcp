@@ -29,12 +29,14 @@ import { notifyResourcesChanged } from '#modules/resources/index.js';
 export interface ListChangePublisher {
   toolsChanged: () => void;
   resourcesChanged: () => void;
+  promptsChanged: () => void;
 }
 
-/** The instance STDIO pinned, narrowed to the two pushes used here. */
+/** The instance STDIO pinned, narrowed to the three pushes used here. */
 export interface ListChangeServer {
   sendToolListChanged: () => void;
   sendResourceListChanged: () => void;
+  sendPromptListChanged: () => void;
 }
 
 export interface ListChangeTargets {
@@ -63,6 +65,29 @@ export function publishToolsChanged(targets: ListChangeTargets): void {
     logger.debug('[ListChange] Published tools/list change over STDIO');
   } catch (error) {
     logger.warn('[ListChange] Failed to publish tools/list change:', error);
+  }
+}
+
+/**
+ * Announce that the prompt list changed.
+ *
+ * Same transport choice as the tools push. This lives here rather than on
+ * `PromptRegistry` because the registry holds only the shell it was constructed
+ * with, and per-serving-unit binding means that shell has no client attached —
+ * a notification sent from it reached nobody on either transport.
+ */
+export function publishPromptsChanged(targets: ListChangeTargets): void {
+  const { httpPublisher, pinnedServer, logger } = targets;
+  try {
+    if (httpPublisher != null) {
+      httpPublisher.promptsChanged();
+      logger.debug('[ListChange] Published prompts/list change over HTTP');
+      return;
+    }
+    pinnedServer.sendPromptListChanged();
+    logger.debug('[ListChange] Published prompts/list change over STDIO');
+  } catch (error) {
+    logger.warn('[ListChange] Failed to publish prompts/list change:', error);
   }
 }
 
