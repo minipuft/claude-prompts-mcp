@@ -13,7 +13,7 @@ tags: []
 every plan-bearing repo, and additionally from CI in the one that has any
 **Work type**: feature (extract local tooling into a shared, versioned contract)
 **Origin**: plan-cleanup pass 2026-08-03; depends on the federation model in
-[`downstream-standards-federation-2026-08-02.md`](../reference/downstream-standards-federation-2026-08-02.md)
+[`downstream-standards-federation-2026-08-02.md`](../downstream-standards-federation-2026-08-02.md)
 **Confidence**: medium — the mechanism is proven in one repo; generalization is the unproven half
 
 ---
