@@ -1,0 +1,243 @@
+# Claims-conformance corpus — the `workflow` parameter (P6 Workflow IR)
+#
+# SCOPE SPLIT vs the integration suite (read this before adding a row here).
+# `tests/integration/chain/p6-workflow-ir.integration.test.ts` and `p6-acceptance.integration.
+# test.ts` already drive the IR through the real pipeline against an in-memory prompt fixture set,
+# proving byte-equivalence with a YAML chain and the full multi-step run (including resume,
+# gate-verdict round-trips, and row-level absence checks in `chain_runs`/`chain_run_nodes` on
+# rejection). This file does NOT re-drive any of that — it exists because none of it had ever been
+# observed through a REAL MCP client over the real transport, against the actual Zod schema at
+# `src/mcp/tools/schemas/workflow-ir.schema.ts` and the actual bundled resource tree. The two
+# suites are complementary: this one proves the CLIENT SURFACE (can a real caller submit this
+# shape and get the documented response), the integration suite proves the RUNTIME BEHAVIOR
+# (does a valid IR execute identically to its YAML twin, does an invalid one write nothing).
+#
+# WHY EVERY ROW STOPS AT STEP 1
+# A submitted workflow always compiles to an ordinary multi-step chain run (P6 acceptance clause
+# a), and CLAUDE.md's own protocol note applies here exactly as it does to a YAML chain: under the
+# active framework's phase-guard gate, a bare `user_response` resume does not advance — see
+# `chain-lifecycle.yaml`'s `chain-gated-resume-without-verdict` `known_divergence` row. Driving a
+# workflow run past step 1 would mean re-deriving that whole gate-verdict round-trip on a second
+# fixture set, which is what the integration suite's P6 acceptance file already does end to end.
+# Every ordering claim below (edges linearize / no-edges preserves declaration order) is fully
+# observable from the FIRST response alone — the server renders step 1 in the same call that
+# accepts the submission — so stopping there is not a shortcut, it is the whole claim.
+#
+# FIXTURE CHOICE — two argument-free bundled prompts with textually disjoint bodies.
+# `minimal_prompt` ("Reply with the single word: acknowledged.") and `guidance/analytical`
+# ("## Analytical Framework ... Apply systematic analysis to the problem.") are both git-tracked
+# (see `resources/prompts/.gitignore` — only examples/, guidance/, codebase-setup/, planning/ and
+# workflow/ ship in CI and the npm tarball) and declare zero arguments each, so neither the
+# workflow compiler's deliberate non-defaulting of node args (`compiler.ts` — "WHY ARGS ARE NOT
+# DEFAULTED FROM THE PROMPT") nor a required-argument gap can affect which body renders. Whichever
+# node's body appears in the response is therefore evidence of ORDER alone.
+# `reference_demo` (declares `text` as `required: true`) is reused from `prompt-engine-surface.
+# yaml` to build the one row that needs a prompt WITH a required argument.
+
+version: 1
+
+scenarios:
+  # ── Linearization (docs/reference/workflow-ir.md; contract notes on `workflow`) ──────────────
+  - id: workflow-edges-linearize-with-declaration-order-tiebreak
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter notes — "EDGES ARE DEPENDENCIES,
+      NOT BRANCHES. ... edges are linearized into one total order (Kahn's algorithm, ties broken
+      by declaration order)." docs/reference/workflow-ir.md states the same rule.
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: analytical-declared-first
+                promptId: analytical
+              - id: minimal-declared-second
+                promptId: minimal_prompt
+            edges:
+              - from: minimal-declared-second
+                to: analytical-declared-first
+    # Declaration order alone would render `analytical` first. The edge forces the OPPOSITE order,
+    # so `minimal_prompt`'s body appearing here can only mean the linearizer — not declaration
+    # order — chose step 1.
+    expect: { text_contains: 'acknowledged' }
+
+  - id: workflow-no-edges-preserves-declaration-order
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter notes — "With no edges the run
+      order is nodes[] exactly as written, so a client that already knows its order can simply
+      write it."
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: analytical-first
+                promptId: analytical
+              - id: minimal-second
+                promptId: minimal_prompt
+            # No edges at all — the opposite fixture of the row above. Also carries a NARROWED
+            # budget (server default maxNodes is 32) to fold "narrowing is accepted" into this row
+            # rather than spend a whole scenario proving the arm that ISN'T a rejection.
+            budget:
+              maxNodes: 10
+    # The declared-first node's body appearing proves nodes[] order is used verbatim — no
+    # topological sort, no alphabetical or id-based reordering.
+    expect: { text_contains: 'Analytical Framework' }
+
+  - id: workflow-gate-target-step-id-accepted
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter notes — "Node ids are the SAME id
+      space as a gate's target_step_id ... A workflow gate binds to a node by declaring
+      target_step_id: '<node id>'."
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: gated-first
+                promptId: analytical
+              - id: gated-second
+                promptId: minimal_prompt
+            gates:
+              - id: conformance-workflow-gate-target
+                description: Conformance corpus check — target_step_id addresses a declared node.
+                target_step_id: gated-first
+    # A gate binding that failed `gate-target-missing` would reject the whole submission and no
+    # step body would render at all — see `workflow-invalid-submission-creates-nothing` below for
+    # what that looks like. Step 1's body rendering is therefore proof the binding was ACCEPTED.
+    expect: { text_contains: 'Analytical Framework' }
+
+  # ── Rejection vocabulary (one scenario per reason, plus the "nothing created" banner) ────────
+  - id: workflow-invalid-submission-creates-nothing
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter notes — "Rejection is all-or-
+      nothing and writes nothing: an invalid workflow returns one addressed line per problem
+      ([reason] node \"x\": detail) and creates no run, no session and no version."
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: ghost-node
+                promptId: this_prompt_does_not_exist_at_all
+    # The general "nothing was created" claim, distinct from any single reason tag — see
+    # `04-parsing-stage.ts::rejectWorkflow`, which prints this line before the per-problem list.
+    expect: { error_contains: 'Nothing was executed and no run was created.' }
+
+  - id: workflow-rejects-unknown-prompt
+    claim_source: >-
+      src/modules/workflow-ir/types.ts `WorkflowRejectionReason` — `unknown-prompt`, produced by
+      `validator.ts::collectPromptRejections` when a node's `promptId` does not resolve.
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: ghost-node-two
+                promptId: another_prompt_id_that_is_not_registered
+    expect: { error_contains: '[unknown-prompt]' }
+
+  - id: workflow-rejects-required-argument-missing
+    claim_source: >-
+      src/modules/workflow-ir/validator.ts `collectPromptRejections` — "required enforcement here
+      closes P7-F6 for THIS surface": a node omitting a `required: true` argument of its
+      referenced prompt is rejected. `reference_demo` declares `text` as `required: true`
+      (`resources/prompts/examples/reference_demo/prompt.yaml`).
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: needs-text-argument
+                promptId: reference_demo
+    expect: { error_contains: '[required-argument-missing]' }
+
+  - id: workflow-rejects-cycle
+    claim_source: >-
+      src/modules/workflow-ir/linearizer.ts — a set of nodes whose edges cannot all be satisfied
+      is rejected with reason `cycle`, naming every node that could not be placed.
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: cycle-node-a
+                promptId: minimal_prompt
+              - id: cycle-node-b
+                promptId: analytical
+            edges:
+              - from: cycle-node-a
+                to: cycle-node-b
+              - from: cycle-node-b
+                to: cycle-node-a
+    expect: { error_contains: '[cycle]' }
+
+  - id: workflow-rejects-cap-widening
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter notes — "Structural caps (maxNodes,
+      maxFanOut, maxInsertions) are ENFORCED and may only NARROW the server defaults — asking for
+      a wider cap is rejected, never silently clamped." Server defaults are 32/8/3
+      (`src/modules/workflow-ir/types.ts` `DEFAULT_WORKFLOW_CAPS`).
+    requests:
+      - tool: prompt_engine
+        args:
+          workflow:
+            version: 1
+            nodes:
+              - id: solo-node
+                promptId: minimal_prompt
+            budget:
+              # One node is nowhere near a real cap breach — the rejection can only be about the
+              # declared budget attempting to WIDEN the server's maxNodes:32, not about the
+              # submission's actual size. That distinction is the whole claim being tested.
+              maxNodes: 33
+    # MEASURED 2026-08-17: this is caught at the Zod schema boundary
+    # (`workflow-ir.schema.ts::workflowBudgetSchema`, `.max(DEFAULT_WORKFLOW_CAPS.maxNodes)`),
+    # never reaching `validator.ts::collectCapRejections`'s own widening check — the schema bound
+    # makes that branch of the validator unreachable from any call that goes through this schema.
+    # The claim ("widening rejected") still holds; only the layer and message differ from the
+    # validator's own `cap-exceeded` prose.
+    expect: { error_contains: 'Too big: expected number to be <=32' }
+
+  # ── Mutual exclusivity with `command` / `chain_id` ─────────────────────────────────────────────
+  # Both rows hit the Zod refine at the MCP boundary (`prompt-engine.schema.ts::withSourceExclusivity`),
+  # not the pipeline-stage twin (`04-parsing-stage.ts::collectSourceConflicts`) — a real MCP client
+  # can only ever reach the schema layer, and the two guards are documented as deliberately NOT
+  # redundant: the stage-04 check exists for in-process callers that walk past this schema
+  # entirely, which this corpus cannot exercise over a real transport.
+  - id: workflow-mutually-exclusive-with-command
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter — "MUTUALLY EXCLUSIVE with
+      'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by
+      precedence."
+    requests:
+      - tool: prompt_engine
+        args:
+          command: '>>minimal_prompt'
+          workflow:
+            version: 1
+            nodes:
+              - id: solo
+                promptId: minimal_prompt
+    expect: { error_contains: "cannot be combined with a command string or a resume token" }
+
+  - id: workflow-mutually-exclusive-with-chain-id
+    claim_source: >-
+      tooling/contracts/prompt-engine.json `workflow` parameter — same exclusivity clause as
+      above, the `chain_id` arm.
+    requests:
+      - tool: prompt_engine
+        args:
+          chain_id: 'chain-not-a-real-run#1'
+          workflow:
+            version: 1
+            nodes:
+              - id: solo-two
+                promptId: minimal_prompt
+    expect: { error_contains: "cannot be combined with a command string or a resume token" }
