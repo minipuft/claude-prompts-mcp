@@ -210,10 +210,27 @@ cli/dist/
 # `.codex/skills` are 0-tracked — so committing this one was the anomaly, not the rule.
 #
 # It is produced by `npm run skills:export` from the registrations in server/skills-sync.yaml,
-# which ship EMPTY by default (see server/skills-sync.example.yaml). Committing the output would
-# mean a hand edit survives silently until someone re-exports, and it would make the repo carry
-# one user's choice of exported resources as if it were the project's.
+# which is itself untracked (see below). Committing the output would mean a hand edit survives
+# silently until someone re-exports, and it would make the repo carry one user's choice of
+# exported resources as if it were the project's.
 #
 # Consequence for the distribution renderer: it GENERATES skills/ rather than drift-checking a
 # committed tree. `scripts/render-targets.json` records the same under canonicalTree.
 skills/
+
+# Skills-sync registrations — per-installation, never committed.
+#
+# Which resources you export as native skills is a local choice. The file itself used to be
+# tracked, and it carried four registrations while the note above claimed registrations "ship
+# EMPTY by default" — so the documented default and the shipped one disagreed, and every
+# developer's local edit showed up as a repo change they had to remember not to commit.
+#
+# `server/skills-sync.yaml` also states the principle for its own agent-plugins block: "Which
+# resources the native package ships is a per-installation choice, not a project default. An
+# entry here exports on every `skills:export`, so shipping one would make this repo's guess the
+# default for everyone who installs it." That applies to every client, not just that one.
+#
+# `server/skills-sync.example.yaml` is the committed artifact. Both readers already handle the
+# file being absent: `loadSkillsSyncExports` returns an empty set, and the export command prints
+# `No skills-sync.yaml found. Copy the example to get started` (service.ts:549).
+server/skills-sync.yaml
