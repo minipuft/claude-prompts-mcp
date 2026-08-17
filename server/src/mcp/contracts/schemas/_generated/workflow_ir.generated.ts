@@ -70,7 +70,7 @@ export const workflow_irParameters: ToolParameter[] = [
     name: 'budget',
     type: 'object',
     description:
-      '[Workflow IR] Declared budget, split by enforcement posture. ENFORCED (structural, counted server-side): maxNodes, maxFanOut, maxInsertions — each may only NARROW the server cap, never widen it; a wider value is rejected as `cap-exceeded` rather than silently clamped. RECORDED ONLY: declaredCostCeiling, written to the existing execution_records telemetry object and never enforced, because the server never observes client token usage.',
+      '[Workflow IR] Declared budget, split by enforcement posture. ENFORCED (structural, counted server-side): maxNodes, maxFanOut, maxInsertions — each may only NARROW the server cap, never widen it; a wider value is rejected, not silently clamped. RECORDED ONLY: declaredCostCeiling, written to the existing execution_records telemetry object and never enforced, because the server never observes client token usage.',
     required: false,
     status: 'working',
     compatibility: 'canonical',
