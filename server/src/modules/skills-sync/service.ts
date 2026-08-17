@@ -216,6 +216,13 @@ interface PromptYamlChainStep {
   stepName: string;
   delegation?: boolean;
   agentType?: string;
+  /**
+   * Gates the runtime enforces at this step. An exported skill has no per-step
+   * boundary to hang them on, so they are folded into the prompt-level gate set
+   * rather than dropped — a skill that omits them under-reports what the chain
+   * actually enforces.
+   */
+  inlineGateIds?: string[];
 }
 
 interface PromptYaml {
@@ -293,6 +300,13 @@ interface ClientCapabilities {
   references: boolean;
   assets: boolean;
   subagents: boolean;
+  /**
+   * Client honors a `hooks` block in SKILL.md frontmatter, letting an exported
+   * skill carry real gate enforcement instead of only describing it. Claude Code
+   * registers such hooks when the skill is invoked; the Agent Skills spec assigns
+   * no meaning to the key, so those variants get the prose protocol alone.
+   */
+  skillFrontmatterHooks: boolean;
 }
 
 interface ClientConfig {
@@ -342,26 +356,50 @@ const CLIENT_REGISTRY: Record<string, ClientConfig> = {
   'claude-code': {
     adapter: 'claude-code',
     outputDir: { user: '~/.claude/skills', project: '.claude/skills' },
-    capabilities: { scripts: true, references: true, assets: false, subagents: true },
+    capabilities: {
+      scripts: true,
+      references: true,
+      assets: false,
+      subagents: true,
+      skillFrontmatterHooks: true,
+    },
   },
   cursor: {
     adapter: 'agent-skills',
     variant: 'cursor',
     outputDir: { user: '~/.cursor/skills', project: '.cursor/skills' },
-    capabilities: { scripts: true, references: true, assets: true, subagents: true },
+    capabilities: {
+      scripts: true,
+      references: true,
+      assets: true,
+      subagents: true,
+      skillFrontmatterHooks: false,
+    },
     extensions: { alwaysApply: false },
   },
   codex: {
     adapter: 'agent-skills',
     variant: 'codex',
     outputDir: { user: '~/.codex/skills', project: '.codex/skills' },
-    capabilities: { scripts: true, references: true, assets: true, subagents: false },
+    capabilities: {
+      scripts: true,
+      references: true,
+      assets: true,
+      subagents: false,
+      skillFrontmatterHooks: false,
+    },
   },
   opencode: {
     adapter: 'agent-skills',
     variant: 'opencode',
     outputDir: { user: '~/.config/opencode/skills', project: '.opencode/skills' },
-    capabilities: { scripts: false, references: false, assets: false, subagents: true },
+    capabilities: {
+      scripts: false,
+      references: false,
+      assets: false,
+      subagents: true,
+      skillFrontmatterHooks: false,
+    },
   },
   /**
    * Agent Plugins 1.0.0 canonical tree.
@@ -378,7 +416,13 @@ const CLIENT_REGISTRY: Record<string, ClientConfig> = {
     adapter: 'agent-skills',
     variant: 'agent-plugins',
     outputDir: { user: '~/.agent-plugins/skills', project: 'skills' },
-    capabilities: { scripts: true, references: true, assets: true, subagents: false },
+    capabilities: {
+      scripts: true,
+      references: true,
+      assets: true,
+      subagents: false,
+      skillFrontmatterHooks: false,
+    },
   },
 };
 
@@ -731,7 +775,8 @@ async function readOptionalFile(filePath: string): Promise<string | null> {
 async function resolveActiveGateRefs(
   gateConfig: PromptYaml['gateConfiguration'],
   promptCategory: string,
-  gatesRoot: string
+  gatesRoot: string,
+  chainSteps: PromptYamlChainStep[] = []
 ): Promise<IRGateRef[]> {
   const refs: IRGateRef[] = [];
   const excludeSet = new Set(gateConfig?.exclude ?? []);
@@ -740,6 +785,13 @@ async function resolveActiveGateRefs(
   // 1. Explicit includes
   for (const gateId of gateConfig?.include ?? []) {
     if (!excludeSet.has(gateId)) registeredIds.add(gateId);
+  }
+
+  // 1b. Gates declared on individual chain steps, flattened to the prompt level
+  for (const step of chainSteps) {
+    for (const gateId of step.inlineGateIds ?? []) {
+      if (!excludeSet.has(gateId)) registeredIds.add(gateId);
+    }
   }
 
   // 2. Category-activated gates (scan all gate.yaml files)
@@ -920,7 +972,12 @@ async function loadPromptIR(
 
   // Resolve active gates for this prompt
   const gatesRoot = path.join(getResourcesDir(), 'gates');
-  const gateRefs = await resolveActiveGateRefs(data.gateConfiguration, category, gatesRoot);
+  const gateRefs = await resolveActiveGateRefs(
+    data.gateConfiguration,
+    category,
+    gatesRoot,
+    data.chainSteps ?? []
+  );
 
   // Load chain step sub-prompt content
   const chainStepContents: IRChainStepContent[] = [];
@@ -1302,6 +1359,104 @@ function hasNunjucksControlFlow(content: string): boolean {
   return /\{%-?\s*(if|for|macro|block|set)\s/.test(content);
 }
 
+/** A construct the export compile cannot translate, named for a CLI warning. */
+interface TemplateFidelityGap {
+  kind: 'expression' | 'control-flow' | 'dropped-branch' | 'literal-argument';
+  detail: string;
+}
+
+/** `{{ name }}` — the only interpolation form `compileTemplate` understands. */
+const BARE_VARIABLE_BODY = /^\s*\w+\s*$/;
+
+/**
+ * Find content that will not survive the export compile.
+ *
+ * `compileTemplate` handles exactly two shapes: `{{ bareWord }}` and `{% if %}`. Anything
+ * else reaches SKILL.md verbatim, where it reads to the consuming model as an instruction
+ * that will never resolve — `{{ref:shared_intro}}` looks like a reference to fetch, and
+ * `{{content|default("...")}}` looks like a value that was supposed to be filled in.
+ *
+ * This reports rather than repairs. Widening the compiler would mean reimplementing
+ * Nunjucks against a target format that has no equivalent for most of it; the honest fix
+ * for an untranslatable construct is to tell the author, not to guess.
+ *
+ * Pure: the caller owns emission, so the same detection serves export, diff, and tests.
+ */
+function findTemplateFidelityGaps(ir: SkillIR): TemplateFidelityGap[] {
+  const gaps: TemplateFidelityGap[] = [];
+  const sources: Array<[string, string | null]> = [
+    ['system message', ir.systemMessage],
+    ['user message', ir.userMessage],
+    ['guidance', ir.guidanceContent],
+    ...ir.chainStepContents.flatMap((step): Array<[string, string | null]> => [
+      [`step ${step.stepId} system message`, step.systemMessage],
+      [`step ${step.stepId} user message`, step.userMessage],
+    ]),
+  ];
+
+  for (const [label, content] of sources) {
+    if (!content) continue;
+
+    // Interpolations the compiler's `\w+` body cannot match: filters, dotted access,
+    // and the `{{ref:id}}` / `{{script:id}}` reference forms.
+    for (const match of content.matchAll(/\{\{([^}]*)\}\}/g)) {
+      const body = match[1] ?? '';
+      if (BARE_VARIABLE_BODY.test(body)) continue;
+      gaps.push({ kind: 'expression', detail: `${label}: {{${body.trim()}}} survives verbatim` });
+    }
+
+    // `if` is compiled (branch kept); every other block passes through untouched.
+    for (const match of content.matchAll(/\{%-?\s*(for|set|macro|block)\s/g)) {
+      gaps.push({ kind: 'control-flow', detail: `${label}: {% ${match[1]} %} survives verbatim` });
+    }
+
+    // The else-branch is discarded with no trace in the output.
+    if (/\{%-?\s*else\s*-?%\}/.test(content)) {
+      gaps.push({ kind: 'dropped-branch', detail: `${label}: {% else %} branch is dropped` });
+    }
+  }
+
+  // Arguments are never substituted — the client appends them as trailing free text — so any
+  // placeholder the compile emits stays literal for the reader. Reported only when the body
+  // actually carries one: a prompt that declares arguments without interpolating them loses
+  // nothing, and warning on every argument-bearing prompt would be noise rather than signal.
+  const declared = new Set(ir.arguments.map((argument) => argument.name));
+  if (declared.size > 0) {
+    const literals = new Set<string>();
+    for (const [, content] of sources) {
+      if (!content) continue;
+      for (const match of content.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) {
+        if (declared.has(match[1] ?? '')) literals.add(match[1] as string);
+      }
+    }
+    if (literals.size > 0) {
+      gaps.push({
+        kind: 'literal-argument',
+        detail: `${literals.size} argument placeholder(s) stay literal: ${[...literals]
+          .sort()
+          .map((name) => `{${name}}`)
+          .join(', ')}`,
+      });
+    }
+  }
+
+  return gaps;
+}
+
+/** One warning per resource, naming every construct that did not translate. */
+function reportTemplateFidelityGaps(
+  ir: SkillIR,
+  gaps: TemplateFidelityGap[],
+  output: SkillsSyncOutput
+): void {
+  if (gaps.length === 0) return;
+  const lines = gaps.map((gap) => `    - ${gap.detail}`).join('\n');
+  output.warn(
+    `  ${ir.id}: ${gaps.length} construct(s) did not translate — the skill is exported anyway\n${lines}\n` +
+      `    Invoke with >>${ir.id} when these matter; the MCP pipeline resolves them.`
+  );
+}
+
 /**
  * Compiles Nunjucks templates to plain text for Agent Skills (no template syntax).
  * - {{argName}} → {argName} (readable placeholder)
@@ -1547,11 +1702,141 @@ function parseSkillMd(content: string): ParsedSkillMd {
 
 // ─── Section 3b: Gate & Chain Section Builders ──────────────────────────────
 
+/** Where an exported skill will live, needed to write a cwd-independent hook command. */
+interface SkillPlacement {
+  /** Absolute directory the client's skills are written to. */
+  baseDir: string;
+  scope: 'user' | 'project';
+  /** `outputDir.project` as configured, e.g. `.claude/skills` — relative to the project root. */
+  projectRelativeDir: string;
+}
+
+/**
+ * Absolute-or-`${CLAUDE_PROJECT_DIR}` path to a skill's gate-review hook.
+ *
+ * A hook `command` runs in whatever directory the session happens to be in, and
+ * no `${CLAUDE_SKILL_DIR}` substitution is performed inside a `hooks` block, so a
+ * relative path silently resolves against the wrong root. `${CLAUDE_PROJECT_DIR}`
+ * is the one placeholder valid here and it only helps project scope; user-scope
+ * skills get the absolute path resolved at export time. The trade-off is that a
+ * user-scope skill is not relocatable — moving it means re-running the export.
+ */
+function resolveHookCommandPath(placement: SkillPlacement, subDir: string): string {
+  const relative = `${subDir}/${GATE_HOOK_RELATIVE_PATH}`;
+  if (placement.scope === 'project') {
+    return `\${CLAUDE_PROJECT_DIR}/${placement.projectRelativeDir}/${relative}`;
+  }
+  return `${placement.baseDir}/${relative}`;
+}
+
+const GATE_HOOK_RELATIVE_PATH = 'hooks/gate-review.py';
+
+/**
+ * Frontmatter `hooks` block turning the prose protocol into real enforcement.
+ *
+ * `once: true` is honored only in skill frontmatter and gives ONE firing, which
+ * is removed whether it allowed or blocked the stop. That is the intended
+ * contract here: exactly one mandatory self-review at the end of the turn that
+ * used the skill, after which the session is unencumbered. A persistent hook
+ * would keep re-blocking every later, unrelated turn in the same session.
+ */
+function buildGateHookFrontmatter(
+  placement: SkillPlacement,
+  subDir: string
+): Record<string, unknown> {
+  return {
+    Stop: [
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: `python3 "${resolveHookCommandPath(placement, subDir)}"`,
+            name: 'gate-review',
+            timeout: 10,
+            once: true,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Self-contained `Stop` hook enforcing the verdict the Enforcement Protocol asks for.
+ *
+ * Deliberately standalone rather than delegating to the plugin's `gate-enforce.py`:
+ * an exported skill is installed into a client that may not have this project's
+ * plugin, and a hook whose script is absent fails open with no signal. The verdict
+ * grammar (`GATE_REVIEW: PASS|FAIL`) is the same contract the plugin hooks parse.
+ */
+function buildGateReviewHookScript(ir: SkillIR): string {
+  const gateIds = ir.gateRefs.map((g) => g.id);
+  return `#!/usr/bin/env python3
+"""Stop hook: require a GATE_REVIEW verdict before the turn ends.
+
+GENERATED by claude-prompts skills-sync. Edits are overwritten on the next export.
+Source resource: ${ir.resourceType}:${ir.category ? `${ir.category}/` : ''}${ir.id}
+
+Exit 0 allows the stop; exit 2 blocks it and feeds stderr back to the model as
+its next instruction. Any unexpected error also exits 0 — a broken review hook
+must not strand a session it cannot evaluate.
+"""
+
+import json
+import re
+import sys
+
+GATES = ${JSON.stringify(gateIds)}
+VERDICT = re.compile(r"GATE_REVIEW:\\s*(PASS|FAIL)", re.IGNORECASE)
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        return 0
+
+    # Already continuing because of a stop hook — do not stack another block.
+    if payload.get("stop_hook_active"):
+        return 0
+
+    message = payload.get("last_assistant_message") or ""
+    match = VERDICT.search(message)
+
+    if match and match.group(1).upper() == "PASS":
+        return 0
+
+    if match:
+        print(
+            "GATE_REVIEW: FAIL was recorded. Address the failing criteria, then "
+            "re-emit 'GATE_REVIEW: PASS — <rationale>'.",
+            file=sys.stderr,
+        )
+        return 2
+
+    listed = ", ".join(GATES) if GATES else "the gates in this skill"
+    print(
+        "This skill's quality gates were not reviewed. Evaluate the work against "
+        f"{listed} (see gates/<id>/guidance.md), then emit "
+        "'GATE_REVIEW: PASS — <rationale>' or 'GATE_REVIEW: FAIL — <rationale>'.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception:  # noqa: BLE001 — never strand a turn on a review-hook bug
+        sys.exit(0)
+`;
+}
+
 /**
  * Builds the Quality Gates markdown section for SKILL.md.
  * Includes criteria table, inline criteria, and enforcement protocol.
  */
-function buildQualityGatesSection(gateRefs: IRGateRef[]): string {
+function buildQualityGatesSection(gateRefs: IRGateRef[], hookEnforced: boolean): string {
   if (gateRefs.length === 0) return '';
 
   const registered = gateRefs.filter((g) => g.source === 'registered');
@@ -1603,9 +1888,152 @@ function buildQualityGatesSection(gateRefs: IRGateRef[]): string {
     section += `3. Emit verdict: \`GATE_REVIEW: PASS — [rationale]\` or \`GATE_REVIEW: FAIL — [rationale]\`\n`;
     section += `4. If FAIL: address issues and re-emit until PASS\n`;
   }
-  section += `\n> This is enforced by SubagentStop hook — task completion is blocked without a PASS verdict.\n\n`;
+  // State the enforcement that this artifact actually ships. The unconditional
+  // claim this replaced was true only where the claude-prompts plugin happened to
+  // be installed, and an exported skill is routinely used where it is not.
+  section += hookEnforced
+    ? `\n> Enforced: this skill registers a \`Stop\` hook (\`${GATE_HOOK_RELATIVE_PATH}\`) that blocks the end of the turn until a PASS verdict is emitted. It fires once per session.\n\n`
+    : `\n> Not mechanically enforced on this client — treat the verdict as a required self-review.\n\n`;
 
   return section;
+}
+
+/** File extension for an emitted script tool, derived from its declared runtime. */
+function scriptExtension(runtime: string): string {
+  if (runtime === 'python') return '.py';
+  if (runtime === 'node') return '.js';
+  return '';
+}
+
+/**
+ * The exact shell command that runs one emitted script tool.
+ *
+ * Single source for BOTH the documented command and the `allowed-tools` pre-approval
+ * below. They must agree literally: `Bash(...)` matches by command prefix, so any drift
+ * between what the skill tells the model to run and what the frontmatter pre-approves
+ * turns silently into a permission prompt nobody expected.
+ */
+function scriptToolCommand(tool: IRScriptTool): string {
+  const runner = tool.runtime === 'python' ? 'python3 ' : tool.runtime === 'node' ? 'node ' : '';
+  return `${runner}tools/${tool.id}/script${scriptExtension(tool.runtime)}`;
+}
+
+/**
+ * Pre-approves the emitted scripts, scoped to the exact command that runs each one.
+ *
+ * Claude Code permission syntax, so this is emitted by the Claude Code adapter only —
+ * `Bash(cmd:*)` is not vocabulary the other clients have been verified to accept, and
+ * inventing it for them is what F5 was about.
+ *
+ * Deliberately NOT a bare `Bash`. A skill is read by a model, never invoked by a person,
+ * so every consumer of this frontmatter is the agent case — which is the argument for
+ * auto-accepting the script, and equally the reason a blanket grant would be handing an
+ * exported skill arbitrary shell. The prefix specifier gives the former without the latter.
+ */
+function buildScriptToolPermissions(ir: SkillIR): string[] {
+  return ir.scriptTools.map((tool) => `Bash(${scriptToolCommand(tool)}:*)`);
+}
+
+/**
+ * Documents the script tools shipped beside a skill.
+ *
+ * These used to be advertised through frontmatter instead — `tools:` in one exporter,
+ * `allowed-tools:` in the other — carrying script-tool display names and ids. Neither
+ * is a tool-name vocabulary any client accepts. `tools:` is not a SKILL.md key at all
+ * and hard-fails portable Agent Skills packaging, while `allowed-tools` matches only
+ * canonical tool names, so an id like `word_count` pre-approved nothing while reading
+ * like a working allowlist. The scripts are real and shipped, so name them in prose the
+ * reader can act on, and pre-approve them by command rather than by a name that matches
+ * nothing.
+ */
+function buildScriptToolsSection(ir: SkillIR): string {
+  if (ir.scriptTools.length === 0) return '';
+
+  let section = `## Script Tools\n\nShipped with this skill. Run them directly:\n\n`;
+  for (const tool of ir.scriptTools) {
+    section += `- **${tool.name}** — \`${scriptToolCommand(tool)}\`\n`;
+  }
+  return `${section}\n`;
+}
+
+/**
+ * Label for one step in the chain arrow-flow line.
+ *
+ * The flow line advertises `>>` commands, so a prompt id is an honest label only
+ * when it is genuinely invocable. Inline steps carry a non-invocable id, which
+ * rendered the whole flow as `>>inline --> >>inline`. Step names are authored for
+ * exactly this purpose and were unused here, while the table below still carries
+ * the id — so the name is the label and `>>` survives only on the id fallback.
+ *
+ * Tests truthiness, not nullishness: the loader coerces a missing `stepName` to
+ * `''` rather than `undefined`, so `??` would silently keep rendering nothing.
+ */
+function chainStepLabel(step: IRChainStep, index: number): string {
+  if (step.stepName) return step.stepName;
+  const localId = step.promptId.split('/').pop();
+  if (localId) return `>>${localId}`;
+  return `step ${index + 1}`;
+}
+
+/**
+ * Renders one gate pass criterion as prose a model can self-review against.
+ *
+ * There is no "right field" to render instead of the serialized object: no variant
+ * of `GatePassCriteria` carries a description, guidance, or summary field, so each
+ * one has to be summarized from its own option keys. Anything unrecognized is named
+ * by its keys and never serialized — a JSON blob is not a reviewable instruction,
+ * which is the whole defect this replaced.
+ */
+function describePassCriterion(criterion: Record<string, unknown>): string[] {
+  const lines: string[] = [];
+  const strings = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+
+  for (const pattern of strings(criterion['required_patterns']))
+    lines.push(`Addresses: ${pattern}`);
+  for (const pattern of strings(criterion['forbidden_patterns'])) lines.push(`Avoids: ${pattern}`);
+  for (const pattern of strings(criterion['regex_patterns'])) lines.push(`Matches \`${pattern}\``);
+
+  const minLength = criterion['min_length'];
+  if (typeof minLength === 'number') lines.push(`Runs to at least ${minLength} characters`);
+  const maxLength = criterion['max_length'];
+  if (typeof maxLength === 'number') lines.push(`Stays under ${maxLength} characters`);
+
+  const shellCommand = criterion['shell_command'];
+  if (typeof shellCommand === 'string') lines.push(`Passes \`${shellCommand}\``);
+
+  const framework = criterion['framework'];
+  if (typeof framework === 'string') lines.push(`Complies with the ${framework} framework`);
+  const minScore = criterion['min_compliance_score'];
+  if (typeof minScore === 'number')
+    lines.push(`Scores at least ${minScore} on framework compliance`);
+
+  const promptTemplate = criterion['prompt_template'];
+  if (typeof promptTemplate === 'string') lines.push(promptTemplate);
+
+  const scriptToolId = criterion['script_tool_id'];
+  if (typeof scriptToolId === 'string') lines.push(`Passes the \`${scriptToolId}\` check`);
+
+  if (lines.length === 0) {
+    const type = typeof criterion['type'] === 'string' ? criterion['type'] : 'unspecified';
+    const keys = Object.keys(criterion).filter((key) => key !== 'type');
+    lines.push(keys.length > 0 ? `${type} (${keys.join(', ')})` : type);
+  }
+
+  return lines;
+}
+
+/**
+ * Builds the Pass Criteria checklist. Shared by both exporters — the two call sites
+ * previously carried byte-identical copies of the serialization defect.
+ */
+function buildPassCriteriaSection(passCriteria: unknown[]): string {
+  let section = `## Pass Criteria\n\n`;
+  for (const entry of passCriteria) {
+    const criterion = (entry ?? {}) as Record<string, unknown>;
+    for (const line of describePassCriterion(criterion)) section += `- ${line}\n`;
+  }
+  return `${section}\n`;
 }
 
 /**
@@ -1623,7 +2051,7 @@ function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean }
   }
 
   // Arrow flow
-  const arrows = ir.chainSteps.map((s) => `>>${s.promptId.split('/').pop()}`).join(' --> ');
+  const arrows = ir.chainSteps.map((s, i) => chainStepLabel(s, i)).join(' --> ');
   section += `${arrows}\n\n`;
 
   // Table with resource links
@@ -1730,14 +2158,22 @@ function emitChainResourceFiles(
 
 // ─── Section 4: Claude Code Adapter ─────────────────────────────────────────
 
-function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFile[] {
+function buildClaudeCodeSkill(
+  ir: SkillIR,
+  config: ClientConfig,
+  placement: SkillPlacement,
+  duplicateIds?: Set<string>
+): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
+  const hookEnforced = config.capabilities.skillFrontmatterHooks && ir.gateRefs.length > 0;
 
   // Frontmatter
   const fm: Record<string, unknown> = { name: ir.name, description: ir.description };
-  if (ir.scriptTools.length > 0) fm['tools'] = ir.scriptTools.map((t) => t.name);
   if (ir.arguments.length > 0) fm['argument-hint'] = buildArgumentHint(ir.arguments);
+  const scriptPermissions = buildScriptToolPermissions(ir);
+  if (scriptPermissions.length > 0) fm['allowed-tools'] = scriptPermissions;
+  if (hookEnforced) fm['hooks'] = buildGateHookFrontmatter(placement, subDir);
 
   let body = `---\n${yaml.dump(fm, { lineWidth: 120 }).trim()}\n---\n\n`;
 
@@ -1759,7 +2195,7 @@ function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFi
   }
 
   // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(ir.gateRefs);
+  body += buildQualityGatesSection(ir.gateRefs, hookEnforced);
 
   // Usage / user message template (compiled)
   if (ir.userMessage) {
@@ -1769,14 +2205,11 @@ function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFi
   // Chain workflow with resource links (Claude Code supports sub-agents)
   body += buildEnhancedChainSection(ir, { hasSubagents: true });
 
+  body += buildScriptToolsSection(ir);
+
   // Gate-specific: pass criteria checklist
   if (ir.gateData) {
-    body += `## Pass Criteria\n\n`;
-    for (const c of ir.gateData.passCriteria) {
-      const criterion = c as Record<string, unknown>;
-      body += `- [${String(criterion['type'])}] ${JSON.stringify(criterion)}\n`;
-    }
-    body += '\n';
+    body += buildPassCriteriaSection(ir.gateData.passCriteria);
   }
 
   // Framework-specific: phase summary
@@ -1802,13 +2235,22 @@ function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFi
 
   files.push({ relativePath: `${subDir}/SKILL.md`, content: body });
 
+  // Gate-review Stop hook — emitted only when the frontmatter above references it,
+  // so the two can never disagree about whether enforcement exists.
+  if (hookEnforced) {
+    files.push({
+      relativePath: `${subDir}/${GATE_HOOK_RELATIVE_PATH}`,
+      content: buildGateReviewHookScript(ir),
+    });
+  }
+
   // Script files and tool metadata
   for (const tool of ir.scriptTools) {
     const toolSubDir = `${subDir}/tools/${tool.id}`;
 
     // Script file
     if (tool.scriptContent) {
-      const ext = tool.runtime === 'python' ? '.py' : tool.runtime === 'node' ? '.js' : '';
+      const ext = scriptExtension(tool.runtime);
       files.push({
         relativePath: `${toolSubDir}/script${ext}`,
         content: tool.scriptContent,
@@ -1880,19 +2322,10 @@ function buildAgentSkillsSkill(
   if (ir.category) metadata['category'] = ir.category;
   fm['metadata'] = metadata;
 
-  // Allowed tools
-  if (ir.scriptTools.length > 0) {
-    fm['allowed-tools'] = ir.scriptTools.map((t) => t.id);
-  }
-
   // Variant-specific extensions
   if (variant === 'cursor') {
     fm['alwaysApply'] = config.extensions?.['alwaysApply'] ?? false;
     if (ir.category) fm['category'] = ir.category;
-  }
-  // OpenCode: strict subset — only name, description, license, compatibility, metadata
-  if (variant === 'opencode') {
-    delete fm['allowed-tools'];
   }
 
   let body = `---\n${yaml.dump(fm, { lineWidth: 120 }).trim()}\n---\n\n`;
@@ -1915,7 +2348,7 @@ function buildAgentSkillsSkill(
   }
 
   // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(ir.gateRefs);
+  body += buildQualityGatesSection(ir.gateRefs, false);
 
   if (ir.userMessage) {
     body += `## Usage\n\n${compileTemplateToPlaintext(ir.userMessage.trim(), ir.arguments)}\n`;
@@ -1924,14 +2357,13 @@ function buildAgentSkillsSkill(
   // Chain workflow with resource links (capability-aware)
   body += buildEnhancedChainSection(ir, { hasSubagents: config.capabilities.subagents });
 
+  // Script tools are only shipped when the client can carry them, so the section
+  // that documents how to run them is gated on the same capability.
+  if (config.capabilities.scripts) body += buildScriptToolsSection(ir);
+
   // Gate pass criteria
   if (ir.gateData) {
-    body += `## Pass Criteria\n\n`;
-    for (const c of ir.gateData.passCriteria) {
-      const criterion = c as Record<string, unknown>;
-      body += `- [${String(criterion['type'])}] ${JSON.stringify(criterion)}\n`;
-    }
-    body += '\n';
+    body += buildPassCriteriaSection(ir.gateData.passCriteria);
   }
 
   // Framework phases
@@ -1964,7 +2396,7 @@ function buildAgentSkillsSkill(
 
       // Script file
       if (tool.scriptContent) {
-        const ext = tool.runtime === 'python' ? '.py' : tool.runtime === 'node' ? '.js' : '';
+        const ext = scriptExtension(tool.runtime);
         files.push({
           relativePath: `${toolSubDir}/script${ext}`,
           content: tool.scriptContent,
@@ -2033,10 +2465,11 @@ function buildAgentSkillsSkill(
 function adaptResource(
   ir: SkillIR,
   clientConfig: ClientConfig,
+  placement: SkillPlacement,
   duplicateIds?: Set<string>
 ): OutputFile[] {
   if (clientConfig.adapter === 'claude-code') {
-    return buildClaudeCodeSkill(ir, duplicateIds);
+    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds);
   }
   return buildAgentSkillsSkill(ir, clientConfig, duplicateIds);
 }
@@ -2092,14 +2525,23 @@ function loadManifestEntries(
 }
 
 /** Bulk save manifest entries within a single transaction. */
+/**
+ * Persist the manifest for one client+scope.
+ *
+ * Returns false when no initialized database is available — the CLI entry point
+ * passes no `dbManager`, so a plain `skills:export` writes files but records
+ * nothing. The caller must report which of the two happened: logging "manifest
+ * saved" on the false branch claims durable drift-detection state that does not
+ * exist, and `diff` later reports every resource as new.
+ */
 async function saveManifestBatch(
   clientId: string,
   scope: 'user' | 'project',
   entries: Map<string, SyncManifestEntry>,
   configHash: string,
   dbManager?: DatabasePort
-): Promise<void> {
-  if (!dbManager?.isInitialized()) return;
+): Promise<boolean> {
+  if (!dbManager?.isInitialized()) return false;
 
   await dbManager.transaction(() => {
     // Clear previous entries for this client+scope
@@ -2131,6 +2573,8 @@ async function saveManifestBatch(
       );
     }
   });
+
+  return true;
 }
 
 function hashOutputFiles(files: OutputFile[]): string {
@@ -2213,8 +2657,14 @@ async function exportCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput):
       output.log(`\n── ${clientId} (${scope}) → ${baseDir}`);
 
       for (const ir of scopedResources) {
+        reportTemplateFidelityGaps(ir, findTemplateFidelityGaps(ir), output);
         const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(ir, clientConfig, duplicateIds);
+        let outputFiles = adaptResource(
+          ir,
+          clientConfig,
+          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+          duplicateIds
+        );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
 
@@ -2251,8 +2701,18 @@ async function exportCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput):
       }
 
       if (!opts.dryRun) {
-        await saveManifestBatch(clientId, scope, manifestEntries, configHash, opts.dbManager);
-        output.log(`  manifest saved (${manifestEntries.size} entries, scope: ${scope})`);
+        const manifestSaved = await saveManifestBatch(
+          clientId,
+          scope,
+          manifestEntries,
+          configHash,
+          opts.dbManager
+        );
+        output.log(
+          manifestSaved
+            ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
+            : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
+        );
         registrationMutations.push({
           clientId,
           scope,
@@ -2436,7 +2896,12 @@ async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
       const manifestEntries = new Map<string, SyncManifestEntry>();
       for (const ir of scopedResources) {
         const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(ir, clientConfig, duplicateIds);
+        let outputFiles = adaptResource(
+          ir,
+          clientConfig,
+          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+          duplicateIds
+        );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
 
@@ -2484,8 +2949,18 @@ async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
       } else {
         const updatedConfigRaw = await readFile(configPath, 'utf-8');
         const configHash = computeContentHash([updatedConfigRaw]);
-        await saveManifestBatch(clientId, scope, manifestEntries, configHash, opts.dbManager);
-        output.log(`  manifest saved (${manifestEntries.size} entries, scope: ${scope})`);
+        const manifestSaved = await saveManifestBatch(
+          clientId,
+          scope,
+          manifestEntries,
+          configHash,
+          opts.dbManager
+        );
+        output.log(
+          manifestSaved
+            ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
+            : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
+        );
       }
     }
   }
@@ -2616,9 +3091,14 @@ async function diffCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
 
         // Output drift: exported files edited locally since last export
         const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(ir, clientConfig, duplicateIds);
-        outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const baseDir = resolveOutputDir(clientConfig, scope);
+        let outputFiles = adaptResource(
+          ir,
+          clientConfig,
+          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+          duplicateIds
+        );
+        outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputPatches: string[] = [];
         const changedOutputFiles: string[] = [];
         for (const file of outputFiles) {
@@ -2800,7 +3280,12 @@ async function pullCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
 
       for (const ir of scopedResources) {
         // Only pull the main SKILL.md, not tool files
-        const outputFiles = adaptResource(ir, clientConfig, duplicateIds);
+        const outputFiles = adaptResource(
+          ir,
+          clientConfig,
+          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+          duplicateIds
+        );
         const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
         if (!skillFile) continue;
 
@@ -3446,5 +3931,6 @@ export function getSkillsSyncConfigPath(): string {
 }
 
 // @internal — exported for testing
-export { parseSkillMd, hasNunjucksControlFlow };
+export { parseSkillMd, hasNunjucksControlFlow, resolveHookCommandPath, buildGateReviewHookScript };
+export type { SkillPlacement };
 export type { ParsedSkillMd };
