@@ -150,11 +150,15 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   params.mcpToolsManager?.updateData(promptsData, convertedPrompts, categories);
   params.apiRouter?.updateData(promptsData, categories, convertedPrompts);
 
-  // Auto-deregister prompts exported as client skills via skills-sync.yaml
-  const exportedPromptIds = await loadSkillsSyncExports(serverRoot, logger);
-  if (exportedPromptIds.size > 0) {
-    promptManager.setExportedPromptIds(exportedPromptIds);
-  }
+  // Auto-deregister prompts exported as client skills via skills-sync.yaml.
+  // Set unconditionally: a hot reload that REMOVES the last registration must
+  // clear the previous set, or the prompt stays deregistered until restart.
+  const exportedPromptIds = await loadSkillsSyncExports(
+    serverRoot,
+    logger,
+    convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
+  );
+  promptManager.setExportedPromptIds(exportedPromptIds);
 
   // Publish content, do not bind. Binding is per serving unit — one shell per
   // STDIO connection and per HTTP request — so `createMcpServerFactory` owns it.
@@ -218,36 +222,109 @@ function mergePromptResults(
   }
 }
 
+/** Subset of skills-sync.yaml this module reads. Full schema: modules/skills-sync/service.ts */
 /**
- * Load the exports list from skills-sync.yaml and return prompt IDs
- * that should be auto-deregistered from MCP (exported as client skills).
- * Returns empty set if the file doesn't exist or has no exports.
+ * Values are `unknown` on purpose: this is parsed YAML from a user-editable file, so the
+ * shape is a claim rather than a guarantee. Declaring the narrowed type here would make
+ * the runtime guards below provably dead to the type checker while they remain necessary
+ * at runtime — the cast would be the only thing making them look redundant.
  */
-async function loadSkillsSyncExports(
+interface SkillsSyncDeregistrationConfig {
+  registrations?: Record<string, unknown>;
+  /** @deprecated flat pre-`registrations` list, still honored on read */
+  exports?: unknown;
+}
+
+/** One client's scoped selection, once it has survived the runtime shape checks. */
+interface ScopedSelection {
+  user?: unknown;
+  project?: unknown;
+}
+
+/** `'all'` selects every discoverable resource, so it cannot be enumerated from config text. */
+const ALL_RESOURCES = Symbol('skills-sync:all');
+
+/**
+ * Union the manifest keys named across every client and scope.
+ *
+ * Scope is deliberately ignored: `prompts/list` is one surface, so a prompt
+ * exported to any client under any scope is skill-served and listing it again
+ * duplicates it. Returns ALL_RESOURCES when any client selects everything.
+ */
+function collectRegisteredKeys(
+  config: SkillsSyncDeregistrationConfig
+): string[] | typeof ALL_RESOURCES {
+  const keys: string[] = [];
+
+  if (Array.isArray(config.exports)) {
+    keys.push(...config.exports.filter((entry): entry is string => typeof entry === 'string'));
+  }
+
+  for (const selection of Object.values(config.registrations ?? {})) {
+    if (selection === 'all') return ALL_RESOURCES;
+    if (selection === null || typeof selection !== 'object') continue;
+    const scopes = selection as ScopedSelection;
+    for (const scoped of [scopes.user, scopes.project]) {
+      if (Array.isArray(scoped)) {
+        keys.push(...scoped.filter((entry): entry is string => typeof entry === 'string'));
+      }
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Load the registered exports from skills-sync.yaml and return `category/id`
+ * keys for prompts that should be auto-deregistered from the MCP prompts list.
+ *
+ * A prompt exported as a client skill is served by that client's native harness,
+ * so listing it again under `prompts/list` offers the same prompt twice. This
+ * removes only the prompts-protocol listing: `>>id` still resolves, because
+ * `prompt_engine` matches against its own `convertedPrompts` array
+ * (`prompt-executor.ts` `updateData`), which this never touches. That is the
+ * intended split — skill for the native path, `>>` when the caller wants the
+ * full gate and chain machinery.
+ *
+ * Reads `registrations` (the canonical shape) and unions every client and scope,
+ * since a prompt exported to any client is skill-served. The legacy flat
+ * `exports` list is still honored for configs that predate `registrations`.
+ * Returns an empty set when the file is missing or declares neither key.
+ */
+export async function loadSkillsSyncExports(
   serverRoot: string | undefined,
-  logger: Logger
+  logger: Logger,
+  allPromptKeys: string[]
 ): Promise<Set<string>> {
   if (serverRoot === undefined) return new Set();
 
   const configPath = path.join(serverRoot, 'skills-sync.yaml');
   try {
     const content = await readFile(configPath, 'utf-8');
-    const config = yaml.load(content) as { exports?: string[] } | null;
+    const config = yaml.load(content) as SkillsSyncDeregistrationConfig | null;
 
-    if (config === null || !Array.isArray(config.exports)) {
+    if (config === null || typeof config !== 'object') {
       return new Set();
     }
 
+    const registered = collectRegisteredKeys(config);
+    if (registered === ALL_RESOURCES) {
+      logger.info(
+        `Skills sync: a client selects 'all', deregistering every prompt (${allPromptKeys.length}) from prompts/list (still callable via >>)`
+      );
+      return new Set(allPromptKeys);
+    }
+
     const exportedIds = new Set<string>();
-    for (const entry of config.exports) {
-      if (typeof entry === 'string' && entry.startsWith('prompt:')) {
+    for (const entry of registered) {
+      if (entry.startsWith('prompt:')) {
         exportedIds.add(entry.slice('prompt:'.length));
       }
     }
 
     if (exportedIds.size > 0) {
       logger.info(
-        `Skills sync: ${exportedIds.size} prompt(s) exported as skills, auto-deregistered from MCP`
+        `Skills sync: ${exportedIds.size} prompt(s) exported as skills, auto-deregistered from prompts/list (still callable via >>)`
       );
     }
 
