@@ -10,7 +10,7 @@ tags:
 
 # Plan Retirement Federation — Implementation Notes
 
-Companion: [`plan-retirement-federation-2026-08-03.md`](plan-retirement-federation-2026-08-03.md)
+Companion: [`plan-retirement-federation-2026-08-03.md`](./plan-retirement-federation-2026-08-03.md)
 
 ## Outcome
 
