@@ -1,7 +1,7 @@
 ---
 title: "CONTRIBUTING agreement with the repo — kill the drift, then gate it"
 date: 2026-08-16
-status: done
+status: reference
 tags:
   - docs
   - scripts

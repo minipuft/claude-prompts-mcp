@@ -1,7 +1,7 @@
 ---
 title: "CONTRIBUTING agreement — implementation notes"
 date: 2026-08-16
-status: active
+status: done
 tags:
   - docs
   - scripts
