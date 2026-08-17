@@ -2,7 +2,7 @@
 title: "Sub-agent Delegation Contract — Implementation Notes"
 plan: subagent-delegation-contract-2026-08-12.md
 date: 2026-08-12
-status: active
+status: reference
 tags: []
 ---
 

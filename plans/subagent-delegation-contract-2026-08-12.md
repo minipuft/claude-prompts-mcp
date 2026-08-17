@@ -1,11 +1,18 @@
 ---
 title: "Sub-agent Delegation Contract — Envelope, Gates, and Agent Export"
 date: 2026-08-12
-status: active
+status: reference
 tags: []
 ---
 
 # Sub-agent Delegation Contract — Envelope, Gates, and Agent Export
+
+**Retired to reference 2026-08-17 (owner decision) with tiers S1–S6 UNEXECUTED.** The live
+signal — measured delegation defect (envelope carries no chain history, no gate text) and the
+S1–S6 scope with falsifiers — is re-homed to the `project_subagent_delegation_defect` memory.
+This document is the full-fidelity record; it is no longer a queue. Any future delegation work
+starts at S6 (re-measure against a fresh build) — the codebase moved substantially after this
+plan was written.
 
 **Work type**: bug_fix (S1–S4) + feature (S5, migrated from the adaptive-chain master plan as P8)
 **Origin**: owner report 2026-08-12 — "sub-agents aren't receiving the context, or gates, from the
