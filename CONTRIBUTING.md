@@ -61,20 +61,20 @@ repo/
 <details>
 <summary><strong>Available Scripts</strong> (run inside <code>server/</code>)</summary>
 
-| Command                             | Description                                 |
-| ----------------------------------- | ------------------------------------------- |
-| `npm run build`                     | esbuild bundle to `dist/index.js`           |
-| `npm run typecheck`                 | Strict TypeScript checks without emit       |
-| `npm run lint` / `lint:fix`         | ESLint validation + autofix                 |
-| `npm run lint:ratchet`              | Fail if ESLint violations increased         |
-| `npm run format` / `format:fix`     | Prettier checks/auto-format                 |
-| `npm run validate:all`              | Full validation suite (deps + architecture) |
-| `npm run validate:arch`             | Dependency Cruiser architecture rules       |
-| `npm test` / `test:jest`            | Jest suite (unit + integration)             |
-| `npm run test:integration`          | Integration tests only                      |
-| `npm run test:coverage`             | Coverage report (target: >80%)              |
-| `npm run generate:contracts`        | Regenerate MCP schemas from contracts       |
-| `npm run start:stdio` / `start:sse` | Launch transports for manual testing        |
+| Command                                     | Description                                 |
+| ------------------------------------------- | ------------------------------------------- |
+| `npm run build`                             | esbuild bundle to `dist/index.js`           |
+| `npm run typecheck`                         | Strict TypeScript checks without emit       |
+| `npm run lint` / `lint:fix`                 | ESLint validation + autofix                 |
+| `npm run lint:ratchet`                      | Fail if ESLint violations increased         |
+| `npm run validate:format`                   | Prettier check on repo-level JSON/MD/YAML   |
+| `npm run validate:all`                      | Full validation suite (deps + architecture) |
+| `npm run validate:arch`                     | Dependency Cruiser architecture rules       |
+| `npm test`                                  | Unit suite only (see `test:integration`)    |
+| `npm run test:integration`                  | Integration tests only                      |
+| `npm run test:coverage`                     | Coverage report (target: >80%)              |
+| `npm run generate:contracts`                | Regenerate MCP schemas from contracts       |
+| `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing  |
 
 </details>
 
@@ -219,12 +219,12 @@ Run validations that match what you changed:
 
 | I changed...               | Run this                                                   | Required? |
 | -------------------------- | ---------------------------------------------------------- | --------- |
-| Server source code         | `npm run typecheck && npm test`                            | Yes       |
+| Server source code         | Minimum Validation below (all four)                        | Yes       |
 | Pipeline stages            | `npm test` + smoke test both transports                    | Yes       |
 | MCP tool schemas/contracts | `npm run generate:contracts && npm run validate:contracts` | Yes       |
 | A prompt or chain template | Execute via `prompt_engine`, describe results in PR        | Yes       |
 | A gate definition          | Execute via `resource_manager`, verify gate triggers       | Yes       |
-| Transport/runtime behavior | Smoke test `npm run start:stdio` and `start:sse`           | Yes       |
+| Transport/runtime behavior | Smoke test BOTH: `start:stdio` and `start:development`     | Yes       |
 | Documentation only         | Verify references against `server/dist/**`                 | Yes       |
 | Dependencies               | `npm audit` + full test suite                              | Yes       |
 
@@ -242,8 +242,12 @@ a competing path list to a hook or required workflow.
 ### Minimum Validation (before any commit)
 
 ```bash
-npm run typecheck && npm run lint:ratchet && npm test
+npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci
 ```
+
+`typecheck:tests:ratchet` is not optional. `tsconfig.json` excludes `tests/`, so `npm run typecheck`
+cannot see the call sites a signature change breaks, and Jest compiles per file without checking the
+project. A test file can pass both while carrying type errors.
 
 ### Full Validation (before pushing)
 
@@ -269,6 +273,9 @@ A [PR template](.github/pull_request_template.md) auto-fills when you open a PR.
 
 1. **Focused scope** -- one concern per PR. Split large changes into reviewable chunks.
 2. **Tests** -- new behavior has tests; changed behavior has updated tests.
+   Unit tests live in `server/tests/unit/<domain>/`, integration tests in `server/tests/integration/`.
+   Run the suite with `npm test`. To run one file directly, Jest needs the ESM flag:
+   `NODE_OPTIONS="--experimental-vm-modules" npx jest tests/unit/<path>`.
 3. **Docs updated** -- code and docs ship together.
 4. **Conventional commit** -- PR title follows commit conventions (squash-merge uses it).
 5. **Validation proof** -- link test output, screenshots, or describe manual verification steps.
@@ -296,13 +303,19 @@ Commits are blocked if checks fail. Staged files may be auto-modified by formatt
 
 Runs before every `git push`:
 
-1. `npm run typecheck`
-2. `npm run lint`
-3. `npm run format`
-4. `npm run test:jest`
-5. `npm run validate:all`
+On the full route, in order:
 
-Pushes are blocked if any command fails.
+1. Type checking (`typecheck`, then `typecheck:committed`)
+2. Linting (`lint:ratchet`)
+3. Format checking
+4. Python hook validation (`validate:python`, only when `hooks/**` changed)
+5. Tests (`test:ci`)
+6. Dependency validation (`validate:arch`)
+7. Version consistency (`validate:versions`)
+8. Build
+
+Docs-only and `hooks/**`-only pushes take lighter routes. `scripts/classify-validation-scope.js`
+decides which. Pushes are blocked if any step fails.
 
 </details>
 

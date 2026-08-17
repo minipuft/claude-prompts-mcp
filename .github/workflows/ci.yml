@@ -163,6 +163,15 @@ jobs:
         working-directory: .
         run: npm --prefix server run validate:python
 
+      # CONTRIBUTING.md classifies as `docs` (scripts/classify-validation-scope.js), and the
+      # docs route skips `validate:all` entirely. Registering this check only in the suite would
+      # leave it dead on the one kind of pull request it exists to police. It runs with no
+      # node_modules on this route, which is why the script imports nothing but node: builtins.
+      - name: Validate CONTRIBUTING commands (docs route)
+        if: needs.classify.outputs.scope == 'docs'
+        working-directory: .
+        run: node server/scripts/validate-contributing.js
+
       - name: Confirm lightweight validation
         if: needs.classify.outputs.scope != 'full'
         working-directory: .
