@@ -483,4 +483,229 @@ describe('gate review scoping (P4-F3)', () => {
       expect(rendered).not.toContain('**Review Required**');
     });
   });
+
+  /**
+   * P5-F6: a gate targeted at step N>1 (`target_step_number`/`target_step_id`) is invisible to
+   * the ONE review-creation call site that used to exist (`SessionManagementStage`,
+   * pre-advance) whenever a `gate_verdict` clears the prior step's review and advances INTO the
+   * targeted step in the SAME request — that request renders the newly-advanced step before any
+   * review-creation call runs against the post-advance step identity.
+   * `GateEnhancementService.ensurePostAdvanceReview` is the second, post-advance call that
+   * closes it; these tests exercise it directly against the same fake registry the writer tests
+   * above use, mirroring `createReviewForStep` with a spy rather than a real
+   * `GateEnforcementAuthority` — the maxAttempts/CreateReviewOptions shape it builds is not this
+   * unit's concern (`gate-enforcement-authority.test.ts` territory), only WHETHER and WITH WHAT
+   * gate ids it gets called.
+   */
+  describe('ensurePostAdvanceReview: post-advance review re-evaluation (P5-F6)', () => {
+    const buildService = (registry: ReturnType<typeof createRegistry>) =>
+      new GateEnhancementService(
+        createGateService(),
+        registry as never,
+        () => undefined,
+        () => undefined as never,
+        undefined,
+        new GateMetricsRecorder(undefined),
+        createLogger() as never,
+        undefined
+      );
+
+    const buildAuthority = () => ({
+      createReviewForStep: jest.fn(
+        async (_context: unknown, _sessionContext: unknown, _gateIds: string[]) =>
+          ({ gateIds: [], maxAttempts: 2 }) as never
+      ),
+    });
+
+    const buildContext = (options: {
+      accumulatedGateIds: string[];
+      hasBlockingGates?: boolean;
+      gateEnforcement?: ReturnType<typeof buildAuthority>;
+    }) => {
+      const context = new ExecutionContext({ chain_id: 'chain-demo#1' } as never);
+      context.state.gates.hasBlockingGates = options.hasBlockingGates ?? true;
+      context.state.gates.accumulatedGateIds = options.accumulatedGateIds;
+      if (options.gateEnforcement !== undefined) {
+        context.gateEnforcement = options.gateEnforcement as never;
+      }
+      return context;
+    };
+
+    const sessionContextAt = (
+      currentStep: number,
+      currentNodeId: string | null,
+      pendingReview?: unknown
+    ) => ({
+      sessionId: 'session-1',
+      chainId: 'chain-demo#1',
+      isChainExecution: true,
+      currentStep,
+      currentNodeId,
+      totalSteps: 3,
+      ...(pendingReview !== undefined ? { pendingReview } : {}),
+    });
+
+    test('(1) a step-targeted gate (target_step_number) creates a review for the post-advance step', async () => {
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 2 only',
+        criteria: ['cite sources'],
+        target_step_number: 2,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({ accumulatedGateIds: [TEMP_ID], gateEnforcement: authority });
+      const sessionContext = sessionContextAt(2, 'write-body');
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).toHaveBeenCalledTimes(1);
+      expect(authority.createReviewForStep).toHaveBeenCalledWith(context, sessionContext, [
+        TEMP_ID,
+      ]);
+    });
+
+    test('(1b) the SAME step-targeted gate does not fire while standing at a different step', async () => {
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 2 only',
+        criteria: ['cite sources'],
+        target_step_number: 2,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({ accumulatedGateIds: [TEMP_ID], gateEnforcement: authority });
+      const sessionContext = sessionContextAt(1, 'draft-outline');
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+    });
+
+    test('(1c) a mixed set includes the untargeted gate too — the created review is not narrowed', async () => {
+      // Regression reproduced via the driven acceptance suite (2026-08-16): creating a review
+      // scoped to the targeted gate ALONE, once triggered, blocked the following call's
+      // full-scope creation from ever running — permanently dropping the untargeted gate from
+      // that step's review. The trigger stays targeted-only; the CONTENT must not.
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 2 only',
+        criteria: ['cite sources'],
+        target_step_number: 2,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({
+        accumulatedGateIds: [TEMP_ID, RUN_WIDE_GATE],
+        gateEnforcement: authority,
+      });
+      const sessionContext = sessionContextAt(2, 'write-body');
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).toHaveBeenCalledWith(
+        context,
+        sessionContext,
+        expect.arrayContaining([TEMP_ID, RUN_WIDE_GATE])
+      );
+      const [, , gateIds] = authority.createReviewForStep.mock.calls[0] as [
+        unknown,
+        unknown,
+        string[],
+      ];
+      expect(gateIds).toHaveLength(2);
+    });
+
+    test('(2) a review already pending short-circuits — no double-create on a same-step re-render', async () => {
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 2 only',
+        criteria: ['cite sources'],
+        target_step_number: 2,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({ accumulatedGateIds: [TEMP_ID], gateEnforcement: authority });
+      const sessionContext = sessionContextAt(2, 'write-body', {
+        gateIds: [TEMP_ID],
+        attemptCount: 0,
+        maxAttempts: 2,
+      });
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+    });
+
+    test('(3) an untargeted (run-wide) gate is excluded — no regression for chains with no step targeting', async () => {
+      const registry = createRegistry();
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      // RUN_WIDE_GATE has no registry entry at all, matching how a planned (non-temporary) gate
+      // reaches the accumulator in production.
+      const context = buildContext({
+        accumulatedGateIds: [RUN_WIDE_GATE],
+        gateEnforcement: authority,
+      });
+      const sessionContext = sessionContextAt(2, 'write-body');
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+    });
+
+    test('(4) a step-1-targeted gate does not leak onto step 2', async () => {
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 1 only',
+        criteria: ['state the plan'],
+        target_step_number: 1,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({ accumulatedGateIds: [TEMP_ID], gateEnforcement: authority });
+      const sessionContext = sessionContextAt(2, 'write-body');
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+    });
+
+    test('no blocking gates on the run short-circuits before any lookup', async () => {
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 2 only',
+        criteria: ['cite sources'],
+        target_step_number: 2,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({
+        accumulatedGateIds: [TEMP_ID],
+        hasBlockingGates: false,
+        gateEnforcement: authority,
+      });
+      const sessionContext = sessionContextAt(2, 'write-body');
+
+      await service.ensurePostAdvanceReview(context, sessionContext as never);
+
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+    });
+
+    test('no GateEnforcementAuthority on the context is a no-op, not a throw', async () => {
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Step 2 only',
+        criteria: ['cite sources'],
+        target_step_number: 2,
+      });
+      const service = buildService(registry);
+      const context = buildContext({ accumulatedGateIds: [TEMP_ID] });
+      const sessionContext = sessionContextAt(2, 'write-body');
+
+      await expect(
+        service.ensurePostAdvanceReview(context, sessionContext as never)
+      ).resolves.toBeUndefined();
+    });
+  });
 });

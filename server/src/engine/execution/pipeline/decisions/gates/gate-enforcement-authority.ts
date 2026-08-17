@@ -23,6 +23,7 @@ import type {
 } from './gate-enforcement-types.js';
 import type { GateDefinitionProvider } from '../../../../gates/core/gate-loader.js';
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
+import type { ExecutionContext, SessionContext } from '../../../context/index.js';
 
 // VerdictPattern type is now imported from gates/config
 
@@ -239,6 +240,78 @@ export class GateEnforcementAuthority {
     if (metadata) {
       pendingReview.metadata = metadata;
     }
+
+    return pendingReview;
+  }
+
+  /**
+   * Create and persist a pending review scoped to `gateIds`, for the step `sessionContext` is
+   * currently standing on. Single creation path (P5-F6) shared by the pre-advance call
+   * (`SessionManagementStage`, the step a request STARTED on) and the post-advance call
+   * (`GateEnhancementService.ensurePostAdvanceReview`, the step a request just ADVANCED onto in
+   * the same call) — extracted from what used to be `SessionManagementStage`'s only caller so
+   * both sites resolve `maxAttempts` and build the review identically rather than drifting.
+   *
+   * Mutates `sessionContext.pendingReview` in place (matching the pre-existing contract both
+   * callers already relied on) and also returns the created review directly — callers read the
+   * return value rather than `sessionContext.pendingReview` afterward, since a guard earlier in
+   * the same function typically narrows that property to `undefined` for TypeScript's control
+   * flow analysis, which a call through an object reference does not invalidate.
+   *
+   * @returns null without side effects when `gateIds` is empty — callers do not need to guard
+   *   separately.
+   */
+  async createReviewForStep(
+    context: ExecutionContext,
+    sessionContext: SessionContext,
+    gateIds: string[]
+  ): Promise<PendingGateReview | null> {
+    if (gateIds.length === 0) {
+      return null;
+    }
+
+    // Get step-level retry override if available. Resolve by identity first: a step definition
+    // is addressed by its node id, and position is only the fallback for steps that predate
+    // minting (or for a context with no node id) — mirrors the resolution
+    // `GateEnhancementService` and stage 18 already use.
+    const currentStepNumber = sessionContext.currentStep ?? 1;
+    const steps = context.parsedCommand?.steps;
+    const currentNodeId = sessionContext.currentNodeId ?? undefined;
+    const currentStep =
+      (currentNodeId !== undefined ? steps?.find((s) => s.nodeId === currentNodeId) : undefined) ??
+      steps?.find((s) => s.stepNumber === currentStepNumber);
+    const stepRetries = currentStep?.retries;
+
+    // Determine maxAttempts with priority: step-level > gate-level > default.
+    let maxAttempts: number | undefined;
+    if (stepRetries !== undefined) {
+      maxAttempts = stepRetries;
+    } else {
+      const gateMaxRetry = context.gates.getMaxRetryLimit();
+      if (gateMaxRetry !== undefined) {
+        maxAttempts = gateMaxRetry;
+      }
+    }
+
+    const reviewOptions: CreateReviewOptions = {
+      gateIds,
+      instructions: context.gateInstructions ?? '',
+      ...(maxAttempts !== undefined ? { maxAttempts } : {}),
+      metadata: {
+        sessionId: sessionContext.sessionId,
+        stepNumber: currentStepNumber,
+      },
+    };
+
+    const pendingReview = await this.createPendingReview(reviewOptions);
+    await this.setPendingReview(sessionContext.sessionId, pendingReview);
+    sessionContext.pendingReview = pendingReview;
+
+    this.logger.debug('[GateEnforcementAuthority] Created PendingGateReview for step gates', {
+      sessionId: sessionContext.sessionId,
+      gateIds,
+      maxAttempts: pendingReview.maxAttempts,
+    });
 
     return pendingReview;
   }
