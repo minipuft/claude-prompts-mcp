@@ -8,6 +8,7 @@ import {
   getVersion,
   compareVersions,
   saveVersion,
+  recordEditResult,
   rollbackVersion,
   deleteHistoryFile,
   formatHistoryTable,
@@ -204,21 +205,98 @@ describe('version-history', () => {
       seedPromptHistory(promptDir);
     });
 
-    it('saves current state and returns target snapshot', () => {
+    // Go-forward semantics (P7-F10): the live state ({description: 'current'}) differs from
+    // v3's recorded snapshot, so it is bridged as v4, and the RESTORED (target) content is
+    // recorded as v5 — the newest version now holds what the rollback PRODUCED, not what
+    // preceded it. Mirrors VersionHistoryService's rollback test exactly.
+    it('bridges an unrecorded live state, then records the restored content as newest', () => {
       const currentSnapshot = { id: 'test-prompt', description: 'current' };
       const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
 
       expect(result.success).toBe(true);
-      expect(result.saved_version).toBe(4);
       expect(result.restored_version).toBe(1);
+      expect(result.saved_version).toBe(5); // v4 = bridged live state, v5 = restored state
       expect(result.snapshot).toBeDefined();
       expect(result.snapshot!.description).toBe('v1 description');
+
+      const history = loadHistory(promptDir);
+      expect(history!.current_version).toBe(5);
+      const bridged = getVersion(promptDir, 4);
+      expect(bridged!.snapshot).toEqual(currentSnapshot);
+      expect(bridged!.description).toContain('Bridge');
+      const restored = getVersion(promptDir, 5);
+      expect(restored!.description).toBe('Rollback to v1');
     });
 
-    it('errors when target version does not exist', () => {
+    it('records exactly one row when the live state is already the latest recorded snapshot', () => {
+      // seedPromptHistory's v3 snapshot is exactly this — no bridge needed.
+      const currentSnapshot = { id: 'test-prompt', description: 'v3 description' };
+      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
+
+      expect(result.saved_version).toBe(4);
+      const restored = getVersion(promptDir, 4);
+      expect(restored!.snapshot).toEqual({ id: 'test-prompt', description: 'v1 description' });
+      expect(restored!.description).toBe('Rollback to v1');
+    });
+
+    it('errors when target version does not exist, and consumes no version number', () => {
+      const before = loadHistory(promptDir)!.current_version;
       const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 99, {});
       expect(result.success).toBe(false);
       expect(result.error).toContain('99');
+      expect(loadHistory(promptDir)!.current_version).toBe(before);
+    });
+  });
+
+  describe('recordEditResult', () => {
+    // P7-F10: parity target — mirrors VersionHistoryService.recordEditResult row-for-row so the
+    // two accepted writers of `version_history` never disagree on what a version number means.
+    it('first update of a never-before-recorded resource lays a bridge v1 and records v2', () => {
+      const priorLive = { id: 'test-prompt', description: 'out-of-band' };
+      const produced = { id: 'test-prompt', description: 'edited' };
+
+      const result = recordEditResult(promptDir, 'prompt', 'test-prompt', priorLive, produced, {
+        description: 'Update via resource_manager',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.bridged).toBe(true);
+      expect(result.version).toBe(2);
+
+      const bridge = getVersion(promptDir, 1);
+      expect(bridge!.snapshot).toEqual(priorLive);
+      expect(bridge!.description).toContain('Bridge');
+
+      const newest = getVersion(promptDir, 2);
+      expect(newest!.snapshot).toEqual(produced);
+      expect(newest!.description).toBe('Update via resource_manager');
+    });
+
+    it('subsequent update with an already-recorded live state records v3, no bridge', () => {
+      const priorLive = { id: 'test-prompt', description: 'out-of-band' };
+      const firstProduced = { id: 'test-prompt', description: 'edited' };
+      recordEditResult(promptDir, 'prompt', 'test-prompt', priorLive, firstProduced, {
+        description: 'Update via resource_manager',
+      });
+
+      // Live state now equals what the first edit produced — no bridge on the second edit.
+      const secondProduced = { id: 'test-prompt', description: 'edited again' };
+      const result = recordEditResult(
+        promptDir,
+        'prompt',
+        'test-prompt',
+        firstProduced,
+        secondProduced,
+        { description: 'Update via resource_manager' }
+      );
+
+      expect(result.bridged).toBe(false);
+      expect(result.version).toBe(3);
+      const newest = getVersion(promptDir, 3);
+      expect(newest!.snapshot).toEqual(secondProduced);
+
+      const history = loadHistory(promptDir);
+      expect(history!.versions).toHaveLength(3);
     });
   });
 

@@ -116,6 +116,7 @@ export {
   getVersion,
   compareVersions,
   saveVersion,
+  recordEditResult,
   rollbackVersion,
   deleteHistoryFile,
   renameHistoryResource,
