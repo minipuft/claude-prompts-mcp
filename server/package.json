@@ -96,6 +96,8 @@
     "validate:gate-index": "node scripts/generate-gate-index.js --check",
     "validate:frameworks": "tsx scripts/validate-frameworks.ts",
     "validate:readme": "node scripts/validate-readme.js --mode=block",
+    "validate:contributing": "node scripts/validate-contributing.js",
+    "validate:contributing:self-test": "node scripts/validate-contributing.js --self-test",
     "validate:conformance-coverage": "node scripts/validate-conformance-coverage.js",
     "validate:conformance-coverage:self-test": "node scripts/validate-conformance-coverage.js --self-test",
     "validate:versions": "node scripts/validate-versions.js",

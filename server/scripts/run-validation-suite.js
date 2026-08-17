@@ -187,6 +187,17 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // /\bnpm run\b/, and validate-contributing.js carries that literal inside the regex that
+    // extracts command references from CONTRIBUTING.md. The script shells out to nothing and
+    // imports only node: builtins, which the docs CI route requires. Declared rather than worked
+    // around, because the detector is textual by design and omitting a matched substrate fails.
+    script: 'validate:contributing',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse: 'unexamined',
+  },
+  {
     script: 'validate:conformance-coverage',
     io: 'read',
     reads: ['file', 'walk'],
