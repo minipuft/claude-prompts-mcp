@@ -85,6 +85,7 @@
     "validate:filesize": "node scripts/validate-filesize.js",
     "generate:contracts": "tsx scripts/generate-contracts.ts",
     "validate:contracts": "tsx scripts/generate-contracts.ts --check",
+    "validate:contracts:self-test": "tsx scripts/generate-contracts.ts --self-test",
     "skills:export": "tsx scripts/skills-sync.ts export",
     "skills:diff": "tsx scripts/skills-sync.ts diff",
     "skills:pull": "tsx scripts/skills-sync.ts pull",
