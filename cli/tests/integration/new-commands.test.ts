@@ -389,12 +389,16 @@ describe('cpm rollback', () => {
   });
 
   it('rolls back to a previous version', () => {
+    // Go-forward semantics (2e15f0c5): the on-disk YAML (with its `category` and
+    // `userMessageTemplateFile` fields) never matches the seeded v3 snapshot
+    // (id/name/description only), so rollback bridges that live state in as v4 before
+    // recording the restored (target) content as the newest version, v5.
     const { stdout, exitCode } = run([
       'rollback', 'prompt', 'test-prompt', '1',
       '--workspace', tmpWs,
     ]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('saved v4');
+    expect(stdout).toContain('saved v5');
     expect(stdout).toContain('restored v1');
 
     // Verify YAML was updated with v1 snapshot
@@ -410,7 +414,7 @@ describe('cpm rollback', () => {
     ]);
     expect(exitCode).toBe(0);
     const data = JSON.parse(stdout);
-    expect(data.saved_version).toBe(4);
+    expect(data.saved_version).toBe(5);
     expect(data.restored_version).toBe(2);
   });
 
