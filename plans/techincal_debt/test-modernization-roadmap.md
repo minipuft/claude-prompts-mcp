@@ -505,3 +505,23 @@ tests/
 ---
 
 _Created: 2025-12-13_
+
+## Re-measurement 2026-08-17 (staleness + carried findings)
+
+This roadmap predates the claims-conformance corpus system (`tests/e2e/conformance/*.yaml`,
+runner `tests/e2e/claims-conformance.test.ts`) and its Phase 5 E2E structure
+(`tests/e2e/stdio|sse|compliance/`) was never built — SSE itself was removed in the SDK v2
+upgrade. Re-scope Phase 5 against the conformance system before executing anything from it.
+
+Carried findings (from the workflow-ir conformance work, PR pending):
+
+- **Conformance coverage gate is frameworks-only** — `validate:conformance-coverage` asserts
+  every bundled framework id appears in the corpus, but has no vocabulary for TOOL PARAMETERS:
+  the `workflow` parameter shipped with zero conformance rows and no gate noticed. Candidate
+  follow-up gate: parameter/claim coverage over `tooling/contracts/*.json` advertised surface.
+  ☐ (as of 2026-08-17 · flips when a parameter-coverage assertion exists in validate:all)
+- **Workflow-IR validator dead branch** — the validator's own cap-widening check for
+  `maxNodes`/`maxFanOut`/`maxInsertions` is structurally unreachable from any real MCP client:
+  the Zod schema (`workflowBudgetSchema` `.max(32)`) rejects widening first with a generic
+  message. Delete-on-next-touch class (same shape as P7-F9).
+  ☐ (as of 2026-08-17 · flips when the validator branch is removed or a non-Zod ingress exists)
