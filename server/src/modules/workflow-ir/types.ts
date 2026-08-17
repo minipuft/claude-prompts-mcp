@@ -88,8 +88,11 @@ export interface WorkflowEdge {
  * already rejected.
  *
  * A declared structural cap may only NARROW the server default. A submission asking for a wider
- * cap than the server allows is `cap-exceeded`, not a silent clamp: a clamped run is a run the
- * client did not author.
+ * cap than the server allows is rejected, not silently clamped — a clamped run is a run the
+ * client did not author. Enforced at the MCP tool boundary (`workflowBudgetSchema`'s
+ * `.max(DEFAULT_WORKFLOW_CAPS.*)`, `mcp/tools/schemas/workflow-ir.schema.ts`): the widening
+ * rejection formerly lived in {@link validateWorkflowIR} too, but every real ingress reaches the
+ * schema first, so that copy was unreachable and was deleted (MEASURED 2026-08-17).
  */
 export interface WorkflowBudget {
   /** ENFORCED — may only narrow {@link DEFAULT_WORKFLOW_CAPS}.maxNodes. */
@@ -180,7 +183,10 @@ export interface WorkflowPromptInfo {
   readonly requiredArguments: readonly string[];
 }
 
-/** Structural caps the server enforces. A submission's `budget` may narrow these, never widen. */
+/**
+ * Structural caps the server enforces. A submission's `budget` may narrow these, never widen —
+ * widening is rejected at the Zod schema boundary (`workflow-ir.schema.ts`), not here.
+ */
 export interface WorkflowCaps {
   readonly maxNodes: number;
   readonly maxFanOut: number;
@@ -192,9 +198,10 @@ export interface WorkflowCaps {
  *
  * `maxInsertions` mirrors `MAX_INSERTIONS_PER_RUN` rather than importing it: `modules/` may
  * value-import `engine/`, but tying the IR's declared submission ceiling to the runtime's
- * adaptive-mutation ceiling would make a change to one silently retune the other. The validator
- * asserts the relationship instead (a declared value may only narrow), and a drift test pins the
- * two numbers together so the mirror cannot rot silently.
+ * adaptive-mutation ceiling would make a change to one silently retune the other. The Zod schema
+ * asserts the relationship instead (a declared value may only narrow — `workflowBudgetSchema`'s
+ * `.max()` bound), and a drift test pins the two numbers together so the mirror cannot rot
+ * silently.
  */
 export const DEFAULT_WORKFLOW_CAPS: WorkflowCaps = {
   maxNodes: 32,
