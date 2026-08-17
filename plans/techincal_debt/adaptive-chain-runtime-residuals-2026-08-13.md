@@ -1,34 +1,52 @@
 ---
 title: "Adaptive Chain Runtime — residual findings after initiative closure"
 date: 2026-08-13
-status: backlog
+status: reference
 tags: []
 ---
 
 # Adaptive Chain Runtime — residuals
 
-The initiative (P0–P7) is terminal; master plan and phase plans retired to `plans/reference/`.
-This file is the live home for every ledger row that was still OPEN at closure. Full finding
-descriptions live in the master plan's Findings Ledger
-(`plans/reference/adaptive-chain-runtime-2026-08-09.md`) — this table carries only the residue
-and its route.
+The initiative (P0–P7) is terminal; master plan and phase plans are retired
+(`plans/reference/`). This file was the live home for every ledger row still OPEN at closure.
+**The residuals sweep (2026-08-13 → 2026-08-17, PR #231, merged) closed it**: 10 of 15 rows
+fixed, 5 re-homed to live owners. This document is now a disposition record — nothing here is a
+queue. Full finding descriptions: master plan's Findings Ledger
+(`plans/reference/adaptive-chain-runtime-2026-08-09.md`). Sweep evidence:
+`adaptive-chain-runtime-residuals-2026-08-13-implementation-notes.md`.
 
-| Id     | Residue                                                                                                                                                                                                                                                                                                                                                 | Route / next actor                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| P3-F5  | Each chain step still costs 2 prompt_engine calls; `declaredCostCeiling` records but nothing reduces the round-trip                                                                                                                                                                                                                                     | unowned — candidate for a future same-call capture design                                        |
-| P4-F1  | `persistSessions` catches-and-logs against the awaited-persistence posture; detector (cold-load test) landed, writer posture stands                                                                                                                                                                                                                     | cross-cutting remediation; pairs with sqlite-layer remediation plan                              |
-| P5-F6  | Gate review renders only at step 1 — DIAGNOSED 2026-08-13: code defect, frequency uninvolved. Review creation runs at stage 13 pre-advance; verdict→advance→render completes in one round trip (16→18), so step N>1 is never "current" where reviews are created. Fix: re-evaluate declared-gate review post-advance, before StepExecutionStage renders | gates hygiene backlog (gate-review lifecycle owner) — pairs with P6-F14; NOT the frequency owner |
-| P6-F10 | `patch` update rewrites the whole prompt dir; P7-F8 `tools:` drop fires against unnamed siblings                                                                                                                                                                                                                                                        | **routing awaits owner** — recommended: standalone fix(mcp-tools) follow-up                      |
-| P6-F12 | `pr_review_chain` markdown step block is unreachable prose; 4 template vars render empty                                                                                                                                                                                                                                                                | shipped-example hygiene, one resource_manager pass                                               |
-| P6-F14 | `GateSetResolver.accumulate` admits unregistered gate ids run-wide                                                                                                                                                                                                                                                                                      | gates hygiene follow-up                                                                          |
-| P6-F15 | `generate-contracts` silently skips a contract missing `metadata.artifactKind`                                                                                                                                                                                                                                                                          | candidate gate: `validate:contracts` asserts every contract yields ≥1 artifact                   |
-| P6-F16 | `patch` cannot reach nested argument descriptions; partial update does not preserve unsupplied core fields                                                                                                                                                                                                                                              | resource_manager settability follow-up (same family as P7-F8/P6-F10)                             |
-| P7-F4  | 13 of 17 prompt categories untracked → probes over `resources/prompts/` need `rg --no-ignore`                                                                                                                                                                                                                                                           | standing hazard — keep in worker briefs until categories are tracked                             |
-| P7-F8  | `tools:` dropped by both write paths; `ConvertedPrompt` has no `tools` field, so no snapshot records them                                                                                                                                                                                                                                               | resource_manager settability follow-up (fold with P6-F10 fix)                                    |
-| P7-F9  | Two unreachable `else { warn }` branches in gate/framework lifecycle processors                                                                                                                                                                                                                                                                         | delete on next touch of those processors                                                         |
-| P7-F10 | `cli-shared/version-history.ts` diverges from the server writer on numbering semantics — **flagged for sync at release**                                                                                                                                                                                                                                | **release cycle** — reconcile before or with the next release                                    |
-| P7-F11 | 4 of 286 shipped templates fail a naive dry render; future template validation must be differential                                                                                                                                                                                                                                                     | constraint on any future template-validation gate                                                |
-| P7-F12 | Create path verifies produced YAML after a version row is spent (update path fixed)                                                                                                                                                                                                                                                                     | resource_manager create-path follow-up                                                           |
-| P7-F15 | Prompt WRITE path resolves package-relative while LOADER honors `MCP_RESOURCES_PATH`                                                                                                                                                                                                                                                                    | packaged-defect initiative (`project_mcp_workspace_packaged_defect` memory)                      |
+## Fixed by the sweep (PR #231, merged 2026-08-17)
 
-Already routed elsewhere (listed for completeness, no action here): P5-F1 → subagent-delegation-contract plan (OQ-P6-6) · P7-F5 → chain-management memory (updated 2026-08-13).
+| Id     | Disposition                                                                                                                                                    |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P5-F6  | Diagnosed (code defect, frequency uninvolved) AND fixed — post-advance declared-gate review re-evaluation; step-N>1 targeted gates now render their review     |
+| P6-F10 | Fixed — suppliedKeys write-scope narrowing; patch-only edit leaves prompt.yaml byte-identical; category change is now a true transactional MOVE (owner ruling) |
+| P6-F12 | Fixed via resource_manager (7 empty vars, not 4; missing outputMapping + bare-name refs). **Workspace-only** — `pr-review/` is gitignored (see P7-F4)          |
+| P6-F14 | Fixed — GateSetResolver Stage 1.5 existence gate (warn + drop + diagnostics; fails open pre-init)                                                              |
+| P6-F15 | Fixed — generate-contracts fails loudly on unmarked contracts; ≥1-artifact assertion; explicit artifact-less posture requires reason + closedBy                |
+| P6-F16 | Fixed — `argument_updates` merge-by-name parameter (additive contract change); preservation half had already landed at HEAD (snapshot-base merge)              |
+| P7-F8  | Data-loss half fixed — writer preserves `tools:` id list + authored category on update AND rollback. Settability half (id-string repair) → parity initiative   |
+| P7-F9  | Fixed — dead `else { warn }` branches deleted; prompt-side processor confirmed already correct                                                                 |
+| P7-F10 | Fixed — CLI rollback now mirrors go-forward numbering (bridge + restored-content-as-newest); `saveVersion` primitive was already identical; posture kept as-is |
+| P7-F12 | Fixed — create path runs `diagnosePromptWrite(null, …)` pre-write; broken template → refused, nothing written                                                  |
+
+Also fixed in-sweep (found by the settability audit, owner-ruled in): gate `activation` /
+`retry_config` / `pass_criteria` fallback-merge, and writer-side preservation of
+`severity` / `enforcementMode` / `gate_type` (+ schema-coverage guard).
+
+## Re-homed (live owners, verified to exist)
+
+| Id     | Live home                                                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P3-F5  | `project_chain_management_tooling` memory — unowned same-call-capture design candidate                                                                        |
+| P4-F1  | `project_sqlite_layer_remediation` memory (carried debt) — its previously named route, the sqlite plan, is itself retired; the memory is the live owner       |
+| P7-F4  | `resource-manager-settability-matrix-2026-08-13.md` §Standing hazards — tracking-policy decision belongs to the settability-parity initiative                 |
+| P7-F11 | `resource-manager-settability-matrix-2026-08-13.md` §Standing hazards — differential-validation constraint; already embodied by shipped `diagnosePromptWrite` |
+| P7-F15 | `project_mcp_workspace_packaged_defect` memory (packaged-defect initiative)                                                                                   |
+
+Already routed elsewhere before the sweep (unchanged): P5-F1 → subagent-delegation-contract plan
+(OQ-P6-6) · P7-F5 → chain-management memory (updated 2026-08-13).
+
+Successor initiative seeded by the sweep: **resource_manager settability parity** —
+`resource-manager-settability-matrix-2026-08-13.md` (matrix, ranked gaps, 7-step increment
+sequence, prompt_builder bridge repair).
