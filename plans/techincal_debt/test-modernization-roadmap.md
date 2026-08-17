@@ -519,9 +519,18 @@ Carried findings (from the workflow-ir conformance work, PR pending):
   every bundled framework id appears in the corpus, but has no vocabulary for TOOL PARAMETERS:
   the `workflow` parameter shipped with zero conformance rows and no gate noticed. Candidate
   follow-up gate: parameter/claim coverage over `tooling/contracts/*.json` advertised surface.
-  ☐ (as of 2026-08-17 · flips when a parameter-coverage assertion exists in validate:all)
+  ✓ FLIPPED 2026-08-17 — validate-conformance-coverage.js extended with per-tool parameter
+  coverage (args-key structural match), 55 declared exceptions each with closedBy, shared
+  exception-hygiene audit (stale exceptions become findings), 11 self-test cases, +2 live
+  corpus cases in tool-surface.yaml. Measured: skills_sync has ZERO conformance corpus (all
+  12 params excepted — closedBy names the corpus file to create). In-tree, e2e re-verification
+  running, commit pending.
 - **Workflow-IR validator dead branch** — the validator's own cap-widening check for
   `maxNodes`/`maxFanOut`/`maxInsertions` is structurally unreachable from any real MCP client:
   the Zod schema (`workflowBudgetSchema` `.max(32)`) rejects widening first with a generic
   message. Delete-on-next-touch class (same shape as P7-F9).
-  ☐ (as of 2026-08-17 · flips when the validator branch is removed or a non-Zod ingress exists)
+  ✓ FLIPPED 2026-08-17 — branch deleted (validator.ts collectCapRejections widening loop + 2
+  widening-only unit tests); unreachability confirmed by full ingress enumeration (sole path
+  flows through the .strict() Zod boundary with identical cap values); `cap-exceeded` reason
+  retained (live producers remain); docs + contract corrected in lockstep. In-tree, commit
+  pending with the parameter-coverage gate.
