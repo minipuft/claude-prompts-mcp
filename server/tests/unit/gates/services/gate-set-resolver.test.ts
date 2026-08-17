@@ -50,10 +50,34 @@ const createGateLoader = (frameworkGateIds: string[] = []) =>
 function buildResolver(
   logger: ReturnType<typeof createLogger>,
   gateManager?: unknown,
-  gateLoader?: unknown
+  gateLoader?: unknown,
+  temporaryGateRegistry?: unknown
 ): GateSetResolver {
-  return new GateSetResolver(logger as never, gateManager as never, gateLoader as never);
+  return new GateSetResolver(
+    logger as never,
+    gateManager as never,
+    gateLoader as never,
+    temporaryGateRegistry as never
+  );
 }
+
+/**
+ * Fake registry with an existence check, for the Stage 1.5 (P6-F14) tests below. Deliberately
+ * separate from `createGateManager`: that fake carries no `isInitialized`/`has`, so every
+ * pre-existing test above degrades to the fail-open branch untouched (`isInitialized === true`
+ * fails the `=== true` check) — only these tests opt into the fail-closed existence gate.
+ */
+const createValidatingGateManager = (knownIds: readonly string[]) =>
+  ({
+    isInitialized: true,
+    has: jest.fn((id: string) => knownIds.includes(id)),
+    selectGates: jest.fn(() => ({
+      selectedIds: [],
+      guides: [],
+      skippedIds: [],
+      metadata: { selectionMethod: 'category', selectionTime: 0 },
+    })),
+  }) as unknown as Parameters<typeof buildResolver>[1];
 
 const baseInput = (overrides: Partial<GateResolutionInput> = {}): GateResolutionInput => ({
   prompt: makePrompt(),
@@ -475,6 +499,92 @@ describe('GateSetResolver — refactor baseline', () => {
     );
 
     expect(result.gateIds).toEqual(['code-quality']);
+  });
+});
+
+describe('GateSetResolver — Stage 1.5 existence gate (P6-F14)', () => {
+  test('an unregistered id never enters the accumulator, and a warning is emitted', async () => {
+    const logger = createLogger();
+    const resolver = buildResolver(logger, createValidatingGateManager(['code-quality']));
+
+    const result = await resolver.resolve(baseInput({ callerGateIds: ['typo-gate'] }));
+
+    expect(result.gateIds).toEqual([]);
+    expect(result.accepted).toEqual([]);
+    expect(result.unregistered.get('typo-gate')).toBe('temporary-request');
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[GateSetResolver] Dropping unregistered gate id(s)',
+      expect.objectContaining({ ids: ['typo-gate'] })
+    );
+  });
+
+  test('a registered id passes through unaffected', async () => {
+    const logger = createLogger();
+    const resolver = buildResolver(logger, createValidatingGateManager(['code-quality']));
+
+    const result = await resolver.resolve(baseInput({ callerGateIds: ['code-quality'] }));
+
+    expect(result.gateIds).toEqual(['code-quality']);
+    expect(result.unregistered.size).toBe(0);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test('a mixed list keeps the valid ids and drops only the unregistered one', async () => {
+    const logger = createLogger();
+    const resolver = buildResolver(
+      logger,
+      createValidatingGateManager(['code-quality', 'test-coverage'])
+    );
+
+    const result = await resolver.resolve(
+      baseInput({ callerGateIds: ['code-quality', 'typo-gate', 'test-coverage'] })
+    );
+
+    expect(sorted(result.gateIds)).toEqual(['code-quality', 'test-coverage']);
+    expect(result.unregistered.size).toBe(1);
+    expect(result.unregistered.get('typo-gate')).toBe('temporary-request');
+  });
+
+  test('a temporary-gate-registered id passes even though GateManager does not know it', async () => {
+    const logger = createLogger();
+    const temporaryGateRegistry = {
+      getTemporaryGate: jest.fn((id: string) => (id === 'temp_abc123' ? { id } : undefined)),
+    };
+    const resolver = buildResolver(
+      logger,
+      createValidatingGateManager(['code-quality']),
+      undefined,
+      temporaryGateRegistry
+    );
+
+    const result = await resolver.resolve(baseInput({ inlineOperatorGateIds: ['temp_abc123'] }));
+
+    expect(result.gateIds).toEqual(['temp_abc123']);
+    expect(result.unregistered.size).toBe(0);
+  });
+
+  test('an uninitialized GateManager fails open rather than dropping every gate', async () => {
+    const logger = createLogger();
+    // Same shape production wires before `initialize()` resolves — `isInitialized` is false,
+    // and the real `.has()` would throw (`BaseResourceHandler.ensureInitialized`).
+    const notReadyManager = {
+      isInitialized: false,
+      has: jest.fn(() => {
+        throw new Error('GateManager not initialized. Call initialize() first.');
+      }),
+      selectGates: jest.fn(() => ({
+        selectedIds: [],
+        guides: [],
+        skippedIds: [],
+        metadata: { selectionMethod: 'category', selectionTime: 0 },
+      })),
+    };
+    const resolver = buildResolver(logger, notReadyManager);
+
+    const result = await resolver.resolve(baseInput({ callerGateIds: ['code-quality'] }));
+
+    expect(result.gateIds).toEqual(['code-quality']);
+    expect(notReadyManager.has).not.toHaveBeenCalled();
   });
 });
 
