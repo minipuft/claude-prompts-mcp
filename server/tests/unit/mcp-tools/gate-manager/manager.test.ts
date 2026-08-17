@@ -1,12 +1,70 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GateToolHandler } from '../../../../src/mcp/tools/gate-manager/core/manager.js';
+import {
+  GATE_YAML_EXCLUDED_KEYS,
+  GATE_YAML_PROJECTED_KEYS,
+  PRESERVED_GATE_YAML_KEYS,
+} from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';
 
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
+import type { GateGuide } from '../../../../src/engine/gates/types/index.js';
+import type { GateManagerInput } from '../../../../src/mcp/tools/gate-manager/core/types.js';
 import type { ConfigManager, Logger } from '../../../../src/shared/types/index.js';
+
+/**
+ * Fake GateGuide standing in for the registry's live gate object during
+ * `update` tests. Mirrors what `gate-lifecycle-processor.ts` reads off
+ * `existingGate` — `.gateId/.name/.type/.description`, `getGuidance()`, and
+ * `getDefinition()` for the raw on-disk `activation`/`retry_config`/
+ * `pass_criteria` used as the update-time fallback source.
+ */
+function createFakeGate(
+  overrides: {
+    gateId?: string;
+    name?: string;
+    type?: 'validation' | 'guidance';
+    description?: string;
+    guidance?: string;
+    pass_criteria?: GateManagerInput['pass_criteria'];
+    activation?: GateManagerInput['activation'];
+    retry_config?: GateManagerInput['retry_config'];
+  } = {}
+): GateGuide {
+  const {
+    gateId = 'existing-gate',
+    name = 'Existing Gate',
+    type = 'validation',
+    description = 'Existing description',
+    guidance = 'Existing guidance',
+    pass_criteria,
+    activation,
+    retry_config,
+  } = overrides;
+
+  return {
+    gateId,
+    name,
+    type,
+    description,
+    getGuidance: () => guidance,
+    getDefinition: () => ({
+      id: gateId,
+      name,
+      type,
+      description,
+      guidance,
+      pass_criteria,
+      activation,
+      retry_config,
+    }),
+  } as unknown as GateGuide;
+}
 
 const createLogger = (): Logger =>
   ({
@@ -21,7 +79,7 @@ describe('GateToolHandler', () => {
   let gatesDir: string;
   let logger: Logger;
   let gateManager: jest.Mocked<
-    Pick<GateManager, 'has' | 'unregister' | 'reload' | 'list' | 'getStats'>
+    Pick<GateManager, 'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get'>
   >;
   let manager: GateToolHandler;
   let onRefresh: jest.Mock<() => Promise<void>>;
@@ -39,6 +97,7 @@ describe('GateToolHandler', () => {
       unregister: jest.fn(() => true),
       reload: jest.fn(async () => true),
       list: jest.fn(() => []),
+      get: jest.fn(() => undefined),
       getStats: jest.fn(() => ({
         totalGates: 0,
         enabledGates: 0,
@@ -157,5 +216,168 @@ describe('GateToolHandler', () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain('Delete requires confirmation');
     expect(gateManager.unregister).not.toHaveBeenCalled();
+  });
+
+  describe('update preservation', () => {
+    // Regression coverage for resource-manager-settability-matrix-2026-08-13 §4 gap #1:
+    // `activation`/`retry_config`/`pass_criteria` had no fallback to the existing gate on
+    // update, so any update call omitting them silently deleted them from gate.yaml.
+
+    function readWrittenGateYaml(id: string): Record<string, unknown> {
+      const yamlPath = join(gatesDir, id, 'gate.yaml');
+      return loadYamlFileSync(yamlPath) as Record<string, unknown>;
+    }
+
+    test('update omitting activation preserves the existing value', async () => {
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(
+        createFakeGate({
+          gateId: 'gate-a',
+          activation: { prompt_categories: ['docs'] },
+        })
+      );
+
+      const result = await manager.handleAction(
+        { action: 'update', id: 'gate-a', description: 'new description' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('gate-a');
+      expect(written['description']).toBe('new description');
+      expect(written['activation']).toEqual({ prompt_categories: ['docs'] });
+    });
+
+    test('update omitting retry_config preserves the existing value', async () => {
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(
+        createFakeGate({
+          gateId: 'gate-b',
+          retry_config: { max_attempts: 5, improvement_hints: false },
+        })
+      );
+
+      const result = await manager.handleAction(
+        { action: 'update', id: 'gate-b', description: 'new description' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('gate-b');
+      expect(written['retry_config']).toEqual({ max_attempts: 5, improvement_hints: false });
+    });
+
+    test('update omitting pass_criteria preserves the existing value', async () => {
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(
+        createFakeGate({
+          gateId: 'gate-c',
+          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+        })
+      );
+
+      const result = await manager.handleAction(
+        { action: 'update', id: 'gate-c', description: 'new description' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('gate-c');
+      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 120 }]);
+    });
+
+    test('update explicitly supplying activation/retry_config/pass_criteria overrides the existing value', async () => {
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(
+        createFakeGate({
+          gateId: 'gate-d',
+          activation: { prompt_categories: ['docs'] },
+          retry_config: { max_attempts: 5 },
+          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+        })
+      );
+
+      const result = await manager.handleAction(
+        {
+          action: 'update',
+          id: 'gate-d',
+          activation: { prompt_categories: ['code'], explicit_request: true },
+          retry_config: { max_attempts: 1 },
+          pass_criteria: [{ type: 'inline_guidance', min_length: 50 }],
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('gate-d');
+      expect(written['activation']).toEqual({
+        prompt_categories: ['code'],
+        explicit_request: true,
+      });
+      expect(written['retry_config']).toEqual({ max_attempts: 1 });
+      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 50 }]);
+    });
+
+    // Regression coverage for the writer-side gap left after the above:
+    // `GateFileWriter.buildGateYaml` never wrote `severity`/`enforcementMode`/`gate_type` at
+    // all — not even conditionally — so no fallback in `gate-lifecycle-processor.ts` could have
+    // saved them; the fix has to live in the writer, reading the on-disk file directly.
+    test('update preserves severity/enforcementMode/gate_type not settable via GateManagerInput', async () => {
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(
+        createFakeGate({ gateId: 'gate-e', description: 'Existing description' })
+      );
+
+      const gateDir = join(gatesDir, 'gate-e');
+      mkdirSync(gateDir, { recursive: true });
+      writeFileSync(
+        join(gateDir, 'gate.yaml'),
+        [
+          'id: gate-e',
+          'name: Existing Gate',
+          'type: validation',
+          'description: Existing description',
+          'severity: critical',
+          'enforcementMode: blocking',
+          'gate_type: category',
+          'guidanceFile: guidance.md',
+          '',
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(join(gateDir, 'guidance.md'), 'Existing guidance', 'utf8');
+
+      const result = await manager.handleAction(
+        { action: 'update', id: 'gate-e', description: 'new description' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('gate-e');
+      // Proves merge, not clobber: the projected field changes to the new value in the SAME
+      // write that preserves the three fields the projection never produces.
+      expect(written['description']).toBe('new description');
+      expect(written['severity']).toBe('critical');
+      expect(written['enforcementMode']).toBe('blocking');
+      expect(written['gate_type']).toBe('category');
+    });
+
+    // Guards the derivation itself: if `GateDefinitionSchema` gains a new declared field, it
+    // must be classified into GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS, or
+    // PRESERVED_GATE_YAML_KEYS — silently falling through either bucket re-opens the data-loss
+    // hole this describe block exists to close. Does NOT catch a new passthrough-ONLY field
+    // (one never added to the Zod object shape) — see the `evaluation`/`blockResponseOnFail`
+    // note on `PRESERVED_GATE_YAML_KEYS` in gate-file-writer.ts for that residual gap.
+    test('projected + excluded + preserved keys cover every declared gate.yaml schema key', () => {
+      const schemaKeys = Object.keys(GateDefinitionSchema.shape);
+      const covered = new Set<string>([
+        ...GATE_YAML_PROJECTED_KEYS,
+        ...GATE_YAML_EXCLUDED_KEYS,
+        ...PRESERVED_GATE_YAML_KEYS,
+      ]);
+
+      const uncovered = schemaKeys.filter((key) => !covered.has(key));
+      expect(uncovered).toEqual([]);
+    });
   });
 });
