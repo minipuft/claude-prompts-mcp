@@ -566,6 +566,24 @@ describe('PromptLifecycleProcessor.createPrompt rejects update-only verbs (OQ-P7
 
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
+
+  /**
+   * Fix D (tier-b-settability-proposal §2 / P6-F16): `argument_updates` overlays fields onto an
+   * EXISTING argument by name — a `create` has no prior argument to overlay onto, the same
+   * "no referent on create" reasoning as `patch`/`dry_run` above.
+   */
+  test('rejects argument_updates on create before any side effect', async () => {
+    const { processor, updatePromptImplementation } = createProcessor();
+
+    await expect(
+      processor.createPrompt({
+        ...codePromptArgs,
+        argument_updates: [{ name: 'snippet', description: 'y' }],
+      } as never)
+    ).rejects.toThrow(/argument_updates.*create/i);
+
+    expect(updatePromptImplementation).not.toHaveBeenCalled();
+  });
 });
 
 /**

@@ -27,6 +27,7 @@ import type {
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
+import type { PromptArgumentUpdate } from '../prompt/operations/argument-updates.js';
 import type { TemplatePatchOperation } from '../prompt/operations/template-patch.js';
 
 /**
@@ -136,6 +137,14 @@ export interface ResourceManagerInput {
     defaultValue?: unknown;
     validation?: ArgumentValidationYaml;
   }>;
+  /**
+   * [Prompt] Update-only structured per-field overlay onto EXISTING arguments, addressed by
+   * `name` (Fix D, tier-b-settability-proposal §2 / P6-F16). Kept in lockstep with the
+   * `argument_updates` member of `resourceManagerInputSchema`; the element type is the merge
+   * applier's own (`PromptArgumentUpdate`), so a change there cannot leave this layer describing a
+   * different shape.
+   */
+  argument_updates?: PromptArgumentUpdate[];
   /**
    * [Prompt] Anchored replacements applied to a prompt's text bodies. Kept in lockstep with the
    * `patch` member of `resourceManagerInputSchema`; the operation type is the applier's own, so a

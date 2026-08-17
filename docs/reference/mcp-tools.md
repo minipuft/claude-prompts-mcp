@@ -720,6 +720,35 @@ consuming a version; resend the same call without `dry_run` to apply it. Both `p
 `dry_run` are update-only — `action:"create"` rejects either explicitly, since there is no
 existing prompt to patch or diff against.
 
+#### Argument Updates (Partial Argument Edit)
+
+`action:"update"` also accepts `argument_updates` — a structured, per-field overlay onto
+**existing** arguments, addressed by `name`, for when only one argument's `description`, `type`,
+`required`, `defaultValue`, or `validation` needs to change and resending the whole `arguments`
+array would be wasteful:
+
+```bash
+resource_manager(
+  resource_type:"prompt",
+  action:"update",
+  id:"weekly_report",
+  argument_updates:[
+    {"name":"team", "description":"Team or org name to summarize"}
+  ]
+)
+```
+
+Each entry is `{name, description?, type?, required?, defaultValue?, validation?}` — the same
+shape as an `arguments` entry. `name` must match an argument the prompt already declares; there is
+no upsert, so adding, removing, or renaming an argument still requires the full `arguments` array.
+Every other field overlays onto the matched entry only when supplied — an omitted field leaves
+that entry's current value untouched, and every argument not named by an update is unchanged.
+
+`argument_updates` is mutually exclusive with `arguments` in the same call (send one or the
+other), update-only like `patch` — `action:"create"` rejects it explicitly, since there is no
+existing argument to overlay updates onto — and combines with `dry_run:true` to preview the merge
+before spending a version.
+
 ### Gates
 
 ```bash
@@ -783,21 +812,22 @@ resource_manager(
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------- |
-| `category`              | Prompt category tag                                                                          |
-| `user_message_template` | Prompt body with `{{variables}}`                                                             |
-| `system_message`        | Optional system message                                                                      |
-| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                |
-| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)            |
-| `dry_run`               | Preview an `update` (or patch) without writing — no version consumed                         |
-| `chain_steps`           | Chain step definitions                                                                       |
-| `gate_configuration`    | Gate include/exclude lists                                                                   |
-| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`          |
-| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default** |
-| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**          |
-| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                        |
-| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                   |
+| Parameter               | Purpose                                                                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                                                               |
+| `user_message_template` | Prompt body with `{{variables}}`                                                                                                  |
+| `system_message`        | Optional system message                                                                                                           |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                     |
+| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit) |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                 |
+| `dry_run`               | Preview an `update` (or patch) without writing — no version consumed                                                              |
+| `chain_steps`           | Chain step definitions                                                                                                            |
+| `gate_configuration`    | Gate include/exclude lists                                                                                                        |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                               |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                      |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                               |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                             |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                        |
 
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block

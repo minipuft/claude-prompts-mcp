@@ -143,8 +143,9 @@ export class ResourceManagerRouter {
       user_message_template: args.user_message_template,
       system_message: args.system_message,
       arguments: args.arguments,
-      // Pass-through, no renaming (mcp-contracts.md): the processor reads `patch`/`dry_run` under
-      // the names the caller sent.
+      // Pass-through, no renaming (mcp-contracts.md): the processor reads `argument_updates`,
+      // `patch`, and `dry_run` under the names the caller sent.
+      argument_updates: args.argument_updates,
       patch: args.patch,
       dry_run: args.dry_run,
       chain_steps: args.chain_steps,
