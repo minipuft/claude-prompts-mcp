@@ -2,7 +2,7 @@
 
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptResourceContext } from '../core/context.js';
-import { FileOperations } from '../operations/file-operations.js';
+import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
 import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/validation.js';
 
 import { ToolResponse } from '#shared/types/index.js';
@@ -220,7 +220,13 @@ export class PromptVersioningProcessor {
     // Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means rollback
     // inherits the on-disk field preservation Tier 1.4 established, so the five prompt-level
     // fields the writer builds no value for survive a rollback exactly as they survive an update.
-    await this.fileOperations.updatePromptImplementation(restore.promptData);
+    // `ALL_PROMPT_DATA_KEYS`: rollback owns the WHOLE restored state (Fix B, tier-b-settability-
+    // proposal §2/§5) — there is no "what did THIS call touch" to narrow against, a restored
+    // snapshot IS the state being written. This is also what lets a rollback to a version
+    // recorded under a DIFFERENT category perform a category move (Part 2): the writer resolves
+    // that purely from `restore.promptData.category` vs the on-disk directory, with no
+    // rollback-specific code needed here.
+    await this.fileOperations.updatePromptImplementation(restore.promptData, ALL_PROMPT_DATA_KEYS);
     await this.context.dependencies.onRefresh();
 
     return {

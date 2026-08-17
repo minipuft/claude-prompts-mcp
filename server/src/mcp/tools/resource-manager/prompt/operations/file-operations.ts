@@ -10,6 +10,7 @@ import * as path from 'node:path';
 
 import { CategoryShipStatus, OperationResult, PromptResourceDependencies } from '../core/types.js';
 
+import type { ResourceMutationTarget } from '#modules/resources/services/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
 
@@ -101,6 +102,39 @@ export function resolvePreservedPromptYamlFields(
 
   return preserved;
 }
+
+/**
+ * `promptData` keys whose value lives in `prompt.yaml` — Fix B write-scope table
+ * (tier-b-settability-proposal §2). A key here does NOT mean the writer unconditionally emits
+ * it (`resolvePreservedPromptYamlFields` and the tools branch still apply their own precedence);
+ * it means: if this call supplied or patched this key, `prompt.yaml` is one of the files this
+ * write is allowed to touch. Everything else about the file is untouched, including comments,
+ * key order, and any authored shape `serializeYaml` would otherwise normalize away (§1.1 churn).
+ */
+export const PROMPT_YAML_RESIDENT_KEYS = [
+  'name',
+  'category',
+  'description',
+  'arguments',
+  'chainSteps',
+  'gateConfiguration',
+  'tools',
+  ...PRESERVED_PROMPT_YAML_KEYS,
+] as const;
+
+/**
+ * Every `promptData` key any write path can touch. `create`, `rollback`, and a detected category
+ * MOVE (Part 2) pass this verbatim — each owns the WHOLE state being written, not an edit to a
+ * subset of it, so none of them has a narrower scope to compute. Also the default
+ * `updatePromptImplementation` falls back to when no `suppliedKeys` argument is given, which
+ * keeps every pre-Fix-B caller (existing tests, any future direct caller that has not adopted the
+ * scope plumbing) on the old always-write-everything behaviour.
+ */
+export const ALL_PROMPT_DATA_KEYS: ReadonlySet<string> = new Set([
+  ...PROMPT_YAML_RESIDENT_KEYS,
+  'userMessageTemplate',
+  'systemMessage',
+]);
 
 /** One parsed `.gitignore` line: its pattern segments, negation flag, and anchoring. */
 interface GitignoreRule {
@@ -199,9 +233,17 @@ export class FileOperations {
   /**
    * Update prompt implementation (shared by create/update)
    * Creates YAML directory structure: {category}/{id}/prompt.yaml + message files
+   *
+   * `suppliedKeys` (Fix B, tier-b-settability-proposal §2) is the union of `promptData` keys this
+   * call actually supplied or patched. Omitted, it defaults to "everything" — the pre-Fix-B
+   * behaviour every existing direct caller (tests, and `create`/`rollback` which own whole state
+   * anyway) still gets without adopting the plumbing.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
-  async updatePromptImplementation(promptData: any): Promise<OperationResult> {
+  async updatePromptImplementation(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
+    promptData: any,
+    suppliedKeys?: ReadonlySet<string>
+  ): Promise<OperationResult> {
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
     const effectiveCategory = promptData.category.toLowerCase().replace(/\s+/g, '-');
     const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
@@ -213,8 +255,41 @@ export class FileOperations {
     // fails the id regex, and the prompt is dropped at load with only a log line.
     const yamlId = toYamlPromptId(promptData.id);
 
+    // Part 2 — category MOVE (owner ruling 2026-08-16, tier-b-settability-proposal §Open
+    // Decision 3, overriding the proposal's original "refuse" recommendation): a caller-supplied
+    // `category` that slugs to a directory other than the one the prompt currently lives under
+    // relocates the whole directory tree. Detected only when the TARGET directory does not
+    // already exist, so the ordinary "no move" case (the overwhelming majority of calls) costs
+    // nothing beyond the `existsSync` this method already needed. Nested chain-step ids ('/' in
+    // the id) are excluded: they scaffold under their PARENT's own directory
+    // (`scaffoldChainStepDirectories`), not under a category, so "category move" has no referent.
+    const promptId = (promptData as { id: string }).id;
+    const isNestedId = promptId.includes('/');
+    const moveSource =
+      !isNestedId && !existsSync(promptDir)
+        ? this.findExistingPromptDirectory(promptsDir, promptId, promptDir)
+        : null;
+
+    // A move relocates the WHOLE prior state — composes with Fix B as a forced full scope. The
+    // caller (the processor) cannot have supplied the right narrower scope for a move: it has no
+    // visibility into whether a category change is a move until THIS layer resolves it against
+    // disk, since the on-disk directory layout is exactly what the processor's in-memory model
+    // does not track.
+    const suppliedKeysForWrite =
+      moveSource !== null ? ALL_PROMPT_DATA_KEYS : (suppliedKeys ?? ALL_PROMPT_DATA_KEYS);
+
+    const targets: ResourceMutationTarget[] = [{ path: promptDir, kind: 'directory' }];
+    if (moveSource !== null) {
+      // Both dirs snapshotted BEFORE the mutation runs: a failure partway through the move (the
+      // relocation succeeds but the post-write `validateFile` rejects the result, say) must
+      // restore the ORIGINAL directory intact and leave no partial directory at the new
+      // location — the two-target restore `ResourceMutationTransaction` already provides for any
+      // target set, snapshot-then-mutate-then-validate-or-restore-all.
+      targets.push({ path: moveSource, kind: 'directory' });
+    }
+
     const txResult = await this.mutationTransaction.run({
-      targets: [{ path: promptDir, kind: 'directory' }],
+      targets,
       mutate: async () => {
         const messages: string[] = [];
         const affectedFiles: string[] = [];
@@ -226,11 +301,23 @@ export class FileOperations {
           messages.push(`Created category directory: '${effectiveCategory}'`);
         }
 
+        if (moveSource !== null) {
+          messages.push(
+            ...(await this.relocatePromptDirectory(
+              moveSource,
+              promptDir,
+              promptId,
+              effectiveCategory
+            ))
+          );
+        }
+
         // Create/update YAML prompt
         const { exists: promptExists, paths } = await this.createOrUpdateYamlPrompt(
           promptData,
           effectiveCategory,
-          promptsDir
+          promptsDir,
+          suppliedKeysForWrite
         );
 
         messages.push(`${promptExists ? 'Updated' : 'Created'} prompt: ${promptData.id}`);
@@ -278,6 +365,54 @@ export class FileOperations {
       affectedFiles: result.affectedFiles,
       categoryShipStatus: await this.readCategoryShipStatus(promptsDir, effectiveCategory),
     };
+  }
+
+  /**
+   * Locate the on-disk directory of `promptId` across every category — used only when the
+   * caller's TARGET directory (derived from `promptData.category`) does not yet exist, so a
+   * category-changing update can find where the prompt currently lives (Part 2 — category move).
+   * Returns `null` when no OTHER directory declares this id, which is the ordinary "brand new
+   * prompt" case, not a move. Excludes flat single-file prompts (`{category}/{id}.yaml`,
+   * `format: 'file'`) — this writer only ever produces directory-format prompts, and relocating a
+   * single file into a directory tree is a different operation this method does not attempt; a
+   * category change against a flat-file prompt falls through to an ordinary create at the target.
+   */
+  private findExistingPromptDirectory(
+    promptsDir: string,
+    promptId: string,
+    excludeDir: string
+  ): string | null {
+    for (const categoryDir of this.discoverCategoryDirectories(promptsDir)) {
+      const found = findYamlPromptInCategory(categoryDir, promptId);
+      if (found !== null && found.format === 'directory' && found.path !== excludeDir) {
+        return found.path;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Relocate the whole prompt directory tree — `tools/`, scaffolded chain-step sub-dirs,
+   * everything — from `sourceDir` to `targetDir`, BEFORE any content write. Doing this first
+   * means `createOrUpdateYamlPrompt`'s existing-yaml read (scoped to `targetDir`) sees the full
+   * prior state at the NEW location, so Fix A's preservation (tools ids, authored
+   * category-if-caller-omitted) has something to read without this method needing to know
+   * anything about preservation itself.
+   *
+   * `cp` + `rm` rather than `rename`: `ResourceMutationTransaction`'s own snapshot lives under a
+   * separate `mkdtemp` root that may be a different filesystem, and `rename` throws `EXDEV`
+   * across filesystems — `cp`+`rm` is the same primitive the transaction itself already uses for
+   * its snapshot/restore, so this method carries no new cross-filesystem assumption.
+   */
+  private async relocatePromptDirectory(
+    sourceDir: string,
+    targetDir: string,
+    promptId: string,
+    targetCategory: string
+  ): Promise<string[]> {
+    await fs.cp(sourceDir, targetDir, { recursive: true });
+    await fs.rm(sourceDir, { recursive: true, force: true });
+    return [`Moved prompt '${promptId}' from '${path.basename(sourceDir)}' to '${targetCategory}'`];
   }
 
   /**
@@ -421,7 +556,8 @@ export class FileOperations {
   async createOrUpdateYamlPrompt(
     promptData: any,
     effectiveCategory: string,
-    promptsDir: string
+    promptsDir: string,
+    suppliedKeys: ReadonlySet<string> = ALL_PROMPT_DATA_KEYS
   ): Promise<{ exists: boolean; paths: string[] }> {
     const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
     const paths: string[] = [];
@@ -429,71 +565,50 @@ export class FileOperations {
     // Check if prompt directory already exists
     const existsBefore = existsSync(promptDir);
 
-    // Read BEFORE the directory is (re)created — this is the only surviving record of the fields
-    // the writer builds no value for. Runs inside the mutation transaction's `mutate`, before any
-    // write, so it observes pre-mutation content.
-    const existingYaml = await this.readExistingPromptYaml(path.join(promptDir, 'prompt.yaml'));
+    // Fix B write-scope narrowing (tier-b-settability-proposal §2): a directory with no prior
+    // `prompt.yaml` needs its baseline files regardless of what the caller's `suppliedKeys`
+    // narrowed to — an update landing on a brand-new, or just-relocated (Part 2 category move),
+    // directory must not skip the write that makes it a valid prompt. `suppliedKeys` narrows an
+    // EXISTING prompt's edit surface; it does not narrow what a fresh directory needs to become
+    // one.
+    const isFreshDirectory = !existsBefore;
+    const writesYaml =
+      isFreshDirectory || PROMPT_YAML_RESIDENT_KEYS.some((key) => suppliedKeys.has(key));
+    const writesUserMessage = isFreshDirectory || suppliedKeys.has('userMessageTemplate');
+    const writesSystemMessage =
+      Boolean(promptData.systemMessage) && (isFreshDirectory || suppliedKeys.has('systemMessage'));
+
+    // Read BEFORE the directory is (re)created, and only when `prompt.yaml` is actually going to
+    // be rewritten — field preservation feeds ONLY that write, and reading it otherwise is I/O a
+    // scoped-out update has no use for. This is also the acceptance mechanism for byte-identity:
+    // when `writesYaml` is false, `prompt.yaml` is never opened by this call at all.
+    const existingYaml = writesYaml
+      ? await this.readExistingPromptYaml(path.join(promptDir, 'prompt.yaml'))
+      : undefined;
 
     // Create prompt directory
     await fs.mkdir(promptDir, { recursive: true });
     paths.push(promptDir);
 
-    // Build prompt.yaml metadata
-    const promptYamlData: Record<string, unknown> = {
-      // Basename, not the qualified id — see toYamlPromptId
-      id: toYamlPromptId(promptData.id),
-      name: promptData.name,
-      category: effectiveCategory,
-      description: promptData.description,
-    };
-
-    // Add optional fields
-    if (promptData.systemMessage) {
-      promptYamlData['systemMessageFile'] = 'system-message.md';
-    }
-    promptYamlData['userMessageTemplateFile'] = 'user-message.md';
-
-    // Add arguments if present
-    if (promptData.arguments && promptData.arguments.length > 0) {
-      promptYamlData['arguments'] = promptData.arguments;
+    if (writesYaml) {
+      const promptYamlData = this.buildPromptYamlData(
+        promptData as Record<string, unknown>,
+        existingYaml,
+        suppliedKeys
+      );
+      const promptYamlPath = path.join(promptDir, 'prompt.yaml');
+      const yamlContent = serializeYaml(promptYamlData, { sortKeys: false });
+      await safeWriteFile(promptYamlPath, yamlContent, 'utf8');
+      paths.push(promptYamlPath);
     }
 
-    // Add gate configuration if present
-    if (promptData.gateConfiguration) {
-      promptYamlData['gateConfiguration'] = promptData.gateConfiguration;
-      this.logger.debug(`[YAML-CREATE] Adding gate configuration to ${promptData.id}`);
+    if (writesUserMessage) {
+      const userMessagePath = path.join(promptDir, 'user-message.md');
+      await safeWriteFile(userMessagePath, promptData.userMessageTemplate ?? '', 'utf8');
+      paths.push(userMessagePath);
     }
 
-    // Add chain steps if present (for chain prompts)
-    if (promptData.chainSteps && promptData.chainSteps.length > 0) {
-      promptYamlData['chainSteps'] = promptData.chainSteps;
-    }
-
-    // Add tools reference if present (just tool IDs, not full definitions)
-    if (promptData.tools && promptData.tools.length > 0) {
-      promptYamlData['tools'] = promptData.tools.map((t: ToolDefinitionInput) => t.id);
-    }
-
-    // Carry forward the fields this writer builds no value for. Without this, every update
-    // deletes them (P7-F2).
-    Object.assign(
-      promptYamlData,
-      resolvePreservedPromptYamlFields(promptData as Record<string, unknown>, existingYaml)
-    );
-
-    // Write prompt.yaml
-    const promptYamlPath = path.join(promptDir, 'prompt.yaml');
-    const yamlContent = serializeYaml(promptYamlData, { sortKeys: false });
-    await safeWriteFile(promptYamlPath, yamlContent, 'utf8');
-    paths.push(promptYamlPath);
-
-    // Write user-message.md (required)
-    const userMessagePath = path.join(promptDir, 'user-message.md');
-    await safeWriteFile(userMessagePath, promptData.userMessageTemplate ?? '', 'utf8');
-    paths.push(userMessagePath);
-
-    // Write system-message.md (optional)
-    if (promptData.systemMessage) {
+    if (writesSystemMessage) {
       const systemMessagePath = path.join(promptDir, 'system-message.md');
       await safeWriteFile(systemMessagePath, promptData.systemMessage, 'utf8');
       paths.push(systemMessagePath);
@@ -505,6 +620,85 @@ export class FileOperations {
       exists: existsBefore,
       paths,
     };
+  }
+
+  /**
+   * Build the `prompt.yaml` document for a write that IS touching the file. Pure — no I/O.
+   * Isolates the category/tools/preserved-field precedence rules from the file-scope orchestration
+   * in `createOrUpdateYamlPrompt`, which keeps that method's branching to "which files does this
+   * call touch" rather than "what does each file contain" (cognitive-complexity boundary).
+   */
+  private buildPromptYamlData(
+    promptData: Record<string, unknown>,
+    existingYaml: Record<string, unknown> | undefined,
+    suppliedKeys: ReadonlySet<string>
+  ): Record<string, unknown> {
+    const promptYamlData: Record<string, unknown> = {
+      // Basename, not the qualified id — see toYamlPromptId
+      id: toYamlPromptId(promptData['id'] as string),
+      name: promptData['name'],
+      description: promptData['description'],
+    };
+
+    // `category:` full precedence (Fix B upgrade of Fix A's interim rule; owner ruling
+    // 2026-08-16, tier-b-settability-proposal §Fix A / §2 / Open Decision 3): caller-supplied >
+    // existing-on-disk > omit. `loader.ts:186` overwrites `prompt.category` with the
+    // directory-derived id at LOAD time regardless of what the file says, so the authored value
+    // has zero runtime effect either way — an explicit supply is still honoured verbatim (it is
+    // the operator's authored record, same treatment as `name`/`description`), and an omitted
+    // one falls back to whatever the file already declared rather than being baked from the
+    // directory slug. Directory targeting is unaffected — it always uses the slugified
+    // `effectiveCategory`, computed by the caller.
+    const existingCategory = existingYaml?.['category'];
+    if (suppliedKeys.has('category')) {
+      promptYamlData['category'] = promptData['category'];
+    } else if (typeof existingCategory === 'string' && existingCategory.length > 0) {
+      promptYamlData['category'] = existingCategory;
+    }
+
+    if (promptData['systemMessage']) {
+      promptYamlData['systemMessageFile'] = 'system-message.md';
+    }
+    promptYamlData['userMessageTemplateFile'] = 'user-message.md';
+
+    const args = promptData['arguments'];
+    if (Array.isArray(args) && args.length > 0) {
+      promptYamlData['arguments'] = args;
+    }
+
+    if (promptData['gateConfiguration']) {
+      promptYamlData['gateConfiguration'] = promptData['gateConfiguration'];
+      this.logger.debug(`[YAML-CREATE] Adding gate configuration to ${String(promptData['id'])}`);
+    }
+
+    const chainSteps = promptData['chainSteps'];
+    if (Array.isArray(chainSteps) && chainSteps.length > 0) {
+      promptYamlData['chainSteps'] = chainSteps;
+    }
+
+    // Tools reference (just tool IDs, not full definitions). Full definitions supplied → write
+    // the id list derived from them (the file bodies themselves are written separately, by
+    // `createOrUpdateTools`). Otherwise preserve the on-disk id list.
+    // `ConvertedPrompt` has no `tools` field (P7-F8) — the in-memory snapshot this writer's
+    // caller builds can never carry it forward, so every metadata-only edit (description,
+    // template patch, ...) would otherwise silently drop the binding on write, orphaning the
+    // `tools/{id}/` files the loader can then no longer reach. The on-disk shape (`string[]`
+    // ids) already matches this key's expected shape — carried forward verbatim, not remapped.
+    const suppliedTools = promptData['tools'] as ToolDefinitionInput[] | undefined;
+    if (Array.isArray(suppliedTools) && suppliedTools.length > 0) {
+      promptYamlData['tools'] = suppliedTools.map((t) => t.id);
+    } else {
+      const existingTools = existingYaml?.['tools'];
+      if (Array.isArray(existingTools) && existingTools.length > 0) {
+        promptYamlData['tools'] = existingTools;
+      }
+    }
+
+    // Carry forward the fields this writer builds no value for. Without this, every update
+    // deletes them (P7-F2).
+    Object.assign(promptYamlData, resolvePreservedPromptYamlFields(promptData, existingYaml));
+
+    return promptYamlData;
   }
   /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unsafe-member-access */
 
