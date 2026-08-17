@@ -29,6 +29,18 @@ scenarios:
     requests: [{ tool: system_control, args: { action: gates, operation: list } }]
     expect: { ok: true }
 
+  - id: sc-gates-list-search-query
+    claim_source: >-
+      system_control contract — `search_query` "Filter gates by keyword (matches ID, name, or
+      description)". gate-action-handler.ts:244 prints `Filtered by: "<query>"` only when a
+      search_query was supplied.
+    requests:
+      - tool: system_control
+        args: { action: gates, operation: list, search_query: content }
+    # The bundled `content-structure` gate id contains "content", so a working filter keeps it
+    # AND prints the filter banner — a query that silently no-oped would still answer `ok: true`.
+    expect: { text_contains: 'Filtered by: "content"' }
+
   - id: sc-analytics
     claim_source: 'system_control action: analytics — docs/guides/telemetry-observability.md'
     requests: [{ tool: system_control, args: { action: analytics, operation: view } }]
@@ -43,6 +55,16 @@ scenarios:
     claim_source: 'system_control action: guide'
     requests: [{ tool: system_control, args: { action: guide } }]
     expect: { ok: true }
+
+  - id: sc-guide-topic
+    claim_source: >-
+      system_control contract — `topic` "Guide topic when requesting guidance".
+      guide-action-handler.ts:28-31 prints `Focus: \`<topic>\`` only when a topic was supplied,
+      versus the untopiced hint line asserted by sc-guide above.
+    requests:
+      - tool: system_control
+        args: { action: guide, topic: framework }
+    expect: { text_contains: 'Focus: `framework`' }
 
   - id: sc-injection
     claim_source: 'system_control action: injection — docs/guides/injection-control.md'
