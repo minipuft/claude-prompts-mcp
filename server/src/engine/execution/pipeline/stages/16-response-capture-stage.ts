@@ -11,6 +11,7 @@ import type {
   UnknownObservation,
 } from '#shared/types/chain-session.js';
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
+import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
 import type { UnknownObservationProcessor } from '../../capture/unknown-observation-processor.js';
@@ -67,7 +68,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     private readonly stepCaptureService: StepCaptureService,
     private readonly chainSessionStore: ChainSessionService,
     private readonly unknownObservationProcessor: UnknownObservationProcessor,
-    logger: Logger
+    logger: Logger,
+    /**
+     * Owner of the post-advance review re-evaluation (P5-F6). Optional so an
+     * ExecutionContext-less test harness need not construct the full gate stack — absent, this
+     * stage falls back to the pre-existing behavior (no post-advance review).
+     */
+    private readonly gateEnhancementService?: GateEnhancementService
   ) {
     super(logger);
   }
@@ -177,6 +184,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (deferredResult.earlyExit) {
+      await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'deferred', handled: true });
       return;
     }
@@ -193,6 +201,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (pendingResult.earlyExit) {
+      await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'pending-review', handled: true });
       return;
     }
@@ -212,7 +221,25 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       }
     );
 
+    await this.ensurePostAdvanceReview(context);
+
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Thin call-through to `GateEnhancementService.ensurePostAdvanceReview` (P5-F6) — the decision
+   * of whether a step-targeted gate needs a fresh review lives there, this stage only supplies
+   * the post-advance `context`/`sessionContext` and the guard against a missing session context.
+   *
+   * Called from every mutually-exclusive exit branch that can follow an advance within this
+   * request (deferred-verdict early exit, pending-review-verdict early exit, and the full capture
+   * fall-through) — exactly one fires per call, so this never runs twice for the same request.
+   */
+  private async ensurePostAdvanceReview(context: ExecutionContext): Promise<void> {
+    if (this.gateEnhancementService === undefined || context.sessionContext === undefined) {
+      return;
+    }
+    await this.gateEnhancementService.ensurePostAdvanceReview(context, context.sessionContext);
   }
 
   /**

@@ -4,7 +4,12 @@ import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
-import { FileOperations, PRESERVED_PROMPT_YAML_KEYS } from '../operations/file-operations.js';
+import { mergeArgumentUpdates, type PromptArgumentUpdate } from '../operations/argument-updates.js';
+import {
+  ALL_PROMPT_DATA_KEYS,
+  FileOperations,
+  PRESERVED_PROMPT_YAML_KEYS,
+} from '../operations/file-operations.js';
 import {
   PATCH_TARGET_FIELDS,
   applyTemplatePatches,
@@ -66,6 +71,16 @@ export class PromptLifecycleProcessor {
       throw new PromptError(
         '\'dry_run\' is not valid on action:"create" — there is no existing prompt to diff ' +
           'against. Create the prompt, then use action:"update" with `dry_run` to preview edits.'
+      );
+    }
+    // Fix D (tier-b-settability-proposal §2): `argument_updates` overlays fields onto an
+    // EXISTING argument by name — a `create` has no prior arguments to overlay onto, the same
+    // "no referent on create" reasoning as `patch`/`dry_run` above (OQ-P7-9 precedent).
+    if ((args as { argument_updates?: unknown }).argument_updates !== undefined) {
+      throw new PromptError(
+        '\'argument_updates\' is not valid on action:"create" — there is no existing argument to ' +
+          'overlay updates onto. Supply the full `arguments` array, or create the prompt first ' +
+          'and refine an argument with action:"update".'
       );
     }
 
@@ -180,7 +195,37 @@ export class PromptLifecycleProcessor {
       ).warnings;
     }
 
-    const writeResult = await this.fileOperations.updatePromptImplementation(promptData);
+    // Produced-state validation (P7-F12 / Fix C — mirrors the update path's pre-write hop at
+    // `diagnosePromptWrite(beforeContent, promptData)` below). Without this, the only check on
+    // create was `file-operations.ts` `validateFile` AFTER the files were already written —
+    // schema-only, so it cannot see a Nunjucks syntax error, and a broken template landed on
+    // disk with a success response. `before` is `null`: a brand-new prompt has no pre-existing
+    // state to amnesty a defect against, so every defect `diagnosePromptWrite` finds is blocking
+    // (`validation.ts` — `before == null` puts every defect in `blocking`, none in
+    // `preExisting`). Runs ahead of the write; create spends no version row, so there is no
+    // "nothing was written and no version was consumed" clause to state here — just "nothing was
+    // written".
+    const createDiagnosis = diagnosePromptWrite(null, promptData);
+    if (createDiagnosis.blocking.length > 0) {
+      const details = createDiagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `❌ **Prompt creation blocked** — the resulting prompt is invalid:\n\n${details}\n\n💡 Nothing was written.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
+    // against — so it passes the full key set rather than computing one (Fix B, tier-b-
+    // settability-proposal §2 / §5 increment 3).
+    const writeResult = await this.fileOperations.updatePromptImplementation(
+      promptData,
+      ALL_PROMPT_DATA_KEYS
+    );
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n`;
@@ -295,9 +340,18 @@ export class PromptLifecycleProcessor {
       tools: args.tools,
     };
 
+    // Fix B (tier-b-settability-proposal §2 write-scope narrowing): the union of every
+    // `promptData` key THIS call actually touches. `FileOperations` uses it to decide which
+    // files get rewritten — a key absent here means the corresponding on-disk file is left
+    // untouched (byte-identical), not re-derived from a possibly-lossier in-memory projection
+    // (§1.1 churn). Built incrementally alongside the same mutations that populate `promptData`
+    // below, so the two cannot drift apart.
+    const suppliedKeys = new Set<string>();
+
     for (const [argKey, dataKey] of Object.entries(UPDATE_FIELDS)) {
       if (args[argKey] !== undefined) {
         promptData[dataKey] = args[argKey];
+        suppliedKeys.add(dataKey);
       }
     }
     // `gate_configuration` flows through UPDATE_FIELDS like every other field. It carried a
@@ -305,16 +359,59 @@ export class PromptLifecycleProcessor {
     // the [Framework] `gates` parameter as an alias — accepted on update, silently ignored on
     // create. That asymmetry is what settled it as unintended rather than designed.
 
+    // `tools` never flows through `UPDATE_FIELDS` (it arrives via `args.tools` directly, above)
+    // — its own entry in `suppliedKeys` accordingly needs its own check.
+    if ((args as { tools?: unknown }).tools !== undefined) {
+      suppliedKeys.add('tools');
+    }
+
+    // Narrowed once rather than reaching into `any` at each use, matching `deletePrompt` below.
+    // `promptData` is read through an indexed `Record` for the same reason. Declared here (ahead
+    // of both Fix D and the patch block) because both read `suppliedArgs`/`promptFields`.
+    const { patch: patchArgument } = args as { patch?: TemplatePatchOperation[] };
+    const suppliedArgs = args as Record<string, unknown>;
+    const promptFields = promptData as Record<string, unknown>;
+
+    // Fix D (tier-b-settability-proposal §2 / P6-F16): `argument_updates` overlays fields onto
+    // EXISTING arguments by `name` — the patch vocabulary (`PATCH_TARGET_FIELDS`) only reaches
+    // the three text bodies, and anchored string replacement cannot address WHICH argument.
+    // Mutually exclusive with `arguments` in the same call (the `findPatchParameterConflict`
+    // pattern below): accepting both would make the result depend on an evaluation order the
+    // caller cannot see. Runs BEFORE `diagnosePromptWrite` and the version record below — same
+    // placement invariant as `patch` — so `promptFields.arguments` reaches both already merged,
+    // and an equivalent full-`arguments` update records the identical snapshot and diff.
+    const argumentUpdates = suppliedArgs['argument_updates'] as PromptArgumentUpdate[] | undefined;
+    if (argumentUpdates !== undefined && argumentUpdates.length > 0) {
+      if (suppliedArgs['arguments'] !== undefined) {
+        return this.blockedUpdate(
+          '❌ **Prompt update blocked**: `argument_updates` cannot be combined with `arguments` ' +
+            'in the same call. Send the full array, or overlay named fields onto existing ' +
+            'arguments — not both.'
+        );
+      }
+
+      const baseArguments = (
+        Array.isArray(promptFields['arguments']) ? promptFields['arguments'] : []
+      ) as Record<string, unknown>[];
+      const mergeResult = mergeArgumentUpdates(baseArguments, argumentUpdates);
+      if (!mergeResult.ok) {
+        return this.blockedUpdate(
+          `❌ **Prompt update blocked**: \`argument_updates\` names \`${mergeResult.unmatchedName}\`, ` +
+            `which is not an argument of this prompt. \`argument_updates\` overlays existing ` +
+            `arguments only — it cannot add one. Use \`arguments\` to add, remove, or rename ` +
+            `arguments.\n\n💡 Nothing was written and no version was consumed.`
+        );
+      }
+
+      promptFields['arguments'] = mergeResult.arguments;
+      suppliedKeys.add('arguments');
+    }
+
     // Anchored patches (P7 row 3.4) apply AFTER the UPDATE_FIELDS merge and BEFORE reference
     // validation, the version record and the write. That placement is what makes acceptance (c)
     // hold: `promptData` reaches `recordEditResult` already patched, so a patch and the equivalent
     // full update record the identical snapshot and diff. Any hook after the version record would
     // version the unpatched state.
-    // Narrowed once rather than reaching into `any` at each use, matching `deletePrompt` below.
-    // `promptData` is read through an indexed `Record` for the same reason.
-    const { patch: patchArgument } = args as { patch?: TemplatePatchOperation[] };
-    const suppliedArgs = args as Record<string, unknown>;
-    const promptFields = promptData as Record<string, unknown>;
     const patchOperations = patchArgument ?? [];
     const patchedFields: PatchTargetField[] = [];
     if (patchOperations.length > 0) {
@@ -347,6 +444,7 @@ export class PromptLifecycleProcessor {
         const dataKey = UPDATE_FIELDS[field] as string;
         promptFields[dataKey] = value;
         patchedFields.push(field as PatchTargetField);
+        suppliedKeys.add(dataKey);
       }
     }
 
@@ -359,6 +457,7 @@ export class PromptLifecycleProcessor {
         stepData: args.chain_step_data,
         order: args.chain_step_order,
       });
+      suppliedKeys.add('chainSteps');
     }
 
     // Chain step reference validation (non-blocking warnings)
@@ -483,7 +582,7 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    const result = await this.fileOperations.updatePromptImplementation(promptData);
+    const result = await this.fileOperations.updatePromptImplementation(promptData, suppliedKeys);
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
     const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 

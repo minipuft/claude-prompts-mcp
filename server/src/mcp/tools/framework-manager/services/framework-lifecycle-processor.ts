@@ -165,12 +165,8 @@ export class FrameworkLifecycleProcessor {
         }
       );
 
-      if (versionResult.success) {
-        versionSaved = versionResult.version;
-        this.ctx.logger.debug(`Saved version ${versionSaved} for framework ${id}`);
-      } else {
-        this.ctx.logger.warn(`Failed to save version for framework ${id}: ${versionResult.error}`);
-      }
+      versionSaved = versionResult.version;
+      this.ctx.logger.debug(`Saved version ${versionSaved} for framework ${id}`);
     }
 
     // Write framework files with merge from existing data

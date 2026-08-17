@@ -306,7 +306,11 @@ export class PipelineBuilder {
       stepCaptureService,
       deps.chainSessionStore,
       unknownObservationProcessor,
-      deps.logger
+      deps.logger,
+      // P5-F6: post-advance review re-evaluation reuses the SAME GateEnhancementService instance
+      // stage 11 uses — its `temporaryGateRegistry`/`runStepViewProvider` wiring is what the
+      // step-target lookup needs, and nothing about it is per-call state.
+      gateEnhancementService
     );
 
     // Shell verification stage

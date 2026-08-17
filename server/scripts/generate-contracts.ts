@@ -38,9 +38,14 @@ interface ToolDescriptionsConfig {
   >;
 }
 
-async function loadContracts(): Promise<ToolContract[]> {
+interface LoadedContract {
+  fileName: string;
+  contract: ToolContract;
+}
+
+async function loadContracts(): Promise<LoadedContract[]> {
   const entries = await readdir(CONTRACTS_DIR, { withFileTypes: true });
-  const contracts: ToolContract[] = [];
+  const contracts: LoadedContract[] = [];
   const contractFiles = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
     .map((entry) => entry.name)
@@ -50,31 +55,77 @@ async function loadContracts(): Promise<ToolContract[]> {
     const content = await readFile(path.join(CONTRACTS_DIR, fileName), 'utf-8');
     const parsed = JSON.parse(content);
     const contract = toolContractSchema.parse(parsed);
-    contracts.push(contract);
+    contracts.push({ fileName, contract });
   }
   return contracts;
 }
 
 /**
- * A contract that describes the SHAPE OF A VALUE rather than an MCP tool's parameter list.
+ * A contract's ARTIFACT POSTURE — what it is allowed to skip, and why.
  *
- * `tooling/contracts/workflow-ir.json` is the first (OQ-P6-10, 2026-08-13). It declares no
- * `toolDescription`, because it is not a tool — nothing registers a `workflow_ir` tool and
- * nothing should advertise one. Two consequences, and both are the point:
+ * `!contract.toolDescription -> skip everything` used to conflate two different things that
+ * happen to share a shape: "deprecated tool" (intentionally produces nothing) and "not a tool"
+ * (a resource-shape contract, which still owes `_generated/` its parameter metadata). That
+ * conflation is P6-F15: a resource-shape contract that forgets its marker falls through to the
+ * same branch as a deprecated one and vanishes from generation with a green exit and nothing but
+ * a console.log naming it.
  *
- *  - it is EXCLUDED from `tool-descriptions.contracts.json`, so no phantom tool reaches
- *    `ToolDescriptionLoader`. That exclusion is automatic: `generateToolDescriptions` already
- *    skips every contract without a `toolDescription`.
- *  - it still EMITS its parameter metadata to `_generated/`, which the pre-existing
- *    `!toolDescription -> continue` guard would otherwise suppress. That guard exists to skip
- *    DEPRECATED tools, and "deprecated tool" and "not a tool" are different things that happened
- *    to share a shape.
+ * Three recognized postures, in priority order:
  *
- * Opt-in rather than inferred: a contract missing `toolDescription` by accident should keep
- * being skipped and logged, exactly as before.
+ *  - `tool` — has `toolDescription`. Normal MCP tool contract; emits `.generated.ts` AND
+ *    contributes to `tool-descriptions.contracts.json`.
+ *  - `resource-shape` — `metadata.artifactKind === 'resource-shape'`. Describes the SHAPE OF A
+ *    VALUE, not a tool's parameter list (`tooling/contracts/workflow-ir.json` is the first,
+ *    OQ-P6-10, 2026-08-13). Emits `.generated.ts` for its parameter metadata; excluded from
+ *    `tool-descriptions.contracts.json` because nothing registers it as a tool.
+ *  - `artifact-less` — `metadata.artifactKind === 'none'`, DECLARED rather than inferred, and
+ *    carrying both `metadata.artifactKindReason` and `metadata.closedBy` — the same two fields
+ *    the sqlite-persistence `AcceptedException` convention requires (a reason and a named exit;
+ *    an exception with no `closedBy` is a permanent bypass wearing a temporary label). Legitimate
+ *    for a genuinely deprecated tool contract kept only for historical typing. Skipped and
+ *    logged, never silently.
+ *
+ * Anything else — no `toolDescription`, no `artifactKind`, an unrecognized `artifactKind` value,
+ * or an `artifactKind: 'none'` missing its reason/closedBy — resolves to `unmarked` and FAILS the
+ * run. A contract missing its marker by accident must keep failing loudly; only an explicit,
+ * fully-declared exemption may skip.
  */
-function isResourceShapeContract(contract: ToolContract): boolean {
-  return contract.metadata?.['artifactKind'] === 'resource-shape';
+type ContractPosture =
+  | { kind: 'tool' }
+  | { kind: 'resource-shape' }
+  | { kind: 'artifact-less'; reason: string; closedBy: string }
+  | { kind: 'unmarked' };
+
+function readMetadataString(contract: ToolContract, key: string): string | undefined {
+  const value = contract.metadata?.[key];
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveContractPosture(contract: ToolContract): ContractPosture {
+  if (contract.toolDescription) {
+    return { kind: 'tool' };
+  }
+
+  const artifactKind = contract.metadata?.['artifactKind'];
+
+  if (artifactKind === 'resource-shape') {
+    return { kind: 'resource-shape' };
+  }
+
+  if (artifactKind === 'none') {
+    const reason = readMetadataString(contract, 'artifactKindReason');
+    const closedBy = readMetadataString(contract, 'closedBy');
+    if (reason && closedBy) {
+      return { kind: 'artifact-less', reason, closedBy };
+    }
+    // Declared artifact-less but missing the hygiene fields — an incomplete exemption is not
+    // an exemption. Fall through to `unmarked` so it fails loudly instead of skipping quietly.
+    return { kind: 'unmarked' };
+  }
+
+  return { kind: 'unmarked' };
 }
 
 async function readJsonIfExists(filePath: string): Promise<ToolDescriptionsConfig | null> {
@@ -179,18 +230,138 @@ function formatWithPrettier(content: string, cwd: string): string {
   return result.status === 0 ? result.stdout : content;
 }
 
+/**
+ * Pure self-test for `resolveContractPosture` — no filesystem I/O, fabricated fixtures.
+ * Mirrors the `--self-test` convention used by `validate-table-contracts.ts` and
+ * `validate-no-phantom-columns.ts`: prove every posture is reachable AND that a
+ * well-formed-but-wrong input (missing marker, incomplete exemption) is rejected.
+ */
+function runSelfTest(): void {
+  const failures: string[] = [];
+
+  const baseContract: Omit<ToolContract, 'toolDescription' | 'metadata'> = {
+    tool: 'fixture_tool',
+    version: 1,
+    summary: 'Fixture contract for resolveContractPosture self-test.',
+    parameters: [
+      {
+        name: 'example',
+        type: 'string',
+        description: 'Fixture parameter.',
+        status: 'working',
+        compatibility: 'canonical',
+      },
+    ],
+  };
+
+  const withToolDescription: ToolContract = {
+    ...baseContract,
+    toolDescription: {
+      description: 'Fixture description.',
+      shortDescription: 'Fixture.',
+      category: 'system',
+      frameworkAware: { enabled: 'enabled', disabled: 'disabled' },
+    },
+  };
+  if (resolveContractPosture(withToolDescription).kind !== 'tool') {
+    failures.push('a contract with toolDescription was not classified as "tool"');
+  }
+
+  const resourceShape: ToolContract = {
+    ...baseContract,
+    metadata: { artifactKind: 'resource-shape' },
+  };
+  if (resolveContractPosture(resourceShape).kind !== 'resource-shape') {
+    failures.push('a contract marked artifactKind: "resource-shape" was not classified as such');
+  }
+
+  const artifactLess: ToolContract = {
+    ...baseContract,
+    metadata: {
+      artifactKind: 'none',
+      artifactKindReason: 'Fixture: intentionally deprecated tool kept for historical typing.',
+      closedBy: 'fixture-closure-condition',
+    },
+  };
+  const artifactLessPosture = resolveContractPosture(artifactLess);
+  if (artifactLessPosture.kind !== 'artifact-less') {
+    failures.push(
+      'a contract marked artifactKind: "none" with reason + closedBy was not classified as ' +
+        '"artifact-less"'
+    );
+  }
+
+  // The three ways a contract can fail the posture check — every one must resolve to "unmarked"
+  // so `main()` fails loudly rather than silently skipping.
+  const noMarkerAtAll: ToolContract = { ...baseContract };
+  if (resolveContractPosture(noMarkerAtAll).kind !== 'unmarked') {
+    failures.push('a contract with no toolDescription and no metadata was not rejected');
+  }
+
+  const unrecognizedArtifactKind: ToolContract = {
+    ...baseContract,
+    metadata: { artifactKind: 'something-else' },
+  };
+  if (resolveContractPosture(unrecognizedArtifactKind).kind !== 'unmarked') {
+    failures.push('an unrecognized artifactKind value was not rejected');
+  }
+
+  const incompleteExemption: ToolContract = {
+    ...baseContract,
+    metadata: { artifactKind: 'none', artifactKindReason: 'Missing closedBy.' },
+  };
+  if (resolveContractPosture(incompleteExemption).kind !== 'unmarked') {
+    failures.push(
+      'artifactKind: "none" with no closedBy was accepted — an exemption with no exit must be ' +
+        'rejected, same as the sqlite AcceptedException convention'
+    );
+  }
+
+  if (failures.length > 0) {
+    console.error('[generate-contracts] SELF-TEST FAILED:');
+    failures.forEach((failure) => console.error(`  - ${failure}`));
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(
+    'generate-contracts self-test OK — classifies tool/resource-shape/artifact-less postures ' +
+      'and rejects a missing marker, an unrecognized artifactKind, and an artifact-less ' +
+      'exemption with no closedBy.'
+  );
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes('--self-test')) {
+    runSelfTest();
+    return;
+  }
+
   const checkMode = process.argv.includes('--check');
-  const contracts = await loadContracts();
+  const loaded = await loadContracts();
   let changed = false;
 
-  for (const contract of contracts) {
-    // Skip .generated.ts for contracts without toolDescription (deprecated tools).
-    // Resource-shape contracts are not tools and legitimately have none — see
-    // isResourceShapeContract.
-    if (!contract.toolDescription && !isResourceShapeContract(contract)) {
+  const postureFailures: string[] = [];
+  const artifactCounts = new Map<string, number>();
+
+  for (const { fileName, contract } of loaded) {
+    const posture = resolveContractPosture(contract);
+
+    if (posture.kind === 'unmarked') {
+      postureFailures.push(
+        `${fileName} (tool: "${contract.tool}") has no toolDescription and no valid ` +
+          `metadata.artifactKind marker. Declare metadata.artifactKind: "resource-shape" for a ` +
+          `value-shape contract, or metadata.artifactKind: "none" with both ` +
+          `metadata.artifactKindReason and metadata.closedBy for a deliberately artifact-less ` +
+          `contract.`
+      );
+      continue;
+    }
+
+    if (posture.kind === 'artifact-less') {
       console.log(
-        `[generate-contracts] Skipping ${contract.tool} (no toolDescription - deprecated)`
+        `[generate-contracts] Skipping ${contract.tool} (artifactKind: none — ${posture.reason}; ` +
+          `closedBy: ${posture.closedBy})`
       );
       continue;
     }
@@ -247,15 +418,41 @@ async function main(): Promise<void> {
     // Prettier already adds trailing newline, don't add another
     const tsChanged = await writeFileIfChanged(tsPath, formattedTsContent, checkMode);
     changed = changed || tsChanged;
+    artifactCounts.set(contract.tool, (artifactCounts.get(contract.tool) ?? 0) + 1);
+  }
+
+  // Every contract with a recognized, non-exempt posture must yield >=1 generated artifact
+  // (this is the validate:contracts gate for P6-F15). The write above already guarantees this
+  // structurally today; asserted explicitly so a future refactor that makes the write
+  // conditional can't silently reopen the same shape of bug under a different code path.
+  for (const { fileName, contract } of loaded) {
+    const posture = resolveContractPosture(contract);
+    if (posture.kind !== 'tool' && posture.kind !== 'resource-shape') continue;
+    if ((artifactCounts.get(contract.tool) ?? 0) < 1) {
+      postureFailures.push(
+        `${fileName} (tool: "${contract.tool}") has posture "${posture.kind}" but produced zero ` +
+          `generated artifacts.`
+      );
+    }
+  }
+
+  if (postureFailures.length > 0) {
+    throw new Error(
+      `[generate-contracts] ${postureFailures.length} contract(s) failed the artifact-posture ` +
+        `check:\n${postureFailures.map((message) => `  - ${message}`).join('\n')}`
+    );
   }
 
   // Generate unified tool-descriptions.contracts.json (SSOT for ToolDescriptionManager)
   const toolDescriptionsPath = path.join(GENERATED_META_DIR, 'tool-descriptions.contracts.json');
   const existingToolDescriptions = await readJsonIfExists(toolDescriptionsPath);
-  const toolDescriptionsDraft = generateToolDescriptions(contracts, {
-    version: existingToolDescriptions?.version,
-    generatedFrom: existingToolDescriptions?.generatedFrom,
-  });
+  const toolDescriptionsDraft = generateToolDescriptions(
+    loaded.map(({ contract }) => contract),
+    {
+      version: existingToolDescriptions?.version,
+      generatedFrom: existingToolDescriptions?.generatedFrom,
+    }
+  );
   const existingComparable = existingToolDescriptions
     ? JSON.stringify(
         {

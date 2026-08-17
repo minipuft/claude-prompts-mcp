@@ -7,6 +7,7 @@ import type { GateSource } from '../../execution/pipeline/state/types.js';
 import type { GateConfigurationInfo } from '../../execution/planning/category-extractor.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../../execution/types.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
+import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
 
 /**
@@ -80,13 +81,24 @@ export interface ResolvedGate {
   readonly rank: number;
 }
 
-export interface GateResolutionResult {
+/** What Stage 2 (the veto set) produces from the registered ids Stage 1.5 lets through. */
+interface StageTwoResult {
   /** Accepted gate ids, in the order their source tier contributed them. */
   readonly gateIds: readonly string[];
   /** Provenance per accepted gate — replayed into `GateAccumulator` by the caller. */
   readonly accepted: readonly ResolvedGate[];
   /** Removed gate id → name of the veto that removed it. Diagnostics only. */
   readonly vetoed: ReadonlyMap<string, string>;
+}
+
+export interface GateResolutionResult extends StageTwoResult {
+  /**
+   * Gate id → source it arrived from. Ids Stage 1 accumulated that match no known gate in
+   * either `GateManager` or `TemporaryGateRegistry` — dropped before Stage 2 ever sees them, so
+   * they cannot be attributed to a veto. Diagnostics only; the caller is expected to surface
+   * this the same way it already surfaces `vetoed` (P6-F14).
+   */
+  readonly unregistered: ReadonlyMap<string, string>;
 }
 
 /**
@@ -123,24 +135,29 @@ export class GateSetResolver {
   private readonly logger: Logger;
   private readonly gateManager: GateManager | undefined;
   private readonly gateLoader: GateDefinitionProvider | undefined;
+  private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
   constructor(
     logger: Logger,
     gateManager?: GateManager | undefined,
-    gateLoader?: GateDefinitionProvider | undefined
+    gateLoader?: GateDefinitionProvider | undefined,
+    temporaryGateRegistry?: TemporaryGateRegistry | undefined
   ) {
     this.logger = logger;
     this.gateManager = gateManager;
     this.gateLoader = gateLoader;
+    this.temporaryGateRegistry = temporaryGateRegistry;
   }
 
   /**
-   * Resolve the gate set. Stage 1 (additive union) then Stage 2 (veto set).
+   * Resolve the gate set. Stage 1 (additive union), Stage 1.5 (existence gate), then Stage 2
+   * (veto set).
    */
   async resolve(input: GateResolutionInput): Promise<GateResolutionResult> {
     const accumulated = this.accumulate(input);
+    const { registered, unregistered } = this.dropUnregistered(accumulated);
     const vetoes = await this.buildVetoes(input);
-    return this.applyVetoes(accumulated, vetoes);
+    return { ...this.applyVetoes(registered, vetoes), unregistered };
   }
 
   // ==========================================================================
@@ -244,6 +261,74 @@ export class GateSetResolver {
   }
 
   // ==========================================================================
+  // Stage 1.5 — existence gate (P6-F14)
+  // ==========================================================================
+
+  /**
+   * `addAll` admits any non-empty string — a typo'd gate id would otherwise reach Stage 2,
+   * survive every veto (a veto only removes what it names), and silently render nothing. This
+   * is the single choke point every source passes through, so it is where the check belongs
+   * (ADR 0001: this class is the one owner of gate-set resolution).
+   *
+   * Fails OPEN whenever `GateManager` cannot answer — mirrors `SymbolicCommandParser`'s posture
+   * for `@framework` operators (an empty/absent registered-id set means "cannot judge," not
+   * "reject everything"; see `detectOperators`). "Cannot answer" covers two cases: no
+   * `GateManager` was wired at all, AND a `GateManager` that exists but has not finished
+   * `initialize()` yet — `GateManager.has()` throws in the latter case
+   * (`BaseResourceHandler.ensureInitialized`), and reading that race as "not found" would drop
+   * every caller-supplied gate. `isInitialized` is checked explicitly instead of try/catch so an
+   * uninitialized manager degrades once, not once per id.
+   *
+   * `TemporaryGateRegistry` alone does NOT unlock validation: it names only gates created THIS
+   * request (inline/named temp gates), never the persistent catalog, so a caller that wires a
+   * temp registry but no ready `GateManager` would otherwise see every persistent-catalog id
+   * rejected as unregistered — checked in `gate-review-scoping.test.ts`, which wires exactly
+   * that shape. `GateManager` readiness is the gate on whether Stage 1.5 runs at all;
+   * `TemporaryGateRegistry` only ever adds a second way for an id to pass once it is running.
+   */
+  private dropUnregistered(accumulated: Map<string, ResolvedGate>): {
+    registered: Map<string, ResolvedGate>;
+    unregistered: Map<string, string>;
+  } {
+    if (this.gateManager?.isInitialized !== true) {
+      return { registered: accumulated, unregistered: new Map() };
+    }
+
+    const registered = new Map<string, ResolvedGate>();
+    const unregistered = new Map<string, string>();
+
+    for (const gate of accumulated.values()) {
+      if (this.isKnownGate(gate.id)) {
+        registered.set(gate.id, gate);
+      } else {
+        unregistered.set(gate.id, gate.source);
+      }
+    }
+
+    if (unregistered.size > 0) {
+      this.logger.warn('[GateSetResolver] Dropping unregistered gate id(s)', {
+        ids: [...unregistered.keys()],
+      });
+    }
+
+    return { registered, unregistered };
+  }
+
+  /**
+   * A gate id is known when either registry recognizes it. `TemporaryGateRegistry` is checked
+   * too, not just `GateManager` — inline (`::`) and named temporary gates are registered there
+   * and never enter the persistent `GateRegistry`, so checking `GateManager` alone would reject
+   * every legitimate temporary gate reference. Only reached once `dropUnregistered` has already
+   * confirmed `GateManager` is ready.
+   */
+  private isKnownGate(gateId: string): boolean {
+    if (this.gateManager?.has(gateId) === true) {
+      return true;
+    }
+    return this.temporaryGateRegistry?.getTemporaryGate(gateId) !== undefined;
+  }
+
+  // ==========================================================================
   // Stage 2 — veto set (unordered)
   // ==========================================================================
 
@@ -334,7 +419,7 @@ export class GateSetResolver {
   private applyVetoes(
     accumulated: Map<string, ResolvedGate>,
     vetoes: readonly GateVeto[]
-  ): GateResolutionResult {
+  ): StageTwoResult {
     const accepted: ResolvedGate[] = [];
     const vetoed = new Map<string, string>();
 

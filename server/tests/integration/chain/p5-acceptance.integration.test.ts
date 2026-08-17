@@ -98,6 +98,12 @@ const S3 = 'S3_SENTINEL_CHARLIE';
  */
 const RUN_WIDE_GATE = 'gate-run-wide';
 const NODE_SCOPED_GATE = 'gate-node-scoped';
+/**
+ * Targets node 1 — the control for P5-F6: a gate scoped to the step the request STARTS on must
+ * stay exactly where it already worked (pre-advance creation), unaffected by the post-advance
+ * re-evaluation this run also exercises for {@link NODE_SCOPED_GATE}.
+ */
+const NODE1_SCOPED_GATE = 'gate-node1-scoped';
 
 const NODE_1 = 'plan-scope';
 const NODE_2 = 'analyze-data';
@@ -238,6 +244,14 @@ const GATE_SPECS = [
     criteria: ['cite the data source'],
     target_step_id: NODE_2,
   },
+  {
+    id: NODE1_SCOPED_GATE,
+    name: 'Node 1 scoped review',
+    type: 'guidance',
+    scope: 'step',
+    criteria: ['state the plan'],
+    target_step_id: NODE_1,
+  },
 ];
 
 const STAGE_ORDER = [
@@ -282,19 +296,24 @@ const buildPipeline = (options: {
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
   const gateRegistry = new TemporaryGateRegistry(logger);
   const runStepViewProvider = createRunStepViewProvider(sessionStore);
+  // Shared with StepResponseCapture below (P5-F6): the post-advance review re-evaluation needs
+  // the SAME registry/runStepViewProvider wiring stage 11 resolves step targets against — a
+  // second instance would work identically here (the registry is a real one, not a per-call
+  // fake), but production wires exactly one instance to both stages and this mirrors that.
+  const gateEnhancementService = new GateEnhancementService(
+    createGateService(),
+    gateRegistry,
+    () => undefined,
+    () => undefined as never,
+    undefined,
+    new GateMetricsRecorder(undefined),
+    logger,
+    runStepViewProvider
+  );
 
   const realStages: Record<string, PipelineStage> = {
     GateEnhancement: new GateEnhancementStage(
-      new GateEnhancementService(
-        createGateService(),
-        gateRegistry,
-        () => undefined,
-        () => undefined as never,
-        undefined,
-        new GateMetricsRecorder(undefined),
-        logger,
-        runStepViewProvider
-      ),
+      gateEnhancementService,
       new TemporaryGateRegistrar(gateRegistry, undefined, logger, runStepViewProvider),
       () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
       logger
@@ -305,7 +324,8 @@ const buildPipeline = (options: {
       new StepCaptureService(sessionStore, logger),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
-      logger
+      logger,
+      gateEnhancementService
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -499,9 +519,17 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
       } as never)
     );
 
+    // P5-F6: the step-2 review must exist in THIS SAME response — the one that ALSO cleared
+    // step 1's review, advanced onto node 2, and rendered node 2's content. This is exactly the
+    // request shape the defect made structurally incapable of creating a review for: the only
+    // review-creation call that used to exist ran pre-advance, one stage before this render.
+    const reviewAtNode2Immediate = [...openReviewGateIds()];
+    const pendingReviewImmediate = onlySession().pendingGateReview;
+
     // Step 2 answers; its review is open while the run stands at node 2.
     await pipeline.execute({ chain_id: chainId, user_response: S2, gates: GATE_SPECS } as never);
     const reviewAtNode2 = [...openReviewGateIds()];
+    const pendingReviewAfterRerender = onlySession().pendingGateReview;
     const atNode3 = textOf(
       await pipeline.execute({
         chain_id: chainId,
@@ -582,6 +610,35 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
     expect(reviewAtNode2).toContain(RUN_WIDE_GATE);
     expect(reviewAtNode3).toContain(RUN_WIDE_GATE);
     expect(reviewAtNode4).toContain(RUN_WIDE_GATE);
+
+    // --- (c-i) P5-F6: the review exists in the SAME response that performed the advance --------
+    //
+    // Falsifiable against `GateEnhancementService.ensurePostAdvanceReview` being a no-op: without
+    // it, `reviewAtNode2Immediate` is `[]` because node 2's review is not created until the NEXT
+    // call (`StepResponseCaptureStage`'s bare-`user_response` capture path resumes at stage 13
+    // with `currentNodeId` already persisted onto node 2, so the pre-existing pre-advance path
+    // creates it one call late) — this suite's OTHER assertions above read `reviewAtNode2` only
+    // after that next call, which is why they pass with or without the fix.
+    expect(reviewAtNode2Immediate).toContain(NODE_SCOPED_GATE);
+    expect(reviewAtNode2Immediate).toContain(RUN_WIDE_GATE);
+
+    // --- (c-ii) no double-create on a same-step re-render (bare user_response while pending) ----
+    //
+    // Node 2's response (S2) is submitted while its review is already open; that call must not
+    // mint a second review — `createdAt`/`attemptCount` prove it is the SAME review object the
+    // advancing call already created, not a freshly reset one.
+    expect(pendingReviewImmediate).toBeDefined();
+    expect(pendingReviewAfterRerender?.createdAt).toBe(pendingReviewImmediate?.createdAt);
+    expect(pendingReviewAfterRerender?.attemptCount).toBe(pendingReviewImmediate?.attemptCount);
+
+    // --- (c-iii) control: a step-1-targeted gate is unaffected by the post-advance path ---------
+    //
+    // Byte-for-byte regression guard: the pre-advance creation path this gate exercises (the
+    // request STARTS on node 1, no advance involved) must render identically to before P5-F6.
+    expect(reviewAtNode1).toContain(NODE1_SCOPED_GATE);
+    expect(reviewAtNode2).not.toContain(NODE1_SCOPED_GATE);
+    expect(reviewAtNode3).not.toContain(NODE1_SCOPED_GATE);
+    expect(reviewAtNode4).not.toContain(NODE1_SCOPED_GATE);
 
     // The run really walked its four nodes — the three criteria above are about ONE run that got
     // to the end, not about three renders that happened to be produced.

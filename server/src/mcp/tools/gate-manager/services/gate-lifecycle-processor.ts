@@ -63,6 +63,10 @@ export class GateLifecycleProcessor {
     if (!existingGate) {
       return this.error(`Failed to retrieve gate '${id}'`);
     }
+    // Raw on-disk definition (not the normalizing getActivationRules()/getPassCriteria()
+    // accessors, which default absent fields to {}/[] — that would fabricate an
+    // `activation: {}` or `pass_criteria: []` key on every update that never set one).
+    const existingDefinition = existingGate.getDefinition();
 
     const beforeState: Record<string, unknown> = {
       id: existingGate.gateId,
@@ -78,9 +82,13 @@ export class GateLifecycleProcessor {
       type: type || existingGate.type || 'validation',
       description: description || existingGate.description,
       guidance: guidance || existingGate.getGuidance(),
-      pass_criteria,
-      activation,
-      retry_config,
+      // Fall back to the existing on-disk value when the caller omits the field —
+      // otherwise GateFileWriter.buildGateYaml rebuilds gate.yaml from scratch and
+      // silently deletes it. Same class of bug prompts already fixed via
+      // PRESERVED_PROMPT_YAML_KEYS (audit: resource-manager-settability-matrix-2026-08-13 #1).
+      pass_criteria: pass_criteria ?? existingDefinition.pass_criteria,
+      activation: activation ?? existingDefinition.activation,
+      retry_config: retry_config ?? existingDefinition.retry_config,
     };
 
     const afterState: Record<string, unknown> = {
@@ -112,12 +120,8 @@ export class GateLifecycleProcessor {
         }
       );
 
-      if (versionResult.success) {
-        versionSaved = versionResult.version;
-        this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
-      } else {
-        this.ctx.logger.warn(`Failed to save version for gate ${id}: ${versionResult.error}`);
-      }
+      versionSaved = versionResult.version;
+      this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
     }
 
     const result = await this.ctx.gateFileService.writeGateFiles(gateData);

@@ -8,7 +8,7 @@ import type { GateService } from './gate-service-interface.js';
 import type { GateResolutionInput } from './gate-set-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
-import type { ExecutionContext } from '../../execution/context/index.js';
+import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 import type { FrameworkDecisionInput } from '../../execution/pipeline/decisions/index.js';
 import type { GateSource } from '../../execution/pipeline/state/types.js';
@@ -86,7 +86,12 @@ export class GateEnhancementService {
    * would capture `undefined` for the process lifetime. Construction is three assignments.
    */
   private buildGateSetResolver(): GateSetResolver {
-    return new GateSetResolver(this.logger, this.gateManagerProvider(), this.gateLoader);
+    return new GateSetResolver(
+      this.logger,
+      this.gateManagerProvider(),
+      this.gateLoader,
+      this.temporaryGateRegistry
+    );
   }
 
   isAvailable(): boolean {
@@ -418,6 +423,118 @@ export class GateEnhancementService {
     }
   }
 
+  /**
+   * Re-evaluate the pending review for the step this call is now STANDING ON, after any advance
+   * that happened earlier in this same request (P5-F6).
+   *
+   * `enhanceChainSteps` (stage 11) runs once per request and writes `reviewGateIds` for the ONE
+   * step the request STARTED on — the only step identity known at that point, because
+   * `SessionManagementStage` (stage 13) and `StepResponseCaptureStage` (stage 16, where an
+   * advance actually happens) both run later. A gate scoped to a specific step
+   * (`target_step_number` / `target_step_id`) that is not the step the request started on is
+   * therefore invisible to that one pre-advance write — advancing INTO the step it targets and
+   * rendering that step happen in the SAME request, one stage after the only review-creation call
+   * that used to exist. This method is the second call, made after the advance, with the
+   * now-current step identity `sessionContext` carries.
+   *
+   * TRIGGERED only when the step-applicable set contains at least one EXPLICITLY step-targeted
+   * gate that specifically matches the new step — never by an untargeted (run-wide) gate alone.
+   * An untargeted gate already got its one opportunity to review when its id first entered
+   * `reviewGateIds` at the step the request started on, and the NEXT call's ordinary pre-advance
+   * creation (`SessionManagementStage`, which by then sees this step's identity as its OWN
+   * pre-advance state) picks it up on schedule — same timing as before this method existed. If
+   * this method fired on an untargeted gate alone, it would create that same-content review one
+   * call EARLIER than today for every chain that carries only run-wide gates, changing what
+   * renders on a request that must stay unchanged (P5-F6 regression, reproduced 2026-08-16 via
+   * `p5-acceptance.integration.test.ts`: a narrower, step-targeted-only review created here
+   * blocked the following call's full-scope creation from ever running, permanently dropping the
+   * run-wide gate from that step's review).
+   *
+   * ONCE triggered, the created review's `gateIds` is still the FULL step-applicable set —
+   * targeted matches AND untargeted pass-through, via the same `filterGatesForTarget` the
+   * per-step walk in `enhanceChainSteps` already uses — not the targeted subset alone. A review
+   * missing the run-wide gate would itself be an incomplete review, and per-review gate lists are
+   * a single field (`PendingGateReview.gateIds`); there is no second review to carry the rest.
+   *
+   * Idempotent by construction: a `sessionContext.pendingReview` already set (same-step
+   * re-render while a review is outstanding, or a review this same call already created via an
+   * earlier branch) short-circuits before any lookup.
+   */
+  async ensurePostAdvanceReview(
+    context: ExecutionContext,
+    sessionContext: SessionContext
+  ): Promise<void> {
+    if (sessionContext.pendingReview !== undefined) {
+      return;
+    }
+    if (context.state.gates.hasBlockingGates !== true) {
+      return;
+    }
+
+    const accumulatedGateIds = context.state.gates.accumulatedGateIds ?? [];
+    if (accumulatedGateIds.length === 0) {
+      return;
+    }
+
+    const runStepView = this.resolveRunStepView(context);
+    const gateIds = this.resolveStepReviewGateIds(
+      accumulatedGateIds,
+      { nodeId: sessionContext.currentNodeId, stepNumber: sessionContext.currentStep },
+      runStepView
+    );
+    if (gateIds.length === 0) {
+      return;
+    }
+
+    const authority = context.gateEnforcement;
+    if (authority === undefined) {
+      this.logger.warn(
+        '[GateEnhancementService] GateEnforcementAuthority not available - cannot create post-advance review'
+      );
+      return;
+    }
+
+    const created = await authority.createReviewForStep(context, sessionContext, gateIds);
+    if (created !== null) {
+      context.diagnostics.info('GateEnhancement', 'Created post-advance PendingGateReview', {
+        gateIds,
+        stepNumber: sessionContext.currentStep,
+        nodeId: sessionContext.currentNodeId,
+        maxAttempts: created.maxAttempts,
+      });
+    }
+  }
+
+  /**
+   * The full step-applicable set for `target` (targeted matches + untargeted pass-through, via
+   * `filterGatesForTarget` — identical semantics to the per-step walk), but returned ONLY when at
+   * least one member of that set carries an EXPLICIT step target that specifically matched
+   * `target`. An all-untargeted match returns `[]`, which is what keeps
+   * {@link ensurePostAdvanceReview} from firing on a run-wide gate alone (see its doc comment).
+   */
+  private resolveStepReviewGateIds(
+    gateIds: readonly string[],
+    target: { readonly nodeId?: string | null; readonly stepNumber?: number },
+    runStepView: RunStepView | undefined
+  ): string[] {
+    const matched = this.filterGatesForTarget([...gateIds], target, runStepView);
+    const hasNewlyTargetedGate = matched.some((gateId) => this.hasExplicitStepTarget(gateId));
+    return hasNewlyTargetedGate ? matched : [];
+  }
+
+  /** Whether `gateId` carries a declared step target in the temporary gate registry. */
+  private hasExplicitStepTarget(gateId: string): boolean {
+    const tempGate = this.temporaryGateRegistry?.getTemporaryGate(gateId);
+    if (tempGate === undefined) {
+      return false;
+    }
+    return (
+      tempGate.target_step_id !== undefined ||
+      tempGate.target_step_number !== undefined ||
+      (tempGate.apply_to_steps !== undefined && tempGate.apply_to_steps.length > 0)
+    );
+  }
+
   private requireGateService(): GateService {
     if (this.gateService === null) {
       throw new Error('Gate service not available');
@@ -453,6 +570,14 @@ export class GateEnhancementService {
     if (resolution.vetoed.size > 0) {
       context.diagnostics.info('GateEnhancement', 'Gates removed by veto', {
         vetoed: Object.fromEntries(resolution.vetoed),
+      });
+    }
+
+    // P6-F14: ids that matched no known gate in either GateManager or TemporaryGateRegistry —
+    // dropped before Stage 2 ever saw them, so `vetoed` above cannot carry this.
+    if (resolution.unregistered.size > 0) {
+      context.diagnostics.warn('GateEnhancement', 'Unregistered gate ids dropped', {
+        unregistered: Object.fromEntries(resolution.unregistered),
       });
     }
   }

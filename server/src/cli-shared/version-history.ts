@@ -8,6 +8,15 @@
  * This module is a READER and WRITER of `version_history` but never its schema owner —
  * `SqliteEngine.applySchema()` holds that exclusively. See `runSqlite` for why that
  * matters: a second `ensure_schema` here used to leave the server unable to boot.
+ *
+ * **Numbering semantics must match `VersionHistoryService` (P7 go-forward, P7-F10 fix).**
+ * `version_history` is a durable table with two accepted writers — this CLI and the server's
+ * `VersionHistoryService` — and they must agree on what a version number means or a resource
+ * edited by both accumulates a history where "the newest version" means two different things
+ * depending on who last wrote it. Go-forward: version N holds the state edit N PRODUCED, not
+ * the state that preceded it. `recordEditResult` and the `rollback` action carry the bridge-row
+ * logic (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
+ * `recordEditResult` below for the mechanism, mirrored line-for-line from the server's.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,6 +48,7 @@ interface HistoryRequest {
     | 'load_history'
     | 'get_version'
     | 'save_version'
+    | 'record_edit_result'
     | 'compare_versions'
     | 'rollback'
     | 'delete_history'
@@ -52,6 +62,8 @@ interface HistoryRequest {
   max_versions?: number;
   created_at?: string;
   snapshot?: Record<string, unknown>;
+  /** The on-disk state immediately BEFORE this edit — only read by `record_edit_result`/`rollback` for the bridge check. */
+  prior_snapshot?: Record<string, unknown>;
   description?: string;
   diff_summary?: string;
   target_version?: number;
@@ -67,6 +79,8 @@ interface HistoryResponse {
   from?: VersionEntry;
   to?: VersionEntry;
   version?: number;
+  /** Set by `record_edit_result` — true when a bridge row was inserted before the recorded result. */
+  bridged?: boolean;
   saved_version?: number;
   restored_version?: number;
   snapshot?: Record<string, unknown>;
@@ -276,6 +290,57 @@ function appendVersion(
   return version;
 }
 
+/** True when the newest recorded snapshot structurally equals the given live state. */
+function latestSnapshotMatches(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  live: Record<string, unknown>
+): boolean {
+  const latest = latestVersion(db, tenantId, request);
+  if (latest === 0) return false;
+  const row = selectVersion(db, tenantId, request, latest);
+  if (row === undefined) return false;
+  return JSON.stringify(JSON.parse(row.snapshot)) === JSON.stringify(live);
+}
+
+/**
+ * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
+ *
+ * Mirrors `VersionHistoryService.recordEditResult` exactly (P7 go-forward numbering): version N
+ * always holds the state edit N produced. Whenever the latest recorded snapshot differs from the
+ * live pre-edit state (first update of a never-before-recorded resource, or an out-of-band edit),
+ * that live state is bridged in first so it stays rollback-reachable; steady state records exactly
+ * one row per edit. Both writers of `version_history` must agree on this, or a resource's "newest
+ * version" means something different depending on which process wrote it.
+ */
+function recordEditResultRow(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  edit: {
+    priorLiveSnapshot: Record<string, unknown>;
+    producedSnapshot: Record<string, unknown>;
+    description: string;
+    diffSummary: string;
+  }
+): { version: number; bridged: boolean } {
+  const { priorLiveSnapshot, producedSnapshot, description, diffSummary } = edit;
+  const bridged = !latestSnapshotMatches(db, tenantId, request, priorLiveSnapshot);
+  if (bridged) {
+    appendVersion(
+      db,
+      tenantId,
+      request,
+      priorLiveSnapshot,
+      'Bridge: prior live state (era transition or out-of-band edit)',
+      ''
+    );
+  }
+  const version = appendVersion(db, tenantId, request, producedSnapshot, description, diffSummary);
+  return { version, bridged };
+}
+
 function prune(
   db: DatabaseSync,
   tenantId: string,
@@ -343,6 +408,16 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       return { success: true, version };
     }
 
+    case 'record_edit_result': {
+      const result = recordEditResultRow(db, tenantId, request, {
+        priorLiveSnapshot: request.prior_snapshot ?? {},
+        producedSnapshot: request.snapshot ?? {},
+        description: request.description ?? '',
+        diffSummary: request.diff_summary ?? '',
+      });
+      return { success: true, version: result.version, bridged: result.bridged };
+    }
+
     case 'compare_versions': {
       const fromVersion = Number(request.from_version);
       const toVersion = Number(request.to_version);
@@ -358,24 +433,30 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'rollback': {
+      // Go-forward semantics (mirrors VersionHistoryService.rollback): the target is validated
+      // BEFORE anything is written, so a refused rollback consumes no version number. The
+      // restored state is then recorded as the newest version via `recordEditResult` — a
+      // rollback is an edit, and version N holds what edit N produced. The live pre-rollback
+      // state needs no dedicated "Pre-rollback snapshot" row: under these semantics it is
+      // already the previous version, and when it is not (old-era rows, out-of-band edits) the
+      // bridge records it.
       const target = Number(request.target_version);
       const targetRow = selectVersion(db, tenantId, request, target);
       if (targetRow === undefined) {
         return { success: false, error: `Version ${target} not found` };
       }
-      const saved = appendVersion(
-        db,
-        tenantId,
-        request,
-        request.current_snapshot ?? {},
-        `Pre-rollback snapshot (before reverting to v${target})`,
-        ''
-      );
+      const restoredSnapshot = JSON.parse(targetRow.snapshot) as Record<string, unknown>;
+      const result = recordEditResultRow(db, tenantId, request, {
+        priorLiveSnapshot: request.current_snapshot ?? {},
+        producedSnapshot: restoredSnapshot,
+        description: `Rollback to v${target}`,
+        diffSummary: '',
+      });
       return {
         success: true,
-        saved_version: saved,
+        saved_version: result.version,
         restored_version: target,
-        snapshot: JSON.parse(targetRow.snapshot) as Record<string, unknown>,
+        snapshot: restoredSnapshot,
       };
     }
 
@@ -505,6 +586,49 @@ export function saveVersion(
     return { success: false, error: result.error ?? 'Failed to save version' };
   }
   return { success: true, version: result.version ?? 0 };
+}
+
+/**
+ * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
+ *
+ * Public CLI counterpart to `VersionHistoryService.recordEditResult` — same go-forward
+ * numbering (version N holds what edit N produced) and same bridge-row rule, so a resource
+ * edited alternately by the server and by `cpm` accumulates one consistent version sequence
+ * rather than two disagreeing ones.
+ */
+export function recordEditResult(
+  resourceDir: string,
+  resourceType: ResourceType,
+  resourceId: string,
+  priorLiveSnapshot: Record<string, unknown>,
+  producedSnapshot: Record<string, unknown>,
+  options?: SaveVersionOptions
+): SaveVersionResult & { bridged: boolean } {
+  const request = createRequest(resourceDir, 'record_edit_result', {
+    resource_type: resourceType,
+    resource_id: resourceId,
+  });
+  if (request === null) {
+    return { success: false, error: 'Unable to resolve resource DB path', bridged: false };
+  }
+
+  const result = runSqlite({
+    ...(request as HistoryRequest),
+    prior_snapshot: priorLiveSnapshot,
+    snapshot: producedSnapshot,
+    diff_summary: options?.diff_summary ?? '',
+    description: options?.description ?? '',
+    created_at: new Date().toISOString(),
+    max_versions: DEFAULT_MAX_VERSIONS,
+  });
+  if (!result.success) {
+    return {
+      success: false,
+      error: result.error ?? 'Failed to record edit result',
+      bridged: false,
+    };
+  }
+  return { success: true, version: result.version ?? 0, bridged: result.bridged ?? false };
 }
 
 export function rollbackVersion(

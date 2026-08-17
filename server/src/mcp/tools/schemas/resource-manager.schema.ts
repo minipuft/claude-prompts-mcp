@@ -21,6 +21,29 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
+ * One argument definition/overlay — shared by `arguments` (full replace) and `argument_updates`
+ * (Fix D per-field overlay by `name`, tier-b-settability-proposal §2). `name` is required in both
+ * uses (authored identity for `arguments`, the match key for `argument_updates`); every other
+ * field is optional in both — a full `arguments` entry may omit a field just as an overlay may.
+ * Mirrors `PromptArgumentSchema` (prompt-schema.ts) field for field, deliberately — see the
+ * `arguments` parameter comment below for why every field stays optional rather than defaulted.
+ */
+const promptArgumentSchema = z.object({
+  name: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+  defaultValue: z.unknown().optional(),
+  /**
+   * Also the switch that arms required-enforcement: `ArgumentParser.enrichResult` runs schema
+   * validation (which is what throws on a missing required argument) only when some argument
+   * declares `minLength`/`maxLength`/`pattern`. Unsettable through the tool until now, so a
+   * tool-authored `required: true` had no reachable enforcement path.
+   */
+  validation: ArgumentValidationSchema.optional(),
+});
+
+/**
  * Resource Manager input schema.
  *
  * Unlike prompt_engine/system_control, resource_manager descriptions come from
@@ -90,25 +113,23 @@ export const resourceManagerInputSchema = z
      * Explicit fields, not `.passthrough()` (OQ-P7-2). The sibling `chain_steps` ten lines below
      * IS passthrough because a step is an opaque object; an argument is a typed contract, and
      * passthrough would admit arbitrary keys into persisted YAML.
+     *
+     * The element shape is shared with `argument_updates` below (Fix D,
+     * tier-b-settability-proposal §2) via `promptArgumentSchema` — `name` is required in both
+     * uses (authored identity here, match key there) and every other field is optional in both.
      */
-    arguments: z
-      .array(
-        z.object({
-          name: z.string(),
-          type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
-          description: z.string().optional(),
-          required: z.boolean().optional(),
-          defaultValue: z.unknown().optional(),
-          /**
-           * Also the switch that arms required-enforcement: `ArgumentParser.enrichResult` runs
-           * schema validation (which is what throws on a missing required argument) only when
-           * some argument declares `minLength`/`maxLength`/`pattern`. Unsettable through the tool
-           * until now, so a tool-authored `required: true` had no reachable enforcement path.
-           */
-          validation: ArgumentValidationSchema.optional(),
-        })
-      )
-      .optional(),
+    arguments: z.array(promptArgumentSchema).optional(),
+    /**
+     * [Prompt] Update-only structured per-field overlay onto EXISTING arguments, addressed by
+     * `name` (Fix D, tier-b-settability-proposal §2 / P6-F16). `name` must match an argument this
+     * prompt already declares — there is no upsert, so adding/removing/renaming an argument still
+     * requires the full `arguments` array. Every other field overlays onto the matched entry only
+     * when supplied; an omitted field leaves that entry's existing value untouched. Mutually
+     * exclusive with `arguments` in the same call — both would make the result depend on an
+     * evaluation order the caller cannot see. Rejected on `create` (nothing exists yet to overlay
+     * onto). `dry_run` previews it like any other update.
+     */
+    argument_updates: z.array(promptArgumentSchema).optional(),
     /**
      * [Prompt] Anchored replacements applied server-side to a prompt's text bodies (P7 Tier 3).
      *

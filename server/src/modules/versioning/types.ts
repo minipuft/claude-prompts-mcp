@@ -47,7 +47,12 @@ export interface SaveVersionResult {
  */
 export interface RollbackResult {
   success: boolean;
-  /** The new version number created for the pre-rollback state */
+  /**
+   * The newest version number after the rollback — go-forward semantics (P7): this row holds
+   * the RESTORED content, not the pre-rollback state. A bridge row for the pre-rollback live
+   * state is inserted first only when it was not already the latest recorded snapshot, in
+   * which case `saved_version` is two versions ahead of the pre-rollback latest rather than one.
+   */
   saved_version?: number;
   /** The version that was restored */
   restored_version?: number;

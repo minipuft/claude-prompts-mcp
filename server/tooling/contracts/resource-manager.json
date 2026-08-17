@@ -91,6 +91,13 @@
       "includeInDescription": false
     },
     {
+      "name": "argument_updates",
+      "type": "array<{name,description?,type?,required?,defaultValue?,validation?}>",
+      "description": "[Prompt] Update-only: per-field overlay onto EXISTING arguments, addressed by `name`. `name` must match an argument this prompt already declares — no upsert, so adding/removing/renaming an argument still requires the full `arguments` array. Every other field overlays onto the matched entry only when supplied; an omitted field leaves that entry's current value untouched. Mutually exclusive with `arguments` in the same call. Rejected on `create`. Combine with `dry_run: true` to preview.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
       "name": "patch",
       "type": "array<{field,old_string,new_string,replace_all?}>",
       "description": "[Prompt] Anchored edits applied server-side on `update`, so one section can be changed without resending the rest. `field` is user_message_template|system_message|description; `old_string` must match the current text EXACTLY (whitespace included) and uniquely, otherwise the update is rejected naming the anchor and its occurrence count; `new_string` may be empty to delete. Operations apply in order. Pass `replace_all: true` to accept a multi-occurrence anchor. Mutually exclusive with `user_message_template`/`system_message` in the same call. Combine with `dry_run: true` to preview.",

@@ -34,6 +34,7 @@ export type resource_managerParamName =
   | 'user_message_template'
   | 'system_message'
   | 'arguments'
+  | 'argument_updates'
   | 'patch'
   | 'dry_run'
   | 'chain_steps'
@@ -157,6 +158,15 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'array<{name,required?,description?,type?,defaultValue?,validation?}>',
     description:
       "[Prompt] Argument definitions for the prompt. `type` is one of string|number|boolean|array|object. `required` and `defaultValue` are persisted to the prompt's YAML; `validation` accepts pattern/minLength/maxLength and is what arms required-argument enforcement at execution.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'argument_updates',
+    type: 'array<{name,description?,type?,required?,defaultValue?,validation?}>',
+    description:
+      "[Prompt] Update-only: per-field overlay onto EXISTING arguments, addressed by `name`. `name` must match an argument this prompt already declares — no upsert, so adding/removing/renaming an argument still requires the full `arguments` array. Every other field overlays onto the matched entry only when supplied; an omitted field leaves that entry's current value untouched. Mutually exclusive with `arguments` in the same call. Rejected on `create`. Combine with `dry_run: true` to preview.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

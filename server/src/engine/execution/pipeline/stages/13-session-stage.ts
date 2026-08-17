@@ -13,7 +13,6 @@ import type {
 } from '#shared/types/index.js';
 import type { ExecutionContext, ParsedCommand, SessionContext } from '../../context/index.js';
 import type { ExecutionPlan } from '../../types.js';
-import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
 import { formatChainId, nextRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
@@ -227,7 +226,10 @@ export class SessionManagementStage extends BasePipelineStage {
       return;
     }
 
-    // Delegate to GateEnforcementAuthority for consistent review creation
+    // Delegate to GateEnforcementAuthority for consistent review creation. The maxAttempts
+    // resolution and review-shape logic live there now (P5-F6) — shared with the post-advance
+    // call site in `GateEnhancementService.ensurePostAdvanceReview` — so this stage only decides
+    // WHETHER to create (the guards above) and hands off WHAT (`gateIds`).
     const authority = context.gateEnforcement;
     if (!authority) {
       this.logger.warn(
@@ -236,50 +238,11 @@ export class SessionManagementStage extends BasePipelineStage {
       return;
     }
 
-    // Get step-level retry override if available
-    const currentStepNumber = sessionContext.currentStep ?? 1;
-    const steps = context.parsedCommand?.steps;
-    // Resolve by identity first: a step definition is addressed by its node id, and position
-    // is only the fallback for steps that predate minting (or for a context with no node id).
-    const currentNodeId = sessionContext.currentNodeId ?? undefined;
-    const currentStep =
-      (currentNodeId !== undefined ? steps?.find((s) => s.nodeId === currentNodeId) : undefined) ??
-      steps?.find((s) => s.stepNumber === currentStepNumber);
-    const stepRetries = currentStep?.retries;
-
-    // Determine maxAttempts with priority: step-level > gate-level > default
-    // Step-level retries take priority (explicit user/chain configuration)
-    // Gate-level retry configs are used if no step-level override exists
-    let maxAttempts: number | undefined;
-    if (stepRetries !== undefined) {
-      maxAttempts = stepRetries;
-    } else {
-      // Check for gate-level retry configs from accumulator
-      const gateMaxRetry = context.gates.getMaxRetryLimit();
-      if (gateMaxRetry !== undefined) {
-        maxAttempts = gateMaxRetry;
-      }
-    }
-
-    const reviewOptions: CreateReviewOptions = {
-      gateIds,
-      instructions: context.gateInstructions ?? '',
-      ...(maxAttempts !== undefined ? { maxAttempts } : {}),
-      metadata: {
-        sessionId: sessionContext.sessionId,
-        stepNumber: currentStepNumber,
-      },
-    };
-
-    const pendingReview = await authority.createPendingReview(reviewOptions);
-
-    // Persist to session manager and update context via authority
-    await authority.setPendingReview(sessionContext.sessionId, pendingReview);
-    sessionContext.pendingReview = pendingReview;
+    const created = await authority.createReviewForStep(context, sessionContext, gateIds);
 
     context.diagnostics.info(this.name, 'Created PendingGateReview for step gates', {
       gateIds,
-      maxAttempts: pendingReview.maxAttempts,
+      maxAttempts: created?.maxAttempts,
       enforcementMode: context.state.gates.enforcementMode,
     });
   }
