@@ -7,6 +7,11 @@ import {
 } from '../../../../src/mcp/tools/resource-manager/core/router.js';
 import { MockLogger } from '../../../helpers/test-helpers.js';
 
+import {
+  DESTRUCTIVE_ACTIONS,
+  HANDLER_OWNED_CONFIRMATION,
+} from '../../../../src/mcp/tools/resource-manager/core/types.js';
+
 import type { ResourceManagerInput } from '../../../../src/mcp/tools/resource-manager/core/types.js';
 import type { ToolResponse } from '../../../../src/shared/types/index.js';
 
@@ -67,6 +72,101 @@ describe('ResourceManagerRouter', () => {
       frameworkManager: mockFrameworkManager as unknown as Parameters<
         typeof createResourceManagerRouter
       >[0]['frameworkManager'],
+    });
+  });
+
+  describe('destructive-action guard', () => {
+    const RESOURCE_TYPES = ['prompt', 'gate', 'framework'] as const;
+    const handlerFor = (type: (typeof RESOURCE_TYPES)[number]) =>
+      type === 'prompt'
+        ? mockPromptResourceHandler
+        : type === 'gate'
+          ? mockGateManager
+          : mockFrameworkManager;
+
+    // Every member of DESTRUCTIVE_ACTIONS, on every resource type. A new destructive action added
+    // to the registry without a guard shows up here rather than in production.
+    for (const action of [...DESTRUCTIVE_ACTIONS]) {
+      for (const resource_type of RESOURCE_TYPES) {
+        // Pairs the handler guards itself because its refusal carries information the router does
+        // not have. Driven from the same constant the router reads, so adding an entry there
+        // moves this test with it rather than leaving a stale expectation behind.
+        const handlerOwned = HANDLER_OWNED_CONFIRMATION.has(`${resource_type}:${action}`);
+
+        (handlerOwned ? test.skip : test)(
+          `refuses ${resource_type} ${action} without confirm and never dispatches`,
+          async () => {
+            const result = await router.handleAction(
+              { resource_type, action, id: 'target' } as ResourceManagerInput,
+              {}
+            );
+
+            expect(result.isError).toBe(true);
+            expect(result.content[0]?.text).toContain('requires confirmation');
+            // The guard must sit AHEAD of dispatch — a handler that is reached has already had
+            // the chance to mutate, which is the whole failure this replaces.
+            expect(handlerFor(resource_type).handleAction).not.toHaveBeenCalled();
+          }
+        );
+
+        test(`dispatches ${resource_type} ${action} when confirm is true`, async () => {
+          const result = await router.handleAction(
+            { resource_type, action, id: 'target', confirm: true } as ResourceManagerInput,
+            {}
+          );
+
+          expect(result.isError).toBe(false);
+          expect(handlerFor(resource_type).handleAction).toHaveBeenCalled();
+        });
+      }
+    }
+
+    test('leaves non-destructive actions unguarded', async () => {
+      // Guarding a read would be its own defect: `confirm` on `list` trains callers to send it
+      // reflexively, which is how a confirmation stops meaning anything.
+      for (const action of ['list', 'inspect', 'history', 'compare', 'reload'] as const) {
+        jest.clearAllMocks();
+        const result = await router.handleAction(
+          { resource_type: 'gate', action, id: 'target' } as ResourceManagerInput,
+          {}
+        );
+        expect(result.isError).toBe(false);
+        expect(mockGateManager.handleAction).toHaveBeenCalled();
+      }
+    });
+
+    test('stands down for handler-owned pairs so the richer refusal survives', async () => {
+      // The exemption must be observable, not just declared. A HANDLER_OWNED_CONFIRMATION entry
+      // whose handler quietly stopped guarding would otherwise look identical to a guarded pair.
+      for (const pair of HANDLER_OWNED_CONFIRMATION) {
+        const [resource_type, action] = pair.split(':') as [
+          (typeof RESOURCE_TYPES)[number],
+          ResourceManagerInput['action'],
+        ];
+        jest.clearAllMocks();
+
+        await router.handleAction(
+          { resource_type, action, id: 'target' } as ResourceManagerInput,
+          {}
+        );
+
+        // Dispatched despite the missing `confirm` — the handler, not the router, decides.
+        expect(handlerFor(resource_type).handleAction).toHaveBeenCalled();
+      }
+    });
+
+    test('confirm: false is refused exactly as an omitted confirm is', async () => {
+      const result = await router.handleAction(
+        {
+          resource_type: 'gate',
+          action: 'delete',
+          id: 'target',
+          confirm: false,
+        } as ResourceManagerInput,
+        {}
+      );
+      expect(result.isError).toBe(true);
+      expect(mockGateManager.handleAction).not.toHaveBeenCalled();
     });
   });
 
@@ -371,6 +471,101 @@ describe('ResourceManagerRouter', () => {
         }),
         {}
       );
+    });
+
+    /**
+     * `dry_run` reaches the gate and framework handlers.
+     *
+     * Both routes build their payload from an explicit allowlist rather than spreading the input,
+     * so a parameter that exists in the schema, in the manager's input type, and in the handler
+     * can still be structurally dead — that is exactly how `version_description` came to be typed,
+     * read, and unreachable (F6). Typechecking cannot see it: every layer compiles fine while the
+     * router quietly drops the field.
+     */
+    test.each([
+      ['gate' as const, () => mockGateManager.handleAction],
+      ['framework' as const, () => mockFrameworkManager.handleAction],
+    ])('forwards dry_run to the %s handler', async (resourceType, handler) => {
+      await router.handleAction(
+        {
+          resource_type: resourceType,
+          action: 'rollback',
+          id: `test-${resourceType}`,
+          version: 1,
+          confirm: true,
+          dry_run: true,
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(handler()).toHaveBeenCalledWith(expect.objectContaining({ dry_run: true }), {});
+    });
+
+    test.each([
+      ['gate' as const, () => mockGateManager.handleAction],
+      ['framework' as const, () => mockFrameworkManager.handleAction],
+    ])('forwards source_workspace to the %s handler on history', async (resourceType, handler) => {
+      await router.handleAction(
+        {
+          resource_type: resourceType,
+          action: 'history',
+          id: `test-${resourceType}`,
+          source_workspace: 'other-checkout',
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(handler()).toHaveBeenCalledWith(
+        expect.objectContaining({ source_workspace: 'other-checkout' }),
+        {}
+      );
+    });
+  });
+
+  /**
+   * `source_workspace` is read-only, and the refusal must be a refusal.
+   *
+   * Ignoring it and scoping back to local would be the worse failure: the caller would be told the
+   * rollback succeeded and would believe they had restored the OTHER workspace's version, when they
+   * had restored their own. Version numbering is per-workspace, so there is no coherent way to
+   * write across the boundary either.
+   */
+  describe('cross-workspace read guard', () => {
+    test.each(['rollback', 'update', 'delete', 'create'] as const)(
+      'refuses source_workspace on %s',
+      async (action) => {
+        const response = await router.handleAction(
+          {
+            resource_type: 'gate',
+            action,
+            id: 'test-gate',
+            confirm: true,
+            source_workspace: 'other-checkout',
+          } as ResourceManagerInput,
+          {}
+        );
+
+        expect(response.isError).toBe(true);
+        expect(response.content[0]!.text).toContain('source_workspace');
+        expect(response.content[0]!.text).toContain('read-only');
+        expect(mockGateManager.handleAction).not.toHaveBeenCalled();
+      }
+    );
+
+    test('allows the action through when source_workspace is absent', async () => {
+      const response = await router.handleAction(
+        {
+          resource_type: 'gate',
+          action: 'rollback',
+          id: 'test-gate',
+          version: 1,
+          confirm: true,
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(response.isError).not.toBe(true);
+      expect(mockGateManager.handleAction).toHaveBeenCalled();
     });
   });
 

@@ -425,6 +425,74 @@ describe('cpm rollback', () => {
     ]);
     expect(exitCode).toBe(1);
   });
+
+  /**
+   * F14 — a rollback must not delete YAML keys the snapshot does not carry.
+   *
+   * A snapshot is a projection of the authored surface, not the whole file, and the SERVER records
+   * gates as five keys (`id`, `name`, `type`, `description`, `guidance`) while `gate.yaml`
+   * declares more. This command used to write `serializeYaml(result.snapshot)` straight over the
+   * entry file, so a CLI rollback of a server-recorded gate destroyed `guidanceFile` and
+   * `pass_criteria` and wrote a bogus `guidance` key holding the markdown body — the two writers
+   * produced different files from the same version.
+   *
+   * The snapshot seeded here is deliberately the SERVER's shape, since that is the row a real
+   * cross-writer rollback reads.
+   */
+  it('preserves gate.yaml keys the snapshot does not carry', () => {
+    const gateWs = copyWorkspace(VERSIONED_WS);
+    try {
+      seedVersionHistory(gateWs, 'gate', 'test-gate', [
+        {
+          version: 1,
+          snapshot: {
+            id: 'test-gate',
+            name: 'Test Gate',
+            type: 'validation',
+            description: 'Original gate description',
+            guidance: 'Confirm the response addresses the request.',
+          },
+          description: 'Version 1',
+        },
+      ]);
+
+      const { stdout, exitCode } = run([
+        'rollback', 'gate', 'test-gate', '1',
+        '--workspace', gateWs,
+      ]);
+      expect(exitCode).toBe(0);
+
+      const content = readFileSync(
+        join(gateWs, 'resources/gates/test-gate/gate.yaml'),
+        'utf8',
+      );
+
+      // Restored from the snapshot.
+      expect(content).toContain('Original gate description');
+
+      // NOT destroyed by it. Each of these is absent from the snapshot and declared on disk.
+      expect(content).toContain('guidanceFile');
+      expect(content).toContain('pass_criteria');
+
+      // `guidance` is the body of guidance.md. Writing it into gate.yaml would leave two
+      // disagreeing guidance sources, which is why the server's writer excludes it.
+      expect(content).not.toMatch(/^guidance:/m);
+
+      // A partial restore is reported, not silently performed.
+      expect(stdout).toContain('recorded no');
+    } finally {
+      if (existsSync(gateWs)) rmSync(gateWs, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to roll back an unversioned resource type', () => {
+    const { stderr, exitCode } = run([
+      'rollback', 'style', 'test-style', '1',
+      '--workspace', tmpWs,
+    ]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('not versioned');
+  });
 });
 
 describe('cpm guide', () => {

@@ -375,6 +375,55 @@ describe('Version History Workflow Integration', () => {
       expect(await alpha.getLatestVersion('prompt', 'shared-id')).toBe(2);
       expect(await beta.getLatestVersion('prompt', 'shared-id')).toBe(1);
     });
+
+    /**
+     * Tier 6 — a READ may deliberately cross the workspace boundary. Writes may not.
+     *
+     * `state.db` is one shared file, so the other workspace's rows are already present and merely
+     * filtered out; reading them is legitimate debugging. The write side is asymmetric on purpose
+     * and the asymmetry is enforced one layer up, in the router, because a snapshot from another
+     * workspace describes files that may not exist here.
+     */
+    it('reads another workspace history with an explicit override, without moving the write scope', async () => {
+      const alpha = new VersionHistoryService({
+        logger: mockLogger as unknown as Logger,
+        configManager: mockConfigProvider,
+        dbManager,
+        scope: { workspaceId: 'ws-alpha' },
+      });
+      const beta = new VersionHistoryService({
+        logger: mockLogger as unknown as Logger,
+        configManager: mockConfigProvider,
+        dbManager,
+        scope: { workspaceId: 'ws-beta' },
+      });
+
+      await alpha.saveVersion('prompt', 'cross-id', { v: 'a1' }, { description: 'alpha v1' });
+      await alpha.saveVersion('prompt', 'cross-id', { v: 'a2' }, { description: 'alpha v2' });
+      await beta.saveVersion('prompt', 'cross-id', { v: 'b1' }, { description: 'beta v1' });
+
+      // Without the override beta sees only its own row — the guard against a vacuous pass below.
+      const own = await beta.loadHistory('prompt', 'cross-id');
+      expect(own!.versions.map((v) => v.description)).toEqual(['beta v1']);
+
+      const across = await beta.loadHistory('prompt', 'cross-id', 'ws-alpha');
+      expect(across!.versions.map((v) => v.description)).toEqual(['alpha v2', 'alpha v1']);
+
+      expect(await beta.getVersion('prompt', 'cross-id', 2, 'ws-alpha')).not.toBeNull();
+      const compared = await beta.compareVersions('prompt', 'cross-id', 1, 2, 'ws-alpha');
+      expect(compared.success).toBe(true);
+      expect(compared.from!.snapshot['v']).toBe('a1');
+      expect(compared.to!.snapshot['v']).toBe('a2');
+
+      // The override is read-only: beta's next write still lands in beta and continues ITS
+      // sequence, not alpha's. If the override leaked into the write scope this would be 3.
+      const saved = await beta.saveVersion('prompt', 'cross-id', { v: 'b2' }, {});
+      expect(saved.version).toBe(2);
+      const betaAfter = dbManager.query<{ version: number }>(
+        `SELECT version FROM version_history WHERE tenant_id = 'ws-beta' AND resource_id = 'cross-id' ORDER BY version`
+      );
+      expect(betaAfter.map((r) => r.version)).toEqual([1, 2]);
+    });
   });
 
   describe('Rollback Workflow', () => {
@@ -661,6 +710,7 @@ describe('Version History Workflow Integration', () => {
       await seedDivergedPrompt();
 
       const response = await processor.handleRollback({
+        action: 'rollback',
         id: PROMPT_ID,
         version: 1,
         confirm: true,
@@ -682,7 +732,12 @@ describe('Version History Workflow Integration', () => {
     it('restores an authored field the live prompt overwrote', async () => {
       await seedDivergedPrompt();
 
-      await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+      await processor.handleRollback({
+        action: 'rollback',
+        id: PROMPT_ID,
+        version: 1,
+        confirm: true,
+      });
 
       // Mechanism 3: rollback wrote a private 8-key object, so a field outside that set could only
       // ever keep its live value. Routed through the same write model, the snapshot's value wins.
@@ -705,7 +760,12 @@ describe('Version History Workflow Integration', () => {
         it(`preserves ${field} across a rollback`, async () => {
           await seedDivergedPrompt();
 
-          await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+          await processor.handleRollback({
+            action: 'rollback',
+            id: PROMPT_ID,
+            version: 1,
+            confirm: true,
+          });
 
           expect(readPromptYaml()[field]).toEqual(value);
         });
@@ -718,7 +778,12 @@ describe('Version History Workflow Integration', () => {
         // rollback side. These two fields are deliberately left to on-disk preservation.
         await seedDivergedPrompt();
 
-        await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+        await processor.handleRollback({
+          action: 'rollback',
+          id: PROMPT_ID,
+          version: 1,
+          confirm: true,
+        });
 
         expect(readPromptYaml()['registerWithMcp']).toBe(false);
       });
@@ -739,7 +804,12 @@ describe('Version History Workflow Integration', () => {
           injection: { 'style-guidance': { enabled: true, target: 'both' } },
         });
 
-        await processor.handleRollback({ id: PROMPT_ID, version: 1, confirm: true });
+        await processor.handleRollback({
+          action: 'rollback',
+          id: PROMPT_ID,
+          version: 1,
+          confirm: true,
+        });
 
         expect(readPromptYaml()['injection']).toEqual({
           'style-guidance': { enabled: true, target: 'both' },
@@ -753,6 +823,7 @@ describe('Version History Workflow Integration', () => {
       await seedDivergedPrompt({ description: null });
 
       const response = await processor.handleRollback({
+        action: 'rollback',
         id: PROMPT_ID,
         version: 1,
         confirm: true,

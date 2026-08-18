@@ -10,7 +10,7 @@ import {
   saveVersion,
   recordEditResult,
   rollbackVersion,
-  deleteHistoryFile,
+  deleteVersionRows,
   formatHistoryTable,
 } from '../../../src/cli-shared/version-history.js';
 import type { HistoryFile } from '../../../src/modules/versioning/types.js';
@@ -300,14 +300,14 @@ describe('version-history', () => {
     });
   });
 
-  describe('deleteHistoryFile', () => {
+  describe('deleteVersionRows', () => {
     it('returns true when history does not exist', () => {
-      expect(deleteHistoryFile(promptDir)).toBe(true);
+      expect(deleteVersionRows(promptDir)).toBe(true);
     });
 
     it('deletes existing history rows', () => {
       seedPromptHistory(promptDir);
-      expect(deleteHistoryFile(promptDir)).toBe(true);
+      expect(deleteVersionRows(promptDir)).toBe(true);
       expect(loadHistory(promptDir)).toBeNull();
     });
   });

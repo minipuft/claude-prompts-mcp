@@ -402,9 +402,31 @@ async function runSurfaceChecks(baseUrl) {
   if (!protocolVersion) return;
 
   const listed = await client.send('tools/list', {});
-  const toolNames = (listed?.result?.tools ?? []).map((tool) => tool.name);
+  const listedTools = listed?.result?.tools ?? [];
+  const toolNames = listedTools.map((tool) => tool.name);
   for (const expected of ['prompt_engine', 'resource_manager', 'system_control']) {
     record(`tool registered: ${expected}`, toolNames.includes(expected));
+  }
+
+  // Annotations are what let a CLIENT gate a destructive call, which is where the human is. They
+  // are set in the registerTool config, and a config the SDK does not forward would typecheck
+  // exactly the same as one it does — so the only evidence that they reach a client is reading
+  // them back off the wire here.
+  const EXPECTED_DESTRUCTIVE = {
+    prompt_engine: false,
+    resource_manager: true,
+    system_control: true,
+  };
+  for (const [toolName, expectedDestructive] of Object.entries(EXPECTED_DESTRUCTIVE)) {
+    const annotations = listedTools.find((tool) => tool.name === toolName)?.annotations;
+    const actual = annotations?.destructiveHint;
+    record(
+      `annotations advertised: ${toolName}`,
+      annotations !== undefined && actual === expectedDestructive,
+      annotations === undefined
+        ? 'no annotations on the listed tool'
+        : `destructiveHint=${String(actual)} (expected ${String(expectedDestructive)})`
+    );
   }
 
   for (const check of TOOL_CHECKS) {

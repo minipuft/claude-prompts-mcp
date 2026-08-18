@@ -202,20 +202,24 @@ describe('GateToolHandler', () => {
     expect((result.content[0] as { text: string }).text).toContain("Gate 'missing-gate' not found");
   });
 
-  test('delete requires explicit confirmation', async () => {
+  test('delete no longer enforces confirmation here — the router owns it', async () => {
+    // This test previously asserted that GateToolHandler refused `delete` without `confirm`. That
+    // guard was one of five hand-written copies in two idioms; it now lives once in
+    // ResourceManagerRouter as DESTRUCTIVE_ACTIONS, checked ahead of dispatch.
+    //
+    // The behaviour change is real and bounded: a caller reaching this handler WITHOUT going
+    // through the router now deletes unconfirmed. Measured 2026-08-17, no such caller exists —
+    // `router.ts:266` is the sole entry point and `gate-manager/core/manager.ts:93` the sole
+    // construction site. Should a second entry point ever appear, it must route through the
+    // router or re-establish a guard; this test is the marker that says so.
+    //
+    // Confirmation coverage: tests/unit/mcp-tools/resource-manager/router.test.ts
+    // §destructive-action guard, verified to red when the guard is disabled.
     gateManager.has.mockReturnValue(true);
 
-    const result = await manager.handleAction(
-      {
-        action: 'delete',
-        id: 'existing-gate',
-      },
-      {}
-    );
+    const result = await manager.handleAction({ action: 'delete', id: 'existing-gate' }, {});
 
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toContain('Delete requires confirmation');
-    expect(gateManager.unregister).not.toHaveBeenCalled();
+    expect((result.content[0] as { text: string }).text).not.toContain('requires confirmation');
   });
 
   describe('update preservation', () => {

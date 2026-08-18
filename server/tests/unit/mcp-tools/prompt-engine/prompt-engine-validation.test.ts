@@ -121,6 +121,92 @@ describe('PromptEngine Validation', () => {
     // These unit tests require extensive mocking that is brittle and low value.
   });
 
+  /**
+   * `cancel` relocated here from `system_control session cancel` (Tier 7).
+   *
+   * It belongs on this tool because of which id the caller holds: a `chain_id` is held BECAUSE
+   * you are running the chain, so ending that run is part of running it. `system_control session`
+   * keeps `list`/`inspect`/`clear`, which are keyed on a `session_id` read from a listing.
+   */
+  describe('cancel', () => {
+    test('requires chain_id, since that is what names the run to stop', async () => {
+      const result = await engine.executePromptCommand({ cancel: true }, {});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('chain_id');
+    });
+
+    test('resolves chain_id to the internal session id before cancelling', async () => {
+      // The substance of the relocation. `cancelChain` is keyed on the internal session id
+      // (`review-demo-1786998494932`), while the caller holds the resume token
+      // (`chain-demo#1`) — the old `system_control` operation took the internal one, so stopping
+      // your own run meant listing sessions to look up an id you never chose. A live drive is
+      // what caught this: with a mock store, passing the chain id straight through "works".
+      const store = engine.getChainSessionStore();
+      jest
+        .spyOn(store, 'getSessionByChainIdentifier')
+        .mockReturnValue({ sessionId: 'review-demo-1786998494932' } as never);
+      const cancelChain = jest
+        .spyOn(store, 'cancelChain')
+        .mockResolvedValue(true as unknown as never);
+
+      const result = await engine.executePromptCommand(
+        { cancel: true, chain_id: 'chain-demo#1' },
+        {}
+      );
+
+      expect(cancelChain).toHaveBeenCalledWith('review-demo-1786998494932', undefined);
+      expect(result.isError).toBe(false);
+      expect(result.content[0].text).toContain('Chain Cancelled');
+      // Cancel is not clear: the session's state survives so it can still be inspected.
+      expect(result.content[0].text).toContain('retained');
+    });
+
+    test('reports a run it could not cancel rather than claiming success', async () => {
+      const store = engine.getChainSessionStore();
+      jest.spyOn(store, 'cancelChain').mockResolvedValue(false as unknown as never);
+
+      const result = await engine.executePromptCommand(
+        { cancel: true, chain_id: 'chain-demo#9' },
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Cancel Not Applied');
+    });
+
+    test('short-circuits before command parsing', async () => {
+      const store = engine.getChainSessionStore();
+      const cancelChain = jest
+        .spyOn(store, 'cancelChain')
+        .mockResolvedValue(true as unknown as never);
+
+      // A command alongside cancel is ignored, not executed — cancel names an existing run rather
+      // than describing one to start, so nothing about command parsing applies.
+      const result = await engine.executePromptCommand(
+        { cancel: true, chain_id: 'chain-demo#1', command: '>>analyze_code test' },
+        {}
+      );
+
+      expect(cancelChain).toHaveBeenCalledWith('chain-demo#1', undefined);
+      expect(result.content[0].text).toContain('Chain Cancelled');
+    });
+
+    test('passes no scope when the request carries none, so the store skips the scope check', async () => {
+      // `undefined`, not a substituted default: `getSessionForMutation` SKIPS the scope check on
+      // undefined and ENFORCES it on a value, so substituting the process workspace scope made
+      // every cancel of a session without a continuityScopeId return "not applied". Found live.
+      const store = engine.getChainSessionStore();
+      const cancelChain = jest
+        .spyOn(store, 'cancelChain')
+        .mockResolvedValue(true as unknown as never);
+
+      await engine.executePromptCommand({ cancel: true, chain_id: 'chain-demo#1' }, {});
+
+      expect(cancelChain.mock.calls[0]?.[1]).toBeUndefined();
+    });
+  });
+
   // Framework manager integration behavior (validation + executor) now covered by dedicated
   // FrameworkValidator/FrameworkResolutionStage tests and future pipeline coverage.
 });
