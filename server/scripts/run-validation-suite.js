@@ -210,6 +210,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:registry-coherence',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both directions — an unclassified processor is a finding AND a classified processor no dispatch edge reaches is a finding. The second was added after the gate went green on its own first run with the entire gate router outside its scan',
+  },
+  {
     script: 'validate:plan-row-tracking',
     io: 'read',
     reads: ['file', 'spawn', 'tracked'],
