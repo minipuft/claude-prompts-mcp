@@ -751,6 +751,16 @@ export class McpToolRouter {
           title: 'Prompt Engine',
           description: promptEngineDescription,
           inputSchema: promptEngineSchema,
+          // Executing a prompt advances chain state and may run script tools, so it is neither
+          // read-only nor safe to replay: the same call twice advances the chain twice.
+          // `destructiveHint` is deliberately false — it mutates run state, it does not remove
+          // operator-authored resources.
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: false,
+            openWorldHint: false,
+          },
         },
         async (args: PromptEngineInput, extra: unknown) => {
           try {
@@ -783,6 +793,13 @@ export class McpToolRouter {
                 ? { gate_action: trimmedGateAction as 'retry' | 'skip' | 'abort' }
                 : {}),
               ...(args.force_restart !== undefined ? { force_restart: args.force_restart } : {}),
+              // This object is an explicit ALLOWLIST, not a spread — a parameter absent here is
+              // dropped between the validated schema and the executor, and typechecks cleanly at
+              // every layer while being structurally dead on the wire. That has now happened
+              // three times in this area (`version_description`, `dry_run` on the gate and
+              // framework routes, and this). Verified live, not by unit test: only a real
+              // tools/call can show whether the value arrives.
+              ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
               ...(args.options != null ? { options: args.options } : {}),
               ...(args.observations != null ? { observations: args.observations } : {}),
               // Passed through unchanged. Unlike `gates` below there is nothing to normalize:
@@ -937,6 +954,15 @@ export class McpToolRouter {
           title: 'System Control',
           description: systemControlDescription,
           inputSchema: systemControlSchema,
+          // Most actions read, but `session clear`, `config restore`, `analytics reset` and
+          // `maintenance restart` destroy state the operator cannot regenerate. The hint is set
+          // for the tool, so it reflects the most destructive action reachable through it.
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: false,
+            openWorldHint: false,
+          },
         },
         async (args: SystemControlInput, extra: unknown) => {
           try {
@@ -995,6 +1021,16 @@ export class McpToolRouter {
           description: resourceManagerDescription,
           // Hand-written schema — includes .passthrough() for advanced framework fields
           inputSchema: resourceManagerInputSchema,
+          // `delete` and `rollback` overwrite or remove authored resources; deletion cannot be
+          // undone, since rollback cannot restore a deleted resource. Clients that surface
+          // destructive hints get a chance to involve the human, which is where the decision
+          // belongs — a `confirm` parameter only ever asks the model.
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: false,
+            openWorldHint: false,
+          },
         },
         async (args: ResourceManagerSchemaInput, extra: unknown) => {
           try {

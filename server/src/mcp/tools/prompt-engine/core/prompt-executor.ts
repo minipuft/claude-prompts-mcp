@@ -27,9 +27,9 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
+import type { WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
-import type { WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
@@ -40,6 +40,7 @@ import {
   PromptReferenceResolver,
   ScriptReferenceResolver,
 } from '#engine/execution/reference/index.js';
+import { resolveDeclaredSections } from '#engine/frameworks/declared-sections.js';
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { FrameworkValidator } from '#engine/frameworks/framework-validator.js';
@@ -80,6 +81,8 @@ import {
   ChainSessionService,
 } from '#shared/types/index.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
+import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -404,6 +407,8 @@ export class PromptExecutor {
       command?: string; // Optional - not needed for chain resume (chain_id + user_response)
       force_restart?: boolean;
       chain_id?: string;
+      /** Stop the run named by `chain_id`. See `handleCancel`. */
+      cancel?: boolean;
       gate_verdict?: string;
       gate_action?: 'retry' | 'skip' | 'abort';
       user_response?: string;
@@ -425,6 +430,12 @@ export class PromptExecutor {
       extra != null && typeof extra === 'object' && '_sdkExtra' in extra
         ? (extra as Record<string, unknown>)['_sdkExtra']
         : undefined;
+    // `cancel` short-circuits before any command parsing: it names an existing run rather than
+    // describing one to start, so nothing below it applies.
+    if (args.cancel === true) {
+      return await this.handleCancel(args.chain_id, sdkExtra);
+    }
+
     const normalizedCommand = typeof args.command === 'string' ? args.command.trim() : '';
     const chainIdFromCommand = this.extractChainId(normalizedCommand);
     const hasResumePayload = Boolean(
@@ -497,6 +508,109 @@ export class PromptExecutor {
     }
     const trimmed = command.trim();
     return isChainId(trimmed) ? trimmed : undefined;
+  }
+
+  /**
+   * Stop the run named by `chainId` and block further progression.
+   *
+   * Relocated from `system_control session cancel`. The rule that decides the placement is which
+   * id the caller holds: a `chain_id` is held BECAUSE you are running the chain, so ending that
+   * run is part of running it. `system_control session` keeps `list`/`inspect`/`clear`, which are
+   * operator work across runs you are not in, keyed on a `session_id` read from a listing.
+   *
+   * Cancel is NOT clear. It transitions the run to `cancelled` and leaves its state and artifacts
+   * in place so the operator can still inspect what happened; removing them is `clear`'s job.
+   * It is also not `force_restart`: that abandons this run and immediately begins a new one, which
+   * is cancel-then-start. Both verbs now live on one tool, so the distinction is stated in both
+   * descriptions rather than being implied by which tool you reached for.
+   */
+  private async handleCancel(
+    chainId: string | undefined,
+    sdkExtra: unknown
+  ): Promise<ToolResponse> {
+    if (chainId === undefined || chainId.trim().length === 0) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              '❌ `cancel: true` requires `chain_id` — it names the run to stop.\n\n' +
+              'Use `system_control(action:"session", operation:"list")` to find one.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Same scope posture the relocated handler used: a cancel must not reach another workspace's
+    // session. `cancelChain` enforces it via `getSessionForMutation`; the caller has to supply it.
+    const scope = this.resolveRequestScope(sdkExtra);
+    const trimmed = chainId.trim();
+
+    // `cancelChain` is keyed on the INTERNAL session id (e.g.
+    // `review-content_analysis-1786998494932`), while the caller holds the resume token
+    // (`chain-content_analysis#1`). Resolving one to the other here is the substance of the
+    // relocation, not a detail of it: the old `system_control` operation took the internal id, so
+    // stopping your own run meant listing sessions first to look up an identifier you never chose.
+    // `includeDormant` is set because a run parked awaiting review is exactly the one an operator
+    // reaches for cancel on.
+    const session = this.chainSessionStore.getSessionByChainIdentifier(trimmed, {
+      ...scope,
+      includeDormant: true,
+    });
+    const cancelled = await this.chainSessionStore.cancelChain(
+      session?.sessionId ?? trimmed,
+      scope
+    );
+
+    if (!cancelled) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `⚠️ **Cancel Not Applied**: \`${chainId}\`\n\n` +
+              'The run is already in a terminal state (completed/failed/cancelled), or no run ' +
+              'with that id exists in this workspace. Use `system_control(action:"session", ' +
+              'operation:"inspect")` to view its current status.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `🛑 **Chain Cancelled**: \`${chainId}\`\n\n` +
+            'Further progression is blocked. Session state and artifacts are retained — remove ' +
+            'them with `system_control(action:"session", operation:"clear")`.',
+        },
+      ],
+      isError: false,
+    };
+  }
+
+  /**
+   * Request-scoped workspace identity, or `undefined` when the request carries none.
+   *
+   * `undefined` rather than a substituted default, mirroring the `system_control` handler this
+   * verb moved from: `getSessionForMutation` SKIPS the scope check when it receives `undefined`
+   * and enforces it when it receives a value. Falling back to the process workspace scope here
+   * looks more careful and is strictly worse — a session created without a `continuityScopeId`
+   * then compares unequal to the substituted one and every cancel returns "not applied". That is
+   * exactly what happened before this comment existed, and only a live drive showed it: the unit
+   * tests pass a mock store whose `cancelChain` resolves `true` regardless of scope.
+   */
+  private resolveRequestScope(sdkExtra: unknown): StateStoreOptions | undefined {
+    if (sdkExtra === null || typeof sdkExtra !== 'object') {
+      return undefined;
+    }
+    const identity = resolveRequestIdentity(sdkExtra as Record<string, unknown>);
+    const scopeId = resolveContinuityScopeId(identity);
+    return scopeId !== 'default' ? { continuityScopeId: scopeId } : undefined;
   }
 
   private async routeToTool(
@@ -680,8 +794,14 @@ export class PromptExecutor {
       this.convertedPrompts,
       this.gateGuidanceRenderer,
       this.resolveFrameworkContextForPrompt.bind(this),
-      this.referenceResolver,
-      this.scriptReferenceResolver
+      {
+        referenceResolver: this.referenceResolver,
+        scriptReferenceResolver: this.scriptReferenceResolver,
+        // Phase-guard declared headers, read through per call so framework hot-reload keeps
+        // working. `frameworkManager` satisfies `FrameworkGuideProvider` structurally.
+        declaredSectionsProvider: (frameworkId: string) =>
+          resolveDeclaredSections(() => this.frameworkManager, frameworkId),
+      }
     );
   }
 

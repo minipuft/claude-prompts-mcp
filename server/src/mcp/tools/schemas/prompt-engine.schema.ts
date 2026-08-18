@@ -193,6 +193,8 @@ const PARAM_DEFAULTS = {
     "Start a new execution instead of resuming. Cannot be combined with 'chain_id'. Redundant with a plain 'command'; it matters when the command text itself carries a chain id.",
   chain_id:
     'Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.',
+  cancel:
+    "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; nothing else is read. Distinct from 'force_restart': cancel ENDS this run and starts nothing, while force_restart abandons it and immediately begins a new one. The session's state and artifacts survive a cancel — remove them with system_control(action:\"session\", operation:\"clear\").",
   gate_verdict:
     'Gate review result when resuming. PREFERRED (structured, cannot be malformed): {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}]}. Also accepts the legacy string "GATE_REVIEW: PASS - rationale". Rationales are single-line. Keep user_response for actual step output.',
   gate_action:
@@ -238,6 +240,12 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .regex(CHAIN_ID_PATTERN, CHAIN_ID_FORMAT_MESSAGE)
       .optional()
       .describe(resolve('chain_id', PARAM_DEFAULTS.chain_id)),
+
+    // Lives here rather than on `system_control` because of which id the caller holds: a
+    // `chain_id` is held BECAUSE you are running the chain, and stopping the run you are in is
+    // part of running it. `system_control session` keeps list/inspect/clear, which are operator
+    // work across runs you are not in and are keyed on `session_id` from a listing.
+    cancel: z.boolean().optional().describe(resolve('cancel', PARAM_DEFAULTS.cancel)),
 
     user_response: z
       .string()

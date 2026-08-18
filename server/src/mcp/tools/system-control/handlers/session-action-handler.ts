@@ -23,10 +23,19 @@ export class SessionActionHandler extends ActionHandler {
       case 'inspect':
         return await this.inspectSession(args);
       case 'cancel':
-        return await this.cancelSession(args);
+        // Relocated to `prompt_engine(chain_id, cancel: true)`. Refused with the replacement
+        // rather than falling into the generic "unknown operation" branch, because a caller
+        // reaching for it here is not confused about the vocabulary — they are using the
+        // interface that used to have it.
+        throw new Error(
+          '`session cancel` moved to prompt_engine: call prompt_engine(chain_id: "<id>", cancel: true). ' +
+            'It is keyed on `chain_id` because a chain id is held BECAUSE you are running the ' +
+            'chain, and stopping that run is part of running it. `list`, `inspect` and `clear` ' +
+            'stay here — they are keyed on a session_id read from a listing.'
+        );
       default:
         throw new Error(
-          `Unknown session operation: ${operation}. Valid operations: list, clear, inspect, cancel`
+          `Unknown session operation: ${operation}. Valid operations: list, clear, inspect`
         );
     }
   }
@@ -78,19 +87,49 @@ export class SessionActionHandler extends ActionHandler {
       throw new Error('session_id parameter is required for clear operation');
     }
 
-    // Try clearing as a session ID first, then as a chain ID
-    const wasSessionCleared = await manager.clearSession(sessionId);
-    if (wasSessionCleared) {
+    // Resolve which namespace the id belongs to BEFORE deleting anything.
+    //
+    // This used to be a try-then-fall-through: clear as a session id, and if that returned false,
+    // clear every session for it as a chain id. A session id that was merely stale, mistyped, or
+    // out of scope therefore escalated silently from "one session" to "every run of a chain" —
+    // `clearSessionsForChain` additionally strips the run number and walks `getRunHistory`, so the
+    // blast radius was every run the chain had ever produced. The handler reported success either
+    // way, so nothing distinguished a precise clear from a chain-wide sweep after the fact.
+    const sessions = manager.listActiveSessions(undefined, this.requestScope);
+    const matchesSession = sessions.some((s) => s.sessionId === sessionId);
+    const matchingChain = sessions.filter((s) => s.chainId === sessionId);
+
+    if (matchesSession && matchingChain.length > 0) {
+      return this.createMinimalSystemResponse(
+        `⚠️ **Ambiguous ID**: \`${sessionId}\` names both a session and a chain.\n\n` +
+          `Refusing rather than guessing which one you meant. Use \`operation: "list"\` to find ` +
+          `the specific session id.`,
+        'session_clear'
+      );
+    }
+
+    if (matchesSession) {
+      await manager.clearSession(sessionId, this.requestScope);
       return this.createMinimalSystemResponse(
         `✅ **Session Cleared**: \`${sessionId}\`\n\nAll state and artifacts for this session have been removed.`,
         'session_clear'
       );
     }
 
-    // Try clearing all sessions for this chain
-    await manager.clearSessionsForChain(sessionId);
+    if (matchingChain.length > 0) {
+      await manager.clearSessionsForChain(sessionId, this.requestScope);
+      return this.createMinimalSystemResponse(
+        `✅ **Chain Sessions Cleared**: \`${sessionId}\`\n\n` +
+          `${matchingChain.length} session(s) and their history have been removed.`,
+        'session_clear'
+      );
+    }
+
+    // Neither namespace matched. Previously this branch was unreachable — the chain-wide clear
+    // absorbed it and reported success for an id that existed nowhere.
     return this.createMinimalSystemResponse(
-      `✅ **Chain Sessions Cleared**: \`${sessionId}\`\n\nAll sessions and history associated with chain ID \`${sessionId}\` have been removed.`,
+      `⚠️ **Nothing Cleared**: \`${sessionId}\` matches no active session or chain in this ` +
+        `workspace.\n\nUse \`operation: "list"\` to see what is active. Nothing was removed.`,
       'session_clear'
     );
   }
@@ -144,30 +183,5 @@ export class SessionActionHandler extends ActionHandler {
     }
 
     return this.createMinimalSystemResponse(response, 'session_inspect');
-  }
-
-  private async cancelSession(args: { session_id?: string }): Promise<ToolResponse> {
-    const manager = this.context.chainSessionStore;
-    if (manager === undefined) {
-      throw new Error('Chain session manager not initialized');
-    }
-
-    const sessionId = args.session_id;
-    if (sessionId === undefined || sessionId.length === 0) {
-      throw new Error('session_id parameter is required for cancel operation');
-    }
-
-    const cancelled = await manager.cancelChain(sessionId);
-    if (!cancelled) {
-      return this.createMinimalSystemResponse(
-        `⚠️ **Cancel Not Applied**: \`${sessionId}\`\n\nSession is in a terminal state (completed/failed) or does not exist. Use \`operation: "inspect"\` to view current status.`,
-        'session_cancel'
-      );
-    }
-
-    return this.createMinimalSystemResponse(
-      `🛑 **Session Cancelled**: \`${sessionId}\`\n\nThe session has been transitioned to \`cancelled\` runStatus. Subsequent progression is blocked. Use \`operation: "clear"\` to remove session state entirely.`,
-      'session_cancel'
-    );
   }
 }

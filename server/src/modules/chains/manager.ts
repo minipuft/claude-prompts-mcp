@@ -1923,8 +1923,18 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Clear session
    */
-  async clearSession(sessionId: string): Promise<boolean> {
-    const session = this.activeSessions.get(sessionId);
+  /**
+   * Remove one session and its artifacts.
+   *
+   * `scope` is honoured the same way `cancelChain` honours it: a session belonging to another
+   * workspace is invisible and the call reports `false`. Without it this method read
+   * `activeSessions` directly, so `system_control session clear` could destroy a session in a
+   * workspace the caller had no view of — while `cancel`, one method away, enforced the boundary.
+   * Omitting `scope` preserves the previous unscoped behaviour for the internal callers
+   * (`cleanupStaleSessions`, `clearSessionsForChain`) that legitimately sweep every scope.
+   */
+  async clearSession(sessionId: string, scope?: StateStoreOptions): Promise<boolean> {
+    const session = this.getSessionForMutation(sessionId, scope);
     if (!session) {
       return false;
     }

@@ -319,7 +319,7 @@ export interface ChainSessionService {
     sessionId: string,
     outcome: GateReviewOutcomeUpdate
   ): Promise<'cleared' | 'pending'>;
-  clearSession(sessionId: string): Promise<boolean>;
+  clearSession(sessionId: string, scope?: StateStoreOptions): Promise<boolean>;
   clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void>;
   listActiveSessions(limit?: number, scope?: StateStoreOptions): ChainSessionSummary[];
   updateSessionState(
