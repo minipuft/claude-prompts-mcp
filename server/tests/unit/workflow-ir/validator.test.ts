@@ -223,25 +223,12 @@ describe('validateWorkflowIR — structural caps (ENFORCED)', () => {
     expect(reasons(result)).toEqual(['cap-exceeded']);
   });
 
-  it('rejects a declared budget that tries to WIDEN a cap, rather than clamping it', () => {
-    // A clamped run is a run the client did not author. Both the widening attempt and (if the
-    // submission is also oversized) the size breach are reported.
-    const result = validateWorkflowIR(
-      ir({ budget: { maxNodes: DEFAULT_WORKFLOW_CAPS.maxNodes + 10 } }),
-      deps()
-    );
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('unreachable');
-    expect(result.rejections[0]?.detail).toContain('may only narrow');
-  });
-
-  it('rejects a maxInsertions above the P4 adaptive-insertion ceiling', () => {
-    const result = validateWorkflowIR(
-      ir({ budget: { maxInsertions: DEFAULT_WORKFLOW_CAPS.maxInsertions + 1 } }),
-      deps()
-    );
-    expect(reasons(result)).toEqual(['cap-exceeded']);
-  });
+  // A declared budget that tries to WIDEN a cap (maxNodes/maxFanOut/maxInsertions above the
+  // server default) was formerly rejected here too, but that rejection was unreachable from any
+  // real MCP client: `workflowBudgetSchema`'s `.max(DEFAULT_WORKFLOW_CAPS.*)` already rejects the
+  // same submission at the tool-input layer, before this validator ever runs. Deleted with the
+  // branch (MEASURED 2026-08-17) — see `tests/e2e/conformance/workflow-ir.yaml`'s
+  // `workflow-rejects-cap-widening` case for the reachable (Zod-layer) version of this claim.
 });
 
 describe('validateWorkflowIR — declared cost ceilings are RECORDED, never enforced', () => {

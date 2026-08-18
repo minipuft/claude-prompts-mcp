@@ -125,10 +125,13 @@ function collectIdRejections(
 /**
  * Structural caps.
  *
- * Two distinct failures share the `cap-exceeded` reason and the detail distinguishes them:
- * the submission exceeds an effective cap, or the submission's own declared budget tries to
- * WIDEN a server cap. Both are "you asked for more than is allowed", and splitting them into two
- * reasons would make a client branch on a distinction it cannot act on differently.
+ * A declared budget may only narrow a server cap, never widen it — but that constraint is
+ * enforced at the MCP tool boundary (`workflowBudgetSchema`'s `.max(DEFAULT_WORKFLOW_CAPS.*)`),
+ * not here: every real ingress into this validator has already passed that schema, so a
+ * `declaredValue > serverValue` widening attempt can never reach this function (MEASURED
+ * 2026-08-17, `tests/e2e/conformance/workflow-ir.yaml`'s `workflow-rejects-cap-widening` case
+ * asserts the Zod-layer rejection instead). What remains here is the one reachable failure: the
+ * submission itself, measured against the effective (narrowed) cap, exceeds it.
  */
 function collectCapRejections(
   ir: WorkflowIR,
@@ -136,20 +139,6 @@ function collectCapRejections(
   rejections: WorkflowRejection[]
 ): void {
   const declared = ir.budget;
-
-  for (const [key, serverValue] of [
-    ['maxNodes', serverCaps.maxNodes],
-    ['maxFanOut', serverCaps.maxFanOut],
-    ['maxInsertions', serverCaps.maxInsertions],
-  ] as const) {
-    const declaredValue = declared?.[key];
-    if (declaredValue !== undefined && declaredValue > serverValue) {
-      rejections.push({
-        reason: 'cap-exceeded',
-        detail: `budget.${key} of ${declaredValue} exceeds the server cap of ${serverValue}; a declared budget may only narrow a cap, never widen it`,
-      });
-    }
-  }
 
   const effectiveMaxNodes = Math.min(serverCaps.maxNodes, declared?.maxNodes ?? Infinity);
   if (ir.nodes.length > effectiveMaxNodes) {

@@ -137,8 +137,12 @@ Split by enforcement posture, and the split is the contract.
 | `maxInsertions`       | **Enforced** | 3       | Narrows the adaptive-mutation insertion ceiling for the run.      |
 | `declaredCostCeiling` | Recorded     | —       | Recorded on the run. Never enforced, never compared.              |
 
-A declared cap may only **narrow** the server default. Asking for a wider one is rejected as
-`cap-exceeded` rather than silently clamped — a clamped run is a run you did not author.
+A declared cap may only **narrow** the server default. Asking for a wider one is rejected, not
+silently clamped — a clamped run is a run you did not author. The rejection happens at the `workflow`
+parameter's Zod schema (`.max(DEFAULT_WORKFLOW_CAPS.*)`), before the validator ever runs, so it
+surfaces as a schema validation error (e.g. `Too big: expected number to be <=32`) rather than a
+`cap-exceeded` rejection — no real submission can reach the validator with a wider cap to reject
+(MEASURED 2026-08-17).
 
 `declaredCostCeiling` is denominated in tokens the server never observes: the client meters those.
 Enforcing it would mean enforcing against a server-side estimate, which is a number precise enough
@@ -212,7 +216,7 @@ submission is fixed in one pass rather than one error per round trip.
 | `unknown-visibility-item`   | A `visibility` entry is outside the item vocabulary.                             |
 | `edge-endpoint-missing`     | An edge's `from` or `to` names no declared node.                                 |
 | `cycle`                     | Edges form a cycle. The detail names every node in the stuck set.                |
-| `cap-exceeded`              | A structural cap is breached, or a declared budget tries to widen one.           |
+| `cap-exceeded`              | The submission's node count or fan-out breaches the effective cap.               |
 | `gate-target-missing`       | A gate's `target_step_id` names no declared node, or an inline gate id is empty. |
 | `mutually-exclusive-source` | The call carried a workflow **and** a `command` or `chain_id`.                   |
 

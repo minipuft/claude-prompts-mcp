@@ -272,3 +272,16 @@ Also flagged, not in the top 5 by severity but cheap to fix and cited above:
   anywhere in `src/`; (4) chain integrity is a transient, warn-only check at one prompt's own
   write time, with no standing sweep of durable chain resources and no re-check when a referenced
   prompt is later deleted.
+
+## Standing hazards absorbed from the residuals plan (re-homed 2026-08-17)
+
+- **P7-F4** — 13 of 17 prompt categories are gitignored: probes over `resources/prompts/` need
+  `rg --no-ignore`, worker briefs must carry the warning, and fixes to gitignored shipped
+  examples (e.g. the P6-F12 `pr_review_chain` repair) exist only in the local workspace and can
+  never be committed. Real fix is a tracking-policy decision (owner's call) — this initiative is
+  the natural place to make it, since settability parity is meaningless for resources git cannot
+  see.
+- **P7-F11** — 4 of 286 shipped templates fail a naive dry render, so any future bulk
+  template-validation gate must be DIFFERENTIAL (new defects block, pre-existing ones are
+  amnestied). Note the shipped `diagnosePromptWrite` design already embodies this: update mode
+  amnesties pre-existing defects, create mode (`before = null`) blocks everything.

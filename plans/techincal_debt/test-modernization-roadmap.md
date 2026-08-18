@@ -1,11 +1,17 @@
 ---
 title: "Test Modernization Roadmap"
 date: 2025-12-13
-status: backlog
+status: reference
 tags: []
 ---
 
 # Test Modernization Roadmap
+
+**Retired to reference 2026-08-17 (owner decision).** The 2025-12 roadmap's structure predates
+the claims-conformance corpus system and its Phase 5 was never built (see §Re-measurement
+2026-08-17, whose two carried findings both shipped via PR #236). A future test-infrastructure
+initiative starts fresh; this document is the record of what was planned and what actually
+replaced it.
 
 > Status: Active | Created: 2025-12-13 | Updated: 2026-02-24
 
@@ -505,3 +511,32 @@ tests/
 ---
 
 _Created: 2025-12-13_
+
+## Re-measurement 2026-08-17 (staleness + carried findings)
+
+This roadmap predates the claims-conformance corpus system (`tests/e2e/conformance/*.yaml`,
+runner `tests/e2e/claims-conformance.test.ts`) and its Phase 5 E2E structure
+(`tests/e2e/stdio|sse|compliance/`) was never built — SSE itself was removed in the SDK v2
+upgrade. Re-scope Phase 5 against the conformance system before executing anything from it.
+
+Carried findings (from the workflow-ir conformance work, PR pending):
+
+- **Conformance coverage gate is frameworks-only** — `validate:conformance-coverage` asserts
+  every bundled framework id appears in the corpus, but has no vocabulary for TOOL PARAMETERS:
+  the `workflow` parameter shipped with zero conformance rows and no gate noticed. Candidate
+  follow-up gate: parameter/claim coverage over `tooling/contracts/*.json` advertised surface.
+  ✓ FLIPPED 2026-08-17 — validate-conformance-coverage.js extended with per-tool parameter
+  coverage (args-key structural match), 55 declared exceptions each with closedBy, shared
+  exception-hygiene audit (stale exceptions become findings), 11 self-test cases, +2 live
+  corpus cases in tool-surface.yaml. Measured: skills_sync has ZERO conformance corpus (all
+  12 params excepted — closedBy names the corpus file to create). e2e re-verified live
+  (145 passed); shipped via PR #236.
+- **Workflow-IR validator dead branch** — the validator's own cap-widening check for
+  `maxNodes`/`maxFanOut`/`maxInsertions` is structurally unreachable from any real MCP client:
+  the Zod schema (`workflowBudgetSchema` `.max(32)`) rejects widening first with a generic
+  message. Delete-on-next-touch class (same shape as P7-F9).
+  ✓ FLIPPED 2026-08-17 — branch deleted (validator.ts collectCapRejections widening loop + 2
+  widening-only unit tests); unreachability confirmed by full ingress enumeration (sole path
+  flows through the .strict() Zod boundary with identical cap values); `cap-exceeded` reason
+  retained (live producers remain); docs + contract corrected in lockstep. Shipped via
+  PR #236.

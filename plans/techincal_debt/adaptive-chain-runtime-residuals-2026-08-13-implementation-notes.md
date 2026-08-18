@@ -1,7 +1,7 @@
 ---
 title: "Adaptive Chain Runtime residuals — implementation notes"
 date: 2026-08-13
-status: active
+status: reference
 tags: []
 ---
 
@@ -163,7 +163,23 @@ stays main-thread. No pushes without owner approval.
   verify:mcp 12/12. Final: lint:ratchet OK, validate:arch OK, targeted 198 unit + 19
   integration green.
 - Main thread: prettier'd the sweep's own doc/plan files → validate:format green.
-  Final receipt `validate:all` run in progress.
+  Final receipt: `validate:all` 39/39.
+
+## Shipped
+
+- **PR #231 MERGED 2026-08-17T04:46:45Z** (merge commit; 9 scoped commits + merge-from-main +
+  2 CI-fix commits preserved on main). CI green across Build/CLI/Test Suite/Node 22+24/Lint.
+  Two CI-only failures fixed post-push: (a) `cli/tests/integration/new-commands.test.ts`
+  encoded old rollback numbering — the standalone cli/ workspace has its OWN test surface
+  that server-side test sweeps do not cover (lesson: enumerate every workspace consuming a
+  changed module); (b) MCP tool schema snapshot (`server/tests/snapshots/mcp-input-schemas.json`
+  via capture-tool-schemas.mjs) needed regeneration for argument_updates — diff verified
+  argument_updates-only. Local checkout intentionally left on the merged feature branch:
+  returning to main would collide with a live concurrent session's uncommitted WIP.
+- Hook wart discovered during commits: pre-commit contract regeneration reads the WORKING
+  TREE contract files and re-stages all of `_generated/` whenever the generator or any
+  contract JSON is staged — defeats file-scoped commits; commit 4 needed git plumbing.
+  Candidate hook fix (not taken).
 
 ## Deviations
 
