@@ -501,3 +501,25 @@ have no test surface unless someone asserts on them, and asserting on them freez
 one such assertion had to be rewritten here because it pinned the dishonest text. **Ordering the
 audit after the implementation, against shipped behaviour rather than intentions (R-5), is what
 made it find anything.** Run before, it would have audited what the code was supposed to say.
+
+## Seventh variant — the observation cancelled by its own documentation
+
+I pushed `b9c1b6e9` (code) and `0fd0f21c` (docs) as two push events minutes apart. The
+`b9c1b6e9` run classified `full` and would have executed the Test matrix. The docs push arrived
+while it was in flight, **concurrency-cancelled it**, and the surviving `0fd0f21c` run classified
+`docs` — matrix skipped by design, green on the docs route.
+
+Net effect: required contexts green on `main`, and the integration tests had still never run on CI
+against the G-wave. Route selection compounded by concurrency cancellation. The run that would
+have observed the fix was cancelled by the commit that documented the fix.
+
+From the branch page the two greens are indistinguishable. Nothing failed, nothing was
+misconfigured, and every gate did exactly its job.
+
+**Operational rule, both directions**: when a code push and a docs push are minutes apart, push
+them as ONE event, or push docs FIRST. A trailing docs push cancels the in-flight full run and
+replaces it with a docs-route green that looks identical.
+
+This is the seventh member of the family this arc catalogued, and the second where nothing is
+broken anywhere — the signal is honest, the routing is correct, and the thing you care about was
+still never observed.
