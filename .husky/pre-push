@@ -61,7 +61,7 @@ if [ "$VALIDATION_SCOPE" = "hooks" ]; then
 fi
 
 echo ""
-echo "1/8 Type checking..."
+echo "1/9 Type checking..."
 npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
 # The check above compiles the WORKING TREE, which is a state CI never sees — CI checks out the
@@ -74,15 +74,15 @@ npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; e
 npm --prefix "$SERVER_DIR" run typecheck:committed || { echo "❌ Committed state does not typecheck"; exit 1; }
 
 echo ""
-echo "2/8 Linting..."
+echo "2/9 Linting..."
 npm --prefix "$SERVER_DIR" run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }
 
 echo ""
-echo "3/8 Format checking..."
+echo "3/9 Format checking..."
 echo "✅ Changed repo-level files checked above"
 
 echo ""
-echo "4/8 Python hook validation..."
+echo "4/9 Python hook validation..."
 HOOK_CHANGES=$(printf '%s\n' "$PUSHED_FILES" | grep '^hooks/' || true)
 if [ -n "$HOOK_CHANGES" ]; then
   npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
@@ -91,20 +91,33 @@ else
 fi
 
 echo ""
-echo "5/8 Running tests..."
+echo "5/9 Running tests..."
 npm --prefix "$SERVER_DIR" run test:ci || { echo "❌ Tests failed"; exit 1; }
 
 echo ""
-echo "6/8 Dependency validation..."
+echo "6/9 Dependency validation..."
 npm --prefix "$SERVER_DIR" run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
 
 echo ""
-echo "7/8 Version consistency check..."
+echo "7/9 Version consistency check..."
 npm --prefix "$SERVER_DIR" run validate:versions || { echo "❌ Version mismatch across manifests"; exit 1; }
 
 echo ""
-echo "8/8 Build..."
+echo "8/9 Build..."
 npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
+
+# Post-build gates CI runs that this hook did not. Measured 2026-08-18: a merge landed four CI
+# failures in a row that every step above passed — conformance-coverage (new tool parameters vs
+# origin's new gate), no-legacy-sidecars (token in a comment), and the tool-schema snapshot
+# (published surface widened without a refresh). All three are sub-second here (tool-schemas
+# spawns the dist just built). ACCEPTED RESIDUAL (as of 2026-08-18 · flips if a mock-drift class
+# failure reaches CI twice more): integration/e2e suites stay CI-only — ~3 min is over this
+# hook's budget; that class (stale test double vs committed contract) remains locally invisible.
+echo ""
+echo "9/9 Post-build schema + semantic gates..."
+npm --prefix "$SERVER_DIR" run validate:tool-schemas || { echo "❌ MCP tool schema snapshot drifted — refresh via scripts/capture-tool-schemas.mjs"; exit 1; }
+npm --prefix "$SERVER_DIR" run validate:conformance-coverage || { echo "❌ Conformance coverage failed"; exit 1; }
+npm --prefix "$SERVER_DIR" run validate:no-legacy-sidecars || { echo "❌ Legacy sidecar reference found"; exit 1; }
 
 echo ""
 echo "✅ Full pre-push validation passed!"
