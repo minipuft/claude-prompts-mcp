@@ -43,13 +43,39 @@ export class GateLifecycleProcessor {
       return this.error(`Failed to create gate: ${result.error}`);
     }
 
+    // Register the gate this method just wrote, the same way `handleUpdate` does after its write.
+    //
+    // `onRefresh` below does NOT do this. It resolves to the application's full server refresh,
+    // which reloads PROMPT data and never touches the gate registry — so before this line, a gate
+    // created here was written correctly and durably to disk and remained unknown to `inspect`,
+    // `update`, `history`, `reload` and `delete` until the next server restart, while this method
+    // returned success and claimed the registry had reloaded. An operator had no signal at all:
+    // the two things they would naturally suspect, a wrong id and a failed write, were both wrong
+    // and the file on disk proved the write had worked.
+    const registered = await this.ctx.gateManager.reload(id);
+
     await this.ctx.onRefresh?.();
     this.trackChange('added', id);
 
+    const filesWritten = `📁 Files created:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}`;
+
+    // Not an error: the files ARE written, so reporting failure would be its own lie. But the
+    // caller has to learn that the gate is not usable yet, and from what to do next rather than
+    // from the next action failing.
+    if (!registered) {
+      return this.success(
+        `⚠️ Gate '${id}' was written to disk but is NOT active in this server process\n\n` +
+          `${filesWritten}\n\n` +
+          `The files are correct and will load on the next start. The in-memory gate registry ` +
+          `did not pick them up, so this gate will not resolve until it does.\n` +
+          `Recover with \`action: "reload"\`, or restart the server.`
+      );
+    }
+
     return this.success(
       `✅ Gate '${id}' created successfully\n\n` +
-        `📁 Files created:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
-        `🔄 Gate registry reloaded`
+        `${filesWritten}\n\n` +
+        `🔄 Registered in the gate registry — ready to use now`
     );
   }
 
@@ -161,10 +187,12 @@ export class GateLifecycleProcessor {
 
     if (!id) return this.error('Gate ID is required for delete action');
 
-    if (!this.ctx.gateManager.has(id)) {
-      return this.error(`Gate '${id}' not found`);
-    }
-
+    // Deliberately NOT gated on registry membership. Delete removes a directory, so the directory
+    // is the authority — and the check below is exactly that. A registry check here refused to
+    // delete a gate that exists on disk but was never registered, which is precisely what a create
+    // used to produce: the tool could not clean up what it had just made, and the directory had to
+    // be removed by hand. The unregister call further down already tolerates a gate the registry
+    // does not know, and logs when that happens.
     const gatesDir = this.ctx.configManager.getGatesDirectory();
     const gateDir = path.join(gatesDir, id);
 
@@ -180,7 +208,8 @@ export class GateLifecycleProcessor {
         `🔍 **Dry run** — deletion of gate '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${gateDir}\n` +
-          `📜 Would purge this gate's rows from \`version_history\`\n` +
+          `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
+          `since rollback resolves the gate first\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted gate.\n\n` +
           `💡 Re-send with \`confirm: true\` and without \`dry_run\` to apply it.`
       );
@@ -202,10 +231,16 @@ export class GateLifecycleProcessor {
     await this.ctx.onRefresh?.();
     this.trackChange('removed', id);
 
+    // Reports which of the two removals actually happened rather than asserting both. A gate that
+    // was on disk but never registered is now deletable (see the guard note above), and saying it
+    // was "unregistered from registry" in that case would repeat the create-side false claim this
+    // change exists to remove.
     return this.success(
       `✅ Gate '${id}' deleted successfully\n\n` +
         `📁 Directory removed: ${gateDir}\n\n` +
-        `🔄 Gate unregistered from registry`
+        (unregistered
+          ? `🔄 Gate unregistered from registry`
+          : `ℹ️ It was not in the gate registry, so only the files were removed`)
     );
   }
 
@@ -214,13 +249,20 @@ export class GateLifecycleProcessor {
 
     if (!id) return this.error('Gate ID is required for reload action');
 
-    if (!this.ctx.gateManager.has(id)) {
-      return this.error(`Gate '${id}' not found`);
-    }
-
+    // Deliberately NOT gated on registry membership either. `reload` is the recovery verb: the
+    // registry's own `reloadGuide` reads the definition from disk and registers it whether or not
+    // the id was already known. Guarding it with `has(id)` refused the one operation able to
+    // repair an unregistered gate — a check for the very state it exists to fix — which is why a
+    // freshly created gate could not be recovered without a restart.
+    //
+    // Nothing is lost by dropping it: `reloadGuide` returns false when no definition loads from
+    // disk, and that becomes the error below.
     const reloadSuccess = await this.ctx.gateManager.reload(id);
     if (!reloadSuccess) {
-      return this.error(`Failed to reload gate '${id}'`);
+      return this.error(
+        `Failed to reload gate '${id}' — no gate definition could be loaded from disk. ` +
+          `Check that ${path.join(this.ctx.configManager.getGatesDirectory(), id, 'gate.yaml')} exists.`
+      );
     }
 
     const reasonText = reason ? ` (reason: ${reason})` : '';

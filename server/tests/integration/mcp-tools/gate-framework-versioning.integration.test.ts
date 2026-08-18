@@ -916,3 +916,193 @@ describe('Prompt rollback refusal writes no version rows', () => {
     expect(countPromptVersionRows()).toBe(before);
   });
 });
+
+/**
+ * F17 — a created gate must be usable by the process that created it.
+ *
+ * WHY THIS NEEDS ITS OWN HARNESS. The suites above wire `onRefresh` to
+ * `registry.reload(GATE_ID)`, and their `run()` helper reloads after every action. Production does
+ * neither: the gate handler's `onRefresh` resolves to the application's full server refresh, which
+ * reloads PROMPT data and never touches the gate registry. That makes the doubles above strictly
+ * more capable than the real wiring, and it is why F17 lived through a green suite — every test
+ * that could have caught it was handed a registry that refreshed itself.
+ *
+ * So this block models the real thing: `onRefresh` does not touch the gate registry, and no helper
+ * reloads between calls. What survives here is what survives in the server.
+ */
+describe('gate registry coherence — production-shaped refresh (F17)', () => {
+  const ID = 'coherence-probe';
+
+  let tempDir: string;
+  let gatesDir: string;
+  let dbManager: SqliteEngine;
+  let registry: DriftableGateRegistry;
+  let lifecycle: GateLifecycleProcessor;
+  let mockLogger: MockLogger;
+  let promptRefreshes: number;
+
+  /**
+   * Adds `unregister` to the disk-backed double, which `handleDelete` calls and which no test
+   * above reaches (the only delete case there is `dry_run`, which returns first).
+   */
+  class DriftableGateRegistry {
+    private cache = new Map<string, Record<string, unknown>>();
+
+    constructor(private readonly dir: string) {}
+
+    has(id: string): boolean {
+      return this.cache.has(id);
+    }
+
+    get(id: string): Record<string, unknown> | undefined {
+      return this.cache.get(id);
+    }
+
+    unregister(id: string): boolean {
+      return this.cache.delete(id);
+    }
+
+    /** Mirrors `GateRegistry.reloadGuide`: reads from disk and registers whether or not known. */
+    async reload(id: string): Promise<boolean> {
+      const yamlPath = path.join(this.dir, id, 'gate.yaml');
+      if (!existsSync(yamlPath)) {
+        this.cache.delete(id);
+        return false;
+      }
+      this.cache.set(id, parseYamlOrThrow<Record<string, unknown>>(readFileSync(yamlPath, 'utf8')));
+      return true;
+    }
+  }
+
+  beforeEach(async () => {
+    mockLogger = new MockLogger();
+    promptRefreshes = 0;
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gate-coherence-test-'));
+    gatesDir = path.join(tempDir, 'gates');
+    await fs.mkdir(gatesDir, { recursive: true });
+
+    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    await dbManager.initialize();
+
+    registry = new DriftableGateRegistry(gatesDir);
+
+    const configManager = { getGatesDirectory: () => gatesDir } as unknown as ConfigManager;
+
+    const ctx: GateResourceContext = {
+      logger: mockLogger as unknown as Logger,
+      gateManager: registry as unknown as GateResourceContext['gateManager'],
+      configManager,
+      textDiffService: new ObjectDiffGenerator(),
+      versionHistoryService: new VersionHistoryService({
+        logger: mockLogger as unknown as Logger,
+        configManager: new TestVersioningConfigProvider(),
+        dbManager,
+      }),
+      gateFileService: new GateFileWriter({
+        logger: mockLogger as unknown as Logger,
+        configManager,
+      }),
+      // The point of this harness. Production's refresh reloads prompt-side state and leaves the
+      // gate registry alone; counting calls proves it still runs without being what registers.
+      onRefresh: async () => {
+        promptRefreshes += 1;
+      },
+    };
+
+    lifecycle = new GateLifecycleProcessor(ctx);
+  });
+
+  afterEach(async () => {
+    try {
+      await dbManager.shutdown();
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  async function create() {
+    return lifecycle.handleCreate({
+      action: 'create',
+      id: ID,
+      name: 'Coherence Probe',
+      type: 'validation',
+      description: 'd1',
+      guidance: 'g1 guidance body',
+    } as GateManagerInput);
+  }
+
+  it('registers the gate it just created, so the creating process can use it', async () => {
+    const response = await create();
+
+    expect(response.isError).toBe(false);
+    // The claim under test is registry membership, not the wording — a message saying "reloaded"
+    // is what shipped before, and it was false.
+    expect(registry.has(ID)).toBe(true);
+    expect(existsSync(path.join(gatesDir, ID, 'gate.yaml'))).toBe(true);
+
+    // The prompt-side refresh still runs; it is simply not what makes the gate resolvable.
+    expect(promptRefreshes).toBe(1);
+  });
+
+  it('says the gate is not active instead of claiming a reload, when registration fails', async () => {
+    // Force the failure mode the old message asserted away. An operator who hits this needs to
+    // learn it from the create response, not from the next action returning "not found".
+    jest.spyOn(registry, 'reload').mockResolvedValue(false as never);
+
+    const response = await create();
+    const text = response.content[0]!.text!;
+
+    expect(text).toContain('NOT active');
+    expect(text).toContain('reload');
+    expect(text).not.toContain('Gate registry reloaded');
+    // Still not an error: the files really were written, and saying otherwise is its own lie.
+    expect(response.isError).toBe(false);
+    expect(existsSync(path.join(gatesDir, ID, 'gate.yaml'))).toBe(true);
+  });
+
+  it('deletes a gate that is on disk but absent from the registry', async () => {
+    await create();
+    // Drift: on disk, unknown to the registry. This is the exact state a pre-fix create produced,
+    // and the state in which the tool could not clean up after itself.
+    registry.unregister(ID);
+    expect(registry.has(ID)).toBe(false);
+
+    const response = await lifecycle.handleDelete({
+      action: 'delete',
+      id: ID,
+      confirm: true,
+    } as GateManagerInput);
+
+    expect(response.isError).toBe(false);
+    expect(existsSync(path.join(gatesDir, ID))).toBe(false);
+    // The message reports which removal happened rather than asserting both.
+    expect(response.content[0]!.text).toContain('not in the gate registry');
+  });
+
+  it('reloads a gate that is on disk but absent from the registry', async () => {
+    await create();
+    registry.unregister(ID);
+
+    const response = await lifecycle.handleReload({
+      action: 'reload',
+      id: ID,
+    } as GateManagerInput);
+
+    expect(response.isError).toBe(false);
+    expect(registry.has(ID)).toBe(true);
+  });
+
+  it('still refuses to reload an id with nothing on disk, naming the path it looked at', async () => {
+    // Guards the guard removal: dropping the membership check must not turn a genuine miss into a
+    // silent success. The refusal should point at the registry/disk, not at the caller's id.
+    const response = await lifecycle.handleReload({
+      action: 'reload',
+      id: 'no-such-gate',
+    } as GateManagerInput);
+
+    expect(response.isError).toBe(true);
+    expect(response.content[0]!.text).toContain('no gate definition could be loaded from disk');
+    expect(response.content[0]!.text).toContain('no-such-gate');
+  });
+});

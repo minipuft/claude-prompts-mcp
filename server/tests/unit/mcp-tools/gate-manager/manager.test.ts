@@ -186,7 +186,15 @@ describe('GateToolHandler', () => {
     expect((result.content[0] as { text: string }).text).toContain('deleted successfully');
   });
 
-  test('delete fails cleanly when gate is missing from registry', async () => {
+  test('delete fails cleanly when there is nothing on disk to delete', async () => {
+    // This test previously asserted that delete refused on REGISTRY membership
+    // (`Gate 'missing-gate' not found`). That guard is gone: delete removes a directory, so the
+    // directory is its authority, and a registry check refused to delete a gate that existed on
+    // disk but was never registered — exactly what a pre-F17-fix create produced, leaving orphans
+    // that had to be removed by hand.
+    //
+    // The behaviour change is bounded and is the point: an id absent from BOTH still fails, and
+    // now says which of the two it actually checked.
     gateManager.has.mockReturnValue(false);
 
     const result = await manager.handleAction(
@@ -199,7 +207,31 @@ describe('GateToolHandler', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toContain("Gate 'missing-gate' not found");
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('Gate directory not found');
+    expect(text).toContain('missing-gate');
+  });
+
+  test('delete removes a gate that is on disk but was never registered', async () => {
+    // The regression this whole change exists to prevent. `has` is false while the directory is
+    // real; before the guard moved, this returned "not found" and the files stayed forever.
+    const gateDir = join(gatesDir, 'orphaned-gate');
+    mkdirSync(gateDir, { recursive: true });
+    writeFileSync(
+      join(gateDir, 'gate.yaml'),
+      'id: orphaned-gate\nname: Orphan\ntype: validation\n'
+    );
+    gateManager.has.mockReturnValue(false);
+    gateManager.unregister.mockReturnValue(false);
+
+    const result = await manager.handleAction(
+      { action: 'delete', id: 'orphaned-gate', confirm: true },
+      {}
+    );
+
+    expect(result.isError).toBe(false);
+    expect(existsSync(gateDir)).toBe(false);
+    expect((result.content[0] as { text: string }).text).toContain('not in the gate registry');
   });
 
   test('delete no longer enforces confirmation here — the router owns it', async () => {
