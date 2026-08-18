@@ -46,6 +46,32 @@ else
 fi
 
 if [ "$VALIDATION_SCOPE" = "docs" ]; then
+  # Plan hygiene runs HERE, not only in `validate:all`. A plan-only change classifies as `docs`
+  # (`scripts/classify-validation-scope.js`), and the docs route skips the suite entirely — so
+  # registering this check only in the suite left it dead on the one kind of push it exists to
+  # police. Measured 2026-08-18: an unstamped `☐` reached CI and was caught only because that
+  # push happened to carry code too, which classified `full`. Same reasoning, and the same fix,
+  # as `validate-contributing.js` on the CI docs route.
+  #
+  # It imports only `node:` builtins plus `scripts/lib/exception-hygiene.js`, which imports
+  # nothing, so it runs with no `node_modules` — which is what lets CI run it on this route too.
+  # `plans:retire:check` is deliberately NOT here: `retire-done-plans` is a binary from
+  # `@minipuft/repository-standards-validation`, so CI could not match it without `npm ci`, and a
+  # local step CI does not run breaks the subset contract.
+  echo ""
+  echo "Plan row tracking (advisory)..."
+  # ADVISORY here, BLOCKING in CI. Deliberate, and the same ruling `lint:ratchet` already
+  # carries for pre-commit: this reads the WORKING TREE, so in a shared worktree it reports
+  # another session's rows — a `✓` naming a file they have on disk but have not committed.
+  # CI cannot see an untracked file at all, so blocking locally would fail your push for
+  # someone else's in-flight work on a condition CI will never flag. Measured 2026-08-18: the
+  # tree was red on a third session's row while CI was green.
+  #
+  # You still get the signal when you can act on it, and CI stays authoritative.
+  node server/scripts/validate-plan-row-tracking.js || {
+    echo "⚠️  Plan row tracking reported findings (advisory locally — CI blocks on these)."
+    echo "    Rows in files YOU touched are yours to fix before this reaches CI."
+  }
   echo ""
   echo "✅ Documentation-only pre-push validation passed."
   exit 0

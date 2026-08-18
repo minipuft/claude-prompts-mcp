@@ -172,6 +172,15 @@ jobs:
         working-directory: .
         run: node server/scripts/validate-contributing.js
 
+      # Same reasoning as the CONTRIBUTING check above: a plan-only change classifies as `docs`,
+      # the docs route skips `validate:all`, and registering plan-row tracking only in the suite
+      # left it dead on plan pushes. It imports only node: builtins, so it needs no node_modules
+      # on this route. `.husky/pre-push` runs the identical command, keeping local a subset.
+      - name: Validate plan row tracking (docs route)
+        if: needs.classify.outputs.scope == 'docs'
+        working-directory: .
+        run: node server/scripts/validate-plan-row-tracking.js
+
       - name: Confirm lightweight validation
         if: needs.classify.outputs.scope != 'full'
         working-directory: .
