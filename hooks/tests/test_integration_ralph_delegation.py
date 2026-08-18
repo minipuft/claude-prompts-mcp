@@ -1,15 +1,14 @@
 """
-Integration tests for Ralph delegation re-entry loop and concurrent sessions.
+Integration tests for Ralph delegation thresholds and concurrent sessions.
 
-Tests the cross-hook coordination between:
+Tests the coordination between:
 - ralph-stop.py (Stop hook): verification, delegation threshold, task file creation
-- subagent-gate-enforce.py (SubagentStop hook): verdict checking, delegation clearing
 - session_state.py: delegation state per session
 - verify_active_store.py: single-slot verify state
 - session_tracker.py: per-session iteration history
 
 Scenarios:
-1. Delegation re-entry: fail → delegate → sub-agent PASS → verify still fails → delegate again
+1. Delegation trigger: in-context failures below threshold, isolation spawn past it
 2. Concurrent session isolation: two sessions don't interfere with each other
 3. Verify-state single-slot: only one active verification at a time
 """
@@ -34,14 +33,6 @@ sys.path.insert(0, str(HOOKS_DIR / "lib"))
 _ralph_stop_spec = importlib.util.spec_from_file_location("ralph_stop", HOOKS_DIR / "ralph-stop.py")
 ralph_stop = importlib.util.module_from_spec(_ralph_stop_spec)
 _ralph_stop_spec.loader.exec_module(ralph_stop)
-
-# Import subagent-gate-enforce.py (hyphenated filename)
-_gate_enforce_spec = importlib.util.spec_from_file_location(
-    "subagent_gate_enforce", HOOKS_DIR / "subagent-gate-enforce.py"
-)
-gate_enforce = importlib.util.module_from_spec(_gate_enforce_spec)
-_gate_enforce_spec.loader.exec_module(gate_enforce)
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,23 +81,6 @@ def run_ralph_stop(
     return exit_code, parsed, mock_save
 
 
-def run_subagent_gate_enforce(hook_input: dict) -> tuple[int, dict | None]:
-    """Simulate a subagent-gate-enforce.py invocation.
-
-    Returns (exit_code, parsed_json_output).
-    """
-    captured = io.StringIO()
-
-    with patch("sys.stdin", io.StringIO(json.dumps(hook_input))), redirect_stdout(captured):
-        with pytest.raises(SystemExit) as exc:
-            gate_enforce.main()
-
-    output = captured.getvalue().strip()
-    exit_code = exc.value.code
-    parsed = json.loads(output) if output else None
-    return exit_code, parsed
-
-
 def make_verify_state(
     command="false", iteration=0, max_iterations=10, timeout_ms=30000, session_id=None, delegation=None
 ):
@@ -126,23 +100,12 @@ def make_verify_state(
     }
 
 
-def build_transcript(prompt_text: str, assistant_text: str, path: Path) -> str:
-    """Write a minimal JSONL transcript and return the path string."""
-    with open(path, "w") as f:
-        f.write(json.dumps({"type": "human", "content": prompt_text}) + "\n")
-        f.write(json.dumps({"type": "assistant", "content": assistant_text}) + "\n")
-    return str(path)
+# ── Test: Delegation Threshold ───────────────────────────────────────────
 
 
-# ── Test: Delegation Re-Entry Loop ───────────────────────────────────────────
-
-
-class TestDelegationReEntryLoop:
-    """Test the full cycle: fail in-context → delegate → sub-agent PASS → fail again → re-delegate.
-
-    This validates the coordination between ralph-stop.py and subagent-gate-enforce.py
-    via session_state.py (hooks-state.db).
-    """
+class TestDelegationThreshold:
+    """Test ralph-stop.py's in-context threshold: failures below it stay in-context,
+    failures past it trigger an isolated (delegated) iteration."""
 
     def test_in_context_failures_block_without_delegation(self):
         """Iterations 1-3 (within threshold) produce in-context error feedback, not delegation."""
@@ -208,263 +171,6 @@ class TestDelegationReEntryLoop:
         assert output["decision"] == "block"
         assert "Isolated Execution FAILED" in output["reason"]
         mock_spawn.assert_called_once()
-
-    def test_subagent_pass_clears_delegation_state(self, tmp_path, patch_workspace):
-        """After sub-agent emits GATE_REVIEW: PASS, delegation state is cleared."""
-        # Set up delegation state in session_state
-        from session_state import load_session_state, save_session_state
-
-        session_id = "ralph-reentry-test"
-        save_session_state(
-            session_id,
-            {
-                "chain_id": "",
-                "current_step": 0,
-                "total_steps": 0,
-                "pending_gate": None,
-                "gate_criteria": [],
-                "last_prompt_id": "",
-                "pending_shell_verify": None,
-                "shell_verify_attempts": 0,
-                "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
-                "delegation_model_hint": None,
-            },
-        )
-
-        # Verify delegation is set
-        state = load_session_state(session_id)
-        assert state["pending_delegation"] is True
-
-        # Build transcript where sub-agent had quality gates and emitted PASS
-        transcript_path = build_transcript(
-            prompt_text="### Quality Gates\n- All tests must pass\n\n## Instructions\nFix the bug.",
-            assistant_text="Fixed the auth module.\n\nGATE_REVIEW: PASS \u2014 All tests passing.",
-            path=tmp_path / "transcript.jsonl",
-        )
-
-        # Run subagent-gate-enforce — should PASS and clear delegation
-        exit_code, output = run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": transcript_path,
-                "session_id": session_id,
-            }
-        )
-
-        assert exit_code == 0
-        assert output is None  # PASS = no output (silent allow)
-
-        # Verify delegation state was cleared
-        state = load_session_state(session_id)
-        assert state["pending_delegation"] is False
-
-    def test_full_reentry_cycle(self, tmp_path, patch_workspace):
-        """Full cycle: in-context fails → delegate → PASS → verify still fails → delegate again.
-
-        This is the complete delegation re-entry loop test.
-        """
-        from session_state import (
-            load_session_state,
-            save_session_state,
-        )
-
-        session_id = "ralph-full-cycle"
-        fail_result = {
-            "passed": False,
-            "exitCode": 1,
-            "stdout": "",
-            "stderr": "FAIL: auth module broken",
-            "timedOut": False,
-        }
-        isolation = {"enabled": True, "inContextThreshold": 2, "timeoutSeconds": 300}
-
-        # ── Phase 1: In-context failures (iterations 1-2) ────────────────────
-        for iteration in range(2):
-            vs = make_verify_state(command="npm test", iteration=iteration, max_iterations=10)
-            _, output, _ = run_ralph_stop(
-                {},
-                verify_state=vs,
-                run_verification_result=fail_result,
-                isolation_config=isolation,
-            )
-            assert output["decision"] == "block"
-            assert "Shell Verification FAILED" in output["reason"], (
-                f"Iteration {iteration}: expected in-context feedback"
-            )
-
-        # ── Phase 2: Isolation triggered (iteration 3 > threshold 2) ─────
-        vs = make_verify_state(
-            command="npm test",
-            iteration=3,
-            max_iterations=10,
-            session_id=session_id,
-        )
-        with patch.object(
-            ralph_stop,
-            "spawn_isolated_iteration",
-            return_value={
-                "passed": False,
-                "output": "Spawned instance could not fix the issue.",
-                "stats": None,
-            },
-        ):
-            _, output, _ = run_ralph_stop(
-                {},
-                verify_state=vs,
-                run_verification_result=fail_result,
-                isolation_config=isolation,
-            )
-        assert output["decision"] == "block"
-        assert "Isolated Execution FAILED" in output["reason"]
-
-        # Simulate: delegation state is set (ralph-stop sets this during spawn_isolated_iteration, mocked above)
-        save_session_state(
-            session_id,
-            {
-                "chain_id": "",
-                "current_step": 0,
-                "total_steps": 0,
-                "pending_gate": None,
-                "gate_criteria": [],
-                "last_prompt_id": "",
-                "pending_shell_verify": "npm test",
-                "shell_verify_attempts": 3,
-                "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
-                "delegation_model_hint": None,
-            },
-        )
-
-        # ── Phase 3: Sub-agent completes with PASS ───────────────────────────
-        transcript_path = build_transcript(
-            prompt_text=(
-                "### Quality Gates\n"
-                "- All tests must pass\n\n"
-                "## Ralph Session Protocol\n"
-                "run_memory_file: run-memory.md\n"
-            ),
-            assistant_text=(
-                "I fixed the auth module by correcting the import.\n\n"
-                "MEMORY_UPDATE: Fixed auth import in session tracker\n\n"
-                "GATE_REVIEW: PASS \u2014 All tests now passing"
-            ),
-            path=tmp_path / "cycle1_transcript.jsonl",
-        )
-
-        exit_code, output = run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": str(transcript_path),
-                "session_id": session_id,
-            }
-        )
-        assert exit_code == 0
-        assert output is None  # PASS = silent allow
-
-        # Verify delegation cleared
-        state = load_session_state(session_id)
-        assert state["pending_delegation"] is False
-
-        # ── Phase 4: Verification still fails → back to in-context ───────────
-        # Reset iteration counter (server would set this based on its own state)
-        vs = make_verify_state(command="npm test", iteration=3, max_iterations=10)
-        _, output, _ = run_ralph_stop(
-            {},
-            verify_state=vs,
-            run_verification_result=fail_result,
-            isolation_config=isolation,
-        )
-        # iteration=3 → +1=4, threshold=2, so 4>2 → DELEGATION again
-        # This proves re-entry: after a successful sub-agent, if verify still fails,
-        # the system delegates again.
-        assert output["decision"] == "block"
-
-    def test_subagent_fail_keeps_delegation_active(self, tmp_path, patch_workspace):
-        """When sub-agent emits GATE_REVIEW: FAIL, delegation state is NOT cleared (blocked)."""
-        from session_state import load_session_state, save_session_state
-
-        session_id = "ralph-fail-test"
-        save_session_state(
-            session_id,
-            {
-                "chain_id": "",
-                "current_step": 0,
-                "total_steps": 0,
-                "pending_gate": None,
-                "gate_criteria": [],
-                "last_prompt_id": "",
-                "pending_shell_verify": None,
-                "shell_verify_attempts": 0,
-                "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
-                "delegation_model_hint": None,
-            },
-        )
-
-        transcript_path = build_transcript(
-            prompt_text="### Quality Gates\n- All tests must pass",
-            assistant_text="Attempted fix but tests still fail.\n\nGATE_REVIEW: FAIL \u2014 2 tests still broken",
-            path=tmp_path / "fail_transcript.jsonl",
-        )
-
-        exit_code, output = run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": str(transcript_path),
-                "session_id": session_id,
-            }
-        )
-
-        assert exit_code == 0
-        assert output is not None
-        assert output["decision"] == "block"
-        assert "Gate Review Failed" in output["reason"]
-
-        # Delegation state should STILL be active (FAIL doesn't clear it)
-        state = load_session_state(session_id)
-        assert state["pending_delegation"] is True
-
-    def test_subagent_no_verdict_keeps_delegation_active(self, tmp_path, patch_workspace):
-        """When sub-agent forgets to emit a verdict, delegation state is NOT cleared."""
-        from session_state import load_session_state, save_session_state
-
-        session_id = "ralph-no-verdict"
-        save_session_state(
-            session_id,
-            {
-                "chain_id": "",
-                "current_step": 0,
-                "total_steps": 0,
-                "pending_gate": None,
-                "gate_criteria": [],
-                "last_prompt_id": "",
-                "pending_shell_verify": None,
-                "shell_verify_attempts": 0,
-                "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
-                "delegation_model_hint": None,
-            },
-        )
-
-        transcript_path = build_transcript(
-            prompt_text="### Quality Gates\n- All tests must pass",
-            assistant_text="I fixed the code. It should work now.",
-            path=tmp_path / "no_verdict_transcript.jsonl",
-        )
-
-        exit_code, output = run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": str(transcript_path),
-                "session_id": session_id,
-            }
-        )
-
-        assert exit_code == 0
-        assert output is not None
-        assert output["decision"] == "block"
-        assert "Gate Verdict Missing" in output["reason"]
-
-        # Delegation still active
-        state = load_session_state(session_id)
-        assert state["pending_delegation"] is True
 
 
 # ── Test: Concurrent Session Isolation ────────────────────────────────────────
@@ -618,65 +324,6 @@ class TestConcurrentSessionIsolation:
         assert kept["chain_id"] == "chain-keep"
         assert deleted is None
 
-    def test_concurrent_subagent_enforce_different_sessions(self, tmp_path, patch_workspace):
-        """Two sub-agents finishing for different sessions: each clears only its own state."""
-        from session_state import load_session_state, save_session_state
-
-        # Both sessions have pending delegation
-        for sid in ("concurrent-A", "concurrent-B"):
-            save_session_state(
-                sid,
-                {
-                    "chain_id": "",
-                    "current_step": 0,
-                    "total_steps": 0,
-                    "pending_gate": None,
-                    "gate_criteria": [],
-                    "last_prompt_id": "",
-                    "pending_shell_verify": None,
-                    "shell_verify_attempts": 0,
-                    "pending_delegation": True,
-                    "delegation_agent_type": "chain-executor",
-                    "delegation_model_hint": None,
-                },
-            )
-
-        # Session A's sub-agent finishes with PASS
-        transcript_a = build_transcript(
-            prompt_text="### Quality Gates\n- Code compiles",
-            assistant_text="Fixed.\n\nGATE_REVIEW: PASS \u2014 Compiles cleanly",
-            path=tmp_path / "transcript_a.jsonl",
-        )
-        run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": transcript_a,
-                "session_id": "concurrent-A",
-            }
-        )
-
-        # Session A delegation cleared, session B still pending
-        state_a = load_session_state("concurrent-A")
-        state_b = load_session_state("concurrent-B")
-
-        assert state_a["pending_delegation"] is False, "Session A should be cleared"
-        assert state_b["pending_delegation"] is True, "Session B should be untouched"
-
-        # Now session B's sub-agent finishes with PASS
-        transcript_b = build_transcript(
-            prompt_text="### Quality Gates\n- Tests pass",
-            assistant_text="All green.\n\nGATE_REVIEW: PASS \u2014 All tests passing",
-            path=tmp_path / "transcript_b.jsonl",
-        )
-        run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": transcript_b,
-                "session_id": "concurrent-B",
-            }
-        )
-
-        state_b = load_session_state("concurrent-B")
-        assert state_b["pending_delegation"] is False, "Session B should now be cleared"
-
 
 # ── Test: Verify-State Single Slot ────────────────────────────────────────────
 
@@ -806,98 +453,3 @@ class TestEdgeCases:
         _, output, _ = run_ralph_stop({}, verify_state=vs_at_max)
         if output:
             assert "Max iterations" in json.dumps(output)
-
-    def test_ralph_protocol_pass_without_memory_update_blocks(self, tmp_path, patch_workspace):
-        """Ralph protocol prompt: PASS verdict but missing MEMORY_UPDATE should block."""
-        from session_state import save_session_state
-
-        save_session_state(
-            "ralph-protocol-test",
-            {
-                "chain_id": "",
-                "current_step": 0,
-                "total_steps": 0,
-                "pending_gate": None,
-                "gate_criteria": [],
-                "last_prompt_id": "",
-                "pending_shell_verify": None,
-                "shell_verify_attempts": 0,
-                "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
-                "delegation_model_hint": None,
-            },
-        )
-
-        transcript_path = build_transcript(
-            prompt_text=(
-                "## Ralph Session Protocol\nrun_memory_file: run-memory.md\n\n### Quality Gates\n- Tests must pass\n"
-            ),
-            assistant_text="I fixed it.\n\nGATE_REVIEW: PASS \u2014 Tests passing",
-            # Note: NO MEMORY_UPDATE line
-            path=tmp_path / "no_memory.jsonl",
-        )
-
-        _, output = run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": str(transcript_path),
-                "session_id": "ralph-protocol-test",
-            }
-        )
-
-        assert output is not None
-        assert output["decision"] == "block"
-        assert "Memory Update Missing" in output["reason"]
-
-    def test_multiple_verdicts_last_wins(self, tmp_path, patch_workspace):
-        """When multiple GATE_REVIEW lines exist across messages, last assistant message wins."""
-        transcript_path = tmp_path / "multi_verdict.jsonl"
-        with open(transcript_path, "w") as f:
-            # Prompt with gates
-            f.write(
-                json.dumps(
-                    {
-                        "type": "human",
-                        "content": "### Quality Gates\n- Tests pass\n- No lint errors",
-                    }
-                )
-                + "\n"
-            )
-            # First attempt: FAIL
-            f.write(
-                json.dumps(
-                    {
-                        "type": "assistant",
-                        "content": "First try failed.\n\nGATE_REVIEW: FAIL \u2014 Lint errors remain",
-                    }
-                )
-                + "\n"
-            )
-            # Human feedback
-            f.write(
-                json.dumps(
-                    {
-                        "type": "human",
-                        "content": "Fix the lint errors and try again.",
-                    }
-                )
-                + "\n"
-            )
-            # Second attempt: PASS (this should win — it's the last assistant message)
-            f.write(
-                json.dumps(
-                    {
-                        "type": "assistant",
-                        "content": "Fixed lint.\n\nGATE_REVIEW: PASS \u2014 All clean now",
-                    }
-                )
-                + "\n"
-            )
-
-        _, output = run_subagent_gate_enforce(
-            {
-                "agent_transcript_path": str(transcript_path),
-            }
-        )
-
-        # Last verdict (PASS) wins — should allow
-        assert output is None  # PASS = silent allow

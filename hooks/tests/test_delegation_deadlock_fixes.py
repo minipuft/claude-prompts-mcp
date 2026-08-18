@@ -35,7 +35,7 @@ sys.path.insert(0, str(HOOKS_DIR))
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
 # Import hyphenated-filename hook modules directly (same pattern as
-# test_gate_enforce_verdict.py / test_subagent_gate_enforce.py).
+# test_gate_enforce_verdict.py).
 _post_spec = importlib.util.spec_from_file_location("post_prompt_engine", HOOKS_DIR / "post-prompt-engine.py")
 post_prompt_engine = importlib.util.module_from_spec(_post_spec)
 _post_spec.loader.exec_module(post_prompt_engine)

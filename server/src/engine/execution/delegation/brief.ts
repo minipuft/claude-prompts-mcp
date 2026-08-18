@@ -17,9 +17,9 @@ export const BRIEF_END = `${BRIEF_DELIMITER}\nEND EXECUTION BRIEF\n${BRIEF_DELIM
 
 /**
  * `### Quality Gates` is load-bearing, not decoration: `hooks/lib/ralph_subagent_contract.py`
- * scans worker transcripts for exactly this heading (S2 — the Python module API is the published
- * contract, so the TS side emits the heading the hook already requires). Renaming it breaks the
- * subagent gate-enforcement contract.
+ * parses worker prompts for exactly this heading (S2 — the Python module API is the published
+ * contract, so the TS side emits the heading that module already requires). Renaming it breaks
+ * the published Python module contract.
  */
 export const QUALITY_GATES_HEADING = '### Quality Gates';
 

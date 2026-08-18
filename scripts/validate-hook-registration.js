@@ -4,10 +4,10 @@
  *
  * Both directions failed silently before this gate (2026-08-05):
  *
- *   unregistered -> `session-skills.py` and `subagent-gate-enforce.py` sat in `hooks/` wired
- *                   into no `hooks.json`, here or downstream. They looked like live hooks in
- *                   every listing, shipped in the npm tarball, and ran nowhere. A downstream
- *                   adapter then imported one of them as if it were a supported module.
+ *   unregistered -> a hook that sits in `hooks/` wired into no `hooks.json`, here or
+ *                   downstream. It looks like a live hook in every listing, ships in the npm
+ *                   tarball, and runs nowhere — and a downstream adapter can import it as if
+ *                   it were a supported module.
  *
  *   dangling     -> the reverse is worse. A `hooks.json` entry naming a file that is not in
  *                   the package makes the hook command fail to launch, and a hook that fails
@@ -97,16 +97,7 @@ const TOOL_MATCHED_EVENTS = new Set(["PreToolUse", "PostToolUse"]);
 /** A matcher we grade literally: bare names and `|` only, no regex metacharacters. */
 const LITERAL_MATCHER = /^[A-Za-z0-9_]+(\|[A-Za-z0-9_]+)*$/;
 
-const UNREGISTERED_EXCEPTIONS = {
-  "subagent-gate-enforce.py": {
-    reason:
-      "SubagentStop verdict enforcement, written during the codex port. Never wired into this " +
-      "plugin's hooks.json, and codex registers no SubagentStop event either, so it runs nowhere.",
-    closedBy:
-      "Register it on SubagentStop after confirming the transcript shape it parses is still " +
-      "what the harness writes, or delete it.",
-  },
-};
+const UNREGISTERED_EXCEPTIONS = {};
 
 /** Script basenames referenced by any command in hooks.json. */
 function registeredScripts(config) {

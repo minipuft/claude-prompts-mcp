@@ -3,8 +3,8 @@ Canonical contract for Ralph sub-agent delegation prompts and responses.
 
 This module defines the protocol markers and parsing rules shared by:
 - task prompt generation (task_protocol.py)
-- sub-agent completion enforcement (subagent-gate-enforce.py)
 - stop-hook delegation metadata (ralph-stop.py)
+- downstream plugins importing hooks/lib as the published Python module API
 """
 
 import re

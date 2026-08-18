@@ -4,7 +4,6 @@ Tests for criterion verdict parsing and original intent detection.
 Covers:
 - parse_criterion_verdicts() parsing of CRITERION_VERDICTS blocks
 - has_original_intent() detection of Original Request Intent heading
-- Integration with subagent-gate-enforce criterion coverage advisory
 """
 
 from ralph_subagent_contract import (

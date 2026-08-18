@@ -3,12 +3,10 @@ Shared pytest fixtures for hook tests.
 
 Provides:
 - Temporary workspace/runtime-state isolation
-- Mock transcript builders
 - Workspace environment patching
 - Mock target validation (stale mock detection)
 """
 
-import json
 import sys
 import unittest.mock
 import warnings
@@ -50,51 +48,6 @@ def patch_workspace(tmp_workspace, monkeypatch):
     """Patch workspace resolution to use tmp_workspace."""
     monkeypatch.setenv("MCP_WORKSPACE", str(tmp_workspace["root"]))
     return tmp_workspace
-
-
-@pytest.fixture
-def transcript_builder(tmp_path):
-    """Build JSONL transcript files for testing subagent-gate-enforce."""
-
-    class TranscriptBuilder:
-        def __init__(self):
-            self.messages = []
-            self.path = tmp_path / "transcript.jsonl"
-
-        def add_human(self, content):
-            self.messages.append({"type": "human", "content": content})
-            return self
-
-        def add_human_blocks(self, blocks):
-            """Add human message with content as list of blocks."""
-            self.messages.append({"type": "human", "content": blocks})
-            return self
-
-        def add_assistant(self, content):
-            self.messages.append({"type": "assistant", "content": content})
-            return self
-
-        def add_assistant_blocks(self, blocks):
-            """Add assistant message with content as list of blocks."""
-            self.messages.append({"type": "assistant", "content": blocks})
-            return self
-
-        def write(self, path=None):
-            target = path or self.path
-            with open(target, "w") as f:
-                for msg in self.messages:
-                    f.write(json.dumps(msg) + "\n")
-            return str(target)
-
-        def write_corrupt(self, path=None):
-            """Write a corrupt (non-JSON) transcript."""
-            target = path or self.path
-            with open(target, "w") as f:
-                f.write("not json at all\n")
-                f.write("{broken\n")
-            return str(target)
-
-    return TranscriptBuilder()
 
 
 # ── Mock Target Validation ────────────────────────────────────────────────────
