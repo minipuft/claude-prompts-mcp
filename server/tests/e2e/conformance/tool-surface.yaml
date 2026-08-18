@@ -161,3 +161,16 @@ scenarios:
       - tool: resource_manager
         args: { resource_type: framework, action: inspect, id: cageerf }
     expect: { text_contains: 'C.A.G.E.E.R.F Framework' }
+
+  # resource_manager `source_workspace` — added with cross-workspace history reads (efe9a605).
+  # The parameter is read-only by contract: the router refuses it on any action outside
+  # CROSS_WORKSPACE_READ_ACTIONS before any handler runs, so this scenario mutates nothing.
+  - id: rm-source-workspace-is-read-only
+    claim_source: >-
+      resource_manager router — "'source_workspace' is a read-only parameter — valid on history
+      and compare"; writing across the workspace boundary would interleave two per-workspace
+      version histories (router.ts source_workspace guard).
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: list, source_workspace: elsewhere }
+    expect: { error_contains: "'source_workspace' is a read-only parameter" }

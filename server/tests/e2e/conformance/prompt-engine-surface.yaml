@@ -102,3 +102,22 @@ scenarios:
     requests:
       [{ tool: prompt_engine, args: { command: '>>minimal_prompt :: verify:"true" loop:true' } }]
     expect: { text_contains: 'Loop mode: autonomous retry' }
+
+  # prompt_engine `cancel` — added when session cancel moved from system_control to prompt_engine
+  # (efe9a605). Both rows assert the contract's own refusal claims, which are deterministic on a
+  # fresh workspace: no fixture run needs to exist for either.
+  - id: pe-cancel-requires-chain-id
+    claim_source: >-
+      prompt_engine contract — cancel: "Stop the run named by 'chain_id' ... Requires 'chain_id';
+      nothing else is read." prompt-executor.ts refuses a cancel that names no run.
+    requests: [{ tool: prompt_engine, args: { cancel: true } }]
+    expect: { error_contains: '`cancel: true` requires `chain_id`' }
+
+  - id: pe-cancel-unknown-run-not-applied
+    claim_source: >-
+      prompt_engine contract — cancel names an EXISTING run; a cancel of an unknown or terminal
+      run reports "Cancel Not Applied" rather than pretending success (prompt-executor.ts).
+    requests:
+      - tool: prompt_engine
+        args: { cancel: true, chain_id: 'chain-conformance-nonexistent#1' }
+    expect: { error_contains: 'Cancel Not Applied' }

@@ -668,7 +668,7 @@ export function rollbackVersion(
  * Delete every `version_history` row for the resource that owns `resourceDir`.
  *
  * Named for what it does, not for the storage model it predates. It was `deleteHistoryFile` until
- * 2026-08-17 — a name from the retired `.history.json` sidecar era — which sent anyone grepping
+ * 2026-08-17 — a name from the retired JSON-sidecar era — which sent anyone grepping
  * for sidecar cleanup to a SQL function and anyone grepping for "what deletes version rows" past
  * it entirely. It is live and load-bearing: `deleteResourceDir` calls it, so removing a resource
  * directory purges its history.

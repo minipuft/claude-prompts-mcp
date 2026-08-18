@@ -183,7 +183,7 @@ scenarios:
       - tool: resource_manager
         args:
           { resource_type: prompt, action: rollback, id: conformance_rollback_guard, version: 1 }
-    expect: { error_contains: 'Rollback requires confirmation' }
+    expect: { error_contains: "'rollback' is destructive and requires confirmation" }
 
   - id: prompt-rollback-restores-previous-content
     claim_source: >-
