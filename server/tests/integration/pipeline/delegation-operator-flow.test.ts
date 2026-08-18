@@ -110,17 +110,31 @@ describe('Delegation Operator (==>) Flow', () => {
         delegated: step.delegated === true ? true : undefined,
       }));
 
-      // Step 4: Render step 1 CTA (next step is delegated)
+      // Step 4: Render step 1 (next step is delegated) — the CTA is now a one-line advisory
+      // (S7): the full handoff moved to the delegated step's OWN render, so the preceding
+      // step no longer carries "Pass ALL content above" pointed at the wrong step's content.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
         currentStepIndex: 0,
       });
 
-      expect(result.callToAction).toContain('HANDOFF');
-      expect(result.callToAction).toContain('Tool: Task');
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(result.callToAction).toContain('⚡ Note');
       expect(result.callToAction).toContain('Summarizer');
+      expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+
+      // Step 5 (S7): the authoritative handoff — HANDOFF INSTRUCTIONS, Tool call, subagent_type
+      // — renders WITH the delegated step's own EXECUTION BRIEF, one resume later.
+      const delegatedResult = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts,
+        currentStepIndex: 1,
+      });
+
+      expect(delegatedResult.content).toContain('HANDOFF INSTRUCTIONS');
+      expect(delegatedResult.content).toContain('Tool: Task');
+      expect(delegatedResult.content).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(delegatedResult.currentStepDelegated).toBe(true);
     });
 
     test('delegation CTA switches to spawn_agent for codex client profile', async () => {
@@ -140,10 +154,14 @@ describe('Delegation Operator (==>) Flow', () => {
         delegated: step.delegated === true ? true : undefined,
       }));
 
+      // S7: Tool: X only appears in the delegated step's OWN handoff content now, not in the
+      // preceding step's advisory — render the delegated step (index 1) to see the strategy
+      // resolution. chainContext carries through unchanged since extractClientProfile reads it
+      // regardless of which step is rendering.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
-        currentStepIndex: 0,
+        currentStepIndex: 1,
         chainContext: {
           requestIdentityContext: {
             clientProfile: {
@@ -156,8 +174,8 @@ describe('Delegation Operator (==>) Flow', () => {
         },
       });
 
-      expect(result.callToAction).toContain('Tool: spawn_agent');
-      expect(result.callToAction).not.toContain('Tool: Task');
+      expect(result.content).toContain('Tool: spawn_agent');
+      expect(result.content).not.toContain('Tool: Task');
     });
 
     test('mixed --> and ==> only delegates the ==> steps', async () => {
@@ -198,22 +216,28 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(step1Result.callToAction).not.toContain('HANDOFF');
       expect(step1Result.callToAction).toContain('resume shortcut');
 
-      // Step 2 → Step 3 IS delegated → delegation CTA
+      // Step 2 → Step 3 IS delegated → one-line advisory (S7), not a full CTA
       const step2Result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
         currentStepIndex: 1,
       });
-      expect(step2Result.callToAction).toContain('HANDOFF');
-      expect(step2Result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(step2Result.callToAction).toContain('⚡ Note');
+      expect(step2Result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
 
-      // Step 3 is final → deliver to user
+      // Step 3 is final AND delegated: the delegated-current-step handoff wins over the
+      // final-step "deliver" branch (S7) — a delegated final step still needs its sub-agent
+      // spawned and resumed before delivery, so it cannot skip straight to "deliver the final
+      // response" the way a non-delegated final step does.
       const step3Result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
         currentStepIndex: 2,
       });
-      expect(step3Result.callToAction).toContain('Deliver the final response');
+      expect(step3Result.content).toContain('HANDOFF INSTRUCTIONS');
+      expect(step3Result.content).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(step3Result.callToAction).toContain('HANDOFF INSTRUCTIONS');
+      expect(step3Result.currentStepDelegated).toBe(true);
     });
 
     test('all ==> chain marks every step except first as delegated', async () => {
@@ -329,14 +353,23 @@ describe('Delegation Operator (==>) Flow', () => {
       // the parser left it: no `==>` in this command, so no step was marked at parse time.
       expect(chainOp!.steps[1].delegated).not.toBe(true);
 
-      // CTA for step 1 → step 2 shows delegation handoff with model hint
+      // Step 1's CTA is now the one-line advisory (S7) — the model-hinted handoff renders
+      // WITH step 2's own EXECUTION BRIEF one resume later.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts: context.parsedCommand!.steps!,
         currentStepIndex: 0,
       });
-      expect(result.callToAction).toContain('HANDOFF');
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(result.callToAction).toContain('⚡ Note');
+      expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+
+      const delegatedResult = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: context.parsedCommand!.steps!,
+        currentStepIndex: 1,
+      });
+      expect(delegatedResult.content).toContain('HANDOFF INSTRUCTIONS');
+      expect(delegatedResult.content).toContain('subagent_type: "claude-prompts:chain-executor"');
     });
 
     test('step without subagentModel adjacent to step with subagentModel stays non-delegated', async () => {
@@ -377,13 +410,16 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(context.parsedCommand!.steps![1].delegated).toBe(true);
       expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);
 
-      // Step 2 → Step 3 is NOT delegated, so CTA should be standard
+      // Step 2 is itself delegated (S7): rendering it now always produces the spawn-handoff
+      // CTA regardless of step 3's status — a delegated CURRENT step's callToAction no longer
+      // depends on the NEXT step, only on `step.delegated` of the step being rendered.
       const step2Result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts: context.parsedCommand!.steps!,
         currentStepIndex: 1,
       });
-      expect(step2Result.callToAction).not.toContain('HANDOFF');
+      expect(step2Result.callToAction).toContain('HANDOFF INSTRUCTIONS');
+      expect(step2Result.currentStepDelegated).toBe(true);
     });
   });
 
@@ -401,15 +437,17 @@ describe('Delegation Operator (==>) Flow', () => {
         },
       ];
 
+      // S7: agentType now resolves inside the delegated step's OWN handoff content, not the
+      // preceding step's advisory — render the delegated step (index 1) itself.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
-        currentStepIndex: 0,
+        currentStepIndex: 1,
       });
 
       // Step-level agentType wins (namespaced by strategy)
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:Explore"');
-      expect(result.callToAction).not.toContain('chain-executor');
+      expect(result.content).toContain('subagent_type: "claude-prompts:Explore"');
+      expect(result.content).not.toContain('chain-executor');
     });
 
     test('prompt-level agentType applies when the step declares none', async () => {
@@ -424,14 +462,15 @@ describe('Delegation Operator (==>) Flow', () => {
         },
       ];
 
+      // S7: render the delegated step itself — its content carries the handoff.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
-        currentStepIndex: 0,
+        currentStepIndex: 1,
       });
 
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:Explore"');
-      expect(result.callToAction).not.toContain('chain-executor');
+      expect(result.content).toContain('subagent_type: "claude-prompts:Explore"');
+      expect(result.content).not.toContain('chain-executor');
     });
 
     test('a step agentType overrides the prompt-level default', async () => {
@@ -449,14 +488,15 @@ describe('Delegation Operator (==>) Flow', () => {
         },
       ];
 
+      // S7: render the delegated step itself — its content carries the handoff.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
-        currentStepIndex: 0,
+        currentStepIndex: 1,
       });
 
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:code-reviewer"');
-      expect(result.callToAction).not.toContain('Explore');
+      expect(result.content).toContain('subagent_type: "claude-prompts:code-reviewer"');
+      expect(result.content).not.toContain('Explore');
     });
 
     test('defaults to namespaced chain-executor when no overrides', async () => {
@@ -465,13 +505,14 @@ describe('Delegation Operator (==>) Flow', () => {
         { stepNumber: 2, promptId: 'summarize', args: {}, delegated: true },
       ];
 
+      // S7: render the delegated step itself — its content carries the handoff.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts,
-        currentStepIndex: 0,
+        currentStepIndex: 1,
       });
 
-      expect(result.callToAction).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(result.content).toContain('subagent_type: "claude-prompts:chain-executor"');
     });
   });
 
@@ -558,6 +599,7 @@ describe('Delegation Operator (==>) Flow', () => {
       const context = await parseDirectly('>>delegating_chain');
       await runStage06(context);
 
+      // The preceding step's CTA is the one-line advisory now (S7) — not the full CTA.
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts: context.parsedCommand!.steps!,
@@ -565,8 +607,18 @@ describe('Delegation Operator (==>) Flow', () => {
       });
 
       expect(result.nextStepDelegated).toBe(true);
-      expect(result.callToAction).toContain('HANDOFF');
-      expect(result.callToAction).toContain('Tool: Task');
+      expect(result.callToAction).toContain('⚡ Note');
+      expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+
+      // The full handoff — HANDOFF INSTRUCTIONS, Tool: Task — renders WITH the marked step's
+      // own EXECUTION BRIEF, one resume later.
+      const delegatedResult = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: context.parsedCommand!.steps!,
+        currentStepIndex: 1,
+      });
+      expect(delegatedResult.content).toContain('HANDOFF INSTRUCTIONS');
+      expect(delegatedResult.content).toContain('Tool: Task');
     });
 
     test('a chain declaring no delegation fields is untouched by stage 06', async () => {

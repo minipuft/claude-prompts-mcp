@@ -1,11 +1,10 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
-import { applyVisibilityToEnvelope } from '../delegation/envelope-visibility.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
-import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
+import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
 import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
@@ -14,24 +13,12 @@ import type {
   SinglePromptFormattingContext,
 } from './formatting-context.js';
 import type { ExecutionContext } from '../context/index.js';
-import type { DelegationPayload, ExecutionEnvelope, RenderingHints } from '../delegation/types.js';
+import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
-import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
 /** Max gates to list in the GATE_VERDICTS template */
 const MAX_GATE_VERDICT_ENTRIES = 10;
-
-/**
- * The decision for "no declarations anywhere". A shared frozen constant rather than a fresh
- * `{ withheld: [], exposed: [], manifest: [] }` per call: it is returned on the hot path every
- * chain without `visibility:` takes, and `applyVisibilityToEnvelope` only reads its lengths.
- */
-const EMPTY_VISIBILITY_DECISION: VisibilityDecision = Object.freeze({
-  withheld: [],
-  exposed: [],
-  manifest: [],
-});
 
 /**
  * Assembles response content sections for different execution types.
@@ -49,8 +36,16 @@ export class ResponseAssembler {
    *   byte-identical. The same narrow-view + provider seam the gate layer uses
    *   (`GateEnhancementService`, `TemporaryGateRegistrar`): the assembler needs two facts about
    *   the run, not a session store, so the dependency stays a function type.
+   * @param declaredSectionsProvider Phase-guard section headers a framework declares, from
+   *   `declared-sections.ts` — the same source `19-phase-guard-verification-stage` grades the
+   *   response against (Tier 2.5, OQ-1). A function type, matching the seam above: this
+   *   assembler needs one derived fact, not framework-manager access. Absent means "declare
+   *   nothing", the pre-Tier-2 behavior for single-prompt execution.
    */
-  constructor(private readonly runStepViewProvider?: RunStepViewProvider) {}
+  constructor(
+    private readonly runStepViewProvider?: RunStepViewProvider,
+    private readonly declaredSectionsProvider?: (frameworkId: string) => DeclaredSection[]
+  ) {}
 
   /**
    * Formats response for chain execution with session tracking.
@@ -146,6 +141,16 @@ export class ResponseAssembler {
         sections.push('\n---\n**Advisory Gate Warnings:**');
         advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
       }
+    }
+
+    // Declared section headers (Tier 2.5, OQ-1) — same block the chain path renders via
+    // buildResponseFormatSection. A gated single prompt (explicit `gates`, a `gate` operator, or
+    // `chainSteps`) gets a session and reaches stage 19 phase-guard verification
+    // (`execution-planner.ts:427-450`), so it must be told the same header vocabulary the guard
+    // grades it against — otherwise it is blocked on a contract it was never shown.
+    const declaredSectionsBlock = this.buildDeclaredSectionsBlock(context);
+    if (declaredSectionsBlock) {
+      sections.push(declaredSectionsBlock);
     }
 
     const nextAction = this.buildNextActionCTA(context, gateActive);
@@ -294,9 +299,12 @@ export class ResponseAssembler {
       }
     }
 
-    const nextStepDelegated = this.isNextStepDelegated(context);
+    // Handoff footer requires the CURRENT step's brief to be IN this response (S7) — a
+    // `nextStepDelegated`-only response carries the one-line advisory, not a handoff, so it
+    // falls through to the normal resume/gate-review lines below.
+    const currentStepDelegated = this.isCurrentStepDelegated(context);
 
-    if (nextStepDelegated) {
+    if (currentStepDelegated) {
       // Handoff takes priority — gate enforcement passes to sub-agent
       lines.push(this.buildHandoffFooterLine(context, chainIdentifier));
     } else if (hasPendingReview) {
@@ -316,8 +324,12 @@ export class ResponseAssembler {
   }
 
   /**
-   * Builds a handoff section using DelegationRenderer with an ExecutionEnvelope
-   * containing gate instructions and framework context for sub-agent isolation.
+   * Builds the NEXT-step delegation advisory via DelegationRenderer (S7). Used to render a full
+   * envelope-bearing handoff here; that handoff was phase-shifted — it described the NEXT step
+   * while pointing "content above" at the CURRENT step's response. The authoritative handoff
+   * (brief + envelope) now renders in ChainOperatorExecutor, in the same response as the
+   * delegated step's own content (`buildCurrentStepHandoff`). This method only builds the
+   * payload identifying that next step and emits the one-line advisory pointing at it.
    *
    * Reads from StepExecutionStage metadata when available, falls back to parsed step metadata
    * when pendingReview blocked StepExecutionStage execution.
@@ -336,7 +348,6 @@ export class ResponseAssembler {
     const nextStep = this.findNextDelegatedStep(context);
     const agentType = nextStep?.agentType ?? 'chain-executor';
     const subagentModel = nextStep?.subagentModel;
-    const envelope = this.buildHandoffEnvelope(context, nextStep?.index);
 
     const gateCount = context.gates.getAll().length;
     const clientProfile = this.resolveClientProfile(context);
@@ -351,11 +362,7 @@ export class ResponseAssembler {
       gateCount,
       hasGates: gateCount > 0,
     };
-    const hints: RenderingHints = {
-      gateGuidanceEnabled: this.isGateGuidanceInjectionEnabled(context),
-      frameworkInjectionEnabled: Boolean(context.frameworkContext),
-    };
-    return renderer.render(payload, envelope ?? undefined, hints);
+    return renderer.renderNextStepAdvisory(payload);
   }
 
   private resolveClientProfile(context: ExecutionContext): RequestClientProfile | undefined {
@@ -367,70 +374,6 @@ export class ResponseAssembler {
     const delegationProfile = this.resolveClientProfile(context)?.delegationProfile;
     const prefix = getHandoffFooterInstruction(delegationProfile);
     return `Next: ${prefix} (see instructions above), then: chain_id="${chainIdentifier}", user_response="<sub-agent result>"`;
-  }
-
-  /**
-   * Builds an ExecutionEnvelope from gate instructions and framework context.
-   * Returns null when no source has content and nothing is withheld.
-   *
-   * `nextStepIndex` is the index of the step being handed off within
-   * `context.parsedCommand.steps`; when present, the P5 visibility decision for that step
-   * filters the envelope and supplies its withheld manifest (Tier 3.2). Absent index (no
-   * delegated step located) leaves the envelope exactly as it was before P5.
-   */
-  private buildHandoffEnvelope(
-    context: ExecutionContext,
-    nextStepIndex?: number
-  ): ExecutionEnvelope | null {
-    const gateInstructions =
-      context.gateInstructions != null && context.gateInstructions.length > 0
-        ? context.gateInstructions
-        : undefined;
-    const frameworkGuidance =
-      context.frameworkContext?.systemPrompt != null &&
-      context.frameworkContext.systemPrompt.length > 0
-        ? context.frameworkContext.systemPrompt
-        : undefined;
-
-    const base =
-      gateInstructions === undefined && frameworkGuidance === undefined
-        ? null
-        : { gateInstructions, frameworkGuidance };
-
-    return applyVisibilityToEnvelope(base, this.resolveHandoffVisibility(context, nextStepIndex));
-  }
-
-  /**
-   * Resolve the P5 visibility decision for the handed-off step.
-   *
-   * Reads declarations off `context.parsedCommand.steps` — the parse-time blueprint, which is
-   * where visibility lives (OQ-P5-5: definition-time facts, re-derived rather than persisted as
-   * run state). Returns an empty decision when there is no delegated step or no parsed steps,
-   * which keeps the envelope byte-identical for every chain that declares nothing.
-   *
-   * `nextStepIndex` now names the step the RUN hands off to (`resolveNextStepIndex`), so the
-   * target is correct after a mutation. The prior declarations are additionally filtered against
-   * the run's retired nodes: a `withhold` declared by a step the mutation policy skipped never
-   * took effect, and carrying it into the decision would withhold context on the authority of a
-   * step that did not run.
-   */
-  private resolveHandoffVisibility(
-    context: ExecutionContext,
-    nextStepIndex?: number
-  ): VisibilityDecision {
-    const steps = context.parsedCommand?.steps;
-    if (steps === undefined || nextStepIndex === undefined || nextStepIndex < 0) {
-      return EMPTY_VISIBILITY_DECISION;
-    }
-    const target = steps[nextStepIndex];
-    const retiredNodeIds = this.resolveRunStepView(context)?.skippedNodeIds ?? [];
-    return decideVisibility({
-      step: target?.visibility != null ? { visibility: target.visibility } : {},
-      priorDeclarations: steps
-        .slice(0, nextStepIndex)
-        .filter((step) => step.nodeId === undefined || !retiredNodeIds.includes(step.nodeId))
-        .map((step) => (step.visibility != null ? { visibility: step.visibility } : {})),
-    });
   }
 
   /**
@@ -501,6 +444,18 @@ export class ResponseAssembler {
       return true;
     }
     return this.findNextDelegatedStep(context) !== undefined;
+  }
+
+  /**
+   * Detects whether the CURRENT step (the one whose content is in this response) is delegated
+   * — i.e. whether ChainOperatorExecutor rendered it as a self-contained EXECUTION BRIEF (R-1).
+   * No parsed-steps fallback: unlike `nextStepDelegated`, this flag only exists once
+   * `renderStep` has actually run and stamped `currentStepDelegated` on the render result — there
+   * is no earlier parse-time signal to fall back to.
+   */
+  private isCurrentStepDelegated(context: ExecutionContext): boolean {
+    const metadata = context.executionResults?.metadata ?? {};
+    return metadata['currentStepDelegated'] === true;
   }
 
   /**
@@ -765,6 +720,77 @@ export class ResponseAssembler {
       }
     }
     return map;
+  }
+
+  /**
+   * Renders the declared-header vocabulary for the framework active on this single-prompt
+   * execution, or `null` when there is nothing to declare — no provider wired, no session (an
+   * ungated single prompt never reaches stage 19), no framework resolves, or the framework
+   * declares no guarded phases. Mirrors `buildResponseFormatSection`'s "Required Sections" block
+   * in `chain-operator-executor.ts` verbatim rather than reimplementing the format, so the two
+   * declaration surfaces cannot drift from each other.
+   */
+  private buildDeclaredSectionsBlock(context: ExecutionContext): string | null {
+    const declaredSections = this.resolveDeclaredSections(context);
+    if (declaredSections.length === 0) {
+      return null;
+    }
+
+    const lines: string[] = [
+      '**Required Sections** — emit these headers verbatim; they are graded structurally:',
+    ];
+    for (const section of declaredSections) {
+      const qualifier = section.required ? 'required' : 'optional';
+      const criteria = section.criteria.length > 0 ? `; ${section.criteria.join('; ')}` : '';
+      lines.push(`- \`${section.header}\` (${qualifier}${criteria})`);
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * Declared phase-guard headers for the framework active on this single-prompt execution, or
+   * `[]` when this execution will not be graded by stage 19 at all.
+   *
+   * Three independent skip conditions (Tier 2.6), each a separate reason to declare nothing:
+   *
+   * 1. No provider wired — pre-Tier-2 behavior, byte-identical.
+   * 2. No session (`context.sessionContext?.sessionId` absent) — an UNGATED single prompt never
+   *    gets a session (`execution-planner.ts:427-450` only sets `requiresSession` for explicit
+   *    `gates`, a `gate` operator, or `chainSteps`), and stage 19 skips whenever the session is
+   *    absent (`19-phase-guard-verification-stage.ts:73-78`). Declaring headers for a prompt that
+   *    will never be graded against them would spend tokens for nothing.
+   * 3. No framework resolves, or the resolved framework declares no guarded phases — `provider()`
+   *    itself returns `[]` for both, so no separate check is needed.
+   *
+   * Reads through the provider on every call — no cache — so framework hot-reload keeps working,
+   * matching the chain path's `resolveDeclaredSections`.
+   */
+  private resolveDeclaredSections(context: ExecutionContext): DeclaredSection[] {
+    const provider = this.declaredSectionsProvider;
+    if (!provider) {
+      return [];
+    }
+
+    if (context.sessionContext?.sessionId === undefined) {
+      return [];
+    }
+
+    // `.id`, never `.type` — `FrameworkManager.getFrameworkGuide` lowercases its argument, so
+    // `.type` only resolves for CAGEERF by coincidence ('CAGEERF' → 'cageerf') and would silently
+    // miss a framework whose discriminator is not simply its lowercased id (`5w1h`).
+    // `19-phase-guard-verification-stage` resolves on `.id`; the declaration and the guard must
+    // read the same field or the prompt names different headers than the guard grades (F2's own
+    // shape, one layer over). Never branch on `context.sessionContext?.isChainExecution` here —
+    // F2 records it returns true for gated single prompts too, so it cannot discriminate this
+    // case; `context.executionPlan?.strategy` is the reliable signal this method already avoids
+    // needing, because `formatSinglePromptResponse` is only invoked for non-chain formatting
+    // contexts (`21-formatting-stage.ts:103-114`).
+    const frameworkId = context.frameworkContext?.selectedFramework.id ?? '';
+    if (frameworkId === '') {
+      return [];
+    }
+
+    return provider(frameworkId);
   }
 
   /**

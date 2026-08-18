@@ -114,6 +114,12 @@ export interface ChainStepRenderResult {
   /** True when the next step in the chain is delegated to a sub-agent */
   nextStepDelegated?: boolean;
   /**
+   * True when THIS rendered step is delegated: its content is an EXECUTION BRIEF plus handoff
+   * instructions (R-1), and the footer should direct the parent to spawn-then-resume rather
+   * than answer inline.
+   */
+  currentStepDelegated?: boolean;
+  /**
    * Phase-guard section headers this render actually declared to the model, verbatim. Recorded
    * into the run so `19-phase-guard-verification-stage` can tell a header the prompt asked for
    * from one it never mentioned — the two are indistinguishable if both sides re-read

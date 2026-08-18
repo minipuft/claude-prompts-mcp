@@ -257,7 +257,10 @@ See [MCP Tools Reference](../reference/mcp-tools.md#visibility-policy) for the Y
 
 ## Delegation
 
-Steps can be handed off to sub-agents using the `==>` operator. Delegated steps run in isolated context, keeping the main conversation clean.
+Steps can be handed off to sub-agents using the `==>` operator. A delegated step renders a
+self-contained **EXECUTION BRIEF** in its own response at resume time — the same moment an
+inline step renders, so template content, per-step gate text, prior-step output, and chain
+history are all available together in one block, instead of being split across two responses.
 
 ```bash
 # Step 2 runs in a sub-agent
@@ -265,28 +268,48 @@ prompt_engine(command:">>research ==> >>analyze --> >>summarize")
 ```
 
 **A step-level `subagentModel` also marks its step delegated on ANY chain invocation**, not only
-after `==>` — a plain `>>chain` call renders the same delegation CTA and handoff envelope for a
-step declaring `subagentModel` in `prompt.yaml` as a command that spells `==>` before it. This
-closed a gap where the YAML field parsed but produced no delegation on the direct invocation
-path. `agentType` alone does not have this effect — see
-[Subagent Model](../reference/chain-schema.md#subagent-model).
+after `==>` — a plain `>>chain` call renders the same execution brief for a step declaring
+`subagentModel` in `prompt.yaml` as a command that spells `==>` before it. `agentType` alone does
+not have this effect — see [Subagent Model](../reference/chain-schema.md#subagent-model).
 
-A delegated step's envelope also carries the [visibility policy](#visibility-policy) result: any
-item a prior step withheld is excluded from the envelope, and the handoff reports the withheld
-item names on one manifest line —
+### The Execution Brief
 
-```
-CONTEXT WITHHELD (names only, values not provided): chain_history
-```
+The brief renders between `══...EXECUTION BRIEF...══` delimiters, followed by HANDOFF
+INSTRUCTIONS that point the parent at the delimited block as the sub-agent's prompt. It carries:
 
-— names only, never the withheld values, across every client profile.
+- **Template content** — the step's rendered prompt and args, identical to what an inline step
+  would render.
+- **`### Quality Gates`** — the step's own gate text. The heading is load-bearing: Python hooks
+  key on it. Omitted when the step declares no gates.
+- **`### Chain History`** — prior-step output and chain history for steps before the previous
+  one, filtered by the [visibility policy](#visibility-policy): any item a prior step withheld is
+  excluded, and the withheld item names are listed rather than their values —
+  ```
+  CONTEXT WITHHELD (names only, values not provided): chain_history
+  ```
+  — names only, never the withheld values, across every client profile.
+- **`### Result Contract`** — instructs the worker to return its work product plus, when the step
+  carries gates, a **Proposed Gate Review** (per-gate pass/fail and a one-line rationale, the
+  same shape as `gate_verdict.per_gate`). The worker proposes; it never submits — the parent
+  reviews the proposal against the same criteria, may override any entry, and is the only party
+  that submits `gate_verdict`.
+
+**The step immediately before a delegated step gets a one-line advisory**
+(`⚡ Note: Step N ... is delegated`) instead of a full handoff — everything the worker needs is
+in the brief the delegated step renders for itself.
+
+The worker carries no `mcp__` tools by design, so the chain resume token never leaves the parent:
+chain state flows brief → worker (per visibility), and the worker's result and proposed review
+flow worker → parent → `user_response`, which the parent submits. Delegation is advisory — the
+server renders the brief and handoff instructions but cannot verify that a client actually
+spawned a sub-agent to run it.
 
 **The handoff target is resolved by node id, not by position.** After an [adaptive
 mutation](#adaptive-mutation) inserts or skips a node, the step a positional offset would name is
 no longer the step the run actually hands off to next; the run's live next-node id is asked for
-directly and matched back to the step it names, so the CTA, the envelope, and its visibility
-manifest all point at the step that will really execute. Legacy chains whose steps carry no `id`
-(and calls made with no active run to ask) keep the pre-existing positional answer unchanged.
+directly and matched back to the step it names, so the advisory note and the brief itself both
+point at the step that will really execute. Legacy chains whose steps carry no `id` (and calls
+made with no active run to ask) keep the pre-existing positional answer unchanged.
 
 ### Model Selection
 
@@ -303,7 +326,9 @@ Set in `prompt.yaml` at the prompt level or per chain step. See the [Chain Schem
 ### Agent Selection
 
 `subagentModel` chooses how capable the sub-agent is. `agentType` chooses which agent it is —
-useful when a step wants a specialist rather than the generic chain runner.
+useful when a step wants a specialist rather than the generic chain runner. Both are advisory
+hints: any executor can run the brief that gets rendered, and `chain-executor` is only the
+default when nothing more specific is set.
 
 ```yaml
 agentType: Explore # every delegated step in this prompt

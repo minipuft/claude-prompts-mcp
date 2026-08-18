@@ -1,10 +1,11 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
-import { applyVisibilityToEnvelope } from '../delegation/envelope-visibility.js';
-import { DelegationRenderer } from '../delegation/renderer.js';
+import { BRIEF_END, BRIEF_START, assembleBriefBody } from '../delegation/brief.js';
+import { DelegationRenderer, renderDelegatedStepHandoff } from '../delegation/renderer.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
+import type { BriefHistoryEntry } from '../delegation/brief.js';
 import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
@@ -17,7 +18,7 @@ import type {
   NormalStepInput,
 } from './types.js';
 import type { DeclaredSection } from '../../frameworks/declared-sections.js';
-import type { DelegationPayload, RenderingHints } from '../delegation/types.js';
+import type { DelegationPayload } from '../delegation/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
 import type { PromptReferenceResolver } from '../reference/index.js';
@@ -521,9 +522,13 @@ export class ChainOperatorExecutor {
 
     lines.push(renderedTemplate.trim());
 
-    // Add gate instructions if stored in step metadata (from GateEnhancementStage)
+    // Add gate instructions if stored in step metadata (from GateEnhancementStage).
+    // Skipped for a delegated CURRENT step: the brief owns the gate text there, under the
+    // `### Quality Gates` heading the hook contract requires (S2/S4) — pushing it here too
+    // would duplicate it inside the brief body.
     if (
       gateGuidanceEnabled &&
+      step.delegated !== true &&
       step.metadata?.['gateInstructions'] &&
       typeof step.metadata['gateInstructions'] === 'string'
     ) {
@@ -537,6 +542,46 @@ export class ChainOperatorExecutor {
       );
     }
 
+    // R-1: a CURRENT delegated step renders as a self-contained EXECUTION BRIEF — everything a
+    // spawned executor needs, in THIS response — followed by handoff instructions pointing at
+    // it. Worker-facing lines built so far move INSIDE the brief; parent-facing sections
+    // (Required Response Format, footer) stay outside, because the parent ratifies and submits
+    // the gate verdict (R-2) — the worker only proposes.
+    const isCurrentDelegated = step.delegated === true;
+    let briefHasGates = false;
+    if (isCurrentDelegated) {
+      const stepGateText =
+        typeof step.metadata?.['gateInstructions'] === 'string'
+          ? step.metadata['gateInstructions']
+          : undefined;
+      briefHasGates = stepGateText !== undefined && stepGateText.trim().length > 0;
+      const briefBody = assembleBriefBody({
+        workerLines: lines.splice(0, lines.length),
+        stepGateText,
+        historyEntries: this.collectBriefHistory(
+          stepPrompts,
+          currentStepIndex,
+          chainContext,
+          withheld
+        ),
+        manifest: visibility.manifest,
+      });
+      lines.push(BRIEF_START, briefBody, BRIEF_END);
+      lines.push(
+        renderDelegatedStepHandoff({
+          stepNumber: step.stepNumber,
+          totalSteps: stepPrompts.length,
+          promptName: this.getPromptDisplayName(step),
+          agentType: step.agentType ?? step.convertedPrompt?.agentType,
+          subagentModel: step.subagentModel ?? step.convertedPrompt?.subagentModel,
+          clientProfile: this.extractClientProfile(chainContext),
+          inlineGateCount: step.inlineGateIds?.length,
+          hasGates: briefHasGates,
+          gateGuidanceEnabled,
+        })
+      );
+    }
+
     // Required Response Format — guides structured output for delivery verification.
     // The declared section headers are resolved even when framework INJECTION is suppressed:
     // suppression hides guidance, it does not disable stage 19, so withholding the vocabulary
@@ -544,10 +589,18 @@ export class ChainOperatorExecutor {
     const declaredSections = this.resolveDeclaredSections(step);
     lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled, declaredSections));
 
-    // Check if the NEXT step is delegated — if so, render a delegation CTA instead
+    // NEXT-step delegation gets a one-line ADVISORY, never a full handoff (S7): the old full CTA
+    // here described step N+1 while "Pass ALL content above" pointed at step N's content — an
+    // obedient parent handed the sub-agent the wrong step's prompt. The authoritative handoff
+    // renders WITH step N+1's own brief, one resume later.
     const nextStep = !isFinalStep ? stepPrompts[currentStepIndex + 1] : undefined;
-    const callToAction =
-      nextStep?.delegated === true
+    const callToAction = isCurrentDelegated
+      ? `Spawn the sub-agent per the HANDOFF INSTRUCTIONS above, then resume with chain_id and user_response="<sub-agent result>"${
+          briefHasGates
+            ? ' — review its Proposed Gate Review before submitting your gate_verdict'
+            : ''
+        }.`
+      : nextStep?.delegated === true
         ? this.buildDelegationCTA(
             stepPrompts,
             currentStepIndex + 1,
@@ -570,6 +623,7 @@ export class ChainOperatorExecutor {
       content,
       callToAction,
       nextStepDelegated: nextStep?.delegated === true || undefined,
+      ...(isCurrentDelegated ? { currentStepDelegated: true } : {}),
       // What this render actually told the model. Reported rather than re-derived: the
       // verification stage may only block on a header the prompt named, and asking phases.yaml
       // after the fact cannot answer that — it is the same source the guard already reads.
@@ -750,12 +804,52 @@ export class ChainOperatorExecutor {
   }
 
   /**
-   * Build a delegation CTA using the existing DelegationRenderer infrastructure.
-   * Produces a Task tool directive instructing the LLM to spawn a sub-agent.
+   * Assemble the worker-facing EXECUTION BRIEF body for a delegated CURRENT step (R-1).
+   * `workerLines` are the already-rendered inline sections (intent, unknowns, framework,
+   * system message, template with prior output substituted per visibility). History (S1) and
+   * per-step gate text (S4) are appended here; the result contract (R-2) closes the brief.
+   */
+  /**
+   * Visibility-admitted prior outputs for a delegated step's brief (S1): steps BEFORE the
+   * previous one — the previous step's output already reaches the worker via
+   * `{{previous_step_output}}` in the template. Withheld history returns empty, not a summary
+   * (P5 semantics); the brief's manifest line names what was withheld.
+   */
+  private collectBriefHistory(
+    stepPrompts: readonly ChainStepPrompt[],
+    currentStepIndex: number,
+    chainContext: Record<string, unknown>,
+    withheld: ReadonlySet<VisibilityItem>
+  ): BriefHistoryEntry[] {
+    if (withheld.has('chain_history')) {
+      return [];
+    }
+    const entries: BriefHistoryEntry[] = [];
+    for (let i = 0; i < currentStepIndex - 1; i++) {
+      const prior = stepPrompts[i];
+      if (prior === undefined) continue;
+      const output = this.getStoredStepResult(chainContext, prior.stepNumber);
+      if (output !== undefined && output.length > 0) {
+        entries.push({
+          stepNumber: prior.stepNumber,
+          stepName: this.getPromptDisplayName(prior),
+          output,
+        });
+      }
+    }
+    return entries;
+  }
+
+  /**
+   * Build the NEXT-step delegation advisory using the existing DelegationRenderer
+   * infrastructure. Emits a one-line preview (S7) — the full handoff is phase-shifted here: it
+   * would describe step N+1 while "Pass ALL content above" points at step N's content. The
+   * authoritative handoff renders one resume later, with the delegated step's own brief
+   * (`buildCurrentStepHandoff`).
    *
    * Takes the whole `stepPrompts` array plus the delegated step's index rather than the step
-   * alone: the P5 manifest names what is withheld from the step being HANDED OFF, which is a
-   * decision over that step's priors, not over the step currently rendering.
+   * alone: the payload's `promptName`/`stepNumber` describe the step being HANDED OFF, which is
+   * a decision over that step's identity, not over the step currently rendering.
    */
   private buildDelegationCTA(
     stepPrompts: readonly ChainStepPrompt[],
@@ -783,22 +877,7 @@ export class ChainOperatorExecutor {
       hasGates: gateGuidanceEnabled,
     };
 
-    const hints: RenderingHints = {
-      gateGuidanceEnabled,
-      frameworkInjectionEnabled: true,
-    };
-
-    // Envelope is `null` on this path until something withholds: the CTA rendered here has
-    // never carried chain history or gate text (ResponseAssembler owns the envelope-bearing
-    // handoff). A manifest alone still produces one, so the sub-agent is told what it is
-    // missing even when nothing else is handed across.
-    const envelope = applyVisibilityToEnvelope(
-      null,
-      this.resolveStepVisibility(stepPrompts, nextStepIndex)
-    );
-
-    const renderer = new DelegationRenderer();
-    return renderer.render(payload, envelope ?? undefined, hints);
+    return new DelegationRenderer().renderNextStepAdvisory(payload);
   }
 
   private extractClientProfile(

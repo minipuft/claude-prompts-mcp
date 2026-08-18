@@ -10,13 +10,16 @@ import type {
 } from '../../../../src/engine/gates/services/run-step-view.js';
 
 /**
- * P5 Tier 3.2, SECOND envelope producer.
+ * R-1/S7 retarget (2026-08-18): this file used to pin the assembler's handoff ENVELOPE — the
+ * second producer. That producer is retired: there is exactly ONE brief producer
+ * (ChainOperatorExecutor renders the EXECUTION BRIEF with the delegated step itself), and the
+ * assembler emits only a one-line advisory for a NEXT delegated step. The P5 manifest wiring
+ * these tests proved now lives in the operator's brief and is pinned in
+ * `tests/unit/execution/operators/chain-operator-executor-delegation.test.ts` (P5 port tests).
  *
- * `ChainOperatorExecutor.buildDelegationCTA` is not the only handoff renderer: when a chain step
- * is formatted for response, `ResponseAssembler.buildHandoffSection` builds its own
- * `ExecutionEnvelope` (this is the one that actually carries gate + framework text). A manifest
- * wired into only the first producer would leave every real handoff unlabelled — the early-exit
- * lie this file exists to prevent.
+ * What still belongs HERE: (1) the negative control that the advisory carries no envelope or
+ * manifest — the pin that keeps the second producer retired; (2) the P6-F1 node-addressed
+ * NEXT-step resolution, which now decides WHICH step the advisory names.
  */
 
 const assembler = new ResponseAssembler();
@@ -63,72 +66,43 @@ const steps = (
   },
 ];
 
-describe('ResponseAssembler handoff envelope – P5 visibility', () => {
-  test('a prior withhold names the item on the handoff manifest', () => {
-    const context = buildContext(steps([{ withhold: ['chain_history'] }]));
-
-    const result = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
-
-    expect(result).toContain('HANDOFF');
-    expect(result).toContain('EXECUTION CONTEXT');
-    expect(result).toContain('CONTEXT WITHHELD (names only, values not provided): chain_history');
-  });
-
-  test('the delegated step’s own expose cancels the manifest', () => {
+describe('ResponseAssembler advisory – single-producer pin (S7)', () => {
+  test('the advisory never carries an envelope or a withheld manifest, even with declarations', () => {
+    // Pre-R-1 this exact fixture produced EXECUTION CONTEXT + the manifest line here. That
+    // content now belongs to the operator's brief exclusively; this pin fails if the second
+    // producer ever grows back.
     const context = buildContext(
-      steps([{ withhold: ['chain_history'] }, { expose: ['chain_history'] }])
-    );
-
-    const result = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
-
-    expect(result).toContain('HANDOFF');
-    expect(result).not.toContain('CONTEXT WITHHELD');
-  });
-
-  test('the manifest coexists with gate instructions rather than replacing them', () => {
-    const context = buildContext(
-      steps([{ withhold: ['unknowns_ledger'] }]),
+      steps([{ withhold: ['chain_history'] }]),
       '### Quality Gates\nEnsure code quality meets criteria.'
     );
 
     const result = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
 
-    expect(result).toContain('Quality Gates');
-    expect(result).toContain('CONTEXT WITHHELD (names only, values not provided): unknowns_ledger');
-  });
-
-  test('control: an undeclared chain produces no envelope and no manifest', () => {
-    const context = buildContext(steps());
-
-    const result = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
-
-    expect(result).toContain('HANDOFF');
+    expect(result).toContain('⚡ Note');
+    expect(result).toContain('delegated-step');
+    expect(result).not.toContain('HANDOFF INSTRUCTIONS');
     expect(result).not.toContain('EXECUTION CONTEXT');
     expect(result).not.toContain('CONTEXT WITHHELD');
   });
 
-  test('control: an undeclared chain with gates renders the envelope exactly as before', () => {
-    const context = buildContext(steps(), '### Quality Gates\nEnsure code quality meets criteria.');
+  test('control: an undeclared chain emits the same advisory shape', () => {
+    const context = buildContext(steps());
 
     const result = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
 
-    expect(result).toContain('EXECUTION CONTEXT');
+    expect(result).toContain('⚡ Note');
+    expect(result).not.toContain('EXECUTION CONTEXT');
     expect(result).not.toContain('CONTEXT WITHHELD');
   });
 });
 
 /**
- * P6 Tier 2 / P6-F1 — the handoff resolves the handed-off step by NODE IDENTITY, not by array
- * position.
- *
- * The pre-P6 reader anchored on the current node id and then took `+1` in the parse array. That
- * offset is a positional answer to a question the P4 mutation policy has already invalidated:
- * once a node is retired or inserted, "the parse step after the current one" and "the node the
- * run goes to next" are different steps. Every assertion below is chosen to be DISJOINT from the
- * positional reader — each one fails, in a distinct way, if `resolveNextStepIndex` is reverted to
- * `currentIndex + 1`.
+ * P6 Tier 2 / P6-F1 — the advisory resolves the next delegated step by NODE IDENTITY, not by
+ * array position. Same resolution the retired handoff used (`resolveNextStepIndex`); what it
+ * feeds changed (advisory payload), what it must answer did not. Each assertion fails, in a
+ * distinct way, if the resolver reverts to `currentIndex + 1`.
  */
-describe('ResponseAssembler handoff – P6-F1 node-addressed step resolution', () => {
+describe('ResponseAssembler advisory – P6-F1 node-addressed step resolution', () => {
   const runView = (view: Partial<RunStepView> & Pick<RunStepView, 'nodeIds'>): RunStepView => ({
     skippedNodeIds: [],
     ...view,
@@ -164,25 +138,14 @@ describe('ResponseAssembler handoff – P6-F1 node-addressed step resolution', (
     return context;
   };
 
-  /**
-   * n1 → n2 (retired mid-run) → n3 (delegated). The run's next live node is n3, not n2.
-   *
-   * n1 carries the withhold: under P5 a step's own `withhold` binds DOWNSTREAM steps, so the
-   * manifest attached to a handoff is built from the PRIOR declarations, not the target's own.
-   */
+  /** n1 → n2 (retired mid-run) → n3 (delegated). The run's next live node is n3, not n2. */
   const skipShapedSteps = (): ChainStepPrompt[] => [
-    {
-      stepNumber: 1,
-      nodeId: 'n1',
-      promptId: 'first',
-      args: {},
-      visibility: { withhold: ['chain_history'] },
-    },
+    { stepNumber: 1, nodeId: 'n1', promptId: 'first', args: {} },
     { stepNumber: 2, nodeId: 'n2', promptId: 'retired-step', args: {} },
     { stepNumber: 3, nodeId: 'n3', promptId: 'delegated-step', args: {}, delegated: true },
   ];
 
-  test('after a skip, the handoff targets the run’s next LIVE node, not the next array slot', () => {
+  test('after a skip, the advisory names the run’s next LIVE node, not the next array slot', () => {
     const assembler = new ResponseAssembler(
       providerFor(
         runView({ nodeIds: ['n1', 'n2', 'n3'], skippedNodeIds: ['n2'], currentNodeId: 'n1' })
@@ -193,68 +156,17 @@ describe('ResponseAssembler handoff – P6-F1 node-addressed step resolution', (
       isChainFormatting: true,
     } as never);
 
-    // The positional reader lands on n2 ('retired-step'), which carries no `delegated` flag, so it
-    // emits NO handoff at all. Node addressing lands on n3 and hands off to it — with the live
-    // prior's withhold resolved against that node.
-    expect(result).toContain('HANDOFF');
+    // The positional reader lands on n2 ('retired-step'), which carries no `delegated` flag, so
+    // it emits NO advisory at all. Node addressing lands on n3 and names it.
+    expect(result).toContain('⚡ Note');
     expect(result).toContain('delegated-step');
     expect(result).not.toContain('retired-step');
-    expect(result).toContain('CONTEXT WITHHELD (names only, values not provided): chain_history');
   });
 
-  test('a retired prior step’s withhold does not reach the handoff manifest', () => {
-    // Both readers agree on the TARGET here (n4 sits one array slot after the current node n3),
-    // so this test isolates the prior-declaration half of the fix: only the retired-node filter
-    // separates the two answers.
+  test('after an insertion, no advisory is emitted for the planned step one slot ahead', () => {
     const chainSteps: ChainStepPrompt[] = [
       { stepNumber: 1, nodeId: 'n1', promptId: 'first', args: {} },
-      {
-        stepNumber: 2,
-        nodeId: 'n2',
-        promptId: 'retired-step',
-        args: {},
-        visibility: { withhold: ['chain_history'] },
-      },
-      {
-        stepNumber: 3,
-        nodeId: 'n3',
-        promptId: 'third',
-        args: {},
-        visibility: { withhold: ['unknowns_ledger'] },
-      },
-      { stepNumber: 4, nodeId: 'n4', promptId: 'delegated-step', args: {}, delegated: true },
-    ];
-    const assembler = new ResponseAssembler(
-      providerFor(
-        runView({
-          nodeIds: ['n1', 'n2', 'n3', 'n4'],
-          skippedNodeIds: ['n2'],
-          currentNodeId: 'n3',
-        })
-      )
-    );
-
-    const result = assembler.formatChainResponse(mutatedContext(chainSteps, 'n3'), {
-      isChainFormatting: true,
-    } as never);
-
-    // n3's withhold is honoured; n2's is dropped — a step that will not execute cannot withhold
-    // context from a step that will. The positional reader carries both.
-    expect(result).toContain('CONTEXT WITHHELD (names only, values not provided): unknowns_ledger');
-    expect(result).not.toContain('chain_history');
-  });
-
-  test('after an insertion, no handoff is emitted for the planned step one slot ahead', () => {
-    const chainSteps: ChainStepPrompt[] = [
-      { stepNumber: 1, nodeId: 'n1', promptId: 'first', args: {} },
-      {
-        stepNumber: 2,
-        nodeId: 'n2',
-        promptId: 'delegated-step',
-        args: {},
-        delegated: true,
-        visibility: { withhold: ['chain_history'] },
-      },
+      { stepNumber: 2, nodeId: 'n2', promptId: 'delegated-step', args: {}, delegated: true },
     ];
     const assembler = new ResponseAssembler(
       providerFor(runView({ nodeIds: ['n1', 'unknown-x', 'n2'], currentNodeId: 'n1' }))
@@ -265,12 +177,12 @@ describe('ResponseAssembler handoff – P6-F1 node-addressed step resolution', (
     } as never);
 
     // The run's next node is the INSERTED one, which has no parse step and therefore cannot be
-    // delegated. The positional reader would render n2's handoff a full step early.
+    // delegated. The positional reader would emit n2's advisory a full step early.
+    expect(result).not.toContain('⚡ Note');
     expect(result).not.toContain('HANDOFF');
-    expect(result).not.toContain('CONTEXT WITHHELD');
   });
 
-  test('standing on the last live node emits no handoff', () => {
+  test('standing on the last live node emits no advisory', () => {
     const chainSteps: ChainStepPrompt[] = [
       { stepNumber: 1, nodeId: 'n1', promptId: 'first', args: {} },
       { stepNumber: 2, nodeId: 'n2', promptId: 'delegated-step', args: {}, delegated: true },
@@ -283,20 +195,14 @@ describe('ResponseAssembler handoff – P6-F1 node-addressed step resolution', (
       isChainFormatting: true,
     } as never);
 
+    expect(result).not.toContain('⚡ Note');
     expect(result).not.toContain('HANDOFF');
   });
 
   test('control: an UNMUTATED run resolves exactly what the positional reader did', () => {
     const chainSteps: ChainStepPrompt[] = [
       { stepNumber: 1, nodeId: 'n1', promptId: 'first', args: {} },
-      {
-        stepNumber: 2,
-        nodeId: 'n2',
-        promptId: 'delegated-step',
-        args: {},
-        delegated: true,
-        visibility: { withhold: ['chain_history'] },
-      },
+      { stepNumber: 2, nodeId: 'n2', promptId: 'delegated-step', args: {}, delegated: true },
     ];
     const view = runView({ nodeIds: ['n1', 'n2'], currentNodeId: 'n1' });
 

@@ -14,13 +14,15 @@ import {
   resolveDelegationStrategy,
 } from '../../../src/engine/execution/delegation/strategy.js';
 
-import type {
-  DelegationPayload,
-  ExecutionEnvelope,
-  RenderingHints,
-} from '../../../src/engine/execution/delegation/types.js';
+import type { DelegationPayload } from '../../../src/engine/execution/delegation/types.js';
 import type { DelegationStrategy } from '../../../src/engine/execution/delegation/strategy.js';
 
+/**
+ * R-1/S7 retarget (2026-08-18): `render()` and the ExecutionEnvelope were the retired handoff
+ * path (envelope content now travels in the operator-rendered EXECUTION BRIEF). These tests
+ * exercise the two surviving render modes: the current-step handoff that points at the brief,
+ * and the next-step one-line advisory.
+ */
 describe('DelegationRenderer', () => {
   const basePayload: DelegationPayload = {
     stepNumber: 2,
@@ -31,118 +33,62 @@ describe('DelegationRenderer', () => {
     hasGates: false,
   };
 
-  test('renders basic CTA with header and instructions (no envelope)', () => {
+  test('current-step handoff renders header, instructions, and the brief pointer', () => {
     const renderer = new DelegationRenderer();
-    const result = renderer.render(basePayload);
+    const result = renderer.renderCurrentStepHandoff(basePayload);
 
     expect(result).toContain('HANDOFF: Execute Step 2 ("research")');
     expect(result).toContain('subagent_type: "claude-prompts:chain-executor"');
     expect(result).toContain('HANDOFF INSTRUCTIONS');
+    expect(result).toContain('Pass the EXECUTION BRIEF above');
+    expect(result).not.toContain('Pass ALL content above');
     expect(result).toContain('CONSTRAINT');
     expect(result).toContain('BLOCKED');
   });
 
   test('includes model from strategy in tool call', () => {
     const renderer = new DelegationRenderer();
-    const payload: DelegationPayload = {
-      ...basePayload,
-      subagentModel: 'heavy',
-    };
-    const result = renderer.render(payload);
+    const result = renderer.renderCurrentStepHandoff({ ...basePayload, subagentModel: 'heavy' });
 
     expect(result).toContain('model: "opus"');
   });
 
-  test('subagentModel fast renders model haiku in CTA', () => {
+  test('subagentModel fast renders model haiku in the handoff', () => {
     const renderer = new DelegationRenderer();
-    const payload: DelegationPayload = {
-      ...basePayload,
-      subagentModel: 'fast',
-    };
-    const result = renderer.render(payload);
+    const result = renderer.renderCurrentStepHandoff({ ...basePayload, subagentModel: 'fast' });
 
     expect(result).toContain('model: "haiku"');
     expect(result).not.toContain('model: "sonnet"');
     expect(result).not.toContain('model: "opus"');
   });
 
-  test('renders execution context envelope when provided', () => {
+  test('verdict review line renders only when the brief carries gates (R-2)', () => {
     const renderer = new DelegationRenderer();
-    const envelope: ExecutionEnvelope = {
-      chainHistory: '### Chain Context\n**Chain**: chain-abc',
-      frameworkGuidance: '### Framework\n**CAGEERF**',
-      gateInstructions: '### Quality Gates\nCode quality criteria',
-    };
-    const result = renderer.render(basePayload, envelope);
-
-    expect(result).toContain('EXECUTION CONTEXT');
-    expect(result).toContain('Chain Context');
-    expect(result).toContain('CAGEERF');
-    expect(result).toContain('Code quality criteria');
-    // Delimiters present
-    expect(result).toContain('\u2550'.repeat(65));
-  });
-
-  test('skips envelope section when all fields are empty', () => {
-    const renderer = new DelegationRenderer();
-    const emptyEnvelope: ExecutionEnvelope = {};
-    const result = renderer.render(basePayload, emptyEnvelope);
-
-    expect(result).not.toContain('EXECUTION CONTEXT');
-  });
-
-  test('includes soft gate hint when gateGuidanceEnabled but no gates', () => {
-    const renderer = new DelegationRenderer();
-    const hints: RenderingHints = {
-      gateGuidanceEnabled: true,
-      frameworkInjectionEnabled: false,
-    };
-    const result = renderer.render(basePayload, undefined, hints);
-
-    expect(result).toContain('gate_verdict');
-    expect(result).toContain('self-review');
-  });
-
-  test('renders enforcement messaging when gateGuidanceEnabled and hasGates', () => {
-    const renderer = new DelegationRenderer();
-    const payload: DelegationPayload = {
+    const gated = renderer.renderCurrentStepHandoff({
       ...basePayload,
-      gateCount: 3,
+      gateCount: 2,
       hasGates: true,
-    };
-    const hints: RenderingHints = {
-      gateGuidanceEnabled: true,
-      frameworkInjectionEnabled: false,
-    };
-    const result = renderer.render(payload, undefined, hints);
+    });
+    const ungated = renderer.renderCurrentStepHandoff(basePayload);
 
-    expect(result).toContain('enforces gate criteria');
-    expect(result).toContain('gate_verdict');
-    expect(result).not.toContain('self-review');
+    expect(gated).toContain('Proposed Gate Review');
+    expect(gated).toContain('INPUT to your gate_verdict');
+    expect(ungated).not.toContain('Proposed Gate Review');
   });
 
-  test('shows continue hint for intermediate steps', () => {
+  test('ratified gate_verdict hint renders when gateGuidanceEnabled and hasGates', () => {
     const renderer = new DelegationRenderer();
-    const result = renderer.render(basePayload);
+    const result = renderer.renderCurrentStepHandoff(
+      { ...basePayload, gateCount: 1, hasGates: true },
+      { gateGuidanceEnabled: true, frameworkInjectionEnabled: false }
+    );
 
-    expect(result).toContain('so Step 3 can begin');
-  });
-
-  test('shows completion hint for last delegation step', () => {
-    const renderer = new DelegationRenderer();
-    const payload: DelegationPayload = {
-      ...basePayload,
-      stepNumber: 3,
-      totalSteps: 3,
-    };
-    const result = renderer.render(payload);
-
-    expect(result).toContain('to complete the chain');
+    expect(result).toContain('ratified gate_verdict');
   });
 
   test('selects codex strategy from payload client profile', () => {
     const renderer = new DelegationRenderer();
-    const result = renderer.render({
+    const result = renderer.renderCurrentStepHandoff({
       ...basePayload,
       clientProfile: {
         clientFamily: 'codex',
@@ -158,7 +104,7 @@ describe('DelegationRenderer', () => {
 
   test('selects neutral strategy from payload client profile', () => {
     const renderer = new DelegationRenderer();
-    const result = renderer.render({
+    const result = renderer.renderCurrentStepHandoff({
       ...basePayload,
       clientProfile: {
         clientFamily: 'unknown',
@@ -170,6 +116,16 @@ describe('DelegationRenderer', () => {
 
     expect(result).toContain('Handoff: Use your client');
     expect(result).not.toContain('Tool: Task');
+  });
+
+  test('next-step advisory is one line naming the delegated step, never instructions', () => {
+    const renderer = new DelegationRenderer();
+    const result = renderer.renderNextStepAdvisory(basePayload);
+
+    expect(result).toContain('Note: Step 2 ("research")');
+    expect(result).toContain('EXECUTION BRIEF');
+    expect(result).not.toContain('HANDOFF INSTRUCTIONS');
+    expect(result.split('\n')).toHaveLength(1);
   });
 });
 
@@ -286,7 +242,7 @@ describe('ClaudeCodeStrategy', () => {
       formatConstraints: () => 'custom constraints',
     };
     const renderer = new DelegationRenderer(customStrategy);
-    const result = renderer.render(basePayloadForStrategy);
+    const result = renderer.renderCurrentStepHandoff(basePayloadForStrategy); // (S7) render() retired with the envelope path
 
     expect(result).toContain('custom: chain-executor custom-model');
     expect(result).toContain('custom constraints');

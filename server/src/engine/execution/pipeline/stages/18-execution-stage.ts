@@ -330,6 +330,7 @@ export class StepExecutionStage extends BasePipelineStage {
         promptName: renderResult.promptName,
         callToAction: renderResult.callToAction,
         nextStepDelegated: renderResult.nextStepDelegated,
+        currentStepDelegated: renderResult.currentStepDelegated,
       },
       generatedAt: Date.now(),
     };

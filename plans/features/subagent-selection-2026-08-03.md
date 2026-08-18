@@ -1,11 +1,17 @@
 ---
 title: "Subagent Selection — Tier 17"
 date: 2026-08-03
-status: active
+status: reference
 tags: []
 ---
 
 # Subagent Selection — Tier 17
+
+> **RETIRED to reference 2026-08-18** — all 8 subtiers ✓ and the gate passed 2026-08-03; nothing
+> open remains. Retired during the delegation-contract R-1 work, which imports (not duplicates)
+> this plan's binding decisions: see `plans/subagent-delegation-contract-2026-08-12-implementation-notes.md`
+> §Rulings "Tier 17 import". Under R-1, `agentType` selection is the author's knob for which
+> executor receives the self-contained brief; `chain-executor` remains only the default hint.
 
 **Date**: 2026-08-03
 **Area**: `server/src/modules/prompts/`, `server/src/engine/execution/parsers/`,

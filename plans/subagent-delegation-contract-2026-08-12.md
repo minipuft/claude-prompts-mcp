@@ -75,7 +75,7 @@ before anyone acts on them.
 
 ## Tiers
 
-### S1 — Give the envelope a producer for chain history ☐ (as of 2026-08-12 · flips when a delegated step's envelope contains prior-step output in a live probe)
+### S1 — Give the envelope a producer for chain history ✓ (2026-08-18 · FLIPPED by live probe: the delegated step-3 brief contained `#### Step 1` + the actual `STEP-ONE-DISTINCT-OUTPUT-MARKER` from the run — scratchpad probe-3step.txt)
 
 `chainHistory` is filtered and rendered but never set. Either wire the producer or delete the
 field — **the decision is the tier**, and it is not obvious: P5 built a withholding policy naming
@@ -84,7 +84,12 @@ while wiring it changes what every delegated step receives.
 
 Coordinate with the P5 owner before touching `delegation/` — that module is their active edit set.
 
-### S2 — Emit the heading the enforcement contract requires ☐ (as of 2026-08-12 · flips when `extract_quality_gates()` returns non-None against a real captured envelope)
+**RULED 2026-08-18 (R-1, implementation notes): wire, don't delete** — and the producer feeds the
+**resume-time brief**, not the early CTA. Source: captured `step_results` via
+`getStoredStepResult`, filtered by the P5 visibility policy. The delegation/ constraint has
+expired (directory clean at HEAD 2026-08-18); see updated Constraints table.
+
+### S2 — Emit the heading the enforcement contract requires ✓ (2026-08-18 · FLIPPED: `extract_quality_gates()` returned the gate text against a brief captured from the production builder; heading exactness mutation-verified — `####` variant fails the named test)
 
 The Python side is the published contract (`hooks/lib/*` module API is in the Public API table).
 The TS side is not. So the TS renderer moves to `### Quality Gates`, not the hook. One-line change
@@ -100,11 +105,19 @@ The codex port measured that the delegated prompt is **unrecoverable** on Codex 
 spawn payload, absent from the transcript) — so a Codex registration cannot work regardless. That
 argues for Claude-Code-only registration or deletion.
 
-### S4 — Per-step gate text in the envelope ☐ (as of 2026-08-12 · flips when a probe shows step N+1's own gate ids in the handoff while step N's are absent)
+### S4 — Per-step gate text in the envelope ✓ (2026-08-18 · brief reads the per-step stage-11 field; mutation M2 (drop the read) fails 3 named tests incl. own-vs-other discrimination. CAVEAT: live end-to-end gate flow through `::` syntax is gated on S9 — the probe's gate never ATTACHED, which is upstream of this row)
 
 Depends on S1/S2 landing and on S-F5 being reproduced. The shape is per-step gate resolution at
 handoff time rather than reuse of a run-scoped field — P5 already built per-step `reviewGateIds`
 (P4-F3 closure), which is the natural source.
+
+**SHRUNK 2026-08-18 (R-1)**: per-step gate TEXT already exists — stage 11 writes
+`step.metadata['gateInstructions']` for every chain step (`gate-enhancement-service.ts:388-392`);
+the envelope reads run-scoped `context.gateInstructions`, which is assigned only on the
+single-prompt branch (`:253`) and is never set for chains. The fix is reading the per-step field
+in the brief renderer, not building new resolution. Closure probe must first verify the gate
+actually ATTACHED (DEV-S-8: the probe's `:: code-quality` token may have been consumed as a
+positional argument — check the run's node `inlineGateIds` before trusting handoff diffs).
 
 ### S5 — Agent export (migrated from the master plan's P8, verbatim scope) ☐ (as of 2026-08-12 · flips when an agent definition exports to a client directory via the sync surface)
 
@@ -128,20 +141,60 @@ divergence handling.
 is about _what a sub-agent is and how it ships_. Same subject as S1–S4 — the sub-agent contract —
 and its first candidate is an agent, not a chain behavior.
 
-### S6 — Re-measure against a fresh build ☐ (as of 2026-08-12 · flips when `npm run build && npm run verify:mcp` precedes a re-run of the S-F6/S-F7 probes)
+**DEMOTED 2026-08-18 (R-1)**: under the self-contained-brief architecture, general-purpose can run
+any delegated node, so shipping `agents/chain-executor.md` buys a restricted-tool safety posture,
+not functionality. Still worth doing; no longer blocks anything.
+
+### S8 — `delegation_skipped` telemetry on execution_records ☐ (as of 2026-08-18 · flips when a resume-without-spawn of a delegated step produces a row with the mark, and a spawned one does not; BLOCKED until the phase-guard session's v24 schema bump lands — two sessions bumping SCHEMA_VERSION collide by construction)
+
+R-4 (owner-ruled): enforcement stays advisory (D6), but the server records what it cannot
+prevent. Read-back consumer: `system_control execution_history`. Partial population by row type,
+same reading as the v21 terminal columns.
+
+### S7 — Retire the phase-shifted early CTA; one handoff producer ✓ (2026-08-18 · FLIPPED by live probe: BRIEF + HANDOFF INSTRUCTIONS in the delegated step's own response, pointing at the brief; prior step carries a one-line advisory; `rg "Pass ALL content above" src/` returns ZERO — render()/buildInstructions/buildEnvelope/ExecutionEnvelope/envelope-visibility.ts deleted same-PR)
+
+NEW row from R-1's third evidence leg: the HANDOFF for step N+1 is embedded in step N's response
+and `Pass ALL content above` points at step N's content — an obedient parent hands the subagent
+the wrong step's prompt, while N+1's real content renders inline to the parent one resume later
+with no handoff at all. Fix: the brief + handoff render together at resume time; the early CTA
+demotes to a one-line advisory; the two producers (`buildDelegationCTA`,
+`chain-operator-executor.ts:760-802`; `buildHandoffSection`, `response-assembler.ts:344-377`)
+consolidate to one. Transport parity applies (STDIO + streamable HTTP).
+
+### S9 — Inline gate token consumed as a positional argument ☐ (as of 2026-08-18 · flips when `>>reference_demo :: code-quality ==> >>reference_demo` produces a run whose node carries `inlineGateIds: ['code-quality']` AND the echoed args do NOT contain `text: ':: code-quality'`)
+
+Promoted from DEV-S-8: both the 2026-08-12 and 2026-08-18 probes show the gated run's step-2 echo
+rendering `**text**: :: code-quality` — the gate token parsed as the prompt's positional argument,
+so the gate likely never attached. This confounded every gated-vs-ungated handoff diff in both
+probe generations, and it blocks S4's live end-to-end closure. Parser scope
+(`symbolic-operator-parser.ts` / argument capture), not envelope scope.
+
+### S6 — Re-measure against a fresh build ✓ (2026-08-18 · build + verify:mcp 17/17 + both probes re-run via streamable-http against the fresh dist)
 
 The running dist is 20 src files behind. S-F6 and S-F7 are measured against it and may already be
 fixed in `src`. **Do this first** — it is cheap and it may retire two findings before anyone plans
 a fix for them.
 
+**Result 2026-08-18**: "may already be fixed" was half true. S-F7's guard IS in the fresh dist
+(`chain-operator-executor.ts:678-685`) — fixed-by-code, not visually exercised because
+`reference_demo`'s template still fails to render, the same evidentiary gap the original probe
+carried. **S-F6 still reproduces live**: the `Result:` line carries no gate hint on the fresh
+build; `renderer.ts:79-83` emits `gateHint` only when `hints?.gateGuidanceEnabled === true` and it
+was false at render time. S-F1/S-F5 re-confirmed: no `EXECUTION CONTEXT` block in either handoff;
+gated and ungated step-1 handoffs **byte-identical except the chain id**. New observation for S4:
+the gated run's step-2 echo shows `**text**: :: code-quality` — the inline gate token may have been
+consumed as a positional argument, which would confound "gate declared but not carried" with "gate
+never attached"; verify gate attachment (run's node `inlineGateIds` / `gates_fired`) before closing
+S4. Probe artifacts: scratchpad `probe-s6.mjs`, `handoff-gated.txt`, `handoff-control.txt`.
+
 ## Constraints
 
-| Constraint                                         | Consequence                                                                                  |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `delegation/` is another session's active edit set | `renderer.ts`, `types.ts`, `envelope-visibility.ts` are P5's; coordinate before editing      |
-| MCP inversion of control (D6)                      | The handoff is a CTA the parent may ignore — proven live. No fix can make delivery mandatory |
-| Python hook module API is in-contract              | The `### Quality Gates` heading moves on the TS side, never the Python side                  |
-| Docs lockstep                                      | `docs/concepts/chains-lifecycle.md` describes delegation; update with any envelope change    |
+| Constraint                                                                                          | Consequence                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~`delegation/` is another session's active edit set~~ EXPIRED 2026-08-18 — directory clean at HEAD | Constraint MOVED: `chain-operator-executor.ts`, `response-assembler.ts`, `operators/types.ts` carry ~213 uncommitted lines from the phase-guard-declaration session (declared sections — no delegation overlap). Edit additively; never revert a foreign hunk |
+| MCP inversion of control (D6)                                                                       | The handoff is a CTA the parent may ignore — proven live. No fix can make delivery mandatory                                                                                                                                                                  |
+| Python hook module API is in-contract                                                               | The `### Quality Gates` heading moves on the TS side, never the Python side                                                                                                                                                                                   |
+| Docs lockstep                                                                                       | `docs/concepts/chains-lifecycle.md` describes delegation; update with any envelope change                                                                                                                                                                     |
 
 ## Sources
 
