@@ -37,6 +37,8 @@ import { ObjectDiffGenerator } from '../../../src/mcp/tools/resource-manager/pro
 import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
 import { GateLifecycleProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-lifecycle-processor.js';
 import { GateVersioningProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-versioning-processor.js';
+import { validateFrameworkSchema } from '../../../src/engine/frameworks/definitions/framework-schema.js';
+import { FrameworkDraftValidator } from '../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 import { FrameworkFileWriter } from '../../../src/mcp/tools/framework-manager/services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-lifecycle-processor.js';
 import { FrameworkVersioningProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-versioning-processor.js';
@@ -49,7 +51,10 @@ import { MockLogger } from '../../helpers/test-helpers.js';
 import type { GateResourceContext } from '../../../src/mcp/tools/gate-manager/core/context.js';
 import type { GateManagerInput } from '../../../src/mcp/tools/gate-manager/core/types.js';
 import type { FrameworkResourceContext } from '../../../src/mcp/tools/framework-manager/core/context.js';
-import type { FrameworkManagerInput } from '../../../src/mcp/tools/framework-manager/core/types.js';
+import type {
+  FrameworkCreationData,
+  FrameworkManagerInput,
+} from '../../../src/mcp/tools/framework-manager/core/types.js';
 import type { PromptResourceContext } from '../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { ConfigManager, Logger } from '../../../src/shared/types/index.js';
@@ -1104,5 +1109,165 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
     expect(response.isError).toBe(true);
     expect(response.content[0]!.text).toContain('no gate definition could be loaded from disk');
     expect(response.content[0]!.text).toContain('no-such-gate');
+  });
+});
+
+describe('framework create — pre-write and post-write validation must agree (G1)', () => {
+  const ID = 'g1-agreement-probe';
+
+  let tempDir: string;
+  let frameworksDir: string;
+  let mockLogger: MockLogger;
+  let draftValidator: FrameworkDraftValidator;
+  let fileService: FrameworkFileWriter;
+  let lifecycle: FrameworkLifecycleProcessor;
+  let registeredGuides: Set<string>;
+  let registeredFrameworks: Set<string>;
+
+  /**
+   * The draft a caller sends. It satisfies every check `FrameworkDraftValidator` performs
+   * (`system_prompt_guidance` non-empty, `phases` non-empty, `framework_gates` non-empty) and is
+   * rejected by `validateFrameworkSchema` on the file the writer produces from it, because
+   * `FrameworkGateSchema` requires `name` on every entry and the draft validator never inspects
+   * array elements.
+   *
+   * `framework_gates` is not a declared parameter on `resourceManagerInputSchema` nor in
+   * `tooling/contracts/resource-manager.json` — it reaches the handler only through
+   * `.passthrough()` — so a caller has no advertised element shape to conform to, while the draft
+   * validator hard-requires the field.
+   */
+  function draft(): FrameworkCreationData {
+    return {
+      id: ID,
+      name: 'G1 Agreement Probe',
+      type: 'G1_AGREEMENT_PROBE',
+      system_prompt_guidance: 'Apply the probe method.',
+      enabled: true,
+      phases: [
+        { id: 'analyze', name: 'Analyze', description: 'Understand the problem' },
+        { id: 'design', name: 'Design', description: 'Plan the solution' },
+      ],
+      framework_gates: [
+        { id: 'analysis-complete', description: 'Validates the analysis phase' },
+      ] as unknown as NonNullable<FrameworkCreationData['framework_gates']>,
+    };
+  }
+
+  function frameworkYamlPath(): string {
+    return path.join(frameworksDir, ID, 'framework.yaml');
+  }
+
+  /**
+   * Registry double mirroring `RuntimeFrameworkLoader`'s load gate exactly: `validateOnLoad`
+   * runs `validateFrameworkSchema` on the on-disk definition and returns `undefined` when it
+   * fails (`runtime-framework-loader.ts:286-294`). Registering unconditionally would make the
+   * double MORE capable than production and would hide the fact that relaxing the transaction
+   * verifier alone just moves the same rejection to `createFrameworkAtomic` step 3.
+   */
+  function makeRegistry() {
+    return {
+      hasGuide: (id: string) => registeredGuides.has(id),
+      unregisterGuide: (id: string) => registeredGuides.delete(id),
+      getRuntimeLoader: () => ({ clearCache: () => undefined }),
+      loadAndRegisterById: async (id: string) => {
+        const yamlPath = path.join(frameworksDir, id, 'framework.yaml');
+        if (!existsSync(yamlPath)) return false;
+        const data = parseYamlOrThrow<Record<string, unknown>>(readFileSync(yamlPath, 'utf8'));
+        if (!validateFrameworkSchema(data, id).valid) return false;
+        registeredGuides.add(id);
+        return true;
+      },
+    };
+  }
+
+  beforeEach(async () => {
+    mockLogger = new MockLogger();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'framework-g1-'));
+    frameworksDir = path.join(tempDir, 'resources', 'frameworks');
+    registeredGuides = new Set<string>();
+    registeredFrameworks = new Set<string>();
+
+    const configManager = { getServerRoot: () => tempDir } as unknown as ConfigManager;
+
+    // Real writer, real ResourceMutationTransaction, real ResourceVerificationService.
+    fileService = new FrameworkFileWriter({
+      logger: mockLogger as unknown as Logger,
+      configManager,
+    });
+    draftValidator = new FrameworkDraftValidator();
+
+    const ctx: FrameworkResourceContext = {
+      logger: mockLogger as unknown as Logger,
+      frameworkManager: {
+        getFramework: (id: string) => (registeredFrameworks.has(id) ? { id } : undefined),
+        getFrameworkRegistry: makeRegistry,
+        registerFramework: async (id: string) => {
+          if (!registeredGuides.has(id.toLowerCase())) return false;
+          registeredFrameworks.add(id);
+          return true;
+        },
+      } as unknown as FrameworkResourceContext['frameworkManager'],
+      configManager,
+      fileService,
+      textDiffService: new ObjectDiffGenerator(),
+      // `handleCreate` never reaches versioning. Throwing rather than stubbing means a future
+      // edit that starts using it fails loudly instead of silently exercising a double.
+      versionHistoryService: new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('handleCreate must not reach versionHistoryService');
+          },
+        }
+      ) as unknown as FrameworkResourceContext['versionHistoryService'],
+      onRefresh: async () => undefined,
+    };
+
+    lifecycle = new FrameworkLifecycleProcessor(ctx, draftValidator);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  /**
+   * The invariant, stated without pre-committing to which layer is wrong (R-2 is the operator's
+   * ruling): the pre-write validator's verdict on a draft and the post-write verifier's verdict
+   * on the file built from that same draft must be the same verdict.
+   *
+   * RED against HEAD: draft accepted, write rolled back.
+   */
+  it('does not accept a draft pre-write and reject the file built from it post-write', async () => {
+    const payload = draft();
+
+    const draftVerdict = draftValidator.validate(payload);
+    const writeResult = await fileService.writeFrameworkFiles(payload, null);
+
+    expect(writeResult.success).toBe(draftVerdict.valid);
+  });
+
+  /**
+   * Same invariant at the tool surface, through the real `handleCreate` — the path an operator
+   * drives. Ruling-agnostic in the same way: whichever layer ends up owning the rejection, the
+   * handler's verdict must match the draft validator's.
+   *
+   * RED against HEAD: the draft validator passes, so `handleCreate` reports success-then-rollback.
+   */
+  it('reports the same verdict from handleCreate as the draft validator gave', async () => {
+    const payload = draft();
+    const draftVerdict = draftValidator.validate(payload);
+
+    const response = await lifecycle.handleCreate({
+      action: 'create',
+      id: payload.id,
+      name: payload.name,
+      framework: payload.type,
+      system_prompt_guidance: payload.system_prompt_guidance,
+      phases: payload.phases,
+      framework_gates: payload.framework_gates,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(!draftVerdict.valid);
+    expect(existsSync(frameworkYamlPath())).toBe(draftVerdict.valid);
   });
 });
