@@ -3,10 +3,13 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { gateSnapshotContract } from './gate-snapshot-contract.js';
+
 import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
+import { projectWriteModel } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
 
 export class GateLifecycleProcessor {
@@ -68,13 +71,7 @@ export class GateLifecycleProcessor {
     // `activation: {}` or `pass_criteria: []` key on every update that never set one).
     const existingDefinition = existingGate.getDefinition();
 
-    const beforeState: Record<string, unknown> = {
-      id: existingGate.gateId,
-      name: existingGate.name,
-      type: existingGate.type,
-      description: existingGate.description,
-      guidance: existingGate.getGuidance(),
-    };
+    const beforeState = gateSnapshotContract.project(id, existingGate);
 
     const gateData: GateCreationData = {
       id,
@@ -91,15 +88,18 @@ export class GateLifecycleProcessor {
       retry_config: retry_config ?? existingDefinition.retry_config,
     };
 
-    const afterState: Record<string, unknown> = {
-      id: gateData.id,
-      name: gateData.name,
-      type: gateData.type,
-      description: gateData.description,
-      guidance: gateData.guidance,
-    };
+    // The state this edit will PRODUCE. `gateData` already resolves every projected field —
+    // supplied value, else the existing one — so it needs no merge base.
+    const afterState = projectWriteModel(
+      id,
+      gateData as unknown as Record<string, unknown>,
+      gateSnapshotContract.projectedFields
+    );
 
-    // Auto-versioning
+    // Auto-versioning — go-forward: version N holds the state edit N produced, so the newest
+    // version always equals what `inspect` shows. `recordEditResult` bridges the prior live state
+    // first when it is not already the newest row, which is what carries pre-P7 gate rows across
+    // the era boundary with no data migration.
     let versionSaved: number | undefined;
     const skipVersion = args.skip_version === true;
     if (this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion) {
@@ -110,12 +110,13 @@ export class GateLifecycleProcessor {
       );
       const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
 
-      const versionResult = await this.ctx.versionHistoryService.saveVersion(
+      const versionResult = await this.ctx.versionHistoryService.recordEditResult(
         'gate',
         id,
         beforeState,
+        afterState,
         {
-          description: args.version_description ?? 'Update via resource_manager',
+          description: 'Update via resource_manager',
           diff_summary: diffSummary,
         }
       );
@@ -156,15 +157,9 @@ export class GateLifecycleProcessor {
   }
 
   async handleDelete(args: GateManagerInput): Promise<ToolResponse> {
-    const { id, confirm } = args;
+    const { id } = args;
 
     if (!id) return this.error('Gate ID is required for delete action');
-
-    if (!confirm) {
-      return this.error(
-        `⚠️ Delete requires confirmation.\n\nTo delete gate '${id}', set confirm: true`
-      );
-    }
 
     if (!this.ctx.gateManager.has(id)) {
       return this.error(`Gate '${id}' not found`);
@@ -175,6 +170,20 @@ export class GateLifecycleProcessor {
 
     if (!existsSync(gateDir)) {
       return this.error(`Gate directory not found: ${gateDir}`);
+    }
+
+    // `dry_run` reports what would be removed and returns before anything is. Deletion is the one
+    // destructive action rollback cannot undo — there is no version row for a gate that no longer
+    // exists — so a preview is worth more here than anywhere else.
+    if (args.dry_run === true) {
+      return this.success(
+        `🔍 **Dry run** — deletion of gate '${id}'\n\n` +
+          `Nothing was removed.\n\n` +
+          `📁 Would remove the directory: ${gateDir}\n` +
+          `📜 Would purge this gate's rows from \`version_history\`\n` +
+          `⚠️ Deletion cannot be undone — rollback cannot restore a deleted gate.\n\n` +
+          `💡 Re-send with \`confirm: true\` and without \`dry_run\` to apply it.`
+      );
     }
 
     try {

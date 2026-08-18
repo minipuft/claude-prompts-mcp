@@ -4,6 +4,15 @@
 // Import directly from shared/types/index.js — no re-export shim.
 
 /**
+ * The three resource types `version_history` records.
+ *
+ * Exported here rather than declared privately in the service because the snapshot contract is
+ * keyed on it and the tool layer implements that contract — a second local declaration would be a
+ * homonym, and a filter written against the wrong one is not type-detectable.
+ */
+export type ResourceType = 'prompt' | 'gate' | 'framework';
+
+/**
  * A single version entry in the history
  */
 export interface VersionEntry {

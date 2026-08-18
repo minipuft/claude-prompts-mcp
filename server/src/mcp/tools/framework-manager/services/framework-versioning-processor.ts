@@ -1,14 +1,18 @@
 // @lifecycle canonical - Framework versioning operations: history, rollback, compare.
 
+import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
+
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
-import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
+import type { FrameworkManagerInput } from '../core/types.js';
+
+import { describeIncompleteSnapshot, describeRollbackPreview } from '#modules/versioning/index.js';
 
 export class FrameworkVersioningProcessor {
   constructor(private readonly ctx: FrameworkResourceContext) {}
 
   async handleHistory(args: FrameworkManagerInput): Promise<ToolResponse> {
-    const { id, limit } = args;
+    const { id, limit, source_workspace } = args;
 
     if (id === undefined || id === '') {
       return this.error('Framework ID is required for history action');
@@ -19,7 +23,11 @@ export class FrameworkVersioningProcessor {
       return this.error(`Framework '${id}' not found`);
     }
 
-    const history = await this.ctx.versionHistoryService.loadHistory('framework', id);
+    const history = await this.ctx.versionHistoryService.loadHistory(
+      'framework',
+      id,
+      source_workspace
+    );
 
     if (!history || history.versions.length === 0) {
       return this.success(
@@ -33,7 +41,7 @@ export class FrameworkVersioningProcessor {
   }
 
   async handleRollback(args: FrameworkManagerInput): Promise<ToolResponse> {
-    const { id, version, confirm } = args;
+    const { id, version } = args;
 
     if (id === undefined || id === '') {
       return this.error('Framework ID is required for rollback action');
@@ -41,13 +49,6 @@ export class FrameworkVersioningProcessor {
     if (version === undefined) {
       return this.error('Version number is required for rollback action');
     }
-    if (confirm !== true) {
-      return this.error(
-        `⚠️ Rollback requires confirmation.\n\n` +
-          `To rollback framework '${id}' to version ${version}, set confirm: true`
-      );
-    }
-
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
     if (existingFramework === undefined) {
       return this.error(`Framework '${id}' not found`);
@@ -59,44 +60,68 @@ export class FrameworkVersioningProcessor {
       return this.error(`Failed to load current framework state`);
     }
 
-    // Capture current state
-    const currentState: Record<string, unknown> = {
-      id: existingData.framework['id'],
-      name: existingData.framework['name'],
-      type: existingData.framework['type'],
-      description: existingData.framework['description'],
-      enabled: existingData.framework['enabled'],
-    };
-
-    // Perform rollback
-    const result = await this.ctx.versionHistoryService.rollback(
+    // PHASE 1 — validate. Pure reads only; nothing below writes until phase 2.
+    const resolved = await this.ctx.versionHistoryService.resolveRollbackTarget(
       'framework',
       id,
-      version,
-      currentState
+      version
     );
-
-    if (!result.success) {
-      return this.error(`Rollback failed: ${result.error}`);
+    if (!resolved.ok) {
+      return this.error(`Rollback failed: ${resolved.error}`);
     }
 
-    const snapshot = result.snapshot;
-    if (!snapshot) {
-      return this.error('Rollback failed: No snapshot found in target version');
+    const snapshot = resolved.entry.snapshot;
+    const restore = frameworkSnapshotContract.restore(id, snapshot);
+    if (!restore.ok) {
+      return this.error(
+        describeIncompleteSnapshot('framework', id, version, restore.missingFields)
+      );
     }
 
-    // Rebuild framework data from snapshot
-    const frameworkData: Partial<FrameworkCreationData> & { id: string } = {
-      id,
-      name: String(snapshot['name'] ?? existingFramework.name),
-      type: String(snapshot['type'] ?? existingData.framework['type']),
-      description: String(snapshot['description'] ?? existingData.framework['description']),
-      enabled: (snapshot['enabled'] as boolean) ?? existingData.framework['enabled'],
-      system_prompt_guidance: existingData.systemPrompt ?? '',
-    };
+    const currentState = frameworkSnapshotContract.project(id, existingData);
 
-    // Write restored framework files
-    const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
+    // `dry_run` returns here — after validation, so a preview refuses an unrestorable version the
+    // same way the real call does, and BEFORE the version row is recorded.
+    if (args.dry_run === true) {
+      return this.success(
+        describeRollbackPreview(
+          'framework',
+          id,
+          version,
+          this.ctx.textDiffService.generateObjectDiff(
+            currentState,
+            snapshot,
+            `${id}/framework.yaml`
+          ),
+          restore.unrecordedFields
+        )
+      );
+    }
+
+    // PHASE 2 — record, before any write, so a persistence failure aborts with nothing on disk.
+    let saveResult;
+    try {
+      saveResult = await this.ctx.versionHistoryService.commitEdit(
+        'framework',
+        id,
+        currentState,
+        snapshot,
+        { description: `Rollback to v${version}`, diff_summary: '' }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return this.error(
+        `Rollback failed: could not record the version snapshot — ${message}\n\n` +
+          `The framework was left unchanged.`
+      );
+    }
+
+    // PHASE 3 — write. Fields outside the projection are carried forward by the writer's deep
+    // merge over the existing YAML, which is why they are not in the projection to begin with.
+    const writeResult = await this.ctx.fileService.writeFrameworkFiles(
+      restore.writeModel,
+      existingData
+    );
     if (!writeResult.success) {
       return this.error(`Rollback write failed: ${writeResult.error}`);
     }
@@ -104,15 +129,24 @@ export class FrameworkVersioningProcessor {
     // Trigger refresh
     await this.ctx.onRefresh?.();
 
-    return this.success(
+    let response =
       `✅ Framework '${id}' rolled back to version ${version}\n\n` +
-        `📜 Current state saved as version ${result.saved_version}\n` +
-        `🔄 Framework registry reloaded`
-    );
+      `📜 Restored state recorded as version ${saveResult.version}\n`;
+
+    // A merge writer cannot remove a key, so a field the snapshot never recorded keeps its
+    // current value. Saying so is the difference between a partial restore and a partial restore
+    // reported as a full one.
+    if (restore.unrecordedFields !== undefined) {
+      response +=
+        `⚠️ Version ${version} recorded no ${restore.unrecordedFields.join(', ')} — ` +
+        `left at the current value\n`;
+    }
+
+    return this.success(`${response}🔄 Framework registry reloaded`);
   }
 
   async handleCompare(args: FrameworkManagerInput): Promise<ToolResponse> {
-    const { id, from_version, to_version } = args;
+    const { id, from_version, to_version, source_workspace } = args;
 
     if (id === undefined || id === '') {
       return this.error('Framework ID is required for compare action');
@@ -130,7 +164,8 @@ export class FrameworkVersioningProcessor {
       'framework',
       id,
       from_version,
-      to_version
+      to_version,
+      source_workspace
     );
 
     if (!result.success) {

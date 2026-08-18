@@ -8,9 +8,8 @@ import type {
   SaveVersionResult,
   RollbackResult,
   SaveVersionOptions,
+  ResourceType,
 } from './types.js';
-
-type ResourceType = 'prompt' | 'gate' | 'framework';
 
 interface VersionRow {
   id: number;
@@ -80,6 +79,24 @@ export class VersionHistoryService {
   /** Tenant key for this service's rows — the workspace, falling back to the shared default. */
   private resolveTenantId(): string {
     return resolveContinuityScopeId(this.scope);
+  }
+
+  /**
+   * Tenant key for a READ that may deliberately target another workspace.
+   *
+   * `state.db` is one file shared by every project, isolated only by `tenant_id`, so another
+   * workspace's rollback history is already physically present — it is simply filtered out. Reading
+   * it is legitimate debugging ("what did this prompt look like in the other checkout?").
+   *
+   * Reads ONLY. There is deliberately no write-side equivalent: `saveVersion` computes the next
+   * number from `MAX(version)` within a scope, so a cross-scope write would interleave two
+   * workspaces' numbering, and a rollback would restore a snapshot describing files that may not
+   * exist here. `rollback` rejects the override rather than ignoring it — silently scoping a
+   * parameter back to local would be worse than refusing, because the caller would believe they had
+   * restored the other workspace's version.
+   */
+  private resolveReadTenantId(readScopeOverride?: string): string {
+    return readScopeOverride ?? this.resolveTenantId();
   }
 
   /**
@@ -204,10 +221,14 @@ export class VersionHistoryService {
   /**
    * Load version history for a resource.
    */
-  async loadHistory(resourceType: ResourceType, resourceId: string): Promise<HistoryFile | null> {
+  async loadHistory(
+    resourceType: ResourceType,
+    resourceId: string,
+    readScopeOverride?: string
+  ): Promise<HistoryFile | null> {
     try {
       const db = this.getDb();
-      const tenantId = this.resolveTenantId();
+      const tenantId = this.resolveReadTenantId(readScopeOverride);
 
       const rows = db.query<VersionRow>(
         `SELECT version, snapshot, diff_summary, description, created_at
@@ -249,11 +270,12 @@ export class VersionHistoryService {
   async getVersion(
     resourceType: ResourceType,
     resourceId: string,
-    version: number
+    version: number,
+    readScopeOverride?: string
   ): Promise<VersionEntry | null> {
     try {
       const db = this.getDb();
-      const tenantId = this.resolveTenantId();
+      const tenantId = this.resolveReadTenantId(readScopeOverride);
 
       const row = db.queryOne<VersionRow>(
         `SELECT version, snapshot, diff_summary, description, created_at
@@ -360,6 +382,59 @@ export class VersionHistoryService {
   }
 
   /**
+   * Resolve the snapshot a rollback would restore. PURE READ — writes nothing, ever.
+   *
+   * This is the first of the three phases a rollback runs (validate → record → write). It exists
+   * as its own method so "nothing has been written yet" is visible at the call site: the caller
+   * takes this snapshot, asks its own snapshot contract whether the record is restorable, and only
+   * then calls `commitEdit`. Previously `rollback()` did the resolve and the record together and
+   * handed the result back for validation, so a caller that rejected an incomplete snapshot had
+   * already caused a bridge row and a restore row to be written — the prompt path said so in its
+   * own error text.
+   */
+  async resolveRollbackTarget(
+    resourceType: ResourceType,
+    resourceId: string,
+    targetVersion: number
+  ): Promise<{ ok: true; entry: VersionEntry } | { ok: false; error: string }> {
+    if (!this.isEnabled()) {
+      return { ok: false, error: 'Versioning is disabled' };
+    }
+
+    const targetEntry = await this.getVersion(resourceType, resourceId, targetVersion);
+    if (targetEntry === null) {
+      return { ok: false, error: `Version ${targetVersion} not found` };
+    }
+    return { ok: true, entry: targetEntry };
+  }
+
+  /**
+   * Record the state an edit produced, bridging the prior live state when it is unrecorded.
+   *
+   * Phase two of three. Named for what a caller does with it rather than for the mechanism:
+   * `recordEditResult` remains the mechanism and this is the boundary the processors call, so the
+   * ordering — record BEFORE the file write, so a persistence failure aborts with nothing on disk —
+   * reads as a sequence at the call site instead of being buried in a service method.
+   *
+   * Throws on persistence failure, by the same contract as `saveVersion`.
+   */
+  async commitEdit(
+    resourceType: ResourceType,
+    resourceId: string,
+    priorLiveSnapshot: Record<string, unknown>,
+    producedSnapshot: Record<string, unknown>,
+    options?: SaveVersionOptions
+  ): Promise<SaveVersionResult & { bridged: boolean }> {
+    return this.recordEditResult(
+      resourceType,
+      resourceId,
+      priorLiveSnapshot,
+      producedSnapshot,
+      options
+    );
+  }
+
+  /**
    * Rollback to a previous version.
    *
    * Go-forward semantics (OQ-P7-3): the target is validated BEFORE anything is written, so a
@@ -368,6 +443,11 @@ export class VersionHistoryService {
    * produced. The live pre-rollback state needs no dedicated "Pre-rollback snapshot" row: under
    * these semantics it is already the previous version, and when it is not (old-era rows,
    * out-of-band edits) the bridge records it.
+   *
+   * RESTORABILITY is not checked here — only existence. A caller that can reject the snapshot
+   * (because its snapshot contract finds a required field missing) must use
+   * `resolveRollbackTarget` + `commitEdit` instead, so the rejection happens before any write.
+   * This convenience wrapper remains for callers with no such rejection to make.
    */
   async rollback(
     resourceType: ResourceType,
@@ -375,21 +455,18 @@ export class VersionHistoryService {
     targetVersion: number,
     currentSnapshot: Record<string, unknown>
   ): Promise<RollbackResult & { snapshot?: Record<string, unknown> }> {
-    if (!this.isEnabled()) {
-      return { success: false, error: 'Versioning is disabled' };
+    const resolved = await this.resolveRollbackTarget(resourceType, resourceId, targetVersion);
+    if (!resolved.ok) {
+      return { success: false, error: resolved.error };
     }
+    const targetEntry = resolved.entry;
 
     try {
-      const targetEntry = await this.getVersion(resourceType, resourceId, targetVersion);
-      if (targetEntry === null) {
-        return { success: false, error: `Version ${targetVersion} not found` };
-      }
-
       // Record the RESTORED state as the newest version, bridging the live state first if it is
       // not already recorded. A persistence failure throws and is caught below — a rollback that
       // reports failure and restores nothing, with the target validated above so the refusal
       // path writes no rows at all.
-      const saveResult = await this.recordEditResult(
+      const saveResult = await this.commitEdit(
         resourceType,
         resourceId,
         currentSnapshot,
@@ -424,15 +501,21 @@ export class VersionHistoryService {
     resourceType: ResourceType,
     resourceId: string,
     fromVersion: number,
-    toVersion: number
+    toVersion: number,
+    readScopeOverride?: string
   ): Promise<{
     success: boolean;
     from?: VersionEntry;
     to?: VersionEntry;
     error?: string;
   }> {
-    const fromEntry = await this.getVersion(resourceType, resourceId, fromVersion);
-    const toEntry = await this.getVersion(resourceType, resourceId, toVersion);
+    const fromEntry = await this.getVersion(
+      resourceType,
+      resourceId,
+      fromVersion,
+      readScopeOverride
+    );
+    const toEntry = await this.getVersion(resourceType, resourceId, toVersion, readScopeOverride);
 
     if (fromEntry === null) {
       return { success: false, error: `Version ${fromVersion} not found` };

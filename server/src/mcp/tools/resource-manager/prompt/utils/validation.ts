@@ -148,7 +148,10 @@ const ACTION_METADATA_MAP = new Map<
 /**
  * Validate required fields in operation arguments with contextual error messages
  */
-export function validateRequiredFields(args: any, required: string[]): void {
+export function validateRequiredFields<T extends object, K extends keyof T & string>(
+  args: T,
+  required: readonly K[]
+): asserts args is T & { [P in K]-?: NonNullable<T[P]> } {
   const missing: string[] = [];
 
   for (const field of required) {
@@ -158,7 +161,7 @@ export function validateRequiredFields(args: any, required: string[]): void {
   }
 
   if (missing.length > 0) {
-    const action = args.action || 'unknown';
+    const action = (args as { action?: string }).action ?? 'unknown';
     const actionInfo = ACTION_REQUIREMENTS[action];
 
     let errorMessage = `❌ Missing required fields for action '${action}': ${missing.join(', ')}\n\n`;

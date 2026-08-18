@@ -407,6 +407,17 @@ export class FrameworkFileWriter {
       yamlData['type'] = typeValue;
     }
 
+    // `description` is read back by `toFrameworkCreationData`, carried in
+    // OPTIONAL_FRAMEWORK_FIELDS, and reported in the update diff — but until 2026-08-17 it was
+    // never written here, so `resource_manager framework update description:"..."` reported a
+    // successful change the file never received (the old value survived only because
+    // `writeFrameworkFiles` deep-merges over the existing YAML). Recording it in a version
+    // snapshot while no write path could restore it is the same defect one layer up, which is
+    // how it surfaced.
+    if (data.description !== undefined) {
+      yamlData['description'] = data.description;
+    }
+
     // Enabled defaults to true
     yamlData['enabled'] = data.enabled ?? true;
 

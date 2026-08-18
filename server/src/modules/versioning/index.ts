@@ -10,4 +10,14 @@ export type {
   SaveVersionResult,
   RollbackResult,
   SaveVersionOptions,
+  ResourceType,
 } from './types.js';
+export type { SnapshotContract, RestoreResult } from './snapshot-contract.js';
+export {
+  missingRequiredFields,
+  copyPresentFields,
+  canonicalizeSnapshot,
+  projectWriteModel,
+  describeRollbackPreview,
+  describeIncompleteSnapshot,
+} from './snapshot-contract.js';

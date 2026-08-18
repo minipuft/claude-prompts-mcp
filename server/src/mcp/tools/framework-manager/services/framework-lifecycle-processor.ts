@@ -4,10 +4,14 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
+
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
+
+import { projectWriteModel } from '#modules/versioning/index.js';
 
 /**
  * Optional framework fields that can be copied directly from input to framework data.
@@ -110,14 +114,8 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Failed to load framework files for '${id}'. Files may be corrupted.`);
     }
 
-    // Capture before state for diff generation
-    const beforeState: Record<string, unknown> = {
-      id: existingData.framework['id'],
-      name: existingData.framework['name'],
-      type: existingData.framework['type'],
-      description: existingData.framework['description'],
-      enabled: existingData.framework['enabled'],
-    };
+    // Capture before state for diff generation and versioning
+    const beforeState = frameworkSnapshotContract.project(id, existingData);
 
     // Build update data with ONLY the fields provided in the request
     const frameworkData: Partial<FrameworkCreationData> & { id: string } = { id };
@@ -135,16 +133,19 @@ export class FrameworkLifecycleProcessor {
     // Assign all optional fields from input (only defined fields)
     this.assignOptionalFields(frameworkData as FrameworkCreationData, args);
 
-    // Build after state for diff generation
-    const afterState: Record<string, unknown> = {
+    // The state this edit will PRODUCE. An update carries only the fields the request named, and
+    // `writeFrameworkFiles` deep-merges them over the existing YAML — so the produced state is
+    // that merge, and `beforeState` is the merge base here for the same reason.
+    const afterState = projectWriteModel(
       id,
-      name: frameworkData.name ?? existingData.framework['name'],
-      type: frameworkData.type ?? existingData.framework['type'],
-      description: frameworkData.description ?? existingData.framework['description'],
-      enabled: frameworkData.enabled ?? existingData.framework['enabled'],
-    };
+      frameworkData,
+      frameworkSnapshotContract.projectedFields,
+      beforeState
+    );
 
-    // Save version before update (auto-versioning)
+    // Auto-versioning — go-forward: version N holds the state edit N produced, matching prompts
+    // and gates. `recordEditResult` bridges the prior live state when it is not already the newest
+    // row, which carries pre-existing framework rows across the era boundary without a migration.
     let versionSaved: number | undefined;
     const skipVersion = args.skip_version === true;
     if (this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion) {
@@ -155,12 +156,13 @@ export class FrameworkLifecycleProcessor {
       );
       const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
 
-      const versionResult = await this.ctx.versionHistoryService.saveVersion(
+      const versionResult = await this.ctx.versionHistoryService.recordEditResult(
         'framework',
         id,
         beforeState,
+        afterState,
         {
-          description: args.version_description ?? 'Update via resource_manager',
+          description: 'Update via resource_manager',
           diff_summary: diffSummary,
         }
       );
@@ -204,16 +206,10 @@ export class FrameworkLifecycleProcessor {
   }
 
   async handleDelete(args: FrameworkManagerInput): Promise<ToolResponse> {
-    const { id, confirm } = args;
+    const { id } = args;
 
     if (id === undefined || id === '') {
       return this.error('Framework ID is required for delete action');
-    }
-
-    if (confirm !== true) {
-      return this.error(
-        `⚠️ Delete requires confirmation.\n\nTo delete framework '${id}', set confirm: true`
-      );
     }
 
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
@@ -235,6 +231,20 @@ export class FrameworkLifecycleProcessor {
 
     if (!existsSync(frameworkDir)) {
       return this.error(`Framework directory not found: ${frameworkDir}`);
+    }
+
+    // `dry_run` reports what would be removed and returns before anything is. Deletion is the one
+    // destructive action rollback cannot undo — there is no version row for a framework that no
+    // longer exists.
+    if (args.dry_run === true) {
+      return this.success(
+        `🔍 **Dry run** — deletion of framework '${id}'\n\n` +
+          `Nothing was removed.\n\n` +
+          `📁 Would remove the directory: ${frameworkDir}\n` +
+          `📜 Would purge this framework's rows from \`version_history\`\n` +
+          `⚠️ Deletion cannot be undone — rollback cannot restore a deleted framework.\n\n` +
+          `💡 Re-send with \`confirm: true\` and without \`dry_run\` to apply it.`
+      );
     }
 
     // Remove framework directory

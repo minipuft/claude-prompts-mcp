@@ -5,6 +5,9 @@ import { PromptResourceContext } from '../core/context.js';
 import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
 import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/validation.js';
 
+import type { PromptResourceInput } from '../../core/types.js';
+
+import { describeRollbackPreview, type SnapshotContract } from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 
 /**
@@ -94,6 +97,58 @@ export function buildRestoreFromSnapshot(
   return { ok: true, promptData };
 }
 
+/**
+ * The prompt path expressed as a `SnapshotContract`.
+ *
+ * This is the reference implementation the gate and framework contracts were generalized from, so
+ * it is stated in terms of the constants and functions that already existed rather than rewritten
+ * against the interface — the exports above keep their current importers, and adopting the shared
+ * shape must not change prompt behaviour by a single field.
+ */
+export const promptSnapshotContract: SnapshotContract<object, Record<string, unknown>> = {
+  resourceType: 'prompt',
+  requiredFields: REQUIRED_SNAPSHOT_FIELDS,
+  projectedFields: [...REQUIRED_SNAPSHOT_FIELDS, ...RESTORED_OPTIONAL_SNAPSHOT_FIELDS],
+  // Deliberately NOT wrapped in `canonicalizeSnapshot`, unlike the gate and framework contracts.
+  // Prompts never had F18's key-order problem: both the record side and the compare side call
+  // `canonicalPromptSnapshot`, so the orders agree by construction. Canonicalizing anyway would
+  // change what a prompt snapshot CONTAINS — `id` and every `SNAPSHOT_PRESERVED_FIELDS` member sit
+  // outside `projectedFields`, so they would be dropped, and `version_history` is durable, so every
+  // existing prompt row would stop matching and bridge once. Uniformity is not worth rewriting the
+  // meaning of rows already on disk.
+  project: (id, live) => canonicalPromptSnapshot(id, live),
+  restore: (id, snapshot) => {
+    const result = buildRestoreFromSnapshot(id, snapshot);
+    return result.ok
+      ? { ok: true, writeModel: result.promptData }
+      : { ok: false, missingFields: result.missingFields };
+  },
+};
+
+/**
+ * F7 — say so when a rollback leaves script tools untouched.
+ *
+ * `tools/{id}/` holds `tool.yaml`, `schema.json` and a script file, none of which a version
+ * snapshot records: `canonicalPromptSnapshot` excludes `tools` deliberately (the writer holds
+ * definition OBJECTS while `PromptYamlSchema` declares an id list), and `ConvertedPrompt` carries
+ * only the loaded definitions, not their bytes. So a rollback restores the template and leaves the
+ * scripts at whatever they currently are.
+ *
+ * Versioning them was considered and rejected on measurement (OQ-E1, 2026-08-17): 7 of 121 prompt
+ * directories declare tools, and no gate or framework directory has a single file its writer does
+ * not already own. What is NOT acceptable is the silence — a partial restore reported as a full
+ * one is the defect class this whole change removes, and it does not stop being one because the
+ * missing part is a file rather than a field.
+ */
+function describeUnversionedScriptTools(livePrompt: { scriptTools?: unknown[] }): string {
+  const count = livePrompt.scriptTools?.length ?? 0;
+  if (count === 0) return '';
+  return (
+    `⚠️ ${count} script tool(s) under \`tools/\` are not versioned — ` +
+    `their files were left unchanged\n`
+  );
+}
+
 export class PromptVersioningProcessor {
   private readonly context: PromptResourceContext;
   private readonly fileOperations: FileOperations;
@@ -105,9 +160,9 @@ export class PromptVersioningProcessor {
     this.textDiffService = context.textDiffService;
   }
 
-  async handleHistory(args: any): Promise<ToolResponse> {
+  async handleHistory(args: PromptResourceInput): Promise<ToolResponse> {
     validateRequiredFields(args, ['id']);
-    const { id, limit } = args;
+    const { id, limit, source_workspace } = args;
 
     const prompt = this.getConvertedPrompts().find((p) => p.id === id);
     if (!prompt) {
@@ -117,7 +172,11 @@ export class PromptVersioningProcessor {
       };
     }
 
-    const history = await this.context.versionHistoryService.loadHistory('prompt', id);
+    const history = await this.context.versionHistoryService.loadHistory(
+      'prompt',
+      id,
+      source_workspace
+    );
 
     if (!history || history.versions.length === 0) {
       return {
@@ -143,23 +202,13 @@ export class PromptVersioningProcessor {
     };
   }
 
-  async handleRollback(args: any): Promise<ToolResponse> {
+  async handleRollback(args: PromptResourceInput): Promise<ToolResponse> {
     validateRequiredFields(args, ['id', 'version']);
-    const { id, version, confirm } = args;
+    const { id, version } = args;
 
-    if (!confirm) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `⚠️ Rollback requires confirmation.\n\n` +
-              `To rollback prompt '${id}' to version ${version}, set confirm: true`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    // Confirmation is enforced once, ahead of dispatch, by DESTRUCTIVE_ACTIONS in the
+    // resource-manager router. `prompt delete` keeps its own guard because that refusal names the
+    // dependent prompts; a rollback refusal carries no such information, so it does not.
 
     const currentPrompt = this.getConvertedPrompts().find((p) => p.id === id);
     if (!currentPrompt) {
@@ -169,36 +218,21 @@ export class PromptVersioningProcessor {
       };
     }
 
-    // Projected through the same shape `updatePrompt` records: the raw ConvertedPrompt carries
-    // loader-resolved runtime keys, and passing it here would make the rollback's bridge check
-    // always see the live state as unrecorded (see canonicalPromptSnapshot).
-    const result = await this.context.versionHistoryService.rollback(
+    // PHASE 1 — validate. Pure read; nothing is written by anything below until phase 2.
+    const resolved = await this.context.versionHistoryService.resolveRollbackTarget(
       'prompt',
       id,
-      version,
-      canonicalPromptSnapshot(id, currentPrompt)
+      version
     );
 
-    if (!result.success) {
+    if (!resolved.ok) {
       return {
-        content: [{ type: 'text' as const, text: `❌ Rollback failed: ${result.error}` }],
+        content: [{ type: 'text' as const, text: `❌ Rollback failed: ${resolved.error}` }],
         isError: true,
       };
     }
 
-    const snapshot = result.snapshot;
-    if (!snapshot) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: '❌ Rollback failed: No snapshot found in target version',
-          },
-        ],
-        isError: true,
-      };
-    }
-
+    const snapshot = resolved.entry.snapshot;
     const restore = buildRestoreFromSnapshot(id, snapshot);
     if (!restore.ok) {
       return {
@@ -208,24 +242,75 @@ export class PromptVersioningProcessor {
             text:
               `❌ Rollback failed: version ${version} of '${id}' is not a complete snapshot — ` +
               `missing ${restore.missingFields.join(', ')}.\n\n` +
-              `The prompt was left unchanged. Substituting the live value for a missing field is ` +
-              `what produced rollbacks landing on a state matching neither version.\n` +
-              `📜 The pre-rollback snapshot was already recorded as version ${result.saved_version}.`,
+              `The prompt was left unchanged and no version was recorded. Substituting the live ` +
+              `value for a missing field is what produced rollbacks landing on a state matching ` +
+              `neither version.`,
           },
         ],
         isError: true,
       };
     }
 
-    // Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means rollback
-    // inherits the on-disk field preservation Tier 1.4 established, so the five prompt-level
-    // fields the writer builds no value for survive a rollback exactly as they survive an update.
-    // `ALL_PROMPT_DATA_KEYS`: rollback owns the WHOLE restored state (Fix B, tier-b-settability-
-    // proposal §2/§5) — there is no "what did THIS call touch" to narrow against, a restored
-    // snapshot IS the state being written. This is also what lets a rollback to a version
-    // recorded under a DIFFERENT category perform a category move (Part 2): the writer resolves
-    // that purely from `restore.promptData.category` vs the on-disk directory, with no
-    // rollback-specific code needed here.
+    const currentState = canonicalPromptSnapshot(id, currentPrompt);
+
+    // `dry_run` returns here — after validation, so a preview refuses an unrestorable version the
+    // same way the real call does, and BEFORE the version row is recorded, so neither the file nor
+    // the table moves.
+    if (args.dry_run === true) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: describeRollbackPreview(
+              'prompt',
+              id,
+              version,
+              this.textDiffService.generateObjectDiff(currentState, snapshot, `${id}/prompt.yaml`)
+            ),
+          },
+        ],
+        isError: false,
+      };
+    }
+
+    // PHASE 2 — record. Throws on persistence failure, which aborts with nothing on disk. This
+    // ordering is the safety property: recording after the write would leave a written file with
+    // no version row. Projected through the same shape `updatePrompt` records, because the raw
+    // ConvertedPrompt carries loader-resolved runtime keys and passing it here would make the
+    // bridge check always see the live state as unrecorded (see canonicalPromptSnapshot).
+    let saveResult;
+    try {
+      saveResult = await this.context.versionHistoryService.commitEdit(
+        'prompt',
+        id,
+        currentState,
+        snapshot,
+        { description: `Rollback to v${version}`, diff_summary: '' }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `❌ Rollback failed: could not record the version snapshot — ${message}\n\n` +
+              `The prompt was left unchanged.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // PHASE 3 — write. Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
+    // rollback inherits the on-disk field preservation Tier 1.4 established, so the five
+    // prompt-level fields the writer builds no value for survive a rollback exactly as they
+    // survive an update. `ALL_PROMPT_DATA_KEYS`: rollback owns the WHOLE restored state (Fix B,
+    // tier-b-settability-proposal §2/§5) — there is no "what did THIS call touch" to narrow
+    // against, a restored snapshot IS the state being written. This is also what lets a rollback
+    // to a version recorded under a DIFFERENT category perform a category move (Part 2): the
+    // writer resolves that purely from `restore.promptData.category` vs the on-disk directory,
+    // with no rollback-specific code needed here.
     await this.fileOperations.updatePromptImplementation(restore.promptData, ALL_PROMPT_DATA_KEYS);
     await this.context.dependencies.onRefresh();
 
@@ -235,7 +320,8 @@ export class PromptVersioningProcessor {
           type: 'text' as const,
           text:
             `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
-            `📜 Current state saved as version ${result.saved_version}\n` +
+            `📜 Restored state recorded as version ${saveResult.version}\n` +
+            describeUnversionedScriptTools(currentPrompt) +
             `🔄 Prompts reloaded`,
         },
       ],
@@ -243,9 +329,9 @@ export class PromptVersioningProcessor {
     };
   }
 
-  async handleCompare(args: any): Promise<ToolResponse> {
+  async handleCompare(args: PromptResourceInput): Promise<ToolResponse> {
     validateRequiredFields(args, ['id', 'from_version', 'to_version']);
-    const { id, from_version, to_version } = args;
+    const { id, from_version, to_version, source_workspace } = args;
 
     const prompt = this.getConvertedPrompts().find((p) => p.id === id);
     if (!prompt) {
@@ -259,7 +345,8 @@ export class PromptVersioningProcessor {
       'prompt',
       id,
       from_version,
-      to_version
+      to_version,
+      source_workspace
     );
 
     if (!result.success) {
