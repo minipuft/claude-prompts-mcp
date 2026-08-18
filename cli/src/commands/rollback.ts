@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { loadYamlFileSync, serializeYaml, rollbackVersion } from '@cli-shared/index.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
-import { TYPE_MAP, TYPE_CONFIG, singularName } from '../lib/types.js';
+import { TYPE_MAP, TYPE_CONFIG, singularName, isVersionedType } from '../lib/types.js';
 
 interface RollbackOptions {
   workspace?: string;
@@ -55,7 +55,15 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     return 1;
   }
 
-  // Map plural type to singular for versioning API
+  // Map plural type to singular for versioning API. Guarded rather than cast: `styles` is a valid
+  // ResourceType with no version rows, and casting it into a union that does not contain it turned
+  // an unsupported operation into a confusing "version not found".
+  if (!isVersionedType(type)) {
+    console.error(
+      `${singularName(type)} resources are not versioned — nothing records version history for them.`,
+    );
+    return 1;
+  }
   const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
   const result = rollbackVersion(match.dir, resourceType, options.id, targetVersion, currentData);
@@ -65,11 +73,33 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     return 1;
   }
 
-  // Write restored snapshot back to YAML
+  // Write the restored snapshot back, MERGED over what is on disk rather than replacing it.
+  //
+  // A snapshot is a projection of the authored surface, not the whole file. The server's writers
+  // know that and carry the rest forward (`resolvePreservedGateYamlFields`, the framework deep
+  // merge); this command used to write `serializeYaml(result.snapshot)` straight over the entry
+  // file, so a server-recorded gate snapshot — five keys — deleted `pass_criteria`, `retry_config`,
+  // `activation` and `guidanceFile` from a `gate.yaml` that declares eight, and injected a
+  // `guidance` key holding the whole markdown body. Server and CLI produced different files from
+  // the same version.
+  //
+  // Keys the snapshot omits therefore keep their current values, and the caller is told which ones
+  // so a partial restore is not reported as a full one.
+  const notRestored: string[] = [];
   if (result.snapshot) {
     const { writeFileSync } = await import('node:fs');
-    const yaml = serializeYaml(result.snapshot);
-    writeFileSync(yamlPath, yaml, 'utf8');
+    const excluded = new Set(config.snapshotKeysNotInEntryFile ?? []);
+    const restorable = Object.fromEntries(
+      Object.entries(result.snapshot).filter(([key]) => !excluded.has(key)),
+    );
+
+    for (const key of Object.keys(currentData)) {
+      if (!(key in restorable)) {
+        notRestored.push(key);
+      }
+    }
+
+    writeFileSync(yamlPath, serializeYaml({ ...currentData, ...restorable }), 'utf8');
   }
 
   if (options.json) {
@@ -78,6 +108,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
         id: options.id,
         saved_version: result.saved_version,
         restored_version: result.restored_version,
+        not_restored: notRestored,
       },
       { json: true },
     );
@@ -85,6 +116,11 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     console.log(
       `Rolled back ${singularName(type)} '${options.id}': saved v${result.saved_version}, restored v${result.restored_version}`,
     );
+    if (notRestored.length > 0) {
+      console.log(
+        `Version ${targetVersion} recorded no ${notRestored.join(', ')} — left at the current value.`,
+      );
+    }
   }
   return 0;
 }

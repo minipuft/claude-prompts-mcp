@@ -118,7 +118,7 @@ export {
   saveVersion,
   recordEditResult,
   rollbackVersion,
-  deleteHistoryFile,
+  deleteVersionRows,
   renameHistoryResource,
   formatHistoryTable,
 } from './version-history.js';

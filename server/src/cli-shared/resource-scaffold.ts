@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { dirname, join } from 'node:path';
 
 import { type ResourceValidationResult, validateResourceFile } from './resource-validation.js';
-import { deleteHistoryFile } from './version-history.js';
+import { deleteVersionRows } from './version-history.js';
 
 type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
@@ -356,7 +356,7 @@ export function deleteResourceDir(resourceDir: string): { success: boolean; erro
       return { success: false, error: `Directory does not exist: ${resourceDir}` };
     }
 
-    deleteHistoryFile(resourceDir);
+    deleteVersionRows(resourceDir);
     rmSync(resourceDir, { recursive: true, force: true });
     return { success: true };
   } catch (error) {

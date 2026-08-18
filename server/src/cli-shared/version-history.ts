@@ -664,7 +664,16 @@ export function rollbackVersion(
   };
 }
 
-export function deleteHistoryFile(resourceDir: string): boolean {
+/**
+ * Delete every `version_history` row for the resource that owns `resourceDir`.
+ *
+ * Named for what it does, not for the storage model it predates. It was `deleteHistoryFile` until
+ * 2026-08-17 — a name from the retired `.history.json` sidecar era — which sent anyone grepping
+ * for sidecar cleanup to a SQL function and anyone grepping for "what deletes version rows" past
+ * it entirely. It is live and load-bearing: `deleteResourceDir` calls it, so removing a resource
+ * directory purges its history.
+ */
+export function deleteVersionRows(resourceDir: string): boolean {
   const request = createRequest(resourceDir, 'delete_history');
   if (request === null) {
     return false;
