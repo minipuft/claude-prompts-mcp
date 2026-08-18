@@ -1270,4 +1270,367 @@ describe('framework create — pre-write and post-write validation must agree (G
     expect(response.isError).toBe(!draftVerdict.valid);
     expect(existsSync(frameworkYamlPath())).toBe(draftVerdict.valid);
   });
+
+  /**
+   * The agreement invariant above is satisfied by a validator that rejects EVERYTHING, so it
+   * cannot on its own show the fix is the right one. This is the other half: the same draft with
+   * a `name` on the gate entry must be accepted by BOTH layers and reach disk.
+   *
+   * FALSIFICATION: make `validateElementShapes` return a constant error and this reds while the
+   * two agreement tests stay green.
+   */
+  it('accepts a well-formed draft at both layers and writes the file', async () => {
+    const payload = draft();
+    payload.framework_gates = [
+      {
+        id: 'analysis-complete',
+        name: 'Analysis Gate',
+        description: 'Validates the analysis phase',
+        frameworkArea: 'analysis',
+        priority: 'high',
+        validationCriteria: ['Problem clearly defined'],
+      },
+    ];
+
+    const draftVerdict = draftValidator.validate(payload);
+    expect(draftVerdict.valid).toBe(true);
+
+    const response = await lifecycle.handleCreate({
+      action: 'create',
+      id: payload.id,
+      name: payload.name,
+      framework: payload.type,
+      system_prompt_guidance: payload.system_prompt_guidance,
+      phases: payload.phases,
+      framework_gates: payload.framework_gates,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(false);
+    expect(existsSync(frameworkYamlPath())).toBe(true);
+    expect(registeredFrameworks.has(ID)).toBe(true);
+  });
+
+  /**
+   * G3's requirement stated at the surface an operator actually reads. The rejection must name
+   * the FIELD and the EXPECTATION, and must still hand over the worked example — which before
+   * this change was reachable only when `framework_gates` was absent entirely, never when it was
+   * present but under-specified (implementation notes M-4).
+   */
+  it('names the offending field and expectation, and still shows the example', async () => {
+    const payload = draft();
+
+    const response = await lifecycle.handleCreate({
+      action: 'create',
+      id: payload.id,
+      name: payload.name,
+      framework: payload.type,
+      system_prompt_guidance: payload.system_prompt_guidance,
+      phases: payload.phases,
+      framework_gates: payload.framework_gates,
+    } as FrameworkManagerInput);
+
+    const text = response.content[0]!.text!;
+    expect(response.isError).toBe(true);
+    expect(text).toContain('framework_gates[0].name');
+    expect(text).toContain('expected string, received undefined');
+    // The example is what tells a caller the shape; `framework_gates` is not a declared parameter
+    // anywhere on the tool surface, so this response is the only place it is published.
+    expect(text).toContain('**Example framework_gates:**');
+    expect(text).toContain('Analysis Gate');
+  });
+});
+
+/**
+ * G2 — the framework half of the F17 shape, with the same harness discipline.
+ *
+ * `onRefresh` for this tool is supplied at `src/mcp/tools/index.ts:597-600` and its entire body is
+ * a comment plus `logger.debug`. So the context below wires it to a COUNTER and nothing else: it
+ * must still run, and it must not be what makes an edit visible. A double that reloaded the
+ * registry from `onRefresh` would be strictly more capable than production, which is exactly how
+ * the gate-side defect lived through a green suite.
+ *
+ * ONE double stands in for three production objects — `RuntimeFrameworkLoader`,
+ * `FrameworkRegistry` and `FrameworkManager`. What production does differently, stated so a green
+ * run is not over-read:
+ *
+ *  - `FrameworkManager.registerFramework` runs `generateSingleFrameworkDefinition(guide)` and
+ *    stores a `FrameworkDefinition`; this double stores the parsed YAML, so `getFramework()`
+ *    returns raw fields. Tests therefore assert on `name`, which survives both shapes.
+ *  - `RuntimeFrameworkLoader` reads a directory of files and resolves overlays; this reads one
+ *    `framework.yaml`.
+ *  - The loader's cache and its `validateOnLoad` gate ARE modelled, deliberately: a cache that
+ *    self-cleared would hide the `clearCache`-before-register ordering, and a load that skipped
+ *    `validateFrameworkSchema` would hide that an invalid file cannot register at all.
+ */
+describe('framework registry coherence — production-shaped refresh (G2)', () => {
+  const ID = 'framework-coherence-probe';
+
+  let tempDir: string;
+  let frameworksDir: string;
+  let mockLogger: MockLogger;
+  let fileService: FrameworkFileWriter;
+  let lifecycle: FrameworkLifecycleProcessor;
+  let registry: DriftableFrameworkRegistry;
+  let promptRefreshes: number;
+
+  class DriftableFrameworkRegistry {
+    /** `RuntimeFrameworkLoader`'s parsed-definition cache. Cleared ONLY by `clearCache`. */
+    private readonly loaderCache = new Map<string, Record<string, unknown>>();
+    private readonly guides = new Map<string, Record<string, unknown>>();
+    private readonly frameworks = new Map<string, Record<string, unknown>>();
+    /** Recorded so a test can assert the ordering rather than only its consequence. */
+    readonly clearCacheCalls: string[] = [];
+
+    constructor(private readonly dir: string) {}
+
+    // ---- RuntimeFrameworkLoader surface -------------------------------------------------
+    getRuntimeLoader(): { clearCache: (id?: string) => void } {
+      return { clearCache: (id?: string) => this.clearCache(id) };
+    }
+
+    clearCache(id?: string): void {
+      this.clearCacheCalls.push(id ?? '(all)');
+      if (id === undefined) this.loaderCache.clear();
+      else this.loaderCache.delete(id.toLowerCase());
+    }
+
+    /** Mirrors the loader's read path, INCLUDING its `validateOnLoad` default of true. */
+    private load(id: string): Record<string, unknown> | undefined {
+      const cached = this.loaderCache.get(id);
+      if (cached !== undefined) return cached;
+
+      const yamlPath = path.join(this.dir, id, 'framework.yaml');
+      if (!existsSync(yamlPath)) return undefined;
+      const data = parseYamlOrThrow<Record<string, unknown>>(readFileSync(yamlPath, 'utf8'));
+      if (!validateFrameworkSchema(data, id).valid) return undefined;
+      this.loaderCache.set(id, data);
+      return data;
+    }
+
+    // ---- FrameworkRegistry surface ------------------------------------------------------
+    getFrameworkRegistry(): DriftableFrameworkRegistry {
+      return this;
+    }
+
+    hasGuide(id: string): boolean {
+      return this.guides.has(id.toLowerCase());
+    }
+
+    unregisterGuide(id: string): boolean {
+      return this.guides.delete(id.toLowerCase());
+    }
+
+    async loadAndRegisterById(id: string): Promise<boolean> {
+      const data = this.load(id.toLowerCase());
+      if (data === undefined) return false;
+      this.guides.set(id.toLowerCase(), data);
+      return true;
+    }
+
+    // ---- FrameworkManager surface -------------------------------------------------------
+    getFramework(id: string): Record<string, unknown> | undefined {
+      return this.frameworks.get(id.toLowerCase());
+    }
+
+    async registerFramework(id: string): Promise<boolean> {
+      const loaded = await this.loadAndRegisterById(id);
+      if (!loaded) return false;
+      this.frameworks.set(id.toLowerCase(), this.guides.get(id.toLowerCase())!);
+      return true;
+    }
+
+    unregister(id: string): boolean {
+      const hadDefinition = this.frameworks.delete(id.toLowerCase());
+      const hadGuide = this.guides.delete(id.toLowerCase());
+      return hadDefinition || hadGuide;
+    }
+
+    /** Test-only drift: forget the framework while leaving its files on disk. */
+    forget(id: string): void {
+      this.unregister(id);
+    }
+  }
+
+  beforeEach(async () => {
+    mockLogger = new MockLogger();
+    promptRefreshes = 0;
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'framework-coherence-'));
+    frameworksDir = path.join(tempDir, 'resources', 'frameworks');
+    await fs.mkdir(frameworksDir, { recursive: true });
+
+    const configManager = { getServerRoot: () => tempDir } as unknown as ConfigManager;
+    fileService = new FrameworkFileWriter({
+      logger: mockLogger as unknown as Logger,
+      configManager,
+    });
+    registry = new DriftableFrameworkRegistry(frameworksDir);
+
+    const ctx: FrameworkResourceContext = {
+      logger: mockLogger as unknown as Logger,
+      frameworkManager: registry as unknown as FrameworkResourceContext['frameworkManager'],
+      configManager,
+      fileService,
+      textDiffService: new ObjectDiffGenerator(),
+      // Answers exactly one question and throws for everything else, so a future edit that starts
+      // using versioning fails loudly rather than silently exercising a stub.
+      versionHistoryService: new Proxy(
+        {},
+        {
+          get(_target, property) {
+            if (property === 'isAutoVersionEnabled') return () => false;
+            throw new Error(
+              `this harness does not provide versionHistoryService.${String(property)}`
+            );
+          },
+        }
+      ) as unknown as FrameworkResourceContext['versionHistoryService'],
+      // The point of this harness. Production's refresh is a `logger.debug`; counting calls proves
+      // it still runs without being what registers.
+      onRefresh: async () => {
+        promptRefreshes += 1;
+      },
+    };
+
+    lifecycle = new FrameworkLifecycleProcessor(ctx, new FrameworkDraftValidator());
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  async function create(name = 'Original Name') {
+    return lifecycle.handleCreate({
+      action: 'create',
+      id: ID,
+      name,
+      framework: 'COHERENCE_PROBE',
+      system_prompt_guidance: 'Apply the coherence probe.',
+      phases: [{ id: 'analyze', name: 'Analyze', description: 'Understand the problem' }],
+      framework_gates: [
+        {
+          id: 'analysis-complete',
+          name: 'Analysis Gate',
+          description: 'Validates the analysis phase',
+          frameworkArea: 'analysis',
+          priority: 'high',
+          validationCriteria: ['Problem clearly defined'],
+        },
+      ],
+    } as FrameworkManagerInput);
+  }
+
+  it('makes an update visible to the process that made it, in one process', async () => {
+    expect((await create()).isError).toBe(false);
+    expect(registry.getFramework(ID)?.['name']).toBe('Original Name');
+
+    const response = await lifecycle.handleUpdate({
+      action: 'update',
+      id: ID,
+      name: 'Renamed In Flight',
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(false);
+    // The claim under test is what the registry now holds, not the wording — the message that
+    // shipped before said "Framework registry reloaded" and it was false.
+    expect(registry.getFramework(ID)?.['name']).toBe('Renamed In Flight');
+    expect(response.content[0]!.text).not.toContain('Framework registry reloaded');
+    expect(response.content[0]!.text).toContain('Re-registered');
+
+    // onRefresh still runs and is still not what made the edit visible.
+    expect(promptRefreshes).toBe(2);
+  });
+
+  it('clears the loader cache before re-registering, or the re-register serves stale content', async () => {
+    await create();
+    registry.clearCacheCalls.length = 0;
+
+    await lifecycle.handleUpdate({
+      action: 'update',
+      id: ID,
+      name: 'Cache Ordering Probe',
+    } as FrameworkManagerInput);
+
+    // FALSIFICATION: drop the `clearCache` call in `reregister` and this is `[]` while the
+    // assertion above also reds, because `loadAndRegisterById` would re-serve the cached
+    // pre-edit YAML — which is the failure `createFrameworkAtomic` step 2 exists to prevent.
+    expect(registry.clearCacheCalls).toContain(ID);
+  });
+
+  it('says the edit is not live instead of claiming a reload, when re-registration fails', async () => {
+    await create();
+    jest.spyOn(registry, 'registerFramework').mockResolvedValue(false as never);
+
+    const response = await lifecycle.handleUpdate({
+      action: 'update',
+      id: ID,
+      name: 'Will Not Register',
+    } as FrameworkManagerInput);
+
+    const text = response.content[0]!.text!;
+    expect(text).toContain('NOT re-registered');
+    expect(text).toContain('reload');
+    expect(text).not.toContain('Framework registry reloaded');
+    // Still not an error: the files really were written.
+    expect(response.isError).toBe(false);
+    expect(existsSync(path.join(frameworksDir, ID, 'framework.yaml'))).toBe(true);
+  });
+
+  it('deletes a framework that is on disk but absent from the registry', async () => {
+    await create();
+    registry.forget(ID);
+    expect(registry.getFramework(ID)).toBeUndefined();
+
+    const response = await lifecycle.handleDelete({
+      action: 'delete',
+      id: ID,
+      confirm: true,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(false);
+    expect(existsSync(path.join(frameworksDir, ID))).toBe(false);
+    expect(response.content[0]!.text).toContain('not in the framework registry');
+  });
+
+  it('reloads a framework that is on disk but absent from the registry', async () => {
+    await create();
+    registry.forget(ID);
+
+    const response = await lifecycle.handleReload({
+      action: 'reload',
+      id: ID,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(false);
+    expect(registry.getFramework(ID)?.['name']).toBe('Original Name');
+  });
+
+  it('still refuses to reload an id with nothing on disk, naming the path it looked at', async () => {
+    // Guards the guard removal: dropping the membership check must not turn a genuine miss into a
+    // silent success.
+    const response = await lifecycle.handleReload({
+      action: 'reload',
+      id: 'no-such-framework',
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(true);
+    const text = response.content[0]!.text!;
+    expect(text).toContain('no framework definition could be loaded from disk');
+    expect(text).toContain(path.join('no-such-framework', 'framework.yaml'));
+  });
+
+  it('does not promise a version_history purge its live path never performs (G4)', async () => {
+    await create();
+
+    const response = await lifecycle.handleDelete({
+      action: 'delete',
+      id: ID,
+      dry_run: true,
+    } as FrameworkManagerInput);
+
+    const text = response.content[0]!.text!;
+    expect(text).toContain('are NOT removed');
+    expect(text).not.toContain('Would purge');
+    // The dry run must still be a dry run.
+    expect(existsSync(path.join(frameworksDir, ID, 'framework.yaml'))).toBe(true);
+  });
 });

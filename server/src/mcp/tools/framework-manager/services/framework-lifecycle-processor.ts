@@ -178,7 +178,18 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Failed to update framework: ${result.error}`);
     }
 
-    // Trigger refresh to reload frameworks
+    // Re-register the framework this method just rewrote, so the process that made the edit can
+    // see it. `onRefresh` below does NOT do this: for this tool it is supplied at
+    // `src/mcp/tools/index.ts:597-600` and its entire body is a comment plus a `logger.debug`.
+    // Before this line, an update wrote correct YAML to disk and then claimed
+    // `🔄 Framework registry reloaded` while the in-memory definition stayed at its pre-edit
+    // content until the next server restart — the same write-then-assert-a-refresh shape fixed on
+    // the gate side in `b7102dd9`. `create` is unaffected and deliberately untouched:
+    // `createFrameworkAtomic` steps 2-4 already clear the cache and register.
+    const registered = await this.reregister(id);
+
+    // Still runs, and is still not what makes the edit visible. Kept because dependent systems
+    // outside the framework registry subscribe to it.
     await this.ctx.onRefresh?.();
 
     // Generate diff view
@@ -200,7 +211,14 @@ export class FrameworkLifecycleProcessor {
       response += `${diffResult.formatted}\n\n`;
     }
 
-    response += `🔄 Framework registry reloaded`;
+    // Reports what happened rather than asserting it. Not an error either way: the files ARE
+    // written, so returning a failure would be its own lie — but the caller has to learn that the
+    // edit is not live yet from this response, not from the next action returning stale content.
+    response += registered
+      ? `🔄 Re-registered in the framework registry — the new content is live in this process`
+      : `⚠️ Written to disk but NOT re-registered in this server process. The files are correct ` +
+        `and will load on the next start; until then this framework resolves to its previous ` +
+        `content. Recover with \`action: "reload"\`, or restart the server.`;
 
     return this.success(response);
   }
@@ -212,10 +230,13 @@ export class FrameworkLifecycleProcessor {
       return this.error('Framework ID is required for delete action');
     }
 
-    const existingFramework = this.ctx.frameworkManager.getFramework(id);
-    if (existingFramework === undefined) {
-      return this.error(`Framework '${id}' not found`);
-    }
+    // Deliberately NOT gated on registry membership. Delete removes a directory, so the directory
+    // is the authority — and the `existsSync` check below is exactly that. A registry check here
+    // refused to delete a framework that exists on disk but was never registered, which is
+    // precisely the state a failed re-registration produces: the tool could not clean up what it
+    // had just written, and the directory had to be removed by hand. The `unregister` call
+    // further down already tolerates a framework the registry does not know, and logs when that
+    // happens. Same removal, same reasoning, as the gate side in `b7102dd9`.
 
     // Prevent deleting built-in frameworks
     const builtInFrameworks = ['cageerf', 'react', '5w1h', 'scamper'];
@@ -241,7 +262,12 @@ export class FrameworkLifecycleProcessor {
         `🔍 **Dry run** — deletion of framework '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${frameworkDir}\n` +
-          `📜 Would purge this framework's rows from \`version_history\`\n` +
+          // Corrects a claim the live path never made good on: deletion is `fs.rm` +
+          // `unregister` and touches no database row. The version rows survive and become
+          // unreachable, since rollback resolves the framework first — the same wording, and the
+          // same reason, as the gate-side correction in `b7102dd9`.
+          `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
+          `since rollback resolves the framework first\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted framework.\n\n` +
           `💡 Re-send with \`confirm: true\` and without \`dry_run\` to apply it.`
       );
@@ -267,10 +293,16 @@ export class FrameworkLifecycleProcessor {
     // Trigger refresh for any dependent systems
     await this.ctx.onRefresh?.();
 
+    // Reports which of the two removals actually happened rather than asserting both. A framework
+    // that was on disk but never registered is now deletable (see the guard note above), and
+    // saying the registry was updated in that case would repeat the false claim this change
+    // removes elsewhere in this file.
     return this.success(
       `✅ Framework '${id}' deleted successfully\n\n` +
         `📁 Directory removed: ${frameworkDir}\n\n` +
-        `🔄 Framework registry updated`
+        (unregistered
+          ? `🔄 Framework unregistered from the registry`
+          : `ℹ️ It was not in the framework registry, so only the files were removed`)
     );
   }
 
@@ -281,12 +313,26 @@ export class FrameworkLifecycleProcessor {
       return this.error('Framework ID is required for reload action');
     }
 
-    const existingFramework = this.ctx.frameworkManager.getFramework(id);
-    if (existingFramework === undefined) {
-      return this.error(`Framework '${id}' not found`);
+    // Deliberately NOT gated on registry membership either. `reload` is the recovery verb:
+    // `registerFramework` loads the definition from disk and registers it whether or not the id
+    // was already known. Guarding it with `getFramework(id) === undefined` refused the one
+    // operation able to repair an unregistered framework — a check for the very state it exists
+    // to fix. Nothing is lost by dropping it: `registerFramework` returns false when no
+    // definition loads from disk, and that becomes the error below.
+    //
+    // Before this change `handleReload` had no implementation at all: its whole body was
+    // `await this.ctx.onRefresh?.()`, a measured no-op for this tool, followed by an
+    // unconditional `reloaded successfully`.
+    const reloaded = await this.reregister(id);
+
+    if (!reloaded) {
+      return this.error(
+        `Failed to reload framework '${id}' — no framework definition could be loaded from disk. ` +
+          `Check that ${path.join(this.ctx.fileService.getFrameworkDir(id), 'framework.yaml')} exists.`
+      );
     }
 
-    // Trigger full refresh (framework registry doesn't have per-item reload)
+    // Still runs, for dependent systems outside the framework registry.
     await this.ctx.onRefresh?.();
 
     const reasonText = reason !== undefined && reason !== '' ? ` (reason: ${reason})` : '';
@@ -352,6 +398,36 @@ export class FrameworkLifecycleProcessor {
   // ============================================================================
   // Private Helpers
   // ============================================================================
+
+  /**
+   * Clear the runtime loader's cache for `id`, then load-and-register it from disk.
+   *
+   * ORDER IS THE CONTRACT. `RuntimeFrameworkLoader` caches parsed definitions, so a re-register
+   * that skips the clear re-registers the content the loader already holds — the pre-edit
+   * content. `createFrameworkAtomic` step 2 exists for exactly that reason; update and reload
+   * need the same step for the same reason.
+   *
+   * `FrameworkManager.reloadResource(id)` is `protected` and regenerates from the guide already
+   * in the registry, so it cannot pick up a changed file. `registerFramework(id)` is the public
+   * surface and does the whole job: `loadAndRegisterById` (guide) → `generateSingleFrameworkDefinition`
+   * → set in the framework map. It returns false rather than throwing when nothing loads.
+   */
+  private async reregister(id: string): Promise<boolean> {
+    try {
+      this.ctx.frameworkManager.getFrameworkRegistry().getRuntimeLoader().clearCache(id);
+    } catch (error) {
+      // `getFrameworkRegistry` throws when the manager is not initialized. Reported, not
+      // swallowed: the caller branches on false and says the content is not live.
+      this.ctx.logger.warn(
+        `Could not clear the framework loader cache for '${id}': ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    }
+
+    return await this.ctx.frameworkManager.registerFramework(id);
+  }
 
   /**
    * Comprehensive existence check across all framework state sources.
