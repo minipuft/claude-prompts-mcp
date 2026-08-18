@@ -113,4 +113,11 @@ export interface ChainStepRenderResult {
   callToAction: string;
   /** True when the next step in the chain is delegated to a sub-agent */
   nextStepDelegated?: boolean;
+  /**
+   * Phase-guard section headers this render actually declared to the model, verbatim. Recorded
+   * into the run so `19-phase-guard-verification-stage` can tell a header the prompt asked for
+   * from one it never mentioned — the two are indistinguishable if both sides re-read
+   * `phases.yaml`.
+   */
+  declaredSections?: string[];
 }

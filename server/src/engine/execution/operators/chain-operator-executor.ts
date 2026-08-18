@@ -16,6 +16,7 @@ import type {
   GateReviewInput,
   NormalStepInput,
 } from './types.js';
+import type { DeclaredSection } from '../../frameworks/declared-sections.js';
 import type { DelegationPayload, RenderingHints } from '../delegation/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
@@ -33,6 +34,29 @@ function isGateReviewInput(input: ChainStepExecutionInput): input is GateReviewI
   return input.executionType === 'gate_review';
 }
 
+/**
+ * Optional collaborators for {@link ChainOperatorExecutor}. Grouped rather than positional:
+ * `declaredSectionsProvider` would otherwise be a seventh constructor parameter, breaching the
+ * max-params limit. No test constructs the executor with more than four positional arguments, so
+ * grouping the two pre-existing resolvers here costs one production call site and nothing else.
+ *
+ * NAMED rather than an inline type literal so `validate:state-field-writers` can watch it: every
+ * field here is an optional dependency seam that defaults to no-op, which means a seam declared
+ * and never wired compiles, passes every test, and silently keeps the old behavior. That class is
+ * only visible to a gate if the type has a name to resolve.
+ */
+export interface ChainOperatorCollaborators {
+  referenceResolver?: PromptReferenceResolver;
+  scriptReferenceResolver?: ScriptReferenceResolverPort;
+  /**
+   * Phase-guard section headers a framework declares, from `declared-sections.ts` — the same
+   * source `19-phase-guard-verification-stage` grades the response against. A function type, not
+   * a registry: this executor needs one derived fact, not framework-manager access. Absent means
+   * "declare nothing", which is the pre-Tier-2 behavior.
+   */
+  declaredSectionsProvider?: (frameworkId: string) => DeclaredSection[];
+}
+
 export class ChainOperatorExecutor {
   constructor(
     private readonly logger: Logger,
@@ -44,8 +68,7 @@ export class ChainOperatorExecutor {
       category?: string;
       systemPrompt?: string;
     } | null>,
-    private readonly referenceResolver?: PromptReferenceResolver,
-    private readonly scriptReferenceResolver?: ScriptReferenceResolverPort
+    private readonly collaborators?: ChainOperatorCollaborators
   ) {}
 
   async renderStep(input: ChainStepExecutionInput): Promise<ChainStepRenderResult> {
@@ -291,7 +314,31 @@ export class ChainOperatorExecutor {
       );
     }
 
-    // Assemble in proper order: Framework → Warning → Content → Gates → Metadata
+    // Required Response Format — reuses the same declared-sections contract as
+    // renderNormalStep (F5, phase-guard-declaration-contract-2026-08-15). A gated chain step
+    // is graded on this render, not on renderNormalStep: 13-session-stage opens the pending
+    // gate review upfront and 18-execution-stage skips the normal render entirely for a
+    // blocking-gate step, so this was the only chain path that never declared its headers.
+    //
+    // Declared UNCONDITIONALLY, retries included — this deliberately does NOT mirror the
+    // `!isRetry` gate on frameworkGuidance a few lines above. frameworkGuidance is dropped on
+    // retry because the model has already seen it; the header vocabulary is the opposite case.
+    // A retry exists because the model's prior attempt failed a structural check (a declared
+    // header was missing or malformed), so retry is exactly the turn where the model most
+    // needs the vocabulary restated — omitting it here would tell the step to fix its
+    // structure without telling it the structure. `isFinalStep`/`gateGuidanceEnabled` reuse
+    // the target step's own coordinates (`targetIndex`) and the chain-wide gate-guidance
+    // decision already resolved above, matching renderNormalStep's semantics exactly rather
+    // than introducing a second definition of "final".
+    const isTargetFinalStep = targetIndex === stepPrompts.length - 1;
+    const declaredSections = this.resolveDeclaredSections(targetStep);
+    const responseFormatSection = this.buildResponseFormatSection(
+      isTargetFinalStep,
+      gateGuidanceEnabled,
+      declaredSections
+    );
+
+    // Assemble in proper order: Framework → Warning → Content → Gates → Metadata → Format
     // Use original task template as the review body. Gate guidance comes from
     // GateGuidanceRenderer (gateGuidance variable) as the single source of truth.
     const reviewPrompt = originalContent;
@@ -301,6 +348,7 @@ export class ChainOperatorExecutor {
       reviewPrompt,
       gateGuidance,
       supplementalSections.join('\n\n'),
+      responseFormatSection,
     ].filter((part) => part && part.trim().length > 0);
 
     const reviewContent = contentParts.join('\n\n');
@@ -489,8 +537,12 @@ export class ChainOperatorExecutor {
       );
     }
 
-    // Required Response Format — guides structured output for delivery verification
-    lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled));
+    // Required Response Format — guides structured output for delivery verification.
+    // The declared section headers are resolved even when framework INJECTION is suppressed:
+    // suppression hides guidance, it does not disable stage 19, so withholding the vocabulary
+    // here would recreate the exact unsatisfiable-guard defect this tier removes.
+    const declaredSections = this.resolveDeclaredSections(step);
+    lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled, declaredSections));
 
     // Check if the NEXT step is delegated — if so, render a delegation CTA instead
     const nextStep = !isFinalStep ? stepPrompts[currentStepIndex + 1] : undefined;
@@ -518,6 +570,12 @@ export class ChainOperatorExecutor {
       content,
       callToAction,
       nextStepDelegated: nextStep?.delegated === true || undefined,
+      // What this render actually told the model. Reported rather than re-derived: the
+      // verification stage may only block on a header the prompt named, and asking phases.yaml
+      // after the fact cannot answer that — it is the same source the guard already reads.
+      ...(declaredSections.length > 0
+        ? { declaredSections: declaredSections.map((section) => section.header) }
+        : {}),
     };
   }
 
@@ -629,6 +687,33 @@ export class ChainOperatorExecutor {
     return ['---', '', heading, '', `**${frameworkName}**`, '', systemPrompt, '', '---', ''].join(
       '\n'
     );
+  }
+
+  /**
+   * Declared phase-guard headers for the framework active on this step, or `[]` when no provider
+   * is wired, no framework resolves, or the framework declares no guards. Reads through on every
+   * call — no cache — so framework hot-reload keeps working.
+   */
+  private resolveDeclaredSections(step?: ChainStepPrompt): DeclaredSection[] {
+    const provider = this.collaborators?.declaredSectionsProvider;
+    if (!provider) {
+      return [];
+    }
+
+    // `.id`, not `.type` — `getFrameworkGuide` lowercases its argument, so `type` happens to
+    // resolve for CAGEERF ('CAGEERF' → 'cageerf') but would silently miss any framework whose
+    // discriminator is not its lowercased id. `19-phase-guard-verification-stage` resolves on
+    // `.id` for the same reason, and the two must agree or the declaration names other headers
+    // than the guard grades.
+    const frameworkId = step?.frameworkContext?.selectedFramework.id ?? '';
+    if (frameworkId === '') {
+      this.logger.debug('[SymbolicChain] No resolved framework id — declaring no sections', {
+        promptId: step?.promptId,
+      });
+      return [];
+    }
+
+    return provider(frameworkId);
   }
 
   private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
@@ -928,7 +1013,11 @@ export class ChainOperatorExecutor {
   /**
    * Build Required Response Format section for structured delivery verification.
    */
-  private buildResponseFormatSection(isFinalStep: boolean, gateGuidanceEnabled: boolean): string {
+  private buildResponseFormatSection(
+    isFinalStep: boolean,
+    gateGuidanceEnabled: boolean,
+    declaredSections: readonly DeclaredSection[] = []
+  ): string {
     const lines: string[] = [
       '---',
       '',
@@ -937,6 +1026,21 @@ export class ChainOperatorExecutor {
       '**Summary**: What was implemented (2-3 sentences)',
       '',
     ];
+
+    // Declared section headers — derived from the framework's phases.yaml, which is the same
+    // source `19-phase-guard-verification-stage` grades this response against. Emitting the
+    // vocabulary (not a fill-in skeleton) is what makes the guard satisfiable.
+    if (declaredSections.length > 0) {
+      lines.push(
+        '**Required Sections** — emit these headers verbatim; they are graded structurally:'
+      );
+      for (const section of declaredSections) {
+        const qualifier = section.required ? 'required' : 'optional';
+        const criteria = section.criteria.length > 0 ? `; ${section.criteria.join('; ')}` : '';
+        lines.push(`- \`${section.header}\` (${qualifier}${criteria})`);
+      }
+      lines.push('');
+    }
 
     if (gateGuidanceEnabled) {
       lines.push(
@@ -1039,13 +1143,15 @@ export class ChainOperatorExecutor {
   ): Promise<string> {
     try {
       // Use reference resolver if available, otherwise fall back to standard template processing
-      if (this.referenceResolver || this.scriptReferenceResolver) {
+      const referenceResolver = this.collaborators?.referenceResolver;
+      const scriptReferenceResolver = this.collaborators?.scriptReferenceResolver;
+      if (referenceResolver || scriptReferenceResolver) {
         const result = await processTemplateWithRefs(
           templateString,
           templateContext,
           {},
-          this.referenceResolver,
-          { scriptResolver: this.scriptReferenceResolver }
+          referenceResolver,
+          { scriptResolver: scriptReferenceResolver }
         );
         return result.content;
       }
