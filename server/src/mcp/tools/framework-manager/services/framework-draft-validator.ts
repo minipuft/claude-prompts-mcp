@@ -153,7 +153,16 @@ export class FrameworkDraftValidator {
    * Format validation result into human-readable success message.
    */
   formatSuccess(id: string, validation: FrameworkDraftValidationResult, paths: string[]): string {
-    let message = `✅ Framework '${id}' created (${validation.score}% - ${validation.level})\n\n`;
+    // `level` is not printed: `validate()` requires guidance + phases + gates, worth
+    // 30 + 30 + 20, so any valid draft scores >= 80 and `level` is invariably 'full'. A word
+    // that cannot vary carries no information while implying completeness — directly above a
+    // Recommendations list naming what is missing. The unit is stated for the same reason it
+    // was added to the error header: `measureCoverage` is presence-only.
+    let message = `✅ Framework '${id}' created (${validation.score}% field coverage)`;
+    message +=
+      validation.warnings.length > 0
+        ? ` — ${validation.warnings.length} recommendation(s)\n\n`
+        : `\n\n`;
     message += `**Files:**\n${paths.map((p) => `  • ${p}`).join('\n')}\n\n`;
 
     if (validation.warnings.length > 0) {

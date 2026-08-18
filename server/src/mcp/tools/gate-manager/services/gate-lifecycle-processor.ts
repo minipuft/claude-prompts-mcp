@@ -66,7 +66,7 @@ export class GateLifecycleProcessor {
       return this.success(
         `⚠️ Gate '${id}' was written to disk but is NOT active in this server process\n\n` +
           `${filesWritten}\n\n` +
-          `The files are correct and will load on the next start. The in-memory gate registry ` +
+          `The files on disk are what you asked for. The in-memory gate registry ` +
           `did not pick them up, so this gate will not resolve until it does.\n` +
           `Recover with \`action: "reload"\`, or restart the server.`
       );
@@ -156,7 +156,10 @@ export class GateLifecycleProcessor {
       return this.error(`Failed to update gate: ${result.error}`);
     }
 
-    await this.ctx.gateManager.reload(id);
+    // Result read, not discarded. `reload` returns false when no definition loads, and an
+    // unconditional `🔄 Gate reloaded` on that branch is the same false claim `handleCreate`
+    // branches on twelve lines up.
+    const reloaded = await this.ctx.gateManager.reload(id);
     this.trackChange('modified', id);
 
     const diffResult = this.ctx.textDiffService.generateObjectDiff(
@@ -177,7 +180,10 @@ export class GateLifecycleProcessor {
       response += `${diffResult.formatted}\n\n`;
     }
 
-    response += `🔄 Gate reloaded`;
+    response += reloaded
+      ? `🔄 Gate reloaded`
+      : `⚠️ Files written, but the gate could not be reloaded into this process — it still holds ` +
+        `its previous content. See the server log.`;
 
     return this.success(response);
   }
@@ -211,7 +217,7 @@ export class GateLifecycleProcessor {
           `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
           `since rollback resolves the gate first\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted gate.\n\n` +
-          `💡 Re-send with \`confirm: true\` and without \`dry_run\` to apply it.`
+          `💡 Re-send the same call without \`dry_run\` to apply it.`
       );
     }
 

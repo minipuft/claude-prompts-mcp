@@ -1,5 +1,6 @@
 // @lifecycle canonical - Framework versioning operations: history, rollback, compare.
 
+import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
@@ -126,7 +127,13 @@ export class FrameworkVersioningProcessor {
       return this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    // Trigger refresh
+    // Re-register the framework this rollback just rewrote. `onRefresh` does not do it — see
+    // `reregisterFramework`. Until 2026-08-18 this path awaited `onRefresh` alone and then
+    // asserted `🔄 Framework registry reloaded`, the exact string `d5eaa6a1` deleted from
+    // `handleUpdate` and `handleReload` one file over. A rollback writes through the same file
+    // service, so it owed the same call and made the same false claim.
+    const registered = await reregisterFramework(this.ctx, id);
+
     await this.ctx.onRefresh?.();
 
     let response =
@@ -142,7 +149,17 @@ export class FrameworkVersioningProcessor {
         `left at the current value\n`;
     }
 
-    return this.success(`${response}🔄 Framework registry reloaded`);
+    if (!registered) {
+      return this.success(
+        `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
+          `pre-rollback content and will until the server restarts. See the server log for why ` +
+          `registration failed.`
+      );
+    }
+
+    return this.success(
+      `${response}🔄 Re-registered — the restored content is live in this process`
+    );
   }
 
   async handleCompare(args: FrameworkManagerInput): Promise<ToolResponse> {

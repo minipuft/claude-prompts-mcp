@@ -78,7 +78,14 @@ const SERVER = path.resolve(path.dirname(SCRIPT_PATH), '..');
 const TOOLS_DIR = path.join(SERVER, 'src', 'mcp', 'tools');
 
 /** Actions that change resource state on disk, and therefore owe a registry consequence. */
-const MUTATING_ACTIONS = ['create', 'update', 'delete', 'reload'];
+// `rollback` is here because it writes `framework.yaml` through the same file service as
+// `update`. Its absence was measured on 2026-08-18: this gate went green while
+// `framework-versioning-processor.ts` awaited a no-op `onRefresh` and asserted
+// `🔄 Framework registry reloaded` — the exact string deleted from `update` in `d5eaa6a1`. The
+// gate's own success line then claimed "every mutating dispatch edge", which was true only under
+// this constant's definition of mutating. A scope that excludes a writer is a green run about a
+// question nobody asked.
+const MUTATING_ACTIONS = ['create', 'update', 'delete', 'reload', 'rollback'];
 
 /**
  * Per-processor registration rules. One entry per resource lifecycle processor; `actions` names,
@@ -113,6 +120,37 @@ const RULES = {
       reload: ['gateManager.reload('],
     },
   },
+  'src/mcp/tools/gate-manager/services/gate-versioning-processor.ts': {
+    resource: 'gate',
+    why:
+      'Same as the gate lifecycle processor — `onRefresh` never touches the gate registry, so ' +
+      '`rollback` names the id it rewrote.',
+    actions: {
+      rollback: ['gateManager.reload('],
+    },
+  },
+  'src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.ts': {
+    resource: 'prompt',
+    why:
+      'For PROMPTS ONLY, `onRefresh` IS the registration — it resolves to the full server ' +
+      'refresh, whose job is reloading prompt data. Same reasoning as the prompt lifecycle ' +
+      'processor entry; declared so the difference from gates and frameworks is stated, not ' +
+      'inferred from its absence.',
+    actions: {
+      rollback: ['onRefresh'],
+    },
+  },
+  'src/mcp/tools/framework-manager/services/framework-versioning-processor.ts': {
+    resource: 'framework',
+    why:
+      '`rollback` writes `framework.yaml` through the same file service as `update`, so it owes ' +
+      'the same registry consequence. It shares `reregisterFramework` with the lifecycle ' +
+      'processor rather than holding a private copy: the private copy is exactly how this path ' +
+      'was missed when `update` and `reload` were fixed.',
+    actions: {
+      rollback: ['reregisterFramework('],
+    },
+  },
   'src/mcp/tools/framework-manager/services/framework-lifecycle-processor.ts': {
     resource: 'framework',
     why:
@@ -123,9 +161,9 @@ const RULES = {
       're-register re-serves the pre-edit content the loader already holds.',
     actions: {
       create: ['registerFramework('],
-      update: ['this.reregister('],
+      update: ['this.reregister(', 'reregisterFramework('],
       delete: ['frameworkManager.unregister(', 'unregister('],
-      reload: ['this.reregister('],
+      reload: ['this.reregister(', 'reregisterFramework('],
     },
   },
 };
@@ -428,7 +466,10 @@ function check(sources, rules = RULES, handlerLocal = HANDLER_LOCAL_MUTATIONS) {
       findings.push(
         `${rule.resource}:${edge.action} — ${edge.method}() writes but does not register: none ` +
           `of [${patterns.join(', ')}] is reachable from it (own body + one hop). ` +
-          `Awaiting onRefresh() is NOT registration here — ${rule.why}`
+          // No fixed claim about onRefresh here: for prompts `onRefresh` IS the registration, so
+          // the old prefix rendered as "Awaiting onRefresh() is NOT registration here — For
+          // PROMPTS ONLY, `onRefresh` IS the registration." Let the rule's own `why` speak.
+          `Registration here means one of those patterns — ${rule.why}`
       );
     }
   }
@@ -504,8 +545,8 @@ function selfTest() {
     const { findings, byEdge } = check(clean);
     record('a clean tree reports no findings', findings.length === 0, findings.join(' | '));
     record(
-      'the dispatch scan resolves all three processors',
-      byEdge.length === 3,
+      'the dispatch scan resolves every declared processor',
+      byEdge.length === Object.keys(RULES).length,
       `resolved: ${byEdge.join(', ')}`
     );
   }
@@ -744,22 +785,36 @@ function main() {
   }
 
   if (findings.length > 0) {
-    console.error('❌ Registry coherence — a lifecycle handler writes without registering:');
+    // Deliberately generic. This header used to read 'a lifecycle handler writes without
+    // registering', which is true of ONE of the five finding classes — the others are stale
+    // rules, unclassified processors, unreached processors and missing `why`s, none of which
+    // involve a handler writing anything. A gate that mislabels its own result is the defect one
+    // layer up from the one it checks for.
+    console.error(`❌ Registry coherence: ${findings.length} finding(s)`);
     for (const finding of findings) console.error(`  • ${finding}`);
-    console.error(
-      '\nA resource written to disk and not registered is unreachable to every subsequent ' +
-        'action in the process that made it, while the handler reports success. Register the id ' +
-        'you just wrote, or declare the route in RULES with a `why`.'
-    );
+    if (findings.some((finding) => finding.includes('writes but does not register'))) {
+      console.error(
+        '\nA resource written to disk and not registered is unreachable to every subsequent ' +
+          'action in the process that made it, while the handler reports success. Register the ' +
+          'id you just wrote, or declare the route in RULES with a `why`. If the write is ' +
+          'handled on the router rather than a processor, declare it in ' +
+          'HANDLER_LOCAL_MUTATIONS with a `closedBy`.'
+      );
+    }
   }
 
   const auditProblems = reportExceptionAudit('validate-registry-coherence', audit);
 
   if (findings.length > 0 || auditProblems > 0) process.exit(1);
 
+  // Names the scope rather than claiming "every mutating edge". The unqualified phrasing was
+  // true only under MUTATING_ACTIONS' own definition of mutating, and that constant excluded
+  // `rollback` while a rollback handler wrote files and claimed a refresh it never performed.
   console.log(
-    `✅ Registry coherence: ${byEdge.length} lifecycle processors, every mutating dispatch edge ` +
-      'registers what it writes by its declared route'
+    `✅ Registry coherence: ${byEdge.length} lifecycle processors; every ` +
+      `${MUTATING_ACTIONS.join('/')} edge reaching a processor registers by its declared route ` +
+      `(${Object.keys(HANDLER_LOCAL_MUTATIONS).length} declared handler-local edge(s), which are ` +
+      'declared rather than verified)'
   );
 }
 

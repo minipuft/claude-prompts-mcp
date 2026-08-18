@@ -1614,7 +1614,13 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
 
     expect(response.isError).toBe(true);
     const text = response.content[0]!.text!;
-    expect(text).toContain('no framework definition could be loaded from disk');
+    // Asserts the CAUSE-AGNOSTIC wording, deliberately. `reregisterFramework` returns false for
+    // an uninitialized manager, an unavailable registry, a guide that loads but cannot be
+    // retrieved, a definition that fails to generate, or a thrown error. The earlier text named
+    // only the missing-file cause, so four of five failures sent the operator to check a file
+    // that was already there.
+    expect(text).toContain('it could not be registered from disk');
+    expect(text).toContain('Check the server log for the reason');
     expect(text).toContain(path.join('no-such-framework', 'framework.yaml'));
   });
 

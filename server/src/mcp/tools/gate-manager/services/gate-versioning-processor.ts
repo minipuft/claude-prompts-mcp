@@ -106,12 +106,15 @@ export class GateVersioningProcessor {
       return this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    await this.ctx.gateManager.reload(id);
+    const reloaded = await this.ctx.gateManager.reload(id);
 
     return this.success(
       `✅ Gate '${id}' rolled back to version ${version}\n\n` +
         `📜 Restored state recorded as version ${saveResult.version}\n` +
-        `🔄 Gate reloaded with restored content`
+        (reloaded
+          ? `🔄 Gate reloaded with restored content`
+          : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +
+            `holds its pre-rollback content. See the server log.`)
     );
   }
 

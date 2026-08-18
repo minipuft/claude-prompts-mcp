@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
@@ -200,7 +201,7 @@ export class FrameworkLifecycleProcessor {
     );
 
     let response =
-      `✅ Framework '${id}' updated successfully\n\n` +
+      `${registered ? `✅ Framework '${id}' updated successfully` : `⚠️ Framework '${id}' was written to disk but the edit is NOT live in this process`}\n\n` +
       `📁 Files updated:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n`;
 
     if (versionSaved !== undefined) {
@@ -216,9 +217,10 @@ export class FrameworkLifecycleProcessor {
     // edit is not live yet from this response, not from the next action returning stale content.
     response += registered
       ? `🔄 Re-registered in the framework registry — the new content is live in this process`
-      : `⚠️ Written to disk but NOT re-registered in this server process. The files are correct ` +
-        `and will load on the next start; until then this framework resolves to its previous ` +
-        `content. Recover with \`action: "reload"\`, or restart the server.`;
+      : `⚠️ Written to disk but NOT re-registered in this server process. The files on disk are ` +
+        `what you asked for; until this resolves, the framework serves its previous content. ` +
+        `\`action: "reload"\` retries the same registration and will fail the same way unless the ` +
+        `cause was transient — check the server log for the reason, then restart.`;
 
     return this.success(response);
   }
@@ -269,7 +271,7 @@ export class FrameworkLifecycleProcessor {
           `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
           `since rollback resolves the framework first\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted framework.\n\n` +
-          `💡 Re-send with \`confirm: true\` and without \`dry_run\` to apply it.`
+          `💡 Re-send the same call without \`dry_run\` to apply it.`
       );
     }
 
@@ -326,9 +328,15 @@ export class FrameworkLifecycleProcessor {
     const reloaded = await this.reregister(id);
 
     if (!reloaded) {
+      // Deliberately does not name a single cause. `reregisterFramework` returns false for an
+      // uninitialized manager, an unavailable registry, a guide that loads but cannot be
+      // retrieved, a definition that fails to generate, or a thrown error — only one of which is
+      // "the file is missing". The previous text sent operators to check a file that exists.
       return this.error(
-        `Failed to reload framework '${id}' — no framework definition could be loaded from disk. ` +
-          `Check that ${path.join(this.ctx.fileService.getFrameworkDir(id), 'framework.yaml')} exists.`
+        `Failed to reload framework '${id}' — it could not be registered from disk. Check the ` +
+          `server log for the reason, then verify that ` +
+          `${path.join(this.ctx.configManager.getServerRoot(), 'resources', 'frameworks', id.toLowerCase(), 'framework.yaml')} ` +
+          `exists and parses.`
       );
     }
 
@@ -412,21 +420,17 @@ export class FrameworkLifecycleProcessor {
    * surface and does the whole job: `loadAndRegisterById` (guide) → `generateSingleFrameworkDefinition`
    * → set in the framework map. It returns false rather than throwing when nothing loads.
    */
-  private async reregister(id: string): Promise<boolean> {
-    try {
-      this.ctx.frameworkManager.getFrameworkRegistry().getRuntimeLoader().clearCache(id);
-    } catch (error) {
-      // `getFrameworkRegistry` throws when the manager is not initialized. Reported, not
-      // swallowed: the caller branches on false and says the content is not live.
-      this.ctx.logger.warn(
-        `Could not clear the framework loader cache for '${id}': ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      return false;
-    }
+  private frameworkDir(id: string): string {
+    return path.join(
+      this.ctx.configManager.getServerRoot(),
+      'resources',
+      'frameworks',
+      id.toLowerCase()
+    );
+  }
 
-    return await this.ctx.frameworkManager.registerFramework(id);
+  private async reregister(id: string): Promise<boolean> {
+    return await reregisterFramework(this.ctx, id);
   }
 
   /**
@@ -484,18 +488,31 @@ export class FrameworkLifecycleProcessor {
     // Step 3: Register in framework registry
     const registryResult = await registry.loadAndRegisterById(normalizedId);
     if (!registryResult) {
-      await this.ctx.fileService.deleteFramework(normalizedId);
-      return { success: false, error: 'Registry registration failed - files rolled back' };
+      // The boolean is read, not discarded. `deleteFramework` returns false on an rm failure or
+      // a missing directory and logs rather than throwing, so the old unconditional
+      // "files rolled back" told the operator the disk was clean while a half-written framework
+      // directory could still be sitting there — the orphan state task 3.2 exists to make
+      // recoverable.
+      const removed = await this.ctx.fileService.deleteFramework(normalizedId);
+      return {
+        success: false,
+        error: removed
+          ? 'Registry registration failed - files rolled back'
+          : `Registry registration failed, AND the files could not be removed — ${this.frameworkDir(normalizedId)} may still exist. Delete it before retrying.`,
+      };
     }
 
     // Step 4: Register in framework manager
     const frameworkResult = await this.ctx.frameworkManager.registerFramework(id);
     if (!frameworkResult) {
-      registry.unregisterGuide(normalizedId);
-      await this.ctx.fileService.deleteFramework(normalizedId);
+      const unregistered = registry.unregisterGuide(normalizedId);
+      const removed = await this.ctx.fileService.deleteFramework(normalizedId);
       return {
         success: false,
-        error: 'Framework registration failed - registry and files rolled back',
+        error:
+          unregistered && removed
+            ? 'Framework registration failed - registry and files rolled back'
+            : `Framework registration failed, and rollback was incomplete: ${unregistered ? 'guide unregistered' : 'guide NOT unregistered'}, ${removed ? 'files removed' : `files NOT removed (${this.frameworkDir(normalizedId)} may still exist)`}.`,
       };
     }
 
