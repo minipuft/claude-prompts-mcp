@@ -178,9 +178,11 @@ describe('Pull Command Integration', () => {
     const skillPath = await exportAndGetSkillPath('pull-test');
     const exported = await readFile(skillPath, 'utf-8');
 
-    // The exported SKILL.md should have compiled away the conditional:
-    // {% if style %}...{% endif %} → "Use {style} formatting."
-    expect(exported).toContain('Use {style} formatting.');
+    // The exported SKILL.md compiles the conditional away, keeping the ELSE branch:
+    // an argument is never substituted in a skill, so the if-branch would emit a
+    // placeholder that cannot bind while discarding the fallback (F18).
+    expect(exported).toContain('Use default formatting.');
+    expect(exported).not.toContain('Use {style} formatting.');
     expect(exported).not.toContain('{% if');
 
     // Edit ONLY the user message section (leave Instructions untouched)

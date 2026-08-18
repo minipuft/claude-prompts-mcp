@@ -479,6 +479,83 @@ describe('Export Command Integration', () => {
     });
   });
 
+  // ── F17/F18: what a skill reader is told about arguments that never bind ──
+  //
+  // Arguments are appended as trailing free text, never substituted, so any
+  // placeholder the compile emits stays literal. F18 removes most of them by
+  // preferring the `{% else %}` fallback; F17 annotates whatever survives.
+  describe('argument placeholders in exported skills (F17/F18)', () => {
+    async function writePromptWithBody(
+      id: string,
+      body: string,
+      args: Array<Record<string, unknown>>
+    ): Promise<string> {
+      const dir = path.join(serverRoot, 'resources', 'prompts', 'general', id);
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, 'user-message.md'), body);
+      await writeFile(
+        path.join(dir, 'prompt.yaml'),
+        yaml.dump({
+          id,
+          name: id,
+          description: `${id} description`,
+          category: 'general',
+          userMessageTemplateFile: 'user-message.md',
+          arguments: args,
+        })
+      );
+      await writeConfig('claude-code');
+      await runExport();
+      return readFile(path.join(outputDir, id, 'SKILL.md'), 'utf-8');
+    }
+
+    it('emits the else-branch, not the placeholder that can never bind', async () => {
+      const skill = await writePromptWithBody(
+        'branching',
+        'Mode: {% if work_kind %}{{ work_kind }}{% else %}[bug_fix | feature | refactor]{% endif %}',
+        [{ name: 'work_kind', description: 'kind of work', required: false }]
+      );
+
+      expect(skill).toContain('[bug_fix | feature | refactor]');
+      expect(skill).not.toContain('{work_kind}');
+    });
+
+    it('stays silent about literal arguments when the else-branch removed them all', async () => {
+      const skill = await writePromptWithBody(
+        'branching_quiet',
+        'Mode: {% if work_kind %}{{ work_kind }}{% else %}[bug_fix | feature]{% endif %}',
+        [{ name: 'work_kind', description: 'kind of work', required: false }]
+      );
+
+      // The whole point of the composition: a prompt written with a fallback
+      // gets no warning banner, because it has nothing left to warn about.
+      expect(skill).toContain('## Arguments');
+      expect(skill).not.toContain('stay literal');
+    });
+
+    it('annotates when a placeholder really does survive the compile', async () => {
+      const skill = await writePromptWithBody(
+        'bare_interp',
+        'Do this to {{ target_thing }} carefully.',
+        [{ name: 'target_thing', description: 'what to act on', required: true }]
+      );
+
+      expect(skill).toContain('{target_thing}');
+      expect(skill).toContain('stay literal');
+    });
+
+    it('says nothing when arguments are declared but never interpolated', async () => {
+      const skill = await writePromptWithBody('declared_only', 'A fixed instruction.', [
+        { name: 'unused_arg', description: 'declared, never used', required: false },
+      ]);
+
+      // Guards against the annoying case: every argument-bearing skill carrying a
+      // caveat it does not need.
+      expect(skill).toContain('- **unused_arg**');
+      expect(skill).not.toContain('stay literal');
+    });
+  });
+
   describe('gate-review hook emission', () => {
     beforeEach(async () => {
       // Scoped to a category none of these prompts use, so it reaches a skill only through the

@@ -1435,15 +1435,59 @@ function manifestKey(ir: SkillIR): string {
  * - {% if argName %}content{% endif %} → content (markers stripped, content kept)
  * - {% else %}content{% endif %} → removed (optional fallback not supported)
  */
+/**
+ * The note that goes under `## Arguments` when placeholders survive the compile.
+ *
+ * Emitted only when the compiled body still shows at least one declared argument
+ * as a literal `{name}` -- the same "only when the body actually carries one"
+ * condition `findTemplateFidelityGaps` applies to its CLI warning, for the same
+ * reason: a prompt that declares arguments without interpolating them loses
+ * nothing, and annotating every argument-bearing skill would be noise.
+ *
+ * The `{% else %}` preference in `compileTemplate` is what usually removes the
+ * placeholder in the first place, so a well-written prompt never triggers this.
+ */
+const LITERAL_ARGUMENT_NOTE =
+  'Supplied when this prompt runs through MCP. Here the `{name}` placeholders below ' +
+  'stay literal, so state the values in your message instead.';
+
+/**
+ * Declared arguments still visible as literal `{name}` after compiling for export.
+ *
+ * Computed from the prompt's compiled sources rather than from the output buffer:
+ * `## Usage` is emitted AFTER `## Arguments`, so a buffer-position check would
+ * miss every placeholder living in the user message -- which is most of them.
+ */
+function literalArgumentsAfterCompile(
+  ir: SkillIR,
+  compile: (template: string, args: IRArgument[]) => string
+): string[] {
+  const compiled = [ir.systemMessage, ir.guidanceContent, ir.userMessage]
+    .filter((section): section is string => Boolean(section))
+    .map((section) => compile(section, ir.arguments))
+    .join('\n');
+
+  const found = new Set<string>();
+  for (const argument of ir.arguments) {
+    if (compiled.includes(`{${argument.name}}`)) found.add(argument.name);
+  }
+  return [...found].sort();
+}
+
 function compileTemplate(template: string, _args: IRArgument[]): string {
   let result = template;
 
-  // Replace {% if argName %}...{% endif %} blocks (keep inner content)
-  // Handle {% if %}...{% else %}...{% endif %} — keep the if-branch, drop else-branch
+  // `{% if arg %}A{% else %}B{% endif %}` compiles to B, not A.
+  //
+  // The if-branch is written for the case where `arg` was supplied, and in a skill
+  // it never is -- arguments are appended as trailing free text, never substituted.
+  // So keeping A emits a placeholder that cannot bind AND discards the fallback,
+  // which is usually the enumeration telling the reader what belongs there. B is
+  // the only branch that is ever true for a skill reader.
   result = result.replace(
-    /\{%-?\s*if\s+(\w+)\s*-?%\}([\s\S]*?)(?:\{%-?\s*else\s*-?%\}[\s\S]*?)?\{%-?\s*endif\s*-?%\}/g,
-    (_match, _varName: string, ifContent: string) => {
-      return ifContent.trim();
+    /\{%-?\s*if\s+(\w+)\s*-?%\}([\s\S]*?)(?:\{%-?\s*else\s*-?%\}([\s\S]*?))?\{%-?\s*endif\s*-?%\}/g,
+    (_match, _varName: string, ifContent: string, elseContent?: string) => {
+      return (elseContent ?? ifContent).trim();
     }
   );
 
@@ -1564,10 +1608,11 @@ function reportTemplateFidelityGaps(
 function compileTemplateToPlaintext(template: string, _args: IRArgument[]): string {
   let result = template;
 
-  // Strip {% if %}...{% else %}...{% endif %} — keep if-branch
+  // Same else-branch preference as `compileTemplate` -- see the reasoning there.
   result = result.replace(
-    /\{%-?\s*if\s+(\w+)\s*-?%\}([\s\S]*?)(?:\{%-?\s*else\s*-?%\}[\s\S]*?)?\{%-?\s*endif\s*-?%\}/g,
-    (_match, _varName: string, ifContent: string) => ifContent.trim()
+    /\{%-?\s*if\s+(\w+)\s*-?%\}([\s\S]*?)(?:\{%-?\s*else\s*-?%\}([\s\S]*?))?\{%-?\s*endif\s*-?%\}/g,
+    (_match, _varName: string, ifContent: string, elseContent?: string) =>
+      (elseContent ?? ifContent).trim()
   );
 
   // Replace {{argName}} with readable {argName}
@@ -2287,6 +2332,9 @@ function buildClaudeCodeSkill(
   // Arguments reference
   if (ir.arguments.length > 0) {
     body += `## Arguments\n\n`;
+    if (literalArgumentsAfterCompile(ir, compileTemplate).length > 0) {
+      body += `${LITERAL_ARGUMENT_NOTE}\n\n`;
+    }
     for (const a of ir.arguments) {
       body += `- **${a.name}**${a.required ? ' (required)' : ''}: ${a.description}\n`;
     }
@@ -2440,6 +2488,9 @@ function buildAgentSkillsSkill(
   // Arguments (descriptive — no positional syntax in Agent Skills)
   if (ir.arguments.length > 0) {
     body += `## Arguments\n\n`;
+    if (literalArgumentsAfterCompile(ir, compileTemplateToPlaintext).length > 0) {
+      body += `${LITERAL_ARGUMENT_NOTE}\n\n`;
+    }
     for (const a of ir.arguments) {
       body += `- **${a.name}**${a.required ? ' (required)' : ''}: ${a.description}\n`;
     }
