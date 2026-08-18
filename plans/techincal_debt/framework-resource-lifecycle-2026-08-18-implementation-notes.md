@@ -417,3 +417,35 @@ The handling was right regardless of whose they were, but the standing rule need
 **neither active session stages `server/package.json` or `server/scripts/run-validation-suite.js`
 whole until the phase-guard session lands its scripts.** Waiting on the delegation session would
 have waited forever.
+
+## What is and is not CI-proven (2026-08-18)
+
+`0cad5169` is green, but **the integration tests have never executed on CI against the G-wave
+commits.** The green run took the classifier's `docs` route (plan files only, 57s), and in the
+`088d01d4` run the Test matrix was SKIPPED by the Build cascade rather than failed. The last real
+matrix execution was `860aeca9` — pre-fix. Flagged by the delegation session; correct, and worth
+recording rather than letting a green badge stand in for a run that never happened.
+
+This is the same species the whole day catalogued: a green signal that observed something other
+than the thing in question. Sixth variant — not a probe that missed the path, but a **route
+selection** that legitimately excluded it.
+
+Closed locally instead of waiting, since no code push was pending from this session:
+
+```
+npx jest tests/integration --runInBand
+  Test Suites: 50 passed, 2 failed, 52 total
+  Tests:       695 passed, 3 failed, 698 total
+```
+
+All three failures are one assertion — `Expected: 23, Received: 24` — in
+`sqlite-backend.test.ts` (×2) and `chain-run-storage.integration.test.ts`, caused by the offline
+phase-guard session's **uncommitted** `SCHEMA_VERSION 23 → 24` in `sqlite-engine.ts`, which is on
+this plan's do-not-touch list. A CI checkout carries the committed `23`, so those three pass there.
+
+`gate-framework-versioning.integration.test.ts` — the file carrying G1 and the G2 coherence
+harness — is in the passing set at **27/27**.
+
+**Precise claim**: on a clean checkout of `0cad5169` the full integration suite would pass. That is
+an inference from a measured local run plus a single identified difference, not a CI observation.
+It flips to observed on the next code-scope push from any session.
