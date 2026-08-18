@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 
 import {
   ResourceVerificationError,
+  ResourceVerificationService,
   type ResourceVerificationFailurePayload,
   type ResourceVerificationResult,
 } from './resource-verification-service.js';
@@ -37,6 +38,16 @@ interface TargetSnapshot {
 }
 
 export class ResourceMutationTransaction {
+  /**
+   * Formatting only — `ResourceVerificationService` holds no state and opens no connection, and
+   * the two methods used here (`toFailurePayload`, `formatFailurePayload`) are pure. Defaulted
+   * rather than required so every existing `new ResourceMutationTransaction()` call site is
+   * unchanged, and injectable so a test can assert the wiring rather than the wording.
+   */
+  constructor(
+    private readonly verificationService: ResourceVerificationService = new ResourceVerificationService()
+  ) {}
+
   async run<T>(
     options: ResourceMutationTransactionOptions<T>
   ): Promise<ResourceMutationTransactionResult<T>> {
@@ -53,12 +64,28 @@ export class ResourceMutationTransaction {
         if (!validation.valid) {
           await this.restoreSnapshots(snapshots);
           rolledBack = true;
+
+          // The exact sentence the caller needs is computed right here and used to be dropped on
+          // the floor: this branch held a fully specific `ResourceVerificationResult` — one issue
+          // naming `frameworkGates.0.name` and `expected string, received undefined` — and
+          // returned a fixed string saying only that the state was invalid. An operator who hit
+          // it could not tell a malformed field from a disk failure, which is how a
+          // writer/verifier disagreement survived undiagnosed. Generic over every resource type,
+          // so prompts, gates, frameworks, styles and tools all gain the detail.
+          const verificationFailure = this.verificationService.toFailurePayload(
+            validation,
+            rolledBack
+          );
+
           return {
             success: false,
             result,
             validation,
+            verificationFailure,
             rolledBack,
-            error: 'Mutation produced invalid resource state; restored previous files.',
+            error:
+              'Mutation produced invalid resource state; restored previous files.\n' +
+              this.verificationService.formatFailurePayload(verificationFailure),
           };
         }
 
