@@ -35,7 +35,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -188,6 +188,38 @@ const TOOL_CHECKS = [
       if (missing.length > 0) return `frameworks on disk but not listed: ${missing.join(', ')}`;
       const activeCount = (text.match(/ACTIVE/g) ?? []).length;
       if (activeCount !== 1) return `expected exactly 1 active framework, found ${activeCount}`;
+      return true;
+    },
+  },
+  {
+    // The declared total and the per-client counts are rendered by different parts of
+    // the status builder, so a client silently dropped from the enumeration fails here
+    // while the header still reads plausibly. The config path is asserted against disk
+    // for the same reason: `Config: found` is the renderer's own claim about itself.
+    label: 'system_control skills_sync status',
+    tool: 'system_control',
+    args: { action: 'skills_sync', operation: 'status' },
+    expect: (text) => {
+      const configPath = text.match(/Config: (found|missing) \(([^)]+)\)/);
+      if (!configPath) return 'status does not report a config path';
+      if (configPath[1] === 'found' && !existsSync(configPath[2])) {
+        return `reports config found at ${configPath[2]}, which does not exist`;
+      }
+
+      const declared = Number(text.match(/Configured registrations: (\d+)/)?.[1]);
+      if (!Number.isFinite(declared)) return 'status does not declare a registration count';
+
+      const clients = [...text.matchAll(/^- ([\w-]+): (all|scoped \((\d+)\)|unregistered)/gm)];
+      if (clients.length === 0) return 'status enumerates no clients';
+
+      // `all` contributes no per-client number, so the arithmetic is only meaningful
+      // when every registered client is scoped.
+      if (!clients.some((c) => c[2] === 'all')) {
+        const summed = clients.reduce((total, c) => total + Number(c[3] ?? 0), 0);
+        if (summed !== declared) {
+          return `declares ${declared} registrations but the client rows sum to ${summed}`;
+        }
+      }
       return true;
     },
   },
@@ -544,6 +576,13 @@ const WRONG_BUT_WELL_FORMED = {
   // passed alongside it.
   'system_control execution_history':
     '⚠️ **Execution Ledger Not Available**\n\nThe execution record store is not wired. This occurs when the server started without a database.',
+  // A client silently dropped from the enumeration. The header still declares 4, every
+  // remaining row is well-formed, and only the arithmetic between the two renderings
+  // catches it — which is the whole reason the check compares them.
+  'system_control skills_sync status':
+    'Skills Sync Status\n\nConfig: found (' +
+    path.join(SERVER_ROOT, 'skills-sync.example.yaml') +
+    ')\nSelection source: registrations\nConfigured registrations: 4\n\nClients:\n- claude-code: scoped (2), no manifest entries\n- cursor: unregistered, no manifest entries\n',
 };
 
 /** Where the action registry lives. Parsed, not imported — this file must stay dependency-free. */
