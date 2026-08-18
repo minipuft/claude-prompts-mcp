@@ -446,9 +446,14 @@ this plan's do-not-touch list. A CI checkout carries the committed `23`, so thos
 `gate-framework-versioning.integration.test.ts` — the file carrying G1 and the G2 coherence
 harness — is in the passing set at **27/27**.
 
-**Precise claim**: on a clean checkout of `0cad5169` the full integration suite would pass. That is
-an inference from a measured local run plus a single identified difference, not a CI observation.
-It flips to observed on the next code-scope push from any session.
+**Precise claim at the time**: on a clean checkout the full integration suite would pass — an
+inference from a measured local run plus a single identified difference, not a CI observation.
+
+**FLIPPED TO OBSERVED 2026-08-18, run `32182768946` at `b9c1b6e9`.** Full route materialized:
+`Test (Node 22.13.0)` success, `Test (Node 24)` success, alongside Lint & Validate, Build and CLI.
+The inference held, but it is no longer the evidence — the matrix executed against the G-wave on a
+clean checkout and passed. Took a manual rerun by the delegation session to get there, for the
+reason in the seventh-variant section below.
 
 ## R-5 message-honesty audit (2026-08-18) — the fix was incomplete
 
