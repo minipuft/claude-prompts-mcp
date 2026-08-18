@@ -118,6 +118,52 @@ interface GateVeto {
 
 const RANK = GATE_SOURCE_PRIORITY;
 
+/** The three conditions that withhold the active framework's gates. */
+export interface FrameworkVetoInput {
+  /** Whether a framework system prompt is actually injected for this execution. */
+  readonly frameworkInjected: boolean;
+  /** Operator switch `gatesConfig.enableFrameworkGates`; `undefined` means enabled. */
+  readonly frameworkGatesEnabled?: boolean | undefined;
+  /** Prompt author's `gateConfiguration.framework_gates`; `undefined` means enabled. */
+  readonly promptFrameworkGates?: boolean | undefined;
+}
+
+/** A framework veto that applies, and the highest source rank it may remove. */
+export interface FrameworkVeto {
+  readonly name: string;
+  readonly bindsUpToRank: number;
+}
+
+/**
+ * Which framework vetoes apply to this execution, with the rank each binds up to.
+ *
+ * Exported because two callers need the same three conditions for different reasons. This
+ * resolver turns each into a ranked `GateVeto`. `GateEnhancementService` appends a default
+ * `framework-compliance` when nothing else supplied a framework gate, and that append is
+ * BELOW every declared source — so it must not happen while any veto applies, whatever that
+ * veto's `bindsUpToRank`.
+ *
+ * Read the ranks as scoping the vetoes against ranked sources only; they say nothing about a
+ * fallback that has no rank. Until 2026-08-18 the append consulted `enableFrameworkGates`
+ * alone and silently reinstated the gate the resolver had just withheld — so `framework_gates:
+ * false` and an uninjected framework were both unobservable at the service boundary.
+ */
+export function applicableFrameworkVetoes(input: FrameworkVetoInput): FrameworkVeto[] {
+  const applicable: FrameworkVeto[] = [];
+
+  if (!input.frameworkInjected) {
+    applicable.push({ name: 'framework-nesting', bindsUpToRank: RANK['inline-operator'] });
+  }
+  if (input.frameworkGatesEnabled === false) {
+    applicable.push({ name: 'framework-gates-disabled', bindsUpToRank: RANK['inline-operator'] });
+  }
+  if (input.promptFrameworkGates === false) {
+    applicable.push({ name: 'framework-gates-opt-out', bindsUpToRank: RANK['prompt-config'] });
+  }
+
+  return applicable;
+}
+
 /**
  * Resolves the gate set for one execution, per ADR 0001.
  *
@@ -365,20 +411,11 @@ export class GateSetResolver {
    * preference and stops at rank 60, like `exclude`.
    */
   private async buildFrameworkVetoes(input: GateResolutionInput): Promise<GateVeto[]> {
-    const applicable: Array<{ name: string; bindsUpToRank: number }> = [];
-
-    if (!input.frameworkInjected) {
-      applicable.push({ name: 'framework-nesting', bindsUpToRank: RANK['inline-operator'] });
-    }
-    if (input.frameworkGatesEnabled === false) {
-      applicable.push({
-        name: 'framework-gates-disabled',
-        bindsUpToRank: RANK['inline-operator'],
-      });
-    }
-    if (input.prompt.gateConfiguration?.framework_gates === false) {
-      applicable.push({ name: 'framework-gates-opt-out', bindsUpToRank: RANK['prompt-config'] });
-    }
+    const applicable = applicableFrameworkVetoes({
+      frameworkInjected: input.frameworkInjected,
+      frameworkGatesEnabled: input.frameworkGatesEnabled,
+      promptFrameworkGates: input.prompt.gateConfiguration?.framework_gates,
+    });
 
     if (applicable.length === 0) {
       return [];

@@ -1,11 +1,11 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
-import { GateSetResolver } from './gate-set-resolver.js';
+import { applicableFrameworkVetoes, GateSetResolver } from './gate-set-resolver.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
-import type { GateResolutionInput } from './gate-set-resolver.js';
+import type { FrameworkVeto, GateResolutionInput } from './gate-set-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
@@ -176,15 +176,22 @@ export class GateEnhancementService {
 
     const activeFrameworkId = this.getActiveFrameworkId(context);
 
+    const frameworkInjected = isFrameworkInjected({
+      modifiers: executionPlan.modifiers,
+      promptInjection: prompt.injection,
+    });
+    const frameworkVetoes = applicableFrameworkVetoes({
+      frameworkInjected,
+      frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
+      promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
+    });
+
     await this.resolveIntoAccumulator(context, {
       prompt,
       category: prompt.category ?? '',
       modifiers: executionPlan.modifiers,
       frameworkId: activeFrameworkId,
-      frameworkInjected: isFrameworkInjected({
-        modifiers: executionPlan.modifiers,
-        promptInjection: prompt.injection,
-      }),
+      frameworkInjected,
       frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
       knownFrameworkGateIds: [...frameworkGateIds],
       inlineOperatorGateIds: inlineGateIds,
@@ -199,7 +206,8 @@ export class GateEnhancementService {
       gateIds,
       gatesConfig,
       activeFrameworkId,
-      frameworkGateIds
+      frameworkGateIds,
+      frameworkVetoes
     );
 
     if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
@@ -320,17 +328,24 @@ export class GateEnhancementService {
       const activeFrameworkId = this.getActiveFrameworkId(context);
       const stepFrameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
 
+      // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
+      // prompt and may carry its own injection block and its own `gateConfiguration`.
+      const frameworkInjected = isFrameworkInjected({
+        modifiers: step.executionPlan?.modifiers,
+        promptInjection: prompt.injection,
+      });
+      const frameworkVetoes = applicableFrameworkVetoes({
+        frameworkInjected,
+        frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
+        promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
+      });
+
       await this.resolveIntoAccumulator(context, {
         prompt,
         category: prompt.category ?? '',
         modifiers: step.executionPlan?.modifiers,
         frameworkId: stepFrameworkId,
-        // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
-        // prompt and may carry its own injection block.
-        frameworkInjected: isFrameworkInjected({
-          modifiers: step.executionPlan?.modifiers,
-          promptInjection: prompt.injection,
-        }),
+        frameworkInjected,
         frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
         knownFrameworkGateIds: [...frameworkGateIds],
         inlineOperatorGateIds: stepInlineGates,
@@ -347,7 +362,8 @@ export class GateEnhancementService {
         gateIds,
         gatesConfig,
         activeFrameworkId,
-        frameworkGateIds
+        frameworkGateIds,
+        frameworkVetoes
       );
 
       if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
@@ -839,13 +855,27 @@ export class GateEnhancementService {
     return result;
   }
 
+  /**
+   * Appends `framework-compliance` when a framework is active and nothing else supplied a
+   * framework gate.
+   *
+   * The append carries no source rank — it is a fallback beneath every declared source — so
+   * ANY applicable framework veto binds it. Consulting `enableFrameworkGates` alone was the
+   * F2 defect: `GateSetResolver` withheld the framework gates a line earlier and this method
+   * put one straight back, making both `framework_gates: false` and an uninjected framework
+   * unobservable to every caller of the service.
+   */
   private ensureDefaultFrameworkGate(
     gateIds: string[],
     gatesConfig: GatesConfig | undefined,
     activeFrameworkId: string | undefined,
-    frameworkGateIds: Set<string>
+    frameworkGateIds: Set<string>,
+    frameworkVetoes: readonly FrameworkVeto[]
   ): string[] {
     if (!gatesConfig?.enableFrameworkGates || !activeFrameworkId) {
+      return gateIds;
+    }
+    if (frameworkVetoes.length > 0) {
       return gateIds;
     }
     const hasFrameworkGate = gateIds.some((gate) => frameworkGateIds.has(gate));

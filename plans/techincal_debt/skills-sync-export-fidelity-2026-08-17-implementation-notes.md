@@ -47,33 +47,38 @@ Flip the plan row to RULED in the same edit.
 | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | DEV-W3-1 | F1,F5–F8 | **Rejected the plan's own `isolation: "worktree"` option for parallel workers.** Dispatch shape is instead: read-only diagnosis subagents in parallel, every edit serialized by the main thread in this worktree. | A worktree is cut from HEAD. Probed: `service.ts` carries **384 uncommitted insertions** from Waves 1–2, and all three skills-sync test files are **untracked** — so a worker's worktree would contain neither the code under test nor the tests, would rediscover Wave 1–2 from scratch, and would conflict on every merge. 84 files are dirty repo-wide (a concurrent session). The plan's serialization constraint was written before that uncommitted state existed. Matches the global rule that evidence production delegates and judgment does not. | 2026-08-17 |
 
+| DEV-W3-6 | F2 | **The `%lean` case survives M-F2-1 and is labelled as such.** It was written expecting the veto guard to be what withholds the gate; the probe showed `FrameworkDecisionAuthority` (`framework-decision-authority.ts:115-130`) already returns no framework for `%clean`/`%lean`, so `activeFrameworkId` is undefined and the pre-existing FIRST guard blocks the append. Kept as a boundary marker with the measurement in its docblock rather than deleted or left reading as coverage it does not provide. This also means ADR 0001's F4 (`%lean` keeps framework-dependent gates) is not closed by this work at the default-append site — it would have to be about the rank-40 source, which is untested here. |
+
 ## Falsification record
 
 A row closes only with an entry here. "Test added" is not a closure.
 
-| Row | Mutation applied                                                      | Test that failed                                                                         | Date       |
-| --- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------- |
-| F3  | `BARE_VARIABLE_BODY` matches everything (expression detection dead)   | 4 tests: filter expression / `{{ref:}}`+`{{script:}}` / dotted access / exports-anyway   | 2026-08-17 |
-| F3  | `{% else %}` detection never fires (`if (false)`)                     | `export-command.test.ts` › reports a dropped `{% else %}` branch                         | 2026-08-17 |
-| F3  | Control-flow regex never matches (`for`/`set`/`macro`)                | `export-command.test.ts` › reports control-flow blocks other than `{% if %}`             | 2026-08-17 |
-| F4  | Literal-argument reporting removed (`if (false)`)                     | `export-command.test.ts` › reports argument placeholders that stay literal               | 2026-08-17 |
-| Q2  | Silence guard removed — warn even with zero gaps                      | 2 tests: bare-variable-only stays silent / declared-but-uninterpolated stays silent      | 2026-08-17 |
-| Q2  | **The rejected branch**: `continue` on any gap, skipping the resource | `export-command.test.ts` › exports the resource anyway — warnings never skip or refuse   | 2026-08-17 |
-| F5  | Blanket `Bash` instead of a scoped specifier (M-O)                    | 2 tests: pre-approves the exact command, not blanket Bash / cannot drift                 | 2026-08-17 |
-| F5  | Granted command drifts from the documented one (M-P)                  | 2 tests: same pair — the drift guard fires independently of the shape guard              | 2026-08-17 |
-| F5  | Leak `Bash(...)` permission syntax into the generic adapter (M-Q)     | `export-command.test.ts` › does not emit Claude Code permission syntax for other clients | 2026-08-17 |
-| F5  | Re-emit the invalid `tools:` frontmatter key (M-L)                    | 2 tests: never emits a `tools:` key / never claims an allowlist (claude-code)            | 2026-08-17 |
-| F5  | Re-emit `allowed-tools` from script-tool ids, generic adapter (M-M)   | `export-command.test.ts` › never claims an allowlist … (codex) — **see DEV-W3-4**        | 2026-08-17 |
-| F5  | Drop the Script Tools section from the generic adapter only (M-N)     | `export-command.test.ts` › documents how to run the script (codex)                       | 2026-08-17 |
-| F7  | Flow line reverted to `promptId` (M-G)                                | 2 tests: renders step names / falls back to the invocable id                             | 2026-08-17 |
-| F7  | `stepName !== undefined` instead of truthiness — the `''` trap (M-H)  | `export-command.test.ts` › falls back to the invocable id when a step declares no name   | 2026-08-17 |
-| F8  | Serialization defect restored in the shared helper (M-I)              | 3 tests: prose / shell_verify summary / unrecognized-by-keys                             | 2026-08-17 |
-| F8  | Unrecognized-criterion fallback dumps values instead of keys (M-J)    | `export-command.test.ts` › names an unrecognized criterion by its keys                   | 2026-08-17 |
-| F8  | **Generic adapter only** reverted, claude-code left fixed (M-K)       | `export-command.test.ts` › renders prose for the generic adapter too                     | 2026-08-17 |
-| —   | Drop chain-step `inlineGateIds`                                       | `export-command.test.ts` › includes a gate that only a chain step declares               | 2026-08-16 |
-| —   | `saveManifestBatch` returns true when no db                           | `export-command.test.ts` › reports the manifest as NOT saved                             | 2026-08-16 |
-| —   | Remove `hooks` from claude-code frontmatter                           | `export-command.test.ts` › emits both the frontmatter hook and the script                | 2026-08-16 |
-| —   | Gate section claims enforcement unconditionally                       | `export-command.test.ts` › says it is NOT enforced on a client with no support           | 2026-08-16 |
-| —   | Deregistration reader reads dead `exports` key                        | `deregistration.test.ts` › 5 tests                                                       | 2026-08-16 |
-| —   | Emit bare id instead of `category/id`                                 | `deregistration.test.ts` › 5 tests                                                       | 2026-08-16 |
-| —   | Drop the `'all'` expansion                                            | `deregistration.test.ts` › deregisters every prompt when a client selects `all`          | 2026-08-16 |
+| Row | Mutation applied                                                      | Test that failed                                                                              | Date       |
+| --- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------- |
+| F2  | Veto guard removed from `ensureDefaultFrameworkGate` (M-F2-1)         | 2 tests: `framework_gates: false` withholds it / `system-prompt.enabled: false` withholds it  | 2026-08-18 |
+| F2  | `framework-gates-opt-out` dropped from the shared helper (M-F2-2)     | `framework-gate-opt-out.test.ts` › `framework_gates: false` withholds it — the shipped defect | 2026-08-18 |
+| F2  | Default append neutered entirely (M-F2-3)                             | 2 tests: control (active framework still gets it) / `framework_gates: true` is not an opt-out | 2026-08-18 |
+| F3  | `BARE_VARIABLE_BODY` matches everything (expression detection dead)   | 4 tests: filter expression / `{{ref:}}`+`{{script:}}` / dotted access / exports-anyway        | 2026-08-17 |
+| F3  | `{% else %}` detection never fires (`if (false)`)                     | `export-command.test.ts` › reports a dropped `{% else %}` branch                              | 2026-08-17 |
+| F3  | Control-flow regex never matches (`for`/`set`/`macro`)                | `export-command.test.ts` › reports control-flow blocks other than `{% if %}`                  | 2026-08-17 |
+| F4  | Literal-argument reporting removed (`if (false)`)                     | `export-command.test.ts` › reports argument placeholders that stay literal                    | 2026-08-17 |
+| Q2  | Silence guard removed — warn even with zero gaps                      | 2 tests: bare-variable-only stays silent / declared-but-uninterpolated stays silent           | 2026-08-17 |
+| Q2  | **The rejected branch**: `continue` on any gap, skipping the resource | `export-command.test.ts` › exports the resource anyway — warnings never skip or refuse        | 2026-08-17 |
+| F5  | Blanket `Bash` instead of a scoped specifier (M-O)                    | 2 tests: pre-approves the exact command, not blanket Bash / cannot drift                      | 2026-08-17 |
+| F5  | Granted command drifts from the documented one (M-P)                  | 2 tests: same pair — the drift guard fires independently of the shape guard                   | 2026-08-17 |
+| F5  | Leak `Bash(...)` permission syntax into the generic adapter (M-Q)     | `export-command.test.ts` › does not emit Claude Code permission syntax for other clients      | 2026-08-17 |
+| F5  | Re-emit the invalid `tools:` frontmatter key (M-L)                    | 2 tests: never emits a `tools:` key / never claims an allowlist (claude-code)                 | 2026-08-17 |
+| F5  | Re-emit `allowed-tools` from script-tool ids, generic adapter (M-M)   | `export-command.test.ts` › never claims an allowlist … (codex) — **see DEV-W3-4**             | 2026-08-17 |
+| F5  | Drop the Script Tools section from the generic adapter only (M-N)     | `export-command.test.ts` › documents how to run the script (codex)                            | 2026-08-17 |
+| F7  | Flow line reverted to `promptId` (M-G)                                | 2 tests: renders step names / falls back to the invocable id                                  | 2026-08-17 |
+| F7  | `stepName !== undefined` instead of truthiness — the `''` trap (M-H)  | `export-command.test.ts` › falls back to the invocable id when a step declares no name        | 2026-08-17 |
+| F8  | Serialization defect restored in the shared helper (M-I)              | 3 tests: prose / shell_verify summary / unrecognized-by-keys                                  | 2026-08-17 |
+| F8  | Unrecognized-criterion fallback dumps values instead of keys (M-J)    | `export-command.test.ts` › names an unrecognized criterion by its keys                        | 2026-08-17 |
+| F8  | **Generic adapter only** reverted, claude-code left fixed (M-K)       | `export-command.test.ts` › renders prose for the generic adapter too                          | 2026-08-17 |
+| —   | Drop chain-step `inlineGateIds`                                       | `export-command.test.ts` › includes a gate that only a chain step declares                    | 2026-08-16 |
+| —   | `saveManifestBatch` returns true when no db                           | `export-command.test.ts` › reports the manifest as NOT saved                                  | 2026-08-16 |
+| —   | Remove `hooks` from claude-code frontmatter                           | `export-command.test.ts` › emits both the frontmatter hook and the script                     | 2026-08-16 |
+| —   | Gate section claims enforcement unconditionally                       | `export-command.test.ts` › says it is NOT enforced on a client with no support                | 2026-08-16 |
+| —   | Deregistration reader reads dead `exports` key                        | `deregistration.test.ts` › 5 tests                                                            | 2026-08-16 |
+| —   | Emit bare id instead of `category/id`                                 | `deregistration.test.ts` › 5 tests                                                            | 2026-08-16 |
+| —   | Drop the `'all'` expansion                                            | `deregistration.test.ts` › deregisters every prompt when a client selects `all`               | 2026-08-16 |
