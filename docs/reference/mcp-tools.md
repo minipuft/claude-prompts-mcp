@@ -623,10 +623,10 @@ All resource types support these actions:
 | `inspect`  | Get resource details     | `id`                               | _Prefer `resource://` URIs_ |
 | `create`   | Create new resource      | `id`, type-specific                |                             |
 | `update`   | Modify existing resource | `id`, fields to update             |                             |
-| `delete`   | Remove resource          | `id`, `confirm:true`               |                             |
+| `delete`   | Remove resource          | `id`, `confirm:true`               | `dry_run:true` to preview   |
 | `reload`   | Hot-reload from disk     | `id` (optional)                    |                             |
 | `history`  | View version history     | `id`                               |                             |
-| `rollback` | Restore previous version | `id`, `version`, `confirm:true`    |                             |
+| `rollback` | Restore previous version | `id`, `version`, `confirm:true`    | `dry_run:true` to preview   |
 | `compare`  | Compare two versions     | `id`, `from_version`, `to_version` |                             |
 
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
@@ -820,7 +820,7 @@ resource_manager(
 | `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                     |
 | `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit) |
 | `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                 |
-| `dry_run`               | Preview an `update` (or patch) without writing — no version consumed                                                              |
+| `dry_run`               | Preview an `update`/`patch`, a `rollback`, or a `delete` without writing — no version consumed                                    |
 | `chain_steps`           | Chain step definitions                                                                                                            |
 | `gate_configuration`    | Gate include/exclude lists                                                                                                        |
 | `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                               |
@@ -902,7 +902,7 @@ system_control(action:"gates", operation:"list")
 | `analytics`         | —                                     | Execution metrics         |
 | `config`            | —                                     | View config overlays      |
 | `changes`           | `list`                                | Resource change audit log |
-| `session`           | `list`, `inspect`, `clear`, `cancel`  | Chain session lifecycle   |
+| `session`           | `list`, `inspect`, `clear`            | Chain session lifecycle   |
 | `execution_history` | `list`                                | Chain execution ledger    |
 
 ### Execution History
@@ -961,16 +961,28 @@ system_control(action:"session", operation:"list", show_details:true)
 # Inspect a specific session (state, step, pending gates, context variables)
 system_control(action:"session", operation:"inspect", session_id:"chain-research#1")
 
-# Cancel an active session — transitions runStatus to 'cancelled' (idempotent on
-# already-cancelled; refuses sessions already in terminal completed/failed state).
-# Subsequent step progression is blocked; session state is retained for inspection.
-system_control(action:"session", operation:"cancel", session_id:"chain-research#1")
-
 # Clear a session entirely — removes state and artifacts (irreversible).
 system_control(action:"session", operation:"clear", session_id:"chain-research#1")
+
+# Stopping a run lives on the other tool — see "Which tool stops a run" below.
+prompt_engine(chain_id:"chain-research#1", cancel:true)
 ```
 
-**Cancel vs Clear**: `cancel` is the soft-stop — runStatus becomes `cancelled`, session row stays for inspection/audit. `clear` is the hard removal — session and chain history are deleted. Use cancel during active runs to halt progression while preserving evidence; use clear during cleanup.
+### Which tool stops a run
+
+**The id you hold decides the tool.** A `chain_id` is held _because you are running the chain_, and
+stopping the run you are in is part of running it — so `cancel` is on `prompt_engine`. A
+`session_id` comes from a listing, and acting on runs you are not in is operator work — so `list`,
+`inspect` and `clear` stay on `system_control`. Without that rule the split re-forms the first time
+someone adds a verb.
+
+| Verb            | Tool                                                  | Effect                                                                                                                                                                                                                          |
+| --------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cancel`        | `prompt_engine(chain_id, cancel:true)`                | Soft stop. runStatus becomes `cancelled`, progression is blocked, and the session row and artifacts are **retained** for inspection and audit. Idempotent on an already-cancelled run; refuses one already completed or failed. |
+| `clear`         | `system_control(action:"session", operation:"clear")` | Hard removal. Session state and chain history are deleted. Irreversible.                                                                                                                                                        |
+| `force_restart` | `prompt_engine(command, force_restart:true)`          | Abandons the current run and immediately starts a new one — cancel-then-start in a single call. Use `cancel` when you want to stop and start nothing.                                                                           |
+
+Cancel during an active run to halt progression while preserving evidence; clear during cleanup.
 
 ### Resource Change Tracking
 
@@ -1286,11 +1298,40 @@ resource_manager(
 )
 ```
 
-**Safety:** The target version is validated before anything is written — an invalid version number
-is refused and consumes no version. The restored content is then recorded as a new version
-(described as `Rollback to vN`), not a separate "pre-rollback snapshot" — under go-forward
-numbering the live state before rollback is already the previous version. You can always
-rollback-from-rollback.
+**Safety:** A rollback runs in three phases — validate, record, write — and a refusal at any point
+before the write leaves both the files and `version_history` untouched. The target version is
+resolved and checked for completeness first; only then is the restored state recorded (described as
+`Rollback to vN`), and only then is the file written. Recording precedes the write on purpose, so a
+persistence failure aborts with nothing on disk. There is no separate "pre-rollback snapshot" —
+under go-forward numbering the live state before the rollback is already the previous version. You
+can always rollback-from-rollback.
+
+**Incomplete snapshots are refused, not merged.** A version whose snapshot is missing a field the
+resource cannot be rebuilt without is not restorable, and the rollback is refused naming the
+missing fields. Substituting the current value for a missing one would land the resource on a state
+matching neither the target version nor the state before it — under a message saying version N had
+been restored.
+
+**Preview any of it with `dry_run`.** `dry_run:true` on `rollback` returns the diff between the
+current state and the version you would restore, writing no file and recording no version; it still
+refuses an incomplete snapshot, so the preview and the real call agree. `dry_run:true` on `delete`
+reports what would be removed — for a prompt, that includes the prompts that reference it.
+
+### What a rollback does not restore
+
+A version snapshot records the resource's authored surface, not every byte in its directory. What
+falls outside it is left to the file writers, which carry it forward from disk:
+
+| Resource  | Not in the snapshot                                                             | What happens on rollback                  |
+| --------- | ------------------------------------------------------------------------------- | ----------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values         |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so** |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml`          |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge     |
+
+Where a rollback restores only part of a resource, the response names what it did not restore.
+Frameworks additionally report any projected field the target version never recorded, because the
+framework writer merges rather than rebuilds and so cannot remove a key.
 
 ### Compare Versions
 

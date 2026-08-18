@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ⚠ BREAKING CHANGES
+
+- **`session cancel` moved from `system_control` to `prompt_engine`.** Call `prompt_engine(chain_id:"chain-x#1", cancel:true)`; `system_control(action:"session", operation:"cancel")` now refuses and names the replacement. `list`, `inspect` and `clear` stay on `system_control`. **The id you hold decides the tool**: a `chain_id` is held _because you are running the chain_, so stopping that run is part of running it, while a `session_id` comes from a listing and acting on runs you are not in is operator work. The split had no rule before this, which is how `prompt_engine` came to own `force_restart` — a session-lifecycle mutation — while the verb it is built from lived on the other tool. `force_restart` is now documented as cancel-then-start, so the two abandonment verbs sit on one tool with one sentence separating them.
+- **`resource_manager` gains `source_workspace`**, a read-only cross-workspace history parameter. It is honoured by `history` and `compare` and **refused** by every other action, including `rollback`: a snapshot recorded in another workspace describes files that may not exist here, and version numbering is per-workspace. The refusal is deliberate — silently scoping the parameter back to local would leave the caller believing they had restored the other workspace's version.
+
+Both changes alter the reachable-shape union of the MCP tool surface, which this repository's Public API Contract prices as breaking.
+
+### Added
+
+- **`dry_run` previews `rollback` and `delete`** on prompts, gates and frameworks, in addition to prompt `update`. A preview writes no file and records no version, and still refuses a version whose snapshot is incomplete, so the preview and the real call agree. A `delete` preview names what would be removed — for a prompt, the prompts that reference it.
+- **`resource_manager` and `system_control` advertise `destructiveHint`**, and `prompt_engine` advertises that it is not destructive, so clients can gate destructive actions where the operator is.
+- **Phase-guard section headers are now declared to the model, derived live from `phases.yaml`.** Chain steps and gated single prompts (any prompt carrying an explicit `gates` parameter, a `gate` operator, or `chainSteps`) render the section-header vocabulary — and the declarable subset of its guard criteria (`contains_any`, `contains_all`, `max_length`) — from the same source the phase-guard evaluator grades against, replacing five hand-maintained prompt copies as the source of truth. Negative criteria (`forbidden_terms`, `matches_pattern`) are never declared to the model; the type system rejects a criterion that tries. A framework that declares `guards` on a phase with no `section_header` is now refused at load, naming the offending phase. `validate:phase-header-drift` catches a prompt file that restates a header its framework no longer declares.
+
+### Changed
+
+- **Destructive `resource_manager` actions are denied by one guard** ahead of dispatch rather than by six hand-written checks across the processors. `prompt delete` keeps its own refusal because that one names the dependent prompts that would break.
+
+### Fixed
+
+- **A phase guard can no longer block on a section header the executing prompt was never told to produce.** Previously the guard graded every `phases.yaml` header regardless of whether the rendered prompt actually asked for it, so a header rename in `phases.yaml` silently created an unsatisfiable review loop — reproduced live on this repository's own planning chain. A header the prompt did not declare is now advisory only; enforcement of a declared-and-missing header is unchanged.
+- **Gate and framework version history now records the state each edit produced**, matching prompts. Previously version N held the state edit N _replaced_, so the state currently on disk was recorded in no row at all and was not rollback-reachable until the next edit. A self-healing bridge row carries existing rows across the change with no migration.
+- **Rollback restores the recorded snapshot exactly instead of merging current values into it.** A version whose snapshot cannot rebuild the resource is now refused, naming the missing fields; substituting the live value landed the resource on a state matching neither the target version nor the state before it, under a message saying version N had been restored. Where a rollback legitimately leaves part of a resource untouched — fields resolved through the category chain, a framework field the version never recorded, script tools under `tools/{id}/` — the response now names what it did not restore.
+- **A rollback refused for any reason no longer writes version rows.** Rollback runs validate → record → write, with recording ahead of the file write so a persistence failure aborts with nothing on disk.
+- **A gate or framework edit no longer writes a spurious bridge row every time.** Snapshot projections are emitted in a canonical key order, because the bridge check is `JSON.stringify` equality and was therefore order-sensitive; steady state is one row per edit again.
+- **`cpm rollback` no longer destroys resource fields.** It wrote the recorded snapshot as the entire entry YAML, so rolling a gate back through the CLI deleted `pass_criteria`, `retry_config`, `activation` and `guidanceFile` and injected a bogus `guidance` key — the CLI and the server produced different files from the same version. The snapshot is now merged over what is on disk, and `cpm rollback style` is refused up front rather than cast into a resource type that has no version history.
+- **`resource_manager framework update description:"…"` was a silent no-op.** The value was accepted, diffed and reported, but never written; the old description survived because the framework writer merges over the existing YAML.
+
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
 
 
