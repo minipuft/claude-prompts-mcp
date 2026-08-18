@@ -82,6 +82,52 @@ export type ResourceAction =
 /**
  * Actions specific to certain resource types
  */
+/**
+ * Actions that destroy or overwrite operator-authored state and therefore require `confirm: true`.
+ *
+ * One registry, checked once before dispatch. Until this existed the same guard was hand-written
+ * in six processors in two idioms (`!confirm` and `confirm !== true`), which is six places to
+ * forget it — and `system_control`'s `session clear` shows what forgetting looks like.
+ *
+ * SCOPE: `resource_manager` only. `system_control` is a separate tool with its own action
+ * vocabulary and its own three hand-written guards; it is NOT covered here. See the
+ * consolidation plan's OQ-A2 before widening this — adding a confirmation requirement to an
+ * action that never had one changes behaviour for existing callers.
+ *
+ * `reload` is deliberately absent: it re-reads from disk and destroys nothing.
+ */
+export const DESTRUCTIVE_ACTIONS: ReadonlySet<ResourceAction> = new Set<ResourceAction>([
+  'delete',
+  'rollback',
+]);
+
+/**
+ * `<resource_type>:<action>` pairs whose refusal carries information the router does not have, so
+ * the handler owns the guard and the pre-dispatch check stands down for them.
+ *
+ * Exactly one entry, and it earns its place: `prompt delete` computes the set of prompts that
+ * reference the target and names them in the refusal, so the operator learns what would break
+ * before deciding. The router has no view of the prompt dependency graph, so guarding here would
+ * replace a specific refusal with a generic one — a downgrade wearing the shape of consolidation.
+ *
+ * This is a bypass list, so it must not grow quietly. A new entry needs the same test: does the
+ * handler's refusal tell the caller something the router cannot? "The message is nicer" does not
+ * qualify. Every entry is covered by a handler-level test asserting the guard still refuses.
+ */
+export const HANDLER_OWNED_CONFIRMATION: ReadonlySet<string> = new Set<string>(['prompt:delete']);
+
+/**
+ * Actions that may read version history from a workspace other than this one.
+ *
+ * Reads only, and named as a set so the router's refusal message enumerates itself — a second list
+ * in the message text is a second thing to forget to update. `rollback` is deliberately absent:
+ * see the router's cross-workspace guard for why it refuses rather than ignores.
+ */
+export const CROSS_WORKSPACE_READ_ACTIONS: ReadonlySet<ResourceAction> = new Set<ResourceAction>([
+  'history',
+  'compare',
+]);
+
 export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
 export const FRAMEWORK_ONLY_ACTIONS: ResourceAction[] = ['switch'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
@@ -103,6 +149,16 @@ export const COMMON_ACTIONS: ResourceAction[] = [
 type GatePassCriteria = NonNullable<GateManagerInput['pass_criteria']>[number];
 type FrameworkPhase = NonNullable<FrameworkManagerInput['phases']>[number];
 type FrameworkToolDescriptions = NonNullable<FrameworkManagerInput['tool_descriptions']>;
+
+/**
+ * What a prompt-domain processor receives.
+ *
+ * The router dispatches on `resource_type` and does not pass it on, so the prompt handler's own
+ * argument object carries every field below EXCEPT that one. Processors were typed `args: any`
+ * for exactly this reason — `ResourceManagerInput` did not describe what they are handed. Naming
+ * the difference is what lets the versioning processors declare a real signature.
+ */
+export type PromptResourceInput = Omit<ResourceManagerInput, 'resource_type'>;
 
 export interface ResourceManagerInput {
   // Router parameter (REQUIRED - validated by Zod schema)
@@ -153,6 +209,13 @@ export interface ResourceManagerInput {
   patch?: TemplatePatchOperation[];
   /** [Prompt] Render and diff the update without writing it or recording a version. */
   dry_run?: boolean;
+  /**
+   * Workspace whose version history to READ, when it is not this one.
+   *
+   * Read-only and scope-local-on-write: honoured by `history` and `compare`, rejected by
+   * `rollback`. See the router's cross-workspace guard.
+   */
+  source_workspace?: string;
   chain_steps?: Array<Record<string, unknown>>;
   /** [Prompt] Step-level operation for chain updates (default: replace entire array) */
   chain_step_operation?: 'add' | 'remove' | 'reorder' | 'replace';

@@ -29,6 +29,7 @@ export type prompt_engineParamName =
   | 'gate_action'
   | 'gates'
   | 'force_restart'
+  | 'cancel'
   | 'options'
   | 'observations'
   | 'workflow';
@@ -121,7 +122,15 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'force_restart',
     type: 'boolean',
     description:
-      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id.",
+      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id. Distinct from 'cancel': force_restart abandons the current run and immediately begins a new one, while cancel ends it and starts nothing.",
+    status: 'working',
+    compatibility: 'canonical',
+  },
+  {
+    name: 'cancel',
+    type: 'boolean',
+    description:
+      "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; no other parameter is read. Moved here from system_control session cancel because a chain id is held BECAUSE you are running the chain, so ending that run is part of running it — system_control keeps list/inspect/clear, which are keyed on a session_id read from a listing. Cancel retains the session's state and artifacts; remove them with system_control(action:\"session\", operation:\"clear\").",
     status: 'working',
     compatibility: 'canonical',
   },

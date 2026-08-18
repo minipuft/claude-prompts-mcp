@@ -552,7 +552,7 @@ export class PromptLifecycleProcessor {
           beforeContent as unknown as Record<string, unknown>,
           { ...promptData },
           {
-            description: args.version_description ?? 'Update via resource_manager',
+            description: 'Update via resource_manager',
             diff_summary: diffSummary,
           }
         );
@@ -682,6 +682,31 @@ export class PromptLifecycleProcessor {
           },
         ],
         isError: true,
+      };
+    }
+
+    // `dry_run` reports the same blast radius the refusal names, without needing the refusal — a
+    // caller who already knows they want to delete can still see what it costs first. Placed after
+    // the confirm gate so `dry_run` never becomes a way to skip it.
+    if (args.dry_run === true) {
+      const blastRadius =
+        dependencies.length > 0
+          ? `\n⚠️ ${dependencies.length} prompt(s) reference it and would break:\n` +
+            dependencies.map((dep) => `- ${dep.name} (${dep.id})`).join('\n') +
+            '\n'
+          : '';
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `🔍 **Dry run** — deletion of prompt '${id}' (${promptToDelete.name})\n\n` +
+              `Nothing was removed.\n${blastRadius}\n` +
+              `⚠️ Deletion cannot be undone — rollback cannot restore a deleted prompt.\n\n` +
+              `💡 Re-send the same call without \`dry_run\` to apply it.`,
+          },
+        ],
+        isError: false,
       };
     }
 

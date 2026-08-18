@@ -155,6 +155,16 @@ export const resourceManagerInputSchema = z
      * matched before spending a version.
      */
     dry_run: z.boolean().optional(),
+    /**
+     * Read version history belonging to a DIFFERENT workspace.
+     *
+     * `state.db` is one file shared by every project on the machine, isolated by workspace id
+     * alone — so another checkout's history is already present and merely filtered out. Valid on
+     * `history` and `compare` only. `rollback` REJECTS it rather than ignoring it: a snapshot from
+     * another workspace describes files that may not exist here, and silently scoping the
+     * parameter back to local would leave the caller believing they had restored it.
+     */
+    source_workspace: z.string().min(1).optional(),
     /** [Prompt] Chain steps definition for multi-step prompts. */
     chain_steps: z.array(ChainStepSchema.passthrough()).optional(),
     /** [Prompt] Step-level operation for chain updates (default: replace entire array). */

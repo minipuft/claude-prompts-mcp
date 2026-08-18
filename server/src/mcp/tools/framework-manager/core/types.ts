@@ -172,6 +172,16 @@ export interface FrameworkManagerInput {
   enabled_only?: boolean;
   persist?: boolean;
   confirm?: boolean;
+  /**
+   * Preview a destructive action instead of performing it.
+   *
+   * Honoured on `rollback` and `delete`. A preview returns before the version row is recorded and
+   * before any file is touched, so neither of the two side-effect surfaces moves.
+   */
+  dry_run?: boolean;
+  /** Workspace whose version history to READ. Honoured by `history`/`compare`; the router
+   * refuses it on `rollback`. */
+  source_workspace?: string;
   reason?: string;
 
   // Advanced framework fields (not advertised in tool description for token efficiency)
@@ -193,7 +203,6 @@ export interface FrameworkManagerInput {
   /** Skip automatic version saving for this update */
   skip_version?: boolean;
   /** Optional description for the version entry */
-  version_description?: string;
   /** Target version for rollback action */
   version?: number;
   /** Starting version for compare action */

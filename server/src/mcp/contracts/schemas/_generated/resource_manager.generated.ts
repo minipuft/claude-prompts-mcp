@@ -36,6 +36,7 @@ export type resource_managerParamName =
   | 'arguments'
   | 'argument_updates'
   | 'patch'
+  | 'source_workspace'
   | 'dry_run'
   | 'chain_steps'
   | 'tools'
@@ -181,10 +182,19 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
+    name: 'source_workspace',
+    type: 'string',
+    description:
+      "[Versioning] Read version history belonging to a DIFFERENT workspace. `state.db` is one file shared by every project on the machine, isolated by workspace id alone, so another checkout's history is already present and merely filtered out. READ-ONLY and scope-local-on-write: honoured by `history` and `compare`; every other action REJECTS it rather than ignoring it, because a snapshot recorded elsewhere describes files that may not exist here and version numbering is per-workspace. Inspect with it, then apply the change in that workspace.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
     name: 'dry_run',
     type: 'boolean',
     description:
-      '[Prompt] Preview an `update`: returns the resulting text bodies and the diff without writing the file or recording a version. Works for a full update as well as a `patch`.',
+      'Preview a mutation instead of performing it — nothing is written and no version is recorded. `update` (prompt): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. Not valid on `create` — there is nothing to diff against.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

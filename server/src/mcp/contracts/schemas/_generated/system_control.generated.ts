@@ -37,7 +37,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session|changes|execution_history]',
     description:
-      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel), changes (resource change audit log), execution_history (chain execution ledger, newest first).',
+      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first).',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -53,7 +53,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'operation',
     type: 'string',
     description:
-      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect/cancel).',
+      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect).',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -229,13 +229,6 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'session:inspect',
     summary: 'Inspect session details.',
-    parameters: ['action', 'operation', 'session_id'],
-    status: 'working',
-  },
-  {
-    id: 'session:cancel',
-    summary:
-      "Cancel an active chain session (transitions runStatus to 'cancelled'; idempotent on already-cancelled; refuses terminal completed/failed).",
     parameters: ['action', 'operation', 'session_id'],
     status: 'working',
   },

@@ -6,7 +6,13 @@
  * based on the resource_type parameter.
  */
 
-import { PROMPT_ONLY_ACTIONS, FRAMEWORK_ONLY_ACTIONS } from './types.js';
+import {
+  CROSS_WORKSPACE_READ_ACTIONS,
+  PROMPT_ONLY_ACTIONS,
+  FRAMEWORK_ONLY_ACTIONS,
+  DESTRUCTIVE_ACTIONS,
+  HANDLER_OWNED_CONFIRMATION,
+} from './types.js';
 
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
@@ -62,6 +68,37 @@ export class ResourceManagerRouter {
     const validationResult = this.validateActionForResourceType(resource_type, action);
     if (!validationResult.valid) {
       return this.createErrorResponse(validationResult.error ?? 'Invalid action');
+    }
+
+    // One confirmation guard for every destructive action, ahead of dispatch. Deliberately above
+    // the resource_type switch: a per-handler check is a check each new handler must remember.
+    // HANDLER_OWNED_CONFIRMATION names the pairs whose own refusal says more than this one can.
+    if (
+      DESTRUCTIVE_ACTIONS.has(action) &&
+      !HANDLER_OWNED_CONFIRMATION.has(`${resource_type}:${action}`) &&
+      args.confirm !== true
+    ) {
+      return this.createErrorResponse(
+        `⚠️ '${action}' is destructive and requires confirmation.\n\n` +
+          `To ${action} ${resource_type} '${args.id ?? '<id>'}', re-send the same call with confirm: true.` +
+          (action === 'delete'
+            ? `\n\nDeletion cannot be undone — rollback cannot restore a deleted ${resource_type}.`
+            : '')
+      );
+    }
+
+    // Reading another workspace's version history is legitimate debugging; writing with it is not.
+    // Refused here rather than per-type, and refused rather than ignored: silently scoping the
+    // parameter back to local would leave the caller believing they had restored the other
+    // workspace's version.
+    if (args.source_workspace !== undefined && !CROSS_WORKSPACE_READ_ACTIONS.has(action)) {
+      return this.createErrorResponse(
+        `'source_workspace' is a read-only parameter — valid on ${[...CROSS_WORKSPACE_READ_ACTIONS].join(' and ')}, not on '${action}'.\n\n` +
+          `A snapshot recorded in another workspace describes files that may not exist here, and ` +
+          `version numbering is per-workspace, so writing across that boundary would interleave ` +
+          `two histories. Use action:"history" or action:"compare" with 'source_workspace' to ` +
+          `inspect it, then apply the change in that workspace.`
+      );
     }
 
     this.logger.debug(`[ResourceManager] Routing ${resource_type}:${action}`, {
@@ -176,6 +213,7 @@ export class ResourceManagerRouter {
       to_version: args.to_version,
       skip_version: args.skip_version,
       limit: args.limit,
+      source_workspace: args.source_workspace,
     };
 
     return await this.promptResourceHandler.handleAction(
@@ -241,6 +279,12 @@ export class ResourceManagerRouter {
     }
     if (args.confirm !== undefined) {
       gateArgs.confirm = args.confirm;
+    }
+    if (args.dry_run !== undefined) {
+      gateArgs.dry_run = args.dry_run;
+    }
+    if (args.source_workspace !== undefined) {
+      gateArgs.source_workspace = args.source_workspace;
     }
     if (args.reason) {
       gateArgs.reason = args.reason;
@@ -329,6 +373,12 @@ export class ResourceManagerRouter {
     }
     if (args.confirm !== undefined) {
       frameworkArgs.confirm = args.confirm;
+    }
+    if (args.dry_run !== undefined) {
+      frameworkArgs.dry_run = args.dry_run;
+    }
+    if (args.source_workspace !== undefined) {
+      frameworkArgs.source_workspace = args.source_workspace;
     }
     if (args.reason) {
       frameworkArgs.reason = args.reason;
