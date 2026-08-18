@@ -16,8 +16,10 @@ import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 import { createTwoFilesPatch } from 'diff';
 
+import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
+import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import {
   ResourceMutationTransaction,
@@ -264,9 +266,12 @@ interface GateYaml {
   description: string;
   guidanceFile?: string;
   enabled?: boolean;
+  /** Enforcement kind: `validation` | `guidance`. Not the activation dimension. */
   type?: string;
+  /** Activation kind, which IS the dimension `isGateActiveForContext` branches on. */
+  gate_type?: 'framework' | 'category' | 'custom';
   pass_criteria?: unknown[];
-  activation?: unknown;
+  activation?: GateActivationRules;
   retry_config?: unknown;
 }
 
@@ -769,8 +774,36 @@ async function readOptionalFile(filePath: string): Promise<string | null> {
 }
 
 /**
- * Resolves gate IDs that are active for a prompt based on its gateConfiguration
- * and category-based auto-activation.
+ * Whether an exported skill could honour this gate at all.
+ *
+ * An exported SKILL.md for a PROMPT injects no framework — `loadPromptIR` sets
+ * `frameworkData: null` unconditionally, and only a framework RESOURCE export carries a system
+ * prompt. A gate that depends on a framework is therefore a claim the artifact cannot honour,
+ * exactly as the runtime's `framework-nesting` veto says: scoring adherence to a framework that
+ * was never injected is incoherent, and that veto binds every source rank, so an explicit
+ * `include` does not rescue it either.
+ *
+ * Two declarations reach the same conclusion and BOTH are needed. `gate_type: 'framework'`
+ * catches `framework-compliance`. `framework_context` catches `creed-fidelity`, which declares
+ * `gate_type: category` while naming RADIANT — and the regular-gate branch of
+ * `isGateActiveForContext` reads an ABSENT framework as "unconstrained" rather than as a
+ * mismatch, so delegation alone would activate it into a skill that has no RADIANT anywhere.
+ */
+function dependsOnFramework(gate: GateYaml): boolean {
+  if (gate.gate_type === 'framework') return true;
+  const contexts = gate.activation?.framework_context;
+  return contexts !== undefined && contexts.length > 0;
+}
+
+/**
+ * Resolves the gate IDs active for a prompt, delegating activation to the engine.
+ *
+ * Activation is `isGateActiveForContext` — the same function `GenericGateGuide.isActive` calls,
+ * which is what `GateManager.selectGates` iterates. Export used to hand-roll a subset of it
+ * (`prompt_categories` plus `explicit_request`, exact-case), which is why the two disagreed:
+ * measured 2026-08-18 for category `development`, the engine activated 11 gates and export 7.
+ * Five `custom` gates declaring no category restriction were missed entirely — the hand-rolled
+ * check required a category MATCH where the engine requires only the absence of a conflict.
  */
 async function resolveActiveGateRefs(
   gateConfig: PromptYaml['gateConfiguration'],
@@ -782,19 +815,8 @@ async function resolveActiveGateRefs(
   const excludeSet = new Set(gateConfig?.exclude ?? []);
   const registeredIds = new Set<string>();
 
-  // 1. Explicit includes
-  for (const gateId of gateConfig?.include ?? []) {
-    if (!excludeSet.has(gateId)) registeredIds.add(gateId);
-  }
-
-  // 1b. Gates declared on individual chain steps, flattened to the prompt level
-  for (const step of chainSteps) {
-    for (const gateId of step.inlineGateIds ?? []) {
-      if (!excludeSet.has(gateId)) registeredIds.add(gateId);
-    }
-  }
-
-  // 2. Category-activated gates (scan all gate.yaml files)
+  // Read every gate once, keyed by declared id. The directory name is the fallback key because
+  // that is what `include` entries and the auto-activation scan both used before.
   let gateDirs: string[] = [];
   try {
     gateDirs = (await readdir(gatesRoot, { withFileTypes: true }))
@@ -804,16 +826,42 @@ async function resolveActiveGateRefs(
     /* no gates directory */
   }
 
+  const gatesById = new Map<string, GateYaml>();
   for (const dirName of gateDirs) {
-    if (excludeSet.has(dirName) || registeredIds.has(dirName)) continue;
     const gateYamlRaw = await readOptionalFile(path.join(gatesRoot, dirName, 'gate.yaml'));
     if (!gateYamlRaw) continue;
     const gate = yaml.load(gateYamlRaw) as GateYaml;
-    const activation = gate.activation as Record<string, unknown> | undefined;
-    const cats = activation?.['prompt_categories'] as string[] | undefined;
-    const explicit = activation?.['explicit_request'] as boolean | undefined;
-    if (cats?.includes(promptCategory) && explicit !== true) {
-      registeredIds.add(gate.id ?? dirName);
+    // `getAllGuides(enabledOnly)` defaults to true in `selectGates`; match it.
+    if (gate.enabled === false) continue;
+    gatesById.set(gate.id ?? dirName, gate);
+  }
+
+  /** Registers a gate id unless it is excluded, unknown, or unhonourable in a skill. */
+  const register = (gateId: string): void => {
+    if (excludeSet.has(gateId)) return;
+    const gate = gatesById.get(gateId);
+    if (gate === undefined || dependsOnFramework(gate)) return;
+    registeredIds.add(gateId);
+  };
+
+  // 1. Explicit includes
+  for (const gateId of gateConfig?.include ?? []) {
+    register(gateId);
+  }
+
+  // 1b. Gates declared on individual chain steps, flattened to the prompt level
+  for (const step of chainSteps) {
+    for (const gateId of step.inlineGateIds ?? []) {
+      register(gateId);
+    }
+  }
+
+  // 2. Auto-activated gates — the engine's rules, not a local approximation of them.
+  const activationContext: GateActivationContext = { promptCategory, explicitRequest: false };
+  for (const [gateId, gate] of gatesById) {
+    if (registeredIds.has(gateId)) continue;
+    if (isGateActiveForContext(gate.activation, activationContext, gate.gate_type ?? 'custom')) {
+      register(gateId);
     }
   }
 

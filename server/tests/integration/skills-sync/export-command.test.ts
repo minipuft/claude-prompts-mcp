@@ -88,12 +88,22 @@ describe('Export Command Integration', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  async function writeGate(id: string, name: string): Promise<void> {
+  /**
+   * `extra` carries `activation` and `gate_type`. A gate written without `activation` is
+   * ALWAYS active — `isGateActiveForContext` reads absent rules as "no restriction", the same
+   * as `GateManager.selectGates` does at runtime — so a fixture that wants to stay out of an
+   * unrelated prompt has to say so.
+   */
+  async function writeGate(
+    id: string,
+    name: string,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
     const gateDir = path.join(serverRoot, 'resources', 'gates', id);
     await mkdir(gateDir, { recursive: true });
     await writeFile(
       path.join(gateDir, 'gate.yaml'),
-      yaml.dump({ id, name, type: 'validation', description: `${name} gate` })
+      yaml.dump({ id, name, type: 'validation', description: `${name} gate`, ...extra })
     );
     await writeFile(path.join(gateDir, 'guidance.md'), `Guidance for ${id}.`);
   }
@@ -180,11 +190,148 @@ describe('Export Command Integration', () => {
     });
   });
 
+  // ── F1 + F16: export activation delegates to the engine ────────────────────
+
+  /**
+   * F1. Export hand-rolled its own auto-activation — `prompt_categories.includes(category)`
+   * plus `explicit_request` — while the runtime calls `isGateActiveForContext` through
+   * `GenericGateGuide.isActive`. The two disagree in both directions, so a skill advertised a
+   * contract `>>` does not enforce and omitted one it does. Measured against the real gate set
+   * for category `development` on 2026-08-18: engine 11, export 7.
+   *
+   * The plan's prescribed fix — delegate and stop — is NOT sufficient on its own, which is what
+   * `creed-fidelity` below is here to pin.
+   */
+  describe('gate activation follows the engine (F1)', () => {
+    it('activates a gate that declares no category restriction', async () => {
+      // The five-gate half of the measured gap. The old check demanded a category MATCH; the
+      // engine only requires the absence of a CONFLICT, so an unrestricted gate is active.
+      await writeGate('unrestricted', 'Unrestricted');
+      await writePrompt('general', 'plain');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'plain', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('unrestricted');
+    });
+
+    it('matches the declared category case-insensitively', async () => {
+      // The engine lowercases both sides; the hand-rolled check used exact `includes`.
+      await writeGate('upper-cat', 'Upper Cat', {
+        activation: { prompt_categories: ['General'] },
+      });
+      // The prompt id must not contain the gate id: `toContain` would then pass on the id
+      // echoed in the skill header alone. Measured — an earlier `cased`/`cased_prompt` pair
+      // survived the mutation that reverts this fix.
+      await writePrompt('general', 'mixed_capitals');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'mixed_capitals', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('upper-cat');
+    });
+
+    it('still withholds a gate whose category does not match', async () => {
+      await writeGate('elsewhere', 'Elsewhere', { activation: { prompt_categories: ['other'] } });
+      await writePrompt('general', 'unmatched');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'unmatched', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('elsewhere');
+    });
+
+    it('still withholds a gate requiring explicit request', async () => {
+      await writeGate('on-demand', 'On Demand', {
+        activation: { prompt_categories: ['general'], explicit_request: true },
+      });
+      await writePrompt('general', 'not_asked');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'not_asked', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('on-demand');
+    });
+
+    it('skips a disabled gate, as selectGates does', async () => {
+      await writeGate('switched-off', 'Switched Off', { enabled: false });
+      await writePrompt('general', 'enabled_only');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'enabled_only', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('switched-off');
+    });
+  });
+
+  /**
+   * F16 (split from F2). An exported prompt skill injects no framework — `loadPromptIR` sets
+   * `frameworkData: null` unconditionally — so a gate that depends on one is a claim the
+   * artifact cannot honour. The runtime says the same thing: `framework-nesting` binds every
+   * source rank, so not even an explicit `include` rescues it.
+   */
+  describe('gates that depend on a framework are never exported (F16)', () => {
+    it('withholds a gate_type: framework gate even when explicitly included', async () => {
+      await writeGate('framework-compliance', 'Framework Compliance', {
+        gate_type: 'framework',
+        activation: { prompt_categories: ['general'] },
+      });
+      await writePrompt('general', 'fw_included', {
+        gateConfiguration: { include: ['framework-compliance'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'fw_included', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('framework-compliance');
+    });
+
+    it('withholds a category gate that names a framework_context', async () => {
+      // `creed-fidelity`'s real shape: gate_type `category`, framework_context `[RADIANT]`.
+      // Delegation alone ACTIVATES it, because the regular-gate branch reads an absent
+      // framework as unconstrained rather than as a mismatch. Reading gate_type alone would
+      // miss it, which is why `dependsOnFramework` checks both declarations.
+      await writeGate('creed-fidelity', 'Creed Fidelity', {
+        gate_type: 'category',
+        activation: { prompt_categories: ['general'], framework_context: ['RADIANT'] },
+      });
+      await writePrompt('general', 'creed_prompt');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'creed_prompt', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('creed-fidelity');
+    });
+
+    it('a framework-free gate alongside them is still exported', async () => {
+      // Guards the obvious over-correction: dropping every gate would pass both tests above.
+      await writeGate('plain-gate', 'Plain Gate', {
+        activation: { prompt_categories: ['general'] },
+      });
+      await writeGate('fw-gate', 'FW Gate', {
+        gate_type: 'framework',
+        activation: { prompt_categories: ['general'] },
+      });
+      await writePrompt('general', 'mixed');
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'mixed', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('plain-gate');
+      expect(skill).not.toContain('fw-gate');
+    });
+  });
+
   // ── M4 + M6: hook emission and the enforcement claim ───────────────────────
 
   describe('gate-review hook emission', () => {
     beforeEach(async () => {
-      await writeGate('code-quality', 'Code Quality');
+      // Scoped to a category none of these prompts use, so it reaches a skill only through the
+      // explicit `include` each gated test declares. Unrestricted, it would auto-activate into
+      // the ungated prompt below and there would be no negative case left to assert (F1).
+      await writeGate('code-quality', 'Code Quality', {
+        activation: { prompt_categories: ['code'] },
+      });
     });
 
     it('emits both the frontmatter hook and the script it points at', async () => {
