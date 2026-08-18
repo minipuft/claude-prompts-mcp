@@ -30,7 +30,7 @@ import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import * as path from 'node:path';
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ObjectDiffGenerator } from '../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
@@ -495,6 +495,136 @@ describe('Gate versioning through the real write path', () => {
     expect(preview.isError).toBe(false);
     expect(preview.content[0]!.text).toContain('Dry run');
     expect(readGateYaml()['id']).toBe(GATE_ID);
+  });
+
+  /**
+   * The safety property the plan says must survive: **validate → record → write**.
+   *
+   * The ordering is the whole reason `commitEdit`/`recordEditResult` is called before the file
+   * writer rather than after it — a persistence failure has to abort the edit with nothing on
+   * disk, because the alternative is a file whose current state is recorded in no version row.
+   * That is precisely F1's defect arriving through a different door, and it is unrecoverable: the
+   * operator cannot roll back to a state that was never written down.
+   *
+   * Nothing asserted it until now. The ordering is correct at HEAD and commented in all three
+   * lifecycle processors, so every existing test passes either way — which is the same shape as
+   * `workspace-and-mutations.yaml:24-29`, an assertion that held while its mutation never ran.
+   *
+   * Fault injection rather than a real disk failure: the property is about ORDER, and a spy that
+   * throws where persistence throws observes order without needing the filesystem to cooperate.
+   * `recordEditResult` is the seam because `commitEdit` delegates to it, so one fault covers the
+   * update path (which calls `recordEditResult` directly) and the rollback path (which reaches it
+   * through `commitEdit`).
+   */
+  describe('safety property — a persistence failure leaves the file unmodified', () => {
+    /** Replace the persistence step with one that throws the way `saveVersion` throws. */
+    function failPersistence(method: 'recordEditResult' | 'commitEdit') {
+      return jest
+        .spyOn(versionHistoryService, method)
+        .mockRejectedValue(new Error('Failed to save version: disk full') as never);
+    }
+
+    it('aborts an update with nothing written when recording the version throws', async () => {
+      await run({
+        action: 'create',
+        id: GATE_ID,
+        name: 'Versioning Probe',
+        type: 'validation',
+        description: 'v1 description',
+        guidance: 'v1 guidance body',
+      } as GateManagerInput);
+
+      // Captured as bytes, not as a parsed object: the claim is that the file was never opened
+      // for writing, and a re-serialized comparison would forgive a rewrite that happened to
+      // round-trip to the same YAML.
+      const yamlBefore = readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8');
+      const guidanceBefore = readGuidance();
+      const rowsBefore = countVersionRows();
+
+      const spy = failPersistence('recordEditResult');
+      let persistenceWasReached = false;
+      try {
+        // The handler boundary owns the catch (architecture.md), so this surfaces as an error
+        // response rather than a rejection. Either is acceptable — what must NOT happen is a
+        // success, so both shapes are funnelled into one assertion below.
+        const outcome = await run({
+          action: 'update',
+          id: GATE_ID,
+          description: 'v2 description',
+          guidance: 'v2 guidance body',
+        } as GateManagerInput).catch((error: unknown) => ({
+          isError: true,
+          content: [{ text: String(error) }],
+        }));
+
+        expect(outcome.isError).toBe(true);
+        // Read before `mockRestore`, which resets `mock.calls` along with the implementation.
+        persistenceWasReached = spy.mock.calls.length > 0;
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8')).toBe(yamlBefore);
+      expect(readGuidance()).toBe(guidanceBefore);
+      expect(countVersionRows()).toBe(rowsBefore);
+
+      // Guard against a vacuous pass. If the update had been rejected before it ever reached the
+      // persistence step — an unknown id, a validation refusal — the file would also be
+      // unchanged, and this test would assert nothing about ordering. The fault having been
+      // reached is what makes the untouched file evidence about `record → write` specifically.
+      expect(persistenceWasReached).toBe(true);
+    });
+
+    it('aborts a rollback with nothing written when committing the edit throws', async () => {
+      await run({
+        action: 'create',
+        id: GATE_ID,
+        name: 'Versioning Probe',
+        type: 'validation',
+        description: 'v1 description',
+        guidance: 'v1 guidance body',
+      } as GateManagerInput);
+
+      await run({
+        action: 'update',
+        id: GATE_ID,
+        description: 'v2 description',
+        guidance: 'v2 guidance body',
+      } as GateManagerInput);
+
+      const history = (await versionHistoryService.loadHistory('gate', GATE_ID))!;
+      const target = history.versions.find((v) => v.snapshot['description'] === 'v1 description')!;
+
+      const yamlBefore = readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8');
+      const guidanceBefore = readGuidance();
+      const rowsBefore = countVersionRows();
+
+      const spy = failPersistence('commitEdit');
+      let persistenceWasReached = false;
+      try {
+        const outcome = await run({
+          action: 'rollback',
+          id: GATE_ID,
+          version: target.version,
+          confirm: true,
+        } as GateManagerInput).catch((error: unknown) => ({
+          isError: true,
+          content: [{ text: String(error) }],
+        }));
+
+        expect(outcome.isError).toBe(true);
+        // Read before `mockRestore`, which resets `mock.calls` along with the implementation.
+        persistenceWasReached = spy.mock.calls.length > 0;
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The gate still holds v2 — the rollback the operator asked for did not half-happen.
+      expect(readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8')).toBe(yamlBefore);
+      expect(readGuidance()).toBe(guidanceBefore);
+      expect(countVersionRows()).toBe(rowsBefore);
+      expect(persistenceWasReached).toBe(true);
+    });
   });
 });
 

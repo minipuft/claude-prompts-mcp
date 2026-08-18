@@ -688,3 +688,91 @@ describe('PromptLifecycleProcessor category ship warning (P7-D4)', () => {
     expect(text).toContain('Category not tracked in repo');
   });
 });
+
+/**
+ * DEV-T1-3 — the handler-level half of the confirmation guard.
+ *
+ * `HANDLER_OWNED_CONFIRMATION` is a bypass list: the router's `DESTRUCTIVE_ACTIONS` check stands
+ * down for `prompt:delete` so the handler can refuse instead. That constant's own doc comment
+ * asserts "Every entry is covered by a handler-level test asserting the guard still refuses" —
+ * and until this block, it was not. `router.test.ts` covers the router STANDING DOWN, which is
+ * the opposite obligation: together they say the guard moved, but only this one says it landed.
+ *
+ * The blast-radius assertion is the load-bearing one. A bypass entry is only justified when the
+ * handler's refusal tells the caller something the router cannot, and here that is the list of
+ * chains whose steps would break. A test that asserted refusal alone would pass just as well
+ * against a generic message — which is the case where the entry should be deleted and the router
+ * left to do the job.
+ */
+describe('deletePrompt confirmation (HANDLER_OWNED_CONFIRMATION)', () => {
+  const TARGET = 'shared_step';
+
+  /**
+   * `deletePrompt` reads `promptsData` (existence) and `convertedPrompts` (dependencies) — two
+   * different collections off `getData()`, so both must be populated or the dependency list is
+   * empty for the wrong reason and the blast-radius assertion goes vacuous.
+   */
+  function createDeleteProcessor() {
+    const logger = createLogger();
+    const context = {
+      dependencies: {
+        logger,
+        semanticAnalyzer: createSemanticAnalyzer(),
+        onRefresh: jest.fn(async () => {}),
+        onRestart: jest.fn(async () => {}),
+      },
+      fileOperations: { deletePrompt: jest.fn(async () => ({ message: 'deleted' })) },
+      getData: () => ({
+        promptsData: [{ id: TARGET, name: 'Shared Step', category: 'general' }],
+        convertedPrompts: [
+          {
+            id: 'review_chain',
+            name: 'Review Chain',
+            chainSteps: [{ promptId: TARGET }],
+          },
+          {
+            id: 'release_chain',
+            name: 'Release Chain',
+            chainSteps: [{ promptId: TARGET }],
+          },
+          // A chain that does NOT reference the target, so the count below is a filter result
+          // rather than "every chain in the fixture".
+          { id: 'unrelated_chain', name: 'Unrelated Chain', chainSteps: [{ promptId: 'other' }] },
+        ],
+      }),
+    } as unknown as PromptResourceContext;
+
+    return new PromptLifecycleProcessor(context);
+  }
+
+  test('refuses without confirm, and names what the deletion would break', async () => {
+    const processor = createDeleteProcessor();
+
+    const response = await processor.deletePrompt({ id: TARGET } as never);
+
+    expect(response.isError).toBe(true);
+    const text = textOf(response as never);
+    expect(text).toContain('confirm: true');
+    // Delete has no undo through the tool surface — the refusal has to say so.
+    expect(text).toContain('cannot be undone');
+
+    // The blast radius: this is what the router's generic refusal cannot produce, and therefore
+    // the entire justification for the bypass-list entry.
+    expect(text).toContain('2 prompt(s) reference it');
+    expect(text).toContain('Review Chain');
+    expect(text).toContain('Release Chain');
+    expect(text).not.toContain('Unrelated Chain');
+  });
+
+  test('refuses before touching the filesystem', async () => {
+    const processor = createDeleteProcessor();
+    const context = (
+      processor as unknown as { context: { fileOperations: { deletePrompt: jest.Mock } } }
+    ).context;
+
+    await processor.deletePrompt({ id: TARGET } as never);
+
+    // A refusal that still deleted would satisfy every assertion above.
+    expect(context.fileOperations.deletePrompt).not.toHaveBeenCalled();
+  });
+});
