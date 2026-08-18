@@ -330,16 +330,13 @@ single-prompt path does (single control renders with text=""; chain control fail
 generation today carried this failure, including the morning receipts, which keyed on step
 OUTPUTS and were unaffected.
 
-Peripheral findings (filed, not fixed):
+Peripheral findings — each now has a terminal home (do-or-kill retrofit 2026-08-18):
 
-1. **S10** (plan row): gate-review renders emit a delegation advisory naming the synthetic
-   `__gate_review__` step ("Step 4 (Quality Gate Validation)") instead of the real delegated step.
-2. **Chain arg-defaults gap**: chain step arg resolution skips prompt argument defaults that the
-   single-prompt path applies — reference_demo renders as single, fails as chain step, both with
-   empty args. Consolidation-plan scope (touches OQ3 design-enrichment surface), not delegation.
-3. Single-prompt `>>reference_demo :: code-quality` fails word_count ("Missing required field:
-   text") while bare `>>reference_demo` passes text="" — the gate-token-only rawArgs path takes a
-   different defaults branch. Same family as (2).
+1. **S10** (plan row, later ✓ FIXED same day): gate-review renders emit a delegation advisory
+   naming the synthetic `__gate_review__` step instead of the real delegated step.
+2. **Chain arg-defaults gap** → row **D.1** in `prompt-surface-ir-consolidation-2026-08-18.md`
+   (that plan owns chain arg resolution; was "filed" here, which the do-or-kill rule retired).
+3. Gate-token-only rawArgs defaults branch → row **D.2**, same table, same retrofit.
 
 **Constraint-set correction (2026-08-18, after 98's G-wave push `088d01d4`)**: the
 `validate:knip-ratchet` / `validate:phase-header-drift` hunks in `server/package.json` and
