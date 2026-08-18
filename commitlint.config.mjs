@@ -6,6 +6,7 @@ export default {
       'always',
       [
         'server',
+        'cli',
         'runtime',
         'pipeline',
         'gates',

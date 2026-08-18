@@ -177,7 +177,7 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/) e
 
 Use these project-specific scopes:
 
-`server` `runtime` `pipeline` `gates` `frameworks` `prompts` `chains` `styles` `scripts` `hooks` `resources` `mcp-tools` `contracts` `parsers` `ci` `deps` `config` `docs` `tests` `execution`
+`server` `cli` `runtime` `pipeline` `gates` `frameworks` `prompts` `chains` `styles` `scripts` `hooks` `resources` `mcp-tools` `contracts` `parsers` `ci` `deps` `config` `logging` `metrics` `docs` `tests` `semantic` `execution`
 
 ### Examples
 
