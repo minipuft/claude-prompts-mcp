@@ -181,6 +181,54 @@ const operations: ActionDescriptor[] = [
     description:
       'Read the chain execution ledger, newest first, grouped by session. Optional limit (default 50, max 500).',
   },
+  {
+    id: 'skills_sync:status',
+    displayName: 'Skills Sync Status',
+    category: 'skills_sync',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Report export/adoption state for each configured skills-sync client.',
+  },
+  {
+    id: 'skills_sync:export',
+    displayName: 'Export Skills',
+    category: 'skills_sync',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Write skills to the configured client directories from `skills-sync.yaml`.',
+  },
+  {
+    id: 'skills_sync:sync',
+    displayName: 'Sync Skills',
+    category: 'skills_sync',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Export, then prune directories the manifest no longer lists.',
+  },
+  {
+    id: 'skills_sync:diff',
+    displayName: 'Diff Skills',
+    category: 'skills_sync',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Compare exported skills against their sources without writing.',
+  },
+  {
+    id: 'skills_sync:pull',
+    displayName: 'Pull Skills',
+    category: 'skills_sync',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Adopt client-side edits back into the tracked sources.',
+  },
+  {
+    id: 'skills_sync:clone',
+    displayName: 'Clone Skills',
+    category: 'skills_sync',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Adopt an untracked client skill directory as a new tracked source.',
+  },
 ];
 
 export const SYSTEM_CONTROL_ACTION_IDS = [

@@ -2,6 +2,10 @@
 title: "Framework resource lifecycle — implementation notes"
 date: 2026-08-18
 status: active
+tags:
+  - frameworks
+  - mcp-tools
+  - resources
 plan: framework-resource-lifecycle-2026-08-18.md
 ---
 
@@ -191,9 +195,79 @@ The registry double in that describe mirrors `RuntimeFrameworkLoader`'s load gat
 unconditionally. That is the anti-over-capable-double discipline applied correctly: a permissive
 double would have hidden M-3 entirely.
 
+## Tiers 2-3 — in flight (as of 2026-08-18, mid-session flush)
+
+Implementer agent is mid-work. Recorded here so the edit set survives compaction; **none of this
+is validated yet** and no row in the plan table has been flipped on its account.
+
+| File touched                                                                | Tier row | What it is                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mcp/tools/framework-manager/services/framework-draft-validator.ts`         | 2.1      | Element-shape validation for `framework_gates` / `template_suggestions`; `createErrorResponse` now selects its worked example by the field named in the error, so a present-but-malformed field gets the same guidance an absent one already got |
+| `modules/resources/services/resource-verification-service.ts`               | 2.1      | Receives the element validation, per DEV-T2-1 — the tool layer may not value-import schemas, this service may and already does                                                                                                                   |
+| `modules/resources/services/resource-mutation-transaction.ts`               | 2.2      | G3: surface the `validation` object the reject path computes and discards                                                                                                                                                                        |
+| `tests/unit/resources/resource-mutation-transaction.test.ts`                | 2.2      | NEW — unit coverage for the G3 message                                                                                                                                                                                                           |
+| `mcp/tools/framework-manager/services/framework-lifecycle-processor.ts`     | 3.1-3.3  | G2 re-register on update/reload; guard removal on delete/reload; G4 dry-run text                                                                                                                                                                 |
+| `tests/integration/mcp-tools/gate-framework-versioning.integration.test.ts` | 2.1, 3.x | Tier 1's two RED tests turn green here; new coverage for the Tier 3 rows                                                                                                                                                                         |
+
+**DEV-T2-1 is closed** (measured 2026-08-18 19:42): element validation moved onto
+`ResourceVerificationService` and the arch error cleared.
+
+```
+tsc --noEmit -p tsconfig.json   → exit 0
+validate:arch                   → OK, 468 modules, 0 errors / 11 warnings
+```
+
+The 11 remaining warnings are pre-existing and none are on these files
+(`engine-cross-layer-type-only` x9, `no-circular` x2 on `workflow-ir/types.ts` and
+`execution-context.ts`).
+
+**Build health of the shared tree, measured for a peer session** (they suspected these in-flight
+files were breaking template rendering in a dist built from the tree):
+
+```
+npm run build      → dist/index.js, dist/cpm.js
+npm run verify:mcp → OK: 18/18
+                     PASS prompts/list (protocol) — 111 of 118 bound
+                     PASS prompts/get (protocol) — action_plan
+```
+
+`prompts/get` is a real render through a server spawned from that dist, so the tree bundles and
+renders. The hypothesis also fails on mechanism: typecheck exits 0 (no half-moved import to throw
+at init) and all four files are on the resource WRITE path, where a module-init throw would take
+down tool registration rather than templating — and all three tools registered. Redirected them to
+the offline phase-guard session's half-landed `setStepState` hunks in stages 18/19, which are on
+the execution path. Discriminator given: reproduces on a build from committed HEAD → theirs;
+only on a tree build → the offline session's.
+
+**Follow-up, 2026-08-18 — my attribution was wrong, the discriminator was right.** The peer ran
+the committed-HEAD-vs-tree test and it reproduced on a **committed-HEAD detached-worktree build**,
+so the phase-guard hunks I named were not the cause. Nor was it a regression: every probe
+generation that day carried it. Real cause is `reference_demo`-specific — its inline `word_count`
+script hard-requires `text`, and CHAIN-mode argument resolution does not apply prompt argument
+defaults the way the single-prompt path does (single control renders with `text=""`, chain control
+fails). Not in this plan's scope; it belongs to the consolidation plan.
+
+Two lessons worth more than the finding:
+
+1. **My `verify:mcp` render was a false negative for their question.** `prompts/get (protocol)`
+   exercises `action_plan`, not `reference_demo`, and not the chain path at all. I reported
+   "the tree bundles and renders" — true, and not an answer to "does chain-mode rendering work".
+   Same shape as `feedback_surface_check_vs_end_to_end`: 18/18 green on a surface that never
+   touched the failing path.
+2. **The transferable output was the discriminator, not the hypothesis.** Naming the offline
+   session was a guess dressed as a lead. "Reproduces on a build from committed HEAD → yours;
+   only on a tree build → theirs" cost one sentence, settled it, and would have been correct
+   whichever way it fell.
+
+**Still open until measured**: red-on-mutation proof per assertion, `test:ci`, `lint:ratchet` with
+a per-rule diff against a freshly measured actual, `typecheck:tests:ratchet`, Tier 4's two gate
+mutations, and the main-thread live drive.
+
 ## Deviations
 
-| id       | Tier | What changed and why                                                                                                                                                                                                                                 |
-| -------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DEV-T1-1 | 1    | Tier 1 subagent terminated on a session API limit mid-task, after writing the RED test but before producing its report. Test recovered from the worktree; all findings re-measured by the main thread rather than trusted from a partial transcript. |
-| DEV-T1-2 | 1    | Used a throwaway probe test (`__g1probe.test.ts`) to capture the validation object the transaction discards and to sweep the built-ins. Removed after measurement — the durable version of the same evidence is M-1/M-2 here plus the RED test.      |
+| id       | Tier | What changed and why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEV-T1-1 | 1    | Tier 1 subagent terminated on a session API limit mid-task, after writing the RED test but before producing its report. Test recovered from the worktree; all findings re-measured by the main thread rather than trusted from a partial transcript.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| DEV-T1-2 | 1    | Used a throwaway probe test (`__g1probe.test.ts`) to capture the validation object the transaction discards and to sweep the built-ins. Removed after measurement — the durable version of the same evidence is M-1/M-2 here plus the RED test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| DEV-T2-1 | 2    | **My brief was wrong.** I instructed the implementer to import `FrameworkGateSchema`/`TemplateSuggestionSchema` directly from `#engine/frameworks/definitions/framework-schema.js`, without checking `.dependency-cruiser.cjs` first. `tool-layer-no-validator-value-imports` (`:213-222`, severity `error`) forbids exactly that and names the sanctioned path in its own comment: use `ResourceVerificationService` from `modules/resources/services`. Type-only does not help — the check needs `.safeParse()` at runtime. Redirected: element validation moves onto the service, the draft validator calls it. Better design regardless, since the service already owns resource-document validation and already imports every schema, so the one-copy-of-the-shape argument survives intact. The R-2 ruling is unaffected — this changed the mechanism, not the diagnosis. |
+| DEV-T2-2 | 2    | An uncommitted in-flight file blocked a peer session's pre-push. These gates read the **working tree**, not the push range's committed content, so one session's mid-edit file blocks pushes for every session in the shared worktree even when every commit involved is green. Third occurrence this week of the worktree-vs-committed-state distinction costing a cycle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
