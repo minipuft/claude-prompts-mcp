@@ -13,6 +13,7 @@ import type {
   Logger,
   ToolResponse,
   ChainSessionService,
+  DatabasePort,
 } from '#shared/types/index.js';
 import type { SafeConfigWriter } from '../../config-utils.js';
 import type { ResponseFormatter } from '../../prompt-engine/processors/response-formatter.js';
@@ -57,6 +58,12 @@ export interface SystemControlContext {
   readonly gateGuidanceRenderer?: GateGuidanceRenderer;
   readonly chainSessionStore?: ChainSessionService;
   readonly executionRecordStore?: ExecutionRecordStore;
+  /**
+   * Set once the database is up. Skills-sync manifests are the only consumer:
+   * without it, `export` still writes skills but drops every manifest row, so
+   * `diff` and `prune` cannot see what was exported.
+   */
+  readonly databasePort?: DatabasePort;
   readonly configManager?: ConfigManager;
   readonly safeConfigWriter?: SafeConfigWriter;
   readonly onRestart?: (reason: string) => Promise<void>;

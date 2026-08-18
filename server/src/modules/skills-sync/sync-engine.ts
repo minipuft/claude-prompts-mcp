@@ -123,6 +123,50 @@ export function parseManagedSkillMarker(skillMarkdown: string): ManagedSkillMark
   return parseManagedMarkerRecord(frontmatter as Record<string, unknown>);
 }
 
+/**
+ * The section this emitter always writes first, from the prompt's system message.
+ *
+ * It is the adoption key because it is the one structural fact every skill this
+ * tool has ever emitted shares. Measured 2026-08-18 against a real pre-marker
+ * orphan and a current managed skill: both lead with it, and both carry LATER
+ * headings drawn from their own prompt bodies — so a broader "every heading is
+ * one we emit" test would reject the orphans this exists to reach.
+ */
+const EMITTED_LEAD_SECTION = '## Instructions';
+
+/**
+ * Decide whether an unmarked skill directory was emitted by this tool.
+ *
+ * Structural on purpose: it asks "did we generate this?" rather than the proxy
+ * "does a resource share this name?", so a hand-written skill cannot be claimed
+ * by a name collision, and a directory whose canonical resource was since
+ * renamed or deleted is still reachable.
+ *
+ * A true answer authorizes STAMPING a marker, never a deletion — a false
+ * positive must cost a revertible edit, not someone's hand-written skill.
+ */
+export function isAdoptableSkillMarkdown(skillMarkdown: string): boolean {
+  // Already ours by declaration; adoption is for the ones that predate markers.
+  if (parseManagedSkillMarker(skillMarkdown) !== null) return false;
+
+  const fmMatch = skillMarkdown.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (fmMatch == null) return false;
+  const frontmatterRaw = fmMatch[1];
+  if (frontmatterRaw == null) return false;
+
+  const frontmatter = yaml.load(frontmatterRaw);
+  if (frontmatter == null || typeof frontmatter !== 'object' || Array.isArray(frontmatter)) {
+    return false;
+  }
+  const fm = frontmatter as Record<string, unknown>;
+  if (typeof fm['name'] !== 'string' || fm['name'].length === 0) return false;
+  if (typeof fm['description'] !== 'string' || fm['description'].length === 0) return false;
+
+  const body = skillMarkdown.slice(fmMatch[0].length);
+  const firstHeading = body.match(/^## .+$/m)?.[0]?.trim();
+  return firstHeading === EMITTED_LEAD_SECTION;
+}
+
 export function buildSyncPrunePlan(input: SyncPrunePlanInput): SyncPrunePlan {
   const { desiredResourceKeys, manifestManagedSkillDirs, markerManagedSkillDirs } = input;
   const managedSkillDirs = mergeManagedSkillDirMaps(

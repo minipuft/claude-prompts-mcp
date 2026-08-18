@@ -17,6 +17,7 @@ import { GuideActionHandler } from './handlers/guide-action-handler.js';
 import { InjectionActionHandler } from './handlers/injection-action-handler.js';
 import { MaintenanceActionHandler } from './handlers/maintenance-action-handler.js';
 import { SessionActionHandler } from './handlers/session-action-handler.js';
+import { SkillsSyncActionHandler } from './handlers/skills-sync-action-handler.js';
 import { StatusActionHandler } from './handlers/status-action-handler.js';
 import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
 
@@ -35,6 +36,7 @@ import {
   type Logger,
   type ToolResponse,
   type ChainSessionService,
+  type DatabasePort,
   StateStoreOptions,
 } from '#shared/types/index.js';
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
@@ -63,6 +65,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   gateGuidanceRenderer?: GateGuidanceRenderer;
   chainSessionStore?: ChainSessionService;
   executionRecordStore?: ExecutionRecordStore;
+  databasePort?: DatabasePort;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
@@ -138,6 +141,10 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   setGateStateStore(gateStateStore: GateStateStore): void {
     this.gateStateStore = gateStateStore;
     this.logger.debug('Gate system manager configured for runtime gate control');
+  }
+
+  setDatabasePort(databasePort: DatabasePort): void {
+    this.databasePort = databasePort;
   }
 
   setChainSessionStore(chainSessionStore: ChainSessionService): void {
@@ -386,6 +393,8 @@ export class ConsolidatedSystemControl implements SystemControlContext {
         return new ChangesActionHandler(this);
       case 'execution_history':
         return new ExecutionHistoryActionHandler(this);
+      case 'skills_sync':
+        return new SkillsSyncActionHandler(this);
       default:
         throw new Error(
           `Unknown action: ${action}. Valid actions: ${SYSTEM_CONTROL_ACTION_IDS.join(', ')}`

@@ -35,9 +35,9 @@ export type system_controlParamName =
 export const system_controlParameters: ToolParameter[] = [
   {
     name: 'action',
-    type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session|changes|execution_history]',
+    type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session|changes|execution_history|skills_sync]',
     description:
-      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first).',
+      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -53,7 +53,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'operation',
     type: 'string',
     description:
-      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect).',
+      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect; skills_sync status/export/sync/diff/pull/clone).',
     status: 'working',
     compatibility: 'canonical',
   },

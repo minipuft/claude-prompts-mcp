@@ -14,11 +14,23 @@ import {
   type SkillsSyncOutput,
 } from '#modules/skills-sync/service.js';
 
-const SKILLS_SYNC_ACTIONS = ['status', 'export', 'sync', 'diff', 'pull', 'clone'] as const;
-type SkillsSyncAction = (typeof SKILLS_SYNC_ACTIONS)[number];
+export const SKILLS_SYNC_OPERATIONS = [
+  'status',
+  'export',
+  'sync',
+  'diff',
+  'pull',
+  'clone',
+] as const;
+export type SkillsSyncOperation = (typeof SKILLS_SYNC_OPERATIONS)[number];
 
 export interface SkillsSyncInput {
-  action: SkillsSyncAction;
+  /**
+   * Named `operation`, not `action`, all the way down: `system_control` spends
+   * `action` on its own dispatch, so mapping it here would be exactly the hidden
+   * router transformation `mcp-contracts.md` bans.
+   */
+  operation: SkillsSyncOperation;
   client?: string;
   scope?: 'user' | 'project';
   resource_type?: ResourceType;
@@ -75,21 +87,21 @@ export class ConsolidatedSkillsSync {
   ) {}
 
   async handleAction(args: SkillsSyncInput): Promise<ToolResponse> {
-    const action = args.action;
+    const operation = args.operation;
 
-    if (!SKILLS_SYNC_ACTIONS.includes(action)) {
+    if (!SKILLS_SYNC_OPERATIONS.includes(operation)) {
       return createStructuredResponse(
-        `Unknown skills_sync action: ${String(action)}. Valid actions: ${SKILLS_SYNC_ACTIONS.join(', ')}`,
+        `Unknown skills_sync operation: ${String(operation)}. Valid operations: ${SKILLS_SYNC_OPERATIONS.join(', ')}`,
         true,
-        { action: 'invalid_action' }
+        { action: 'invalid_operation' }
       );
     }
 
-    if (action === 'status') {
+    if (operation === 'status') {
       return this.getStatus();
     }
 
-    return this.executeSkillsSyncAction(action, args);
+    return this.executeSkillsSyncOperation(operation, args);
   }
 
   private async getStatus(): Promise<ToolResponse> {
@@ -225,8 +237,8 @@ export class ConsolidatedSkillsSync {
     });
   }
 
-  private async executeSkillsSyncAction(
-    action: Exclude<SkillsSyncAction, 'status'>,
+  private async executeSkillsSyncOperation(
+    operation: Exclude<SkillsSyncOperation, 'status'>,
     args: SkillsSyncInput
   ): Promise<ToolResponse> {
     const logs: string[] = [];
@@ -239,7 +251,7 @@ export class ConsolidatedSkillsSync {
     try {
       await runSkillsSyncCommand(
         {
-          command: action,
+          command: operation,
           client: args.client,
           scope: args.scope,
           resourceType: args.resource_type,
@@ -256,20 +268,24 @@ export class ConsolidatedSkillsSync {
         output
       );
 
-      const text = logs.length > 0 ? logs.join('\n') : `skills_sync ${action} completed.`;
+      const text = logs.length > 0 ? logs.join('\n') : `skills_sync ${operation} completed.`;
       return createStructuredResponse(text, false, {
-        action,
+        action: operation,
         lines: logs,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`skills_sync ${action} failed: ${message}`);
+      this.logger.error(`skills_sync ${operation} failed: ${message}`);
       const details = logs.length > 0 ? `\n\nOutput:\n${logs.join('\n')}` : '';
-      return createStructuredResponse(`skills_sync ${action} failed: ${message}${details}`, true, {
-        action,
-        lines: logs,
-        error: message,
-      });
+      return createStructuredResponse(
+        `skills_sync ${operation} failed: ${message}${details}`,
+        true,
+        {
+          action: operation,
+          lines: logs,
+          error: message,
+        }
+      );
     }
   }
 }

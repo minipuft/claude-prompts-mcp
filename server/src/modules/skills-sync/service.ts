@@ -36,6 +36,7 @@ import {
   buildSyncPrunePlan,
   collectManifestManagedSkillDirs,
   injectManagedSkillMarker,
+  isAdoptableSkillMarkdown,
   parseManagedSkillMarker,
   type ManagedSkillDirMap,
 } from './sync-engine.js';
@@ -449,6 +450,7 @@ interface SyncManifestEntry {
 }
 
 import type { ToolIndexEntry } from '#shared/types/persistence.js';
+import { frameworkLabel } from '#shared/utils/framework-label.js';
 
 export interface SkillsSyncOptions {
   command: string;
@@ -1218,7 +1220,7 @@ async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   return {
     id: data.id,
     name: data.name,
-    description: `${data.name} framework (${data.type})`,
+    description: `${frameworkLabel(data.name)} (${data.type})`,
     resourceType: 'framework',
     category: null,
     enabled: data.enabled ?? true,
@@ -2860,6 +2862,32 @@ function attachManagedMarkerToSkillFiles(
   });
 }
 
+/**
+ * Find directories this tool emitted before markers existed.
+ *
+ * These are structurally unreachable otherwise: marker-based prune cannot see
+ * them and they have no manifest row either, so every installation that exported
+ * before markers has orphans no command can touch.
+ */
+async function findAdoptableSkillDirs(baseDir: string): Promise<string[]> {
+  if (!existsSync(baseDir)) {
+    return [];
+  }
+
+  const adoptable: string[] = [];
+  const entries = await readdir(baseDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const skillContent = await readOptionalFile(path.join(baseDir, entry.name, 'SKILL.md'));
+    if (!skillContent) continue;
+    if (isAdoptableSkillMarkdown(skillContent)) {
+      adoptable.push(entry.name);
+    }
+  }
+
+  return adoptable.sort();
+}
+
 async function collectManagedSkillDirsFromMarkers(
   baseDir: string,
   clientId: string,
@@ -2888,6 +2916,60 @@ async function collectManagedSkillDirsFromMarkers(
   }
 
   return managedSkillDirs;
+}
+
+/**
+ * Stamp the managed marker onto directories this tool emitted before markers existed.
+ *
+ * Deliberately NOT a prune. `resourceKey` is recovered from the directory name
+ * because that is the only link a pre-marker export left behind; a wrong guess
+ * yields a marker pointing at a key that no longer resolves, which the next
+ * prune plan reports as stale — recoverable. Deleting on the same evidence
+ * would not be.
+ */
+async function adoptUnmarkedSkillDirs(
+  baseDir: string,
+  clientId: string,
+  scope: 'user' | 'project',
+  markerManagedSkillDirs: ManagedSkillDirMap,
+  dryRun: boolean,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<string[]> {
+  const alreadyMarked = new Set<string>();
+  for (const dirs of markerManagedSkillDirs.values()) {
+    for (const dir of dirs) alreadyMarked.add(dir);
+  }
+
+  const adopted: string[] = [];
+  for (const skillDir of await findAdoptableSkillDirs(baseDir)) {
+    if (alreadyMarked.has(skillDir)) continue;
+
+    const skillPath = path.join(baseDir, skillDir, 'SKILL.md');
+    const content = await readOptionalFile(skillPath);
+    if (!content) continue;
+
+    const resourceKey = `prompt:${skillDir}`;
+    if (dryRun) {
+      output.log(`  [dry-run] adopt ${skillDir}/ as ${resourceKey}`);
+      adopted.push(skillDir);
+      continue;
+    }
+
+    try {
+      await writeFile(
+        skillPath,
+        injectManagedSkillMarker(content, { clientId, scope, resourceKey })
+      );
+      adopted.push(skillDir);
+    } catch (error) {
+      const reason = `could not stamp managed marker: ${(error as Error).message}`;
+      output.warn(`  ${skillDir}: ${reason}`);
+      report.failures.push({ id: skillDir, reason });
+    }
+  }
+
+  return adopted;
 }
 
 async function applySyncPrune(
@@ -3007,6 +3089,25 @@ async function syncCommand(
         manifestManagedSkillDirs,
         markerManagedSkillDirs,
       });
+
+      // Pre-marker exports carry no marker and no manifest row, so neither input
+      // above can see them. Stamp a marker instead of pruning: adoption makes them
+      // reachable by the ordinary marker path on the NEXT run, and a false positive
+      // then costs a revertible edit rather than a hand-written skill.
+      const adoptedSkillDirs = await adoptUnmarkedSkillDirs(
+        baseDir,
+        clientId,
+        scope,
+        markerManagedSkillDirs,
+        opts.dryRun === true,
+        output,
+        report
+      );
+      if (adoptedSkillDirs.length > 0) {
+        output.log(
+          `  adopted ${adoptedSkillDirs.length} unmarked skill dir(s) emitted before markers existed: ${adoptedSkillDirs.join(', ')}`
+        );
+      }
 
       const manifestEntries = new Map<string, SyncManifestEntry>();
       for (const ir of scopedResources) {

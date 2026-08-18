@@ -195,6 +195,7 @@ export const SYSTEM_CONTROL_ACTION_IDS = [
   'session',
   'changes',
   'execution_history',
+  'skills_sync',
 ] as const;
 
 export type SystemControlActionId = (typeof SYSTEM_CONTROL_ACTION_IDS)[number];

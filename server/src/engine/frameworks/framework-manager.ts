@@ -27,6 +27,7 @@ import type { ConvertedPrompt } from '../execution/types.js';
 import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
+import { frameworkLabel } from '#shared/utils/framework-label.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)
@@ -616,7 +617,7 @@ export class FrameworkManager extends BaseResourceHandler<
    * Generate system prompt template wrapper
    */
   private generateSystemPromptTemplate(guide: FrameworkGuide): string {
-    return `You are operating under the ${guide.frameworkName} framework for {PROMPT_NAME}.
+    return `You are operating under the ${frameworkLabel(guide.frameworkName)} for {PROMPT_NAME}.
 
 {FRAMEWORK_GUIDANCE}
 

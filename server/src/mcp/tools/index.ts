@@ -343,6 +343,11 @@ export class McpToolRouter {
     if (executionRecordStore !== null) {
       this.systemControl.setExecutionRecordStore(executionRecordStore);
     }
+
+    // skills_sync manifests are written only when a database is present. Wiring it
+    // here is what turns `export` from "writes skills, drops every manifest row"
+    // into an export that `diff` and `prune` can subsequently see.
+    this.systemControl.setDatabasePort(db);
   }
 
   /**
