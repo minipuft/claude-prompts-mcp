@@ -660,3 +660,78 @@ added afterward to pin (2) and (3) — written from the live evidence, not befor
 | CLI workspace                     | typecheck clean · 77 tests passed                                                                                                                                                                                                                                                                                                     |
 | `npm run verify:mcp`              | **17/17**                                                                                                                                                                                                                                                                                                                             |
 | **Live drive, STDIO**             | `tools/list` advertises `cancel` and `source_workspace`; `source_workspace` accepted on `history`, refused on `rollback`; `system_control session cancel` refuses and names the replacement; `prompt_engine(cancel:true)` without `chain_id` refuses; start → cancel → resume returns `Chain run already complete. Status: cancelled` |
+
+## Closeout pass — 2026-08-17 (three open items + plan hygiene)
+
+Ran after the eight-commit merge to `main`, to close what an audit found still open before the plan
+was retired to `reference`.
+
+### DEV-T8-1 — the vacuous-pass guard caught my own harness, not the product
+
+The fault-injection test asserts `expect(spy).toHaveBeenCalled()` so that an untouched file counts
+as evidence about ORDER rather than about the edit having been rejected upstream. It failed on the
+first run with `Received number of calls: 0` — and the fault had in fact fired, visible in the
+response text (`Failed to save version: disk full`).
+
+Cause: `spy.mockRestore()` in the `finally` block resets `mock.calls` along with the implementation,
+so the assertion ran against a cleared record. Fixed by reading `spy.mock.calls.length` into a local
+**before** the restore.
+
+Worth keeping because the guard did its job in an unexpected direction: without it the test would
+have passed for the wrong reason if the update had ever started failing earlier in the path, and I
+would not have learned that `mockRestore` is destructive to the evidence.
+
+### DEV-T8-2 — a framework switch is not a witness for re-registration
+
+Item 2 of the audit was "Tier 1.5 was marked ✓ by reading SDK source, not by driving it". The first
+drive did exactly what the plan row specified — switch the framework over Streamable HTTP, re-list
+tools, compare annotations — and reported PASS on all three tools.
+
+It proved nothing. Comparing tool DESCRIPTIONS before and after the switch showed `UNCHANGED` on all
+three, so nothing observable about the tool surface had moved, and "annotations survived
+re-registration" was indistinguishable from "no re-registration happened". That is the same shape as
+the three structurally-dead parameters this initiative already found, arriving in the verification
+rather than in the code.
+
+Re-driven through the gate-system toggle instead, which is wired to
+`setToolSurfaceChangedHandler` → `reregisterToolsWithUpdatedDescriptions`, and whose effect is
+visible: `gates`, `gate_verdict` and `gate_action` disappear from `prompt_engine`'s advertised
+schema while gates are off. With that witness in hand the annotation comparison means something.
+Result: re-registration ran, all three tools kept their annotations, gate system restored afterward
+(11 parameters before, 11 after).
+
+The drive script also required a correction — `operation: 'off'` is not in the vocabulary
+(`enable`, `disable`, `status`, `health`, `list`), which the server reported cleanly.
+
+### DEV-T8-3 — `HANDLER_OWNED_CONFIRMATION`'s doc comment was false
+
+The constant asserts "Every entry is covered by a handler-level test asserting the guard still
+refuses". `rg deletePrompt tests/` returned zero hits — its sole entry had no such test.
+`router.test.ts` covers the router STANDING DOWN for that pair, which is the complementary
+obligation and not this one.
+
+Added two tests in `prompt-lifecycle-processor.test.ts`. The load-bearing assertion is the blast
+radius (`2 prompt(s) reference it`, naming both chains and excluding the unrelated one), because
+that is the only thing justifying the bypass entry: if the handler's refusal said nothing the router
+could not, the entry should be deleted rather than tested. Both red when the guard is disabled.
+
+### Hygiene applied to the plan file
+
+| Edit                                                         | Why                                                                                            |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Tier 5 rows 5.0-5.4 `☐` → `⊘` with `verified` stamps         | The tier was rejected on measurement; `☐` reads as outstanding work to every reader and gate   |
+| F7 done-criterion no longer points at task 5.3               | F7 closed by disclosure; the criterion described a mechanism that was refuted                  |
+| Dropped the `sqlite-persistence.md` documentation row        | It promised to document a Tier 5.2 discriminator that will not exist                           |
+| Dropped three Tier-5 rows from the testing strategy          | Same reason                                                                                    |
+| Widened the Changelog entry                                  | It omitted the cancel relocation, `source_workspace`, F14 and F15 — narrower than what shipped |
+| Tier 1.5 and the two done-criteria rows carry their evidence | A `✓` with no observation behind it is what this pass existed to find                          |
+| `status: active` → `reference`                               | Everything not rejected is landed; what remains was promoted out                               |
+
+### Promoted out rather than closed here
+
+- **F17** → `plans/techincal_debt/gate-registry-refresh-on-create-2026-08-17.md` (`backlog`). It is
+  pre-existing, High, and blocks the parent plan's Final Verify in its `create`-first form. Left in
+  an implementation-notes appendix it would have been findable only by someone already reading this
+  file.
+- **Phase 4c growth capture** — owed against the whole PR, not against a plan being retired. Two of
+  the five patterns are past the 3-sighting bar; recorded in the plan's Growth capture section.
