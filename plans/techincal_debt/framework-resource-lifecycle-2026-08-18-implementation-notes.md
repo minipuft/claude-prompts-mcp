@@ -449,3 +449,55 @@ harness — is in the passing set at **27/27**.
 **Precise claim**: on a clean checkout of `0cad5169` the full integration suite would pass. That is
 an inference from a measured local run plus a single identified difference, not a CI observation.
 It flips to observed on the next code-scope push from any session.
+
+## R-5 message-honesty audit (2026-08-18) — the fix was incomplete
+
+Run last by design, so it audited strings against shipped behaviour. Verdict: **verified with
+findings**, and the most important finding is that this initiative's own defect survived in paths
+the first pass did not look at.
+
+### The miss
+
+`framework-versioning-processor.ts:145` emitted `🔄 Framework registry reloaded` — **the exact
+string `d5eaa6a1` deleted from `handleUpdate` and `handleReload`** — one file over, after awaiting
+the same no-op `onRefresh`. `handleRollback` writes through the same file service, so it owed the
+same call and made the same claim.
+
+Two compounding causes, both mine:
+
+1. **The fix was scoped to a file, not to a behaviour.** I searched `framework-lifecycle-processor.ts`
+   for write-then-claim and never asked which OTHER handlers write `framework.yaml`. Re-registration
+   is now a shared module (`framework-reregistration.ts`) that both processors import — a private
+   helper on one processor is exactly how the sibling path inherited the old behaviour.
+2. **The gate I built to prevent this could not see it.** `MUTATING_ACTIONS` was
+   `create|update|delete|reload`; `rollback` writes and was outside the scan. The success line then
+   claimed "every mutating dispatch edge", true only under that constant's own definition of
+   mutating. **This is M-7 recurring**: the gate went green on a narrowed universe for the second
+   time, in a different dimension. Widening it immediately surfaced two more unclassified versioning
+   processors — the set-equality direction doing its job.
+
+Mutation-verified: removing the rollback registration exits 1, restoring exits 0.
+
+### Nine further corrections, all measured against the emitting branch
+
+| Where                          | Was                                                                                                                                       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| gate failure header            | claimed a handler wrote without registering — true of 1 of its 5 finding classes                                                          |
+| gate remedy paragraph          | named a fix that does not apply to stale rules or handler-local edges                                                                     |
+| gate per-finding text          | asserted "onRefresh is NOT registration here" immediately before a prompt rule saying it is                                               |
+| gate success line              | "every mutating dispatch edge", scoped by a constant that excluded a writer                                                               |
+| `gate reload`, `gate rollback` | discarded the boolean reporting whether the reload happened, then asserted it had                                                         |
+| framework reload error         | named a missing file for 4 causes that are not one, sending operators to check a file that exists                                         |
+| degraded-update recovery text  | told operators to retry a call that re-runs the identical failing path                                                                    |
+| framework update header        | `✅ updated successfully` on the degraded branch, qualified 16 lines later. The gate side replaces the header; the framework side did not |
+| create header                  | printed a `level` that is invariably `full` whenever the draft is valid, directly above the list of what is missing                       |
+| both dry-run previews          | told operators to add `confirm: true`, which the router required before the preview could exist                                           |
+| `createFrameworkAtomic`        | claimed files were rolled back without reading the boolean that says whether they were                                                    |
+
+### What this says about the audit itself
+
+Every one of these was invisible to the full validation suite, which was green throughout. Strings
+have no test surface unless someone asserts on them, and asserting on them freezes the wording —
+one such assertion had to be rewritten here because it pinned the dishonest text. **Ordering the
+audit after the implementation, against shipped behaviour rather than intentions (R-5), is what
+made it find anything.** Run before, it would have audited what the code was supposed to say.
