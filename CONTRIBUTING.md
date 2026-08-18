@@ -26,6 +26,31 @@ git commit -m "feat(server): add new capability"
 > [!TIP]
 > First time? Start with a docs fix or a small bug. The hooks will lint, format, and typecheck your staged files automatically.
 
+### Working in a second worktree
+
+Step 2 above wires the git hooks, and it wires them **per worktree**. `core.hooksPath` is the
+relative path `.husky/_`, which husky generates and self-ignores, so `git worktree add` produces a
+worktree where that path does not resolve — and git skips every hook silently, with no warning and
+no failing exit code. Commits and pushes from there run no local validation at all.
+
+Create additional worktrees with the bootstrap script, which adds the worktree, wires husky inside
+it, links both `node_modules` trees, and then verifies the hooks are executable before reporting
+success:
+
+```bash
+npm run worktree:create -- ../claude-prompts-mcp-featurex feat/my-change --from origin/main
+```
+
+To repair a worktree that already exists, run husky from inside it:
+
+```bash
+npx --prefix /path/to/main-worktree husky
+```
+
+`npm run validate:git-hooks-active` reports which case you are in. It is part of `validate:all`,
+and it passes without inspecting anything outside a linked worktree, so CI and plain clones are
+unaffected.
+
 ## Development Environment
 
 | Surface / requirement                | Version                    | Notes                                            |

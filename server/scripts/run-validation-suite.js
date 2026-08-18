@@ -321,6 +321,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:git-hooks-active',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'UNCHECKED and known — verifies hooks CAN run in this worktree (core.hooksPath resolves to executable pre-commit/commit-msg/pre-push), NOT that they DID run for any commit already made. A commit pushed from a worktree before this gate was added is indistinguishable here from one the hooks passed; git records no evidence either way.',
+  },
+  {
     script: 'validate:suite-membership',
     io: 'read',
     reads: ['file', 'index', 'spawn', 'tracked'],
