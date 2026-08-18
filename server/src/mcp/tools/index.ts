@@ -147,6 +147,11 @@ export class McpToolRouter {
   private systemControl!: ConsolidatedSystemControl;
   private gateManagerTool!: GateToolHandler;
   private frameworkManagerTool!: FrameworkToolHandler;
+  /** Database port received before `frameworkManagerTool` existed; applied at its construction. */
+  private pendingDatabasePort?: {
+    db: import('#shared/types/persistence.js').DatabasePort;
+    scope?: import('#shared/types/persistence.js').StateStoreOptions;
+  };
   private resourceManagerRouter?: ResourceManagerRouter;
   // Core tools: prompt engine, prompt resources, system control, gate manager, framework manager, resource manager
 
@@ -332,6 +337,15 @@ export class McpToolRouter {
     this.promptExecutor.setDatabasePort(db, argHistoryStore);
     this.promptResourceHandler.setDatabasePort(db, scope);
     this.gateManagerTool.setDatabasePort(db, scope);
+    // The framework tool does not exist yet at the composition root's call order —
+    // `module-initializer` calls this at :291 and `setFrameworkManager()` (which constructs the
+    // tool) at :308. The existence guard below therefore never fired, and framework versioning
+    // ran with no DatabasePort: the FIRST `framework update` threw
+    // "VersionHistoryService: DatabasePort not provided" and no framework could be updated at
+    // all. Retaining the port and applying it at construction mirrors the deferred wiring this
+    // class already does for `frameworkStateStore` a few methods down, and removes the ordering
+    // dependency rather than re-ordering two calls that could drift apart again.
+    this.pendingDatabasePort = { db, scope };
     if (this.frameworkManagerTool) {
       this.frameworkManagerTool.setDatabasePort(db, scope);
     }
@@ -614,6 +628,15 @@ export class McpToolRouter {
       }
 
       this.frameworkManagerTool = createFrameworkToolHandler(frameworkManagerDeps);
+
+      // Apply a database port that arrived before this tool existed. Without this the tool's
+      // VersionHistoryService has no port and every `framework update` throws.
+      if (this.pendingDatabasePort !== undefined) {
+        this.frameworkManagerTool.setDatabasePort(
+          this.pendingDatabasePort.db,
+          this.pendingDatabasePort.scope
+        );
+      }
 
       // Initialize unified resource manager router (routes to prompt/gate/framework managers)
       this.resourceManagerRouter = createResourceManagerRouter({
