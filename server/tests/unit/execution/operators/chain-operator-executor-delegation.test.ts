@@ -236,6 +236,49 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
     );
   });
 
+  // S10: the gate-review render's synthetic identity (`__gate_review__`, stepNumber
+  // stepPrompts.length + 1) is deliberate and pinned by gate-review-stage tests — but no
+  // delegation advisory may originate here wearing those coordinates. The advisory for a
+  // review response is assembler-owned (ResponseAssembler.buildHandoffSection resolves the
+  // REAL delegated step from parsed steps; see response-assembler-delegation.test.ts). This
+  // pins the producer boundary: the review render emits no advisory at all.
+  test('S10: gate-review render emits no delegation advisory of its own', async () => {
+    const executor = new ChainOperatorExecutor(mockLogger, prompts);
+    const stepPrompts = [
+      {
+        stepNumber: 1,
+        promptId: 'step1',
+        args: {},
+        metadata: { gateInstructions: 'GATE-A: check step one output' },
+      },
+      { stepNumber: 2, promptId: 'step2', args: {}, delegated: true },
+    ];
+
+    const result = await executor.renderStep({
+      executionType: 'gate_review',
+      stepPrompts,
+      chainContext: { current_step: 1, step_results: { '1': 'step one result' } },
+      pendingGateReview: {
+        combinedPrompt: 'Review the output',
+        gateIds: ['code-quality'],
+        prompts: [],
+        createdAt: Date.now(),
+        attemptCount: 0,
+        maxAttempts: 3,
+      },
+      additionalGateIds: ['code-quality'],
+    });
+
+    // Synthetic identity stays on the render result (that contract is pinned elsewhere)...
+    expect(result.promptId).toBe('__gate_review__');
+    expect(result.promptName).toBe('Quality Gate Validation');
+    // ...but no advisory line may leave this producer carrying those coordinates.
+    expect(result.content).not.toContain('⚡ Note');
+    expect(result.content).not.toContain('is delegated');
+    expect(result.callToAction).not.toContain('⚡ Note');
+    expect(result.callToAction).not.toContain('is delegated');
+  });
+
   test('R-2: result contract labels the worker verdict PROPOSED', async () => {
     const executor = new ChainOperatorExecutor(mockLogger, prompts);
     const stepPrompts = [

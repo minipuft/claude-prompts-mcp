@@ -331,21 +331,41 @@ export class ResponseAssembler {
    * delegated step's own content (`buildCurrentStepHandoff`). This method only builds the
    * payload identifying that next step and emits the one-line advisory pointing at it.
    *
-   * Reads from StepExecutionStage metadata when available, falls back to parsed step metadata
-   * when pendingReview blocked StepExecutionStage execution.
+   * Resolves the advisory's step identity from the parse-time step the run actually hands off
+   * to (`findNextDelegatedStep`), falling back to StepExecutionStage metadata only when no
+   * parse-time view exists. Metadata is the LAST resort, not the first (S10): on a gate-review
+   * response the metadata names the SYNTHETIC review step (`promptId: '__gate_review__'`,
+   * `stepNumber: totalSteps + 1`), so reading it first emitted "Step 4 ("Quality Gate
+   * Validation") is delegated" for a 2-step chain — the synthetic step's coordinates must never
+   * reach the advisory.
    */
   private buildHandoffSection(context: ExecutionContext): string | null {
     const metadata = context.executionResults?.metadata ?? {};
 
-    // Read step info from metadata (StepExecutionStage) or fall back to parsed steps
-    const stepNumber =
-      (metadata['stepNumber'] as number | undefined) ?? context.sessionContext?.currentStep ?? 0;
-    const totalSteps =
-      (metadata['totalSteps'] as number | undefined) ?? context.sessionContext?.totalSteps ?? 0;
-    const promptName = String(
-      metadata['promptName'] ?? this.resolveNextStepPromptName(context) ?? 'next-step'
-    );
     const nextStep = this.findNextDelegatedStep(context);
+    const parsedNext =
+      nextStep !== undefined ? context.parsedCommand?.steps?.[nextStep.index] : undefined;
+
+    // Real delegated-step identity when the parse-time view has it; metadata-derived offset
+    // (`current + 1`) only when it does not (e.g. a normal render whose parsed steps are not
+    // on the context — pinned by the metadata-path test).
+    const fallbackStepNumber =
+      ((metadata['stepNumber'] as number | undefined) ?? context.sessionContext?.currentStep ?? 0) +
+      1;
+    const stepNumber = parsedNext?.stepNumber ?? fallbackStepNumber;
+    const totalSteps =
+      parsedNext !== undefined
+        ? (context.parsedCommand?.steps?.length ?? 0)
+        : ((metadata['totalSteps'] as number | undefined) ??
+          context.sessionContext?.totalSteps ??
+          0);
+    const parsedNextName = parsedNext?.convertedPrompt?.name;
+    const promptName =
+      parsedNext !== undefined
+        ? parsedNextName != null && parsedNextName.trim().length > 0
+          ? parsedNextName
+          : parsedNext.promptId
+        : String(metadata['promptName'] ?? this.resolveNextStepPromptName(context) ?? 'next-step');
     const agentType = nextStep?.agentType ?? 'chain-executor';
     const subagentModel = nextStep?.subagentModel;
 
@@ -353,7 +373,7 @@ export class ResponseAssembler {
     const clientProfile = this.resolveClientProfile(context);
     const renderer = new DelegationRenderer();
     const payload: DelegationPayload = {
-      stepNumber: stepNumber + 1, // handoff targets NEXT step
+      stepNumber,
       totalSteps,
       promptName,
       agentType,

@@ -315,3 +315,80 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
     expect(currentFooter).not.toContain('gate_verdict');
   });
 });
+
+/**
+ * S10 (subagent-delegation-contract-2026-08-12): a gate-review response's executionResults
+ * metadata names the SYNTHETIC review step (`promptId: '__gate_review__'`, `promptName:
+ * 'Quality Gate Validation'`, `stepNumber: totalSteps + 1` — stage 20 stores the review render
+ * result verbatim). The advisory must resolve the REAL delegated step from the parse-time
+ * steps; reading metadata first emitted "Step 4 ("Quality Gate Validation") is delegated" for
+ * a 2-step chain.
+ */
+describe('ResponseAssembler – S10: gate-review response delegation advisory', () => {
+  const assembler = new ResponseAssembler();
+
+  function makeGateReviewContext(options: { nextDelegated: boolean }): ExecutionContext {
+    const context = new ExecutionContext({ command: 'noop' });
+    context.sessionContext = {
+      sessionId: 'sess-s10',
+      chainId: 'chain-s10#1',
+      isChainExecution: true,
+      currentStep: 1,
+      totalSteps: 2,
+      pendingReview: {
+        combinedPrompt: 'Review the output',
+        gateIds: ['code-quality'],
+        prompts: [],
+        createdAt: Date.now(),
+        attemptCount: 0,
+        maxAttempts: 3,
+      } as any,
+    };
+    (context as any).parsedCommand = {
+      promptId: 'minimal_prompt',
+      steps: [
+        { stepNumber: 1, promptId: 'minimal_prompt', args: {} },
+        {
+          stepNumber: 2,
+          promptId: 'second_prompt',
+          args: {},
+          ...(options.nextDelegated ? { delegated: true } : {}),
+          convertedPrompt: { id: 'second_prompt', name: 'Second Prompt' },
+        },
+      ],
+    };
+    // What GateReviewStage stores: the synthetic review render result's own coordinates.
+    context.executionResults = {
+      content: 'Original Task Instructions for the reviewed step',
+      metadata: {
+        stepNumber: 3, // stepPrompts.length + 1 — synthetic
+        totalSteps: 3, // synthetic
+        promptId: '__gate_review__',
+        promptName: 'Quality Gate Validation',
+      },
+      generatedAt: Date.now(),
+    };
+    return context;
+  }
+
+  test('advisory names the REAL delegated next step, never the synthetic review step', () => {
+    const context = makeGateReviewContext({ nextDelegated: true });
+
+    const result = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
+
+    expect(result).toContain('⚡ Note: Step 2 ("Second Prompt") is delegated');
+    // The synthetic coordinates must not reach the advisory (or anywhere else): the old read
+    // was metadata stepNumber + 1 = 4, named after the review step.
+    expect(result).not.toContain('Step 4');
+    expect(result).not.toContain('Quality Gate Validation');
+  });
+
+  test('no delegated next step → no advisory in the gate-review response', () => {
+    const context = makeGateReviewContext({ nextDelegated: false });
+
+    const result = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
+
+    expect(result).not.toContain('⚡ Note');
+    expect(result).not.toContain('is delegated');
+  });
+});
