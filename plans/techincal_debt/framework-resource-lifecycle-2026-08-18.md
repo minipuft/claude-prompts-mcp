@@ -1,7 +1,9 @@
 ---
 title: "Framework resource lifecycle — create must succeed, and be usable by the process that created it"
 date: 2026-08-18
-status: active
+status: reference
+tracking: none
+tracking_reason: local-only
 tags:
   - frameworks
   - mcp-tools
@@ -9,6 +11,15 @@ tags:
 ---
 
 # Framework Resource Lifecycle
+
+> **Retired to `reference` 2026-08-18.** Every task row closed on measured evidence. Delivered
+> straight to `main` with no Issue or PR, so the canonical delivery evidence is the commit range
+> `3558ab22..913f00b0` — Tier 1 red tests, `295271a1` (G1+G3), `d5eaa6a1` (G2+G4), `457d3121`
+> (the coherence gate), `63ee8ed4` (G5), `b9c1b6e9` (the honesty-audit corrections).
+> Integration matrix **CI-observed** at `b9c1b6e9`, run `32182768946`, Node 22.13.0 and 24.
+>
+> `reference`, not `done`: `resource-manager-settability-matrix-2026-08-13.md` cites this plan as
+> the origin of findings SF-1 through SF-4, which it re-homed rather than let retire with it.
 
 **Area**: `server/src/mcp/tools/framework-manager/**`, `server/src/modules/resources/services/resource-mutation-transaction.ts` (read), the verification service behind `validateFile`, `server/tests/integration/mcp-tools/gate-framework-versioning.integration.test.ts`
 **Work type**: bug_fix

@@ -1,7 +1,7 @@
 ---
 title: "A gate created through resource_manager is invisible until restart"
 date: 2026-08-17
-status: backlog
+status: reference
 tags:
   - gates
   - mcp-tools

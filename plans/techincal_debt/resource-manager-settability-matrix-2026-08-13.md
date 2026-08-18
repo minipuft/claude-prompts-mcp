@@ -285,3 +285,44 @@ Also flagged, not in the top 5 by severity but cheap to fix and cited above:
   template-validation gate must be DIFFERENTIAL (new defects block, pre-existing ones are
   amnestied). Note the shipped `diagnosePromptWrite` design already embodies this: update mode
   amnesties pre-existing defects, create mode (`before = null`) blocks everything.
+
+## Findings re-homed from the framework-lifecycle plan (2026-08-18)
+
+`framework-resource-lifecycle-2026-08-18.md` retires to `reference` with every row closed. Four of
+its findings are settability-surface problems rather than lifecycle defects, so they land here
+instead of dying with it. None is fixed; each names what would close it.
+
+- **SF-1 — `framework_gates` is hard-required but has no published shape.**
+  `FrameworkDraftValidator` refuses a draft without it, yet it is not a declared parameter on
+  `resourceManagerInputSchema` (it arrives through the top-level `.passthrough()`) and
+  `tooling/contracts/resource-manager.json` mentions it only inside another parameter's prose.
+  The one statement of its element shape is an example in an error response. A caller is required
+  to send a field the tool surface never describes. Directly a §5 gap. Closing it means declaring
+  a typed parameter — **narrowing, not breaking**, per the CLAUDE.md union rule.
+  _(as of 2026-08-18 · flips when `framework_gates` appears in the contract with an element shape)_
+
+- **SF-2 — `dry_run: true` requires `confirm: true` to reach the dry-run path.**
+  `router.ts` applies the confirm gate above dispatch, and neither `framework:delete` nor
+  `gate:delete` is in `HANDLER_OWNED_CONFIRMATION`. So a preview demands destructive confirmation,
+  which inverts the flag's purpose. The `prompt` sibling is correct
+  (`prompt-lifecycle-processor.ts`), so this is a parity gap, not a design question.
+  _(as of 2026-08-18 · flips when a delete preview runs without `confirm`)_
+
+- **SF-3 — framework `update` records the version row before the write.**
+  `handleUpdate` calls `recordEditResult` and then `writeFrameworkFiles`, so a failed write leaves
+  a `history` entry describing an edit that never landed. The three-phase safety property the
+  versioning work established (validate → record → write) protects the file, not the ledger; the
+  ledger can still gain a row for a write that did not happen. The error text is accurate — this is
+  a state defect, not a message one.
+  _(as of 2026-08-18 · flips when a forced write failure leaves no new version row)_
+
+- **SF-4 — `builtInFrameworks` is a hardcoded list.**
+  `framework-lifecycle-processor.ts` guards deletion against a literal
+  `['cageerf', 'react', '5w1h', 'scamper']`. The project handbook's Key Constraints require
+  `frameworkManager.getFramework(id)` and forbid hardcoding framework lists — and the list is
+  already wrong, since `focus`, `liquescent`, `radiant` and `verify` also ship. Deleting a shipped
+  framework not on the list is currently permitted.
+  _(as of 2026-08-18 · flips when the guard derives its set from the registry)_
+
+SF-1 and SF-2 surfaced in the R-5 message-honesty audit; SF-3 and SF-4 were adjacent findings that
+audit reported and nothing else recorded.

@@ -11,6 +11,14 @@ plan: framework-resource-lifecycle-2026-08-18.md
 
 # Implementation Notes
 
+## Lineage
+
+This plan generalises `gate-registry-refresh-on-create-2026-08-17.md` and
+`gate-registry-refresh-on-create-2026-08-17-implementation-notes.md`, which diagnosed the same write-then-claim-a-refresh defect on the gate
+side and fixed it in `b7102dd9`. Every "mirror the gate fix" instruction below resolves to that
+plan's F17 analysis, and `validate:registry-coherence` exists to stop the class those notes
+identified from recurring on a fourth resource type.
+
 ## Pre-dispatch reading (main thread, 2026-08-18)
 
 Static read of the framework path before dispatching the Tier 1 subagent. Recorded here because
