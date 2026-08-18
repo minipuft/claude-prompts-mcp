@@ -115,6 +115,14 @@ A shape-checking script has four drift modes. Three are preventable with pattern
 
 **Shared worktree.** Another session is live in `engine/execution/delegation/**`, `chain-operator-executor.ts`, `response-assembler.ts`, `gate-enhancement-service.ts`, `hooks/lib/`, delegation tests, and `docs/concepts/chains-lifecycle.md`. A third, offline session holds uncommitted hunks in stages 18/19, phase-guard-evaluator, `runtime-framework-loader.ts`, `sqlite-engine.ts`, `table-contracts.ts`, `pipeline-builder.ts`, `chains/manager.ts`, `run-registry.ts`. **Do not touch any of these, and run no git HEAD operation** — no checkout, branch, stash, or rebase.
 
+**No schema changes, and no `SCHEMA_VERSION` bump.** The v24 bump in `sqlite-engine.ts` belongs to
+the offline phase-guard session; a second session bumping `SCHEMA_VERSION` collides by construction,
+and the delegation session has already sequenced its own `execution_records` column to land after
+v24 for this reason. None of G1, G2, G3 or the R-3 gate needs persistent state — the writer/verifier
+disagreement, the registry reload, the discarded validation detail, and a static validation script
+are all schema-free. If this work develops schema appetite, that is a signal the diagnosis went
+somewhere unexpected: stop and re-rule rather than bumping.
+
 Verify every commit with `git show --name-only <sha>` after the hook runs. The pre-commit formatter re-adds whole files, which defeated a hunk-split in `efe9a605` and put another session's in-flight hunks into a commit without their defining files, leaving committed `main` unable to typecheck. Inspecting the index is not sufficient — the hook runs after.
 
 ## Risks carried forward
