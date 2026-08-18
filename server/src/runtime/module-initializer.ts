@@ -330,7 +330,8 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
       const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
+      const { createResourceIndexer, reportResourceSyncFailures } =
+        await import('#infra/database/resource-indexer.js');
       const { ScriptToolDefinitionLoader } =
         await import('#modules/automation/core/script-definition-loader.js');
       const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
@@ -339,9 +340,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
       const indexer = createResourceIndexer(dbManager, logger, {
         resourcesDir,
-        toolLoader: (dir, id) => scriptLoader.loadAllToolsForPrompt(dir, id),
+        toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
       });
-      await indexer.syncAll();
+      const syncResult = await indexer.syncAll();
+      reportResourceSyncFailures(syncResult, logger);
       if (isVerbose) logger.info('✅ ResourceIndexer synced to SQLite');
     } catch (error) {
       // `resource_index` is what the Python hooks read; a stale one makes prompt-suggest

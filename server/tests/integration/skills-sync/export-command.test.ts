@@ -324,6 +324,161 @@ describe('Export Command Integration', () => {
 
   // ── M4 + M6: hook emission and the enforcement claim ───────────────────────
 
+  // ── F6 / DEV-W3-3: a tool missing from a NON-EMPTY index degrades in silence ──
+  //
+  // `loadToolsCache` warns only when the cache is wholly empty. If most tools
+  // indexed and one dropped out — the shape a validation failure takes — that one
+  // fell through to the per-tool fallback with no warning and exported with no
+  // schema.json and no tool.json. Same command, two different artifacts.
+  describe('partial-cold tool index (F6)', () => {
+    /**
+     * Index stub returning exactly one tool row, so the cache is NON-EMPTY and the
+     * wholly-empty warning stays silent. The tool it knows about belongs to a
+     * different prompt than the one under test.
+     */
+    function indexKnowing(toolRowIds: string[]) {
+      return {
+        isInitialized: () => true,
+        query: (sql: string) =>
+          sql.includes('type = ?') || sql.includes('resource_index')
+            ? toolRowIds.map((id) => ({
+                id,
+                name: id,
+                category: 'general',
+                description: '',
+                content_hash: 'h',
+                metadata_json: JSON.stringify({
+                  runtime: 'python',
+                  input_schema: {},
+                  prompt_id: id.split('/')[0],
+                  script_path: 'script.py',
+                  tool_dir: 'x',
+                }),
+              }))
+            : [],
+        run: () => undefined,
+        transaction: (fn: () => void) => fn(),
+      };
+    }
+
+    async function writePromptWithTool(id: string, toolId: string): Promise<void> {
+      await writePrompt('general', id, { tools: [toolId] });
+      const toolDir = path.join(serverRoot, 'resources', 'prompts', 'general', id, 'tools', toolId);
+      await mkdir(toolDir, { recursive: true });
+      await writeFile(
+        path.join(toolDir, 'tool.yaml'),
+        yaml.dump({ id: toolId, name: toolId, script: 'script.py', runtime: 'python' })
+      );
+      await writeFile(path.join(toolDir, 'script.py'), 'print("hi")');
+    }
+
+    it('warns per tool when one tool is missing from an otherwise-populated index', async () => {
+      await writeConfig('claude-code');
+      // `indexed_owner` is in the index; `dropped_owner` is not. Neither id is a
+      // substring of the tool ids, so a warning about the wrong one cannot pass.
+      await writePromptWithTool('indexed_owner', 'alpha-widget');
+      await writePromptWithTool('dropped_owner', 'beta-widget');
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        {
+          command: 'export',
+          client: 'claude-code',
+          scope: 'user',
+          dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
+        } as SkillsSyncOptions,
+        out
+      );
+
+      const degraded = report.failures.filter((f) => f.id === 'dropped_owner/beta-widget');
+      expect(degraded).toHaveLength(1);
+      expect(degraded[0]?.reason).toContain('not in the resource index');
+      expect(out.warns.join('\n')).toContain('dropped_owner/beta-widget');
+    });
+
+    it('stays quiet about the tool the index does know', async () => {
+      await writeConfig('claude-code');
+      await writePromptWithTool('indexed_owner', 'alpha-widget');
+      await writePromptWithTool('dropped_owner', 'beta-widget');
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        {
+          command: 'export',
+          client: 'claude-code',
+          scope: 'user',
+          dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
+        } as SkillsSyncOptions,
+        out
+      );
+
+      // Without this the previous test also passes for a fix that warns about
+      // every tool unconditionally.
+      expect(report.failures.map((f) => f.id)).not.toContain('indexed_owner/alpha-widget');
+    });
+  });
+
+  // ── F13: --json must make stdout parseable, not merely add a JSON line ──
+  describe('--json output (F13)', () => {
+    it('emits exactly one stdout write, and it parses as the run report', async () => {
+      await writeConfig('claude-code');
+      await writePrompt('general', 'exported_thing');
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        {
+          command: 'export',
+          client: 'claude-code',
+          scope: 'user',
+          json: true,
+        } as SkillsSyncOptions,
+        out
+      );
+
+      // An export normally logs a banner, a per-file `wrote ...` line and a
+      // manifest line. Under --json every one of those must be suppressed, or
+      // stdout does not parse.
+      expect(out.logs).toHaveLength(1);
+      const parsed = JSON.parse(out.logs[0] as string) as Record<string, unknown>;
+      expect(parsed['command']).toBe('export');
+      expect(parsed['resources']).toBe(report.resources);
+      expect(parsed['written']).toBeGreaterThan(0);
+      expect(Array.isArray(parsed['failures'])).toBe(true);
+    });
+
+    it('still writes the human log when --json is absent', async () => {
+      await writeConfig('claude-code');
+      await writePrompt('general', 'exported_thing');
+
+      const out = await runExport();
+
+      // Guards the inverse: a fix that suppressed logs unconditionally would
+      // pass the test above.
+      expect(out.logs.length).toBeGreaterThan(1);
+      expect(out.logs.some((line) => line.includes('wrote'))).toBe(true);
+    });
+
+    it('reports a failure in the JSON when the manifest cannot be saved', async () => {
+      await writeConfig('claude-code');
+      await writePrompt('general', 'exported_thing');
+
+      // No dbManager → the manifest is dropped. Previously this was a log line
+      // only; a machine consumer had no way to see it.
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        {
+          command: 'export',
+          client: 'claude-code',
+          scope: 'user',
+          json: true,
+        } as SkillsSyncOptions,
+        out
+      );
+
+      expect(report.failures.some((f) => f.reason.includes('manifest not saved'))).toBe(true);
+    });
+  });
+
   describe('gate-review hook emission', () => {
     beforeEach(async () => {
       // Scoped to a category none of these prompts use, so it reaches a skill only through the

@@ -20,6 +20,8 @@ export {
   type ScriptRuntime,
   type ScriptToolDefinition,
   type ScriptToolLoaderConfig,
+  type ScriptToolLoadFailure,
+  type ScriptToolLoadReport,
   type ScriptToolLoaderStats,
   type ToolDetectionMatch,
   type ToolMatchReason,

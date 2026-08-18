@@ -800,7 +800,8 @@ export class Application {
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
         const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-        const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
+        const { createResourceIndexer, reportResourceSyncFailures } =
+          await import('#infra/database/resource-indexer.js');
         const { ScriptToolDefinitionLoader } =
           await import('#modules/automation/core/script-definition-loader.js');
         const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
@@ -810,9 +811,10 @@ export class Application {
         const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
         const indexer = createResourceIndexer(dbManager, this.logger, {
           resourcesDir,
-          toolLoader: (dir, id) => scriptLoader.loadAllToolsForPrompt(dir, id),
+          toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
         });
-        await indexer.syncAll();
+        const syncResult = await indexer.syncAll();
+        reportResourceSyncFailures(syncResult, this.logger);
         this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 

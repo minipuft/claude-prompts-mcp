@@ -40,6 +40,8 @@ import type {
   LoadedScriptTool,
   ScriptToolLoaderConfig,
   ScriptToolLoaderStats,
+  ScriptToolLoadFailure,
+  ScriptToolLoadReport,
   JSONSchemaDefinition,
   ExecutionConfig,
 } from '../types.js';
@@ -48,6 +50,15 @@ import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // Re-export validation types
 export type { ScriptToolSchemaValidationResult } from './script-schema.js';
+
+/**
+ * Internal result of one load attempt.
+ *
+ * Kept private to the loader: the public surface is `LoadedScriptTool | undefined`
+ * for callers that only want usable tools, and `ScriptToolLoadReport` for callers
+ * that must account for every tool on disk.
+ */
+type LoadOutcome = { ok: true; tool: LoadedScriptTool } | { ok: false; reason: string };
 
 /**
  * Script Tool Definition Loader
@@ -97,31 +108,41 @@ export class ScriptToolDefinitionLoader {
    * @returns Loaded tool definition or undefined if not found
    */
   loadTool(promptDir: string, toolId: string, promptId: string): LoadedScriptTool | undefined {
+    const outcome = this.loadToolOutcome(promptDir, toolId, promptId);
+    return outcome.ok ? outcome.tool : undefined;
+  }
+
+  /**
+   * Load a tool, keeping the reason when it fails.
+   *
+   * `loadTool` is the lossy view of this; callers that must account for every
+   * discovered tool use this one so a drop-out carries a cause.
+   */
+  private loadToolOutcome(promptDir: string, toolId: string, promptId: string): LoadOutcome {
     const normalizedId = toolId.toLowerCase();
     const toolDir = join(promptDir, 'tools', normalizedId);
     const cacheKey = toolDir; // Use absolute path as cache key for uniqueness
 
     // Check cache first
-    if (this.enableCache && this.cache.has(cacheKey)) {
-      this.stats.cacheHits++;
-      return this.cache.get(cacheKey);
+    if (this.enableCache) {
+      const cached = this.cache.get(cacheKey);
+      if (cached) {
+        this.stats.cacheHits++;
+        return { ok: true, tool: cached };
+      }
     }
 
     this.stats.cacheMisses++;
 
     // Load from YAML directory
-    const definition = this.loadFromToolDir(toolDir, normalizedId, promptId);
+    const outcome = this.loadFromToolDir(toolDir, normalizedId, promptId);
 
-    if (!definition) {
-      return undefined;
+    // Cache result (successes only — a failure must stay re-checkable)
+    if (outcome.ok && this.enableCache) {
+      this.cache.set(cacheKey, outcome.tool);
     }
 
-    // Cache result
-    if (this.enableCache) {
-      this.cache.set(cacheKey, definition);
-    }
-
-    return definition;
+    return outcome;
   }
 
   /**
@@ -191,8 +212,33 @@ export class ScriptToolDefinitionLoader {
    * @returns Array of all successfully loaded tools
    */
   loadAllToolsForPrompt(promptDir: string, promptId: string): LoadedScriptTool[] {
-    const toolIds = this.discoverTools(promptDir);
-    return this.loadToolsForPrompt(promptDir, toolIds, promptId);
+    return this.loadAllToolsForPromptDetailed(promptDir, promptId).tools;
+  }
+
+  /**
+   * Load all available tools for a prompt, reporting the ones that dropped out.
+   *
+   * A tool present on disk but unloadable is otherwise indistinguishable from a
+   * tool that was deleted — this is the boundary that keeps the two apart.
+   *
+   * @param promptDir - Absolute path to the prompt directory
+   * @param promptId - ID of the parent prompt
+   * @returns Loaded tools plus a failure entry per discovered-but-unloadable tool
+   */
+  loadAllToolsForPromptDetailed(promptDir: string, promptId: string): ScriptToolLoadReport {
+    const tools: LoadedScriptTool[] = [];
+    const failures: ScriptToolLoadFailure[] = [];
+
+    for (const toolId of this.discoverTools(promptDir)) {
+      const outcome = this.loadToolOutcome(promptDir, toolId, promptId);
+      if (outcome.ok) {
+        tools.push(outcome.tool);
+      } else {
+        failures.push({ toolId, reason: outcome.reason });
+      }
+    }
+
+    return { tools, failures };
   }
 
   /**
@@ -258,11 +304,7 @@ export class ScriptToolDefinitionLoader {
   /**
    * Load a tool from its directory (tools/{id}/).
    */
-  private loadFromToolDir(
-    toolDir: string,
-    toolId: string,
-    promptId: string
-  ): LoadedScriptTool | undefined {
+  private loadFromToolDir(toolDir: string, toolId: string, promptId: string): LoadOutcome {
     try {
       const entryPath = join(toolDir, 'tool.yaml');
 
@@ -270,7 +312,7 @@ export class ScriptToolDefinitionLoader {
         if (this.debug) {
           process.stderr.write(`[ScriptToolDefinitionLoader] tool.yaml not found: ${entryPath}\n`);
         }
-        return undefined;
+        return { ok: false, reason: `tool.yaml not found at ${entryPath}` };
       }
 
       // Load main tool.yaml
@@ -279,7 +321,7 @@ export class ScriptToolDefinitionLoader {
       });
 
       if (!yamlDefinition) {
-        return undefined;
+        return { ok: false, reason: `tool.yaml at ${entryPath} parsed to an empty document` };
       }
 
       // Inline referenced files
@@ -290,12 +332,13 @@ export class ScriptToolDefinitionLoader {
         const validation = this.validateDefinition(yamlDefinition, toolId);
         if (!validation.valid) {
           this.stats.loadErrors++;
+          const reason = `validation failed: ${validation.errors.join('; ')}`;
           process.stderr.write(
             `[ScriptToolDefinitionLoader] Validation failed for '${toolId}': ${validation.errors.join(
               '; '
             )}\n`
           );
-          return undefined;
+          return { ok: false, reason };
         }
         if (validation.warnings.length > 0 && this.debug) {
           process.stderr.write(
@@ -336,7 +379,7 @@ export class ScriptToolDefinitionLoader {
         );
       }
 
-      return loadedTool;
+      return { ok: true, tool: loadedTool };
     } catch (error) {
       this.stats.loadErrors++;
       if (this.debug) {
@@ -344,7 +387,7 @@ export class ScriptToolDefinitionLoader {
           `[ScriptToolDefinitionLoader] Failed to load '${toolId}': ${String(error)}\n`
         );
       }
-      return undefined;
+      return { ok: false, reason: String(error) };
     }
   }
 

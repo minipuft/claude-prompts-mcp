@@ -37,6 +37,8 @@ export {
   type IndexedResource,
   type IndexedResourceType,
   type ResourceIndexerConfig,
+  reportResourceSyncFailures,
+  type SyncFailure,
   type SyncResult,
   type ToolLoaderFn,
 } from './resource-indexer.js';

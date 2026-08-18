@@ -32,9 +32,13 @@ import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 
 /** Injected tool loader — avoids direct import from modules layer. */
-export type ToolLoaderFn = (promptDir: string, promptId: string) => LoadedScriptTool[];
+export type ToolLoaderFn = (promptDir: string, promptId: string) => ScriptToolLoadReport;
 
-import type { JSONSchemaDefinition, LoadedScriptTool } from '#shared/types/automation.js';
+import type {
+  JSONSchemaDefinition,
+  LoadedScriptTool,
+  ScriptToolLoadReport,
+} from '#shared/types/automation.js';
 import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
@@ -66,7 +70,25 @@ export interface IndexedResource {
 export type { ToolIndexEntry } from '#shared/types/persistence.js';
 
 /**
- * Sync result statistics
+ * One resource that could not be synced, with the reason.
+ *
+ * The counters alone cannot distinguish a resource that failed from one that
+ * legitimately went away — both used to read as `removed`.
+ */
+export interface SyncFailure {
+  /** Resource type, or 'tool' for script tools nested under prompts */
+  type: IndexedResourceType | 'tool';
+  /** Resource id (composite `{promptId}/{toolId}` for tools) */
+  id: string;
+  /** Why this resource failed */
+  reason: string;
+}
+
+/**
+ * Sync result statistics.
+ *
+ * `errors` is the count of `failures` — the two are maintained together by
+ * `recordSyncFailure` so a caller cannot see a non-zero count with no detail.
  */
 export interface SyncResult {
   added: number;
@@ -74,6 +96,47 @@ export interface SyncResult {
   removed: number;
   unchanged: number;
   errors: number;
+  failures: SyncFailure[];
+}
+
+/** Empty result — the single place the shape is constructed. */
+function emptySyncResult(): SyncResult {
+  return { added: 0, modified: 0, removed: 0, unchanged: 0, errors: 0, failures: [] };
+}
+
+/**
+ * Log every per-item sync failure by id and reason.
+ *
+ * Deliberately non-throwing: a resource that fails to parse is a data defect,
+ * and refusing to start the server over one bad file trades a named warning for
+ * an outage. The caller keeps its own throw for a wholly-failed indexer.
+ */
+export function reportResourceSyncFailures(result: SyncResult, logger: Logger): void {
+  if (result.failures.length === 0) {
+    return;
+  }
+
+  logger.warn(
+    `ResourceIndexer: ${result.failures.length} resource(s) failed to sync and are missing or stale in the index:`
+  );
+  for (const failure of result.failures) {
+    logger.warn(`  ${failure.type} ${failure.id}: ${failure.reason}`);
+  }
+}
+
+/** Record a failure and its count together, so the two cannot drift apart. */
+function recordSyncFailure(
+  result: SyncResult,
+  type: SyncFailure['type'],
+  id: string,
+  error: unknown
+): void {
+  result.errors++;
+  result.failures.push({
+    type,
+    id,
+    reason: error instanceof Error ? error.message : String(error),
+  });
 }
 
 // Stop words for keyword extraction
@@ -377,13 +440,7 @@ export class ResourceIndexer {
    * Perform a full sync of all resource types
    */
   async syncAll(): Promise<SyncResult> {
-    const result: SyncResult = {
-      added: 0,
-      modified: 0,
-      removed: 0,
-      unchanged: 0,
-      errors: 0,
-    };
+    const result = emptySyncResult();
 
     const types: Array<{ type: IndexedResourceType; enabled: boolean; subdir: string }> = [
       { type: 'prompt', enabled: this.config.trackPrompts, subdir: 'prompts' },
@@ -402,9 +459,10 @@ export class ResourceIndexer {
         result.removed += typeResult.removed;
         result.unchanged += typeResult.unchanged;
         result.errors += typeResult.errors;
+        result.failures.push(...typeResult.failures);
       } catch (error) {
         this.logger.error(`ResourceIndexer: Failed to sync ${type}s:`, error);
-        result.errors++;
+        recordSyncFailure(result, type, `<all ${type}s>`, error);
       }
     }
 
@@ -417,9 +475,10 @@ export class ResourceIndexer {
         result.removed += toolResult.removed;
         result.unchanged += toolResult.unchanged;
         result.errors += toolResult.errors;
+        result.failures.push(...toolResult.failures);
       } catch (error) {
         this.logger.error('ResourceIndexer: Failed to sync tools:', error);
-        result.errors++;
+        recordSyncFailure(result, 'tool', '<all tools>', error);
       }
     }
 
@@ -436,13 +495,7 @@ export class ResourceIndexer {
    * Sync a specific resource type
    */
   async syncResourceType(type: IndexedResourceType, subdir: string): Promise<SyncResult> {
-    const result: SyncResult = {
-      added: 0,
-      modified: 0,
-      removed: 0,
-      unchanged: 0,
-      errors: 0,
-    };
+    const result = emptySyncResult();
 
     const resourceDir = path.join(this.config.resourcesDir, subdir);
 
@@ -488,7 +541,7 @@ export class ResourceIndexer {
         indexed.delete(id); // Mark as processed
       } catch (error) {
         this.logger.warn(`ResourceIndexer: Error processing ${type}/${id}:`, error);
-        result.errors++;
+        recordSyncFailure(result, type, id, error);
       }
     }
 
@@ -499,7 +552,7 @@ export class ResourceIndexer {
         result.removed++;
       } catch (error) {
         this.logger.warn(`ResourceIndexer: Error removing ${type}/${id}:`, error);
-        result.errors++;
+        recordSyncFailure(result, type, id, error);
       }
     }
 
@@ -800,7 +853,7 @@ export class ResourceIndexer {
    * Indexes each tool as type='tool' with composite id: `{promptId}/{toolId}`.
    */
   async syncTools(): Promise<SyncResult> {
-    const result: SyncResult = { added: 0, modified: 0, removed: 0, unchanged: 0, errors: 0 };
+    const result = emptySyncResult();
 
     if (!this.toolLoader) {
       this.logger.debug('ResourceIndexer: Tool loader not provided, skipping tool sync');
@@ -822,8 +875,8 @@ export class ResourceIndexer {
       const category = prompt.category ?? '';
 
       try {
-        const tools = this.toolLoader(promptDir, prompt.id);
-        for (const tool of tools) {
+        const report = this.toolLoader(promptDir, prompt.id);
+        for (const tool of report.tools) {
           const compositeId = `${prompt.id}/${tool.id}`;
           seen.add(compositeId);
           this.upsertToolEntry({
@@ -835,9 +888,21 @@ export class ResourceIndexer {
             result,
           });
         }
+        for (const failure of report.failures) {
+          const compositeId = `${prompt.id}/${failure.toolId}`;
+          // Marked seen deliberately: the tool IS on disk, it just did not load.
+          // Letting it fall through to the removal sweep below would delete its
+          // index row and report `removed`, which is the claim that a validation
+          // failure and a deleted directory are the same event.
+          seen.add(compositeId);
+          this.logger.warn(
+            `ResourceIndexer: Tool ${compositeId} failed to load: ${failure.reason}`
+          );
+          recordSyncFailure(result, 'tool', compositeId, failure.reason);
+        }
       } catch (error) {
         this.logger.debug(`ResourceIndexer: Error syncing tools for prompt ${prompt.id}:`, error);
-        result.errors++;
+        recordSyncFailure(result, 'tool', `${prompt.id}/<all tools>`, error);
       }
     }
 
@@ -851,7 +916,7 @@ export class ResourceIndexer {
 
     this.logger.info(
       `ResourceIndexer: Tools sync - ${result.added} added, ${result.modified} modified, ` +
-        `${result.removed} removed, ${result.unchanged} unchanged`
+        `${result.removed} removed, ${result.unchanged} unchanged, ${result.errors} errors`
     );
 
     return result;
@@ -884,7 +949,10 @@ export class ResourceIndexer {
 
     const contentHash = computeContentHash([
       JSON.stringify(tool.inputSchema),
-      JSON.stringify(tool.execution),
+      // The defaulted `execution` above, not `tool.execution` — the raw field is
+      // optional, and JSON.stringify(undefined) returns undefined, which throws
+      // inside the hash and takes down tool sync for the whole prompt.
+      JSON.stringify(execution),
       tool.descriptionContent !== '' ? tool.descriptionContent : '',
       tool.scriptPath,
     ]);

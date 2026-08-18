@@ -464,8 +464,38 @@ export interface SkillsSyncOptions {
   preview?: boolean;
   force?: boolean;
   json?: boolean;
-  verbose?: boolean;
   dbManager?: DatabasePort;
+}
+
+/** One resource that did not export cleanly, with the reason. */
+export interface SkillsSyncFailure {
+  /** Resource id, or `{promptId}/{toolId}` for a degraded script tool */
+  id: string;
+  /** Why it failed or degraded */
+  reason: string;
+}
+
+/**
+ * Machine-readable summary of one skills-sync run, emitted by `--json`.
+ *
+ * Mirrors `SyncResult.failures` one layer down: counters answer "how much",
+ * `failures` answers "which one, and why" — the question counters cannot.
+ */
+export interface SkillsSyncRunReport {
+  command: string;
+  dryRun: boolean;
+  /** Resources loaded from canonical YAML */
+  resources: number;
+  /** Files written (0 on a dry run) */
+  written: number;
+  /** Managed skill directories pruned */
+  pruned: number;
+  failures: SkillsSyncFailure[];
+}
+
+/** Empty report — the single place the shape is constructed. */
+function emptyRunReport(command: string, dryRun: boolean): SkillsSyncRunReport {
+  return { command, dryRun, resources: 0, written: 0, pruned: 0, failures: [] };
 }
 
 export interface SkillsSyncOutput {
@@ -946,7 +976,9 @@ async function loadDocFiles(promptDir: string): Promise<IRDocFile[]> {
 async function loadPromptIR(
   promptDir: string,
   category: string,
-  toolsCache: Record<string, ToolIndexEntry>
+  toolsCache: Record<string, ToolIndexEntry>,
+  output?: SkillsSyncOutput,
+  report?: SkillsSyncRunReport
 ): Promise<SkillIR> {
   const yamlPath = path.join(promptDir, 'prompt.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
@@ -969,11 +1001,21 @@ async function loadPromptIR(
     const scriptFile = cached?.scriptPath ?? 'script.py';
     const scriptContent = await readOptionalFile(path.join(toolDir, scriptFile));
 
-    // Fallback to basic YAML parsing if not in cache
+    // Fallback to basic YAML parsing if not in cache.
+    //
+    // `loadToolsCache` warns only when the cache is WHOLLY empty, so a single
+    // tool that dropped out of the index — the exact shape a validation failure
+    // takes — used to land here in silence and export with no schema.json and no
+    // tool.json. Warn per tool, where the degradation actually happens.
     if (!cached) {
       const toolYamlPath = path.join(toolDir, 'tool.yaml');
       const toolRaw = await readOptionalFile(toolYamlPath);
       if (!toolRaw) continue;
+
+      const reason =
+        'not in the resource index — exporting without schema.json/tool.json; re-run the server to re-index';
+      output?.warn(`  ${cacheKey}: ${reason}`);
+      report?.failures.push({ id: cacheKey, reason });
 
       const toolData = yaml.load(toolRaw) as ToolYaml;
       scriptTools.push({
@@ -1257,7 +1299,8 @@ interface LoadFilters {
 async function loadAllResources(
   filters: LoadFilters | undefined,
   output: SkillsSyncOutput,
-  dbManager?: DatabasePort
+  dbManager?: DatabasePort,
+  report?: SkillsSyncRunReport
 ): Promise<SkillIR[]> {
   const resources: SkillIR[] = [];
 
@@ -1277,9 +1320,15 @@ async function loadAllResources(
           if (!pd.isDirectory()) continue;
           if (filters?.id && pd.name !== filters.id) continue;
           try {
-            resources.push(await loadPromptIR(path.join(catDir, pd.name), cat.name, toolsCache));
+            resources.push(
+              await loadPromptIR(path.join(catDir, pd.name), cat.name, toolsCache, output, report)
+            );
           } catch (e) {
             output.error(`  skip prompt ${cat.name}/${pd.name}: ${(e as Error).message}`);
+            report?.failures.push({
+              id: `${cat.name}/${pd.name}`,
+              reason: `prompt skipped: ${(e as Error).message}`,
+            });
           }
         }
       }
@@ -2631,7 +2680,11 @@ function hashOutputFiles(files: OutputFile[]): string {
 
 // ─── Section 8: Export Command ──────────────────────────────────────────────
 
-async function exportCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): Promise<void> {
+async function exportCommand(
+  opts: SkillsSyncOptions,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
   const config = await loadSyncConfig();
   const cliScope = opts.scope; // undefined = use per-resource scope; set = override all
   const clientIds =
@@ -2641,7 +2694,8 @@ async function exportCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput):
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
 
-  const resources = await loadAllResources(filters, output, opts.dbManager);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report);
+  report.resources = resources.length;
   output.log(`Loaded ${resources.length} resources`);
 
   // Detect duplicate prompt IDs across categories
@@ -2723,6 +2777,7 @@ async function exportCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput):
           } else {
             await mkdir(path.dirname(fullPath), { recursive: true });
             await writeFile(fullPath, file.content);
+            report.written++;
             output.log(`  wrote ${file.relativePath}`);
           }
         }
@@ -2756,6 +2811,12 @@ async function exportCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput):
           configHash,
           opts.dbManager
         );
+        if (!manifestSaved) {
+          report.failures.push({
+            id: `${clientId}:${scope}`,
+            reason: `manifest not saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`,
+          });
+        }
         output.log(
           manifestSaved
             ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
@@ -2833,7 +2894,8 @@ async function applySyncPrune(
   baseDir: string,
   pruneSkillDirs: string[],
   dryRun: boolean,
-  output: SkillsSyncOutput
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
 ): Promise<void> {
   if (pruneSkillDirs.length === 0) {
     return;
@@ -2846,11 +2908,16 @@ async function applySyncPrune(
       continue;
     }
     await rm(fullPath, { recursive: true, force: true });
+    report.pruned++;
     output.log(`  pruned ${skillDir}/`);
   }
 }
 
-async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): Promise<void> {
+async function syncCommand(
+  opts: SkillsSyncOptions,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
   const config = await loadSyncConfig();
   const cliScope = opts.scope;
   const shouldPrune = opts.prune ?? true;
@@ -2861,7 +2928,7 @@ async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
 
-  const resources = await loadAllResources(filters, output, opts.dbManager);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report);
   output.log(`Loaded ${resources.length} resources`);
 
   const idCounts = new Map<string, number>();
@@ -2960,6 +3027,7 @@ async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
           } else {
             await mkdir(path.dirname(fullPath), { recursive: true });
             await writeFile(fullPath, file.content);
+            report.written++;
             output.log(`  wrote ${file.relativePath}`);
           }
         }
@@ -2985,7 +3053,13 @@ async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
       }
 
       if (shouldPrune) {
-        await applySyncPrune(baseDir, prunePlan.pruneSkillDirs, opts.dryRun === true, output);
+        await applySyncPrune(
+          baseDir,
+          prunePlan.pruneSkillDirs,
+          opts.dryRun === true,
+          output,
+          report
+        );
       } else if (prunePlan.pruneSkillDirs.length > 0) {
         output.log(`  prune skipped (${prunePlan.pruneSkillDirs.length} stale managed skill(s))`);
       }
@@ -3004,6 +3078,12 @@ async function syncCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
           configHash,
           opts.dbManager
         );
+        if (!manifestSaved) {
+          report.failures.push({
+            id: `${clientId}:${scope}`,
+            reason: `manifest not saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`,
+          });
+        }
         output.log(
           manifestSaved
             ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
@@ -3026,7 +3106,11 @@ function formatPatchForDisplay(rawPatch: string, indent = '    '): string {
 
 // ─── Section 9: Diff Command ────────────────────────────────────────────────
 
-async function diffCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): Promise<void> {
+async function diffCommand(
+  opts: SkillsSyncOptions,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
   const config = await loadSyncConfig();
   const cliScope = opts.scope;
   const clientIds =
@@ -3035,7 +3119,7 @@ async function diffCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
   const filters: LoadFilters = {};
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
-  const resources = await loadAllResources(filters, output, opts.dbManager);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report);
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
 
   // When --output is provided, collect patches and write .patch files
@@ -3286,7 +3370,11 @@ async function diffCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
  * system message, user message, guidance). Structured metadata (arguments,
  * chains, gates) is never modified.
  */
-async function pullCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): Promise<void> {
+async function pullCommand(
+  opts: SkillsSyncOptions,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
   const config = await loadSyncConfig();
   const cliScope = opts.scope;
   const clientIds =
@@ -3295,7 +3383,7 @@ async function pullCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
   const filters: LoadFilters = {};
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
-  const resources = await loadAllResources(filters, output, opts.dbManager);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report);
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
 
   for (const clientId of clientIds) {
@@ -3515,7 +3603,11 @@ async function pullCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): P
  * - gates/{id}/ → copied to canonical gates, added to gateConfiguration.include
  * - resources/{stepId}/ → copied as sub-prompts, added to chainSteps
  */
-async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): Promise<void> {
+async function cloneCommand(
+  opts: SkillsSyncOptions,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
   const filePath = opts.file;
   if (!filePath) {
     throw usageError('clone requires --file <path> to a SKILL.md');
@@ -3873,7 +3965,6 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
       preview: { type: 'boolean' },
       force: { type: 'boolean' },
       json: { type: 'boolean' },
-      verbose: { type: 'boolean' },
     },
     allowPositionals: true,
     strict: true,
@@ -3893,7 +3984,6 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
     preview: values.preview ?? false,
     force: values.force ?? false,
     json: values.json ?? false,
-    verbose: values.verbose ?? false,
   };
 }
 
@@ -3924,46 +4014,61 @@ Options:
   --file <path>               Source SKILL.md file (clone command)
   --category <name>           Target category (clone command, default: general)
   --force                     Overwrite existing resource (clone command)
-  --json                      Emit machine-readable JSON output summary
-  --verbose                   Include infrastructure logs (DB/indexing details)
+  --json                      Emit a machine-readable JSON run summary on stdout
 `);
 }
 
 export async function runSkillsSyncCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput = DEFAULT_OUTPUT
-): Promise<void> {
+): Promise<SkillsSyncRunReport> {
   validateSkillsSyncOptions(opts);
+
+  const report = emptyRunReport(opts.command, opts.dryRun ?? false);
+
+  // In JSON mode stdout carries the report and nothing else, so the human
+  // progress log is suppressed. warn/error keep their own channel (stderr),
+  // which leaves stdout parseable even on a partial failure.
+  const commandOutput: SkillsSyncOutput = opts.json
+    ? { log: () => undefined, warn: output.warn, error: output.error }
+    : output;
 
   switch (opts.command) {
     case 'export':
-      await exportCommand(opts, output);
+      await exportCommand(opts, commandOutput, report);
       break;
     case 'sync':
-      await syncCommand({ ...opts, prune: opts.prune ?? true }, output);
+      await syncCommand({ ...opts, prune: opts.prune ?? true }, commandOutput, report);
       break;
     case 'diff':
-      await diffCommand(opts, output);
+      await diffCommand(opts, commandOutput, report);
       break;
     case 'patch':
       // Backward compat: 'patch' is now 'diff --output'
       await diffCommand(
         { ...opts, output: opts.output ?? path.join(getServerRoot(), 'runtime-state', 'patches') },
-        output
+        commandOutput,
+        report
       );
       break;
     case 'pull':
-      await pullCommand(opts, output);
+      await pullCommand(opts, commandOutput, report);
       break;
     case 'clone':
-      await cloneCommand(opts, output);
+      await cloneCommand(opts, commandOutput, report);
       break;
     case 'help':
-      printSkillsSyncHelp();
+      if (!opts.json) printSkillsSyncHelp();
       break;
     default:
       throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
   }
+
+  if (opts.json) {
+    output.log(JSON.stringify(report, null, 2));
+  }
+
+  return report;
 }
 
 export async function runSkillsSyncFromArgv(argv: string[]): Promise<void> {

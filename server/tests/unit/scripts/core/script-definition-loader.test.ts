@@ -9,6 +9,10 @@
  * - Stats tracking
  */
 
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   ScriptToolDefinitionLoader,
   createScriptToolDefinitionLoader,
@@ -87,6 +91,81 @@ describe('ScriptToolDefinitionLoader', () => {
     it('should return empty array for directory without tools', () => {
       const result = loader.loadAllToolsForPrompt('/tmp', 'test_prompt');
       expect(result).toEqual([]);
+    });
+  });
+
+  // ── F6: a tool that fails to load must be reportable, not merely absent ──
+  //
+  // `loadTool` returns undefined and `loadToolsForPrompt` skips it silently, so
+  // downstream (ResourceIndexer) could not tell a validation failure from a tool
+  // that was never on disk. Throwing was rejected: one bad tool would fail the
+  // whole sync. This boundary is how the drop-out carries a cause instead.
+  describe('loadAllToolsForPromptDetailed', () => {
+    let promptDir: string;
+
+    /** Write tools/{id}/tool.yaml verbatim, so a test can write invalid YAML. */
+    function writeTool(id: string, yamlBody: string): void {
+      const dir = join(promptDir, 'tools', id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'tool.yaml'), yamlBody);
+      writeFileSync(join(dir, 'script.py'), 'print("ok")');
+    }
+
+    beforeEach(() => {
+      promptDir = mkdtempSync(join(tmpdir(), 'tool-report-'));
+      loader = createScriptToolDefinitionLoader({ debug: false, enableCache: true });
+    });
+
+    afterEach(() => {
+      rmSync(promptDir, { recursive: true, force: true });
+    });
+
+    it('separates a tool that failed validation from the tools that loaded', () => {
+      // Ids deliberately unrelated to the prompt id, so no assertion can pass by
+      // matching a substring of the fixture's own name.
+      writeTool(
+        'usable-widget',
+        'id: usable-widget\nname: Usable Widget\nscript: script.py\nruntime: python\n'
+      );
+      writeTool('lacks-script', 'id: lacks-script\nname: Lacks Script\nruntime: python\n');
+
+      const report = loader.loadAllToolsForPromptDetailed(promptDir, 'owner_prompt');
+
+      expect(report.tools.map((t) => t.id)).toEqual(['usable-widget']);
+      expect(report.failures).toHaveLength(1);
+      expect(report.failures[0]?.toolId).toBe('lacks-script');
+      expect(report.failures[0]?.reason).toContain('validation failed');
+    });
+
+    it('does not throw when a tool fails — one bad tool must not fail the sync', () => {
+      writeTool('lacks-script', 'id: lacks-script\nname: Lacks Script\nruntime: python\n');
+
+      expect(() => loader.loadAllToolsForPromptDetailed(promptDir, 'owner_prompt')).not.toThrow();
+    });
+
+    it('reports no failures when every discovered tool loads', () => {
+      writeTool(
+        'usable-widget',
+        'id: usable-widget\nname: Usable Widget\nscript: script.py\nruntime: python\n'
+      );
+
+      const report = loader.loadAllToolsForPromptDetailed(promptDir, 'owner_prompt');
+
+      expect(report.failures).toEqual([]);
+      expect(report.tools).toHaveLength(1);
+    });
+
+    it("keeps loadAllToolsForPrompt returning exactly the report's tools", () => {
+      writeTool(
+        'usable-widget',
+        'id: usable-widget\nname: Usable Widget\nscript: script.py\nruntime: python\n'
+      );
+      writeTool('lacks-script', 'id: lacks-script\nname: Lacks Script\nruntime: python\n');
+
+      const plain = loader.loadAllToolsForPrompt(promptDir, 'owner_prompt');
+      const detailed = loader.loadAllToolsForPromptDetailed(promptDir, 'owner_prompt');
+
+      expect(plain.map((t) => t.id)).toEqual(detailed.tools.map((t) => t.id));
     });
   });
 

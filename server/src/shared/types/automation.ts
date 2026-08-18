@@ -169,6 +169,33 @@ export interface LoadedScriptTool extends ScriptToolDefinition {
 }
 
 /**
+ * A tool that was discovered on disk but could not be loaded.
+ *
+ * Loading is deliberately non-throwing: one unparseable tool must not fail a
+ * whole sync. Reporting the drop-out is what keeps a validation failure
+ * distinguishable from a tool that was simply deleted.
+ */
+export interface ScriptToolLoadFailure {
+  /** Tool ID as it appears on disk (directory name under tools/) */
+  toolId: string;
+  /** Why the tool could not be loaded */
+  reason: string;
+}
+
+/**
+ * Outcome of loading every tool for one prompt.
+ *
+ * Callers that only need the usable tools read `tools`; callers that must
+ * account for every discovered tool read `failures` as well.
+ */
+export interface ScriptToolLoadReport {
+  /** Tools that loaded and validated successfully */
+  tools: LoadedScriptTool[];
+  /** Tools discovered on disk that did not load */
+  failures: ScriptToolLoadFailure[];
+}
+
+/**
  * Request to execute a script tool.
  *
  * Passed to the ScriptExecutor service for execution.

@@ -18,18 +18,37 @@ describe('skills-sync CLI option handling', () => {
     error: jest.fn(),
   };
 
-  it('parses json/verbose flags for CLI output modes', () => {
-    const opts = parseSkillsSyncArgs([
-      'node',
-      'scripts/skills-sync.ts',
-      'diff',
-      '--json',
-      '--verbose',
-    ]);
+  it('parses --json for machine-readable output', () => {
+    const opts = parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff', '--json']);
 
     expect(opts.command).toBe('diff');
     expect(opts.json).toBe(true);
-    expect(opts.verbose).toBe(true);
+  });
+
+  it('rejects --verbose, which never had behavior behind it', () => {
+    // Deleted rather than kept as a warned no-op: a knob whose retirement
+    // nobody would notice is a permanent parallel path (cleanup-standards.md).
+    expect(() =>
+      parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff', '--verbose'])
+    ).toThrow();
+  });
+
+  it('emits nothing but a parseable JSON report on stdout under --json', async () => {
+    const logged: string[] = [];
+    const jsonOutput = {
+      log: (...args: unknown[]) => logged.push(args.join(' ')),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+
+    const report = await runSkillsSyncCommand({ command: 'help', json: true }, jsonOutput);
+
+    // Exactly one stdout write, and it round-trips as JSON — the help banner
+    // that `help` normally prints would corrupt it.
+    expect(logged).toHaveLength(1);
+    const parsed = JSON.parse(logged[0] as string) as Record<string, unknown>;
+    expect(parsed).toMatchObject({ command: 'help', failures: [] });
+    expect(report.command).toBe('help');
   });
 
   it('rejects clone without --file as usage error', async () => {

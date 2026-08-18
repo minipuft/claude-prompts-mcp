@@ -15,7 +15,11 @@ import * as path from 'node:path';
 
 import { jest, describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
-import { SqliteEngine, ResourceIndexer } from '../../../src/infra/database/index.js';
+import {
+  SqliteEngine,
+  ResourceIndexer,
+  reportResourceSyncFailures,
+} from '../../../src/infra/database/index.js';
 
 // Mock logger
 const mockLogger = {
@@ -350,6 +354,164 @@ describe('ResourceIndexer', () => {
       const statsAfter = indexer.getStats();
       expect(statsAfter.prompt).toBe(0);
       expect(statsAfter.gate).toBe(0);
+    });
+  });
+
+  // ── F6: a tool that fails to load must not read as a tool that was deleted ──
+  //
+  // The defect this describes: `loadTool` returns undefined rather than throwing,
+  // `loadToolsForPrompt` skipped it silently, and `syncTools` then DELETED its
+  // index row counting `removed++`. Validation failure and disk deletion were the
+  // same observable event, and `errors` stayed 0 for both.
+  describe('tool sync failure reporting', () => {
+    /**
+     * A loader stub standing in for ScriptToolDefinitionLoader.
+     *
+     * Named `broken-parser` (not a substring of any prompt id or name used here)
+     * so an assertion cannot pass by matching the fixture's own name.
+     */
+    function loaderReporting(
+      tools: Array<{ id: string; name: string }>,
+      failures: Array<{ toolId: string; reason: string }>
+    ) {
+      return (_dir: string, promptId: string) => ({
+        tools: tools.map((t) => ({
+          ...t,
+          runtime: 'python' as const,
+          inputSchema: {},
+          // Mirrors the real loader, which always resolves an execution config.
+          execution: { trigger: 'schema_match' as const, confirm: true, strict: false },
+          description: '',
+          scriptPath: 'script.py',
+          toolDir: path.join(RESOURCES_DIR, 'prompts', promptId, 'tools', t.id),
+          absoluteScriptPath: 'script.py',
+          promptId,
+          descriptionContent: '',
+        })),
+        failures,
+      });
+    }
+
+    async function indexOnePromptWith(loader: ReturnType<typeof loaderReporting>) {
+      await createResource('prompts', 'host_prompt', {
+        id: 'host_prompt',
+        name: 'Host Prompt',
+        category: 'general',
+        description: 'Owns the tools under test',
+      });
+      const withTools = new ResourceIndexer(dbManager, mockLogger as any, {
+        resourcesDir: RESOURCES_DIR,
+        toolLoader: loader as any,
+      });
+      return withTools;
+    }
+
+    it('reports a failing tool by id and reason instead of counting it removed', async () => {
+      // Index the tool successfully first, so there is a row that the removal
+      // sweep could delete on the second pass.
+      const warm = await indexOnePromptWith(
+        loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
+      );
+      const first = await warm.syncAll();
+      expect(first.errors).toBe(0);
+      expect(first.failures).toEqual([]);
+
+      // Same tool, now failing validation — still present on disk.
+      const cold = await indexOnePromptWith(
+        loaderReporting(
+          [],
+          [{ toolId: 'broken-parser', reason: 'validation failed: missing script' }]
+        )
+      );
+      const second = await cold.syncAll();
+
+      expect(second.removed).toBe(0);
+      expect(second.errors).toBe(1);
+      expect(second.failures).toEqual([
+        {
+          type: 'tool',
+          id: 'host_prompt/broken-parser',
+          reason: 'validation failed: missing script',
+        },
+      ]);
+    });
+
+    it('keeps the failing tool indexed rather than dropping it from the index', async () => {
+      const warm = await indexOnePromptWith(
+        loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
+      );
+      await warm.syncAll();
+
+      const cold = await indexOnePromptWith(
+        loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed' }])
+      );
+      await cold.syncAll();
+
+      const rows = dbManager.query<{ id: string }>(
+        "SELECT id FROM resource_index WHERE type = 'tool'"
+      );
+      expect(rows.map((r) => r.id)).toEqual(['host_prompt/broken-parser']);
+    });
+
+    it('still counts a genuinely deleted tool as removed', async () => {
+      // The other side of the discrimination: an EMPTY failure list means the
+      // tool is really gone, and `removed` must still fire. Without this case a
+      // fix that simply never removes anything would pass the two above.
+      const warm = await indexOnePromptWith(
+        loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
+      );
+      await warm.syncAll();
+
+      const gone = await indexOnePromptWith(loaderReporting([], []));
+      const result = await gone.syncAll();
+
+      expect(result.removed).toBe(1);
+      expect(result.errors).toBe(0);
+      expect(result.failures).toEqual([]);
+    });
+
+    it('reportResourceSyncFailures names every failure by id and reason', async () => {
+      // The two runtime call sites (module-initializer, application) discarded
+      // syncAll()'s return entirely. This is the composition they now perform.
+      const cold = await indexOnePromptWith(
+        loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed: no script' }])
+      );
+      const result = await cold.syncAll();
+
+      mockLogger.warn.mockClear();
+      reportResourceSyncFailures(result, mockLogger as any);
+
+      const warned = mockLogger.warn.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
+      expect(warned).toContain('host_prompt/broken-parser');
+      expect(warned).toContain('validation failed: no script');
+    });
+
+    it('reportResourceSyncFailures says nothing on a clean sync', async () => {
+      const clean = await indexOnePromptWith(
+        loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
+      );
+      const result = await clean.syncAll();
+
+      mockLogger.warn.mockClear();
+      reportResourceSyncFailures(result, mockLogger as any);
+
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('keeps errors and failures.length in step', async () => {
+      const cold = await indexOnePromptWith(
+        loaderReporting(
+          [],
+          [
+            { toolId: 'broken-parser', reason: 'validation failed' },
+            { toolId: 'other-tool', reason: 'tool.yaml not found' },
+          ]
+        )
+      );
+      const result = await cold.syncAll();
+
+      expect(result.errors).toBe(result.failures.length);
+      expect(result.errors).toBe(2);
     });
   });
 
