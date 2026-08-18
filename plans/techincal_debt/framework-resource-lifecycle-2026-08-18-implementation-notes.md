@@ -208,6 +208,8 @@ is validated yet** and no row in the plan table has been flipped on its account.
 | `tests/unit/resources/resource-mutation-transaction.test.ts`                | 2.2      | NEW — unit coverage for the G3 message                                                                                                                                                                                                           |
 | `mcp/tools/framework-manager/services/framework-lifecycle-processor.ts`     | 3.1-3.3  | G2 re-register on update/reload; guard removal on delete/reload; G4 dry-run text                                                                                                                                                                 |
 | `tests/integration/mcp-tools/gate-framework-versioning.integration.test.ts` | 2.1, 3.x | Tier 1's two RED tests turn green here; new coverage for the Tier 3 rows                                                                                                                                                                         |
+| `scripts/validate-registry-coherence.js` (NEW, 33k)                         | 4.1      | The R-3 gate, plus a `--self-test` mode                                                                                                                                                                                                          |
+| `package.json`                                                              | 4.2      | `validate:registry-coherence` and `validate:registry-coherence:self-test` registered at `:114-115`                                                                                                                                               |
 
 **DEV-T2-1 is closed** (measured 2026-08-18 19:42): element validation moved onto
 `ResourceVerificationService` and the arch error cleared.
@@ -259,6 +261,12 @@ Two lessons worth more than the finding:
    only on a tree build → theirs" cost one sentence, settled it, and would have been correct
    whichever way it fell.
 
+**Tier 4 is now in flight too** — the gate script exists and both npm entries are registered.
+Registration is not evidence: `validate:all` wiring, the `--self-test`, and the two required
+mutations (remove a real registration call -> must red; add an unclassified lifecycle processor ->
+must red) are all unmeasured. A 33k script that has never been shown to fail is exactly the
+"reads as coverage" shape R-3 warns about.
+
 **Still open until measured**: red-on-mutation proof per assertion, `test:ci`, `lint:ratchet` with
 a per-rule diff against a freshly measured actual, `typecheck:tests:ratchet`, Tier 4's two gate
 mutations, and the main-thread live drive.
@@ -271,3 +279,129 @@ mutations, and the main-thread live drive.
 | DEV-T1-2 | 1    | Used a throwaway probe test (`__g1probe.test.ts`) to capture the validation object the transaction discards and to sweep the built-ins. Removed after measurement — the durable version of the same evidence is M-1/M-2 here plus the RED test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | DEV-T2-1 | 2    | **My brief was wrong.** I instructed the implementer to import `FrameworkGateSchema`/`TemplateSuggestionSchema` directly from `#engine/frameworks/definitions/framework-schema.js`, without checking `.dependency-cruiser.cjs` first. `tool-layer-no-validator-value-imports` (`:213-222`, severity `error`) forbids exactly that and names the sanctioned path in its own comment: use `ResourceVerificationService` from `modules/resources/services`. Type-only does not help — the check needs `.safeParse()` at runtime. Redirected: element validation moves onto the service, the draft validator calls it. Better design regardless, since the service already owns resource-document validation and already imports every schema, so the one-copy-of-the-shape argument survives intact. The R-2 ruling is unaffected — this changed the mechanism, not the diagnosis. |
 | DEV-T2-2 | 2    | An uncommitted in-flight file blocked a peer session's pre-push. These gates read the **working tree**, not the push range's committed content, so one session's mid-edit file blocks pushes for every session in the shared worktree even when every commit involved is green. Third occurrence this week of the worktree-vs-committed-state distinction costing a cycle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+## Tier 2-4 execution (2026-08-18)
+
+### M-6 — where the element check landed, and why not where the brief said
+
+The dispatch brief told the subagent to import `FrameworkGateSchema` / `TemplateSuggestionSchema`
+directly into `framework-draft-validator.ts`. That compiles and `npm run typecheck` is clean, but
+`npm run validate:arch` rejects it: `.dependency-cruiser.cjs:213-222`,
+`tool-layer-no-validator-value-imports`, severity **error** — `src/mcp/tools/**` may not
+value-import a resource schema, and the rule's own comment names the replacement
+(`ResourceVerificationService`). A type-only import does not help, because `.safeParse()` is
+needed at runtime.
+
+Landed instead as `ResourceVerificationService.validateFrameworkDraftElements(draft)`
+(`resource-verification-service.ts`), which the draft validator calls through an injected service
+and renders with the service's existing `formatIssues`. The SSOT argument survives intact and gets
+stronger: the service imports the schema, the tool imports the service, one copy of the shape, and
+pre-write and post-write failures are now rendered by the same function.
+
+The container names differ across that boundary and the difference is load-bearing — the draft
+carries `framework_gates` / `template_suggestions`, the document carries `frameworkGates` /
+`templateSuggestions`, and the writer copies each array through verbatim. So the element shape is
+identical and only the container name differs, which is why a draft-time issue names the
+snake_case field the operator actually typed.
+
+### M-7 — the R-3 gate found its own drift mode on its first run
+
+`validate-registry-coherence.js` went **green on its first run with the entire gate router outside
+its scan**. Its switch matcher required `switch (action)`; `gate-manager/core/manager.ts` spells it
+`switch (args.action)`. The gate processor stayed classified via the filename enumeration, so it
+was never "unclassified", and it had no resolved edges, so its registration rules were evaluated
+zero times. A green run meaning nothing — the exact placebo R-3 warns about.
+
+Two fixes, both kept: the pattern accepts an optional receiver, AND a fourth set-equality
+direction was added — **a classified processor that no dispatch edge reaches is a finding**. The
+pattern fix alone would have closed this instance and left the class open. `--self-test` case 3b
+encodes the incident.
+
+### M-8 — knip-ratchet, format and plan-row-tracking failures are NOT from this work
+
+`npm run validate:all` reports 3 of 43 steps failing. Attribution, measured:
+
+| Step                         | Cause                                                                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validate:knip-ratchet`      | exports +1, types +1, unlisted +13. **Byte-identical with this tier's new script moved out of `scripts/`** — the deltas are another session's untracked test files plus a baseline they have not refreshed |
+| `validate:format`            | two `plans/**` implementation-notes files modified by another session                                                                                                                                      |
+| `validate:plan-row-tracking` | a ✓ row naming `server/scripts/validate-phase-header-drift.js`, another session's staged-but-uncommitted file                                                                                              |
+
+Three `tests/integration` failures (`sqlite-backend.test.ts` ×2, `chain-run-storage.integration.test.ts`)
+come from the uncommitted `SCHEMA_VERSION = 23 → 24` bump in `sqlite-engine.ts`, which belongs to
+the offline phase-guard session and is on this work's do-not-touch list.
+
+### M-9 — per-rule ESLint diff, freshly measured
+
+The ratchet baseline is a CEILING (3200 errors / 1020 warnings) against an actual of 3169 / 1007,
+so a green ratchet can absorb a new violation. Measured per rule over exactly the four changed
+`src/` files, HEAD content vs working tree:
+
+```
+BEFORE  {sonarjs/cognitive-complexity: 1 warn, strict-boolean-expressions: 6 err, no-unnecessary-condition: 3 err}
+AFTER   {no-unnecessary-condition: 2 err}
+```
+
+No rule increased and no new rule appeared; the new script contributes zero findings.
+`validate()`'s cognitive complexity went 22 → 15-or-under by extracting `measureCoverage` /
+`collectErrors` / `collectWarnings` / `computeScore` — it was already over the hard limit at HEAD
+and the element check would have pushed it to 23.
+
+## Deviations (continued)
+
+| id       | Tier | What changed and why                                                                                                                                                                                                                                                       |
+| -------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEV-T2-1 | 2    | Element validation landed on `ResourceVerificationService`, not as a direct schema import in the draft validator — `validate:arch` rule `tool-layer-no-validator-value-imports` forbids the latter at severity error. Notes M-6. SSOT reasoning unchanged and strengthened |
+| DEV-T2-2 | 2    | Decomposed `FrameworkDraftValidator.validate` into four private pure helpers. Not asked for, but the element branch pushed an already-over-limit function from cognitive 22 to 23, and this repo blocks at 15. Net −8 lint findings across the changed files               |
+| DEV-T2-3 | 2    | `createErrorResponse` header now reads `(N% field coverage)` rather than `(N% complete)`. The score is documented as field coverage, and "80% complete" beside a hard failure is the message-honesty class this plan exists to fix                                         |
+| DEV-T2-4 | 2    | `ResourceMutationTransaction` gained a defaulted constructor parameter for `ResourceVerificationService` (stateless, pure formatting). Every existing `new ResourceMutationTransaction()` call site is unchanged                                                           |
+| DEV-T3-1 | 3    | `handleUpdate` / `handleReload` share one private `reregister(id)` — clear the loader cache for that id, then `registerFramework(id)`. `clearCache(id)` is per-id, narrower than `createFrameworkAtomic`'s clear-all, which is left untouched                              |
+| DEV-T3-2 | 3    | `handleDelete`'s success message now branches on `unregistered`, mirroring `b7102dd9`. Not in the brief, but the guard removal makes "registry updated" false for exactly the orphan case task 3.2 makes deletable                                                         |
+| DEV-T4-1 | 4    | Added a FOURTH set-equality direction beyond the three R-3 named: a classified processor no dispatch edge reaches. Found by the gate failing this way on its own first run (notes M-7); the pattern fix alone would have closed the instance and left the class open       |
+| DEV-T4-2 | 4    | Added `--list`, which prints the resolved dispatch universe. A gate whose scan silently narrows reads as coverage; M-7 is exactly that, and it was diagnosed only by making the universe inspectable                                                                       |
+| DEV-T4-3 | 4    | `HANDLER_LOCAL_MUTATIONS` carries one entry — prompt `reload` is handled on the router itself. Declared with `closedBy` and audited by `lib/exception-hygiene.js` rather than silently skipped, so a 4th resource type cannot be added entirely inside a router            |
+| DEV-T4-4 | 4    | Plan rows 2.1-4.2 left `☐`. `validate:plan-row-tracking` fails a ✓ naming an untracked file, and `scripts/validate-registry-coherence.js` is untracked until the main thread commits. Rows flip in the commit that tracks the file, not before                             |
+
+## Live drive — main thread, 2026-08-18 (never delegated)
+
+Server spawned from a fresh `dist/` over Streamable HTTP, one process, no restart. Full lifecycle.
+
+| Step                                               | Result                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| create with `framework_gates: [{id, description}]` | **Rejected pre-write**: `framework_gates[0].name: Invalid input: expected string, received undefined`, with the worked example attached. **G1 + G3 closed** — the exact sentence the transaction used to discard is now the error, and it arrives before any file is written |
+| create well-formed                                 | `✅ Framework created (80% - full)`, four files, no rollback. **G1 closed**                                                                                                                                                                                                  |
+| inspect, same process                              | Resolves                                                                                                                                                                                                                                                                     |
+| update `name`                                      | `✅ updated`, `📜 Version 4 saved`, diff rendered                                                                                                                                                                                                                            |
+| inspect after update                               | `Framework: RENAMED-BY-LIVE-DRIVE`                                                                                                                                                                                                                                           |
+| `system_control framework list`                    | `**RENAMED-BY-LIVE-DRIVE**` — this reads the in-memory framework map. **G2 closed, proven two independent ways**                                                                                                                                                             |
+| history                                            | 2 versions listed                                                                                                                                                                                                                                                            |
+| reload                                             | Succeeds                                                                                                                                                                                                                                                                     |
+| delete `dry_run`                                   | `📜 Its version_history rows are NOT removed — they survive and become unreachable`. **G4 closed**                                                                                                                                                                           |
+| delete                                             | Directory removed, `🔄 Framework unregistered from the registry`                                                                                                                                                                                                             |
+| inspect after delete                               | `Framework not found` — round trip leaves no orphan                                                                                                                                                                                                                          |
+
+### Two false negatives in my own probe, both mine
+
+1. **First drive asserted on `description`, which `inspect` synthesizes.** It read
+   `LIVEDRIVE_PROBE framework for systematic approach` before _and_ after the update — a generated
+   default, not the stored field. The G2 verdict printed `NO` while the fix was working. Re-probed
+   on `name`, which is rendered verbatim, and cross-checked against the in-memory map. **A probe
+   asserting on a synthesized field cannot observe the thing under test**, and it fails in the
+   direction that looks like a real defect.
+2. **First drive sent `dry_run: true` without `confirm: true`** and was intercepted by the
+   confirmation guard, so it never reached the G4 text at all. Reported as an `isError` that
+   looked like a G4 failure.
+
+Both were caught only because the _shape_ of the failure did not match the fix — G2's re-register
+demonstrably ran, and a dry run has no business being destructive. Had either been believed, I
+would have reported a working fix as broken.
+
+### Finding, not fixed (out of scope)
+
+`dry_run: true` requires `confirm: true` to reach the dry-run path. A dry run that demands
+destructive confirmation inverts the purpose of the flag, and the text it then prints —
+"Re-send with `confirm: true` and without `dry_run`" — reads as though confirm were not already
+supplied. Not in this plan's scope; recorded for the settability/consolidation work.
+
+| DEV-T5-1 | 5 | **G5 found during the live drive and fixed in scope.** Framework update was completely broken in every transport (`DatabasePort not provided`), which BLOCKED the G2 proof this plan requires. Fixing it was the only route to a done criterion already in scope, so it landed as `63ee8ed4` rather than being deferred. It also explains the plan's original mis-filing of G2: nothing could reach the registry defect because update failed first. |
+| DEV-T5-2 | 5 | Live-drive probe produced two false negatives (synthesized `description` field; `dry_run` without `confirm`). Both looked like fix failures. Recorded because the lesson generalises: a probe must assert on a value the surface renders verbatim, not one it may synthesize. |
