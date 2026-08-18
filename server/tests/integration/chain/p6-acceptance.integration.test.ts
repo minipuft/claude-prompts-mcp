@@ -51,8 +51,8 @@
  *       merely absent from a blueprint field); node 2's `inlineGateIds` shows up in the REAL gate
  *       accumulator (`pendingGateReview.gateIds`, populated by `GateEnhancementService` and read by
  *       `SessionManagementStage`); node 3's `subagentModel`/`agentType` produce a REAL delegation
- *       preview (`DelegationRenderer` output), previewed on node 2's render because node 3 is next
- *       and delegated — the same "preview on the step before" shape P5's acceptance suite
+ *       advisory on node 2's render (node 3 is next and delegated) and a REAL EXECUTION BRIEF on
+ *       node 3's own render (R-1) — the same advisory-then-brief shape P5's acceptance suite
  *       demonstrated for a YAML chain, now shown for an IR-submitted one.
  *
  *   (e) YAML `subagentModel` delegates on a plain `>>chain` — Tier 6.2's dual-transport LIVE drive.
@@ -96,6 +96,8 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
+import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
+import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
@@ -409,12 +411,20 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
   /** The gate list the OPEN review is scoped to — exactly what a client's next call would see. */
   const openReviewGateIds = (): readonly string[] => onlySession().pendingGateReview?.gateIds ?? [];
 
-  /** Everything from the delegation header on — the sub-agent's whole handoff preview. */
-  const handoffSectionOf = (text: string): string => {
-    const marker = text.indexOf('HANDOFF: Execute Step');
-    expect(marker).toBeGreaterThanOrEqual(0);
-    return text.slice(marker);
+  /** The delegated step's own EXECUTION BRIEF — everything between the R-1 delimiters. */
+  const briefSectionOf = (text: string): string => {
+    const start = text.indexOf(BRIEF_START);
+    const end = text.indexOf(BRIEF_END);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return text.slice(start, end);
   };
+
+  const passVerdict = renderGateVerdict({
+    overall: 'PASS',
+    rationale: 'meets the gates',
+    per_gate: [{ index: 1, passed: true, rationale: 'satisfied' }],
+  });
 
   /**
    * Drive the IR to node 2's render. Node 1 declares no gates, so its response is captured and
@@ -452,7 +462,7 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
   });
 
   describe('acceptance (d) — gate binding, visibility and delegation reach the run AND take real effect', () => {
-    test('one render proves all three: withheld sentinel absent, inline gate in the review list, delegation previewed', async () => {
+    test('one driven run proves all three: withheld sentinel absent, inline gate in the review list, delegation advised then briefed', async () => {
       const { atNode2, chainId } = await driveToNode2();
 
       // --- visibility: node 1's withhold keeps S1 out of node 2's ACTUAL rendered text --------
@@ -461,14 +471,14 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
       expect(atNode2).toContain('Prior: **[CONTEXT WITHHELD]**');
       expect(atNode2).not.toContain(S1);
 
-      // --- delegation: node 3 (subagentModel + agentType) is next and delegated, so its handoff
-      // is PREVIEWED on node 2's render — a real `DelegationRenderer` CTA, not a blueprint flag. -
-      const handoff = handoffSectionOf(atNode2);
-      expect(handoff).toContain('HANDOFF: Execute Step 3');
-      expect(handoff).toContain(
-        'CONTEXT WITHHELD (names only, values not provided): previous_step_output'
-      );
-      expect(handoff).not.toContain(S1);
+      // --- delegation, part 1: node 3 (subagentModel + agentType) is next and delegated, so
+      // node 2's render carries the R-1 one-line ADVISORY — a real `DelegationRenderer` line,
+      // not a blueprint flag. The full handoff no longer renders in this position (S7): the
+      // authoritative handoff arrives with node 3's own brief, asserted below.
+      expect(atNode2).toContain('⚡ Note: Step 3');
+      expect(atNode2).toContain('is delegated');
+      expect(atNode2).not.toContain('HANDOFF INSTRUCTIONS');
+      expect(atNode2).not.toContain('CONTEXT WITHHELD (names only');
 
       // --- gate binding: node 2's inlineGateIds entered the REAL accumulator, not just the
       // blueprint field. `GateEnhancementService` recomputes the review list for whichever node
@@ -479,6 +489,24 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
       // accumulator recomputed on every call, observed on the call scoped to the node under test.
       await pipeline.execute({ chain_id: chainId, user_response: 'node-2-response' });
       expect(openReviewGateIds()).toContain(INLINE_GATE);
+
+      // --- delegation, part 2: clearing node 2's review advances onto node 3, whose OWN render
+      // is the authoritative handoff — a delimited EXECUTION BRIEF carrying the names-only
+      // manifest, followed by HANDOFF INSTRUCTIONS (R-1). Sliced between the delimiters so the
+      // assertions cannot be satisfied by text outside the sub-agent's prompt.
+      const atNode3 = textOf(
+        await pipeline.execute({ chain_id: chainId, gate_verdict: passVerdict })
+      );
+      const brief = briefSectionOf(atNode3);
+      expect(brief).toContain(
+        'CONTEXT WITHHELD (names only, values not provided): previous_step_output'
+      );
+      // The withheld VALUE (node 2's output) is absent from the brief, while chain history —
+      // never declared withheld — is admitted: only the declared item moved.
+      expect(brief).not.toContain('node-2-response');
+      expect(brief).toContain(S1);
+      expect(atNode3).toContain('HANDOFF: Execute Step 3');
+      expect(atNode3).toContain('HANDOFF INSTRUCTIONS');
     });
 
     test('control: an IR with no visibility, gate or delegation declarations renders none of the three', async () => {
@@ -499,7 +527,9 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
       expect(atNode2).toContain(`Prior: ${S1}`);
       expect(atNode2).not.toContain('[CONTEXT WITHHELD]');
       expect(openReviewGateIds()).toEqual([]);
-      expect(atNode2).not.toContain('HANDOFF: Execute Step');
+      expect(atNode2).not.toContain('⚡ Note');
+      expect(atNode2).not.toContain('HANDOFF');
+      expect(atNode2).not.toContain('EXECUTION BRIEF');
     });
   });
 });

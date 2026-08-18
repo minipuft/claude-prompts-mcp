@@ -4,7 +4,7 @@
  *
  * Master plan §P5 states the phase is done when (a) a step declares withheld items that a later
  * step (declaring `expose`) receives, (b) a `==>` delegated step provably does not receive the
- * withheld items and its handoff carries a names-only manifest, and (c) a gate targeted at node N
+ * withheld items and its EXECUTION BRIEF carries a names-only manifest, and (c) a gate targeted at node N
  * enters gate REVIEW only while the run stands at node N. All three are proven HERE, in a single
  * driven run, because they interact: the expose is step-scoped (so the delegated step at the end
  * of the same run must still be withheld from), and the review scope must not move when the
@@ -46,6 +46,7 @@ import * as path from 'node:path';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
@@ -488,11 +489,13 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
     per_gate: [{ index: 1, passed: true, rationale: 'satisfied' }],
   });
 
-  /** Everything from the delegation header on — the sub-agent's whole handoff. */
-  const handoffSectionOf = (text: string): string => {
-    const marker = text.indexOf('HANDOFF: Execute Step 4');
-    expect(marker).toBeGreaterThanOrEqual(0);
-    return text.slice(marker);
+  /** The delegated step's own EXECUTION BRIEF — everything between the R-1 delimiters. */
+  const briefSectionOf = (text: string): string => {
+    const start = text.indexOf(BRIEF_START);
+    const end = text.indexOf(BRIEF_END);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return text.slice(start, end);
   };
 
   test('one driven run proves (a) withhold→expose, (b) delegated non-receipt, (c) targeted-gate review scoping', async () => {
@@ -581,15 +584,24 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
 
     // --- (b) the delegated step provably receives neither withheld item -----------------------
     //
-    // The handoff is rendered on the call that lands on node 3, because the NEXT step is the
-    // delegated one. Sliced from the delegation header so the assertion cannot be satisfied by
-    // text belonging to the step the main thread is executing.
-    const handoff = handoffSectionOf(atNode3);
-    expect(handoff).toContain(
+    // R-1: the call that lands on node 3 only ADVISES that the next step is delegated — no
+    // envelope, no handoff, no manifest in that position.
+    expect(atNode3).toContain('⚡ Note: Step 4');
+    expect(atNode3).toContain('is delegated');
+    expect(atNode3).not.toContain('HANDOFF INSTRUCTIONS');
+    expect(atNode3).not.toContain(BRIEF_START);
+
+    // The authoritative handoff arrives WITH node 4's own render: a delimited EXECUTION BRIEF
+    // carrying the names-only manifest, then HANDOFF INSTRUCTIONS. Sliced between the brief
+    // delimiters so the assertions cannot be satisfied by text outside the sub-agent's prompt.
+    const brief = briefSectionOf(atNode4);
+    expect(brief).toContain(
       'CONTEXT WITHHELD (names only, values not provided): previous_step_output, chain_history'
     );
-    expect(handoff).not.toContain(S1);
-    expect(handoff).not.toContain(S2);
+    expect(brief).not.toContain(S1);
+    expect(brief).not.toContain(S2);
+    expect(atNode4).toContain('HANDOFF: Execute Step 4');
+    expect(atNode4).toContain('HANDOFF INSTRUCTIONS');
 
     // The delegated step's OWN render carries no withheld value either — which is also the proof
     // that step 3's `expose` was step-scoped: it did not survive onto step 4.

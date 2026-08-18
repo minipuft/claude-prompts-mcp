@@ -1,5 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
+import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 
@@ -273,37 +274,61 @@ describe('P5 visibility — delegation manifest', () => {
   ): ChainStepPrompt[] =>
     buildSteps(declarations, [undefined, { delegated: true, agentType: 'chain-executor' }]);
 
-  test('the handoff CTA names withheld items and carries none of their values', async () => {
+  test('the delegated step’s own brief names withheld items and carries none of their values', async () => {
+    // R-1: the manifest travels INSIDE the delegated step's own EXECUTION BRIEF, so the run is
+    // driven one step further than the old envelope test — the delegated step renders as
+    // CURRENT, and the manifest line is asserted between the brief delimiters. Step 3 is the
+    // delegated one here (not the helper's step 2) so the withheld chain_history has a value
+    // (step 1's output) that is DISTINCT from the non-withheld `previous_step_output` channel,
+    // which legitimately carries step 2's output into the brief.
     const render = await renderStep(
-      delegatedSteps([withhold('chain_history', 'unknowns_ledger')]),
-      0
+      buildSteps(
+        [withhold('chain_history', 'unknowns_ledger')],
+        [undefined, undefined, { delegated: true, agentType: 'chain-executor' }]
+      ),
+      2
     );
 
-    expect(render.callToAction).toContain('CONTEXT WITHHELD (names only, values not provided)');
-    expect(render.callToAction).toContain('chain_history');
-    expect(render.callToAction).toContain('unknowns_ledger');
+    const briefStart = render.content.indexOf(BRIEF_START);
+    const briefEnd = render.content.indexOf(BRIEF_END);
+    expect(briefStart).toBeGreaterThanOrEqual(0);
+    expect(briefEnd).toBeGreaterThan(briefStart);
+    const brief = render.content.slice(briefStart, briefEnd);
+
+    expect(brief).toContain('CONTEXT WITHHELD (names only, values not provided)');
+    expect(brief).toContain('chain_history');
+    expect(brief).toContain('unknowns_ledger');
+    expect(render.content).not.toContain(STEP1_OUTPUT);
+    expect(render.content).not.toContain('LEDGER_SECRET_STATEMENT');
     expect(render.callToAction).not.toContain(STEP1_OUTPUT);
     expect(render.callToAction).not.toContain('LEDGER_SECRET_STATEMENT');
   });
 
-  test('control: an undeclared chain’s handoff CTA gains no envelope at all', async () => {
+  test('control: an undeclared chain’s next-step response carries the advisory and no envelope', async () => {
     const render = await renderStep(delegatedSteps([]), 0);
 
-    expect(render.callToAction).toContain('HANDOFF: Execute Step 2');
+    // R-1: the pre-delegation position carries ONLY the one-line advisory — the authoritative
+    // handoff (brief + instructions) arrives with the delegated step's own render.
+    expect(render.callToAction).toContain('⚡ Note: Step 2');
+    expect(render.callToAction).toContain('is delegated');
+    expect(render.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
     expect(render.callToAction).not.toContain('EXECUTION CONTEXT');
     expect(render.callToAction).not.toContain('CONTEXT WITHHELD');
+    expect(render.content).not.toContain(BRIEF_START);
   });
 
   test('the manifest describes the DELEGATED step, not the step doing the handing off', async () => {
-    // Step 2 (the delegated one) exposes what step 1 withheld. The CTA rendered during step 1
-    // must report nothing withheld — a manifest computed for the rendering step would report
-    // `chain_history` here.
-    const render = await renderStep(
-      delegatedSteps([withhold('chain_history'), expose('chain_history')]),
-      0
-    );
+    // Step 2 (the delegated one) exposes what step 1 withheld. The manifest is computed at the
+    // delegated step's OWN render (R-1), so its expose cancels the entry — a manifest computed
+    // for an earlier step's view would still report `chain_history` here. The pre-delegation
+    // advisory position carries no manifest at all.
+    const steps = delegatedSteps([withhold('chain_history'), expose('chain_history')]);
 
-    expect(render.callToAction).not.toContain('CONTEXT WITHHELD');
+    const advisory = await renderStep(steps, 0);
+    expect(advisory.callToAction).not.toContain('CONTEXT WITHHELD');
+
+    const render = await renderStep(steps, 1);
+    expect(render.content).not.toContain('CONTEXT WITHHELD');
   });
 });
 
