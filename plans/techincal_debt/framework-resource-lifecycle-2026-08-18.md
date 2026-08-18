@@ -1,0 +1,124 @@
+---
+title: "Framework resource lifecycle — create must succeed, and be usable by the process that created it"
+date: 2026-08-18
+status: active
+tags:
+  - frameworks
+  - mcp-tools
+  - resources
+---
+
+# Framework Resource Lifecycle
+
+**Area**: `server/src/mcp/tools/framework-manager/**`, `server/src/modules/resources/services/resource-mutation-transaction.ts` (read), the verification service behind `validateFile`, `server/tests/integration/mcp-tools/gate-framework-versioning.integration.test.ts`
+**Work type**: bug_fix
+**Risk**: medium — two root causes in one pass, on a path that currently cannot be driven end to end
+**Origin**: measured 2026-08-18 while driving the F17 gate fix. Sibling session confirms `framework-manager/**` is uncontended.
+
+## The two defects
+
+| id  | Severity   | Finding                                                                                                                                                                                                                                                                                               | Evidence                                                                                                                                                                                                                                                                                  |
+| --- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1  | **High**   | `framework create` fails at the writer and rolls back. The draft validator PASSES; a second, post-write `verificationService.validateFile('frameworks', id, path)` inside `ResourceMutationTransaction` rejects the file the writer just produced. So the writer emits YAML its own verifier refuses. | Driven live 3× 2026-08-18. After satisfying `phases` and `framework_gates`, create returned "Framework write failed and was rolled back: Mutation produced invalid resource state; restored previous files." `framework-file-writer.ts:369-380`, `resource-mutation-transaction.ts:52-62` |
+| G2  | **High**   | A created framework would be invisible to the process that created it — the same defect fixed for gates in `b7102dd9`. Its production `onRefresh` is a comment and a `logger.debug`; nothing reloads the framework registry.                                                                          | `index.ts:597-600`. **Reading, not measurement** — G1 blocks the drive that would confirm it                                                                                                                                                                                              |
+| G3  | **Medium** | The rollback error names nothing actionable. It reports that state was invalid without saying which field, which expectation, or which path — so the failure is unactionable from the tool surface, which is how G1 survived.                                                                         | `resource-mutation-transaction.ts:61` returns a fixed string; the `validation` object it carries is not surfaced                                                                                                                                                                          |
+
+**G2 depends on G1 for its proof, not for its fix.** The fix is known (mirror the gate pattern). What G1 blocks is _driving_ it, and this initiative has repeatedly found changes that typecheck at every layer and never run — so G2 ships only once a live drive can reach it.
+
+## Rulings (operator, 2026-08-18)
+
+| id  | Question                                                       | Ruling                                                                                                                                                                                                                                                                                                                              |
+| --- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-1 | Registry coherence design (was OQ-3 on the F17 plan)           | **Per-handler explicit reload.** Mirror the gate fix: each lifecycle handler reloads the id it just wrote. Rejected: fixing `fullServerRefresh` to reload all registries (runs on every prompt edit too), and read-through-on-miss (puts I/O behind a lookup). Accepted weakness: a 4th resource type must remember — R-3 covers it |
+| R-2 | Which validation layer is the G1 defect                        | **Diagnose first, then decide.** Do not pre-commit to blaming the writer, the verifier, or the draft contract. The diagnosis establishes what `validateFile` rejects and why; the ruling is then recorded here with evidence before the fix is written                                                                              |
+| R-3 | Guard against the "writes but never registers" class recurring | **Yes — a validation script**, `validate:registry-coherence`, in `validate:all`. Drift analysis and required design in the section below                                                                                                                                                                                            |
+| R-4 | Execution shape                                                | **One subagent does diagnosis, implementation and validation end to end**; the main thread judges the result and owns the live drive, the R-2 ruling, and the scope check                                                                                                                                                           |
+| R-5 | What reviewers enforce                                         | Repo standards + live-drive proof · red-on-mutation-removal for every assertion · message-honesty audit. The honesty audit runs **after** this plan records what was built, so it audits strings against shipped behavior rather than against intentions                                                                            |
+| R-6 | Reviewer agent scope                                           | A **global** `implementation-verifier` carrying only the transferable charter (verify claims against evidence; a green suite is not proof a path runs). Project-specific standards are passed in the invocation brief, never baked into the agent, or it goes stale for every other project                                         |
+
+## R-3 — the gate must not drift silently
+
+A shape-checking script has four drift modes. Three are preventable with patterns this repo already runs; the design is not optional detail, it is what separates this gate from a placebo.
+
+| Drift mode                                                | Consequence                                                                                  | Required countermeasure                                                                                                                                                                                                                                         |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Handler renamed away from `handleCreate`                  | Silent pass                                                                                  | Do not key on method names alone. Name-keyed checks in this repo were wrong 3/3 (`feedback_homonym_false_consumer`); resolve the handler through its registration/dispatch edge                                                                                 |
+| Registration moved into a helper                          | False positive on correct code → an exception gets added → the exception outlives its reason | Every exception carries `closedBy`, plus a **satisfied-exception check** that fails when an entry's condition no longer holds — the pattern `verify-mcp-surface.mjs` already implements and both SQLite gates are documented as lacking                         |
+| **A 4th resource type in a file the glob does not match** | **Silent pass — precisely the case the gate exists for**                                     | **Set-equality, not spot-checks.** Enumerate the lifecycle processors the gate knows and FAIL on any it has no rule for. `validate:table-contracts` already does exactly this against the embedded DDL. Converts a silent miss into a loud "classify this file" |
+| Registration happens through a path the gate cannot see   | False positive, or a real miss                                                               | Not preventable by static shape. Backstop with the behavioral test in the testing strategy below                                                                                                                                                                |
+
+`--self-test` is required, not optional: eight scripts here carry one, and a gate that has quietly stopped detecting anything is worse than no gate because it reads as coverage.
+
+## Plan Table
+
+### Tier 1 — Diagnose G1 to a named cause (no fix yet)
+
+| #   | St                                                                            | File                                            | Change                                                                                                                                                               | Depends | Verify                                                                 |
+| --- | ----------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| 1.1 | ☐ (as of 2026-08-18 · flips when the rejecting check is named with its input) | —                                               | Establish what `validateFile('frameworks', …)` actually checks, and what the writer emitted that failed it. Capture the `validation` object the transaction discards | —       | The failing field/expectation quoted from a real run, not inferred     |
+| 1.2 | ☐ (as of 2026-08-18 · flips when R-2 is recorded above with evidence)         | this plan                                       | Rule R-2: writer wrong, verifier wrong, or draft contract wrong. Record in the Rulings table with the 1.1 evidence                                                   | 1.1     | Ruling present, naming which layer and why the other two were rejected |
+| 1.3 | ☐ (as of 2026-08-18 · flips when a red test exists)                           | `gate-framework-versioning.integration.test.ts` | A failing test reproducing G1 through the real write path, before any fix                                                                                            | 1.2     | Red against HEAD, output pasted into the notes                         |
+
+### Tier 2 — Fix G1 + G3
+
+| #   | St                                                         | File                               | Change                                                                                                          | Depends | Verify                                                                  |
+| --- | ---------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------- |
+| 2.1 | ☐ (as of 2026-08-18 · flips when 1.3 goes green)           | per the R-2 ruling                 | Apply the minimal fix the ruling names                                                                          | 1.2     | Task 1.3 green; no other suite regresses                                |
+| 2.2 | ☐ (as of 2026-08-18 · flips when the error quotes a field) | `resource-mutation-transaction.ts` | Surface the `validation` detail the rollback currently discards, so the failure names the field and expectation | 1.1     | A forced invalid write reports what was invalid, not that something was |
+
+### Tier 3 — Fix G2 (blocked on Tier 2 by proof, not by code)
+
+| #   | St                                                                       | File                               | Change                                                                                                                                                           | Depends | Verify                                                  |
+| --- | ------------------------------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------- |
+| 3.1 | ☐ (as of 2026-08-18 · flips when create→inspect succeeds in one process) | `framework-lifecycle-processor.ts` | Mirror `b7102dd9`: after a successful write call `frameworkManager.reload(id)` and branch the response on the result. Do NOT claim a refresh that did not happen | 2.1     | Live drive: create → inspect in one process, no restart |
+| 3.2 | ☐ (as of 2026-08-18 · flips when a drifted framework is deletable)       | same                               | Audit `handleDelete`/`handleReload` for the registry-membership guards removed on the gate side; apply the same reasoning if present                             | 3.1     | Delete a framework on disk but absent from the registry |
+
+### Tier 4 — R-3 gate
+
+| #   | St                                                                       | File                                           | Change                                                                                                                                                                                           | Depends | Verify                                                                                                     |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------- |
+| 4.1 | ☐ (as of 2026-08-18 · flips when the gate reds on a removed reload call) | `scripts/validate-registry-coherence.js` (NEW) | The gate, built to the four countermeasures in R-3 — set-equality over lifecycle processors, edge-resolved not name-keyed, exceptions with `closedBy` + satisfied-exception check, `--self-test` | 3.1     | Self-test passes; removing a real `reload(id)` call reds it; adding an unclassified processor file reds it |
+| 4.2 | ☐ (as of 2026-08-18 · flips when it appears in validate:all)             | `package.json`                                 | Wire into `validate:all`                                                                                                                                                                         | 4.1     | `npm run validate:all` runs it                                                                             |
+
+## Testing strategy
+
+| What to test                                                      | Type                                       | Why this type                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1 reproduction through the real write path                       | integration                                | The defect is a writer/verifier disagreement; only the real writer produces the artifact the verifier rejects                                                                                                                                                                         |
+| Framework create is usable in-process                             | integration, **production-shaped context** | The existing double wires `onRefresh` to a registry reload, making it more capable than production — which is exactly why F17 survived a green suite. The new context must NOT reload, and should keep a call counter so a future edit cannot quietly restore the over-capable double |
+| Create→use across all three resource types                        | integration, `describe.each`               | Behavioral backstop for R-3 drift mode 4, which static shape cannot catch                                                                                                                                                                                                             |
+| Rollback error names the failing field                            | unit                                       | Pure message construction over a validation result                                                                                                                                                                                                                                    |
+| `validate:registry-coherence` catches its own motivating instance | script `--self-test`                       | A gate that has never been shown to fail is not known to work                                                                                                                                                                                                                         |
+
+**Every new assertion carries a red-on-mutation-removal proof.** This repo has produced three assertions that passed while what they tested never ran.
+
+## Done criteria
+
+| Criterion       | Validation                                                        | Pass condition                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1 closed       | Live drive                                                        | `framework create` succeeds with a valid payload, no rollback                                                                                                 |
+| G3 closed       | Forced invalid write                                              | The error names the field and the expectation, not just that state was invalid                                                                                |
+| G2 closed       | Live drive, one process, no restart                               | create → inspect → update → history → reload → delete all succeed; round trip leaves no orphaned directory                                                    |
+| R-3 gate real   | `--self-test` + two mutations                                     | Self-test passes; a removed `reload(id)` reds it; an unclassified lifecycle processor reds it                                                                 |
+| No regression   | `typecheck && lint:ratchet && typecheck:tests:ratchet && test:ci` | Green, with a **per-rule** ESLint diff against a freshly measured actual — the ratchet is a ceiling and can absorb a new violation inside a net-negative diff |
+| Messages honest | Post-implementation audit (R-5)                                   | Every user-facing string in the changed handlers matches what the code does                                                                                   |
+| Scope held      | `git diff --stat`                                                 | Nothing outside `framework-manager/**` and its tests                                                                                                          |
+
+## Execution dispatch
+
+| Work                                         | Executor                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Tiers 1–4, diagnosis through validation      | **One subagent, end to end** (R-4)                                                                      |
+| R-2 ruling                                   | **Main thread** — it decides which layer is wrong, and a wrong ruling sends the fix into the wrong file |
+| Final live drive, gate verdicts, scope check | **Main thread — never delegated**                                                                       |
+| Message-honesty audit                        | Reviewer pass, **after** this plan records what shipped (R-5)                                           |
+
+**Shared worktree.** Another session is live in `engine/execution/delegation/**`, `chain-operator-executor.ts`, `response-assembler.ts`, `gate-enhancement-service.ts`, `hooks/lib/`, delegation tests, and `docs/concepts/chains-lifecycle.md`. A third, offline session holds uncommitted hunks in stages 18/19, phase-guard-evaluator, `runtime-framework-loader.ts`, `sqlite-engine.ts`, `table-contracts.ts`, `pipeline-builder.ts`, `chains/manager.ts`, `run-registry.ts`. **Do not touch any of these, and run no git HEAD operation** — no checkout, branch, stash, or rebase.
+
+Verify every commit with `git show --name-only <sha>` after the hook runs. The pre-commit formatter re-adds whole files, which defeated a hunk-split in `efe9a605` and put another session's in-flight hunks into a commit without their defining files, leaving committed `main` unable to typecheck. Inspecting the index is not sufficient — the hook runs after.
+
+## Risks carried forward
+
+- Tier 3 is code-ready but proof-blocked. If Tier 2 slips, do NOT ship Tier 3 unproven — that is the defect class this initiative keeps finding
+- Two root causes land in one pass by operator ruling; keep them in separate commits so either can be reverted alone
+- R-3's gate is a static shape check with one drift mode it cannot cover; the `describe.each` test is not optional decoration
