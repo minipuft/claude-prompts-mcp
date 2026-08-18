@@ -2,6 +2,10 @@
   "prompt_engine": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+      "cancel": {
+        "description": "<present>",
+        "type": "boolean"
+      },
       "chain_id": {
         "description": "<present>",
         "pattern": "^chain-[a-zA-Z0-9_-]+(?:#\\d+)?$",
@@ -1075,6 +1079,10 @@
       },
       "skip_version": {
         "type": "boolean"
+      },
+      "source_workspace": {
+        "minLength": 1,
+        "type": "string"
       },
       "subagent_model": {
         "enum": ["heavy", "standard", "fast"],
