@@ -265,3 +265,123 @@ Main-thread owns retargeting it to the advisory shape — it doubles as S7's fal
 second producer.
 
 ## Validation runs
+
+Post-push (2026-08-18): CI on main went RED for `82871329` — Test Suite job only. Three
+INTEGRATION files still assert the pre-R1 envelope surface (`HANDOFF: Execute Step 2`,
+`CONTEXT WITHHELD` in the next-step CTA): `tests/integration/chain/p5-acceptance`,
+`p6-acceptance`, `visibility-policy`. This is the exact ACCEPTED RESIDUAL documented in
+pre-push step 9 (integration stays CI-only) — first strike of the two that flip it.
+Retarget dispatched to a subagent (files disjoint from S9 work); acceptance claims preserved,
+anchors move to the advisory/brief surface.
+
+## S9 diagnosis + ruling — 2026-08-18 (main-thread trace, >>diagnose S9 ==> >>strategicImplement)
+
+Three linked defects, all statically confirmed:
+
+1. **Arg pollution** — `parseChainOperator` deliberately skips gate-stripping
+   (`symbolic-operator-parser.ts:439` comment), so segment text `a :: code-quality` yields
+   `args=":: code-quality"` → positional `text`. The :439 fear is real only for the deprecated
+   bare `=` form (`input = "value"` would match `\s+(=)`); `::` forms are safely strippable.
+2. **Per-step attribution declaration-dead** — `ExecutionStep.inlineGateCriteria`
+   (`operator-types.ts:174`) has ZERO writers. Downstream is fully built and dead:
+   builder `:212` → ChainStepPrompt `:234` → InlineGateProcessor per-step branch
+   (`inline-gate-processor.ts:161-170`) → `step.inlineGateIds` → stage 11 `:326`. Same class as
+   the phantom-column findings: readers without a producer.
+3. **Execution-scope gates invisible to chains** — the whole-command match DOES register
+   (`symbolic-command-builder.ts:193-194,245` → processInlineGates → `parsedCommand.inlineGateIds`)
+   but `resolveGateContext` (`gate-enhancement-service.ts:129-137`) routes chains to the branch
+   that reads only `step.inlineGateIds`; `parsedCommand.inlineGateIds` is consumed by the
+   single-prompt branch alone. Registered gate, empty review list on every step — matches both
+   probe generations' "gate never attached".
+
+**Ruling**: fix = per-segment attribution in the parser (strip `::` tokens from segment text,
+quote-aware; anonymous/canonical → `step.inlineGateCriteria`; named forms stripped from text but
+registration stays on the global `namedInlineGates` path; deprecated `=` untouched). Chain branch
+of the builder stops seeding global `inlineGateCriteria` from `::`-derived anonymous criteria —
+every token lives in some segment, so the global copy would only re-create the defect-3 orphan.
+Defect 3 then needs no code change for `::` syntax: there is no remaining "command-level" `::`
+position on a chain. Named-gate review scoping on chains keeps its pre-existing (unreviewed)
+shape — out of S9 scope, noted for the consolidation plan. Implementation dispatched to a
+subagent with mandatory falsification (strip-mutation and attribution-mutation must each name
+failing tests, with applied-mutation proof per feedback_mutation_never_reached).
+
+Live flip-condition re-probe requires rebuild + server restart, which is deferred until
+`chain-diagnose#1` completes — chain_runs are PID-scoped ephemeral and a restart would destroy
+the open run.
+
+## S9 closure receipts + two peripheral findings — 2026-08-18
+
+Implementation `e6931647` (subagent under the ruled design): extractInlineGateTokens() in
+parseChainOperator, `ChainStep.inlineGateCriteria` producer, builder suppression of the
+command-level orphan. 8 tests; falsified both ways with applied-mutation proof. CI-red fix
+`67e92eff` (3 integration suites retargeted to the brief surface) pushed in the same batch —
+push was blocked twice by shared-worktree working-tree gates (98's mid-refactor arch violation,
+then a misformatted disk copy of their notes file) and once required un-sweeping a formatter-staged
+foreign plan writeback out of my commit via amend.
+
+**Live receipts** (committed-HEAD detached-worktree build, probe-s9-chain.txt / probe-s9-min.txt):
+gated single leads its gate list with code-quality vs control without; gated CHAIN step-1 review
+list leads with Code Quality Standards vs control without → the `::` gate attaches to its chain
+step end-to-end. The all-day "Template rendering failed" in probes is NOT a regression and NOT
+the phase-guard session's tree hunks (98's hypothesis, ruled out by the committed-HEAD build
+reproducing it): it is reference_demo-specific — its inline `word_count` script hard-requires
+`text`, and chain-mode arg resolution does not apply prompt argument defaults the way the
+single-prompt path does (single control renders with text=""; chain control fails). Every probe
+generation today carried this failure, including the morning receipts, which keyed on step
+OUTPUTS and were unaffected.
+
+Peripheral findings (filed, not fixed):
+
+1. **S10** (plan row): gate-review renders emit a delegation advisory naming the synthetic
+   `__gate_review__` step ("Step 4 (Quality Gate Validation)") instead of the real delegated step.
+2. **Chain arg-defaults gap**: chain step arg resolution skips prompt argument defaults that the
+   single-prompt path applies — reference_demo renders as single, fails as chain step, both with
+   empty args. Consolidation-plan scope (touches OQ3 design-enrichment surface), not delegation.
+3. Single-prompt `>>reference_demo :: code-quality` fails word_count ("Missing required field:
+   text") while bare `>>reference_demo` passes text="" — the gate-token-only rawArgs path takes a
+   different defaults branch. Same family as (2).
+
+**Constraint-set correction (2026-08-18, after 98's G-wave push `088d01d4`)**: the
+`validate:knip-ratchet` / `validate:phase-header-drift` hunks in `server/package.json` and
+`server/scripts/run-validation-suite.js`, plus untracked `scripts/knip-ratchet.js`,
+`scripts/validate-phase-header-drift.js`, `.knip-ratchet-baseline.json`, belong to the OFFLINE
+PHASE-GUARD session — `validate-phase-header-drift.js`'s header cites their plan
+(`phase-guard-declaration-contract-2026-08-15.md` OQ-3/task 4.0) — not to this session (98
+mis-attributed them to me during their split; corrected). Rule until that session lands them: do
+not stage `server/package.json` or `server/scripts/run-validation-suite.js` whole — suite
+entries would land pointing at untracked scripts, the `efe9a605` shape from the other direction.
+
+**For the phase-guard session on resume** (relayed from 98, 2026-08-18): their plan
+`phase-guard-declaration-contract-2026-08-15.md:218` has a completed-marked row naming
+`validate-phase-header-drift.js`, which is on disk but UNTRACKED — `validate:plan-row-tracking`
+reds locally in this worktree (not on CI; an untracked file is absent from checkout) until they
+land the script. Same landing also clears the package.json/run-validation-suite.js staging rule
+above.
+
+**CI-observed closure (2026-08-18, end of day)**: full-scope rerun 32182768946 at `b9c1b6e9` —
+Test (Node 22.13.0) and Test (Node 24) both materialized and PASSED. The R-1 integration
+retargets, the S9 parser fix, and 98's G-wave are all CI-observed on a clean checkout, closing
+the scope-routed-green caveat. Getting here surfaced variants six (route selection legitimately
+skips the observing job; nothing broken anywhere) and seven (a trailing docs push
+concurrency-cancels the in-flight full run — "the observation was cancelled by the documentation
+of the observation"); rule: push code+docs as one event, or docs first, and read a badge only
+after checking which route ran and whether the job of interest EXECUTED.
+
+## Do-or-kill application — 2026-08-18 (owner meta-rule, first use)
+
+Owner correction ("we keep retiring items without closing them — remedy at the source") produced
+the do-or-kill row lifecycle, installed at three tiers: `cleanup-standards.md` §Do or Kill,
+`/plan` §Row Lifecycle, and `_limbo_exit_findings` in the global plan linter (caught S5, its
+motivating instance, on first run; two-polarity tests). Applied here: S5 ✗ KILLED (demotion
+rationale became the kill reason + revives-if), S3 ✓ EXECUTED (hook deleted: 233→190 pytest
+accounted exactly, validator 0 exceptions, lib coverage intact), S10 ✓ FIXED (assembler-side —
+DEV: the operator's callToAction is write-only metadata with zero readers; the real advisory
+producer is buildHandoffSection. Reader-less field: T10 of the pipeline-followup plan is its
+open row under do-or-kill, not a new filing). S8 remains the plan's only open row — blocked on
+phase-guard v24, wake-up via the relay note above.
+
+DEV-S10-1 (agent incident, disclosed + verified): the S10 agent ran a stray `git stash`/pop on
+the shared worktree — forbidden op, self-repaired; I verified stash list empty, phase-guard and
+98's hunks present, untracked scripts intact. Agent prompts must keep saying "no git state
+changes"; this one did and the fragment slipped through anyway — the verification step, not the
+prohibition, is what caught it.

@@ -95,7 +95,7 @@ The Python side is the published contract (`hooks/lib/*` module API is in the Pu
 The TS side is not. So the TS renderer moves to `### Quality Gates`, not the hook. One-line change
 plus a fixture built from a **captured** envelope, never a hand-written one.
 
-### S3 — Decide `subagent-gate-enforce.py`: register or delete ☐ (as of 2026-08-12 · flips when the hook appears in hooks.json, or its file and its 4 test files are gone)
+### S3 — Decide `subagent-gate-enforce.py`: register or delete ✓ (2026-08-18 · RULED delete, EXECUTED: hook + its 36-test suite deleted; 7 hook-behavior tests removed from the integration file with zero lib-coverage shrinkage (all lib parsers have direct coverage in test_ralph_subagent_contract.py, untouched); validator exception retired (0 declared exceptions, 7/7 registered); pytest 233→190 accounted exactly; sweep returns plans/ only. Ruling legs: owner's Advisory+telemetry ruling forbids a blocking hook; worker-proposes/parent-ratifies makes a FAIL proposal legitimate output blocking would suppress; the hook parses legacy GATE_REVIEW while the shipped brief asks for Proposed Gate Review; Codex-unrecoverable regardless. NOTE the flip condition's '4 test files' was untrusted inventory — measured: 1 suite deleted, 3 test files + conftest edited in place)
 
 It has four test files and no registration. Its `closedBy` already says: register after confirming
 the transcript shape, or delete. S2 is its prerequisite — registering it against a heading nothing
@@ -119,7 +119,7 @@ in the brief renderer, not building new resolution. Closure probe must first ver
 actually ATTACHED (DEV-S-8: the probe's `:: code-quality` token may have been consumed as a
 positional argument — check the run's node `inlineGateIds` before trusting handoff diffs).
 
-### S5 — Agent export (migrated from the master plan's P8, verbatim scope) ☐ (as of 2026-08-12 · flips when an agent definition exports to a client directory via the sync surface)
+### S5 — Agent export ✗ KILLED (2026-08-18 · R-1 removed its blocking value — under the self-contained brief, general-purpose runs any delegated node, so shipping `agents/chain-executor.md` buys only a restricted-tool safety posture · revives if a delegated node ever needs tool-restriction guarantees the brief cannot express — reopen as its own plan then, not a row here. First application of the do-or-kill rule, cleanup-standards §Do or Kill, replacing this row's earlier 'demoted' limbo)
 
 **Goal**: extend the server's export surface (skills-sync precedent) to AGENT definitions, so
 subagents ship alongside prompts/skills to downstream consumers (codex/gemini/opencode ports; the
@@ -161,13 +161,23 @@ demotes to a one-line advisory; the two producers (`buildDelegationCTA`,
 `chain-operator-executor.ts:760-802`; `buildHandoffSection`, `response-assembler.ts:344-377`)
 consolidate to one. Transport parity applies (STDIO + streamable HTTP).
 
-### S9 — Inline gate token consumed as a positional argument ☐ (as of 2026-08-18 · flips when `>>reference_demo :: code-quality ==> >>reference_demo` produces a run whose node carries `inlineGateIds: ['code-quality']` AND the echoed args do NOT contain `text: ':: code-quality'`)
+### S9 — Inline gate token consumed as a positional argument ✓ (2026-08-18 · fix `e6931647`: per-segment `::` attribution in parseChainOperator; falsified both ways (M-a strip-mutation → 4 named tests fail incl. the args assertion; M-b attribution-mutation → exactly tests 1/2/3/7); LIVE receipt via committed-HEAD build probe: gated `>>minimal_prompt :: code-quality ==> >>minimal_prompt` step-1 review list leads with Code Quality Standards while the control chain lacks it (probe-s9-chain.txt), and the single-prompt pair discriminates gates-enabled. The flip condition's reference_demo echo half is unmeasurable as written — reference_demo's inline word_count script fails on chain-mode arg resolution in every generation of probes, gated AND control (pre-existing, filed in notes) — args cleanliness is receipted by unit test 1 + M-a instead)
 
 Promoted from DEV-S-8: both the 2026-08-12 and 2026-08-18 probes show the gated run's step-2 echo
 rendering `**text**: :: code-quality` — the gate token parsed as the prompt's positional argument,
 so the gate likely never attached. This confounded every gated-vs-ungated handoff diff in both
 probe generations, and it blocks S4's live end-to-end closure. Parser scope
 (`symbolic-operator-parser.ts` / argument capture), not envelope scope.
+
+**DIAGNOSED 2026-08-18** (implementation-notes §S9 diagnosis): three linked defects — deliberate
+non-strip at `parseChainOperator` (:439 comment), `ExecutionStep.inlineGateCriteria` has zero
+writers (downstream per-step machinery fully built and dead), and chains' gate context reads only
+`step.inlineGateIds` while the `::` gate registers at execution scope. Fix ruled: per-segment
+attribution + strip in the parser; implementation in flight with mandatory falsification.
+
+### S10 — Gate-review render's delegation advisory names the synthetic review step ✓ (2026-08-18 · fixed in the ASSEMBLER, not the operator — root cause differed from the filed mechanism: the operator's callToAction is write-only metadata nothing reads; the client-visible advisory is ResponseAssembler.buildHandoffSection reading synthetic stepNumber+1/promptName from gate-review metadata. Now resolves identity from the real parsed delegated step (convertedPrompt name, real stepNumber/totalSteps), metadata read kept only as a pinned fallback; falsified byte-exact (mutation reproduced `Step 4 ("Quality Gate Validation")`, named failing test); 3 tests incl. producer-boundary pin on the operator; 123/123 across operators+delegation+formatting)
+
+Observed in both the old envelope ("HANDOFF: Execute Step 4 (\"Quality Gate Validation\")", 2026-08-18 morning) and the new advisory ("⚡ Note: Step 4 (\"Quality Gate Validation\") is delegated", probe-s9-chain.txt line 227/447, gated AND control) — a 2-step chain claiming step 4. `chain-operator-executor.ts:358-364` returns a synthetic render result (`promptId: '__gate_review__'`, `promptName: 'Quality Gate Validation'`, synthetic stepNumber), and the delegation advisory emitted alongside a gate-review response takes its stepNumber/promptName from THAT render result instead of the delegated real step. Gate-independent, pre-existing, cosmetic-to-confusing (misleads the parent about what is delegated). Unit coverage gap: advisory-targeting tests cover normal renders only, not the review branch.
 
 ### S6 — Re-measure against a fresh build ✓ (2026-08-18 · build + verify:mcp 17/17 + both probes re-run via streamable-http against the fresh dist)
 
