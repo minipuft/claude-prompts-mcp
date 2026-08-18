@@ -117,7 +117,25 @@ function createHarness(workspaceDir: string): Harness {
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations,
     getData: () => ({ convertedPrompts: [livePrompt] }),
-    versionHistoryService: { isAutoVersionEnabled: () => true, recordEditResult, rollback },
+    versionHistoryService: {
+      isAutoVersionEnabled: () => true,
+      recordEditResult,
+      rollback,
+      // Bridge the test-configured `rollback` double into the two-phase contract the processor
+      // now calls (resolveRollbackTarget → commitEdit → write). Tests keep configuring
+      // `harness.rollback` with the old single-call shape; the bridge projects it so this mock
+      // cannot silently drift from ONE of the two phases while the other stays green.
+      resolveRollbackTarget: async () => {
+        const result = await rollback();
+        return result.success
+          ? { ok: true as const, entry: { snapshot: result.snapshot } }
+          : { ok: false as const, error: result.error ?? 'Version not found' };
+      },
+      commitEdit: async () => {
+        const result = await rollback();
+        return { version: result.saved_version ?? 0, bridged: false };
+      },
+    },
     textDiffService: new ObjectDiffGenerator(),
     comparisonEngine: new ComparisonEngine(logger),
   } as unknown as PromptResourceContext;
