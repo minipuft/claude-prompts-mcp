@@ -26,6 +26,15 @@ export interface ChainStep {
    * the stage-06 mirror-copy onto this exact field was the dead half, not this one).
    */
   delegated?: boolean;
+  /**
+   * Anonymous/canonical inline gate criteria extracted from THIS step's segment text
+   * (`:: code-quality`, `:: "criteria text"`) by `parseChainOperator` (S9). Carried onto
+   * `ExecutionStep.inlineGateCriteria` by `generateExecutionPlan`, which
+   * `buildSymbolicChain` reads to seed `ChainStepPrompt.inlineGateCriteria` per step.
+   * Named forms (`:: id:"criteria"`) are stripped from the segment but never land here —
+   * they stay on the global namedInlineGates path.
+   */
+  inlineGateCriteria?: string[];
 }
 
 /**

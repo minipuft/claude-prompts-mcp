@@ -193,6 +193,14 @@ export class SymbolicCommandBuilder {
     const { anonymousCriteria: globalGateCriteria, namedGates } =
       this.collectGateCriteria(parseResult);
 
+    // S9: when the parser attributed inline gate criteria to specific steps, every anonymous
+    // token lived inside some segment — seeding the command-level inlineGateCriteria from the
+    // whole-command anonymousCriteria as well would double-register the same criteria as an
+    // orphan execution-scope gate no step reviews. Named gates keep their global handling.
+    const stepsCarryInlineGates = parseResult.executionPlan.steps.some(
+      (step) => (step.inlineGateCriteria?.length ?? 0) > 0
+    );
+
     for (const [index, step] of parseResult.executionPlan.steps.entries()) {
       if (!step.promptId) {
         continue;
@@ -242,7 +250,8 @@ export class SymbolicCommandBuilder {
       ...parseResult,
       steps: stepPrompts,
       promptArgs: commandArgs,
-      inlineGateCriteria: globalGateCriteria.length > 0 ? globalGateCriteria : undefined,
+      inlineGateCriteria:
+        !stepsCarryInlineGates && globalGateCriteria.length > 0 ? globalGateCriteria : undefined,
     };
 
     if (namedGates.length > 0) {

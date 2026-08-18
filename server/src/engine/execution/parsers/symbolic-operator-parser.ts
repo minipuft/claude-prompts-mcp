@@ -1,6 +1,10 @@
 // @lifecycle canonical - Parses symbolic command expressions into operators.
 import { OPERATOR_PATTERNS } from './operator-patterns.js';
-import { stripStyleOperators, findFrameworkOperatorOutsideQuotes } from './parser-utils.js';
+import {
+  stripStyleOperators,
+  findFrameworkOperatorOutsideQuotes,
+  isPositionInsideQuotes,
+} from './parser-utils.js';
 import {
   type ChainOperator,
   type ChainStep,
@@ -436,8 +440,10 @@ export class SymbolicCommandParser {
     // Remove framework operator prefix if present
     let cleanCommand = command.replace(this.OPERATOR_REGEX.framework, '');
     cleanCommand = stripStyleOperators(cleanCommand);
-    // NOTE: Do NOT strip gate patterns here - they conflict with regular arguments like input="value"
-    // Gate operators should be detected and handled separately by the gate operator executor
+    // NOTE: Only `::`-form gate tokens are stripped, and only per-segment (see
+    // extractInlineGateTokens below). The deprecated `=` form is deliberately left in the
+    // segment text — it is indistinguishable from a regular argument like input = "value",
+    // which is why gate stripping was historically skipped here entirely.
 
     this.logger.debug(`[parseChainOperator] Original command: ${command}`);
     this.logger.debug(`[parseChainOperator] Clean command: ${cleanCommand}`);
@@ -456,10 +462,16 @@ export class SymbolicCommandParser {
       // Note: Operators still apply at execution-level, not per-step
       const cleanedStep = this.cleanStepOperators(result.text);
 
-      const stepMatch = cleanedStep.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
+      // S9: pull `::`-form gate tokens out of THIS segment before the promptId/args regex
+      // runs, so a token like `:: code-quality` neither pollutes the step's positional args
+      // nor evaporates — anonymous/canonical criteria attach to this step.
+      const { text: gateFreeStep, criteria: stepGateCriteria } =
+        this.extractInlineGateTokens(cleanedStep);
+
+      const stepMatch = gateFreeStep.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
       if (!stepMatch) {
         this.logger.error(
-          `[parseChainOperator] Failed to match step: "${result.text}" (cleaned: "${cleanedStep}")`
+          `[parseChainOperator] Failed to match step: "${result.text}" (cleaned: "${gateFreeStep}")`
         );
         throw new ValidationError(`Invalid chain step format: ${result.text}`);
       }
@@ -479,6 +491,7 @@ export class SymbolicCommandParser {
         position: index,
         variableName: `step${index + 1}_result`,
         ...(result.delegated === true ? { delegated: true } : {}),
+        ...(stepGateCriteria.length > 0 ? { inlineGateCriteria: stepGateCriteria } : {}),
       };
     });
 
@@ -513,6 +526,69 @@ export class SymbolicCommandParser {
     cleaned = stripStyleOperators(cleaned);
 
     return cleaned.trim();
+  }
+
+  /**
+   * Extract `::`-form inline gate tokens from a single chain-step segment (S9).
+   *
+   * Strips every matched token from the segment text so it cannot pollute the step's
+   * positional args. Anonymous quoted (`:: "criteria text"`) and canonical/unquoted
+   * (`:: code-quality`) forms return their parsed criteria so the step itself carries
+   * them; named forms (`:: id:"criteria"`, including `verify:`) are stripped only —
+   * named-gate registration stays on the existing global namedInlineGates path.
+   *
+   * Deliberately matches ONLY the `::` operator token. The deprecated `=` form is left
+   * untouched because it is indistinguishable from a regular `key = "value"` argument —
+   * the reason gate stripping was historically skipped in parseChainOperator entirely.
+   * Quote-aware: tokens inside quoted argument values are never matched.
+   */
+  private extractInlineGateTokens(segment: string): { text: string; criteria: string[] } {
+    const criteria: string[] = [];
+    const removals: Array<{ start: number; end: number }> = [];
+
+    for (const match of segment.matchAll(this.OPERATOR_REGEX.gate)) {
+      const index = match.index;
+      if (match[1] !== '::') {
+        continue; // never touch the deprecated `=` form
+      }
+      if (isPositionInsideQuotes(segment, index)) {
+        continue;
+      }
+
+      const namedColonId = match[2];
+      const namedColonText = match[3];
+      const anonQuoted = match[4];
+      const canonicalOrUnquoted = match[5];
+
+      if (namedColonId != null && namedColonText != null) {
+        // Named gate: strip the token; registration stays global.
+        removals.push({ start: index, end: index + match[0].length });
+        continue;
+      }
+      if (anonQuoted != null) {
+        criteria.push(...this.parseCriteria(anonQuoted));
+        removals.push({ start: index, end: index + match[0].length });
+        continue;
+      }
+      if (canonicalOrUnquoted != null) {
+        criteria.push(...this.parseCriteria(canonicalOrUnquoted));
+        removals.push({ start: index, end: index + match[0].length });
+      }
+    }
+
+    if (removals.length === 0) {
+      return { text: segment, criteria };
+    }
+
+    let text = '';
+    let cursor = 0;
+    for (const { start, end } of removals) {
+      text += segment.slice(cursor, start);
+      cursor = end;
+    }
+    text += segment.slice(cursor);
+
+    return { text: text.trim(), criteria };
   }
 
   /**
@@ -755,6 +831,9 @@ export class SymbolicCommandParser {
           dependencies: index > 0 ? [index] : [],
           outputVariable: step.variableName,
           ...(step.delegated === true ? { delegated: true } : {}),
+          ...(step.inlineGateCriteria != null && step.inlineGateCriteria.length > 0
+            ? { inlineGateCriteria: step.inlineGateCriteria }
+            : {}),
         });
       });
     } else {
