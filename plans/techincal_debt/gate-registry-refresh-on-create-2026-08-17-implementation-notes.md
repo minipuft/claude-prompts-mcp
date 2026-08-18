@@ -1,3 +1,13 @@
+---
+title: "Implementation notes — gate registry refresh on create (F17)"
+date: 2026-08-18
+status: reference
+tags:
+  - gates
+  - mcp-tools
+  - resources
+---
+
 # Implementation notes — gate registry refresh on create (F17)
 
 Plan: `gate-registry-refresh-on-create-2026-08-17.md`. Root cause traced 2026-08-18 via `>>diagnose`
