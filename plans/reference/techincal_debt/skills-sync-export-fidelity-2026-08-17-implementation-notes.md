@@ -1,7 +1,7 @@
 ---
 title: "Implementation notes — Skills Sync export fidelity"
 date: 2026-08-17
-status: backlog
+status: reference
 tags: []
 ---
 

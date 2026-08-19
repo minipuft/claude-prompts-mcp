@@ -10,7 +10,7 @@ tags: []
 Produced by `>>implementation_plan` (5 steps). Deviation log and ruling rationales live in the
 sibling `-implementation-notes.md`; this file carries the contract only.
 
-Sibling plan `skills-sync-export-fidelity-2026-08-17.md` owns the export subsystem. This one owns
+Sibling plan `skills-sync-export-fidelity-2026-08-17.md` owns the export subsystem — **retired to `plans/reference/techincal_debt/` on 2026-08-18**, all 18 rows closed. This one owns
 script tools. They share one lesson — a subsystem can reimplement a rule that already has a
 canonical owner — and both cite ADR 0001 for it.
 

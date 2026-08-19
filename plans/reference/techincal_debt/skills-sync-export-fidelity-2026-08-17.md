@@ -1,7 +1,7 @@
 ---
 title: "Skills Sync export fidelity — untested behaviors and the system gaps behind them"
 date: 2026-08-17
-status: backlog
+status: reference
 tags: []
 ---
 
