@@ -1,7 +1,7 @@
 ---
 title: "Implementation notes — Script tools verification"
 date: 2026-08-17
-status: backlog
+status: done
 tags: []
 ---
 

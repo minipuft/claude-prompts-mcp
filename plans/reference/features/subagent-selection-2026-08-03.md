@@ -17,7 +17,7 @@ tags: []
 **Area**: `server/src/modules/prompts/`, `server/src/engine/execution/parsers/`,
 `server/src/engine/execution/operators/`, `server/src/engine/execution/pipeline/stages/`
 **Work type**: feature (new user-facing surface)
-**Origin**: [`pipeline-followup-2026-08-03.md`](../reference/techincal_debt/pipeline-followup-2026-08-03.md) Tier 15B
+**Origin**: [`pipeline-followup-2026-08-03.md`](../techincal_debt/pipeline-followup-2026-08-03.md) Tier 15B
 **Confidence**: high — the wiring path is fully mapped and an identical, working sibling exists
 
 ---
