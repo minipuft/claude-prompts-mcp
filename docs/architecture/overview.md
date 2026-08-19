@@ -496,7 +496,7 @@ Assertions (structural, deterministic) and LLM quality gates (subjective) check 
 | Shell verification (`:: verify:`)            | 08b   | Command output — does shell command pass?                      | Deterministic |
 | LLM quality gates                            | 08    | Content quality — depth of analysis, actionability?            | Subjective    |
 
-**Composition contract**: When Stage 09b assertions pass and a pending LLM gate review exists, the assertion results are **merged into** the gate review prompt as pre-validated structural context. The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate review is retained — not cleared.
+**Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the assertion results are **merged into** the gate review prompt as pre-validated structural context. The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate review is retained — not cleared.
 
 **Assertion failures**: When assertions fail, they create their own `PendingGateReview` with feedback. No merge occurs — the review IS the assertion feedback.
 

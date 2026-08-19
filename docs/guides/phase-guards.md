@@ -176,7 +176,7 @@ Phase guards fail
   → PendingGateReview created with retry feedback
   → Stage 10 renders feedback to the LLM
   → LLM revises response addressing structural issues
-  → Stage 09b re-evaluates on next turn
+  → Stage 19 re-evaluates on next turn
   → After maxRetries: user gets gate_action prompt (retry/skip/abort)
 ```
 

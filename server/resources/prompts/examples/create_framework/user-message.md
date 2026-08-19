@@ -324,7 +324,7 @@ qualityIndicators:
 
 ### Processing Step Assertion Fields (Optional)
 
-Processing steps can include `marker` + `assertions` for deterministic output verification. When present, Stage 09b evaluates the LLM's response against these rules after execution — no LLM cost, instant feedback.
+Processing steps can include `marker` + `assertions` for deterministic output verification. When present, Stage 19 evaluates the LLM's response against these rules after execution — no LLM cost, instant feedback.
 
 | Field        | Type   | Description                                          |
 | ------------ | ------ | ---------------------------------------------------- |
