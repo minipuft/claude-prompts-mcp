@@ -359,6 +359,9 @@ _backward_.
 
 ### OQ-F1 — status: **OVERRIDDEN 2026-08-17 — implement now** (operator decision; the defer ruling below is kept as the reasoning it replaced)
 
+**Resolved**: overridden and landed at Tier 6 on 2026-08-17 (row 6.0 ✓). The two options below
+are kept as the reasoning the override replaced, not as live choices.
+
 Adding a read-scope parameter widens the reachable-shape union, which this repo's Public API
 Contract prices as breaking. Is the debugging value worth a major bump?
 
