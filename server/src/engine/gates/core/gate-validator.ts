@@ -27,7 +27,9 @@
 import { getShellPreset } from '../config/index.js';
 import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 
+import type { ScriptExecutionResult, ScriptExecutorPort } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from './gate-loader.js';
+import type { ScriptLoader } from '../../execution/reference/script-reference-resolver.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { ShellVerifyGate } from '../shell/types.js';
 import type {
@@ -50,11 +52,30 @@ export interface GateValidationStatistics {
 }
 
 /**
+ * What a `script_tool` gate needs in order to run a registered tool rather than
+ * a shell string: the same registry and executor the inline `{{script:id}}` path
+ * already uses. Both are injected as ports because `engine/` may not
+ * value-import `modules/`.
+ */
+export interface ScriptToolRuntime {
+  loader: ScriptLoader;
+  executor: ScriptExecutorPort;
+}
+
+/**
+ * Read lazily, not captured. The workspace loader is rebuilt whenever prompts
+ * reload, and holding the instance from construction time would serve tool
+ * definitions from before the last refresh.
+ */
+export type ScriptToolRuntimeProvider = () => ScriptToolRuntime | undefined;
+
+/**
  * Core gate validator with pass/fail logic
  */
 export class GateValidator {
   private logger: Logger;
   private gateLoader: GateDefinitionProvider;
+  private scriptToolRuntime: ScriptToolRuntimeProvider | undefined;
   private validationStats: GateValidationStatistics = {
     totalValidations: 0,
     successfulValidations: 0,
@@ -63,9 +84,14 @@ export class GateValidator {
   };
   private validationTimes: number[] = [];
 
-  constructor(logger: Logger, gateLoader: GateDefinitionProvider) {
+  constructor(
+    logger: Logger,
+    gateLoader: GateDefinitionProvider,
+    scriptToolRuntime?: ScriptToolRuntimeProvider
+  ) {
     this.logger = logger;
     this.gateLoader = gateLoader;
+    this.scriptToolRuntime = scriptToolRuntime;
   }
 
   /**
@@ -368,53 +394,60 @@ export class GateValidator {
     const toolId = criteria.script_tool_id;
 
     if (toolId == null || toolId.trim() === '') {
-      this.logger.warn(
-        '[SCRIPT GATE] Script tool verification skipped - no script_tool_id specified'
+      return this.unrunnableScriptTool(
+        undefined,
+        'no script_tool_id specified in the script_tool criteria'
       );
-      return {
-        type: 'script_tool',
-        passed: true,
-        score: 1.0,
-        message: 'Script tool verification skipped (no script_tool_id specified)',
-        details: { skipped: true },
-      };
+    }
+
+    const runtime = this.scriptToolRuntime?.();
+    if (runtime === undefined) {
+      return this.unrunnableScriptTool(
+        toolId,
+        'no script tool registry is wired into this validator'
+      );
+    }
+
+    const tool = runtime.loader.loadScript(toolId);
+    if (tool === undefined) {
+      return this.unrunnableScriptTool(
+        toolId,
+        `no registered script tool has that id. script_tool_id names a tool, not a shell command`
+      );
+    }
+
+    // A gate runs on the server's initiative, so there is no invocation through
+    // which a caller could name the tool and approve it. Same rule the inline
+    // `{{script:id}}` path enforces, and the same default: an unset `confirm`
+    // means true.
+    if (tool.execution?.confirm !== false) {
+      return this.unrunnableScriptTool(
+        toolId,
+        'the tool requires confirmation, which a gate has no channel to obtain'
+      );
     }
 
     this.logger.debug(`[SCRIPT GATE] Executing script tool verification: ${toolId}`);
 
     try {
-      const { executeProcess } = await import('#shared/utils/process.js');
-
-      const result = await executeProcess({
-        command: toolId,
-        stdin: JSON.stringify(criteria.script_tool_input ?? {}),
-        cwd: criteria.script_tool_working_dir,
-        timeout: criteria.script_tool_timeout ?? 30000,
-        maxTimeout: 60000,
-        parseJson: true,
-        processGroup: false,
-      });
-
-      const scriptOutput = result.parsed as Record<string, unknown> | null;
-      const passed = scriptOutput?.['passed'] === true;
-      const reason =
-        (scriptOutput?.['reason'] as string) ??
-        (passed ? 'Script tool passed' : 'Script tool failed');
-
-      return {
-        type: 'script_tool',
-        passed,
-        score: passed ? 1.0 : 0,
-        message: `Script tool '${toolId}': ${reason}`,
-        details: {
+      const result = await runtime.executor.execute(
+        {
           toolId,
-          exitCode: result.exitCode,
-          durationMs: result.durationMs,
-          scriptOutput,
-          ...(result.signalName ? { signalName: result.signalName } : {}),
-          ...(result.stderr ? { stderr: result.stderr.slice(0, 500) } : {}),
+          promptId: tool.promptId,
+          inputs: criteria.script_tool_input ?? {},
+          ...(criteria.script_tool_timeout != null
+            ? { timeout: criteria.script_tool_timeout }
+            : {}),
         },
-      };
+        // `script_tool_working_dir` stays relative to the tool's own directory,
+        // matching `tool.workingDir`, so a gate cannot relocate a tool outside
+        // the directory that registered it.
+        criteria.script_tool_working_dir != null
+          ? { ...tool, workingDir: criteria.script_tool_working_dir }
+          : tool
+      );
+
+      return this.scriptToolCheck(toolId, result);
     } catch (error) {
       this.logger.error(`[SCRIPT GATE] Script tool verification error:`, error);
       return {
@@ -428,6 +461,62 @@ export class GateValidator {
         },
       };
     }
+  }
+
+  /**
+   * Read a structured verdict out of a completed script-tool run.
+   *
+   * The script owns the verdict: `{ passed, reason?, details? }`. A run that
+   * failed to produce one is a failed check, not a passed one — the same
+   * reading as an unrunnable tool, one step later.
+   */
+  private scriptToolCheck(toolId: string, result: ScriptExecutionResult): ValidationCheck {
+    const scriptOutput =
+      typeof result.output === 'object' && result.output !== null
+        ? (result.output as Record<string, unknown>)
+        : null;
+    const passed = result.success && scriptOutput?.['passed'] === true;
+    const reason =
+      (scriptOutput?.['reason'] as string | undefined) ??
+      result.error ??
+      (passed ? 'Script tool passed' : 'Script tool did not report passed: true');
+
+    return {
+      type: 'script_tool',
+      passed,
+      score: passed ? 1.0 : 0,
+      message: `Script tool '${toolId}': ${reason}`,
+      details: {
+        toolId,
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+        scriptOutput,
+        ...(result.stderr !== '' ? { stderr: result.stderr.slice(0, 500) } : {}),
+      },
+    };
+  }
+
+  /**
+   * A `script_tool` check that could not run.
+   *
+   * Fails closed. A verification that did not happen is not a verification, and
+   * scoring it 1.0 — which this branch used to do for a missing id — reports the
+   * strongest possible evidence for the one outcome that carries none.
+   */
+  private unrunnableScriptTool(toolId: string | undefined, reason: string): ValidationCheck {
+    const subject = toolId != null && toolId !== '' ? `'${toolId}'` : 'script_tool check';
+    this.logger.warn(`[SCRIPT GATE] Cannot run ${subject}: ${reason}`);
+    return {
+      type: 'script_tool',
+      passed: false,
+      score: 0,
+      message: `Script tool verification could not run for ${subject}: ${reason}`,
+      details: {
+        ...(toolId != null ? { toolId } : {}),
+        unrunnable: true,
+        reason,
+      },
+    };
   }
 
   /**
@@ -554,7 +643,8 @@ export class GateValidator {
  */
 export function createGateValidator(
   logger: Logger,
-  gateLoader: GateDefinitionProvider
+  gateLoader: GateDefinitionProvider,
+  scriptToolRuntime?: ScriptToolRuntimeProvider
 ): GateValidator {
-  return new GateValidator(logger, gateLoader);
+  return new GateValidator(logger, gateLoader, scriptToolRuntime);
 }

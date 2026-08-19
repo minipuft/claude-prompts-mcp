@@ -55,10 +55,15 @@ so it has not run. Add `tool:text_digest` to the arguments to approve it.
 Two tools live in this one prompt, and each keeps its own `confirm` setting on
 both routes:
 
-| Tool          | `confirm` | Declared in `tools:` | Inline `script:<id>` reference |
-| ------------- | --------- | -------------------- | ------------------------------ |
-| `word_count`  | `false`   | runs automatically   | runs automatically             |
-| `text_digest` | `true`    | waits for approval   | refuses until named            |
+| Tool          | `confirm` | Declared in `tools:` | Inline reference                                      |
+| ------------- | --------- | -------------------- | ----------------------------------------------------- |
+| `word_count`  | `false`   | runs automatically   | {% raw %}`{{script:word_count}}` runs{% endraw %}     |
+| `text_digest` | `true`    | waits for approval   | {% raw %}`{{script:text_digest}}` refuses{% endraw %} |
+
+Those two cells sit inside a `raw` block, which is what lets this table print the
+syntax instead of executing it. Without it the resolver would read the table's
+own explanation as a live reference and run `text_digest` — the documentation
+would trigger the very thing it describes.
 
 The setting belongs to the tool, not to the route that reaches it. An inline
 reference is the prompt author asking, which is not the same as you asking — so

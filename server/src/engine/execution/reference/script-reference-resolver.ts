@@ -55,6 +55,50 @@ const SCRIPT_REFERENCE_PATTERN =
   /\{\{script:([a-zA-Z0-9_-]+)(?:\.([a-zA-Z0-9_]+))?((?:\s+[a-zA-Z_][a-zA-Z0-9_]*=(?:'[^']*'|"[^"]*"|\d+(?:\.\d+)?|true|false))*)\s*\}\}/g;
 
 /**
+ * Matches a Nunjucks `{% raw %}...{% endraw %}` block, including whitespace-control
+ * forms (`{%- raw -%}`).
+ */
+const RAW_BLOCK_PATTERN = /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}/g;
+
+/** Matches an opening raw tag, used to find one that is never closed. */
+const RAW_OPEN_PATTERN = /\{%-?\s*raw\s*-?%\}/g;
+
+/**
+ * Character ranges a `{% raw %}` block covers, as `[start, end)` pairs.
+ *
+ * `{% raw %}` is the documented escape for literal `{{ }}` (template-syntax.md
+ * §Escaping) and has to hold here too: `preResolve` runs BEFORE Nunjucks, over
+ * raw template text, so without this a prompt that merely documents the
+ * `{{script:id}}` syntax executes it instead of printing it.
+ *
+ * An UNCLOSED `{% raw %}` covers the rest of the template. Nunjucks rejects such
+ * a template anyway, so nothing renders either way — but the choice decides
+ * whether a script runs first, and a side effect before a guaranteed parse error
+ * is the worse of the two outcomes.
+ */
+function rawBlockRanges(template: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+
+  RAW_BLOCK_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = RAW_BLOCK_PATTERN.exec(template)) !== null) {
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+
+  RAW_OPEN_PATTERN.lastIndex = 0;
+  let open: RegExpExecArray | null;
+  while ((open = RAW_OPEN_PATTERN.exec(template)) !== null) {
+    const index = open.index;
+    if (!ranges.some(([start, end]) => index >= start && index < end)) {
+      ranges.push([index, template.length]);
+      break;
+    }
+  }
+
+  return ranges;
+}
+
+/**
  * Interface for script loader (injected dependency).
  * Abstracts the script discovery mechanism.
  */
@@ -321,6 +365,7 @@ export class ScriptReferenceResolver {
    */
   detectScriptReferences(template: string): DetectedScriptReference[] {
     const references: DetectedScriptReference[] = [];
+    const rawRanges = rawBlockRanges(template);
     let match: RegExpExecArray | null;
 
     // Reset regex state
@@ -329,6 +374,10 @@ export class ScriptReferenceResolver {
     while ((match = SCRIPT_REFERENCE_PATTERN.exec(template)) !== null) {
       const scriptId = match[1];
       if (scriptId === undefined) continue;
+
+      // Escaped by the author: render it, do not run it.
+      const index = match.index;
+      if (rawRanges.some(([start, end]) => index >= start && index < end)) continue;
 
       const fieldAccess = match[2];
       const argsString = match[3];

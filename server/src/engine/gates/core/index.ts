@@ -17,10 +17,10 @@ import {
   type TemporaryGateDefinition,
 } from './temporary-gate-registry.js';
 
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateDefinitionProvider } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { ValidationContext } from '../types.js';
-import type { StateStoreOptions } from '#shared/types/persistence.js';
 
 export { GateLoader, createGateLoader, type GateDefinitionProvider } from './gate-loader.js';
 export { GateValidator, createGateValidator } from './gate-validator.js';
@@ -69,7 +69,7 @@ export type {
   ValidationCheck,
   ValidationContext,
 } from '../types.js';
-export type { GateValidationStatistics } from './gate-validator.js';
+export type { GateValidationStatistics, ScriptToolRuntime } from './gate-validator.js';
 
 /**
  * Core gate system manager with temporary gate support

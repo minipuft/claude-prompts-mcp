@@ -24,8 +24,10 @@
  * |                            | (see gate-validator.ts default branch)        | from `phases.yaml`, independently of this criteria type              |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
  * |                            | (supports `shell_stdin_source: agent_response`) | matching reality (file paths, line counts, symbol locations)        |
- * | `script_tool`              | **Hard** — registered script with JSON stdin, | Structured validation requiring rich input/output contracts           |
- * |                            | parses pass/fail return                       |                                                                       |
+ * | `script_tool`              | **Not enforced** — accepted by the schema,    | (none today; prefer `shell_verify`)                                   |
+ * |                            | executed by no live path. Stage 20 runs       |                                                                       |
+ * |                            | `shell_verify` criteria only. GateValidator   |                                                                       |
+ * |                            | has a runner, but no production caller        |                                                                       |
  *
  * Common mistakes the taxonomy prevents:
  * - Using `inline_guidance` and expecting auto-enforcement (it's display only)
@@ -68,8 +70,10 @@ export const GatePassCriteriaSchema = z
      * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
      *   Supports `shell_stdin_source: 'agent_response'` for response-content
      *   verification against ground truth.
-     * - `script_tool`: runs a registered script tool with JSON input via stdin,
-     *   parses structured pass/fail return.
+     * - `script_tool`: accepted, but executed by no live path — Stage 20 runs
+     *   `shell_verify` criteria only. GateValidator's runner resolves
+     *   `script_tool_id` against the registered script tools and fails closed,
+     *   but nothing in production reaches it. Prefer `shell_verify`.
      */
     type: z.enum([
       'inline_guidance',

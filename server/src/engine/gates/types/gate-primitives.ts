@@ -48,7 +48,9 @@ export interface GatePassCriteria {
    * - `framework_compliance`: declarative only — GateValidator auto-passes it.
    *   PhaseGuardVerificationStage enforces phase guards from `phases.yaml`, not from this value.
    * - `shell_verify`: exit-code ground truth (supports response injection)
-   * - `script_tool`: registered script with JSON stdin
+   * - `script_tool`: accepted but not enforced — no live path executes it. GateValidator's
+   *   runner resolves the id against registered script tools and fails closed, but nothing
+   *   in production calls it
    */
   type:
     'inline_guidance' | 'llm_self_check' | 'framework_compliance' | 'shell_verify' | 'script_tool';
@@ -107,12 +109,15 @@ export interface GatePassCriteria {
   shell_response_env_var?: string;
 
   // Script tool verification options (structured JSON pass/fail)
-  /** Script or command to execute for verification */
+  /**
+   * ID of a REGISTERED script tool. Not a command: an id that resolves to no
+   * registered tool fails the check rather than reaching a shell.
+   */
   script_tool_id?: string;
   /** JSON input sent via stdin to the script */
   script_tool_input?: Record<string, unknown>;
   /** Timeout in milliseconds for script execution (default: 30000) */
   script_tool_timeout?: number;
-  /** Working directory for script execution */
+  /** Working directory, relative to the tool's own directory (like `tool.workingDir`) */
   script_tool_working_dir?: string;
 }

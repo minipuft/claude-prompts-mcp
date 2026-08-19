@@ -449,12 +449,28 @@ describe('Shell Verify Gate Criteria Integration', () => {
       expect(check?.details?.['configPath']).toBeUndefined();
     });
 
-    test('takes no configuration input at all', () => {
-      // Structural half of the decoupling: the third `llmConfig` parameter is gone from both the
-      // factory and the constructor, so there is no longer a path by which config could reach
-      // this verdict. Arity is the only way to assert an argument's absence.
-      expect(createGateValidator).toHaveLength(2);
-      expect(GateValidator).toHaveLength(2);
+    test('takes no configuration input at all', async () => {
+      // Structural half of the decoupling: the retired `llmConfig` parameter is gone from both
+      // the factory and the constructor, so there is no longer a path by which config could
+      // reach this verdict.
+      //
+      // Arity USED to carry that claim, back when the validator took exactly two arguments. It
+      // stopped being able to once Tier 6 added a third — an injected script-tool runtime, which
+      // has nothing to do with `llm_self_check`. A count cannot distinguish "the config argument
+      // came back" from "some unrelated argument was added", so it would have failed here for a
+      // change that does not touch what this test is about. Assert the behavior instead: whatever
+      // is injected, the reserved type still skips and still reports no config path.
+      const loader = createMockLoader({ 'reserved-llm-gate': llmGate });
+      const withRuntime = createGateValidator(mockLogger, loader, () => {
+        throw new Error('llm_self_check must not reach the script-tool runtime');
+      });
+
+      const result = await withRuntime.validateGate('reserved-llm-gate', { content: 'anything' });
+      const check = result?.checks?.[0];
+
+      expect(check?.details?.['configPath']).toBeUndefined();
+      expect(check?.message).toContain('%judge');
+      expect(new GateValidator(mockLogger, loader)).toBeInstanceOf(GateValidator);
     });
   });
 });

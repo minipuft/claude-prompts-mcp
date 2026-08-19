@@ -193,3 +193,81 @@ Not deviations — recorded so a worker does not re-derive them.
 `n` and the symbol name was destroyed in the output. Pasted uncritically it would have read as
 "the interface is named `n`". Use `rg -n`, and treat a suspiciously uniform match column as a
 flag argument error rather than a finding.
+
+## Tier 6 — deviations and falsification record (2026-08-19)
+
+### DEV-T6-1 — the worktree was rolled back below HEAD before work started
+
+Tier 6 opened against a working tree that was 875 lines BEHIND `HEAD`: every file from
+`639fe268` and `655642d5` was present in git and absent on disk, `t3.json` was untracked
+again, and the plan file itself was the pre-Tier-6 304-line version with no Tier 6 section.
+Reading that file first is how this was caught — the tier being executed did not exist in it.
+
+Provenance: 23 files shared one mtime to the second (02:44:23), nine minutes AFTER the 02:35
+commits and after the push. `git reflog` shows no reset, so nothing moved `HEAD`; the tree was
+restored around it. The 213 worktree-only lines were all stale intermediates of work that is now
+committed — the pre-rewrite `script-inline-path-parity.test.ts`, the earlier `{{script:<id>}}`
+form of the demo table.
+
+Conservative option taken: `git diff HEAD` saved to the scratchpad as a reversible backup, then
+`git restore --source=HEAD --worktree -- .`. Nothing unique was lost and `origin/main` already
+carried everything. **The lesson is the ordering, not the restore**: had the first Tier 6 edit
+landed on that tree, the commit closing Tier 6 would have silently reverted two commits' worth of
+CI and docs work, and every gate would have passed on the reverted state.
+
+### DEV-T6-2 — the row's premise was right, its conclusion was not (F11)
+
+Row 6.4 said: correct `create_gate` "to match 6.1's outcome". That instruction assumes the doc is
+false only because the code is wrong, so fixing the code makes the doc true. Fixing the code did
+not make the doc true.
+
+`script_tool` has no live execution path at all. Stage 20 is the only consumer of `pass_criteria`
+and it filters for `shell_verify`; `GateValidator`'s entire entry chain has zero production
+callers. Writing "**Enforced** — resolves the id and runs THAT tool" would have been a _more
+accurate description of dormant code_ and a _worse claim about the product_ — the failure mode
+of verifying a fix against its own unit boundary. It was actually written that way first, and
+reverted once the drive ran.
+
+Generalizes past this row: **a doc row's verify condition should name an observation, not another
+row's completion.** "Claim matches behavior" survives F11; "matches 6.1's outcome" did not.
+
+### DEV-T6-3 — an arity assertion broke on a change it was not about
+
+`shell-verify-gate-criteria.test.ts` asserted `createGateValidator` has arity 2, as the structural
+half of proving `llm_self_check` takes no config ("Arity is the only way to assert an argument's
+absence"). Adding an injected script-tool runtime — a third parameter with nothing to do with
+`llm_self_check` — turned it red.
+
+The claim was still true; the proxy could not express it. A count cannot distinguish "the retired
+config argument came back" from "an unrelated argument was added". Replaced with the behavioral
+form: inject a runtime whose provider THROWS, and assert the reserved type still skips and still
+reports no `configPath`. That fails if config ever reaches the verdict and passes for any
+unrelated injection.
+
+### DEV-T6-4 — the drive found a defect in its own explanatory prose
+
+The `reference_demo` summary table, rewritten to carry real `{{script:...}}` syntax inside
+`{% raw %}`, gained a sentence reading "Those two cells are wrapped in `{% raw %}`". Backticks are
+markdown; Nunjucks reads the tag anyway. The rendered output showed "wrapped in ``" — the literal
+tag consumed as an unterminated raw open.
+
+Third time this specific prompt's own documentation of a mechanism has triggered the mechanism
+(twice pre-fix per row 6.5, once here). Rephrased to "sit inside a `raw` block". A template that
+explains template syntax has no safe way to quote a tag in prose short of escaping it, and prose
+is exactly where nobody looks for one.
+
+### Falsification record — Tier 6
+
+Each mutation was applied with a `//MUTANT` marker, confirmed present by `grep -c`, run, and
+reverted from a pre-mutation copy with the marker count re-checked at 0.
+
+| Row | Mutation applied                                                                                  | Named failure                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6.1 | Unresolved id falls back to `executeProcess({command: toolId})` — the pre-Tier-6 defect, restored | `a gate whose script_tool_id is a shell command does not run a shell` — sentinel existed (`Expected: false, Received: true`), proving the shell ran `touch` |
+| 6.2 | `unrunnableScriptTool` returns `passed: true, score: 1.0`                                         | 4 failures, incl. `a missing script_tool_id does not score 1.0` and `a gate with no script-tool runtime wired fails closed rather than passing`             |
+| 6.5 | Raw-range skip removed from `detectScriptReferences`                                              | 3 failures, incl. `does not execute a reference inside a raw block` (executor called once, expected zero)                                                   |
+
+**The 6.1 mutation is the one worth keeping.** Its first version of the test asserted only the
+verdict, and passed on unfixed code: `sh -c "echo hi"` produced unparseable stdout, so `passed`
+was already `false` for the wrong reason. A verdict cannot distinguish "resolved nothing" from
+"shelled it and the shell failed". The sentinel file can, and it is what the mutation moved.

@@ -102,11 +102,15 @@ Run a script tool and insert its output.
 
 ```django
 {# Run script 'word_count' #}
-Word count: {{ script:word_count text=content }}
+Word count: {{script:word_count text=content}}
 
 {# Access JSON properties #}
-{{ script:analyzer.score }}
+{{script:analyzer.score}}
 ```
+
+**No space after `{{`.** The resolver matches `{{script:` literally, so a spaced
+`{{ script:word_count }}` is never resolved — and Nunjucks then fails to parse it as an
+expression, which fails the whole render rather than rendering nothing.
 
 #### Approval
 
@@ -170,3 +174,13 @@ function App() {
 }
 {% endraw %}
 ```
+
+A `raw` block also suppresses script execution, so a prompt can document the syntax without
+running anything:
+
+```django
+{% raw %}{{script:word_count text=content}}{% endraw %}
+```
+
+That renders as literal text and executes no script. Without the block the reference resolves
+during rendering, which is how a prompt's own explanatory table can run a tool.

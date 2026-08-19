@@ -346,4 +346,52 @@ describe('ScriptReferenceResolver Integration', () => {
       expect(Array.isArray(result.diagnostics.warnings)).toBe(true);
     });
   });
+
+  // Row 6.5 — `{% raw %}` is the documented escape for literal `{{ }}`
+  // (template-syntax.md §Escaping). `preResolve` runs a regex over raw template
+  // text before Nunjucks ever sees it, so without raw-awareness a prompt that
+  // merely DOCUMENTS the syntax executes it. That is not hypothetical: the
+  // shipped `reference_demo` explanatory table broke the whole prompt twice.
+  describe('Raw Blocks', () => {
+    test('does not execute a reference inside a raw block', async () => {
+      const result = await resolver.preResolve(
+        'Docs: {% raw %}{{script:analyzer}}{% endraw %}',
+        {}
+      );
+
+      expect(mockExecutor.execute).not.toHaveBeenCalled();
+      expect(result.diagnostics.scriptsResolved).toBe(0);
+    });
+
+    test('renders a raw-escaped reference as literal text', async () => {
+      const result = await resolver.preResolve(
+        'Docs: {% raw %}{{script:analyzer}}{% endraw %}',
+        {}
+      );
+
+      expect(render(result.resolvedTemplate)).toBe('Docs: {{script:analyzer}}');
+    });
+
+    test('still resolves references outside the raw block', async () => {
+      const result = await resolver.preResolve(
+        '{% raw %}{{script:analyzer}}{% endraw %} and {{script:formatter}}',
+        {}
+      );
+
+      expect(result.diagnostics.scriptsResolved).toBe(1);
+      expect(render(result.resolvedTemplate)).toBe(
+        '{{script:analyzer}} and {"formatted":"Hello World","length":11}'
+      );
+    });
+
+    test('resolves a reference that follows a closed raw block', async () => {
+      const result = await resolver.preResolve(
+        '{% raw %}literal{% endraw %}{{script:analyzer}}',
+        {}
+      );
+
+      expect(result.diagnostics.scriptsResolved).toBe(1);
+      expect(render(result.resolvedTemplate)).toBe('literal{"count":42,"status":"complete"}');
+    });
+  });
 });

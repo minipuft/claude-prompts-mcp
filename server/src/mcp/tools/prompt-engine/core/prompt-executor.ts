@@ -24,6 +24,7 @@ import { renderPromptEngineGuide } from '../utils/guide.js';
 import type { ParsingSystem } from '#engine/execution/parsers/index.js';
 import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { ScriptToolRuntime } from '#engine/gates/core/index.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
@@ -120,6 +121,13 @@ export class PromptExecutor {
   private referenceResolver?: PromptReferenceResolver;
   /** Resolver for {{script:id}} references in templates */
   private scriptReferenceResolver?: ScriptReferenceResolver;
+  /**
+   * The script-tool registry and executor, shared by the inline `{{script:id}}`
+   * resolver and by `script_tool` gate criteria. Rebuilt on every prompt reload
+   * (see `updateData`), which is why gates read it through a provider rather
+   * than holding the instance.
+   */
+  private scriptToolRuntime?: ScriptToolRuntime;
   /** Hook registry for pipeline event emissions */
   private hookRegistry?: HookRegistryPort;
   /** Notification emitter for MCP client notifications */
@@ -204,7 +212,7 @@ export class PromptExecutor {
     });
 
     const gateProvider = new GateManagerProvider(gateManager, temporaryGateRegistry);
-    const gateValidator = createGateValidator(logger, gateProvider);
+    const gateValidator = createGateValidator(logger, gateProvider, () => this.scriptToolRuntime);
     this.lightweightGateSystem = new LightweightGateSystem(
       gateProvider,
       gateValidator,
@@ -269,6 +277,7 @@ export class PromptExecutor {
       scriptLoader,
       scriptExecutor
     );
+    this.scriptToolRuntime = { loader: scriptLoader, executor: scriptExecutor };
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();
   }
