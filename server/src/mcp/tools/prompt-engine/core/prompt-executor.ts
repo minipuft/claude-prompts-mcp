@@ -24,8 +24,8 @@ import { renderPromptEngineGuide } from '../utils/guide.js';
 import type { ParsingSystem } from '#engine/execution/parsers/index.js';
 import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { ScriptToolRuntime } from '#engine/gates/core/index.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { ScriptToolRuntime } from '#engine/gates/services/script-tool-criterion-runner.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { WorkflowIR } from '#modules/workflow-ir/types.js';
@@ -50,11 +50,7 @@ import {
   createPromptGuidanceService,
 } from '#engine/frameworks/prompt-guidance/index.js';
 import { FrameworkExecutionContext } from '#engine/frameworks/types/index.js';
-import {
-  LightweightGateSystem,
-  createGateValidator,
-  createTemporaryGateRegistry,
-} from '#engine/gates/core/index.js';
+import { LightweightGateSystem, createTemporaryGateRegistry } from '#engine/gates/core/index.js';
 import {
   GateGuidanceRenderer,
   createGateGuidanceRenderer,
@@ -212,12 +208,7 @@ export class PromptExecutor {
     });
 
     const gateProvider = new GateManagerProvider(gateManager, temporaryGateRegistry);
-    const gateValidator = createGateValidator(logger, gateProvider, () => this.scriptToolRuntime);
-    this.lightweightGateSystem = new LightweightGateSystem(
-      gateProvider,
-      gateValidator,
-      temporaryGateRegistry
-    );
+    this.lightweightGateSystem = new LightweightGateSystem(gateProvider, temporaryGateRegistry);
     this.gateReferenceResolver = new GateReferenceResolver(this.lightweightGateSystem.gateLoader);
     this.gateGuidanceRenderer = createGateGuidanceRenderer(logger, {
       gateLoader: this.lightweightGateSystem.gateLoader,

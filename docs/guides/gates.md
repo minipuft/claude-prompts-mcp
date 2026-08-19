@@ -9,12 +9,17 @@ Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `t
 | `type:`                | What runs at execution time                                                                                                                                                                                                                                                                                             | Enforcement strength          | Use for                                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
 | `inline_guidance`      | Renders a checklist into the chain response for agent self-assessment. No runtime check.                                                                                                                                                                                                                                | Display only                  | Conventions, style hints, self-evaluation prompts                                                |
-| `llm_self_check`       | _Reserved._ No runner. Auto-passes with a skip message naming the replacement, so a gate declaring it is never blocked by it.                                                                                                                                                                                           | Not enforced                  | (none — use `inline_guidance`, or [`%judge`](./judge-mode.md) for model-graded review)           |
-| `framework_compliance` | Nothing. GateValidator has no branch for this type, so it hits the auto-pass default. Stage 19 does inspect the response against the active framework's `phases.yaml` (section headers, `min_length`, `forbidden_terms`) — but it triggers on `phases.yaml` guards, not on this value.                                  | Declarative only              | Documenting intent. To actually enforce sections, define guards in the framework's `phases.yaml` |
+| `llm_self_check`       | _Reserved._ No runner. Contributes no ground-truth result, so it can never clear a review on its own — the gate falls through to normal model review.                                                                                                                                                                   | Not enforced                  | (none — use `inline_guidance`, or [`%judge`](./judge-mode.md) for model-graded review)           |
+| `framework_compliance` | Nothing. No criteria runner handles this type. Stage 19 does inspect the response against the active framework's `phases.yaml` (section headers, `min_length`, `forbidden_terms`) — but it triggers on `phases.yaml` guards, not on this value.                                                                         | Declarative only              | Documenting intent. To actually enforce sections, define guards in the framework's `phases.yaml` |
 | `shell_verify`         | Spawns the configured shell command and checks its exit code (0 = pass). Optional response injection pipes the agent response to stdin.                                                                                                                                                                                 | Hard ground-truth enforcement | Tests, linting, builds, response-content verification                                            |
 | `script_tool`          | Resolves `script_tool_id` against the registered script tools and runs THAT tool with JSON stdin, expecting `{ passed, reason?, details? }` back. Runs beside `shell_verify` during gate review; a gate may declare both. Fails closed when it cannot run, and a criterion with no `script_tool_id` is refused at load. | Hard structured enforcement   | Checks needing typed arguments and an explained verdict, not just an exit code                   |
 
 > [!IMPORTANT]
+> **Single prompts do not run criteria.** Stage 20 renders synthetic gate-review steps and
+> requires chain steps to do it, so a gated single prompt runs no `pass_criteria` at all — not
+> `shell_verify`, not `script_tool`. Its gates still reach the model as review guidance; they just
+> carry no ground truth. Declare ground-truth criteria on gates you attach to chains.
+>
 > **A criterion that cannot be enforced is now refused at load.** `shell_verify` without a
 > `shell_command`, and `script_tool` without a `script_tool_id`, fail gate loading with a message
 > naming the missing field. Previously both auto-passed at review time, so a gate declaring a check
@@ -27,6 +32,11 @@ Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `t
 > cleared review having verified nothing — silently, with no warning and no output. It now runs
 > beside `shell_verify` through the same coverage decision, which reads only gate id and pass/fail
 > and is therefore mechanism-agnostic.
+>
+> A second criteria runner (`GateValidator`) existed alongside Stage 20 with its own, weaker
+> `shell_verify` implementation and no production caller at all. It was deleted on 2026-08-19
+> rather than revived: every criteria type now has exactly one owner, and the pipeline stages are
+> it.
 
 > [!NOTE]
 > The former `content_check` and `pattern_check` types have been renamed to `inline_guidance` (commit `380655e4`). Neither had a runtime enforcement path wired — both rendered guidance text and relied on the agent's `GATE_REVIEW` self-report. The rename makes the actual behavior honest. See [Phase Guards Guide](./phase-guards.md) for `framework_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.

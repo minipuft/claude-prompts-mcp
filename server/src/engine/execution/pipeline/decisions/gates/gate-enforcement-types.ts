@@ -76,13 +76,13 @@ export interface CreateReviewOptions {
 }
 
 /**
- * One gate's shell-verification result, reduced to what the coverage decision reads.
+ * One gate's ground-truth verification result, reduced to what the coverage decision reads.
  *
- * Structurally a subset of `GateShellVerifyResult` from the shell-verify runner, declared
- * here so the authority does not depend on the gates/shell module to answer a question
- * about its own domain.
+ * Structurally a subset of BOTH `GateShellVerifyResult` and `GateScriptToolResult`, declared
+ * here so the authority does not depend on the gates modules to answer a question about its
+ * own domain — and so a further mechanism needs no change here.
  */
-export interface ShellVerificationOutcome {
+export interface GroundTruthOutcome {
   readonly gateId: string;
   readonly passed: boolean;
 }
@@ -90,19 +90,19 @@ export interface ShellVerificationOutcome {
 /**
  * Inputs to the shell-verification coverage decision.
  */
-export interface ShellVerificationCoverageInput {
+export interface GroundTruthCoverageInput {
   /** Gate ids the pending review is still waiting on. */
   readonly requiredGateIds: readonly string[];
-  /** Results produced by running this request's `shell_verify` criteria. */
-  readonly results: readonly ShellVerificationOutcome[];
+  /** Results produced by running this request's ground-truth criteria, of any mechanism. */
+  readonly results: readonly GroundTruthOutcome[];
   /** Gate ids an earlier stage in this same request already shell-verified. */
   readonly priorVerifiedGateIds?: readonly string[];
 }
 
 /**
- * Whether shell verification alone clears a pending gate review.
+ * Whether ground-truth verification alone clears a pending gate review.
  */
-export interface ShellVerificationCoverage {
+export interface GroundTruthCoverage {
   /** True when every required gate is covered by a passing verification. */
   readonly satisfied: boolean;
   /** This request's and earlier stages' verified gate ids, deduplicated. */

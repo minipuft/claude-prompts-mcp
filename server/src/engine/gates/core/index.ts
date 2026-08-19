@@ -10,7 +10,6 @@
 
 import { GateStateStore } from '../gate-state-store.js';
 import { createGateLoader } from './gate-loader.js';
-import { GateValidator, createGateValidator } from './gate-validator.js';
 import {
   TemporaryGateRegistry,
   createTemporaryGateRegistry,
@@ -19,11 +18,8 @@ import {
 
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateDefinitionProvider } from './gate-loader.js';
-import type { ValidationResult } from '../../execution/types.js';
-import type { ValidationContext } from '../types.js';
 
 export { GateLoader, createGateLoader, type GateDefinitionProvider } from './gate-loader.js';
-export { GateValidator, createGateValidator } from './gate-validator.js';
 export {
   TemporaryGateRegistry,
   createTemporaryGateRegistry,
@@ -61,16 +57,11 @@ export {
   type GateRetryConfigYaml,
 } from './gate-schema.js';
 
-export type { ValidationResult } from '../../execution/types.js';
 export type {
   GateActivationResult,
   GatePassCriteria,
   LightweightGateDefinition,
-  ValidationCheck,
-  ValidationContext,
 } from '../types.js';
-export type { GateValidationStatistics } from './gate-validator.js';
-export type { ScriptToolRuntime } from '../services/script-tool-criterion-runner.js';
 
 /**
  * Core gate system manager with temporary gate support
@@ -84,7 +75,6 @@ export class LightweightGateSystem {
 
   constructor(
     public gateLoader: GateDefinitionProvider,
-    public gateValidator: GateValidator,
     temporaryGateRegistry?: TemporaryGateRegistry
   ) {
     this.temporaryGateRegistry = temporaryGateRegistry;
@@ -174,85 +164,6 @@ export class LightweightGateSystem {
   }
 
   /**
-   * Validate content against active gates
-   */
-  async validateContent(
-    gateIds: string[],
-    content: string,
-    validationContext: {
-      promptId?: string;
-      stepId?: string;
-      attemptNumber?: number;
-      previousAttempts?: string[];
-      metadata?: Record<string, any>;
-    }
-  ): Promise<ValidationResult[]> {
-    // Check if gate system is enabled
-    if (!this.isGateSystemEnabled()) {
-      // Return success results for all gates if system is disabled
-      return gateIds.map((gateId) => ({
-        gateId,
-        valid: true,
-        passed: true,
-        message: 'Gate system disabled - validation skipped',
-        score: 1.0,
-        details: {},
-        retryHints: [],
-        suggestions: [],
-      }));
-    }
-
-    const startTime = performance.now();
-
-    const context: ValidationContext = {
-      content,
-    };
-
-    if (validationContext.metadata) {
-      context.metadata = validationContext.metadata;
-    }
-
-    const executionContext: NonNullable<ValidationContext['executionContext']> = {};
-    if (validationContext.promptId) {
-      executionContext.promptId = validationContext.promptId;
-    }
-    if (validationContext.stepId) {
-      executionContext.stepId = validationContext.stepId;
-    }
-    if (validationContext.attemptNumber !== undefined) {
-      executionContext.attemptNumber = validationContext.attemptNumber;
-    }
-    if (validationContext.previousAttempts) {
-      executionContext.previousAttempts = validationContext.previousAttempts;
-    }
-
-    if (Object.keys(executionContext).length > 0) {
-      context.executionContext = executionContext;
-    }
-
-    const results = await this.gateValidator.validateGates(gateIds, context);
-
-    // Record validation metrics if gate system manager is available
-    if (this.gateStateStore) {
-      const executionTime = performance.now() - startTime;
-      const success = results.every((r) => r.passed);
-      this.gateStateStore.recordValidation(success, executionTime, this.workspaceScope);
-    }
-
-    return results;
-  }
-
-  /**
-   * Get system statistics
-   */
-  getStatistics() {
-    return {
-      gateLoader: this.gateLoader.getStatistics(),
-      gateValidator: this.gateValidator.getStatistics(),
-    };
-  }
-
-  /**
    * Get the temporary gate registry instance (enhancement)
    */
   getTemporaryGateRegistry(): TemporaryGateRegistry | undefined {
@@ -321,9 +232,7 @@ export function createLightweightGateSystem(
 
   const gateLoader =
     options?.provider ?? createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
-  const gateValidator = createGateValidator(logger, gateLoader);
-
-  const gateSystem = new LightweightGateSystem(gateLoader, gateValidator, temporaryGateRegistry);
+  const gateSystem = new LightweightGateSystem(gateLoader, temporaryGateRegistry);
 
   if (gateStateStore) {
     gateSystem.setGateStateStore(gateStateStore);

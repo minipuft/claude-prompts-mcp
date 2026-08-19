@@ -27,5 +27,3 @@ export { ResponseFormatter } from './processors/response-formatter.js';
 
 // Utility functions (internal use)
 export { PromptClassifier } from './utils/classification.js';
-
-export { EngineValidator } from './utils/validation.js';

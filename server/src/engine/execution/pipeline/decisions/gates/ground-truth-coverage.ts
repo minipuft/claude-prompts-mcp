@@ -1,8 +1,8 @@
-// @lifecycle canonical - Decides whether ground-truth shell verification clears a gate review.
+// @lifecycle canonical - Decides whether ground-truth verification clears a gate review.
 /**
- * Shell-verification coverage decision.
+ * Ground-truth coverage decision.
  *
- * "Has this pending gate review already been satisfied by running commands?" is
+ * "Has this pending gate review already been satisfied by running something?" is
  * gate-verdict domain work — it decides a gate is cleared — so it belongs beside the
  * other gate-enforcement decisions rather than inside the stage that renders reviews.
  *
@@ -16,30 +16,30 @@
  * injecting them.
  */
 
-import type {
-  ShellVerificationCoverage,
-  ShellVerificationCoverageInput,
-} from './gate-enforcement-types.js';
+import type { GroundTruthCoverage, GroundTruthCoverageInput } from './gate-enforcement-types.js';
 
 /**
- * Decide whether shell verification alone clears a pending review.
+ * Decide whether ground-truth verification alone clears a pending review.
  *
  * Clears only when this request actually ran verifications, every one passed, and the
  * gates verified here plus any an earlier stage verified cover every gate the review is
  * waiting on. Partial coverage falls through to normal review: a gate with no
- * `shell_verify` criteria has been checked by nothing, and a passing sibling does not
- * speak for it.
+ * ground-truth criteria has been checked by nothing, and a passing sibling does not speak
+ * for it.
+ *
+ * **Mechanism-agnostic by construction.** It reads only `gateId` and `passed`, so
+ * `shell_verify` exit codes and `script_tool` structured verdicts feed it unchanged and a
+ * third mechanism would too. The name said "shell" until 2026-08-19 purely because shell
+ * was the only mechanism that existed.
  */
-export function resolveShellVerificationCoverage(
-  input: ShellVerificationCoverageInput
-): ShellVerificationCoverage {
+export function resolveGroundTruthCoverage(input: GroundTruthCoverageInput): GroundTruthCoverage {
   const priorVerified = input.priorVerifiedGateIds ?? [];
 
   if (input.results.length === 0) {
     return {
       satisfied: false,
       verifiedGateIds: [...new Set(priorVerified)],
-      reason: 'No shell_verify criteria ran for this review',
+      reason: 'No ground-truth criteria ran for this review',
     };
   }
 
@@ -54,7 +54,7 @@ export function resolveShellVerificationCoverage(
     return {
       satisfied: false,
       verifiedGateIds,
-      reason: `Shell verification failed for ${failedGateIds.join(', ')}`,
+      reason: `Ground-truth verification failed for ${failedGateIds.join(', ')}`,
     };
   }
 
@@ -63,13 +63,13 @@ export function resolveShellVerificationCoverage(
     return {
       satisfied: false,
       verifiedGateIds,
-      reason: `Shell verification does not cover ${uncovered.join(', ')}`,
+      reason: `Ground-truth verification does not cover ${uncovered.join(', ')}`,
     };
   }
 
   return {
     satisfied: true,
     verifiedGateIds,
-    reason: 'Every required gate passed shell verification',
+    reason: 'Every required gate passed ground-truth verification',
   };
 }

@@ -345,3 +345,77 @@ the old permissiveness (measured).
 | Stage 20 runs script_tool criteria                          | (drive) probe gate with a valid registered tool | sentinel file created; PASSED/FAILED sections rendered — the pre-fix drive produced an empty gate heading and no sentinel                     |
 | An unrunnable criterion produces a failing ROW, not silence | probe named a tool that does not exist          | `COULD NOT RUN` row rendered and the review was not cleared — silence would have cleared it                                                   |
 | Unenforceable criteria are refused at load                  | `{type:'script_tool'}` with no id               | `refuses script_tool with no script_tool_id`; the pre-existing vocab test also went red, which is how the change proved it reached the schema |
+
+## Post-retirement follow-through (2026-08-19) — GateValidator deleted, coverage renamed
+
+Owner asked two questions after row 6.7 landed: is the dormant `GateValidator` superseded or
+unfinished, and rename `resolveShellVerificationCoverage` now.
+
+### The rename
+
+`resolveShellVerificationCoverage` → `resolveGroundTruthCoverage`, with
+`ShellVerificationOutcome`/`CoverageInput`/`Coverage` → `GroundTruth*` and the file renamed to
+`ground-truth-coverage.ts`. Flagged as debt in DEV-T6-6 the same day and paid immediately: the
+decision had started carrying `script_tool` results while its name still said shell. One test
+asserted the reason string `Shell verification failed for tests`, which is the kind of assertion
+that makes a rename visible rather than silent — updated with it.
+
+### GateValidator: superseded, and deleted
+
+Not unfinished. Every criteria type it handled has a live owner elsewhere:
+
+| Type                   | Live owner                                                            |
+| ---------------------- | --------------------------------------------------------------------- |
+| `inline_guidance`      | guidance renderer (display only)                                      |
+| `framework_compliance` | Stage 19 phase guards, from `phases.yaml` — explicitly not this value |
+| `shell_verify`         | Stage 17 (`:: verify`) and Stage 20's runner                          |
+| `script_tool`          | Stage 20's runner, as of `078eb7e0`                                   |
+| `llm_self_check`       | nothing, anywhere — reserved, and documented as such                  |
+
+Its own `runShellVerify` was a strictly WEAKER duplicate of the live one: no
+`shell_stdin_source: agent_response` injection, no coverage integration. Hooking it up would have
+created a second criteria-execution path with different semantics from Stage 20 — the parallel
+system this entire plan exists to remove, rebuilt deliberately.
+
+Deleted: `gate-validator.ts` (540 lines), `EngineValidator` and its whole module
+(`prompt-engine/utils/validation.ts` — constructed only by its own test),
+`LightweightGateSystem.validateContent` and `.getStatistics`, and the barrel exports and type
+re-exports left orphaned. ESLint error count fell 3165 → 3116.
+
+### F12 — a gated SINGLE prompt runs no criteria at all
+
+Found while deciding the above, and it is the one honest argument for "hook it up" — so it is
+recorded rather than waved past. Stage 20 renders synthetic gate-review steps and returns early
+when `parsedCommand.steps` is empty, so a gated single prompt runs **no** `pass_criteria`: not
+`script_tool`, and not `shell_verify` either. Measured by drive: a `shell_verify` gate whose
+command was `touch <sentinel>`, attached to `>>reference_demo`, produced no shell section across
+four turns and never created the sentinel.
+
+`GateValidator` was NOT the fix — its entry point was a class nothing constructs, and its shell
+implementation was the weaker one. The fix is to give single prompts the same two runners Stage 20
+calls. Documented in `gates.md` as a limitation in the meantime, because a gate that carries
+ground-truth criteria and silently runs none is the exact shape of F11.
+
+### Reader without a producer, created deliberately and marked
+
+`GateStateStore.recordValidation` lost its only caller with `validateContent`. `getSystemHealth`
+still reads `totalValidations`/`successRate`/`lastValidationTime`, so those now report their
+initial values forever. Deleting the writer and leaving the reader would be worse, and deleting
+both reaches into persisted state shape — out of scope here. The method carries an as-of stamp
+naming its natural producer (`20-gate-review-stage.ts`, which now knows every verification outcome
+and its duration) and the alternative (delete the health fields with it). Note that the metrics
+were never actually recorded in production, since the only writer sat on the dead path.
+
+### Test surface
+
+`shell-verify-gate-criteria.test.ts` (15 tests) tested the deleted validator; its `shell_verify`
+coverage is duplicated by `gate-shell-verify-review-feedback.test.ts` (23 tests) against the live
+runner, so deleting it lost nothing. Its one still-true property was ported: a reserved
+criteria type contributes no ground-truth result, so coverage is not satisfied and the review
+falls through to model review rather than clearing. That is the property that matters now that the
+auto-pass stub is gone — silence must read as "not verified".
+
+`script-tool-gate-criteria.test.ts`'s validator half was retargeted onto `runScriptToolCriterion`,
+the shared rule, which is where those assertions belonged anyway.
+`gate-system-scope-propagation.test.ts` lost its `recordValidation` seam and now observes the one
+that remains, reached through `getGuidanceText`.

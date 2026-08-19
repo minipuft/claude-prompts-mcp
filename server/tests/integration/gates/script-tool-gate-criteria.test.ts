@@ -23,16 +23,17 @@ import { tmpdir } from 'os';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-import { createGateValidator } from '../../../src/engine/gates/core/gate-validator.js';
 import { validateGateSchema } from '../../../src/engine/gates/core/gate-schema.js';
 import { runGateScriptToolVerifications } from '../../../src/engine/gates/services/gate-script-tool-runner.js';
+import { runScriptToolCriterion } from '../../../src/engine/gates/services/script-tool-criterion-runner.js';
+import { resolveGroundTruthCoverage } from '../../../src/engine/execution/pipeline/decisions/gates/ground-truth-coverage.js';
 import { createScriptExecutor } from '../../../src/modules/automation/execution/script-executor.js';
 
 import type { ScriptLoader } from '../../../src/engine/execution/reference/script-reference-resolver.js';
 import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate-loader.js';
 import type {
+  GatePassCriteria,
   LightweightGateDefinition,
-  ValidationContext,
 } from '../../../src/engine/gates/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { LoadedScriptTool } from '../../../src/shared/types/index.js';
@@ -100,7 +101,6 @@ function loaderProviderFor(gate: LightweightGateDefinition): GateDefinitionProvi
 }
 
 describe('script_tool gate criteria', () => {
-  const context: ValidationContext = { content: 'content under review' };
   let scriptTools: () => {
     loader: ScriptLoader;
     executor: ReturnType<typeof createScriptExecutor>;
@@ -111,104 +111,98 @@ describe('script_tool gate criteria', () => {
     scriptTools = () => ({ loader: loaderFor(verdictTool()), executor });
   });
 
-  // 6.1 — the defect, stated negatively, with a SIDE EFFECT as the observable.
-  //
-  // A verdict alone cannot distinguish "resolved nothing" from "shelled the
-  // string and the shell failed": before Tier 6 an unparseable `sh -c` result
-  // already produced passed:false, so an assertion on the verdict passes for
-  // the wrong reason. The sentinel file is the honest signal — it exists only
-  // if a shell actually ran the criteria value.
-  test('a gate whose script_tool_id is a shell command does not run a shell', async () => {
-    const sentinel = path.join(mkdtempSync(path.join(tmpdir(), 'script-tool-gate-')), 'shelled');
-    const gate = gateWith({ type: 'script_tool', script_tool_id: `touch ${sentinel}` });
-    const validator = createGateValidator(silentLogger, loaderProviderFor(gate), scriptTools);
+  // The rule itself, tested where it is defined. `runScriptToolCriterion` is the single
+  // encoding of "what does a script_tool criterion mean"; the gate-review runner is one
+  // projection of it. Testing the rule here and the projection below keeps a fix to one
+  // from silently missing the other.
+  describe('the criterion rule', () => {
+    // 6.1 stated negatively, with a SIDE EFFECT as the observable.
+    //
+    // A verdict alone cannot distinguish "resolved nothing" from "shelled the string and
+    // the shell failed": before Tier 6 an unparseable `sh -c` result already produced a
+    // failure, so asserting the verdict passes for the wrong reason. The sentinel file
+    // exists only if a shell actually ran the criteria value.
+    test('an id that looks like a shell command does not run a shell', async () => {
+      const sentinel = path.join(mkdtempSync(path.join(tmpdir(), 'script-tool-gate-')), 'shelled');
 
-    const result = await validator.validateGate(gate.id, context);
-    const check = result?.checks?.[0];
+      const outcome = await runScriptToolCriterion(
+        { type: 'script_tool', script_tool_id: `touch ${sentinel}` } as GatePassCriteria,
+        scriptTools()
+      );
 
-    expect(existsSync(sentinel)).toBe(false);
-    expect(check?.passed).toBe(false);
-    expect(JSON.stringify(check?.details ?? {})).not.toContain('gate-verdict.cjs');
-  }, 20000);
+      expect(existsSync(sentinel)).toBe(false);
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(true);
+    }, 20000);
 
-  test('a gate naming a registered tool runs THAT tool', async () => {
-    const gate = gateWith({
-      type: 'script_tool',
-      script_tool_id: 'verdict_tool',
-      script_tool_input: { verdict: 'pass' },
+    test('a registered id runs THAT tool', async () => {
+      const outcome = await runScriptToolCriterion(
+        {
+          type: 'script_tool',
+          script_tool_id: 'verdict_tool',
+          script_tool_input: { verdict: 'pass' },
+        } as GatePassCriteria,
+        scriptTools()
+      );
+
+      expect(outcome.passed).toBe(true);
+      // The marker proves the verdict came from the fixture, not from a shell.
+      expect(JSON.stringify(outcome.scriptOutput ?? {})).toContain('gate-verdict.cjs');
+    }, 20000);
+
+    test('a tool reporting failure fails the criterion without being unrunnable', async () => {
+      const outcome = await runScriptToolCriterion(
+        {
+          type: 'script_tool',
+          script_tool_id: 'verdict_tool',
+          script_tool_input: { verdict: 'nope' },
+        } as GatePassCriteria,
+        scriptTools()
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(false);
+    }, 20000);
+
+    // 6.2 — an unrunnable verification is not a verification. The load gate refuses an
+    // id-less criterion, so this covers the paths only reachable at run time.
+    test('a missing id is unrunnable rather than passing', async () => {
+      const outcome = await runScriptToolCriterion(
+        { type: 'script_tool' } as GatePassCriteria,
+        scriptTools()
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(true);
     });
-    const validator = createGateValidator(silentLogger, loaderProviderFor(gate), scriptTools);
 
-    const result = await validator.validateGate(gate.id, context);
-    const check = result?.checks?.[0];
+    test('no wired runtime fails closed rather than passing', async () => {
+      const outcome = await runScriptToolCriterion(
+        { type: 'script_tool', script_tool_id: 'verdict_tool' } as GatePassCriteria,
+        undefined
+      );
 
-    expect(check?.passed).toBe(true);
-    // The marker proves the verdict came from the fixture, not from a shell.
-    expect(JSON.stringify(check?.details ?? {})).toContain('gate-verdict.cjs');
-  }, 20000);
-
-  test('a registered tool reporting failure fails the gate', async () => {
-    const gate = gateWith({
-      type: 'script_tool',
-      script_tool_id: 'verdict_tool',
-      script_tool_input: { verdict: 'nope' },
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(true);
     });
-    const validator = createGateValidator(silentLogger, loaderProviderFor(gate), scriptTools);
 
-    const result = await validator.validateGate(gate.id, context);
-    const check = result?.checks?.[0];
+    // The control Tier 3 established, applied to gate criteria: a gate is not a caller and
+    // has no channel through which a confirm-required tool could be approved.
+    test('a confirm-required tool is refused rather than run', async () => {
+      const guarded = verdictTool({
+        id: 'guarded_verdict',
+        execution: { trigger: 'always', confirm: true },
+      } as Partial<LoadedScriptTool>);
 
-    expect(check?.passed).toBe(false);
-    expect(check?.score).toBe(0);
-    expect(JSON.stringify(check?.details ?? {})).toContain('gate-verdict.cjs');
-  }, 20000);
+      const outcome = await runScriptToolCriterion(
+        { type: 'script_tool', script_tool_id: 'guarded_verdict' } as GatePassCriteria,
+        { loader: loaderFor(guarded), executor: createScriptExecutor({ debug: false }) }
+      );
 
-  // 6.2 — an unrunnable verification is not a verification.
-  test('a missing script_tool_id does not score 1.0', async () => {
-    const gate = gateWith({ type: 'script_tool' });
-    const validator = createGateValidator(silentLogger, loaderProviderFor(gate), scriptTools);
-
-    const result = await validator.validateGate(gate.id, context);
-    const check = result?.checks?.[0];
-
-    expect(check?.passed).toBe(false);
-    expect(check?.score).not.toBe(1.0);
-  });
-
-  test('a gate with no script-tool runtime wired fails closed rather than passing', async () => {
-    const gate = gateWith({ type: 'script_tool', script_tool_id: 'verdict_tool' });
-    const validator = createGateValidator(silentLogger, loaderProviderFor(gate), undefined);
-
-    const result = await validator.validateGate(gate.id, context);
-    const check = result?.checks?.[0];
-
-    expect(check?.passed).toBe(false);
-    expect(check?.score).not.toBe(1.0);
-  });
-
-  // The control Tier 3 established, applied to the third executeProcess consumer:
-  // a gate has no approval channel, so it cannot stand in for the caller.
-  test('a confirm-required tool is refused rather than run by a gate', async () => {
-    const guarded = verdictTool({
-      id: 'guarded_verdict',
-      execution: { trigger: 'always', confirm: true },
-    } as Partial<LoadedScriptTool>);
-    const executor = createScriptExecutor({ debug: false });
-    const gate = gateWith({
-      type: 'script_tool',
-      script_tool_id: 'guarded_verdict',
-      script_tool_input: { verdict: 'pass' },
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(true);
+      expect(outcome.reason).toContain('confirmation');
     });
-    const validator = createGateValidator(silentLogger, loaderProviderFor(gate), () => ({
-      loader: loaderFor(guarded),
-      executor,
-    }));
-
-    const result = await validator.validateGate(gate.id, context);
-    const check = result?.checks?.[0];
-
-    expect(check?.passed).toBe(false);
-    expect(JSON.stringify(check?.details ?? {})).not.toContain('gate-verdict.cjs');
   });
 
   // F11 — was a characterization of inertness; now the liveness assertion.
@@ -292,6 +286,47 @@ describe('script_tool gate criteria', () => {
       );
 
       expect(results).toEqual([]);
+    });
+  });
+
+  // Ported from `shell-verify-gate-criteria.test.ts`, deleted with GateValidator.
+  //
+  // `llm_self_check` is reserved: no runner exists anywhere. It used to reach GateValidator's
+  // auto-pass stub, which returned `passed: true` with a skip message — that stub is gone, so
+  // the property worth protecting is the one that keeps a reserved type from CLEARING a
+  // review: it contributes no ground-truth result, and coverage clears only gates covered by
+  // a passing one. Silence must read as "not verified", never as "verified".
+  describe('a reserved criteria type cannot clear a review', () => {
+    test('contributes no ground-truth result, so coverage is not satisfied', async () => {
+      const gate = gateWith({ type: 'llm_self_check', prompt_template: 'Assess depth' });
+      const provider = {
+        ...loaderProviderFor(gate),
+        loadGates: async (ids: string[]) => (ids.includes(gate.id) ? [gate] : []),
+      } as unknown as GateDefinitionProvider;
+
+      const results = await runGateScriptToolVerifications([gate.id], provider, scriptTools());
+      const coverage = resolveGroundTruthCoverage({
+        requiredGateIds: [gate.id],
+        results,
+      });
+
+      expect(results).toEqual([]);
+      expect(coverage.satisfied).toBe(false);
+    });
+
+    test('the schema still accepts the type, so existing gate files keep loading', () => {
+      const result = validateGateSchema(
+        {
+          id: 'probe',
+          name: 'Probe',
+          type: 'validation',
+          description: 'load probe',
+          pass_criteria: [{ type: 'llm_self_check', prompt_template: 'Assess depth' }],
+        },
+        'probe'
+      );
+
+      expect(result.valid).toBe(true);
     });
   });
 

@@ -7,7 +7,7 @@ import {
 import { runGateShellVerifications } from '../../../gates/services/gate-shell-verify-runner.js';
 import { formatGateShellVerifySection } from '../../../gates/shell/shell-verify-message-formatter.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
-import { resolveShellVerificationCoverage } from '../decisions/gates/shell-verification-coverage.js';
+import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -193,7 +193,7 @@ export class GateReviewStage extends BasePipelineStage {
         //
         // The decision reads only `gateId` and `passed`, so it is mechanism-agnostic and
         // both result kinds feed it unchanged.
-        const coverage = resolveShellVerificationCoverage({
+        const coverage = resolveGroundTruthCoverage({
           requiredGateIds: pendingReview.gateIds,
           results: [...shellResults, ...scriptResults],
           priorVerifiedGateIds: context.state.gates.shellVerifyPassedForGates ?? [],

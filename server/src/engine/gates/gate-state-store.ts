@@ -352,7 +352,19 @@ export class GateStateStore extends EventEmitter {
   }
 
   /**
-   * Record a validation execution for metrics
+   * Record a validation execution for metrics.
+   *
+   * **No caller as of 2026-08-19.** Its only one was `LightweightGateSystem.validateContent`,
+   * deleted with `GateValidator` when every criteria type moved to a pipeline stage. So
+   * `getSystemHealth`'s `totalValidations`, `successRate` and `lastValidationTime` now read
+   * their initial values forever — a reader without a producer, and the reason this method is
+   * kept rather than deleted with its caller: the health projection still exists and needs a
+   * writer, not amputation.
+   *
+   * Revives when gate review reports its ground-truth results here (the natural producer is
+   * `20-gate-review-stage.ts`, which now knows every verification outcome and their durations).
+   * Delete instead if that is judged not worth wiring — but do it together with the health
+   * fields, so no reader is left describing a number nothing computes.
    */
   recordValidation(success: boolean, executionTime: number, scope?: StateStoreOptions): void {
     const currentState = this.getOrCreateScopedState(scope);

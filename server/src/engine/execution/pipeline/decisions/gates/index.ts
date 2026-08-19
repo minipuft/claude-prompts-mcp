@@ -2,7 +2,7 @@
 
 export { GateEnforcementAuthority } from './gate-enforcement-authority.js';
 export { resolveEnforcementMode } from './enforcement-mode.js';
-export { resolveShellVerificationCoverage } from './shell-verification-coverage.js';
+export { resolveGroundTruthCoverage } from './ground-truth-coverage.js';
 export type {
   ActionResult,
   CreateReviewOptions,
@@ -12,8 +12,8 @@ export type {
   PendingGateReview,
   RetryConfig,
   ReviewOutcome,
-  ShellVerificationCoverage,
-  ShellVerificationCoverageInput,
-  ShellVerificationOutcome,
+  GroundTruthCoverage,
+  GroundTruthCoverageInput,
+  GroundTruthOutcome,
   VerdictSource,
 } from './gate-enforcement-types.js';
