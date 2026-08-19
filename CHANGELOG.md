@@ -25,6 +25,8 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 
 ### Changed
 
+- **Plan execution consolidated onto one prompt that compiles, rather than two that narrate.** `>>strategicImplement` now compiles a tier-gated plan table into a single `prompt_engine` workflow submission — row ids become node ids, the Depends column becomes the dependency edges, gate ids named in a row's Verify column become that node's inline gates, and the tier gate targets the tier's last node. `>>implementation_plan` emits rows carrying that mapping, and `>>tier_execute` is removed with no alias: its 160-line protocol rebuilt a dependency DAG from prose on every run, which is exactly the structure the workflow IR already validates. The practical effect is that review fires on the row that earned it instead of batching to the end of a tier, and "which of these rows can run in parallel" is answered by the linearizer rather than re-derived by hand each initiative. The surviving judgment work — tier re-measurement, vacuity-checked gate verification, plan writeback, and the commit boundary — moved into `strategicImplement` rather than being deleted with the prompt.
+
 - **Destructive `resource_manager` actions are denied by one guard** ahead of dispatch rather than by six hand-written checks across the processors. `prompt delete` keeps its own refusal because that one names the dependent prompts that would break.
 
 ### Fixed

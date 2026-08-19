@@ -1,29 +1,48 @@
 id: strategicImplement
 name: Strategic Implementation
-category: development
 description: >-
-  Implementation-mode starting gun (single-shot). Signals that it is time to
-  implement: classifies the work type, binds the session to its plan file
-  (arming the plan-hygiene hooks), and routes to the owning skills under the
-  always-loaded global standards. Deliberately adds no thresholds or step
-  templates of its own — the dev loop lives in ~/.claude/rules/dev-workflow.md
-  and the skills it dispatches. Vocabulary: master plans have phases, phase
-  plans have tiers, tiers have task rows.
+  Implementation-mode entry point (single-shot). Classifies the work type, binds
+  the session to its plan file (arming the plan-hygiene hooks), routes to the
+  owning skills under the always-loaded global standards, and compiles a plan
+  tier's task rows into one prompt_engine workflow submission — row ids become
+  node ids, the Depends column becomes the dependency edges, per-row gate ids
+  fire on their own node instead of batching to end-of-tier. Owns tier
+  re-measurement, vacuity-checked gate verification, plan writeback, and the
+  commit boundary; adds no thresholds of its own, since the dev loop lives in
+  ~/.claude/rules/dev-workflow.md and the skills it dispatches. Vocabulary:
+  master plans have phases, phase plans have tiers, tiers have task rows, a
+  compiled row is a node.
+category: development
 systemMessageFile: system-message.md
 userMessageTemplateFile: user-message.md
 arguments:
   - name: task
-    required: true
+    type: string
     description: What to implement — describe the feature, test, fix, refactor, or change
-    type: string
+    required: true
   - name: plan_path
-    required: false
+    type: string
     description: Path to existing plan document (for plan-driven implementation)
-    type: string
-  - name: work_type
     required: false
-    description: 'Override auto-detection: test, bug_fix, feature, refactor, optimize'
+  - name: work_type
     type: string
+    description: 'Override auto-detection: test, bug_fix, feature, refactor, optimize'
+    required: false
+  - name: design_mode
+    type: string
+    description: >-
+      Design Enrichment routing: auto | on | off. Default auto — detects
+      visual/creative surfaces (styles, .scss/.css, shaders/.glsl, UI, theme,
+      animation, layout, palette/colour, art direction) in the task and routes
+      design direction through >>design_muse plus the surface's creative skills.
+      'on' forces it; 'off' emits nothing.
+    required: false
+  - name: autonomous_commit
+    type: boolean
+    description: >-
+      Commit after the tier gate passes without asking. Default false — the
+      global rule is to commit only when explicitly asked.
+    required: false
 gateConfiguration:
   include:
     - workflow-preflight

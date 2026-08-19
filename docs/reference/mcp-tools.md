@@ -497,6 +497,24 @@ A rejection names its subject and its rule:
 Full field reference, the linearization rule, and the complete rejection vocabulary:
 [Workflow IR Reference](./workflow-ir.md).
 
+#### Compiling a plan tier into a submission
+
+You rarely hand-write a submission. `>>strategicImplement` compiles one from a tier-gated plan
+file — the table `>>implementation_plan` emits — one tier per submission:
+
+| Plan artifact                   | Compiles to                                                               |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| Row id `1.2` in tier T1         | Node id `t1-2` (kebab slug; edges and gates address it)                   |
+| The row's Change text           | `stepName`                                                                |
+| The row's Depends column        | `edges` — `{ "from": "t1-1", "to": "t1-2" }`                              |
+| `gates: <id>` in a row's Verify | That node's `inlineGateIds`, so review fires ON the row                   |
+| The tier's gate criterion       | A run-level gate whose `target_step_id` is the tier's LAST node id        |
+| `execution_dispatch` Agent cell | `subagentModel` (`heavy`/`standard`/`fast`); `main thread` emits no field |
+
+A row with no Depends keeps its declared place, which is what the linearization does with it
+anyway. Rows already marked ✓ are skipped. Gate verdicts, tier acceptance, open-question rulings,
+and the scope check are never compiled into a node — they stay with the calling session.
+
 ### Shell Verification Gates (Ralph Mode)
 
 Ground-truth validation via shell command exit codes. Exit 0 = PASS, non-zero = FAIL.

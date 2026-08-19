@@ -41,11 +41,22 @@ plan_table:
   [Repeat for each dependency tier]
 
   Rules:
-  - St(atus) column is REQUIRED and starts ☐ — tier_execute reads exactly this shape (☐ pending, ✓ done, ⚠ falsified premise); a plan table without it forces every executor to bridge by hand
+  - St(atus) column is REQUIRED and starts ☐ — `>>strategicImplement` and the plan-hygiene hooks read exactly this shape (☐ pending, ✓ done, ⚠ falsified premise, ⊘ closed-no-change); a plan table without it forces every executor to bridge by hand. Stamp every non-✓ row with `(as of YYYY-MM-DD · flips when <observation>)` — an unstamped ☐ means "still open" and "never re-checked" at once, and the row-tracking gate fails on it
   - Tasks without dependencies can run in parallel
   - New files are RED FLAGS — justify each one
   - Verify column: how to confirm this task works before moving on
   - Each task completable in a single agent session — split if 10+ files
+  - Row ids slug to kebab NODE ids for workflow compilation: row `1.2` in tier T1 → `t1-2`,
+    row `10.1` in T10 → `t10-1`. Keep row ids numeric-dotted so the slug stays mechanical.
+  - Depends holds ROW IDS from the same tier (`1.1`, or `1.1, 2.3` for several). These ARE
+    the compiled edges (`{from:"t1-1", to:"t1-2"}`). Write `—` for none; a row with no
+    Depends keeps its declared place, which is what the linearization does with it anyway.
+  - A row may name gate ids in its Verify column as `gates: <id>[, <id>]`. Those compile to
+    that node's inline gates, so review fires ON the row instead of batching to end-of-tier.
+    The tier gate compiles to a run-level gate targeting the tier's LAST node id.
+  - execution_dispatch Agent column vocabulary is `heavy | standard | fast | main thread`.
+    The three model words compile to a per-node model choice; `main thread` compiles to no
+    node field at all and keeps that work in-session.
 
 new_file_justifications:
   [For each new file: why it can't be added to an existing file]
