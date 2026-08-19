@@ -882,6 +882,7 @@ export class PromptExecutor {
         responseFormatter: this.responseFormatter,
         referenceResolver: this.referenceResolver,
         scriptReferenceResolver: this.scriptReferenceResolver,
+        scriptToolRuntime: () => this.scriptToolRuntime,
         frameworkManager: this.frameworkManager,
         frameworkValidator: this.frameworkValidator,
         promptGuidanceService: this.promptGuidanceService ?? null,

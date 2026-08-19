@@ -69,7 +69,8 @@ export type {
   ValidationCheck,
   ValidationContext,
 } from '../types.js';
-export type { GateValidationStatistics, ScriptToolRuntime } from './gate-validator.js';
+export type { GateValidationStatistics } from './gate-validator.js';
+export type { ScriptToolRuntime } from '../services/script-tool-criterion-runner.js';
 
 /**
  * Core gate system manager with temporary gate support

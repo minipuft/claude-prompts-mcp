@@ -361,7 +361,10 @@ export class PipelineBuilder {
       deps.lightweightGateSystem.gateLoader,
       deps.logger,
       () => deps.configManager.getConfig().gates,
-      deps.executionRecordStore
+      {
+        executionRecordStore: deps.executionRecordStore,
+        scriptToolRuntime: deps.scriptToolRuntime,
+      }
     );
     // Third consumer of the same run read model (P6 Tier 2): the handoff CTA and its P5
     // visibility envelope resolve the handed-off step by node identity, so they need the run's

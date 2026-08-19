@@ -271,3 +271,77 @@ reverted from a pre-mutation copy with the marker count re-checked at 0.
 verdict, and passed on unfixed code: `sh -c "echo hi"` produced unparseable stdout, so `passed`
 was already `false` for the wrong reason. A verdict cannot distinguish "resolved nothing" from
 "shelled it and the shell failed". The sentinel file can, and it is what the mutation moved.
+
+## Row 6.7 — wiring `script_tool` into the live path (2026-08-19)
+
+Owner ruling: wire it in; keep JSON criteria as a capability with `shell_verify` as the simpler
+default; refuse unenforceable criteria at load; fold the breaking half into the release already
+being cut.
+
+### DEV-T6-5 — the second implementation almost got written
+
+Tier 6 put a correct `script_tool` runner in `GateValidator`. Wiring Stage 20 meant writing the
+same resolve-then-run rule a second time, in the runner Stage 20 actually calls — two encodings of
+one criteria type, on two paths, which is precisely the shape F1 and F9 already produced between
+the declarative and inline script routes.
+
+Extracted `runScriptToolCriterion` instead: one rule, two projections. `GateValidator` maps the
+outcome to a `ValidationCheck`; the gate-review runner maps it to a feedback row. The dormant path
+now cannot enforce a different contract from the live one even if someone revives it.
+
+### DEV-T6-6 — the coverage decision needed nothing
+
+`resolveShellVerificationCoverage` reads only `gateId` and `passed` from each result, so
+`[...shellResults, ...scriptResults]` works unchanged. Its NAME says shell and its input type is
+`ShellVerificationOutcome`; both were left alone deliberately — renaming the coverage layer is ~45
+occurrences across 6 files, a mechanical change riding on a behavioral one. Recorded here rather
+than done, because a name that says "Shell" while carrying script-tool results will mislead the
+next reader.
+
+### DEV-T6-7 — the drive failed three times before it proved anything, and each failure was real
+
+1. `>>reference_demo` with the gate attached ran nothing: Stage 20 requires `parsedCommand.steps`,
+   so it skips entirely for a single prompt. The gate rendered as inline guidance, which looks like
+   participation and is not.
+2. `>>test_gate_chain` does not load — it exists in `resources/prompts/general/` but is not in the
+   index. Switched to `research_chain`.
+3. The workspace tool would not resolve: `tool.yaml` at workspace level declares `script:`, not
+   `scriptPath:`, and takes its input schema from a sibling `schema.json`. The first probe used the
+   `LoadedScriptTool` field names, which are the POST-load shape.
+
+Failure 3 is the interesting one — it produced the honest negative: gate review printed
+`COULD NOT RUN — no registered script tool has that id`, and the sentinel file was absent. That is
+the fail-closed path observed at the server, not asserted in a test. Only after fixing the YAML did
+the positive case land: tool resolved, sentinel written, `{passed:false, reason:"probe ran and
+deliberately failed"}` surfaced with its `details` block, gate not cleared. Flipping the fixture to
+`passed:true` produced PASSED. Both polarities, live.
+
+**Nothing in this repository had ever driven Stage 20 through the MCP surface.** The existing
+`shell_verify` feature is tested at runner+formatter level only, which is why an entire criteria
+type could sit inert without a failing test. The drive is recorded here because it is not
+reproducible from the suite.
+
+### DEV-T6-8 — a params warning that was worth obeying
+
+Adding the runtime took `GateReviewStage`'s constructor to 7 parameters, one over the limit that
+`refactoring.md` calls the genuine-outlier threshold. Rather than regenerate the baseline, both
+optional collaborators were grouped into `GateReviewCollaborators`, matching the existing
+`ChainOperatorCollaborators`. This also removed a bare `null` in positional slot six at four call
+sites, which told a reader nothing about which collaborator it was.
+
+### DEV-T6-9 — the shell_verify half of the load refusal was not asked for
+
+The owner's "refuse at load" answered a question about unenforceable criteria generally. Applying
+it to `script_tool` alone would have left `shell_verify` still auto-passing when misconfigured —
+the same fail-open, one line away, in the file being edited to remove it. Both are refused, and the
+`shell_verify` half is called out separately in the changelog because it is the one that could
+break an existing gate file. No gate in this repository or the three downstream consumers relies on
+the old permissiveness (measured).
+
+### Falsification record — row 6.7
+
+| Claim                                                       | Mutation applied                                | Named failure                                                                                                                                 |
+| ----------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage 20 runs script_tool criteria                          | (drive) probe gate with a valid registered tool | sentinel file created; PASSED/FAILED sections rendered — the pre-fix drive produced an empty gate heading and no sentinel                     |
+| An unrunnable criterion produces a failing ROW, not silence | probe named a tool that does not exist          | `COULD NOT RUN` row rendered and the review was not cleared — silence would have cleared it                                                   |
+| Unenforceable criteria are refused at load                  | `{type:'script_tool'}` with no id               | `refuses script_tool with no script_tool_id`; the pre-existing vocab test also went red, which is how the change proved it reached the schema |

@@ -24,7 +24,8 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 
 import { createGateValidator } from '../../../src/engine/gates/core/gate-validator.js';
-import { runGateShellVerifications } from '../../../src/engine/gates/services/gate-shell-verify-runner.js';
+import { validateGateSchema } from '../../../src/engine/gates/core/gate-schema.js';
+import { runGateScriptToolVerifications } from '../../../src/engine/gates/services/gate-script-tool-runner.js';
 import { createScriptExecutor } from '../../../src/modules/automation/execution/script-executor.js';
 
 import type { ScriptLoader } from '../../../src/engine/execution/reference/script-reference-resolver.js';
@@ -210,33 +211,131 @@ describe('script_tool gate criteria', () => {
     expect(JSON.stringify(check?.details ?? {})).not.toContain('gate-verdict.cjs');
   });
 
-  // F11 — characterization, not aspiration.
+  // F11 — was a characterization of inertness; now the liveness assertion.
   //
-  // Everything above tests `GateValidator`, whose whole call chain
-  // (EngineValidator.validateWithGates → LightweightGateSystem.validateContent →
-  // validateGates) has NO production caller. The one live consumer of
-  // `pass_criteria` is Stage 20, which delegates to `runGateShellVerifications`
-  // — and that filters for `shell_verify`. So a `script_tool` gate currently
-  // enforces nothing during a real run.
-  //
-  // This test asserts that inertness deliberately, so that wiring the type in
-  // turns a passing suite red and forces the docs (gates.md taxonomy,
-  // create_gate) to move with the code instead of drifting behind it.
-  describe('F11 — the live gate-review path does not run script_tool', () => {
-    test('a gate whose only criterion is script_tool produces no verification result', async () => {
+  // Before 2026-08-19 Stage 20, the only live consumer of `pass_criteria`, filtered for
+  // `shell_verify`, so a gate declaring `script_tool` cleared review having verified
+  // nothing and said nothing about it. These tests pin the fix at the runner Stage 20
+  // actually calls — the layer where the type was dead — rather than only at
+  // GateValidator, whose entry chain still has no production caller.
+  describe('F11 — the live gate-review path runs script_tool', () => {
+    const providerFor = (gate: LightweightGateDefinition): GateDefinitionProvider =>
+      ({
+        ...loaderProviderFor(gate),
+        loadGates: async (ids: string[]) => (ids.includes(gate.id) ? [gate] : []),
+      }) as unknown as GateDefinitionProvider;
+
+    test('runs the registered tool and reports its verdict', async () => {
       const gate = gateWith({
         type: 'script_tool',
         script_tool_id: 'verdict_tool',
         script_tool_input: { verdict: 'pass' },
       });
-      const provider = {
-        ...loaderProviderFor(gate),
-        loadGates: async (ids: string[]) => (ids.includes(gate.id) ? [gate] : []),
-      } as unknown as GateDefinitionProvider;
 
-      const results = await runGateShellVerifications([gate.id], provider);
+      const results = await runGateScriptToolVerifications(
+        [gate.id],
+        providerFor(gate),
+        scriptTools()
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(true);
+      expect(results[0]?.toolId).toBe('verdict_tool');
+      // The marker proves the verdict came from the fixture, not from a shell.
+      expect(JSON.stringify(results[0]?.scriptOutput ?? {})).toContain('gate-verdict.cjs');
+    }, 20000);
+
+    test('a failing verdict produces a failing result, not an absent one', async () => {
+      const gate = gateWith({
+        type: 'script_tool',
+        script_tool_id: 'verdict_tool',
+        script_tool_input: { verdict: 'nope' },
+      });
+
+      const results = await runGateScriptToolVerifications(
+        [gate.id],
+        providerFor(gate),
+        scriptTools()
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(false);
+      expect(results[0]?.unrunnable).toBe(false);
+    }, 20000);
+
+    // The load gate below refuses an id-less criterion, but a criterion naming an
+    // unknown tool is only detectable at run time. It must produce a FAILING row rather
+    // than no row: coverage clears a review when every required gate is covered by a
+    // passing result, so a silently absent row is indistinguishable from success.
+    test('an unrunnable criterion yields a failing row rather than silence', async () => {
+      const gate = gateWith({ type: 'script_tool', script_tool_id: 'no_such_tool' });
+
+      const results = await runGateScriptToolVerifications(
+        [gate.id],
+        providerFor(gate),
+        scriptTools()
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(false);
+      expect(results[0]?.unrunnable).toBe(true);
+      expect(results[0]?.reason).toContain('not a shell command');
+    });
+
+    test('a gate with no script_tool criteria contributes nothing', async () => {
+      const gate = gateWith({ type: 'shell_verify', shell_command: 'true' });
+
+      const results = await runGateScriptToolVerifications(
+        [gate.id],
+        providerFor(gate),
+        scriptTools()
+      );
 
       expect(results).toEqual([]);
+    });
+  });
+
+  // "Refuse at load": a declared criterion that cannot be enforced is rejected where the
+  // author is looking, instead of failing closed mid-review where they are not.
+  describe('load-time refusal of unenforceable criteria', () => {
+    const gateYaml = (criteria: Record<string, unknown>): Record<string, unknown> => ({
+      id: 'probe',
+      name: 'Probe',
+      type: 'validation',
+      description: 'load probe',
+      pass_criteria: [criteria],
+    });
+
+    test('refuses script_tool with no script_tool_id', () => {
+      const result = validateGateSchema(gateYaml({ type: 'script_tool' }), 'probe');
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('script_tool_id');
+    });
+
+    test('refuses script_tool whose id is blank', () => {
+      const result = validateGateSchema(
+        gateYaml({ type: 'script_tool', script_tool_id: '  ' }),
+        'probe'
+      );
+
+      expect(result.valid).toBe(false);
+    });
+
+    test('refuses shell_verify with no shell_command', () => {
+      const result = validateGateSchema(gateYaml({ type: 'shell_verify' }), 'probe');
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('shell_command');
+    });
+
+    test('accepts a well-formed script_tool criterion', () => {
+      const result = validateGateSchema(
+        gateYaml({ type: 'script_tool', script_tool_id: 'verdict_tool' }),
+        'probe'
+      );
+
+      expect(result.valid).toBe(true);
     });
   });
 });

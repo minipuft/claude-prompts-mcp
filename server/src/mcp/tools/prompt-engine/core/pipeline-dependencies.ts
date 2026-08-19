@@ -20,6 +20,7 @@ import type { LightweightGateSystem } from '#engine/gates/core/index.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { GateReferenceResolver } from '#engine/gates/services/gate-reference-resolver.js';
+import type { ScriptToolRuntimeProvider } from '#engine/gates/services/script-tool-criterion-runner.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { StyleManager } from '#modules/formatting/index.js';
 import type {
@@ -69,6 +70,11 @@ export interface PipelineDependencies {
   responseFormatter: ResponseFormatter;
   referenceResolver: PromptReferenceResolver | undefined;
   scriptReferenceResolver: ScriptReferenceResolver | undefined;
+  /**
+   * Registry + executor for `script_tool` gate criteria, read lazily. Same instances the
+   * inline `{{script:id}}` resolver uses; rebuilt whenever prompts reload.
+   */
+  scriptToolRuntime: ScriptToolRuntimeProvider | undefined;
 
   // ── Framework (optional, set via setters on PromptExecutor) ──
   frameworkManager: FrameworkManager | undefined;

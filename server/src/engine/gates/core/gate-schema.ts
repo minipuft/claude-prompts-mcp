@@ -24,10 +24,10 @@
  * |                            | (see gate-validator.ts default branch)        | from `phases.yaml`, independently of this criteria type              |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
  * |                            | (supports `shell_stdin_source: agent_response`) | matching reality (file paths, line counts, symbol locations)        |
- * | `script_tool`              | **Not enforced** — accepted by the schema,    | (none today; prefer `shell_verify`)                                   |
- * |                            | executed by no live path. Stage 20 runs       |                                                                       |
- * |                            | `shell_verify` criteria only. GateValidator   |                                                                       |
- * |                            | has a runner, but no production caller        |                                                                       |
+ * | `script_tool`              | **Hard** — resolves the id to a registered    | Checks needing typed arguments and an explained verdict               |
+ * |                            | tool and runs it with JSON stdin, parsing     |                                                                       |
+ * |                            | `{passed, reason?}`. Runs beside              |                                                                       |
+ * |                            | `shell_verify`; fails closed when it cannot   |                                                                       |
  *
  * Common mistakes the taxonomy prevents:
  * - Using `inline_guidance` and expecting auto-enforcement (it's display only)
@@ -70,10 +70,10 @@ export const GatePassCriteriaSchema = z
      * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
      *   Supports `shell_stdin_source: 'agent_response'` for response-content
      *   verification against ground truth.
-     * - `script_tool`: accepted, but executed by no live path — Stage 20 runs
-     *   `shell_verify` criteria only. GateValidator's runner resolves
-     *   `script_tool_id` against the registered script tools and fails closed,
-     *   but nothing in production reaches it. Prefer `shell_verify`.
+     * - `script_tool`: resolves `script_tool_id` against the registered script tools
+     *   and runs that tool with JSON input via stdin, parsing a structured
+     *   `{passed, reason?}` verdict. Runs beside `shell_verify` during gate review.
+     *   Fails closed when it cannot run; a criterion with no id is refused at load.
      */
     type: z.enum([
       'inline_guidance',
@@ -148,7 +148,33 @@ export const GatePassCriteriaSchema = z
     /** Working directory for script execution */
     script_tool_working_dir: z.string().optional(),
   })
-  .passthrough(); // Allow additional fields for extensibility
+  .passthrough() // Allow additional fields for extensibility
+  .superRefine((criteria, ctx) => {
+    // A criteria type whose required field is missing cannot be enforced, and a gate
+    // that cannot enforce a criterion it declares is worse than a gate with no criterion:
+    // it reads as verified. Refuse at load, where the author is looking, rather than
+    // failing closed mid-review where they are not.
+    if (criteria.type === 'shell_verify' && isBlank(criteria.shell_command)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['shell_command'],
+        message: "shell_verify criteria require a non-empty 'shell_command'",
+      });
+    }
+    if (criteria.type === 'script_tool' && isBlank(criteria.script_tool_id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['script_tool_id'],
+        message:
+          "script_tool criteria require a non-empty 'script_tool_id' naming a registered script tool (not a shell command)",
+      });
+    }
+  });
+
+/** A string field is absent, empty, or whitespace — three ways to declare nothing. */
+function isBlank(value: string | undefined): boolean {
+  return value == null || value.trim() === '';
+}
 
 export type GatePassCriteriaYaml = z.infer<typeof GatePassCriteriaSchema>;
 

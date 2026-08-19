@@ -240,14 +240,9 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(
-      chainExecutor,
-      sessionStore,
-      null,
-      logger,
-      undefined,
-      recordStore
-    ),
+    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
+      executionRecordStore: recordStore,
+    }),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),

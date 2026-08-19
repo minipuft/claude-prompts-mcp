@@ -48,9 +48,9 @@ export interface GatePassCriteria {
    * - `framework_compliance`: declarative only — GateValidator auto-passes it.
    *   PhaseGuardVerificationStage enforces phase guards from `phases.yaml`, not from this value.
    * - `shell_verify`: exit-code ground truth (supports response injection)
-   * - `script_tool`: accepted but not enforced — no live path executes it. GateValidator's
-   *   runner resolves the id against registered script tools and fails closed, but nothing
-   *   in production calls it
+   * - `script_tool`: resolves the id against registered script tools and runs THAT tool
+   *   with JSON stdin, parsing a structured verdict; runs beside `shell_verify` and fails
+   *   closed when it cannot run
    */
   type:
     'inline_guidance' | 'llm_self_check' | 'framework_compliance' | 'shell_verify' | 'script_tool';

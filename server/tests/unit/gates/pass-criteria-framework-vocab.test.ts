@@ -54,8 +54,27 @@ describe('pass_criteria type enum', () => {
   });
 
   it('leaves the other criteria types untouched', () => {
-    for (const type of ['inline_guidance', 'llm_self_check', 'shell_verify', 'script_tool']) {
-      expect((GatePassCriteriaSchema.parse({ type }) as { type: string }).type).toBe(type);
+    // Each entry is the MINIMAL valid criterion for its type, not a bare `{ type }`.
+    // `shell_verify` and `script_tool` now require the field that names what to run:
+    // a criterion that declares a check it cannot perform is refused at load rather
+    // than auto-passing at review time. This test is about the type vocabulary, so it
+    // supplies the field rather than asserting the old permissiveness.
+    const minimal: Array<Record<string, unknown>> = [
+      { type: 'inline_guidance' },
+      { type: 'llm_self_check' },
+      { type: 'shell_verify', shell_command: 'true' },
+      { type: 'script_tool', script_tool_id: 'some_tool' },
+    ];
+
+    for (const criteria of minimal) {
+      expect((GatePassCriteriaSchema.parse(criteria) as { type: string }).type).toBe(
+        criteria['type']
+      );
     }
+  });
+
+  it('refuses a criteria type that declares a check it cannot perform', () => {
+    expect(() => GatePassCriteriaSchema.parse({ type: 'shell_verify' })).toThrow();
+    expect(() => GatePassCriteriaSchema.parse({ type: 'script_tool' })).toThrow();
   });
 });
