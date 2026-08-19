@@ -1,6 +1,9 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
+import { resolveDelegationSkipped } from '../delegation/acknowledgment.js';
+
 import type { Logger } from '#infra/logging/index.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 
@@ -41,7 +44,12 @@ export interface StepCaptureInput {
 export class StepCaptureService {
   constructor(
     private readonly chainSessionStore: ChainSessionService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    /**
+     * Ledger writer for the capture-time `completed` step row (S8). Optional, matching the
+     * pipeline stages that hold the same store: absent, capture still happens, just unledgered.
+     */
+    private readonly executionRecordStore: ExecutionRecordStore | null = null
   ) {}
 
   /**
@@ -162,6 +170,7 @@ export class StepCaptureService {
   }
 
   private async captureRealResponse(
+    context: ExecutionContext,
     sessionId: string,
     chainId: string,
     target: StepTarget,
@@ -183,7 +192,60 @@ export class StepCaptureService {
       preservePlaceholder: false,
     });
 
+    this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent);
+
     this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
+  }
+
+  /**
+   * Append the capture-time `completed` row for the step whose real output was just captured
+   * (S8). This is the moment the delegation-acknowledgment fact exists and the only writer
+   * that binds `delegation_skipped`: 1/0 when the captured step was delegated AND carried gate
+   * text (the same `metadata['gateInstructions']` field the brief derived its Result Contract
+   * from), NULL everywhere else — partial population BY ROW TYPE. Exactly one row per captured
+   * step: gate retries re-enter `captureStep` and take its completed-non-placeholder early
+   * return before reaching this.
+   */
+  private ledgerCapturedStep(
+    context: ExecutionContext,
+    sessionId: string,
+    chainId: string,
+    target: StepTarget,
+    responseContent: string
+  ): void {
+    if (this.executionRecordStore === null) return;
+
+    // Same two-key resolution as GateReviewStage: the node id is the identity, the ordinal is
+    // the fallback for a chain parsed before node-id minting.
+    const steps = context.parsedCommand?.steps;
+    const step =
+      steps?.find((candidate) => candidate.nodeId === target.nodeId) ??
+      steps?.find((candidate) => candidate.stepNumber === target.ordinal);
+
+    const stepGateText =
+      typeof step?.metadata?.['gateInstructions'] === 'string'
+        ? step.metadata['gateInstructions']
+        : undefined;
+    const delegationSkipped = resolveDelegationSkipped({
+      delegated: step?.delegated,
+      stepGateText,
+      capturedResponse: responseContent,
+    });
+
+    const capturedAt = Date.now();
+    this.executionRecordStore.append({
+      sessionId,
+      chainId,
+      stepNumber: target.ordinal,
+      nodeId: target.nodeId,
+      ...(step?.promptId !== undefined ? { promptId: step.promptId } : {}),
+      status: 'completed',
+      substate: { respondedAt: capturedAt },
+      startedAt: capturedAt,
+      completedAt: capturedAt,
+      ...(delegationSkipped !== undefined ? { delegationSkipped } : {}),
+      scope: context.getScopeOptions(),
+    });
   }
 
   getStepOutputMapping(
@@ -223,6 +285,7 @@ export class StepCaptureService {
 
     const outputMapping = this.getStepOutputMapping(context, target.ordinal);
     await this.captureRealResponse(
+      context,
       sessionId,
       session.chainId,
       target,
@@ -265,6 +328,7 @@ export class StepCaptureService {
   ): Promise<void> {
     const outputMapping = this.getStepOutputMapping(context, target.ordinal);
     await this.captureRealResponse(
+      context,
       sessionId,
       session.chainId,
       target,

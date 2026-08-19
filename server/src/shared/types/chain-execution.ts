@@ -202,6 +202,15 @@ export interface ExecutionRecord {
   unknownsClosed?: number;
   nodesInserted?: number;
   nodesSkipped?: number;
+  /**
+   * S8 delegation-acknowledgment audit, populated ONLY on capture-time `completed` step rows
+   * for a step that was BOTH delegated and gated — the one row type where the fact exists
+   * (`resolveDelegationSkipped`). `true`: the captured output lacks the contracted
+   * `Proposed Gate Review:` block, so the parent likely answered inline instead of spawning.
+   * `false`: the block is present. Undefined everywhere else — non-delegated steps, delegated
+   * steps with no gates (acknowledgment structurally unobservable), render/terminal rows.
+   */
+  delegationSkipped?: boolean;
 }
 
 /**
@@ -261,6 +270,15 @@ export interface StepMetadata {
   renderedAt?: number;
   respondedAt?: number;
   completedAt?: number;
+  /**
+   * Phase-guard section headers this step's prompt ACTUALLY declared, verbatim, captured at
+   * render time. Not derivable from `phases.yaml` after the fact: that is the source the guard
+   * already reads, so re-deriving it would make declared and guarded identical by construction
+   * and the advisory branch unreachable. Absent means "no declaration was recorded for this
+   * step", which `19-phase-guard-verification-stage` treats as nothing being declared — it can
+   * only make blocking rarer, never more frequent.
+   */
+  declaredSections?: string[];
 }
 
 /**

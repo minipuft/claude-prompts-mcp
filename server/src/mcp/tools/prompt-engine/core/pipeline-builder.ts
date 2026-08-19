@@ -58,6 +58,7 @@ import {
   ResponseFormattingStage,
   PostFormattingCleanupStage,
 } from '#engine/execution/pipeline/index.js';
+import { resolveDeclaredSections } from '#engine/frameworks/declared-sections.js';
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
 import {
   JudgeMenuFormatter,
@@ -296,7 +297,11 @@ export class PipelineBuilder {
       deps.hookRegistry,
       deps.notificationEmitter
     );
-    const stepCaptureService = new StepCaptureService(deps.chainSessionStore, deps.logger);
+    const stepCaptureService = new StepCaptureService(
+      deps.chainSessionStore,
+      deps.logger,
+      deps.executionRecordStore
+    );
     const unknownObservationProcessor = new UnknownObservationProcessor(
       deps.chainSessionStore,
       deps.logger
@@ -362,7 +367,14 @@ export class PipelineBuilder {
     // visibility envelope resolve the handed-off step by node identity, so they need the run's
     // node order and its retired nodes — the parse array alone answers a positional question the
     // mutation policy has already invalidated (P6-F1).
-    const responseAssembler = new ResponseAssembler(runStepViewProvider);
+    const responseAssembler = new ResponseAssembler(
+      runStepViewProvider,
+      // Phase-guard declared headers for gated single prompts (Tier 2.5, OQ-1). Read through
+      // `deps.frameworkManager` per call — no cache — matching the chain path's identical
+      // wiring at `prompt-executor.ts:createChainOperatorExecutor`, so hot-reload keeps working
+      // for this consumer too.
+      (frameworkId: string) => resolveDeclaredSections(() => deps.frameworkManager, frameworkId)
+    );
     const formattingStage = new ResponseFormattingStage(
       deps.responseFormatter,
       responseAssembler,

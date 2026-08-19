@@ -60,6 +60,7 @@ interface ExecutionRecordRow {
   unknowns_closed: number | null;
   nodes_inserted: number | null;
   nodes_skipped: number | null;
+  delegation_skipped: number | null;
 }
 
 export interface ExecutionRecordAppendInput {
@@ -99,6 +100,13 @@ export interface ExecutionRecordAppendInput {
    */
   nodesInserted?: number;
   nodesSkipped?: number;
+  /**
+   * S8 delegation-acknowledgment audit. Bound ONLY by the capture-time step writer
+   * (StepCaptureService), and only when the captured step was delegated AND gated — the one
+   * row type where the fact exists. Stored as 1 (skipped) / 0 (acknowledged) / NULL (not
+   * evaluable): partial population BY ROW TYPE, the same reading as the v21/v23 columns above.
+   */
+  delegationSkipped?: boolean;
   scope?: StateStoreOptions;
 }
 
@@ -137,8 +145,8 @@ export class ExecutionRecordStore {
           substate_json, input_required_json, evidence_json, gate_verdicts_json,
           error_message, started_at, completed_at,
           steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed,
-          nodes_inserted, nodes_skipped
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          nodes_inserted, nodes_skipped, delegation_skipped
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     } catch (error) {
@@ -233,6 +241,9 @@ export class ExecutionRecordStore {
       unknownsClosed: row.unknowns_closed ?? undefined,
       nodesInserted: row.nodes_inserted ?? undefined,
       nodesSkipped: row.nodes_skipped ?? undefined,
+      ...(row.delegation_skipped !== null
+        ? { delegationSkipped: row.delegation_skipped === 1 }
+        : {}),
     };
   }
 }
@@ -269,6 +280,7 @@ function buildAppendParams(
     input.unknownsClosed ?? null,
     input.nodesInserted ?? null,
     input.nodesSkipped ?? null,
+    input.delegationSkipped === undefined ? null : input.delegationSkipped ? 1 : 0,
   ];
 }
 

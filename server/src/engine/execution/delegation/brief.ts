@@ -67,6 +67,14 @@ export function buildChainHistorySection(entries: readonly BriefHistoryEntry[]):
 }
 
 /**
+ * The literal heading a conforming worker's proposed self-review opens with. Exported as the
+ * SSOT for that token: the S8 delegation-acknowledgment predicate
+ * (`acknowledgment.ts#resolveDelegationSkipped`) detects a spawned worker by this exact string
+ * in the captured step output, so the emitter and the detector must share one spelling.
+ */
+export const PROPOSED_GATE_REVIEW_TOKEN = 'Proposed Gate Review:';
+
+/**
  * Result contract (R-2 — worker proposes, parent ratifies). The worker returns its work product
  * plus, when gates exist, a `Proposed Gate Review` block in the same per-gate shape as
  * `gate_verdict.per_gate`. It is labelled PROPOSED because the worker's verdict is never
@@ -86,7 +94,7 @@ export function buildResultContractSection(hasGates: boolean): string {
       'Then append a proposed self-review — PROPOSED only; the orchestrating agent reviews and may override before submitting the actual verdict:',
       '',
       '```',
-      'Proposed Gate Review:',
+      PROPOSED_GATE_REVIEW_TOKEN,
       '- [gate 1 name]: PASS|FAIL — <one-line rationale>',
       '- [gate 2 name]: PASS|FAIL — <one-line rationale>',
       '```'

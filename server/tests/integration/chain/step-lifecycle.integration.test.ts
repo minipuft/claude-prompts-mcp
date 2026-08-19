@@ -157,6 +157,7 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       unknowns_closed INTEGER,
       nodes_inserted INTEGER,
       nodes_skipped INTEGER,
+      delegation_skipped INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
