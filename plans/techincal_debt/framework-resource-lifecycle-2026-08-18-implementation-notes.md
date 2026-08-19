@@ -1,7 +1,7 @@
 ---
 title: "Framework resource lifecycle — implementation notes"
 date: 2026-08-18
-status: active
+status: done
 tags:
   - frameworks
   - mcp-tools

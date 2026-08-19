@@ -1,7 +1,7 @@
 ---
 title: "Implementation Notes — Resource Versioning Consolidation (A–F)"
 date: 2026-08-17
-status: backlog
+status: done
 tags: []
 ---
 
@@ -560,7 +560,7 @@ reader sees what was weighed. This release is now a **breaking major** — both 
 reachable-shape union of the MCP tool surface, marked in `CHANGELOG.md` under `### ⚠ BREAKING
 CHANGES` per `ci-release.md`.
 
-### F18 — CLOSED. The first test written for it could not fail.
+### F18 — CLOSED. The first test written for it could not fail
 
 Fixed with `canonicalizeSnapshot(record, projectedFields)`, applied at the end of `project()` in the
 gate and framework contracts and inside `projectWriteModel`, so the two directions agree by
