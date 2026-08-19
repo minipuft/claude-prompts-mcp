@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 
 import {
   validateFrameworkSchema,
+  validatePhasesSchema,
   type FrameworkSchemaValidationResult,
 } from './framework-schema.js';
 
@@ -298,6 +299,29 @@ export class RuntimeFrameworkLoader {
             validation.warnings.join('; ')
           );
         }
+
+        // Validate the inlined phases.yaml content (F1: previously dead code —
+        // validatePhasesSchema had zero callers, so a guards block with no
+        // section_header never reached this check despite existing as an ERROR).
+        if (definition.phases) {
+          const phasesValidation = this.validatePhases(definition.phases);
+          if (!phasesValidation.valid) {
+            this.stats.loadErrors++;
+            // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
+            console.error(
+              `[RuntimeFrameworkLoader] Phases validation failed for '${id}':`,
+              phasesValidation.errors.join('; ')
+            );
+            return undefined;
+          }
+          if (phasesValidation.warnings.length > 0) {
+            // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
+            console.warn(
+              `[RuntimeFrameworkLoader] Phases warnings for '${id}':`,
+              phasesValidation.warnings.join('; ')
+            );
+          }
+        }
       }
 
       if (this.debug) {
@@ -509,6 +533,17 @@ export class RuntimeFrameworkLoader {
   ): FrameworkSchemaValidationResult {
     // Use shared schema validation (SSOT with validate-frameworks.ts)
     return validateFrameworkSchema(definition, expectedId);
+  }
+
+  /**
+   * Validate the inlined phases.yaml content using the shared Zod schema.
+   *
+   * Runs the phase-guard coherence checks (guards without section_header,
+   * duplicate order, min_length > max_length) that ship in
+   * `validatePhasesSchema` but were never wired to a caller (F1).
+   */
+  private validatePhases(phases: unknown): FrameworkSchemaValidationResult {
+    return validatePhasesSchema(phases);
   }
 }
 

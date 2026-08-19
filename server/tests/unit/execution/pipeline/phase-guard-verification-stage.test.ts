@@ -62,13 +62,32 @@ function createRegistry(guide?: FrameworkGuide) {
   };
 }
 
-function createMockSessionStore(): ChainSessionService {
+/**
+ * Tier 3.1: a guard may only block on a header the RENDER recorded as declared. The store is what
+ * holds that record, so a store returning no declaration is a run where the model was told
+ * nothing — every guard is advisory there, by design. Tests that assert enforcement must
+ * therefore declare the headers their fixture guards, which is what `declaredSections` does here.
+ */
+function createMockSessionStore(declaredSections?: readonly string[]): ChainSessionService {
+  const session =
+    declaredSections === undefined
+      ? null
+      : {
+          state: {
+            stepStates: new Map([
+              [
+                'n1',
+                { state: 'working', isPlaceholder: false, declaredSections: [...declaredSections] },
+              ],
+            ]),
+          },
+        };
   return {
     setPendingGateReview: jest
       .fn<ChainSessionService['setPendingGateReview']>()
       .mockResolvedValue(undefined),
     getPendingGateReview: jest.fn().mockResolvedValue(null),
-    getSession: jest.fn().mockResolvedValue(null),
+    getSession: jest.fn().mockReturnValue(session),
     createSession: jest.fn().mockResolvedValue(undefined),
     updateSession: jest.fn().mockResolvedValue(undefined),
     clearPendingGateReview: jest.fn().mockResolvedValue(undefined),
@@ -81,7 +100,14 @@ describe('PhaseGuardVerificationStage', () => {
 
   beforeEach(() => {
     logger = createLogger();
-    sessionStore = createMockSessionStore();
+    // Default: every header the fixtures use is declared, so the pre-Tier-3.1 assertions keep
+    // testing what they were written to test — that a declared-and-missing section blocks.
+    sessionStore = createMockSessionStore([
+      '## Context',
+      '## Analysis',
+      '## Goals',
+      '## Execution',
+    ]);
   });
 
   test('skips when phase guards mode is off', async () => {
@@ -591,5 +617,70 @@ describe('PhaseGuardVerificationStage', () => {
     expect(review.retryHints[0]).toContain('## Context');
     expect(review.retryHints[1]).toContain('## Analysis');
     expect(review.metadata.failedPhases).toEqual(expect.arrayContaining(['context', 'analysis']));
+  });
+  // ---- Tier 3.1/3.2: a guard may only block on a header the prompt actually declared ----
+
+  test('a guard on an UNDECLARED header is advisory — it warns and does not block', async () => {
+    const guide = createMockGuide([
+      { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    ]);
+    // The run recorded a declaration, but not for this header — so the model was never told to
+    // emit `## Context`. Blocking on it would be unsatisfiable, which is the defect Tier 3 closes.
+    const store = createMockSessionStore(['## Something Else']);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      store,
+      logger
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+
+    await stage.execute(ctx);
+
+    expect(store.setPendingGateReview).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  test('a run with NO recorded declaration blocks nothing', async () => {
+    const guide = createMockGuide([
+      { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    ]);
+    // No record at all. The change can only make enforcement rarer, never stricter — so an
+    // unrecorded render is treated as having declared nothing rather than as having declared all.
+    const store = createMockSessionStore(undefined);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      store,
+      logger
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+
+    await stage.execute(ctx);
+
+    expect(store.setPendingGateReview).not.toHaveBeenCalled();
+  });
+
+  test('a DECLARED-and-missing section still blocks — enforcement is not lost', async () => {
+    const guide = createMockGuide([
+      { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    ]);
+    const store = createMockSessionStore(['## Context']);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      store,
+      logger
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+
+    await stage.execute(ctx);
+
+    // The dangerous regression for this tier is losing enforcement for declared headers, so this
+    // assertion is the one that must fail if the advisory filter is ever widened by accident.
+    expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
   });
 });

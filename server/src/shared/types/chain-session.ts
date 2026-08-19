@@ -332,7 +332,8 @@ export interface ChainSessionService {
     sessionId: string,
     nodeId: string,
     milestone: StepMilestone,
-    isPlaceholder?: boolean
+    isPlaceholder?: boolean,
+    declaredSections?: readonly string[]
   ): boolean;
   getStepState(sessionId: string, nodeId: string): StepMetadata | undefined;
   transitionStepState(

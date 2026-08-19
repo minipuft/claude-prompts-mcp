@@ -19,6 +19,7 @@
  * 5. If any fail → create PendingGateReview (gate system handles lifecycle)
  */
 
+import { resolveGuardedProcessingSteps } from '../../../frameworks/declared-sections.js';
 import {
   evaluatePhaseGuards,
   buildPhaseGuardPassSummary,
@@ -28,14 +29,13 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { PhaseGuardsConfig } from '#shared/types/core-config.js';
-import type { ProcessingStep, FrameworkGuide } from '../../../frameworks/types/framework-types.js';
+import type { FrameworkGuideProvider } from '../../../frameworks/declared-sections.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /** Sentinel gate ID used for phase-guard-created pending reviews. */
 export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
-type FrameworkRegistryProvider = () =>
-  { getFrameworkGuide(id: string): FrameworkGuide | undefined } | undefined;
+type FrameworkRegistryProvider = FrameworkGuideProvider;
 
 type PhaseGuardsConfigProvider = () => PhaseGuardsConfig | undefined;
 
@@ -85,7 +85,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     }
 
     // 4. Get framework phases with guards
-    const phases = this.getPhasesWithGuards(frameworkId);
+    const phases = resolveGuardedProcessingSteps(this.frameworkRegistryProvider, frameworkId);
     if (phases.length === 0) {
       this.logExit({ skipped: 'No phases with guards' });
       return;
@@ -113,8 +113,36 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
+    // 6c. A guard may only block on a header the prompt actually declared (Tier 3.1 / OQ-4).
+    // The declaration is read back from what the render RECORDED, never re-derived from
+    // `phases.yaml` — that is the source these guards already come from, so re-deriving would
+    // make declared and guarded identical by construction and this filter a no-op. A phase whose
+    // header was never declared is evaluated for diagnostics but cannot block: the model was not
+    // told about it, so failing it is unsatisfiable. No record at all therefore blocks nothing,
+    // which can only make enforcement rarer, never stricter.
+    const declaredHeaders = this.resolveDeclaredHeaders(context);
+    const blockingPhases = phases.filter(
+      (phase) => phase.section_header !== undefined && declaredHeaders.has(phase.section_header)
+    );
+    const advisoryPhases = phases.filter((phase) => !blockingPhases.includes(phase));
+
+    if (advisoryPhases.length > 0) {
+      this.logger.warn('[PhaseGuard] Guards on undeclared headers are advisory this turn', {
+        undeclared: advisoryPhases.map((phase) => phase.section_header),
+        declaredCount: declaredHeaders.size,
+      });
+    }
+
+    if (blockingPhases.length === 0) {
+      this.logExit({
+        skipped: 'No declared headers to enforce',
+        advisory: advisoryPhases.length,
+      });
+      return;
+    }
+
     // 7. Evaluate phase guards
-    const result = evaluatePhaseGuards(outputText, phases);
+    const result = evaluatePhaseGuards(outputText, blockingPhases);
 
     if (result.allPassed) {
       // Phase guards passed — merge structural verification into pending gate review.
@@ -223,23 +251,28 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
   }
 
   /**
-   * Extract processing steps that have guards from the framework guide.
+   * Headers this run recorded as actually declared to the model, across every node of the run.
+   * Run-wide rather than per-node on purpose: a chain's later step is graded against the phases
+   * the framework declares for the whole run, and a header declared on step 2 was still put in
+   * front of the model. An empty set means nothing was recorded, which blocks nothing.
    */
-  private getPhasesWithGuards(frameworkId: string): ProcessingStep[] {
-    const registry = this.frameworkRegistryProvider();
-    if (!registry) return [];
+  private resolveDeclaredHeaders(context: ExecutionContext): Set<string> {
+    const headers = new Set<string>();
+    const sessionId = context.sessionContext?.sessionId;
+    if (sessionId === undefined) return headers;
 
-    const guide = registry.getFrameworkGuide(frameworkId);
-    if (!guide) return [];
+    // `state` is non-optional on the type but absent on partial test doubles and on a session
+    // restored before its state was hydrated; read defensively rather than trusting the shape.
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    const stepStates = session?.state?.stepStates;
+    if (stepStates === undefined) return headers;
 
-    const enhancement = guide.enhanceWithFramework(
-      { id: 'phase-guard-check', name: '', description: '', category: '' } as any,
-      {}
-    );
-
-    return (enhancement?.processingEnhancements ?? []).filter(
-      (step) => step.section_header && step.guards
-    );
+    for (const metadata of stepStates.values()) {
+      for (const header of metadata.declaredSections ?? []) {
+        headers.add(header);
+      }
+    }
+    return headers;
   }
 
   /**

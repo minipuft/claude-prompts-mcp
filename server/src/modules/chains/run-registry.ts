@@ -78,6 +78,7 @@ interface ChainRunNodeRow {
   milestone: string | null;
   is_placeholder: number | null;
   rendered_at: number | null;
+  declared_sections_json?: string | null;
   responded_at: number | null;
   completed_at: number | null;
   /**
@@ -116,6 +117,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const nodeRows = this.db.query<ChainRunNodeRow>(
       `SELECT n.session_id, n.node_id, n.position, n.prompt_id, n.step_name, n.milestone,
               n.is_placeholder, n.rendered_at, n.responded_at, n.completed_at,
+              n.declared_sections_json,
               n.origin, n.origin_unknown_id
          FROM chain_run_nodes n
          JOIN chain_runs r ON r.session_id = n.session_id
@@ -187,8 +189,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           `INSERT INTO chain_run_nodes (
              session_id, node_id, position, prompt_id, step_name, milestone,
              is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             origin, origin_unknown_id, declared_sections_json, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             session.sessionId,
             node.id,
@@ -205,6 +207,12 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
             // default would paper over.
             node.origin ?? 'planned',
             node.originUnknownId ?? null,
+            // Serialised only when the render recorded one. A step that declared nothing and a
+            // step whose declaration was never recorded are the same row here, and both mean the
+            // verification stage has no declared header to block on.
+            metadata?.declaredSections === undefined
+              ? null
+              : JSON.stringify(metadata.declaredSections),
             updatedAt,
           ]
         );
@@ -300,6 +308,22 @@ function reconstructNode(node: ChainRunNodeRow): ChainNode {
   return reconstructed;
 }
 
+/**
+ * Read back the recorded declaration. A malformed or non-array payload is treated as absent
+ * rather than thrown: this column records what a prompt declared, and a run must not fail to
+ * resume because that record is unreadable — an absent declaration only relaxes enforcement.
+ */
+function parseDeclaredSections(raw: string | null | undefined): string[] | undefined {
+  if (raw === null || raw === undefined || raw === '') return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    return parsed.filter((entry): entry is string => typeof entry === 'string');
+  } catch {
+    return undefined;
+  }
+}
+
 /** Rebuild the step-lifecycle map from the node rows. Rows with no milestone have no entry. */
 function toStepStates(nodeRows: readonly ChainRunNodeRow[]): Map<string, StepMetadata> {
   const stepStates = new Map<string, StepMetadata>();
@@ -312,6 +336,8 @@ function toStepStates(nodeRows: readonly ChainRunNodeRow[]): Map<string, StepMet
     if (node.rendered_at !== null) metadata.renderedAt = node.rendered_at;
     if (node.responded_at !== null) metadata.respondedAt = node.responded_at;
     if (node.completed_at !== null) metadata.completedAt = node.completed_at;
+    const declared = parseDeclaredSections(node.declared_sections_json);
+    if (declared !== undefined) metadata.declaredSections = declared;
     stepStates.set(node.node_id, metadata);
   }
   return stepStates;

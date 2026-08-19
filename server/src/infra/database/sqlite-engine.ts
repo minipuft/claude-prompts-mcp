@@ -46,6 +46,12 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v24: adds `declared_sections_json` to `chain_run_nodes` (phase-guard declaration contract)
+ * and `delegation_skipped` to `execution_records` (S8 delegation acknowledgment, R-4). Both are
+ * nullable with no DDL DEFAULT — rationale at each column's DDL comment. Both tables are
+ * `ephemeral`, so the bump is free of the durable snapshot/restore path: `DROPPED_ON_THIS_BUMP`
+ * stays empty and `DROPPED_AT_VERSION` does not move.
+ *
  * v23: adds `origin` and `origin_unknown_id` to `chain_run_nodes`, and `nodes_inserted` /
  * `nodes_skipped` to `execution_records` (P4 adaptive mutation).
  *
@@ -184,7 +190,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 23;
+const SCHEMA_VERSION = 24;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -739,6 +745,14 @@ export class SqliteEngine implements DatabasePort {
         -- exist there); non-NULL on inserted rows, which is what the per-unknown-id insertion
         -- cap counts. Not recoverable from node_id: mintInsertionId slugifies and suffixes.
         origin_unknown_id TEXT,
+        -- v24: the phase-guard section headers this step's prompt actually declared, JSON array
+        -- of verbatim header strings. Nullable with NO DDL DEFAULT, for the same reason origin
+        -- has none: validate:no-phantom-columns exempts defaulted columns, so a default would
+        -- hide a dropped writer from the one gate built to catch that. NULL is a real value here
+        -- -- it means no declaration was recorded, which the verification stage reads as nothing
+        -- being declared, and therefore blocks on nothing. Partial population BY ROW TYPE, the
+        -- same reading as the v21 and v23 telemetry columns.
+        declared_sections_json TEXT,
         updated_at INTEGER,
         PRIMARY KEY (session_id, node_id)
       );
@@ -781,6 +795,16 @@ export class SqliteEngine implements DatabasePort {
         -- getRunTelemetry object, so no writer can bind one group and miss the other.
         nodes_inserted INTEGER,
         nodes_skipped INTEGER,
+        -- S8 (v24): delegation acknowledgment audit (R-4 — enforcement stays advisory; the
+        -- server records what it cannot prevent). Bound at capture time by StepCaptureService:
+        -- 1 when a delegated+gated step's captured output lacks the contracted
+        -- 'Proposed Gate Review:' block, 0 when it is present, NULL when the fact does not
+        -- exist (non-delegated step, delegated step with no gates, render/terminal rows).
+        -- Partial population BY ROW TYPE, same reading as the five v21 columns above. No DDL
+        -- DEFAULT deliberately, for the same reason chain_run_nodes.origin has none:
+        -- validate:no-phantom-columns exempts defaulted columns, and a default would hide a
+        -- dropped writer from the one gate built to notice it.
+        delegation_skipped INTEGER,
         created_at TEXT DEFAULT (datetime('now'))
       );
 

@@ -81,6 +81,12 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:knip-ratchet',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse: 'unexamined',
+  },
+  {
     script: 'validate:format',
     io: 'read',
     reads: ['spawn', 'tracked'],
@@ -207,6 +213,12 @@ export const SUITE = [
     script: 'validate:operator-registry-drift',
     io: 'read',
     reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
+    script: 'validate:phase-header-drift',
+    io: 'read',
+    reads: ['file', 'walk'],
     converse: 'unexamined',
   },
   {

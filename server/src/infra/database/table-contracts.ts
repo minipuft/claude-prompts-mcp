@@ -317,7 +317,20 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                       where the fact exists. It is a column rather than a substring of
     //                       node_id because `mintInsertionId` slugifies and collision-suffixes,
     //                       which has no decodable inverse.
-    // Neither needs an `acceptedPhantomColumns` entry — both appear in the owner's INSERT list.
+    //
+    // v24 added one more, also in the owner's INSERT list:
+    //   declared_sections_json — the phase-guard section headers a step's prompt ACTUALLY
+    //                       declared to the model, JSON array of verbatim header strings,
+    //                       recorded by 18-execution-stage at render time and read back by
+    //                       19-phase-guard-verification-stage. It exists because that fact has
+    //                       no other source: `phases.yaml` is what the GUARD reads, so deriving
+    //                       the declaration from it would make declared and guarded identical by
+    //                       construction and the advisory branch unreachable. Nullable and
+    //                       WITHOUT a DDL DEFAULT, for the same reason `origin` has none. NULL is
+    //                       meaningful: no declaration was recorded, so the verification stage
+    //                       blocks on nothing — the change can only relax enforcement, never
+    //                       tighten it. Partial population BY ROW TYPE, like origin_unknown_id.
+    // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {
     table: 'execution_records',
@@ -354,7 +367,16 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'P4 (v23) added nodes_inserted and nodes_skipped on the same terminal-rows-only terms: ' +
       'they ride the same getRunTelemetry object both terminal writers spread, so neither ' +
       'writer can bind the v21 group and miss these. They are the surviving audit of adaptive ' +
-      'mutation once chain_run_nodes (ephemeral, PID-deleted at cleanup) is gone.',
+      'mutation once chain_run_nodes (ephemeral, PID-deleted at cleanup) is gone. ' +
+      'S8 (v24) added delegation_skipped, bound by a THIRD row type: the capture-time ' +
+      '`completed` step row StepCaptureService appends when a chain resume captures real step ' +
+      'output. It is 1 when a delegated+gated step was captured without the contracted ' +
+      "'Proposed Gate Review:' block (resolveDelegationSkipped, delegation/acknowledgment.ts), " +
+      '0 when the block is present, and NULL wherever the fact does not exist — non-delegated ' +
+      'steps, delegated steps with no gate text, and every render/terminal row. Same partial- ' +
+      'population-BY-ROW-TYPE reading as the v21/v23 groups; record-only (R-4 — enforcement ' +
+      'stays advisory, the server records what it cannot prevent), read back by the ' +
+      'execution_history action.',
   },
 ];
 

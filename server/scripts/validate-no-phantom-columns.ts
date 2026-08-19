@@ -3,6 +3,21 @@
 /**
  * Flags columns that are declared and indexed in the schema but that no writer ever populates.
  *
+ * THE DECLARED-BUT-NEVER-CONSUMED FAMILY. This gate is one of three covering the same failure
+ * shape at different layers. A declaration exists, its consumers are reachable, and nothing ever
+ * supplies it — so the feature looks implemented, is measured as covered, and silently does
+ * nothing. Keep them cross-referenced; a new instance of the shape belongs in whichever member
+ * owns that layer rather than in a fourth script:
+ *   - `validate:no-phantom-columns`   — a DB column declared and indexed, with no writer
+ *   - `validate:state-field-writers`  — THIS: an optional TS field with readers and no writer,
+ *                                       including optional dependency seams that default to no-op
+ *   - `validate:knip-ratchet`         — an export declared and never imported
+ *
+ * NONE of them catches runtime unreachability: code that is wired, imported and written, but sits
+ * on a branch the live path never takes. That class is what the `reached` pre-flight probe in
+ * `~/.claude/rules/refactoring.md` exists for, and it is why a green suite is not evidence a new
+ * path runs. Measured 2026-08-17: a feature passed 2619 unit tests on a path that never executed.
+ *
  * WHY THIS IS ITS OWN GATE: this is the schema-level sibling of the phantom *field* class that
  * `validate-state-field-writers.js` catches on TypeScript interfaces, and it fails the same way
  * — worse than dead code, because the readers are reachable. A phantom column reads as NULL on

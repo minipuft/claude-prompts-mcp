@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { ChainOperatorExecutor } from '../../../../src/engine/execution/operators/chain-operator-executor.js';
 
+import type { DeclaredSection } from '../../../../src/engine/frameworks/declared-sections.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
 
@@ -424,5 +425,163 @@ describe('ChainOperatorExecutor', () => {
         promptId: 'summarize',
       })
     );
+  });
+
+  describe('declared section headers (Tier 2.3, OQ-1)', () => {
+    /** The four required CAGEERF sections, matching phases.yaml at HEAD 2026-08-17. */
+    const cageerfSections: DeclaredSection[] = [
+      { header: '## Context', required: true, phaseId: 'context_establishment', criteria: [] },
+      { header: '## Analysis', required: true, phaseId: 'systematic_analysis', criteria: [] },
+      { header: '## Goals', required: true, phaseId: 'goal_definition', criteria: [] },
+      { header: '## Execution', required: true, phaseId: 'execution_planning', criteria: [] },
+    ];
+
+    function buildExecutor(sections: DeclaredSection[]): ChainOperatorExecutor {
+      return new ChainOperatorExecutor(mockLogger, mockConvertedPrompts, undefined, undefined, {
+        declaredSectionsProvider: () => sections,
+      });
+    }
+
+    function stepWithFramework(frameworkId: string) {
+      return {
+        stepNumber: 1,
+        promptId: 'analyze',
+        args: { code: 'x' },
+        frameworkContext: {
+          selectedFramework: { id: frameworkId, name: frameworkId.toUpperCase() },
+          systemPrompt: `Apply ${frameworkId}.`,
+        } as any,
+      };
+    }
+
+    test('emitted prompt contains every declared header for the active framework', async () => {
+      const executor = buildExecutor(cageerfSections);
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [stepWithFramework('cageerf')],
+        currentStepIndex: 0,
+      });
+
+      for (const section of cageerfSections) {
+        expect(result.content).toContain(`\`${section.header}\``);
+      }
+    });
+
+    test('back-test: mutating a fixture section_header changes the rendered prompt and fails an assertion against the old value', async () => {
+      const OLD_HEADER = '## Goals';
+      const NEW_HEADER = '## Objectives';
+
+      // Simulates phases.yaml renaming a declared header — the exact drift this tier exists to
+      // make impossible to miss. A snapshot test would silently re-record this output and never
+      // surface the rename; this test instead proves the rendered prompt tracks the fixture.
+      const mutatedSections = cageerfSections.map((section) =>
+        section.header === OLD_HEADER ? { ...section, header: NEW_HEADER } : section
+      );
+
+      const executor = buildExecutor(mutatedSections);
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [stepWithFramework('cageerf')],
+        currentStepIndex: 0,
+      });
+
+      // The rendered prompt reflects the mutated fixture...
+      expect(result.content).toContain(`\`${NEW_HEADER}\``);
+
+      // ...and an assertion written against the STALE header value now fails — proving this
+      // check is live rather than frozen. `toThrow` makes the failure itself the assertion: if
+      // the renderer ever regressed to hardcoding '## Goals' instead of reading the fixture,
+      // this proof would stop throwing and the test above (asserting NEW_HEADER) would also fail.
+      expect(() => expect(result.content).toContain(`\`${OLD_HEADER}\``)).toThrow();
+    });
+
+    test('no provider wired declares nothing (pre-Tier-2 behavior, byte-identical)', async () => {
+      const executor = new ChainOperatorExecutor(mockLogger, mockConvertedPrompts);
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [stepWithFramework('cageerf')],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).not.toContain('Required Sections');
+    });
+
+    test('a framework with no guarded phases declares nothing', async () => {
+      const executor = buildExecutor([]);
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [stepWithFramework('plain-framework')],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).not.toContain('Required Sections');
+    });
+
+    describe('gate review render (F5 — 13-session-stage opens the review upfront, renderNormalStep never runs)', () => {
+      function buildPendingReview(attemptCount: number) {
+        return {
+          combinedPrompt: '',
+          gateIds: [],
+          prompts: [],
+          createdAt: Date.now(),
+          attemptCount,
+          maxAttempts: 3,
+        };
+      }
+
+      test('declares every header for the reviewed step on the FIRST render (attemptCount 0)', async () => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'gate_review',
+          pendingGateReview: buildPendingReview(0) as any,
+          stepPrompts: [stepWithFramework('cageerf')],
+          chainContext: {},
+          additionalGateIds: [],
+        });
+
+        expect(result.content).toContain('Required Sections');
+        for (const section of cageerfSections) {
+          expect(result.content).toContain(`\`${section.header}\``);
+        }
+      });
+
+      test('still declares every header on a RETRY (attemptCount > 0), unlike frameworkGuidance which is suppressed', async () => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'gate_review',
+          pendingGateReview: buildPendingReview(1) as any,
+          stepPrompts: [stepWithFramework('cageerf')],
+          chainContext: {},
+          additionalGateIds: [],
+        });
+
+        // A retry exists because a declared header failed to appear (or a structural check
+        // failed); the vocabulary must be restated so the retry can actually fix it — omitting
+        // it here would tell the model to fix its structure without telling it the structure.
+        expect(result.content).toContain('Required Sections');
+        for (const section of cageerfSections) {
+          expect(result.content).toContain(`\`${section.header}\``);
+        }
+      });
+
+      test('no provider wired declares nothing on gate review (matches the normal-step behavior)', async () => {
+        const executor = new ChainOperatorExecutor(mockLogger, mockConvertedPrompts);
+
+        const result = await executor.renderStep({
+          executionType: 'gate_review',
+          pendingGateReview: buildPendingReview(0) as any,
+          stepPrompts: [stepWithFramework('cageerf')],
+          chainContext: {},
+          additionalGateIds: [],
+        });
+
+        expect(result.content).not.toContain('Required Sections');
+      });
+    });
   });
 });

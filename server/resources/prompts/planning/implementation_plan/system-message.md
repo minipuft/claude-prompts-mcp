@@ -70,7 +70,7 @@ finds no sections, and the phase guard then checks nothing while appearing to pa
 
 The emitted plan file follows this ownership split (the master plan and implementation notes own the rest):
 
-- **Tier tables with a Status column** (☐/✓/⚠) — the ONLY place work rows live; tier_execute reads exactly this shape
+- **Tier tables with a Status column** (☐/✓/⚠/⊘ — ⊘ = closed, verified, no change required) — the ONLY place work rows live; tier_execute reads exactly this shape
 - **§Open Questions** — each with a status (`OPEN` / `RULED → implementation notes`) and the tier it must precede
 - **§Findings** — phase-scoped ids (`P<n>-F<m>`); a finding that binds a FUTURE phase is additionally promoted to the master plan's Findings Ledger
 - Per-tier **execution records** appended by tier_execute, short

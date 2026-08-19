@@ -198,6 +198,21 @@ export class StepExecutionStage extends BasePipelineStage {
 
     context.executionResults = this.createExecutionResults(renderResult);
 
+    // Record what the render declared (Tier 3.1 / OQ-4). This is the ONLY moment the fact
+    // exists: `phases.yaml` is the source the guard already reads, so re-deriving it later
+    // would make "declared" and "guarded" identical by construction and leave the advisory
+    // branch unreachable. Written against the node id minted on the step just rendered, not
+    // `session.currentNodeId`, which is the store's view and can lag by a call.
+    if (renderResult.declaredSections !== undefined && currentStep.nodeId !== undefined) {
+      this.chainSessionStore.setStepState(
+        session.sessionId,
+        currentStep.nodeId,
+        'rendered',
+        false,
+        renderResult.declaredSections
+      );
+    }
+
     if (this.executionRecordStore !== null) {
       const renderedAt = Date.now();
       this.executionRecordStore.append({

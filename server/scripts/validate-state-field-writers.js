@@ -3,6 +3,21 @@
 /**
  * Flags optional fields on pipeline state interfaces that have readers and no writers.
  *
+ * THE DECLARED-BUT-NEVER-CONSUMED FAMILY. This gate is one of three covering the same failure
+ * shape at different layers. A declaration exists, its consumers are reachable, and nothing ever
+ * supplies it — so the feature looks implemented, is measured as covered, and silently does
+ * nothing. Keep them cross-referenced; a new instance of the shape belongs in whichever member
+ * owns that layer rather than in a fourth script:
+ *   - `validate:no-phantom-columns`   — a DB column declared and indexed, with no writer
+ *   - `validate:state-field-writers`  — THIS: an optional TS field with readers and no writer,
+ *                                       including optional dependency seams that default to no-op
+ *   - `validate:knip-ratchet`         — an export declared and never imported
+ *
+ * NONE of them catches runtime unreachability: code that is wired, imported and written, but sits
+ * on a branch the live path never takes. That class is what the `reached` pre-flight probe in
+ * `~/.claude/rules/refactoring.md` exists for, and it is why a green suite is not evidence a new
+ * path runs. Measured 2026-08-17: a feature passed 2619 unit tests on a path that never executed.
+ *
  * The shape this catches is worse than dead code, because the readers are reachable: they
  * run on every request and silently take the `undefined` branch, so the feature they gate
  * looks implemented and is measured as covered. Three instances were found by hand before
@@ -88,8 +103,26 @@ const WATCHED = [
     reason: 'Assembled by several callers; a field no caller sets is a channel with no producer.',
   },
   {
+    file: 'src/shared/types/chain-execution.ts',
+    interfaces: ['StepMetadata'],
+    reason:
+      'Per-step lifecycle record persisted to chain_run_nodes and read back on resume. A field ' +
+      'declared here with no writer is a column that reads NULL on every row while the feature ' +
+      'it backs looks implemented — the same failure this gate catches in memory, one layer down.',
+  },
+  {
+    file: 'src/engine/execution/operators/chain-operator-executor.ts',
+    interfaces: ['ChainOperatorCollaborators'],
+    reason:
+      'Optional dependency seams that default to no-op. This is the third member of the ' +
+      'declared-but-never-consumed family (columns with no writer, exports with no importer, ' +
+      'seams with no wiring): omit the wiring and the code compiles, every test passes, and ' +
+      'behavior silently keeps the old path. Named rather than an inline literal so this gate ' +
+      'has a symbol to resolve.',
+  },
+  {
     file: 'src/engine/execution/operators/types.ts',
-    interfaces: ['ChainStepPrompt'],
+    interfaces: ['ChainStepPrompt', 'ChainStepRenderResult'],
     reason:
       'Built by two independent step builders (symbolic-command-builder and 04-parsing-stage), ' +
       'so a field wired in one and missed in the other has a producer on only one entry path. ' +

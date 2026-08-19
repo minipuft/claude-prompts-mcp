@@ -672,7 +672,8 @@ export class ChainSessionStore implements ChainSessionService {
     sessionId: string,
     nodeId: string,
     milestone: StepMilestone,
-    isPlaceholder: boolean = false
+    isPlaceholder: boolean = false,
+    declaredSections?: readonly string[]
   ): boolean {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
@@ -706,6 +707,14 @@ export class ChainSessionStore implements ChainSessionService {
         ? { completedAt: now }
         : existing?.completedAt !== undefined
           ? { completedAt: existing.completedAt }
+          : {}),
+      // Sticky like the timestamps above: a declaration is recorded once, at render, and every
+      // later milestone for the same node carries it forward. Dropping it on 'responded' would
+      // erase the record precisely when the verification stage needs to read it.
+      ...(declaredSections !== undefined
+        ? { declaredSections: [...declaredSections] }
+        : existing?.declaredSections !== undefined
+          ? { declaredSections: existing.declaredSections }
           : {}),
     };
 
@@ -921,7 +930,10 @@ export class ChainSessionStore implements ChainSessionService {
     // Determine the appropriate state based on whether this is a placeholder
     const milestone: StepMilestone = isPlaceholder ? 'rendered' : 'responded';
 
-    // Update step state tracking
+    // Update step state tracking. `declaredSections` is deliberately NOT threaded here:
+    // 18-execution-stage records it directly at render time, which is the only moment the fact
+    // exists. A second write path through this metadata bag would be a second writer for one
+    // column, and setStepState already carries the recorded value forward across milestones.
     this.setStepState(sessionId, nodeId, milestone, isPlaceholder);
 
     // NOTE: Step advancement is now handled by advanceStep() which should be called

@@ -6,6 +6,7 @@
  * Zero external dependencies. Takes output text + phase definitions, returns structured results.
  */
 
+import { GUARD_CRITERIA } from './criteria.js';
 import { splitBySectionHeaders } from './section-splitter.js';
 
 import type {
@@ -104,107 +105,12 @@ function evaluateStepGuards(
     return checks;
   }
 
-  // min_length: content must be at least N characters
-  if (guards.min_length !== undefined) {
-    const len = content.length;
-    checks.push({
-      type: 'min_length',
-      passed: len >= guards.min_length,
-      expected: guards.min_length,
-      actual: len,
-      feedback:
-        len >= guards.min_length
-          ? ''
-          : `Section "${sectionHeader}" is too short (${len} chars). Expand to at least ${guards.min_length} characters.`,
-    });
-  }
-
-  // max_length: content must not exceed N characters
-  if (guards.max_length !== undefined) {
-    const len = content.length;
-    checks.push({
-      type: 'max_length',
-      passed: len <= guards.max_length,
-      expected: guards.max_length,
-      actual: len,
-      feedback:
-        len <= guards.max_length
-          ? ''
-          : `Section "${sectionHeader}" is too long (${len} chars). Reduce to at most ${guards.max_length} characters.`,
-    });
-  }
-
-  // contains_any: content must include at least one of the keywords
-  if (guards.contains_any && guards.contains_any.length > 0) {
-    const contentLower = content.toLowerCase();
-    const found = guards.contains_any.filter((kw) => contentLower.includes(kw.toLowerCase()));
-    checks.push({
-      type: 'contains_any',
-      passed: found.length > 0,
-      expected: guards.contains_any,
-      actual: found,
-      feedback:
-        found.length > 0
-          ? ''
-          : `Section "${sectionHeader}" must include at least one of: ${guards.contains_any.map((k) => `"${k}"`).join(', ')}.`,
-    });
-  }
-
-  // contains_all: content must include all keywords
-  if (guards.contains_all && guards.contains_all.length > 0) {
-    const contentLower = content.toLowerCase();
-    const missing = guards.contains_all.filter((kw) => !contentLower.includes(kw.toLowerCase()));
-    checks.push({
-      type: 'contains_all',
-      passed: missing.length === 0,
-      expected: guards.contains_all,
-      actual: guards.contains_all.filter((kw) => contentLower.includes(kw.toLowerCase())),
-      feedback:
-        missing.length === 0
-          ? ''
-          : `Section "${sectionHeader}" is missing required terms: ${missing.map((k) => `"${k}"`).join(', ')}.`,
-    });
-  }
-
-  // matches_pattern: content must match regex
-  if (guards.matches_pattern) {
-    let passed = false;
-    // No initializer: both the try and the catch assign it.
-    let feedback: string;
-    try {
-      const regex = new RegExp(guards.matches_pattern, 'i');
-      passed = regex.test(content);
-      feedback = passed
-        ? ''
-        : `Section "${sectionHeader}" does not match required pattern: /${guards.matches_pattern}/i.`;
-    } catch {
-      feedback = `Invalid phase guard pattern for "${sectionHeader}": "${guards.matches_pattern}" is not a valid regex.`;
+  // Content criteria come from the registry — this function knows none of them by name, so
+  // adding a criterion is one entry in `criteria.ts` rather than another branch here.
+  for (const criterion of GUARD_CRITERIA) {
+    if (criterion.applies(guards)) {
+      checks.push(criterion.evaluate(guards, content, sectionHeader));
     }
-    checks.push({
-      type: 'matches_pattern',
-      passed,
-      expected: guards.matches_pattern,
-      actual: passed,
-      feedback,
-    });
-  }
-
-  // forbidden_terms: content must NOT include any of the keywords (word-boundary match)
-  if (guards.forbidden_terms && guards.forbidden_terms.length > 0) {
-    const found = guards.forbidden_terms.filter((kw) => {
-      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`\\b${escaped}\\b`, 'i').test(content);
-    });
-    checks.push({
-      type: 'forbidden_terms',
-      passed: found.length === 0,
-      expected: [],
-      actual: found,
-      feedback:
-        found.length === 0
-          ? ''
-          : `Section "${sectionHeader}" contains forbidden terms: ${found.map((k) => `"${k}"`).join(', ')}. Remove these.`,
-    });
   }
 
   return checks;

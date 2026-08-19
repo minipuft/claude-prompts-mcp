@@ -81,7 +81,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   });
 
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
-    expect(engine.getSchemaVersion()).toBe(23);
+    expect(engine.getSchemaVersion()).toBe(24);
 
     const tables = engine
       .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)

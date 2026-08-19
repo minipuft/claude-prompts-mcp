@@ -1,8 +1,24 @@
 #!/usr/bin/env node
 
 /**
- * Plan rows must be checkable in BOTH polarities: a ✓ must not name an untracked file, and a ☐
- * must carry the stamp that makes it re-checkable.
+ * Plan rows must be checkable in every state they can be in: a ✓ must not name an untracked file,
+ * a ☐ must carry the stamp that makes it re-checkable, and a ⊘ must carry the stamp that makes
+ * IT re-checkable too.
+ *
+ * A THIRD STATE: ⊘ (U+2298), CLOSED — VERIFIED, NO CHANGE REQUIRED
+ * ✓ and ☐ do not cover a row whose work is settled but produced no edit — investigated, found
+ * nothing to change, closed. Forced into ✓, that row claims an edit that never happened; forced
+ * into ☐, it claims pending work that isn't. Real instance: a tier task said "strip restated guard
+ * numbers from 5 prompt files"; measurement showed only 1 of the 5 actually restated a number, and
+ * the other 4 correctly needed no edit — neither existing mark describes that outcome honestly.
+ *
+ * ⊘ is MARKED, like ✓ — it asserts a settled position, not an absence of one — so by this file's
+ * own reasoning below it must carry a proposition a gate can read. But unlike ✓, there is no
+ * artifact to check against git: by definition nothing was written, so rule 1's git-tracked check
+ * answers a question a ⊘ row is not asking, and a ⊘ row is deliberately exempt from it. The stamp
+ * is therefore the ONLY evidence a reader gets: `(verified YYYY-MM-DD · <reason>)`, required the
+ * same way `(as of ... · flips when ...)` is required for ☐. Without it, "closed" and "forgotten"
+ * look identical from here.
  *
  * WHY THE SECOND RULE EXISTS
  * The first rule shipped 2026-08-12 and was measured one day later against the same plan. Five
@@ -96,6 +112,9 @@ const IGNORED_PREFIXES = ['node_modules/', 'server/dist/', 'cli/dist/'];
 /** The unmarked status. Rule 2 makes it carry a proposition. */
 const OPEN_MARK = '☐';
 
+/** Closed, no change required — settled but produced no edit. Rule 3 makes it carry a stamp too. */
+const CLOSED_MARK = '⊘';
+
 /**
  * The stamp that turns an open marker into something re-checkable.
  *
@@ -104,6 +123,14 @@ const OPEN_MARK = '☐';
  * exact phrasing is the point of a NOTATION gate: it is checkable without knowing the domain.
  */
 const OPEN_STAMP = /as of (\d{4}-\d{2}-\d{2})\s*[·|-]\s*flips when\s+\S/;
+
+/**
+ * The stamp that turns a closed-no-change marker into something re-checkable.
+ *
+ * Same two-part shape as `OPEN_STAMP` and the same reasoning: the date alone answers "how old is
+ * this belief" but not "why was nothing changed", and the reason alone cannot be aged.
+ */
+const CLOSED_STAMP = /verified (\d{4}-\d{2}-\d{2})\s*[·|-]\s*\S/;
 
 /** Frontmatter status; only `active` plans are graded by rule 2. */
 function planStatus(content) {
@@ -164,6 +191,11 @@ export function auditPlanText(planPath, content, tracked) {
     // claim machine-readable, and reading those produces findings nobody can act on.
     if (!line.startsWith('|') || !line.includes(DONE_MARK)) continue;
 
+    // A ⊘ row names files it deliberately did NOT touch — that is the whole point of the mark —
+    // so the git-tracked check below would be asking the wrong question of it. Exempt the entire
+    // row, not just the ⊘ mention, in case a row transitions through both marks in one edit.
+    if (line.includes(CLOSED_MARK)) continue;
+
     for (const match of line.matchAll(PATH_IN_BACKTICKS)) {
       const rel = match[1];
       if (IGNORED_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
@@ -221,6 +253,39 @@ export function auditOpenRows(planPath, content, grandfathered = GRANDFATHERED_O
 }
 
 /**
+ * Rule 3 — a closed-no-change row in an ACTIVE plan must carry `verified <date> · <reason>`.
+ *
+ * ⊘ means "settled, nothing to edit" — a MARKED claim like ✓, not an unmarked default like ☐. It
+ * gets a stamp for the same reason ✓ gets a git check: an assertion with no mechanical way to
+ * verify it is a claim nobody downstream can act on.
+ *
+ * Pure, like rules 1 and 2, so the self-test feeds it fabricated plans.
+ *
+ * @returns {{violations: string[], stamped: number, graded: boolean}}
+ */
+export function auditClosedRows(planPath, content) {
+  const violations = [];
+  let stamped = 0;
+
+  if (planStatus(content) !== 'active') return { violations, stamped, graded: false };
+
+  for (const [index, line] of content.split('\n').entries()) {
+    if (!line.startsWith('|') || !line.includes(CLOSED_MARK)) continue;
+
+    if (CLOSED_STAMP.test(line)) {
+      stamped += 1;
+      continue;
+    }
+    violations.push(
+      `${planPath}:${index + 1}: a row marked ${CLOSED_MARK} carries no stamp. Closed-no-change ` +
+        'still asserts something checkable — add `(verified YYYY-MM-DD · <reason>)`.'
+    );
+  }
+
+  return { violations, stamped, graded: true };
+}
+
+/**
  * Classifies one grandfathered entry against the shared exception vocabulary.
  *
  * The `unreachable` branch is the one worth reading. A grandfathered plan can go inert two ways
@@ -271,11 +336,13 @@ function run() {
   const tracked = trackedFiles();
   const doneViolations = [];
   const openViolations = [];
+  const closedViolations = [];
   const planTexts = new Map();
   let skipped = 0;
   let checked = 0;
   let stamped = 0;
   let gradedPlans = 0;
+  let closedStamped = 0;
 
   for (const plan of planFiles()) {
     const content = readFileSync(path.join(REPO, plan), 'utf8');
@@ -290,6 +357,10 @@ function run() {
     openViolations.push(...open.violations);
     stamped += open.stamped;
     if (open.graded) gradedPlans += 1;
+
+    const closed = auditClosedRows(plan, content);
+    closedViolations.push(...closed.violations);
+    closedStamped += closed.stamped;
   }
 
   const exceptionAudit = auditGrandfathered(planTexts);
@@ -314,9 +385,24 @@ function run() {
     );
   }
 
+  if (closedViolations.length > 0) {
+    console.error(
+      `\n✖ Closed-no-change rows in active plans carry no stamp (${closedViolations.length}):`
+    );
+    for (const violation of closedViolations) console.error(`  - ${violation}`);
+    console.error(
+      `\nA ${CLOSED_MARK} asserts settlement with no artifact to check against git, so the stamp ` +
+        'is the only evidence a reader gets — without it, "closed" and "forgotten" look the same.'
+    );
+  }
+
   const exceptionProblems = reportExceptionAudit('plan-row-tracking', exceptionAudit);
 
-  if (doneViolations.length + openViolations.length + exceptionProblems > 0) return 1;
+  if (
+    doneViolations.length + openViolations.length + closedViolations.length + exceptionProblems >
+    0
+  )
+    return 1;
 
   // Report counts rather than a bare success. A gate that checked nothing and a gate that checked
   // everything print the same "OK" otherwise, which is how a scope regression hides — the same
@@ -325,7 +411,8 @@ function run() {
     `✔ Plan rows: ${checked} path(s) named by ${DONE_MARK} rows are tracked ` +
       `(${skipped} not on disk — renamed, deleted, or external; not decidable here); ` +
       `${stamped} ${OPEN_MARK} row(s) stamped across ${gradedPlans} active plan(s) ` +
-      `(${GRANDFATHERED_OPEN_ROWS.length} grandfathered).`
+      `(${GRANDFATHERED_OPEN_ROWS.length} grandfathered); ` +
+      `${closedStamped} ${CLOSED_MARK} row(s) stamped.`
   );
   return 0;
 }
@@ -392,6 +479,18 @@ function selfTest() {
     new Set()
   );
 
+  expectClean(
+    'a ⊘ row naming an on-disk-but-untracked file does not trigger the ✓ path rule',
+    `| 1.1 | ⊘ (verified 2026-08-17 · no change needed) | did not touch \`${onDisk}\` | closed |`,
+    new Set() // nothing tracked — would fail rule 1 if ⊘ rows were not exempt
+  );
+
+  expectClean(
+    'a row carrying BOTH ✓ and ⊘ is still exempt from the ✓ path rule',
+    `| 1.1 | ✓ ⊘ (verified 2026-08-17 · reason) | \`${onDisk}\` | closed |`,
+    new Set()
+  );
+
   // The skip path must not swallow everything: if `existsSync` were inverted or the regex broke,
   // every case above would pass vacuously. Prove the matcher still finds a real path.
   const { checked } = auditPlanText(
@@ -440,6 +539,46 @@ function selfTest() {
   openCase(
     'a reference plan is not graded',
     '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ☐ | x |',
+    false
+  );
+
+  // ---- Rule 3: the closed-no-change row must carry its own stamp too -------------------------
+  const closedCase = (name, text, expectFail, planPath = 'plans/fake.md') => {
+    const { violations } = auditClosedRows(planPath, text);
+    const failed = violations.length > 0;
+    if (failed !== expectFail) {
+      console.error(
+        `✖ self-test: "${name}" — expected ${expectFail ? 'a finding' : 'clean'}, got the opposite`
+      );
+      failures += 1;
+    } else {
+      console.log(`✔ self-test: ${name}`);
+    }
+  };
+
+  closedCase(
+    'a bare ⊘ row in an active plan is caught',
+    `${ACTIVE}| 1.1 | ⊘ | investigated, nothing to change |`,
+    true
+  );
+  closedCase(
+    'a stamped ⊘ row passes',
+    `${ACTIVE}| 1.1 | ⊘ (verified 2026-08-17 · grep confirmed no restated number) | investigated |`,
+    false
+  );
+  closedCase(
+    'a date with no reason is still a finding — half a stamp is not a stamp',
+    `${ACTIVE}| 1.1 | ⊘ (verified 2026-08-17) | investigated |`,
+    true
+  );
+  closedCase(
+    'a reason with no date is still a finding — an unaged claim cannot be triaged',
+    `${ACTIVE}| 1.1 | ⊘ (verified · grep confirmed no restated number) | investigated |`,
+    true
+  );
+  closedCase(
+    'a reference plan is not graded for ⊘',
+    '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ⊘ | x |',
     false
   );
   // Synthetic fixture: the live GRANDFATHERED_OPEN_ROWS list is empty in the healthy steady

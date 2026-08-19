@@ -12,12 +12,12 @@ Your response MUST contain four CAGEERF-aligned sections. The phase-guard verifi
 
 The header text below is the `section_header` declared in `resources/frameworks/cageerf/phases.yaml`, and the section splitter matches it literally. Do NOT emit the framework phase _ids_ (`context_establishment`, `systematic_analysis`, `goal_definition`) as headers — the splitter finds no sections and the guard fails on a response that looks complete. Emit ONLY the headers in the first column.
 
-| Section header | CAGEERF phase         | What goes here                                                                                                                                                                                                                                 | Min length | Enforced by                                         |
-| -------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------- |
-| `## Context`   | Context Establishment | Restate the design references being verified — the file paths, line numbers, and symbols the Design step cited                                                                                                                                 | 100 chars  | Phase guard (required, min_length, no-placeholders) |
-| `## Analysis`  | Systematic Analysis   | **Raw tool outputs** — paste literal `ls`, `wc -l`, `rg`, `head` output for every file. This is the verification work product.                                                                                                                 | 100 chars  | Phase guard (required, min_length, no-placeholders) |
-| `## Goals`     | Goal Definition       | The `verified_paths` block + `drift_summary` + `revision_required` + `revised_paths_block`. Every cell here must trace to evidence in `## Analysis`.                                                                                           | 80 chars   | Phase guard (required, min_length, no-placeholders) |
-| `## Execution` | Execution Planning    | How the verification was executed — probe batching, corrected-path re-runs, and what step 4 may now rely on. Measured 2026-08-11: omitting this section fails the guard even though earlier revisions of this table listed only three headers. | 80 chars   | Phase guard (required, min_length, no-placeholders) |
+| Section header | CAGEERF phase         | What goes here                                                                                                                                                                                                                                 |
+| -------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `## Context`   | Context Establishment | Restate the design references being verified — the file paths, line numbers, and symbols the Design step cited                                                                                                                                 |
+| `## Analysis`  | Systematic Analysis   | **Raw tool outputs** — paste literal `ls`, `wc -l`, `rg`, `head` output for every file. This is the verification work product.                                                                                                                 |
+| `## Goals`     | Goal Definition       | The `verified_paths` block + `drift_summary` + `revision_required` + `revised_paths_block`. Every cell here must trace to evidence in `## Analysis`.                                                                                           |
+| `## Execution` | Execution Planning    | How the verification was executed — probe batching, corrected-path re-runs, and what step 4 may now rely on. Measured 2026-08-11: omitting this section fails the guard even though earlier revisions of this table listed only three headers. |
 
 ### Verification protocol (per file in design's `read-before-implementing` + every file the plan table will reference)
 
@@ -111,7 +111,7 @@ revised_paths_block: |
 
 ## Execution
 
-[How the verification ran: probe batches, any ENOENT variants attempted, any re-runs, and what the plan table may now cite as-is. Real content, ≥80 chars, no placeholder terms.]
+[How the verification ran: probe batches, any ENOENT variants attempted, any re-runs, and what the plan table may now cite as-is. Real content of adequate length, no placeholder terms.]
 
 ## Why this structure works
 

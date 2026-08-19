@@ -4,7 +4,7 @@ Phase guards provide deterministic structural validation of LLM output against f
 
 ## How Phase Guards Work
 
-When a framework defines `processingSteps` with `section_header` and `guards` fields in `phases.yaml`, Pipeline Stage 09b automatically checks the LLM's response after execution.
+When a framework defines `processingSteps` with `section_header` and `guards` fields in `phases.yaml`, Pipeline Stage 19 (`19-phase-guard-verification-stage.ts`) automatically checks the LLM's response after execution.
 
 ```
 LLM Output → Section Splitter → Phase Guard Evaluator → Result
@@ -21,7 +21,7 @@ Phase guards activate when ALL of these are true:
 1. A framework is active (via `@CAGEERF`, `@5W1H`, etc.)
 2. The framework's `phases.yaml` has processing steps with `section_header` + `guards`
 3. Phase guards mode is not `off` in config
-4. The execution is within a chain session (phase guards validate chain step responses)
+4. The execution carries a session — a chain step, or a single prompt with explicit `gates`, a `gate` operator, or `chainSteps` (any of which sets `executionPlan.requiresSession`). Phase guards are not chain-exclusive: a gated single prompt reaches Stage 19 the same way a chain step does
 
 ## Defining Phase Guards
 
@@ -62,6 +62,89 @@ processingSteps:
 - A step with `guards` **must** also have a `section_header` (validation error otherwise)
 - A step with `section_header` but no `guards` triggers a warning (the header serves no purpose without guards)
 - `min_length` must not exceed `max_length` when both are defined
+
+## Declared Sections
+
+Phase guards used to grade a response against `section_header` strings that lived only in
+`phases.yaml` — nothing derived the prompt-time instruction from that same source, so a guard could
+block on a header the model was never told to produce. `server/src/engine/frameworks/declared-sections.ts`
+closes that gap: it is the single source both the render path and the grading path read.
+
+```
+phases.yaml (section_header + guards)
+            │
+            └── declared-sections.ts
+                        │
+                        ├─> resolveDeclaredSections() ──> rendered into the prompt
+                        │                                  • chain-operator-executor.ts
+                        │                                    (every chain step's Required
+                        │                                    Response Format block)
+                        │                                  • response-assembler
+                        │                                    .formatSinglePromptResponse
+                        │                                    (gated single prompts — see below)
+                        │
+                        └─> resolveGuardedProcessingSteps() ──> Stage 19 evaluation
+```
+
+### Gated single prompts declare too
+
+A single (non-chain) prompt reaches Stage 19 whenever it carries an explicit `gates` parameter, a
+`gate` operator, or `chainSteps` — any of those sets `executionPlan.requiresSession`, which grants a
+session. Before this contract, that path rendered no header vocabulary at all, so a gated single
+prompt was graded against headers it was never given. `response-assembler.formatSinglePromptResponse`
+now renders the same declared-header block the chain path renders, gated on session presence; an
+ungated single prompt still renders nothing.
+
+### Which guard rules the model is told about
+
+Not every `guards` field is safe to declare. `phase-guards/criteria.ts` is a registry that owns both
+evaluation and declarability per criterion:
+
+| Criterion         | Declared to the model? | Why                                                                         |
+| ----------------- | ---------------------- | --------------------------------------------------------------------------- |
+| `contains_any`    | yes                    | An unguessable keyword list — discovering it by trial costs a retry         |
+| `contains_all`    | yes                    | Same                                                                        |
+| `max_length`      | yes                    | An unstated ceiling is invisible until breached and cannot be fixed in-turn |
+| `min_length`      | no (evaluated only)    | Retry feedback already names the exact threshold — not worth the token cost |
+| `forbidden_terms` | **never**              | Declaring what is rejected hands over the evasion target                    |
+| `matches_pattern` | **never**              | Same — and the natural home for a future sensitive-data check               |
+
+`required` is not in this table: it addresses _which_ header must be present, not what its content
+must satisfy, so it is not a criterion. The two negative criteria carry `declare?: never` in their
+type — a criterion that tries to declare itself is a compile error, not a review comment that can be
+missed.
+
+### A guard may only block on a header the render actually declared
+
+This is the load-bearing rule the rest of the contract exists to support:
+
+- What a chain step or gated single prompt actually rendered is recorded per run-node, in
+  `chain_run_nodes.declared_sections_json` (schema v24) — a durable fact, not a re-derivation from
+  `phases.yaml`. Re-deriving would make "declared" and "guarded" identical by construction, which
+  would make the advisory branch below unreachable by design.
+- Stage 19 reads that record back and partitions a phase's guarded sections into two groups: headers
+  the render declared (still block on absence, per the existing `required` rule) and headers it did
+  not (advisory only — a warning is logged, the run is not blocked).
+- A run with no recorded declaration at all is treated as having declared nothing, never as having
+  declared everything. This direction is deliberate: the contract can only make blocking **rarer**
+  than before, never stricter.
+
+### Guarded-but-unaddressable frameworks are refused at load
+
+A `guards` block with no `section_header` was always a schema error, but the validator that catches
+it had no production caller. Framework load now calls it: a framework that declares `guards` on a
+phase with no `section_header` is refused at load, and the logged error names the offending phase.
+
+### Drift between the prompt copy and `phases.yaml` is a CI gate
+
+A handful of prompts (the `implementation_plan` chain and `examples/create_framework`) restate the
+header vocabulary in hand-written pedagogy — the tables carry per-header guidance that generation
+would lose, so they are kept rather than derived. `server/scripts/validate-phase-header-drift.js`
+catches the failure mode that motivated this contract: a prompt file that restates a `section_header`
+no `phases.yaml` declares. It distinguishes a genuine declaration (named inside a phase-guard table,
+or a fenced example corroborated elsewhere in the same file) from an ordinary Markdown heading, so
+unrelated prompts using a heading like `## Context` for their own purposes do not false-positive.
+Registered in `validate:all`.
 
 ## Enforcement Modes
 
