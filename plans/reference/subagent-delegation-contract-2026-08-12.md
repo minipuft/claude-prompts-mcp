@@ -1,8 +1,12 @@
 ---
 title: "Sub-agent Delegation Contract — Envelope, Gates, and Agent Export"
 date: 2026-08-12
-status: active
-tags: []
+status: reference
+tags:
+  - execution
+  - gates
+  - chains
+tracking: https://github.com/minipuft/claude-prompts-mcp/issues/240
 ---
 
 # Sub-agent Delegation Contract — Envelope, Gates, and Agent Export
@@ -145,7 +149,7 @@ and its first candidate is an agent, not a chain behavior.
 any delegated node, so shipping `agents/chain-executor.md` buys a restricted-tool safety posture,
 not functionality. Still worth doing; no longer blocks anything.
 
-### S8 — `delegation_skipped` telemetry on execution_records ☐ (as of 2026-08-18 · flips when a resume-without-spawn of a delegated step produces a row with the mark, and a spawned one does not; BLOCKED until the phase-guard session's v24 schema bump lands — two sessions bumping SCHEMA_VERSION collide by construction)
+### S8 — `delegation_skipped` telemetry on execution_records ✓ (2026-08-18 · `4983c873`, riding the phase-guard v24 recreate landed in `9970764e` — the collision constraint dissolved when one actor landed both on owner authorization. Predicate: undefined/not-evaluable · 1/token-absent · 0/token-present, token spelling shared with the brief's Result Contract emitter. Writer at StepCaptureService — a DESIGN ADDITION the row did not anticipate: no capture-time ledger row existed, so S8 adds the third execution_records row type (capture-time completed). Falsified: NULL-binding mutation fails all four integration tests by name incl. both flip twins; read-back verified through queryRecent)
 
 R-4 (owner-ruled): enforcement stays advisory (D6), but the server records what it cannot
 prevent. Read-back consumer: `system_control execution_history`. Partial population by row type,

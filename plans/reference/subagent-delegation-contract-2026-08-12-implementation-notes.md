@@ -382,3 +382,34 @@ the shared worktree — forbidden op, self-repaired; I verified stash list empty
 98's hunks present, untracked scripts intact. Agent prompts must keep saying "no git state
 changes"; this one did and the fragment slipped through anyway — the verification step, not the
 prohibition, is what caught it.
+
+**DEV-CI-1 (2026-08-18, self-inflicted variant-seven)**: I pushed the D.1/D.2 docs commit two
+minutes after the dc97413b code push — the exact trailing-docs cancellation I'd diagnosed for 98
+hours earlier — and then misread the pending run as "queued, not replacing" (the same premature
+badge-read; cancellation fires when the pending run STARTS). Code run rerun after the docs run
+completed. Lesson: documenting the rule did not bind it at the push boundary; the mechanical fix
+is folding docs writebacks into the code commit's push (one event), which also matches the
+same-PR cleanup principle.
+
+## S8 implementation — IN FLIGHT (2026-08-18, subagent)
+
+Owner authorized landing the offline phase-guard session's finalized v24 set; S8's
+`delegation_skipped` column rides that same v24 recreate (collision constraint dissolved — one
+actor lands both). Agent's edit surface so far: new `delegation/acknowledgment.ts` (predicate
+module) + unit tests, `chain-execution.ts` type threading, sqlite-engine/table-contracts column
+(additive to v24), pipeline-builder wiring, `delegation-skipped.integration.test.ts` (flip
+condition). My prep: the three stale schema-version assertions fixed 23→24 (33/33 green);
+phase-guard arc independently verified (54/54 + drift gate over 183 prompt files). Coordination:
+export session holds two commits (ecc8537b, fb0c70b0) to ride ONE push; retirement Issue drafted
+(scratchpad issue-body.md) pending the S8 commit hash. Not yet verified: agent's falsification
+record — do not trust these edits until its report lands and is independently re-run.
+
+## Retirement — 2026-08-18
+
+All ten rows terminal (8 ✓, S5 ✗ killed, none open). v24 landed as `9970764e` (phase-guard arc,
+owner-authorized landing of the offline session's finalized work), S8 as `4983c873`. Tracking
+Issue #240 created at the retirement boundary and closed on delivery; plan `status: reference`
+(these notes and docs/concepts/chains-lifecycle.md depend on it) and moved to `plans/reference/`.
+Durable learnings from this arc live in shared memory: do-or-kill row lifecycle, guard-hides-the-
+defect, verbatim-value probes, the worktree-vs-committed family (3 directions), the no-stash rule,
+and the seven-variant green-that-observed-nothing catalog.

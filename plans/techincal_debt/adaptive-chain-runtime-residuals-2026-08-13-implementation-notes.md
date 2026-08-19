@@ -189,3 +189,15 @@ stays main-thread. No pushes without owner approval.
   `DEFAULT_GATE_GUIDANCE_FREQUENCY = {mode:'every', interval:1}` with "Injects on every step"
   comment is dead/stale — runtime default comes from `infra/config/index.ts` `toFrequency(0,
 'first-only')` and always overrides it. Candidate: comment/constant correction on next touch.
+
+## Post-retirement addenda (2026-08-17)
+
+- Not plan-tracked: `~/.claude/skills/cleanup/**`, `~/.claude/skills/_index.md`, and
+  skill-builder agent memory — global framework assets created on owner request (the /cleanup
+  skill), outside this repository's plan scope.
+- Workflow-IR conformance corpus landed via PR #235 (`tests/e2e/conformance/workflow-ir.yaml`
+  - test-modernization-roadmap re-measurement section) — the durable replacement for the
+    session-ephemeral P6 live-drive script.
+- Not plan-tracked: `~/.claude/hooks/planning/plan-sync-stop.py` — global framework hook
+  patched on owner request (flush surface widened from bound-only to session-interacted plan
+  documents, so Bash-mediated flushes register); three-way behavioral test passed.
