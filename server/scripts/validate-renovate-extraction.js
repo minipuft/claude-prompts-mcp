@@ -15,14 +15,20 @@ const ACTION_FILES = [
   '.github/workflows/renovate-config-validator.yml',
 ];
 const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'];
-const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, regex: 5 };
-const EXPECTED_REGEX_IDENTITIES = [
-  ['PyYAML', '.github/workflows/ci.yml'],
-  ['pyrefly', '.github/workflows/ci.yml'],
-  ['pytest', '.github/workflows/ci.yml'],
-  ['renovate', '.github/workflows/renovate-config-validator.yml'],
-  ['ruff', '.github/workflows/ci.yml'],
+// `regex` fell 5 -> 1 and `pip_requirements` appeared on 2026-08-19: the four Python pins moved
+// from `run: pip install x==y` lines in ci.yml into requirements-dev.txt, so a built-in manager
+// reads them and they became installable locally. These are FILE counts, so the four deps arrive
+// as one pip_requirements file — REQUIREMENTS_FILES below asserts which, and the dep identities
+// are asserted in validateExtraction.
+const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, pip_requirements: 1, regex: 1 };
+const REQUIREMENTS_FILES = ['requirements-dev.txt'];
+const EXPECTED_PIP_IDENTITIES = [
+  ['PyYAML', 'requirements-dev.txt'],
+  ['pyrefly', 'requirements-dev.txt'],
+  ['pytest', 'requirements-dev.txt'],
+  ['ruff', 'requirements-dev.txt'],
 ];
+const EXPECTED_REGEX_IDENTITIES = [['renovate', '.github/workflows/renovate-config-validator.yml']];
 const RULES = [
   ['Default dependency PRs remain maintenance-only', { semanticCommitType: 'chore' }],
   [
@@ -161,6 +167,8 @@ function validateExtraction(stats, extracted, errors) {
     errors.push('GitHub Actions file inventory changed');
   if (!same(files('npm'), sorted(PACKAGE_FILES))) errors.push('npm package file inventory changed');
   if (!same(files('nodenv'), ['.node-version'])) errors.push('Node version source changed');
+  if (!same(files('pip_requirements'), sorted(REQUIREMENTS_FILES)))
+    errors.push('Python requirements file inventory changed');
 
   const dependencies = Object.entries(extracted)
     .filter(([, entries]) => Array.isArray(entries))
@@ -177,6 +185,29 @@ function validateExtraction(stats, extracted, errors) {
     mcpb[0].currentValue !== '2.1.2'
   ) {
     errors.push('MCPB must be extracted exactly once from root package.json at 2.1.2');
+  }
+  const pipDeps = dependencies
+    .filter((dependency) => dependency.manager === 'pip_requirements')
+    .map((dependency) => `${dependency.file}:${dependency.depName}`)
+    .sort();
+  const expectedPipDeps = EXPECTED_PIP_IDENTITIES.map(
+    ([depName, file]) => `${file}:${depName}`
+  ).sort();
+  if (!same(pipDeps, expectedPipDeps)) {
+    errors.push(`Python tool identities changed: [${pipDeps}]`);
+  }
+  for (const dependency of dependencies.filter(({ manager }) => manager === 'pip_requirements')) {
+    // Measured against a real `--dry-run=extract` on 2026-08-19: pip_requirements keeps the
+    // operator, so an exact pin arrives as `==0.16.1` — unlike the regex manager, whose capture
+    // group yields a bare `0.16.1`. Requiring the `==` IS the exactness assertion; `>=0.16.1`
+    // or a bare version would not match, and an unpinned Python tool is the failure
+    // requirements-dev.txt exists to prevent.
+    if (
+      typeof dependency.currentValue !== 'string' ||
+      !/^==[0-9][^\s"']*$/.test(dependency.currentValue)
+    ) {
+      errors.push(`Python pin is not exact: ${dependency.depName}`);
+    }
   }
   const regexDeps = dependencies
     .filter((dependency) => dependency.manager === 'regex')
@@ -227,9 +258,20 @@ function fixtureRows() {
     renovate: '44.6.0',
     ruff: '0.16.0',
   };
-  const regex = EXPECTED_REGEX_IDENTITIES.map(([depName, packageFile]) => ({
-    packageFile,
-    deps: [{ depName, currentValue: versions[depName] }],
+  const entriesFor = (identities) => {
+    const byFile = new Map();
+    for (const [depName, packageFile] of identities) {
+      if (!byFile.has(packageFile)) byFile.set(packageFile, { packageFile, deps: [] });
+      byFile.get(packageFile).deps.push({ depName, currentValue: versions[depName] });
+    }
+    return [...byFile.values()];
+  };
+  const regex = entriesFor(EXPECTED_REGEX_IDENTITIES);
+  // The four Python tools share ONE file, so unlike `regex` this cannot be one entry per dep,
+  // and pip_requirements reports `==x.y.z` where the regex manager reports a bare `x.y.z`.
+  const pipRequirements = entriesFor(EXPECTED_PIP_IDENTITIES).map((entry) => ({
+    ...entry,
+    deps: entry.deps.map((dep) => ({ ...dep, currentValue: `==${dep.currentValue}` })),
   }));
   const config = {
     labels: ['dependencies'],
@@ -260,6 +302,7 @@ function fixtureRows() {
         'github-actions': emptyEntries(ACTION_FILES),
         nodenv: emptyEntries(['.node-version']),
         npm: packageEntries,
+        pip_requirements: pipRequirements,
         regex,
       },
     },
@@ -281,8 +324,17 @@ function main() {
     if (!validateRows([...fixture, { level: 40, msg: 'warning' }]).length)
       throw new Error('warning passed');
     const updatedDependency = fixtureRows();
-    updatedDependency[2].packageFiles.regex[2].deps[0].currentValue = '0.16.1';
+    updatedDependency[2].packageFiles.pip_requirements[0].deps[0].currentValue = '==0.16.1';
     if (validateRows(updatedDependency).length) throw new Error('valid dependency update failed');
+    const unpinnedPythonTool = fixtureRows();
+    unpinnedPythonTool[2].packageFiles.pip_requirements[0].deps[0].currentValue = '>=0.16.1';
+    if (!validateRows(unpinnedPythonTool).length) throw new Error('unpinned Python tool passed');
+    const bareVersionPin = fixtureRows();
+    bareVersionPin[2].packageFiles.pip_requirements[0].deps[0].currentValue = '0.16.1';
+    if (!validateRows(bareVersionPin).length) throw new Error('bare-version Python pin passed');
+    const droppedPythonTool = fixtureRows();
+    droppedPythonTool[2].packageFiles.pip_requirements[0].deps.pop();
+    if (!validateRows(droppedPythonTool).length) throw new Error('dropped Python tool passed');
     const missingMcpb = fixtureRows();
     missingMcpb[2].packageFiles.npm[1].deps = [];
     if (!validateRows(missingMcpb).length) throw new Error('missing MCPB passed');

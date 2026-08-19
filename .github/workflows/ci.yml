@@ -16,7 +16,6 @@ concurrency:
 
 env:
   NODE_ENV: test
-  NODE_LTS: "22.x"
 
 permissions:
   contents: read
@@ -99,7 +98,7 @@ jobs:
         if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_LTS }}
+          node-version-file: ".node-version"
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -107,32 +106,18 @@ jobs:
         if: needs.classify.outputs.scope == 'full'
         run: npm ci --prefer-offline --no-audit
 
-      # Pinned on purpose. An unpinned `pip install pyrefly` turned an untouched branch
-      # red on 2026-07-31 when the package went 0.55.x -> 1.1.1 and the newer inference
-      # flagged two pre-existing lines no commit had touched. Renovate tracks Ruff,
-      # Pyrefly, Pytest, and PyYAML through customManagers in .github/renovate.json5.
+      # Pins live in requirements-dev.txt, which is the single installable source both this
+      # workflow and `npm run setup:python` read — that file carries the full rationale for
+      # pinning at all. They used to be four literal `pip install x==y` lines here, which no
+      # developer could install from, so local tooling drifted from CI unnoticed (measured
+      # 2026-08-19: local ruff 0.15.5 against 0.16.1, pytest 9.0.2 against 9.1.1).
       # ruff is installed here rather than via astral-sh/ruff-action because
       # `validate:python` (inside validate:all) is the single definition of the Python
       # gate — the action would have been a second, silently divergent one.
-      - name: Install Ruff
+      - name: Install Python tooling
         if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
         working-directory: .
-        run: pip install ruff==0.16.1 --quiet
-
-      - name: Install Pyrefly
-        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
-        working-directory: .
-        run: pip install pyrefly==1.1.1 --quiet
-
-      - name: Install Pytest
-        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
-        working-directory: .
-        run: pip install pytest==9.1.1 --quiet
-
-      - name: Install PyYAML
-        if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'docs'
-        working-directory: .
-        run: pip install PyYAML==6.0.3 --quiet
+        run: pip install -r requirements-dev.txt --quiet
 
       # The seven `validate:no-*` recurrence guards shell out to ripgrep, which the
       # GitHub runner image does not ship. This was latent until validate:all started
@@ -275,7 +260,7 @@ jobs:
         if: needs.classify.outputs.scope == 'full'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_LTS }}
+          node-version-file: ".node-version"
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -343,6 +328,12 @@ jobs:
       # 24 is what actually ships: every publish path (npm, extension) reads
       # .node-version, which is 24. Testing only the minimum meant a Node-24-specific
       # regression passed CI and shipped. 22.13.0 proves the declared node:sqlite floor.
+      #
+      # This matrix is now the ONLY place a second Node version appears. Until 2026-08-19 the
+      # lint and build jobs ran a floating `NODE_LTS: "22.x"` while classify, cli, and every
+      # local dev box ran .node-version's 24 — so `validate:all` was never once executed on the
+      # version that ships, and the resolved 22.x moved under CI without a commit. Both jobs
+      # read .node-version now; the floor is proven here and nowhere else.
       matrix:
         node: ["22.13.0", "24"]
     defaults:

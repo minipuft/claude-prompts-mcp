@@ -28,15 +28,18 @@ git commit -m "feat(server): add new capability"
 
 ## Development Environment
 
-| Surface / requirement                | Version           | Notes                                         |
-| ------------------------------------ | ----------------- | --------------------------------------------- |
-| **MCP server and desktop extension** | Node.js >=22.13.0 | CI tests the minimum and Node 24              |
-| **Standalone CPM CLI runtime**       | Node.js >=18.18.0 | Separate self-contained compatibility surface |
-| **Local development and publishing** | Node.js 24        | `.node-version` is the repository pin         |
-| **npm**                              | Bundled with Node | Run `npm install` inside `server/`            |
-| **Git**                              | Any recent        | Required for Husky hooks                      |
+| Surface / requirement                | Version                    | Notes                                            |
+| ------------------------------------ | -------------------------- | ------------------------------------------------ |
+| **MCP server and desktop extension** | Node.js >=22.13.0          | CI tests the minimum and Node 24                 |
+| **Standalone CPM CLI runtime**       | Node.js >=18.18.0          | Separate self-contained compatibility surface    |
+| **Local development and publishing** | Node.js 24                 | `.node-version` is the repository pin            |
+| **npm**                              | Bundled with Node          | Run `npm ci` inside `server/`                    |
+| **Python tooling**                   | See `requirements-dev.txt` | `npm run setup:python` installs the pins CI uses |
+| **Git**                              | Any recent                 | Required for Husky hooks                         |
 
-The server uses `node:sqlite` without an experimental flag, which sets its runtime floor. Use Node 24 for repository development so local builds match the publish workflows.
+The server uses `node:sqlite` without an experimental flag, which sets its runtime floor. Use Node 24 for repository development so local builds match the publish workflows — every CI job except the test matrix now reads the same `.node-version`, and the matrix is the only place 22.13.0 appears.
+
+Install with `npm ci`, not `npm install`: `ci` reproduces `package-lock.json` exactly, and a tree that has drifted from the lockfile makes every local `validate:*` result describe a toolchain CI will not use. `npm run validate:lockfile-sync` reports that drift by name and runs inside `validate:all`. `npm run setup:python` does the same job for Ruff, Pyrefly, Pytest, and PyYAML, whose pins live in `requirements-dev.txt` — the same file CI installs from.
 
 <details>
 <summary><strong>Repo Structure</strong></summary>
@@ -305,14 +308,15 @@ Runs before every `git push`:
 
 On the full route, in order:
 
-1. Type checking (`typecheck`, then `typecheck:committed`)
-2. Linting (`lint:ratchet`)
-3. Format checking
-4. Python hook validation (`validate:python`, only when `hooks/**` changed)
-5. Tests (`test:ci`)
-6. Dependency validation (`validate:arch`)
-7. Version consistency (`validate:versions`)
-8. Build
+1. Lockfile sync (`validate:lockfile-sync`) — first, because every step below measures the installed tree
+2. Type checking (`typecheck`, then `typecheck:committed`)
+3. Linting (`lint:ratchet`)
+4. Format checking
+5. Python hook validation (`validate:python`, only when `hooks/**` changed)
+6. Tests (`test:ci`)
+7. Dependency validation (`validate:arch`)
+8. Version consistency (`validate:versions`)
+9. Build
 
 Docs-only and `hooks/**`-only pushes take lighter routes. `scripts/classify-validation-scope.js`
 decides which. Pushes are blocked if any step fails.

@@ -87,6 +87,15 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    // First, because every step after it is only as trustworthy as the tree it ran against.
+    // A drifted node_modules is how a knip-ratchet baseline got measured with knip 6.32.1 and
+    // committed against the lockfile's 6.32.2 (2026-08-19).
+    script: 'validate:lockfile-sync',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
     script: 'validate:format',
     io: 'read',
     reads: ['spawn', 'tracked'],

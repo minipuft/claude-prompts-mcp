@@ -1,0 +1,24 @@
+# Python tooling for `validate:python` — the hook lint, type, and test gate.
+#
+# PINNED ON PURPOSE. An unpinned `pip install pyrefly` turned an untouched branch red on
+# 2026-07-31 when the package went 0.55.x -> 1.1.1 and the newer inference flagged two
+# pre-existing lines no commit had touched. With a floating version you cannot tell a real
+# regression from an upstream release.
+#
+# THIS FILE EXISTS SO THE PINS ARE INSTALLABLE. They previously lived only as literal strings
+# in four `run:` steps of .github/workflows/ci.yml, which meant a developer could align with CI
+# only by hand-copying versions out of a workflow. Measured 2026-08-19, that is exactly what had
+# happened: local ruff 0.15.5 against CI's 0.16.1, local pytest 9.0.2 against CI's 9.1.1.
+#
+# Both sides now read this one file — CI installs it with `pip install -r`, and so does
+# `npm run setup:python` from server/. Renovate tracks it with the built-in `pip_requirements`
+# manager, which replaced four regex customManagers that parsed those shell lines.
+#
+# `requirements-dev.txt` rather than pyproject.toml `[dependency-groups]` (PEP 735): consuming a
+# group needs `pip install --group`, which requires pip >= 25.1, and the CI job runs the GitHub
+# runner's own pip with no setup-python step pinning it. Adding an unverifiable version floor to
+# the runner is the same class of failure this file exists to remove.
+ruff==0.16.1
+pyrefly==1.1.1
+pytest==9.1.1
+PyYAML==6.0.3

@@ -47,6 +47,15 @@ pending. Routing happens inside the workflow while the literal `Lint & Validate`
 `.husky/pre-commit` remains the fast contract-regeneration, staged-lint, conditional
 Python, and typecheck gate. Every local route remains a subset of CI.
 
+**A local gate is only as trustworthy as the toolchain it ran against**, which is a
+different axis from which steps run where. CI installs with `npm ci` and pinned pip
+versions; a developer box installs whenever it last installed. Measured 2026-08-19: a local
+tree sat 18 packages off the lockfile with knip at 6.32.1 against the lockfile's 6.32.2, and
+the knip ratchet baseline was regenerated with the wrong binary. Two commands close it, both
+reading the same file CI reads -- `validate:lockfile-sync` (inside `validate:all`) and
+`setup:python` (`requirements-dev.txt`). Node no longer forks either: every job reads
+`.node-version`, and the test matrix is the only place 22.13.0 appears.
+
 **`lint:ratchet` does NOT run at pre-commit** (since `a5d8cb51`). It is a whole-project
 DIRECTION measure, and direction is a push concern; per-commit conformance is `lint:staged`,
 which lints exactly what is staged. Running it per-commit also meant an unrelated violation
@@ -109,6 +118,8 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | `npm run lint:ratchet`            | Fail if ESLint violations increased                                                                                                                                              |
 | `npm run typecheck:tests:ratchet` | Fail if `tests/` type errors increased. Covers the call sites `typecheck` cannot see — a constructor change can otherwise land green against a test file that no longer compiles |
 | `npm run generate:contracts`      | Regenerate MCP schemas from contracts                                                                                                                                            |
+| `npm run validate:lockfile-sync`  | Fail when `node_modules` has drifted from `package-lock.json` — compares npm's own `node_modules/.package-lock.json`, so no subprocess and no output parsing                     |
+| `npm run setup:python`            | Install the pinned Ruff/Pyrefly/Pytest/PyYAML from `requirements-dev.txt` — the same file CI installs from                                                                       |
 | `npm run validate:all`            | Full validation suite                                                                                                                                                            |
 | `npm run validate:arch`           | Dependency Cruiser architecture rules                                                                                                                                            |
 | `npm run validate:contracts`      | Verify generated artifacts in sync                                                                                                                                               |

@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-19T02:13:35.765Z",
+  "generatedAt": "2026-08-19T03:25:13.584Z",
   "totals": {
-    "findings": 1203
+    "findings": 1204
   },
   "byCategory": {
-    "binaries": 7,
+    "binaries": 8,
     "catalog": 0,
     "catalogReferences": 0,
     "dependencies": 0,

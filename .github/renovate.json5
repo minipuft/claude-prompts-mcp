@@ -266,49 +266,14 @@
 
   // Tool versions pinned inside workflow `run:` steps are invisible to every built-in
   // manager — nothing parses a shell line. MCPB is deliberately absent here because its
-  // exact root devDependency is the sole update path. The five remaining workflow tools
-  // need exact regex managers so their pins stay maintainable.
+  // exact root devDependency is the sole update path.
+  //
+  // Ruff, Pyrefly, Pytest, and PyYAML had four regex managers here until 2026-08-19. They moved
+  // to requirements-dev.txt, which the built-in `pip_requirements` manager reads — a regex
+  // manager is the fallback for a pin no manager can see, and a pin a developer also cannot
+  // install from is the more expensive half of that bargain. One regex manager remains, for the
+  // genuinely unparseable case: a version inside an `npm install -g` line.
   customManagers: [
-    {
-      customType: "regex",
-      description: "Pinned Ruff version in the CI workflow",
-      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
-      matchStrings: [
-        "run: pip install ruff==(?<currentValue>[0-9][^\\s\"']*) --quiet",
-      ],
-      depNameTemplate: "ruff",
-      datasourceTemplate: "pypi",
-    },
-    {
-      customType: "regex",
-      description: "Pinned Pyrefly version in the CI workflow",
-      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
-      matchStrings: [
-        "run: pip install pyrefly==(?<currentValue>[0-9][^\\s\"']*) --quiet",
-      ],
-      depNameTemplate: "pyrefly",
-      datasourceTemplate: "pypi",
-    },
-    {
-      customType: "regex",
-      description: "Pinned Pytest version in the CI workflow",
-      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
-      matchStrings: [
-        "run: pip install pytest==(?<currentValue>[0-9][^\\s\"']*) --quiet",
-      ],
-      depNameTemplate: "pytest",
-      datasourceTemplate: "pypi",
-    },
-    {
-      customType: "regex",
-      description: "Pinned PyYAML version in the CI workflow",
-      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
-      matchStrings: [
-        "run: pip install PyYAML==(?<currentValue>[0-9][^\\s\"']*) --quiet",
-      ],
-      depNameTemplate: "PyYAML",
-      datasourceTemplate: "pypi",
-    },
     {
       customType: "regex",
       description: "Pinned Renovate version in its validator workflow",

@@ -86,8 +86,16 @@ if [ "$VALIDATION_SCOPE" = "hooks" ]; then
   exit 0
 fi
 
+# FIRST, because every step after it measures the tree that is installed, not the tree the
+# lockfile describes, and CI installs the latter with `npm ci`. A drifted tree is how a knip
+# ratchet baseline got regenerated with knip 6.32.1 against the lockfile's 6.32.2 (2026-08-19).
+# ~50ms, and it is a strict subset of CI: `validate:all` runs the same check.
 echo ""
-echo "1/9 Type checking..."
+echo "1/10 Lockfile sync..."
+npm --prefix "$SERVER_DIR" run validate:lockfile-sync || { echo "❌ node_modules has drifted from package-lock.json — run \`npm ci\` in server/"; exit 1; }
+
+echo ""
+echo "2/10 Type checking..."
 npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
 # The check above compiles the WORKING TREE, which is a state CI never sees — CI checks out the
@@ -100,15 +108,15 @@ npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; e
 npm --prefix "$SERVER_DIR" run typecheck:committed || { echo "❌ Committed state does not typecheck"; exit 1; }
 
 echo ""
-echo "2/9 Linting..."
+echo "3/10 Linting..."
 npm --prefix "$SERVER_DIR" run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }
 
 echo ""
-echo "3/9 Format checking..."
+echo "4/10 Format checking..."
 echo "✅ Changed repo-level files checked above"
 
 echo ""
-echo "4/9 Python hook validation..."
+echo "5/10 Python hook validation..."
 HOOK_CHANGES=$(printf '%s\n' "$PUSHED_FILES" | grep '^hooks/' || true)
 if [ -n "$HOOK_CHANGES" ]; then
   npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
@@ -117,19 +125,19 @@ else
 fi
 
 echo ""
-echo "5/9 Running tests..."
+echo "6/10 Running tests..."
 npm --prefix "$SERVER_DIR" run test:ci || { echo "❌ Tests failed"; exit 1; }
 
 echo ""
-echo "6/9 Dependency validation..."
+echo "7/10 Dependency validation..."
 npm --prefix "$SERVER_DIR" run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
 
 echo ""
-echo "7/9 Version consistency check..."
+echo "8/10 Version consistency check..."
 npm --prefix "$SERVER_DIR" run validate:versions || { echo "❌ Version mismatch across manifests"; exit 1; }
 
 echo ""
-echo "8/9 Build..."
+echo "9/10 Build..."
 npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
 
 # Post-build gates CI runs that this hook did not. Measured 2026-08-18: a merge landed four CI
@@ -140,7 +148,7 @@ npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
 # failure reaches CI twice more): integration/e2e suites stay CI-only — ~3 min is over this
 # hook's budget; that class (stale test double vs committed contract) remains locally invisible.
 echo ""
-echo "9/9 Post-build schema + semantic gates..."
+echo "10/10 Post-build schema + semantic gates..."
 npm --prefix "$SERVER_DIR" run validate:tool-schemas || { echo "❌ MCP tool schema snapshot drifted — refresh via scripts/capture-tool-schemas.mjs"; exit 1; }
 npm --prefix "$SERVER_DIR" run validate:conformance-coverage || { echo "❌ Conformance coverage failed"; exit 1; }
 npm --prefix "$SERVER_DIR" run validate:no-legacy-sidecars || { echo "❌ Legacy sidecar reference found"; exit 1; }
