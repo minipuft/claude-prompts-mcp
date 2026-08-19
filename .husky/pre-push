@@ -7,6 +7,30 @@ set -eu
 
 SERVER_DIR=server
 
+# A push that only DELETES remote refs has no content to validate. Git feeds this hook
+# `<local ref> <local sha> <remote ref> <remote sha>` per ref, and a deletion is the all-zero
+# local sha. Without this, `git push origin --delete <branch>` runs the full suite against
+# whatever happens to be in the working tree — so retiring a merged branch from a shared
+# worktree fails on someone else's in-flight edits, and the only way through is --no-verify,
+# which disables the gate for real pushes too.
+#
+# Reads stdin, so it must run before anything else consumes it. Falls through when stdin is
+# empty (the hook invoked by hand) rather than treating "no refs" as "nothing to check".
+#
+# Recovered from `66875801` on `feat/phase-guard-declaration-contract` 2026-08-19.
+DELETIONS_ONLY=yes
+SAW_REF=no
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  SAW_REF=yes
+  case "$local_sha" in
+    *[!0]*) DELETIONS_ONLY=no ;;
+  esac
+done
+if [ "$SAW_REF" = yes ] && [ "$DELETIONS_ONLY" = yes ]; then
+  echo "🔍 Pre-push: deletion-only push — no content to validate."
+  exit 0
+fi
+
 if UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
   PUSH_RANGE="$UPSTREAM..HEAD"
 elif git rev-parse --verify origin/main >/dev/null 2>&1; then
@@ -37,6 +61,20 @@ if [ -n "$PUSH_RANGE" ]; then
 else
   git diff-tree --check --root -r HEAD || { echo "❌ Changed-line whitespace check failed"; exit 1; }
 fi
+
+# Git exports GIT_DIR (and friends) into every hook, and they take precedence over cwd-based
+# repository discovery. Any tool below that shells out to git therefore resolves against the
+# pushing repository's gitdir rather than its own working directory. Measured 2026-08-17 in a
+# linked worktree: `git ls-files 'resources/*.yaml'` returns 89 paths from a shell and 0 under a
+# hook, which turned the bundled-YAML corpus test into a failure the moment integration tests
+# joined this route — and would have made any git-backed check here quietly assess an empty set.
+# The push range was already computed above, so nothing later needs the exported values.
+#
+# Recovered from `71965a5e` on `feat/phase-guard-declaration-contract` 2026-08-19. It is a
+# PRECONDITION of step 6b, not an independent tidy-up: `tests/integration/resources/
+# yaml-corpus.test.ts:40` calls `git ls-files`, so adding integration to this hook without this
+# unset reproduces the exact failure the comment above describes.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY
 
 ROOT_FORMATTABLE=$(printf '%s\n' "$FORMATTABLE_FILES" | grep -v '^server/' | grep -E '\.(json|md|ya?ml)$' || true)
 if [ -n "$ROOT_FORMATTABLE" ]; then
@@ -128,6 +166,30 @@ echo ""
 echo "6/10 Running tests..."
 npm --prefix "$SERVER_DIR" run test:ci || { echo "❌ Tests failed"; exit 1; }
 
+# Integration promoted from CI-only on 2026-08-19. PRIOR ART: `85fc1a99` on
+# `feat/phase-guard-declaration-contract` did this first, and carries the stronger evidence --
+# before 2026-07-29 NO automated job ran this suite and it had rotted to 10 failing suites /
+# 31 failing tests out of 349. That branch is 67 commits behind and renumbered this hook to
+# 1/9..9/9, so its version cannot be merged; this is the same fix reapplied against main's
+# current numbering, and it is now the single encoding.
+#
+# The residual that deferred it (see step 10)
+# named its own trigger -- "a mock-drift class failure reaches CI" -- and priced the suites at
+# ~3 min. Both halves were wrong in the direction that matters: `a0b36d04` is exactly that class
+# (five assertions comparing a pre-render intermediate against post-render text, stale since the
+# raw-wrapping in `d6cd6b73`), it reached CI on `main` rather than on a branch, and the measured
+# cost is 30s, not three minutes. Nothing else local runs `tests/integration/**`: `test:ci` is
+# `test:unit`, and `validate:all` calls `test:ci`, so before this line a completely broken
+# integration tier passed every local gate.
+#
+# Subset contract holds: CI runs this suite in its Test Suite job.
+# NOT on pre-commit. `ci-release.md` budgets that hook at <10s and this is 35s, and a
+# whole-project suite blocks a commit on a failure anywhere in the tree -- in a shared worktree,
+# on work that is not yours. That is the same ruling `lint:ratchet` already carries (a5d8cb51).
+echo ""
+echo "6b/10 Integration tests..."
+npm --prefix "$SERVER_DIR" run test:integration || { echo "❌ Integration tests failed"; exit 1; }
+
 echo ""
 echo "7/10 Dependency validation..."
 npm --prefix "$SERVER_DIR" run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
@@ -144,9 +206,10 @@ npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
 # failures in a row that every step above passed — conformance-coverage (new tool parameters vs
 # origin's new gate), no-legacy-sidecars (token in a comment), and the tool-schema snapshot
 # (published surface widened without a refresh). All three are sub-second here (tool-schemas
-# spawns the dist just built). ACCEPTED RESIDUAL (as of 2026-08-18 · flips if a mock-drift class
-# failure reaches CI twice more): integration/e2e suites stay CI-only — ~3 min is over this
-# hook's budget; that class (stale test double vs committed contract) remains locally invisible.
+# spawns the dist just built). RESIDUAL NARROWED 2026-08-19: integration moved to step 6b after
+# its trigger fired (see there). E2E remains CI-only — ACCEPTED RESIDUAL (as of 2026-08-19 ·
+# flips if an e2e-only failure reaches CI twice): 31s for a suite that has not yet caught
+# anything the other steps missed, where integration had already earned its place.
 echo ""
 echo "10/10 Post-build schema + semantic gates..."
 npm --prefix "$SERVER_DIR" run validate:tool-schemas || { echo "❌ MCP tool schema snapshot drifted — refresh via scripts/capture-tool-schemas.mjs"; exit 1; }

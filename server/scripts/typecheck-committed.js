@@ -36,8 +36,34 @@ import { fileURLToPath } from 'node:url';
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(SERVER, '..');
 
+/**
+ * Environment with every GIT_* variable removed.
+ *
+ * Git exports GIT_DIR, GIT_INDEX_FILE and friends into every hook, and they OUTRANK `cwd` for
+ * repository discovery. This script runs from `pre-push` and creates, then destroys, a worktree —
+ * writes, not reads — so an inherited GIT_DIR aims those writes at whatever repository invoked
+ * the hook rather than at the one `cwd` names.
+ *
+ * `.husky/pre-push` already clears these before calling here, which covers the only call site
+ * that exists today. That protection belongs to the CALL SITE and does not travel: a second
+ * caller — a CI step, another hook, a make target — would silently reintroduce the exposure.
+ * A git consumer that writes should be safe on its own terms.
+ *
+ * Measured 2026-08-17: a test helper with this same shape (cwd set, environment inherited) ran
+ * `git init` and two commits against the live repository instead of its temp one, leaving
+ * `core.bare = true` and two fixture commits on the branch being pushed.
+ */
+function scrubbedGitEnv() {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+}
+
 function git(args, cwd = REPO) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).trim();
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+    env: scrubbedGitEnv(),
+  }).trim();
 }
 
 /**

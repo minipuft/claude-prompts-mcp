@@ -234,3 +234,9 @@ skills/
 # file being absent: `loadSkillsSyncExports` returns an empty set, and the export command prints
 # `No skills-sync.yaml found. Copy the example to get started` (service.ts:549).
 server/skills-sync.yaml
+
+# t3.codes script-runner config. Local tooling choice, not a project default: it
+# registers whichever preview/viewer commands a given developer happens to use,
+# so committing one machine's set makes it everyone's. Same reasoning as
+# `server/skills-sync.yaml` above.
+t3.json
