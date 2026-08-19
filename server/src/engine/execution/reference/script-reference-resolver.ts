@@ -19,6 +19,7 @@
 import { parseInlineScriptArgs } from './internal/inline-arg-parser.js';
 import {
   InvalidFieldAccessError,
+  ScriptConfirmationRequiredError,
   InvalidScriptIdError,
   InvalidScriptOutputError,
   ScriptExecutionFailedError,
@@ -38,6 +39,9 @@ import type {
   ScriptResolutionDiagnostics,
   ScriptResolutionOptions,
 } from './script-reference-types.js';
+
+import { extractExplicitToolRequests } from '#shared/utils/explicit-tool-requests.js';
+import { neutralizeTemplateSyntax } from '#shared/utils/jsonUtils.js';
 
 /**
  * Regex pattern to match {{script:id}}, {{script:id.field}}, {{script:id args}} references.
@@ -146,10 +150,16 @@ export class ScriptReferenceResolver {
         diagnostics.scriptsResolved++;
       }
 
-      // Replace the reference with resolved content
+      // Replace the reference with resolved content.
+      //
+      // The output is spliced into the TEMPLATE, which Nunjucks then renders,
+      // so unprotected script output is executed as template source. Arguments
+      // carrying the same syntax are already escaped by `processTemplate`;
+      // this is the matching control for the one input that crosses a process
+      // boundary and can relay remote or file content.
       resolvedTemplate =
         resolvedTemplate.slice(0, ref.startIndex) +
-        result.output +
+        neutralizeTemplateSyntax(result.output) +
         resolvedTemplate.slice(ref.endIndex);
 
       // Store script result
@@ -219,7 +229,22 @@ export class ScriptReferenceResolver {
       ...(ref.inlineArgs ?? {}),
     };
 
-    // 5. Execute script
+    // 5. Enforce execution.confirm.
+    //
+    // `confirm` defaults to true, matching ToolDetectionService — an unset value
+    // means "ask", so a tool that has not opted out is protected on both paths.
+    // Consent is read from the invocation arguments, which arrive inside
+    // `context`, using the same extraction the declarative path uses. There is no
+    // second encoding of the rule and no pending-approval state to keep.
+    const requiresConfirmation = tool.execution?.confirm !== false;
+    if (requiresConfirmation) {
+      const explicitlyRequested = extractExplicitToolRequests(context);
+      if (!explicitlyRequested.has(tool.id.toLowerCase())) {
+        throw new ScriptConfirmationRequiredError(ref.scriptId);
+      }
+    }
+
+    // 6. Execute script
     this.logger.debug(`[ScriptReferenceResolver] Executing script ${ref.scriptId}`);
 
     const executionResult = await this.scriptExecutor.execute(

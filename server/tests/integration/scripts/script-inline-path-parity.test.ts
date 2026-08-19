@@ -112,59 +112,97 @@ describe('inline vs declarative path parity', () => {
     });
   });
 
-  // 2.2 — F1 reproduction. `test.failing` because this SHOULD pass and does not.
-  // When Tier 3 lands the guard, this line starts failing and must become `test`.
-  test.failing(
-    'inline {{script:id}} must not run a confirm:true tool the invocation did not name',
-    async () => {
-      const tool = confirmRequiredTool('side-effect.cjs');
-      const resolver = new ScriptReferenceResolver(
-        silentLogger,
-        loaderFor(tool),
-        createScriptExecutor()
-      );
+  // 2.2 — F1, FIXED by Tier 3 row 3.3. Flipped from `test.failing` to `test` in
+  // the same commit as its fix.
+  test('inline {{script:id}} must not run a confirm:true tool the invocation did not name', async () => {
+    const tool = confirmRequiredTool('side-effect.cjs');
+    const resolver = new ScriptReferenceResolver(
+      silentLogger,
+      loaderFor(tool),
+      createScriptExecutor()
+    );
 
-      await processTemplateWithRefs(
-        'Result: {{script:guarded_tool}}',
-        { sentinel },
-        {},
-        undefined,
-        { scriptResolver: resolver }
-      ).catch(() => undefined);
+    await processTemplateWithRefs('Result: {{script:guarded_tool}}', { sentinel }, {}, undefined, {
+      scriptResolver: resolver,
+    }).catch(() => undefined);
 
-      // The sentinel is the only honest observable: it proves the subprocess ran,
-      // independent of what the resolver reported.
-      expect(existsSync(sentinel)).toBe(false);
-    },
-    20000
-  );
+    // The sentinel is the only honest observable: it proves the subprocess ran,
+    // independent of what the resolver reported.
+    expect(existsSync(sentinel)).toBe(false);
+  }, 20000);
 
-  // 2.3 — F9 reproduction. `test.failing` because this SHOULD pass and does not.
-  // When Tier 3 lands the escaping, this line starts failing and must become `test`.
-  test.failing(
-    'script output must not be evaluated as template syntax',
-    async () => {
-      const tool = confirmRequiredTool('emit-template.cjs');
-      const resolver = new ScriptReferenceResolver(
-        silentLogger,
-        loaderFor(tool),
-        createScriptExecutor()
-      );
+  // 2.3 — F9, FIXED by Tier 3 row 3.4. Flipped from `test.failing` to `test` in
+  // the same commit as its fix, which is exactly what the marker's failure
+  // demanded once the escaping landed.
+  test('script output must not be evaluated as template syntax', async () => {
+    const tool = confirmRequiredTool('emit-template.cjs');
+    const resolver = new ScriptReferenceResolver(
+      silentLogger,
+      loaderFor(tool),
+      createScriptExecutor()
+    );
 
-      const { content } = await processTemplateWithRefs(
-        'Scout says: {{script:guarded_tool.summary}}',
-        { api_key: 'sk-SECRET-abc123' },
-        {},
-        undefined,
-        { scriptResolver: resolver }
-      );
+    const { content } = await processTemplateWithRefs(
+      'Scout says: {{script:guarded_tool.summary}}',
+      // Approved via tool:<id> so the guard from 3.3 is satisfied — this test
+      // is about what happens to the OUTPUT, not about confirmation.
+      { api_key: 'sk-SECRET-abc123', 'tool:guarded_tool': true },
+      {},
+      undefined,
+      { scriptResolver: resolver }
+    );
 
-      // The argument path escapes template syntax; the script path must match it.
-      expect(content).not.toContain('sk-SECRET-abc123');
-      expect(content).toContain('{{ api_key }}');
-    },
-    20000
-  );
+    // The argument path escapes template syntax; the script path must match it.
+    expect(content).not.toContain('sk-SECRET-abc123');
+    expect(content).toContain('{{ api_key }}');
+  }, 20000);
+
+  // 2.3b — the escape the raw-wrapper must survive. A payload carrying its own
+  // `endraw` closes a naive wrapper early; unhandled, that either leaks the
+  // remainder or takes the whole render down with a parse error.
+  test('script output containing its own endraw stays literal and does not break the render', async () => {
+    const tool = confirmRequiredTool('emit-endraw.cjs');
+    const resolver = new ScriptReferenceResolver(
+      silentLogger,
+      loaderFor(tool),
+      createScriptExecutor()
+    );
+
+    const { content } = await processTemplateWithRefs(
+      'Scout says: {{script:guarded_tool.summary}}',
+      // Approved via tool:<id> so the guard from 3.3 is satisfied — this test
+      // is about what happens to the OUTPUT, not about confirmation.
+      { api_key: 'sk-SECRET-abc123', 'tool:guarded_tool': true },
+      {},
+      undefined,
+      { scriptResolver: resolver }
+    );
+
+    expect(content).not.toContain('sk-SECRET-abc123');
+    expect(content).toContain('{{ api_key }}');
+    // Both closer spellings survive as text rather than terminating the wrapper.
+    expect(content).toContain('endraw');
+  }, 20000);
+  // 3.5 — the approval path. Same reference, same tool, invocation names it.
+  test('inline {{script:id}} runs a confirm:true tool once the invocation names it', async () => {
+    const tool = confirmRequiredTool('side-effect.cjs');
+    const resolver = new ScriptReferenceResolver(
+      silentLogger,
+      loaderFor(tool),
+      createScriptExecutor()
+    );
+
+    await processTemplateWithRefs(
+      'Result: {{script:guarded_tool}}',
+      { sentinel, 'tool:guarded_tool': true },
+      {},
+      undefined,
+      { scriptResolver: resolver }
+    );
+
+    // Same observable as the refusal case, so the pair cannot both pass by accident.
+    expect(existsSync(sentinel)).toBe(true);
+  }, 20000);
 });
 
 /** Minimal ScriptLoader over a single fixture tool. */

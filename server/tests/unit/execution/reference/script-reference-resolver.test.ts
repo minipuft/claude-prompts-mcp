@@ -19,9 +19,23 @@ import {
   InvalidScriptOutputError,
   type ScriptLoader,
 } from '../../../../src/engine/execution/reference/index.js';
+import { processTemplate } from '../../../../src/shared/utils/jsonUtils.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ScriptExecutorPort } from '../../../../src/shared/types/index.js';
 import type { LoadedScriptTool } from '../../../../src/modules/automation/types.js';
+
+/**
+ * Render a resolver result the way every production consumer does.
+ *
+ * `preResolve` returns TEMPLATE SOURCE, not final text: script output is wrapped
+ * so Nunjucks cannot evaluate it (see `neutralizeTemplateSyntax`). Asserting on
+ * the raw `resolvedTemplate` would pin the wrapper's spelling, which is an
+ * implementation detail; every real consumer — `processTemplateWithRefs` and
+ * `PromptReferenceResolver` — renders before anyone reads it.
+ */
+function render(resolvedTemplate: string, args: Record<string, unknown> = {}): string {
+  return processTemplate(resolvedTemplate, args);
+}
 
 describe('ScriptReferenceResolver', () => {
   // Mock logger
@@ -173,7 +187,7 @@ describe('ScriptReferenceResolver', () => {
 
       const result = await resolver.preResolve('Count: {{script:analyzer}}', {});
 
-      expect(result.resolvedTemplate).toBe('Count: {"count":42}');
+      expect(render(result.resolvedTemplate)).toBe('Count: {"count":42}');
       expect(result.scriptResults.size).toBe(1);
       expect(result.diagnostics.scriptsResolved).toBe(1);
     });
@@ -185,7 +199,7 @@ describe('ScriptReferenceResolver', () => {
 
       const result = await resolver.preResolve('Count: {{script:analyzer.count}}', {});
 
-      expect(result.resolvedTemplate).toBe('Count: 42');
+      expect(render(result.resolvedTemplate)).toBe('Count: 42');
     });
 
     it('should pass context and inline args to executor', async () => {
@@ -291,7 +305,7 @@ describe('ScriptReferenceResolver', () => {
         {}
       );
 
-      expect(result.resolvedTemplate).toBe('A: 1 B: 2');
+      expect(render(result.resolvedTemplate)).toBe('A: 1 B: 2');
       expect(result.scriptResults.size).toBe(2);
     });
   });

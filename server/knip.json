@@ -1,4 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["src/mcp/contracts/schemas/_generated/**"]
+  "ignore": [
+    "src/mcp/contracts/schemas/_generated/**",
+    "tests/integration/scripts/fixtures/**"
+  ]
 }

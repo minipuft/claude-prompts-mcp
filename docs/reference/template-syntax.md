@@ -108,6 +108,40 @@ Word count: {{ script:word_count text=content }}
 {{ script:analyzer.score }}
 ```
 
+#### Approval
+
+A reference is the prompt author asking to run something, which is not the same as the
+caller asking. So `execution.confirm` is honored here exactly as it is on the declarative
+`tools:` route:
+
+| Tool sets                   | `{{script:id}}` behavior                                                       |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `confirm: false`            | Runs during rendering.                                                         |
+| `confirm: true`             | Refuses, unless the invocation names the tool as `tool:<id>` in its arguments. |
+| nothing (`confirm` omitted) | Treated as `true` — the default requires approval.                             |
+
+A refusal raises `ScriptConfirmationRequiredError` and aborts the render; it does not
+silently produce an empty value. Because the render aborted, there is no pending state to
+resume against, so re-running the command does not approve an inline reference the way it
+does a declarative one — pass `tool:<id>`:
+
+```
+>>my_prompt text:"..." tool:analyzer
+```
+
+`server/resources/prompts/examples/reference_demo` ships both cases side by side —
+`word_count` (`confirm: false`) and `text_digest` (`confirm: true`).
+
+#### Output limits and escaping
+
+- Script stdout is capped (default 50,000 characters, `maxOutputChars`). Exceeding the cap
+  is a **failure**, not a trim — a truncated JSON payload is a different value, not a
+  shorter one, so `{{script:id.field}}` would otherwise render empty with nothing
+  reporting the loss.
+- Script output is inserted as literal text. Template syntax a script emits is **not**
+  evaluated, so a script returning remote or user-supplied data cannot inject
+  `{{ ... }}` or `{% ... %}` into the surrounding prompt.
+
 ---
 
 ## Special Variables

@@ -30,6 +30,8 @@ import type {
   ExecutionConfig,
 } from '../types.js';
 
+import { extractExplicitToolRequests } from '#shared/utils/explicit-tool-requests.js';
+
 /**
  * Configuration for the ToolDetectionService.
  */
@@ -92,7 +94,7 @@ export class ToolDetectionService implements ToolDetectionServicePort {
     availableTools: LoadedScriptTool[]
   ): ToolDetectionMatch[] {
     const matches: ToolDetectionMatch[] = [];
-    const explicitTools = this.extractExplicitToolRequests(args);
+    const explicitTools = extractExplicitToolRequests(args);
 
     for (const tool of availableTools) {
       // Skip disabled tools
@@ -129,44 +131,6 @@ export class ToolDetectionService implements ToolDetectionServicePort {
     }
 
     return matches;
-  }
-
-  /**
-   * Extract explicit tool requests from args (tool:<id> pattern).
-   *
-   * @param args - Parsed prompt arguments
-   * @returns Set of explicitly requested tool IDs (lowercase)
-   */
-  private extractExplicitToolRequests(args: Record<string, unknown>): Set<string> {
-    const requested = new Set<string>();
-
-    // Check for tool:<id> keys
-    for (const key of Object.keys(args)) {
-      if (key.toLowerCase().startsWith('tool:')) {
-        const toolId = key.slice(5).toLowerCase();
-        if (toolId !== '') {
-          requested.add(toolId);
-        }
-      }
-    }
-
-    // Check for explicit 'tool' or 'tool_id' arg
-    const explicitTool = args['tool'] ?? args['tool_id'] ?? args['toolId'];
-    if (typeof explicitTool === 'string') {
-      requested.add(explicitTool.toLowerCase());
-    }
-
-    // Check for comma-separated tool list
-    if (typeof explicitTool === 'string' && explicitTool.includes(',')) {
-      for (const part of explicitTool.split(',')) {
-        const trimmed = part.trim().toLowerCase();
-        if (trimmed !== '') {
-          requested.add(trimmed);
-        }
-      }
-    }
-
-    return requested;
   }
 
   /**

@@ -20,6 +20,38 @@ function escapeJsonForNunjucks(jsonStr: string): string {
     .replace(/#\}/g, '\\#\\}'); // Escape Nunjucks comment syntax
 }
 
+/** Matches every `endraw` closer Nunjucks accepts, including whitespace-control forms. */
+const NUNJUCKS_ENDRAW = /\{%-?\s*endraw\s*-?%\}/g;
+
+/** Emits a literal `{% endraw %}` from inside a rendered template. */
+const LITERAL_ENDRAW = '{{ "{%" }} endraw {{ "%}" }}';
+
+/**
+ * Render a string as inert text when it is spliced into a template rather than
+ * passed as an argument.
+ *
+ * `escapeJsonForNunjucks` cannot serve this case: it is one half of an
+ * escape/unescape pair keyed to the argument it escaped (see `processTemplate`),
+ * and on a splice there is no matching unescape, so its backslashes survive into
+ * the rendered output. Wrapping in `raw` needs no partner.
+ *
+ * Content containing its own `endraw` would otherwise close the wrapper early —
+ * which fails closed today (Nunjucks raises a parse error rather than evaluating
+ * the remainder) but takes the whole render down with it. Splitting on every
+ * closer form and re-wrapping each segment keeps the text literal and the render
+ * alive. The closer's original whitespace is normalised to `{% endraw %}` in the
+ * output; the text is preserved, its exact spacing is not.
+ *
+ * @param value - Untrusted text destined for a template position
+ * @returns Template source that renders back to `value` verbatim
+ */
+export function neutralizeTemplateSyntax(value: string): string {
+  return String(value)
+    .split(NUNJUCKS_ENDRAW)
+    .map((segment) => `{% raw %}${segment}{% endraw %}`)
+    .join(LITERAL_ENDRAW);
+}
+
 // Lazy initialization to avoid Jest import.meta.url issues
 let nunjucksEnv: nunjucks.Environment | null = null;
 

@@ -40,6 +40,29 @@ export class ScriptNotRegisteredError extends ScriptReferenceError {
 }
 
 /**
+ * Thrown when an inline reference targets a tool that requires confirmation and
+ * the invocation did not name it.
+ *
+ * A prompt author writing `{{script:id}}` is not the invoking user consenting.
+ * The declarative `tools:` path has always drawn that line; this is the same
+ * line on the inline path, decided from the same `tool:<id>` signal, so
+ * `execution.confirm` means one thing regardless of how the tool is reached.
+ */
+export class ScriptConfirmationRequiredError extends ScriptReferenceError {
+  constructor(scriptId: string) {
+    super(
+      `Script "${scriptId}" requires confirmation before running. ` +
+        `It was reached through an inline {{script:${scriptId}}} reference, which is the ` +
+        `prompt's request rather than yours. To approve it, re-run the command with ` +
+        `\`tool:${scriptId}\` in the arguments, or set \`execution.confirm: false\` on the ` +
+        `tool if it needs no approval.`,
+      scriptId
+    );
+    this.name = 'ScriptConfirmationRequiredError';
+  }
+}
+
+/**
  * Thrown when script execution fails (non-zero exit code or runtime error).
  */
 export class ScriptExecutionFailedError extends ScriptReferenceError {

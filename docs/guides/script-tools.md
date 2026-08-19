@@ -132,7 +132,8 @@ execution:
   confirmMessage: "Run full analysis? Takes ~5 minutes."
 ```
 
-Flow: Detection → Confirmation prompt → User approves with `tool:<id>` → Execution
+Flow: Detection → Confirmation prompt → User approves → Execution.
+Approve by re-running the same command, or by naming the tool as `tool:<id>`.
 
 ---
 
@@ -433,7 +434,7 @@ env:
 execution:
   trigger: schema_match # schema_match | explicit | always | never
   strict: false # Require ALL params (schema_match only)
-  confirm: false # Require user confirmation
+  confirm: false # Run without approval. Omitting the key defaults to TRUE
   confirmMessage: "..." # Custom confirmation text
 ```
 
@@ -624,14 +625,29 @@ Analysis for {{name}}: {{script:analyzer user='{{name}}'}}
 
 ### Comparison: Auto-Execute vs Inline References
 
-| Feature        | Auto-Execute         | Inline Reference   |
-| -------------- | -------------------- | ------------------ |
-| Trigger        | Schema match         | Template pattern   |
-| Template var   | `{{tool_<id>}}`      | `{{script:id}}`    |
-| Arguments      | User args + context  | Inline + context   |
-| MCP chaining   | Yes (`auto_execute`) | No                 |
-| Error behavior | Validation result    | Blocking exception |
-| Use case       | Wizard workflows     | Data injection     |
+| Feature        | Auto-Execute         | Inline Reference               |
+| -------------- | -------------------- | ------------------------------ |
+| Trigger        | Schema match         | Template pattern               |
+| Template var   | `{{tool_<id>}}`      | `{{script:id}}`                |
+| Arguments      | User args + context  | Inline + context               |
+| MCP chaining   | Yes (`auto_execute`) | No                             |
+| `confirm`      | Held for approval    | Refuses; raises until approved |
+| Error behavior | Validation result    | Blocking exception             |
+| Use case       | Wizard workflows     | Data injection                 |
+
+Both routes honor `execution.confirm`, but they express it differently: the declarative
+route holds the tool as pending and lets the rest of the prompt render, while an inline
+reference has no way to leave a hole in the middle of a template, so it aborts the render
+with `ScriptConfirmationRequiredError`.
+
+Approval differs to match:
+
+| Route       | Re-run the same command                                                   | Name it as `tool:<id>` |
+| ----------- | ------------------------------------------------------------------------- | ---------------------- |
+| Declarative | Yes — the pending tool is tracked, so a second identical call approves it | Yes                    |
+| Inline      | No — the render aborted, so there is no pending state to resume against   | Yes                    |
+
+`tool:<id>` works on both, so prefer it when you want one habit.
 
 ---
 

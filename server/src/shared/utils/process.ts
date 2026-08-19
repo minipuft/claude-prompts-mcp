@@ -6,6 +6,8 @@
  * timeout enforcement, env filtering, and output capture. Used by:
  * - engine/gates/shell/shell-verify-executor.ts
  * - modules/automation/execution/script-executor.ts
+ * - engine/gates/core/gate-validator.ts (lazy `await import`, so a static-import
+ *   search does not find it — this list is the inventory, measured 2026-08-19)
  *
  * Lives in shared/utils/ because subprocess execution is a stateless I/O
  * operation — no connection pool, no session, no lifecycle. It belongs with
@@ -17,6 +19,8 @@
  */
 
 import { spawn } from 'node:child_process';
+import { accessSync, constants as fsConstants } from 'node:fs';
+import { delimiter as pathDelimiter, isAbsolute, join } from 'node:path';
 
 // ============================================================================
 // Types
@@ -39,6 +43,15 @@ export interface ProcessResult {
   durationMs: number;
   /** Whether the process was killed due to timeout */
   timedOut?: boolean;
+  /**
+   * Whether `stdout` lost characters to `truncateOutput`.
+   *
+   * Reported as a FACT, never acted on here: shell verification reads its output
+   * as human-facing text and a tail is fine, while script tools field-access a
+   * parsed payload and a tail is a different value entirely. Each consumer owns
+   * that policy — see `ScriptExecutor`, which turns this flag into a failure.
+   */
+  stdoutTruncated?: boolean;
   /** Parsed JSON output (when parseJson option is true and stdout is valid JSON) */
   parsed?: unknown;
   /** POSIX signal name when exit code indicates signal termination (exitCode >= 128) */
@@ -170,6 +183,64 @@ export function buildSafeEnvironment(
     ...(baseEnv ?? {}),
     ...(additionalEnv ?? {}),
   };
+}
+
+/**
+ * Pick the first candidate executable that is actually runnable on `searchPath`.
+ *
+ * Lives here rather than in a caller because it must probe the SAME `PATH` the
+ * spawn will use — `buildSafeEnvironment` is what decides that, and a probe run
+ * against `process.env.PATH` while the child receives an overridden one measures
+ * a different question than the one being asked.
+ *
+ * Returns `undefined` only when NO candidate resolves. Callers are expected to
+ * fall back to their own first choice in that case: a probe that cannot see a
+ * binary (an exotic PATH, a permission quirk, a platform this scan gets wrong)
+ * must not turn a working install into "no interpreter found". The probe may
+ * only ever improve the choice, never veto it.
+ */
+export function resolveExecutable(
+  candidates: readonly string[],
+  searchPath: string | undefined
+): string | undefined {
+  const dirs = (searchPath ?? '').split(pathDelimiter).filter((dir) => dir !== '');
+  const suffixes = executableSuffixes();
+
+  for (const candidate of candidates) {
+    // An explicit path is a location, not a name to look up.
+    if (candidate.includes('/') || candidate.includes('\\') || isAbsolute(candidate)) {
+      if (suffixes.some((suffix) => isExecutableFile(candidate + suffix))) {
+        return candidate;
+      }
+      continue;
+    }
+    for (const dir of dirs) {
+      if (suffixes.some((suffix) => isExecutableFile(join(dir, candidate + suffix)))) {
+        return candidate;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/** Windows resolves a bare name through PATHEXT; POSIX does not. */
+function executableSuffixes(): string[] {
+  if (process.platform !== 'win32') {
+    return [''];
+  }
+  const pathext = process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD';
+  return ['', ...pathext.split(';').filter((ext) => ext !== '')];
+}
+
+function isExecutableFile(candidatePath: string): boolean {
+  try {
+    // X_OK is not meaningful on Windows, where any readable file may be spawned.
+    accessSync(candidatePath, process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ============================================================================
@@ -358,6 +429,12 @@ function spawnProcess(opts: SpawnOptions): Promise<ProcessResult> {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    // Characters the streaming slice below discarded before `truncate` ever ran.
+    // Without these the reported count is bounded by the buffer rather than by
+    // what the process actually wrote: a 10k-char stdout under a 1k cap keeps
+    // the last 2k, so `truncate` alone can only ever report 1k of the 9k lost.
+    let stdoutDropped = 0;
+    let stderrDropped = 0;
     const maxChars = truncateOutput > 0 ? truncateOutput * 2 : 0;
 
     // Timeout enforcement: SIGTERM first, then SIGKILL after 1s
@@ -374,6 +451,7 @@ function spawnProcess(opts: SpawnOptions): Promise<ProcessResult> {
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
       if (maxChars > 0 && stdout.length > maxChars) {
+        stdoutDropped += stdout.length - maxChars;
         stdout = stdout.slice(-maxChars);
       }
     });
@@ -381,6 +459,7 @@ function spawnProcess(opts: SpawnOptions): Promise<ProcessResult> {
     proc.stderr?.on('data', (data: Buffer) => {
       stderr += data.toString();
       if (maxChars > 0 && stderr.length > maxChars) {
+        stderrDropped += stderr.length - maxChars;
         stderr = stderr.slice(-maxChars);
       }
     });
@@ -408,8 +487,12 @@ function spawnProcess(opts: SpawnOptions): Promise<ProcessResult> {
       clearTimeout(timeoutId);
 
       const exitCode = code ?? (timedOut ? -1 : 0);
-      const finalStdout = truncateOutput > 0 ? truncate(stdout, truncateOutput) : stdout;
-      const finalStderr = truncateOutput > 0 ? truncate(stderr, truncateOutput) : stderr;
+      const stdoutLost =
+        truncateOutput > 0 ? droppedChars(stdout, truncateOutput, stdoutDropped) : 0;
+      const finalStdout =
+        truncateOutput > 0 ? truncate(stdout, truncateOutput, stdoutDropped) : stdout;
+      const finalStderr =
+        truncateOutput > 0 ? truncate(stderr, truncateOutput, stderrDropped) : stderr;
 
       const result: ProcessResult = {
         exitCode,
@@ -420,6 +503,10 @@ function spawnProcess(opts: SpawnOptions): Promise<ProcessResult> {
 
       if (timedOut) {
         result.timedOut = true;
+      }
+
+      if (stdoutLost > 0) {
+        result.stdoutTruncated = true;
       }
 
       if (parseJson) {
@@ -463,12 +550,22 @@ function killProcess(
   }
 }
 
-function truncate(output: string, maxChars: number): string {
-  if (output.length <= maxChars) {
+/**
+ * Total characters lost, counting what the streaming slice already discarded.
+ * Separated from `truncate` so the caller can report truncation without having
+ * to re-derive the count from the formatted string it just produced.
+ */
+function droppedChars(output: string, maxChars: number, alreadyDropped: number): number {
+  return alreadyDropped + Math.max(0, output.length - maxChars);
+}
+
+function truncate(output: string, maxChars: number, alreadyDropped = 0): string {
+  const dropped = droppedChars(output, maxChars, alreadyDropped);
+  if (dropped === 0) {
     return output;
   }
   const truncated = output.slice(-maxChars);
-  return `[...truncated ${output.length - maxChars} chars...]\n${truncated}`;
+  return `[...truncated ${dropped} chars...]\n${truncated}`;
 }
 
 function tryParseJson(stdout: string): unknown {

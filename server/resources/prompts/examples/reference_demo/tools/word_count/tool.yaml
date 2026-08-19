@@ -17,10 +17,14 @@ execution:
   #   - never: Tool is disabled
   trigger: schema_match
 
-  # confirm: true | false (default: false)
+  # confirm: true | false (default: true)
   #   - false: Execute immediately when triggered
   #   - true: Ask for confirmation before executing
-  confirm: true
+  #
+  # false here so the declarative section below actually is what its heading
+  # says — automatic. Counting words needs no approval. Its sibling
+  # `text_digest` sets true and demonstrates the gate on both routes.
+  confirm: false
   # confirmMessage: string (optional)
   # confirmMessage: "Run word count analysis on the provided text?"
 

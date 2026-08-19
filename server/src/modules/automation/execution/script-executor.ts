@@ -27,7 +27,7 @@ import type {
   JSONSchemaDefinition,
 } from '../types.js';
 
-import { executeProcess } from '#shared/utils/process.js';
+import { buildSafeEnvironment, executeProcess, resolveExecutable } from '#shared/utils/process.js';
 
 /**
  * Runtime command mappings for script execution.
@@ -37,6 +37,16 @@ const RUNTIME_COMMANDS: Record<string, string[]> = {
   node: ['node'],
   shell: ['bash', 'sh'],
 };
+
+/**
+ * Default stdout ceiling for a script tool.
+ *
+ * Sits well above any structured payload a tool legitimately returns and well
+ * below the point where one runaway script fills the context window. It is a
+ * robustness bound, not a security boundary — a script author already has
+ * arbitrary code execution by design, so this bounds accidents, not attacks.
+ */
+const DEFAULT_MAX_OUTPUT_CHARS = 50000;
 
 /**
  * Extension to runtime mapping for auto-detection.
@@ -77,12 +87,14 @@ export class ScriptExecutor implements ScriptExecutorPort {
   private readonly defaultTimeout: number;
   private readonly maxTimeout: number;
   private readonly baseEnv: Record<string, string>;
+  private readonly maxOutputChars: number;
 
   constructor(config: ScriptExecutorConfig = {}) {
     this.defaultTimeout = config.defaultTimeout ?? 30000;
     this.maxTimeout = config.maxTimeout ?? 300000;
     this.debug = config.debug ?? false;
     this.baseEnv = config.baseEnv ?? {};
+    this.maxOutputChars = config.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
 
     if (this.debug) {
       console.error('[ScriptExecutor] Initialized with config:', {
@@ -121,13 +133,6 @@ export class ScriptExecutor implements ScriptExecutorPort {
       );
     }
 
-    // Resolve runtime and command
-    const runtime = this.resolveRuntime(tool);
-    const command = this.findRuntimeCommand(runtime);
-    if (!command) {
-      return this.createErrorResult(startTime, `No interpreter found for runtime '${runtime}'`, -1);
-    }
-
     // Build per-execution env vars (tool-specific + request-specific + context vars)
     const env: Record<string, string> = {
       ...(tool.env ?? {}),
@@ -136,6 +141,14 @@ export class ScriptExecutor implements ScriptExecutorPort {
       SCRIPT_PROMPT_ID: tool.promptId,
       SCRIPT_TOOL_DIR: tool.toolDir,
     };
+
+    // Resolve runtime and command. Built AFTER `env` because the interpreter has
+    // to be looked up on the PATH the child will actually receive.
+    const runtime = this.resolveRuntime(tool);
+    const command = this.findRuntimeCommand(runtime, env);
+    if (!command) {
+      return this.createErrorResult(startTime, `No interpreter found for runtime '${runtime}'`, -1);
+    }
 
     const timeout = this.resolveTimeout(request, tool);
     const workingDir = tool.workingDir ? join(tool.toolDir, tool.workingDir) : tool.toolDir;
@@ -150,15 +163,21 @@ export class ScriptExecutor implements ScriptExecutorPort {
       timeout,
       maxTimeout: this.maxTimeout,
       processGroup: false,
-      truncateOutput: 0,
+      truncateOutput: this.maxOutputChars,
       parseJson: true,
       debug: this.debug,
     });
 
-    const success = result.exitCode === 0;
+    // Truncation is a failure, not a degraded success. `tryParseJson` never
+    // throws — it wraps unparseable text as `{ output: '<text>' }` — so a capped
+    // JSON payload arrives looking like a valid object whose every expected
+    // field is now missing, and `{{script:id.field}}` renders empty with nothing
+    // anywhere reporting that the value was cut.
+    const overflowed = result.stdoutTruncated === true;
+    const success = result.exitCode === 0 && !overflowed;
     const scriptResult: ScriptExecutionResult = {
       success,
-      output: result.parsed ?? result.stdout,
+      output: success ? (result.parsed ?? result.stdout) : null,
       stdout: result.stdout,
       stderr: result.stderr,
       exitCode: result.exitCode,
@@ -166,9 +185,14 @@ export class ScriptExecutor implements ScriptExecutorPort {
     };
 
     if (!success) {
-      scriptResult.error = result.timedOut
-        ? `Script timed out after ${timeout}ms`
-        : result.stderr || `Process exited with code ${result.exitCode}`;
+      scriptResult.error = overflowed
+        ? `Script output exceeded the ${this.maxOutputChars}-character limit. ` +
+          `Truncated output cannot be parsed or field-accessed, so this is reported ` +
+          `as a failure rather than a partial result. Raise 'maxOutputChars' or have ` +
+          `the script return less.`
+        : result.timedOut
+          ? `Script timed out after ${timeout}ms`
+          : result.stderr || `Process exited with code ${result.exitCode}`;
     }
 
     return scriptResult;
@@ -308,12 +332,33 @@ export class ScriptExecutor implements ScriptExecutorPort {
     return 'shell';
   }
 
-  private findRuntimeCommand(runtime: string): string | undefined {
+  /**
+   * Pick the interpreter for a runtime, honoring the declared fallbacks.
+   *
+   * `RUNTIME_COMMANDS` has always listed alternates (`python3` then `python`,
+   * `bash` then `sh`); until 2026-08-19 this returned `commands[0]` regardless,
+   * so on a host with only `python` every python tool failed with ENOENT while
+   * the table claimed otherwise. The probe resolves against the SAME environment
+   * the child receives, and falls back to the first candidate when it finds
+   * nothing — an unresolvable name still reaches spawn and still fails there,
+   * exactly as before, so this can only widen what runs.
+   */
+  private findRuntimeCommand(runtime: string, env: Record<string, string>): string | undefined {
     const commands = RUNTIME_COMMANDS[runtime];
-    if (!commands) {
+    if (!commands || commands.length === 0) {
       return undefined;
     }
-    return commands[0];
+    const searchPath = buildSafeEnvironment(this.baseEnv, env)['PATH'];
+    const resolved = resolveExecutable(commands, searchPath);
+
+    if (this.debug && resolved !== undefined && resolved !== commands[0]) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[ScriptExecutor] Runtime '${runtime}': '${commands[0]}' not on PATH, using '${resolved}'`
+      );
+    }
+
+    return resolved ?? commands[0];
   }
 
   private resolveTimeout(request: ScriptExecutionRequest, tool: LoadedScriptTool): number {

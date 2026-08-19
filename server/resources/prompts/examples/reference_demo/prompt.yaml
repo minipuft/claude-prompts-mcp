@@ -4,7 +4,12 @@ description: Demonstrates template reference features - {{ref:id}} for prompt in
 userMessageTemplateFile: user-message.md
 # Declare script tools available to this prompt
 tools:
+  # Two tools in one resource, deliberately: `word_count` runs automatically and
+  # `text_digest` requires approval, so the pair proves `confirm` is per-tool and
+  # behaves the same whether the tool is reached from this list or from a
+  # {{script:id}} reference in the template.
   - word_count
+  - text_digest
 arguments:
   - name: text
     description: The text to analyze with the word_count script tool

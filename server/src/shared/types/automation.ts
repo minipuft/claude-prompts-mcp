@@ -292,6 +292,16 @@ export interface ScriptExecutorConfig {
   debug?: boolean;
   /** Base environment variables for all scripts */
   baseEnv?: Record<string, string>;
+  /**
+   * Maximum stdout characters a script may produce (default: 50000).
+   *
+   * Exceeding it is a FAILURE, not a trim: the output is parsed as JSON and then
+   * field-accessed by `{{script:id.field}}`, so a tail of a JSON document is a
+   * different value rather than a shorter one. Configurable because the right
+   * ceiling depends on what a deployment's scripts legitimately return, and a
+   * hardcoded one is a limit nobody can move.
+   */
+  maxOutputChars?: number;
 }
 
 /**
