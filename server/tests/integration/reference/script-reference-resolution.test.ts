@@ -14,7 +14,7 @@ import {
   InvalidScriptOutputError,
   ScriptExecutionFailedError,
 } from '../../../src/engine/execution/reference/index.js';
-import { processTemplateWithRefs } from '../../../src/shared/utils/jsonUtils.js';
+import { processTemplate, processTemplateWithRefs } from '../../../src/shared/utils/jsonUtils.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type {
@@ -23,6 +23,17 @@ import type {
   ScriptExecutionResult,
 } from '../../../src/modules/automation/types.js';
 import type { ScriptLoader } from '../../../src/engine/execution/reference/index.js';
+
+/**
+ * `preResolve` returns template SOURCE, not final text: script output is wrapped in
+ * `{% raw %}` so a script cannot inject template syntax into the prompt around it.
+ * The wrapper is an intermediate representation — every real consumer
+ * (`processTemplateWithRefs`, `PromptReferenceResolver`) renders before anyone reads
+ * it — so these assertions render too. Mirrors the helper in the unit suite.
+ */
+function render(resolvedTemplate: string, args: Record<string, unknown> = {}): string {
+  return processTemplate(resolvedTemplate, args);
+}
 
 describe('ScriptReferenceResolver Integration', () => {
   let resolver: ScriptReferenceResolver;
@@ -101,7 +112,7 @@ describe('ScriptReferenceResolver Integration', () => {
     test('resolves simple script reference', async () => {
       const result = await resolver.preResolve('Count: {{script:analyzer}}', {});
 
-      expect(result.resolvedTemplate).toBe('Count: {"count":42,"status":"complete"}');
+      expect(render(result.resolvedTemplate)).toBe('Count: {"count":42,"status":"complete"}');
       expect(result.scriptResults.size).toBe(1);
       expect(result.diagnostics.scriptsResolved).toBe(1);
     });
@@ -109,13 +120,13 @@ describe('ScriptReferenceResolver Integration', () => {
     test('resolves script with field access', async () => {
       const result = await resolver.preResolve('Count: {{script:analyzer.count}}', {});
 
-      expect(result.resolvedTemplate).toBe('Count: 42');
+      expect(render(result.resolvedTemplate)).toBe('Count: 42');
     });
 
     test('resolves nested field access', async () => {
       const result = await resolver.preResolve('Value: {{script:json_output.nested}}', {});
 
-      expect(result.resolvedTemplate).toBe('Value: {"value":"deep"}');
+      expect(render(result.resolvedTemplate)).toBe('Value: {"value":"deep"}');
     });
 
     test('returns template unchanged when no script references', async () => {
@@ -134,7 +145,7 @@ describe('ScriptReferenceResolver Integration', () => {
         {}
       );
 
-      expect(result.resolvedTemplate).toBe('A: 42 B: 11');
+      expect(render(result.resolvedTemplate)).toBe('A: 42 B: 11');
       expect(result.scriptResults.size).toBe(2);
     });
 
@@ -144,7 +155,7 @@ describe('ScriptReferenceResolver Integration', () => {
         {}
       );
 
-      expect(result.resolvedTemplate).toBe('42 + 42 = double');
+      expect(render(result.resolvedTemplate)).toBe('42 + 42 = double');
       // Script only executed once (cached)
       expect(mockExecutor.execute).toHaveBeenCalledTimes(1);
     });
