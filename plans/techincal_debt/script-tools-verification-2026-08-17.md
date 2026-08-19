@@ -132,12 +132,12 @@ inputs — see Q2.
 
 | #   | St  | File                                                | Change                                                                          | ~Lines | Depends | Verify                         |
 | --- | --- | --------------------------------------------------- | ------------------------------------------------------------------------------- | ------ | ------- | ------------------------------ |
-| 1.1 | ☐   | tests/integration/scripts/fixtures/                 | Node fixtures: echo-inputs, sleep-long, exit-nonzero, print-non-json, print-env | 40     | —       | fixture returns JSON on stdin  |
-| 1.2 | ☐   | tests/integration/scripts/script-subprocess.test.ts | Harness + happy path: real spawn through ScriptExecutor                         | 60     | 1.1     | jest --runInBand on the file   |
-| 1.3 | ☐   | ↑                                                   | Timeout: sleep past the bound, assert `timedOut` + bounded wall-clock           | 25     | 1.2     | green; wall-clock < 3× timeout |
-| 1.4 | ☐   | ↑                                                   | Env allowlist: parent secret absent from child env                              | 25     | 1.2     | green                          |
-| 1.5 | ☐   | ↑                                                   | Argv-not-shell: `"; touch <tmp>"` produces no side effect                       | 20     | 1.2     | tmp file absent                |
-| 1.6 | ☐   | ↑                                                   | Non-JSON stdout wraps to `{output}`; non-zero exit → `success:false`            | 25     | 1.2     | green                          |
+| 1.1 | ✓   | tests/integration/scripts/fixtures/                 | Node fixtures: echo-inputs, sleep-long, exit-nonzero, print-non-json, print-env | 40     | —       | fixture returns JSON on stdin  |
+| 1.2 | ✓   | tests/integration/scripts/script-subprocess.test.ts | Harness + happy path: real spawn through ScriptExecutor                         | 60     | 1.1     | jest --runInBand on the file   |
+| 1.3 | ✓   | ↑                                                   | Timeout: sleep past the bound, assert `timedOut` + bounded wall-clock           | 25     | 1.2     | green; wall-clock < 3× timeout |
+| 1.4 | ✓   | ↑                                                   | Env allowlist: parent secret absent from child env                              | 25     | 1.2     | green                          |
+| 1.5 | ✓   | ↑                                                   | Argv-not-shell: `"; touch <tmp>"` produces no side effect                       | 20     | 1.2     | tmp file absent                |
+| 1.6 | ✓   | ↑                                                   | Non-JSON stdout wraps to `{output}`; non-zero exit → `success:false`            | 25     | 1.2     | green                          |
 
 **Tier 1 gate**: `npm run typecheck && NODE_OPTIONS="--experimental-vm-modules" npx jest --runInBand tests/integration/scripts`
 
@@ -145,9 +145,9 @@ inputs — see Q2.
 
 | #   | St  | File | Change                                                                                                                            | ~Lines | Depends | Verify                  |
 | --- | --- | ---- | --------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ----------------------- |
-| 2.1 | ☐   | ↑    | Declarative control: `confirm:true` via Stage 08 returns ConfirmationRequired                                                     | 30     | 1.2     | green on current code   |
-| 2.2 | ☐   | ↑    | **Reproduction (F1)**: `{{script:id}}` to the same tool — assert it does NOT execute                                              | 30     | 2.1     | **RED on current code** |
-| 2.3 | ☐   | ↑    | **Reproduction (F9)**: fixture emits `{{ other_arg }}` on stdout — assert it renders LITERALLY, not as the other argument's value | 25     | 1.2     | **RED on current code** |
+| 2.1 | ✓   | ↑    | Declarative control: `confirm:true` via Stage 08 returns ConfirmationRequired                                                     | 30     | 1.2     | green on current code   |
+| 2.2 | ✓   | ↑    | **Reproduction (F1)**: `{{script:id}}` to the same tool — assert it does NOT execute                                              | 30     | 2.1     | **RED on current code** |
+| 2.3 | ✓   | ↑    | **Reproduction (F9)**: fixture emits `{{ other_arg }}` on stdout — assert it renders LITERALLY, not as the other argument's value | 25     | 1.2     | **RED on current code** |
 
 **Tier 2 gate**: 2.2 AND 2.3 must fail, each for its stated reason (2.2: fixture side-effect
 observed; 2.3: the secret value appears in the rendered output). A green 2.2 or 2.3 before Tier 3
@@ -157,13 +157,13 @@ measured 2026-08-18, zero prompts in this repo, the three sibling workspaces, or
 
 ### Tier 3: The fix — reuse the existing port
 
-| #   | St  | File                                     | Change                                                                                                                                                                                                                            | ~Lines | Depends  | Verify                           |
-| --- | --- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- | -------------------------------- |
-| 3.1 | ☐   | shared/ (new pure fn)                    | Promote `extractExplicitToolRequests` out of `ToolDetectionService` (`:140`, `private`) into a shared pure function. ONE encoding of the `tool:<id>` rule                                                                         | 15     | Q2 ruled | typecheck; detection tests green |
-| 3.2 | ☐   | .../tool-detection-service.ts:95         | Call the shared function; delete the private copy                                                                                                                                                                                 | 5      | 3.1      | existing detection tests green   |
-| 3.3 | ☐   | .../script-reference-resolver.ts:~218    | Guard before `scriptExecutor.execute`: if `tool.execution.confirm !== false` and the shared fn does not find `tool:<id>` in `context`, throw a confirmation-required error naming the opt-in. No port, no injection, no new state | 25     | 3.2      | 2.2 flips GREEN                  |
-| 3.4 | ☐   | .../script-reference-resolver.ts:151-154 | **F9**: escape script output with `escapeJsonForNunjucks` before splicing it into `resolvedTemplate` — same control the args path already applies                                                                                 | 8      | 2.3      | 2.3 flips GREEN                  |
-| 3.5 | ☐   | ↑ test file                              | Approval path: same command WITH `tool:<id>` → executes                                                                                                                                                                           | 20     | 3.3      | green                            |
+| #   | St  | File                                     | Change                                                                                                                                                                                                                                                                                                                                                                                            | ~Lines | Depends  | Verify                           |
+| --- | --- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- | -------------------------------- |
+| 3.1 | ☐   | shared/ (new pure fn)                    | Promote `extractExplicitToolRequests` out of `ToolDetectionService` (`:140`, `private`) into a shared pure function. ONE encoding of the `tool:<id>` rule                                                                                                                                                                                                                                         | 15     | Q2 ruled | typecheck; detection tests green |
+| 3.2 | ☐   | .../tool-detection-service.ts:95         | Call the shared function; delete the private copy                                                                                                                                                                                                                                                                                                                                                 | 5      | 3.1      | existing detection tests green   |
+| 3.3 | ☐   | .../script-reference-resolver.ts:~218    | Guard before `scriptExecutor.execute`: if `tool.execution.confirm !== false` and the shared fn does not find `tool:<id>` in `context`, throw a confirmation-required error naming the opt-in. No port, no injection, no new state                                                                                                                                                                 | 25     | 3.2      | 2.2 flips GREEN                  |
+| 3.4 | ☐   | .../script-reference-resolver.ts:151-154 | **F9**: wrap script output in `{% raw %}...{% endraw %}` before splicing into `resolvedTemplate`. NOT `escapeJsonForNunjucks` — measured 2026-08-18, that escape is half of an escape/unescape pair keyed to the arg it escaped, so on the splice path it leaves literal backslashes (`\{\{ api_key \}\}`) in the output. Raw-wrapping renders correctly. Handle output containing `{% endraw %}` | 8      | 2.3      | 2.3 flips GREEN                  |
+| 3.5 | ☐   | ↑ test file                              | Approval path: same command WITH `tool:<id>` → executes                                                                                                                                                                                                                                                                                                                                           | 20     | 3.3      | green                            |
 
 **Rows 3.1/3.2/3.4 of the pre-ruling plan are DELETED, not deferred.** They added a method to
 `ToolTriggerFilterPort`, implemented it over the tracker, and threaded the concrete filter through
@@ -186,7 +186,7 @@ the composition root. Q2's measurement removed the need for all three: the resol
 | #   | St  | File                     | Change                                                        | ~Lines | Depends  | Verify            |
 | --- | --- | ------------------------ | ------------------------------------------------------------- | ------ | -------- | ----------------- |
 | 5.1 | ☐   | this file                | Keep ledger current as tiers land                             | —      | —        | prettier          |
-| 5.2 | ☐   | -implementation-notes.md | Deviation log — created BEFORE Tier 1's first edit            | 25     | —        | exists before 1.1 |
+| 5.2 | ✓   | -implementation-notes.md | Deviation log — created BEFORE Tier 1's first edit            | 25     | —        | exists before 1.1 |
 | 5.3 | ☐   | ↑ notes                  | Falsification record: mutation + which test failed, per claim | 20     | 3.5, 4.1 | one row per claim |
 | 5.4 | ☐   | CHANGELOG.md             | Fixed entry                                                   | 3      | 3.4      | commitlint        |
 
