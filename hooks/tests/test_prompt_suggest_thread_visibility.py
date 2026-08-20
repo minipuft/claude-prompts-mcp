@@ -1,18 +1,28 @@
 """
-Regression tests for the 2026-08-19 thread-visibility fix.
+Regression tests for the thread-visibility fixes of 2026-08-19 and 2026-08-20.
 
-`prompt-suggest.py` returns two channels: `systemMessage` (human-readable) and
-`hookSpecificOutput.additionalContext` (the <CALL-TOOL> directive). Clients that
-do not consume hook events render only the second one -- T3 Code emits
-hook.started/hook.progress/hook.completed and has no consumer for any of them.
+`prompt-suggest.py` writes two channels: `systemMessage` and
+`hookSpecificOutput.additionalContext`. Only the second is injected into the
+conversation, so only the second survives on every host.
 
-The unknown-prompt path has always assigned the SAME string to both fields, so a
-mistyped >>invocation surfaced its suggestions while a SUCCESSFUL one surfaced
-nothing at all. These tests pin the fix: the resolution line now rides
-`additionalContext` too, and the directive that follows it is unweakened.
+2026-08-19 established that. The unknown-prompt path had always assigned the
+SAME string to both fields, so a mistyped >>invocation surfaced its suggestions
+while a SUCCESSFUL one surfaced nothing; the resolution line now rides
+`additionalContext` on both paths, with the directive after it, unweakened.
 
-The prompt cache is stubbed throughout -- these assertions are about routing,
-and must not change meaning when the user's prompt library does.
+2026-08-20 corrected that fix's premise. `systemMessage` is not dropped by an
+SDK host -- Claude Code turns it into `{type: "system", subtype:
+"informational"}`, and a host with no case for that subtype falls through to its
+unknown-message branch. T3 Code renders that branch as a red error row
+(ClaudeAdapter.ts:3433). Emitting the field there does not fail to help; it
+produces the error the user sees. So a positively identified SDK entrypoint gets
+the field withheld and an echo instruction spliced in instead, and every other
+entrypoint -- including unset and unrecognized -- keeps both channels.
+
+Two things are stubbed so these assertions stay about routing: the prompt cache,
+which must not make them depend on the user's live prompt library, and
+`CLAUDE_CODE_ENTRYPOINT`, which must not make them depend on where pytest was
+launched from.
 """
 
 import importlib.util
@@ -71,9 +81,17 @@ def stub_cache(monkeypatch):
     )
 
 
-def run_hook(monkeypatch, capsys, user_prompt):
-    """Simulate a prompt-suggest.py UserPromptSubmit invocation."""
+def run_hook(monkeypatch, capsys, user_prompt, entrypoint="cli"):
+    """
+    Simulate a prompt-suggest.py UserPromptSubmit invocation.
+
+    The entrypoint is pinned rather than inherited. Which channels the hook
+    writes now depends on `CLAUDE_CODE_ENTRYPOINT`, and a suite run from inside
+    an SDK host inherits `sdk-ts` -- so leaving it ambient makes these tests
+    pass or fail on where pytest was launched from, not on the code.
+    """
     payload = {"session_id": "visibility-test", "prompt": user_prompt}
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", entrypoint)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit) as excinfo:
         prompt_suggest.main()
@@ -157,6 +175,52 @@ class TestMissPathCarriesSignatures:
     def test_both_channels_still_agree_on_the_miss_path(self, stub_cache, monkeypatch, capsys):
         code, out = run_hook(monkeypatch, capsys, ">>demo_promt")
         assert out["systemMessage"] == context_of(out)
+
+
+# ── The SDK-host path: systemMessage is not a channel, it is an error row ──
+#
+# Claude Code turns a hook's `systemMessage` into an SDK message
+# `{type: "system", subtype: "informational"}`. A host with no case for that
+# subtype falls through to its unknown-message branch; T3 Code renders that as a
+# red error row (ClaudeAdapter.ts:3433). So on an SDK host the field is not
+# merely ignored -- emitting it actively produces the thing the user is
+# complaining about. It is withheld, and the line is echoed instead.
+
+
+class TestSdkHostWithholdsSystemMessage:
+    def test_hit_path_emits_no_system_message(self, stub_cache, monkeypatch, capsys):
+        code, out = run_hook(monkeypatch, capsys, '>>demo_prompt content:"x"', entrypoint="sdk-ts")
+        assert "systemMessage" not in out
+
+    def test_miss_path_emits_no_system_message(self, stub_cache, monkeypatch, capsys):
+        code, out = run_hook(monkeypatch, capsys, ">>demo_promt", entrypoint="sdk-ts")
+        assert "systemMessage" not in out
+
+    def test_resolution_line_and_echo_instruction_both_ride_context(self, stub_cache, monkeypatch, capsys):
+        code, out = run_hook(monkeypatch, capsys, '>>demo_prompt content:"x"', entrypoint="sdk-ts")
+        ctx = context_of(out)
+        assert "[>> prompt_engine] demo_prompt" in ctx
+        assert "[surface-to-user]" in ctx
+        assert ctx.index("[>> prompt_engine]") < ctx.index("[surface-to-user]")
+
+    def test_directive_still_stays_last(self, stub_cache, monkeypatch, capsys):
+        """The echo instruction must not displace the blocking instruction."""
+        code, out = run_hook(monkeypatch, capsys, '>>demo_prompt content:"x"', entrypoint="sdk-ts")
+        ctx = context_of(out)
+        assert ctx.rstrip().endswith("</CALL-TOOL>")
+        assert ctx.index("[surface-to-user]") < ctx.index("<CALL-TOOL>")
+
+    def test_miss_path_echoes_without_inventing_a_directive(self, stub_cache, monkeypatch, capsys):
+        code, out = run_hook(monkeypatch, capsys, ">>demo_promt", entrypoint="sdk-ts")
+        ctx = context_of(out)
+        assert "Unknown prompt 'demo_promt'" in ctx
+        assert "[surface-to-user]" in ctx
+        assert "<CALL-TOOL>" not in ctx
+
+    def test_unknown_entrypoint_keeps_the_native_channel(self, stub_cache, monkeypatch, capsys):
+        """An entrypoint we have not seen must not silently lose its line."""
+        code, out = run_hook(monkeypatch, capsys, '>>demo_prompt content:"x"', entrypoint="")
+        assert out["systemMessage"].startswith("[>> prompt_engine] demo_prompt")
 
 
 class TestHelperInIsolation:

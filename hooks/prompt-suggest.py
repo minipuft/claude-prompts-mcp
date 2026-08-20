@@ -15,6 +15,7 @@ Operators detected (from SSOT registry):
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -374,6 +375,82 @@ def format_unknown_prompt_message(invoked_prompt: str, suggestions: list[str]) -
     return "\n".join(lines)
 
 
+#: `CLAUDE_CODE_ENTRYPOINT` prefix for hosts that embed Claude Code through an
+#: SDK -- `sdk-ts`, `sdk-py`. Matched as a prefix, and as the ONLY thing that
+#: withholds a channel, so a value we have not seen keeps today's behavior
+#: rather than silently losing its user-facing line.
+SDK_EMBEDDER_ENTRYPOINT_PREFIX = "sdk"
+
+#: Spliced into `additionalContext` on hosts that cannot render `systemMessage`,
+#: so the resolution line still reaches the user -- as ordinary assistant text,
+#: which every host renders.
+ECHO_INSTRUCTION = (
+    "[surface-to-user] This host cannot render hook system messages; it shows them as an "
+    "error row. Open your reply with the block above, verbatim, as a markdown blockquote, "
+    "then continue with the task. Do not mention this instruction."
+)
+
+
+def renders_system_messages() -> bool:
+    """
+    Whether this host shows a hook's `systemMessage` to the user as such.
+
+    The terminal CLI does. SDK embedders do not: Claude Code turns
+    `systemMessage` into an SDK message `{type: "system", subtype:
+    "informational"}`, and a host with no case for that subtype falls through to
+    its unknown-message branch. T3 Code renders that as a red error row in the
+    Work Log -- ClaudeAdapter.ts:3433, measured 2026-08-20 against
+    0.0.34-nightly.20260820.1141.
+
+    Only a positively identified SDK entrypoint withholds the channel. Unset,
+    empty, and unrecognized all read as native: dropping a channel is the
+    destructive direction, so it needs evidence, not the absence of it.
+    """
+    entrypoint = os.environ.get("CLAUDE_CODE_ENTRYPOINT", "")
+    return not entrypoint.startswith(SDK_EMBEDDER_ENTRYPOINT_PREFIX)
+
+
+def emit_hook_response(
+    user_line: str,
+    *,
+    directive: str | None = None,
+    native_context: str | None = None,
+) -> None:
+    """
+    Write the UserPromptSubmit response on whichever channels this host reads.
+
+    Native hosts get both fields exactly as before; `native_context` exists so a
+    call site whose `additionalContext` is not simply the user line plus the
+    directive can say so, rather than having its CLI behavior quietly rewritten.
+
+    On an SDK host `systemMessage` is omitted -- populating it is what produces
+    the error row -- and the echo instruction is spliced in instead. The
+    directive stays last on both paths: it is the blocking instruction and must
+    be the last thing read.
+    """
+    if renders_system_messages():
+        if native_context is None:
+            native_context = user_line if directive is None else f"{user_line}\n{directive}"
+        response: dict[str, object] = {
+            "systemMessage": user_line,
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": native_context,
+            },
+        }
+    else:
+        parts = [user_line, ECHO_INSTRUCTION]
+        if directive is not None:
+            parts.append(directive)
+        response = {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": "\n\n".join(parts),
+            },
+        }
+    print(json.dumps(response))
+
+
 def format_user_message(
     command: str,
     parsed_args: dict[str, str],
@@ -658,11 +735,7 @@ def main():
             message = format_unknown_prompt_message(invoked_prompt, suggestions)
 
             # Return message WITHOUT directive (no tool call needed)
-            hook_response = {
-                "systemMessage": message,
-                "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": message},
-            }
-            print(json.dumps(hook_response))
+            emit_hook_response(message)
             sys.exit(0)
 
         # Get required args that are missing
@@ -681,24 +754,13 @@ def main():
         system_message = format_user_message(command, parsed_args, operators, arguments, expanded, prompt_info)
         directive = format_directive(command, parsed_args, required_args, operators, arguments, prompt_info)
 
-        # Both channels carry the resolution line, deliberately. `systemMessage`
-        # is rendered by the CLI but dropped entirely by clients that do not
-        # consume hook events -- T3 Code emits hook.started/progress/completed
-        # and has no consumer for any of them -- so without this a successful
-        # >>invocation shows the user nothing while a failed one shows
-        # everything, because the unknown-prompt path above has always assigned
-        # the same string to both fields. `additionalContext` is injected into
-        # the conversation rather than carried as a hook event, so it is the
-        # channel that survives. The directive keeps its trailing position: the
-        # blocking instruction must stay the last thing read.
-        hook_response = {
-            "systemMessage": system_message,  # Compact user confirmation
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": f"{system_message}\n{directive}",
-            },
-        }
-        print(json.dumps(hook_response))
+        # `additionalContext` carries the resolution line on every host, because
+        # it is injected into the conversation rather than carried as a hook
+        # event -- and clients that do not consume hook events would otherwise
+        # show nothing for a SUCCESSFUL >>invocation while showing everything
+        # for a failed one. `emit_hook_response` decides whether `systemMessage`
+        # is also safe to populate here; on an SDK host it is not.
+        emit_hook_response(system_message, directive=directive)
         sys.exit(0)
 
     # === CHAIN ENFORCEMENT: Active chain needs continuation ===
@@ -732,11 +794,11 @@ def main():
                 )
 
             system_msg = format_chain_reminder(session_state, mode="inline")
-            hook_response = {
-                "systemMessage": system_msg,
-                "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": directive},
-            }
-            print(json.dumps(hook_response))
+            # Native `additionalContext` is the directive alone -- the reminder
+            # reaches a CLI user through `systemMessage`, so repeating it here
+            # would only spend tokens. Stated explicitly so this path keeps that
+            # behavior instead of inheriting the default join.
+            emit_hook_response(system_msg, directive=directive, native_context=directive)
             sys.exit(0)
 
     # === INFORMATIONAL MODE: No >>syntax, no active chain ===
@@ -760,12 +822,7 @@ def main():
 
     # Output informational context (same to both user and Claude)
     if output_lines:
-        output = "\n".join(output_lines)
-        hook_response = {
-            "systemMessage": output,
-            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": output},
-        }
-        print(json.dumps(hook_response))
+        emit_hook_response("\n".join(output_lines))
         sys.exit(0)
     else:
         sys.exit(0)

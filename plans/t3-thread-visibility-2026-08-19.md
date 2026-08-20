@@ -12,6 +12,14 @@ tags: []
 `prompt-suggest.py`, not a T3 rendering gap and not a fork item. The human-readable line is
 already computed — it is emitted on the one channel T3 discards. Move it; do not build a renderer.
 
+**Amended 2026-08-20.** Half of that ruling was wrong, and the wrong half was load-bearing.
+T3 does not _discard_ `systemMessage`. Claude Code turns it into an SDK message
+`{type: "system", subtype: "informational"}`; T3's `handleSystemMessage` has no case for that
+subtype, so it falls to the exhaustiveness `default` and emits `runtime.warning`
+(`ClaudeAdapter.ts:3425-3436`) — a red error row in the Work Log. So emitting the field on an SDK
+host does not fail to help the user; it _produces_ the error they reported. Routing was necessary
+and is unchanged; withholding the second channel on SDK hosts is the part this plan did not have.
+
 ## Problem
 
 Using `>>prompt` inside a T3 thread shows the user nothing about what was resolved: which prompt
@@ -303,6 +311,38 @@ Verification: after a completed `strategicImplement` run, `session list` shows n
 for it, and no session reports a step greater than its total.
 _(as of 2026-08-20 · flips when a completed run leaves no active session behind)_
 
+### ✓ 11 — `systemMessage` is an error row on SDK hosts, not a dead channel
+
+`✓ DONE (2026-08-20)`
+
+Measured against `claude` 2.1.237 and T3 `0.0.34-nightly.20260820.1141`:
+
+- The CLI string table carries `system` / `informational` / `warning` and the `" says: "` wrapper —
+  a hook's `systemMessage` is emitted as `system/informational`, prefixed with its hook event name.
+- `handleSystemMessage` (`apps/server/src/provider/Layers/ClaudeAdapter.ts:3063`) handles 26
+  subtypes; `informational` is not among them. It is an **undeclared wire-only subtype**, exactly
+  the case that switch's own comment anticipates ("like `background_tasks_changed` used to be"),
+  so it reaches the runtime fallback rather than failing the `message satisfies never` guard.
+- Fallback is `emitRuntimeWarning` → `runtime.warning` → red ✗ row reading
+  `Claude system message 'informational' — content: UserPromptSubmit says: …`.
+
+Fix: `prompt-suggest.py` gained `renders_system_messages()` + `emit_hook_response()`, and all four
+emit sites route through it. A positively identified SDK entrypoint (`CLAUDE_CODE_ENTRYPOINT`
+prefix `sdk`) gets `systemMessage` withheld and an `[surface-to-user]` echo instruction spliced
+into `additionalContext` between the resolution line and the directive; the directive still ends
+the context. Every other entrypoint — including unset, empty, and unrecognized — keeps both
+channels byte-for-byte, because dropping a channel is the destructive direction and needs
+evidence rather than the absence of it.
+
+Six tests added, and `run_hook` now pins `CLAUDE_CODE_ENTRYPOINT` instead of inheriting it: the
+suite is run from inside T3, so ambient env had made two existing assertions pass or fail on where
+pytest was launched from. `validate:python` green — ruff, ruff format, pyrefly, 226 tests.
+
+Not done here: the upstream T3 fix. `informational` (and `warning`) belong in the pre-switch
+early-return beside `background_tasks_changed` in `ClaudeAdapter.ts`. A checkout now exists at
+`~/Applications/t3code` (MIT, `pingdotgg/t3code`). Landing it needs an Electron rebuild, so it is
+a separate decision.
+
 ## Sequencing
 
 Rows 3 and 4 touch one file and one function region — do them together, in that order. Row 2 is
@@ -316,10 +356,15 @@ not the CLI. A green run in this terminal proves nothing about the surface that 
 - ☐ Row 2 keep/deny split is a judgement from tool annotations, not from observed use
   _(as of 2026-08-19, deny list now live · flips when any workflow actually needs a denied tool —
   at which point move that one tool back and leave the rest denied)_
-- ☐ Whether `additionalContext` renders inline in a T3 thread as it does in the CLI transcript
-  _(as of 2026-08-19 · flips on the first `>>` run in a thread after row 3 lands — if it does not
-  render, the routing fix is insufficient and the ceiling is T3's, which reopens the fork question
-  for `ActivityPayloadProjection.ts` only)_
+- ✓ Whether `additionalContext` renders inline in a T3 thread as it does in the CLI transcript
+  **— FLIPPED 2026-08-20: it does not.** The first `>>` run in a thread after row 3 landed
+  (`>>prompt_engine design_muse`) showed the user exactly one thing, and it was the red
+  `runtime.warning` row derived from `systemMessage`. `additionalContext` is injected into the
+  prompt, so it reaches the _model_ and never becomes a thread activity — it has no inline
+  rendering to have. The ceiling is therefore T3's, as this marker predicted, but the fork question
+  does not reopen: the model can be told to echo the line as ordinary assistant text, which every
+  host renders. That is row 11, and it satisfies the owner's acceptance criterion below (display,
+  not mechanism) without a renderer.
   **Owner acceptance criterion, stated 2026-08-19**: carrying the line on both channels is
   acceptable _provided the lines appear and are displayed to the user_. So the check is display,
   not mechanism — duplication across channels is not itself a defect to fix.

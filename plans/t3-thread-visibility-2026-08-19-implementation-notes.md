@@ -201,8 +201,12 @@ resolution was noticed.
 | **Row 7** — `npm run lint:ratchet`            | ESLint regression gate                                               | **PASS** — row 8 resolved itself                                                               |
 | **Row 7** — live drive                        | hit w/ args · ad-hoc chain · miss w/ suggestions                     | all three render; `>>diagnosisCard signals:string` proves the reduced `format_arg_signature`   |
 | **Row 7** — residue                           | `rg` for all four removed names                                      | none                                                                                           |
+| **Row 11** — `npm run validate:python`        | ruff + ruff format + pyrefly + pytest                                | PASS — **226 passed** (6 new)                                                                  |
+| **Row 11** — measurement                      | T3 `handleSystemMessage` vs CLI string table                         | `informational` unhandled → `runtime.warning` red row (`ClaudeAdapter.ts:3425-3436`)           |
+| **Row 11** — env pinning                      | `run_hook` pins `CLAUDE_CODE_ENTRYPOINT`                             | two existing assertions no longer depend on where pytest is launched                           |
 
-**Not validated, and cannot be from here**: whether `additionalContext` renders inline in a T3
-_thread_. Every check above ran in a terminal, where both channels are visible — which is exactly
-the surface that was never broken. That remains an open marker in the plan with its falsifier
-named (first `>>` run in a thread). Only the operator can close it.
+**The "cannot be validated from here" marker flipped 2026-08-20** — the first `>>` run in a T3
+thread showed only the red `runtime.warning` row derived from `systemMessage`, and
+`additionalContext` reaches the model, not the thread (no inline rendering exists to observe).
+That measurement is what produced Row 11: withhold `systemMessage` on SDK entrypoints and have
+the model echo the line as assistant text. See the plan's amended ruling and Row 11 receipt.
