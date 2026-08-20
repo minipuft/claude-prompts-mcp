@@ -31,6 +31,10 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 
 ### Fixed
 
+- **Attaching a gate token to a prompt no longer breaks it.** `>>reference_demo` rendered normally while `>>reference_demo :: code-quality` failed with "Missing required field: text" — the gate token is the only difference, and a gate-token-only command produces EMPTY arguments. That was the one case the symbolic path answered from author-declared `defaultValue` alone, while the direct path answers it through the argument parser's fallback strategy, which resolves every declared argument down to an empty-string fallback. Two implementations of "what arguments does a prompt get when none are supplied", one missing two tiers. Every prompt whose arguments are all optional-or-defaulted was a latent failure the moment a gate was attached.
+- **A chain step can reach its own prompt's script tools.** Script lookup tries a prompt-local `tools/{id}/` before the workspace `resources/scripts/{id}/`, but only when told which prompt is executing — and the chain renderer never said. A prompt whose tool lives beside it worked standalone and failed as a chain step with `ScriptNotRegisteredError` naming only the workspace path, which the author had never used. Documented behaviour was already correct; the code did not implement it.
+- **A prompt's `tools/*/tool.yaml` is no longer graded against the prompt schema.** Prompt discovery recurses into a prompt's reserved `tools/` directory, so every script-tool manifest was validated as if it were a prompt and logged an ERROR it could never satisfy, on every startup. `tool.yaml` is now reserved alongside `prompt.yaml`, `prompts.yaml` and `category.yaml`.
+
 - **A phase guard can no longer block on a section header the executing prompt was never told to produce.** Previously the guard graded every `phases.yaml` header regardless of whether the rendered prompt actually asked for it, so a header rename in `phases.yaml` silently created an unsatisfiable review loop — reproduced live on this repository's own planning chain. A header the prompt did not declare is now advisory only; enforcement of a declared-and-missing header is unchanged.
 - **Gate and framework version history now records the state each edit produced**, matching prompts. Previously version N held the state edit N _replaced_, so the state currently on disk was recorded in no row at all and was not rollback-reachable until the next edit. A self-healing bridge row carries existing rows across the change with no migration.
 - **Rollback restores the recorded snapshot exactly instead of merging current values into it.** A version whose snapshot cannot rebuild the resource is now refused, naming the missing fields; substituting the live value landed the resource on a state matching neither the target version nor the state before it, under a message saying version N had been restored. Where a rollback legitimately leaves part of a resource untouched — fields resolved through the category chain, a framework field the version never recorded, script tools under `tools/{id}/` — the response now names what it did not restore.
@@ -52,21 +56,19 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
 
-
 ### Fixed
 
-* **ci:** verify the registry entry flagged latest, not the first one returned ([5cef21e](https://github.com/minipuft/claude-prompts-mcp/commit/5cef21ec0205aa1d780c9d38a181323082031bdf))
-* make gate abort terminal, and stop prose punctuation parsing as arguments ([f4452ce](https://github.com/minipuft/claude-prompts-mcp/commit/f4452ced089163b5b507f901f00b73cbaca5b23a))
-* **prompts:** bind prompts per serving unit, resolve content at call time ([#227](https://github.com/minipuft/claude-prompts-mcp/issues/227)) ([e2297de](https://github.com/minipuft/claude-prompts-mcp/commit/e2297de7fdf95dd51d792a28a024f4e8c165e1fe))
-
+- **ci:** verify the registry entry flagged latest, not the first one returned ([5cef21e](https://github.com/minipuft/claude-prompts-mcp/commit/5cef21ec0205aa1d780c9d38a181323082031bdf))
+- make gate abort terminal, and stop prose punctuation parsing as arguments ([f4452ce](https://github.com/minipuft/claude-prompts-mcp/commit/f4452ced089163b5b507f901f00b73cbaca5b23a))
+- **prompts:** bind prompts per serving unit, resolve content at call time ([#227](https://github.com/minipuft/claude-prompts-mcp/issues/227)) ([e2297de](https://github.com/minipuft/claude-prompts-mcp/commit/e2297de7fdf95dd51d792a28a024f4e8c165e1fe))
 
 ### Documentation
 
-* **docs:** correct the origin SHA in the phase-guard plan ([#221](https://github.com/minipuft/claude-prompts-mcp/issues/221)) ([06e88da](https://github.com/minipuft/claude-prompts-mcp/commit/06e88dace62bf6692d42c2ee8673445e248cbf9b))
-* **docs:** plan the phase-guard declaration contract ([4125d25](https://github.com/minipuft/claude-prompts-mcp/commit/4125d25a7e278f1aa04a9d606bf0bab282ba5e89))
-* **docs:** retire the agent-plugins and plan-retirement plans ([2b784e9](https://github.com/minipuft/claude-prompts-mcp/commit/2b784e9755c075ef625c5b8db4cdbb53b675fe85))
-* **docs:** retire the agent-plugins migration as reference ([00d1811](https://github.com/minipuft/claude-prompts-mcp/commit/00d1811ec24ed324f64871b616224d922a206935))
-* **docs:** retire the plan-retirement federation as reference ([ea74eee](https://github.com/minipuft/claude-prompts-mcp/commit/ea74eee4c48c2b978b92570f569f2959ede99eb0))
+- **docs:** correct the origin SHA in the phase-guard plan ([#221](https://github.com/minipuft/claude-prompts-mcp/issues/221)) ([06e88da](https://github.com/minipuft/claude-prompts-mcp/commit/06e88dace62bf6692d42c2ee8673445e248cbf9b))
+- **docs:** plan the phase-guard declaration contract ([4125d25](https://github.com/minipuft/claude-prompts-mcp/commit/4125d25a7e278f1aa04a9d606bf0bab282ba5e89))
+- **docs:** retire the agent-plugins and plan-retirement plans ([2b784e9](https://github.com/minipuft/claude-prompts-mcp/commit/2b784e9755c075ef625c5b8db4cdbb53b675fe85))
+- **docs:** retire the agent-plugins migration as reference ([00d1811](https://github.com/minipuft/claude-prompts-mcp/commit/00d1811ec24ed324f64871b616224d922a206935))
+- **docs:** retire the plan-retirement federation as reference ([ea74eee](https://github.com/minipuft/claude-prompts-mcp/commit/ea74eee4c48c2b978b92570f569f2959ede99eb0))
 
 ## [4.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.1...v4.0.0) (2026-08-15)
 
@@ -83,6 +85,7 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 - `prompt_engine` accepts an optional `observations` parameter — chain steps declare typed unknowns (discovered/resolved) that accumulate in a per-run ledger and surface in subsequent step context.
 - `execution_records` now records per-run telemetry (steps planned/executed, gate verdict submissions, the FAIL subset of those submissions, unknowns opened/closed) as record-only facts on terminal rows, surfaced as one plain-text line per session by `system_control execution_history`. No scoring, weighting, or routing decision is derived from these fields. Schema v21 — `execution_records` is `ephemeral`, so existing rows do not survive the bump.
 - Adaptive chain mutation v1 — a blocking unknown inserts one investigation step; an irrelevant-resolved unknown skips its declared target step; both audited on the terminal execution record (`nodes_inserted`/`nodes_skipped`) and capped per run (1 insertion per unknown id, 3 per run). The model only ever declares typed observations; the server owns every graph edit, in reaction to a declared observation only. Schema v23 — `chain_run_nodes` gains `origin`/`origin_unknown_id` provenance columns.
+
 * agent-plugins migration, codex fleet integration, and brand system for 4.0.0 ([3d402fe](https://github.com/minipuft/claude-prompts-mcp/commit/3d402feaa6da083170b0c358c4ae9405d20ce1f3))
 * **chains:** add per-run unknowns ledger via prompt_engine observations param ([0bdbfbe](https://github.com/minipuft/claude-prompts-mcp/commit/0bdbfbe24a41986c519dd56907d5ffaf022fce05))
 * **chains:** add record-only per-run telemetry to execution_records ([2e84bb3](https://github.com/minipuft/claude-prompts-mcp/commit/2e84bb3cf809698bbb9044055f84b35777bc8ebd))
@@ -123,6 +126,7 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 - **BREAKING — `confirm: true` is now required to delete a prompt.** `resource_manager(resource_type: "prompt", action: "delete")` refuses without it and names the chains that would break. The parameter's schema text has always described it as delete's safety gate, but only `rollback` read it — the guard sat on the recoverable verb and was absent from the unrecoverable one. Deletion has no undo through the tool surface: a deleted prompt's `version_history` rows survive, but `rollback` reports "Prompt not found" once the prompt is gone, so those snapshots are unreachable by any action. Scripts calling delete must add `confirm: true`.
 - **BREAKING — chain steps reject unknown keys.** `chainSteps` entries in prompt YAML are validated strictly; a key with no schema field now fails the prompt's load, naming the key and its step index, instead of being silently discarded. A typo like `framwork: ReACT` previously parsed to a normal-looking step and ran the chain under the wrong framework with no signal — the same silence left six `inlineGateIds` declarations dead across three shipped chains. Every key with a real consumer was declared first, including `delegation`, which no code in the prompt module reads but the skills-sync exporter reads straight off the YAML.
 - Renovate hosted reruns now use a dry-run-first request script that verifies local/remote config parity, strict protected checks, full-SHA Actions enforcement, successful Renovate and Release Please checks on `main`, and the exact dashboard request marker before changing GitHub state. Automated lock maintenance retains Renovate's three-day npm resolution cutoff while treating the timestamp-less synthetic maintenance update as timestamp-optional, preventing a permanent `renovate/stability-days` block.
+
 * **frameworks:** retire the pre-rename methodology back-compat folds ([05b6efc](https://github.com/minipuft/claude-prompts-mcp/commit/05b6efcb89bccc012a1fe0bc1f95f72ab80addee))
 * **scripts:** port no-crosslayer-relative to dependency-cruiser and retire the guard ([3837b91](https://github.com/minipuft/claude-prompts-mcp/commit/3837b919bd938891d48a22ade6e082175c9c70e3))
 * **scripts:** scope shipped-content gates by git, not filesystem walk ([8468c4a](https://github.com/minipuft/claude-prompts-mcp/commit/8468c4a23891b409feace816f30837c1de088c40))
@@ -136,7 +140,7 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
   - `config.json` `gates.methodologyGates` → `gates.frameworkGates`; the top-level `methodologies:` section and `resources.methodologies` are no longer adopted into their `frameworks` equivalents
   - `resource_manager` authoring payload `methodology_gates` / `methodology_elements` → `framework_gates` / `framework_elements`
   - prompt-template placeholder `{METHODOLOGY}` → `{FRAMEWORK_TYPE}`
-  Marked breaking because the framework/gate YAML schemas and `config.json` are declared API surface. Shipped in a minor by explicit maintainer decision — the pre-rename spellings have been unsupported since v3.0.0 (2026-07-31), and the only spelling measurably outside the declared contract was the `resource_manager` authoring payload. If you hold a workspace resource written before v3.0.0, rename the keys above before upgrading.
+    Marked breaking because the framework/gate YAML schemas and `config.json` are declared API surface. Shipped in a minor by explicit maintainer decision — the pre-rename spellings have been unsupported since v3.0.0 (2026-07-31), and the only spelling measurably outside the declared contract was the `resource_manager` authoring payload. If you hold a workspace resource written before v3.0.0, rename the keys above before upgrading.
 
 ### Fixed
 
@@ -147,6 +151,7 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 - **A step-level `subagentModel` now marks its step delegated on any chain invocation**, not only after a `==>` operator. `OperatorValidationStage` returned early on an empty operator set before delegation normalization ran; the direct (non-symbolic) `>>chain` path always has an empty operator set, so a YAML-declared `subagentModel` parsed but produced no delegation CTA or handoff envelope unless the command also spelled `==>`. Delegation normalization now runs before that exit. `agentType` alone still does not mark a step delegated — it only selects which agent a `==>`-delegated or `subagentModel`-marked step uses.
 - **Handoff visibility (and the delegation CTA/envelope it feeds) is now resolved by node identity instead of array position.** `resolveHandoffVisibility` indexed the parsed step blueprint by `nextStepIndex`, so after an adaptive mutation inserted or skipped a node, the visibility declarations resolved belonged to the wrong step. The run's live next-node id is now asked for directly and matched back to the step it names; a `withhold` declared by a step the mutation policy retired (skipped) no longer applies to a step that does run. Runs with no mutation and chains with no declared node ids are unaffected.
 - **Named outputs (`outputMapping`) now publish under a reserved `outputs.<name>` namespace** (`{{outputs.findings}}`) instead of a flat template key (`{{findings}}`), and are removed together with the rest of chain history when a step withholds `chain_history` — previously a withheld alias still leaked through because `stripChainHistory` could only delete regex-identifiable positional keys. `{{findings}}` is no longer published; existing authors must migrate to `{{outputs.findings}}`. No shipped chain declared `outputMapping` at the time of this change. Each key of `outputMapping` still receives the step's whole output — the declared value is not read (documented, not newly broken).
+
 * **ci:** assert the codex-prompts marketplace entry, which nothing checked ([769b023](https://github.com/minipuft/claude-prompts-mcp/commit/769b023d8129e967290d5f7c09132c2943aeb0a0))
 * **ci:** consume repository-standards v1.3.0 so retirement stops restyling docs ([4c6cde7](https://github.com/minipuft/claude-prompts-mcp/commit/4c6cde70a056dff34fe37942c8e1630ae11fe854))
 * **ci:** consume repository-standards v1.3.0 so retirement stops restyling docs ([23af8b4](https://github.com/minipuft/claude-prompts-mcp/commit/23af8b40fd6acb3e91569eeb179df7b69d08b2d7))
@@ -187,100 +192,99 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 
 ### Documentation
 
-* **docs:** adaptive-chain-runtime master plan + P1 unknowns-ledger plan + staged P0 template ([1c87f4a](https://github.com/minipuft/claude-prompts-mcp/commit/1c87f4af3e7434527f13c920d26d825dbfafb12f))
-* **docs:** add a square 512px icon derived from the logo for directory listings ([c874040](https://github.com/minipuft/claude-prompts-mcp/commit/c874040b5b7c3c5b767eebae296208fbe3b052ef))
-* **docs:** add Tier 6 + Agent Plugins migration plan (single source tree, rendered distributions) ([713f520](https://github.com/minipuft/claude-prompts-mcp/commit/713f5203336866c541898b3c07498f2eb994e8d7))
-* **docs:** bring Tier 2b current — registry+Smithery live, Glama claimed, PulseMCP baseline ([a6ca08b](https://github.com/minipuft/claude-prompts-mcp/commit/a6ca08ba81477bc7f52673e2dad5fe4127064c18))
-* **docs:** close 0.5b Workstreams A/B/C, file the checkpoint finding as 0.5.26 ([ec73f85](https://github.com/minipuft/claude-prompts-mcp/commit/ec73f85e4d75c8afa50d42a391472b1ca41a45d4))
-* **docs:** close 4.0.1, unblock 4.4, row the unmeasured install path ([13e2ba2](https://github.com/minipuft/claude-prompts-mcp/commit/13e2ba22500842e9d5a15918e2c01f7de19033b5))
-* **docs:** close 4.10 by deletion, row the unvalidated marketplace PR path ([0328f21](https://github.com/minipuft/claude-prompts-mcp/commit/0328f21d95ca458318b862a616cd99b96967ada7))
-* **docs:** close 4.4, ship 4.12's capability, record the 4.0.0 verification ([2a6e980](https://github.com/minipuft/claude-prompts-mcp/commit/2a6e980bdb157954b2f474aeaeb238b03459b461))
-* **docs:** close 4.5, record shape A as implemented, row the last unobserved link ([584f6db](https://github.com/minipuft/claude-prompts-mcp/commit/584f6db29fb207eef80aef33b7214b3597a0f3a8))
-* **docs:** close 4.8 from a live marketplace install, row same-name shadowing ([30f2207](https://github.com/minipuft/claude-prompts-mcp/commit/30f22078be4d3f27d49321dca73a5947e64988c2))
-* **docs:** close all release gates — v3.2.1 finalized across every surface ([009d952](https://github.com/minipuft/claude-prompts-mcp/commit/009d952107e8ea3d0980cbf2126b48adbe3cf14a))
-* **docs:** close E9/E10, file E11 — a ✓ did not mean committed ([37b012e](https://github.com/minipuft/claude-prompts-mcp/commit/37b012e4057518bcba8d32caf452a869f5725889))
-* **docs:** close the push sequence, row the SIGPIPE flake ([6c1d213](https://github.com/minipuft/claude-prompts-mcp/commit/6c1d2134fb8a26e11daee1b07042f31261b939d0))
-* **docs:** close the Renovate remediation plan — the canary merged itself ([3490711](https://github.com/minipuft/claude-prompts-mcp/commit/3490711d58964a97d9b622d7bb38f5e2b1b1a9bc))
-* **docs:** close Tiers 2-3, mark the falsified premises ([c5405be](https://github.com/minipuft/claude-prompts-mcp/commit/c5405be5c7cf1dadb74690ad2f5c278a24230119))
-* **docs:** close Tiers 5-6, apply the owner rulings ([0e9c3ef](https://github.com/minipuft/claude-prompts-mcp/commit/0e9c3efcaa0ae5baf2805233139ddce6a60f058a))
-* **docs:** close Workstream D and E6, correct the D1/D3 site claims ([47636b0](https://github.com/minipuft/claude-prompts-mcp/commit/47636b0b63c901c9a1f91dbe1bd07addc2697a61))
-* **docs:** confirm 4.5 — a git-sourced Codex install has no runtime ([84aa445](https://github.com/minipuft/claude-prompts-mcp/commit/84aa445b2981e8721d43e53e90934fabba922fe1))
-* **docs:** correct the downstream consumption model ([a4e51ca](https://github.com/minipuft/claude-prompts-mcp/commit/a4e51cab14ced6f8354b35121f9ac9c2f4321336))
-* **docs:** defer Tier 5 — Codex integration + rendered-distribution decision ([9f2922e](https://github.com/minipuft/claude-prompts-mcp/commit/9f2922e2d6734bb87e83871be512cd7e1eea587b))
-* **docs:** documentation governance policy and client-install CTA correction ([4bb8955](https://github.com/minipuft/claude-prompts-mcp/commit/4bb89556256ef21aa68667a9650f7b49a3083b22))
-* **docs:** file E8 for the two foreign validate:all reds ([7fcdc4e](https://github.com/minipuft/claude-prompts-mcp/commit/7fcdc4e5cfa2de995931038616cd8dfd21215f0a))
-* **docs:** file E9/E10 — the committed state was six gates behind the tree ([6a3bab3](https://github.com/minipuft/claude-prompts-mcp/commit/6a3bab36394d77dce108dce4ee1d77c5ff3d22af))
-* **docs:** finalize Tier 4 — close the shipping lane, name every open blocker ([d8c806f](https://github.com/minipuft/claude-prompts-mcp/commit/d8c806fe3ad3461d5a95b67ff308554d91c8e3d5))
-* **docs:** flush the extension-icon findings to the deviation log ([7ff6fab](https://github.com/minipuft/claude-prompts-mcp/commit/7ff6fabeec9ffc096d68417e719a4e9d2b4ae489))
-* **docs:** keep each retiring plan with its own deviation log ([b91a260](https://github.com/minipuft/claude-prompts-mcp/commit/b91a2606c327adef93e75876bedfd8a083b7d806))
-* **docs:** link Workflow IR reference from docs index ([06d9630](https://github.com/minipuft/claude-prompts-mcp/commit/06d96303cfd001525bb554d9ed99ec32fd5c34f1))
-* **docs:** mark the brand-asset plan finished ([b11624a](https://github.com/minipuft/claude-prompts-mcp/commit/b11624afbadb2657ce9bfdf10902ec6a8d41c1c1))
-* **docs:** p1 live drive complete — success signal observed; p0 template applied ([0013955](https://github.com/minipuft/claude-prompts-mcp/commit/0013955aa4339100c6671b294a5dabad6d37758f))
-* **docs:** patch mode, version semantics, visibility fields, ship-signal (P5/P7) ([7897f7e](https://github.com/minipuft/claude-prompts-mcp/commit/7897f7e7d3234ba86ad798c95f296719dfba58fa))
-* **docs:** queue adaptive-chain-runtime plans for retirement at release ([c88ebb2](https://github.com/minipuft/claude-prompts-mcp/commit/c88ebb2b8e64f9b038d1f6691e5f60c1ba093a2f))
-* **docs:** queue claims-conformance suite design (token-free functional validation) ([7dc83ae](https://github.com/minipuft/claude-prompts-mcp/commit/7dc83aebd3face038440dedd4c3e42ba9f6d50df))
-* **docs:** record accepted-work lifecycle ([9232acd](https://github.com/minipuft/claude-prompts-mcp/commit/9232acdc920e947ceb4e1583ed82c75bbbfe6c98))
-* **docs:** record Codex skill repair ([a9b4df1](https://github.com/minipuft/claude-prompts-mcp/commit/a9b4df142dea8b8feb6d9b48d716ac6bdd1f2279))
-* **docs:** record commit-preparation verification trail on P6 companions ([1f2e8fb](https://github.com/minipuft/claude-prompts-mcp/commit/1f2e8fb732f6bb5babee1653f8a18a06af3a3d21))
-* **docs:** record E7 — the gate that watched the wrong tree ([717e792](https://github.com/minipuft/claude-prompts-mcp/commit/717e7925e7827c6ff8d3a1c7784883ed03454952))
-* **docs:** record final commit-preparation verification trail ([f6da764](https://github.com/minipuft/claude-prompts-mcp/commit/f6da7645b3d6b2c6b07460a9cde2bafa66800b2a))
-* **docs:** record further commit-preparation verification trail ([ce07dc4](https://github.com/minipuft/claude-prompts-mcp/commit/ce07dc46db32790e4fe54f33de7db5f9568d6eef))
-* **docs:** record GitHub Project rollout ([0481033](https://github.com/minipuft/claude-prompts-mcp/commit/048103302d94f301bb46c1f58a67c031c0b00674))
-* **docs:** record HEAD verification runs in the implementation ledger ([ac07fd1](https://github.com/minipuft/claude-prompts-mcp/commit/ac07fd1b4232d15414ca0828c5a096cd5ef22540))
-* **docs:** record orphan cleanup + nested-delete fix in p1 notes ([5e89d28](https://github.com/minipuft/claude-prompts-mcp/commit/5e89d2821a71be61654991cf8d05c6459f9fcaf7))
-* **docs:** record p1 unknowns-ledger implementation notes + status writeback ([c809943](https://github.com/minipuft/claude-prompts-mcp/commit/c8099435837338c96eb56478977b04ed1c46706a))
-* **docs:** record P5 compile-closure verification runs ([5ce70a7](https://github.com/minipuft/claude-prompts-mcp/commit/5ce70a7137edafb28f5cf072a5c9131a27bb4b78))
-* **docs:** record p5/p6/p7 plan writebacks and implementation notes ([a2af74d](https://github.com/minipuft/claude-prompts-mcp/commit/a2af74dd11c7425c4256994895717f02800fcf1d))
-* **docs:** record P6 plan writebacks + master-plan closure ([860af13](https://github.com/minipuft/claude-prompts-mcp/commit/860af13d074fe09b07d45be7b83b8ab16e510072))
-* **docs:** record PR linkage fallback ([89d6cb2](https://github.com/minipuft/claude-prompts-mcp/commit/89d6cb2467610721dc645718e4b589e8f48c383e))
-* **docs:** record sub-agent delegation contract plan ([ab8ded5](https://github.com/minipuft/claude-prompts-mcp/commit/ab8ded52b1e2b07230d8f52407d9cdf4f6f194a1))
-* **docs:** record the auto-merge-on-major finding ([59f3c3d](https://github.com/minipuft/claude-prompts-mcp/commit/59f3c3d4504f99f91394d5a8f01cddcbc9f1cc15))
-* **docs:** record the breaking bundle and close its plan rows ([82cf4cd](https://github.com/minipuft/claude-prompts-mcp/commit/82cf4cd58ade99d3503c32400a68484eda02fa82))
-* **docs:** record the migration-exposed retirement defect and release validation ([fdc7ea0](https://github.com/minipuft/claude-prompts-mcp/commit/fdc7ea031b5474b22fb29edec99f56b7e447f72b))
-* **docs:** record tiers 0.8-4.3, and what the probes got wrong ([4bc3b6b](https://github.com/minipuft/claude-prompts-mcp/commit/4bc3b6be134dfe3477068634a06cf5e5c38efab3))
-* **docs:** retire codex-prompts-port and downstream-standards-federation plans to reference ([f011130](https://github.com/minipuft/claude-prompts-mcp/commit/f011130f6c9be842479dd6c4ba39f5f9ad16bf6c))
-* **docs:** retire E8, flush the retirement deviations ([e8f84ef](https://github.com/minipuft/claude-prompts-mcp/commit/e8f84efc6f9d85245bc6a4d2c080305637cbc411))
-* **docs:** retire the Renovate notes with their plan ([a61479f](https://github.com/minipuft/claude-prompts-mcp/commit/a61479f3be900008267f3361d115e83705f0b987))
-* **docs:** retire the Renovate notes with their plan, not after it ([274a0de](https://github.com/minipuft/claude-prompts-mcp/commit/274a0def6e481a4cf634c01af3caaacc3bf11f01))
-* **docs:** retire Tier 5 into Tier 6; draft step-10 awesome-claude-code form for owner ([2add00d](https://github.com/minipuft/claude-prompts-mcp/commit/2add00dfaacb64175258b4594f782f645fdbb726))
-* **docs:** row the codex distribution shapes, flag the same risk in gemini ([fec8a60](https://github.com/minipuft/claude-prompts-mcp/commit/fec8a60f41dca2b830e4828bb31ccfab10f6d242))
-* **docs:** row the npm ruling and the codex staleness before Tier 4 ([27cb02a](https://github.com/minipuft/claude-prompts-mcp/commit/27cb02a719e4270187a10b0c4d29e48d04f7b7fd))
-* **docs:** row the release-time sync, correct what joining the fleet costs ([f850cd7](https://github.com/minipuft/claude-prompts-mcp/commit/f850cd73a0efc8f933a6f9d1d0d7ec6300e4825d))
-* **docs:** shipped prompt count 27 -&gt; 28 ([5862564](https://github.com/minipuft/claude-prompts-mcp/commit/586256494f39bd13bb4cd1d9383a18680c06bade))
-* **docs:** stamp the open planning rows, log the release-readiness sweep ([26352a9](https://github.com/minipuft/claude-prompts-mcp/commit/26352a98ccfa72610d3609fc6fcec5e4384ac179))
-* **docs:** state the resource:// opt-in, correct the prompt count, close Tier 0.5 ([1044afd](https://github.com/minipuft/claude-prompts-mcp/commit/1044afd5297d4a9b7dbabc74cefe2ab241450894))
-* **docs:** track the brand-asset plan and close its acquisition-recovery row ([faf69ae](https://github.com/minipuft/claude-prompts-mcp/commit/faf69ae13a6c378eecab5970dda796377e83531f))
-* **docs:** workflow IR reference + chain docs lockstep + CHANGELOG ([af4a8c5](https://github.com/minipuft/claude-prompts-mcp/commit/af4a8c5dcdcc8a7818e16369b45b36f87547c0ff))
-* **planning:** bind retirement plan to issue 210 ([b2fb2de](https://github.com/minipuft/claude-prompts-mcp/commit/b2fb2de290ee30b91689614f5f16a1023cfb241a))
-* **planning:** record GitHub lifecycle linkage ([af83915](https://github.com/minipuft/claude-prompts-mcp/commit/af83915a126954c1f6bf785d7eaba6a246d781d5))
-* **planning:** record isolated review handoff ([5d42f97](https://github.com/minipuft/claude-prompts-mcp/commit/5d42f973afd0530a6ffdecf00f4bbe5e0709f9e0))
-* **planning:** record mainline delivery linkage ([384c76c](https://github.com/minipuft/claude-prompts-mcp/commit/384c76cf193ec9c1c63c39af63a9b3061070cda9))
+- **docs:** adaptive-chain-runtime master plan + P1 unknowns-ledger plan + staged P0 template ([1c87f4a](https://github.com/minipuft/claude-prompts-mcp/commit/1c87f4af3e7434527f13c920d26d825dbfafb12f))
+- **docs:** add a square 512px icon derived from the logo for directory listings ([c874040](https://github.com/minipuft/claude-prompts-mcp/commit/c874040b5b7c3c5b767eebae296208fbe3b052ef))
+- **docs:** add Tier 6 + Agent Plugins migration plan (single source tree, rendered distributions) ([713f520](https://github.com/minipuft/claude-prompts-mcp/commit/713f5203336866c541898b3c07498f2eb994e8d7))
+- **docs:** bring Tier 2b current — registry+Smithery live, Glama claimed, PulseMCP baseline ([a6ca08b](https://github.com/minipuft/claude-prompts-mcp/commit/a6ca08ba81477bc7f52673e2dad5fe4127064c18))
+- **docs:** close 0.5b Workstreams A/B/C, file the checkpoint finding as 0.5.26 ([ec73f85](https://github.com/minipuft/claude-prompts-mcp/commit/ec73f85e4d75c8afa50d42a391472b1ca41a45d4))
+- **docs:** close 4.0.1, unblock 4.4, row the unmeasured install path ([13e2ba2](https://github.com/minipuft/claude-prompts-mcp/commit/13e2ba22500842e9d5a15918e2c01f7de19033b5))
+- **docs:** close 4.10 by deletion, row the unvalidated marketplace PR path ([0328f21](https://github.com/minipuft/claude-prompts-mcp/commit/0328f21d95ca458318b862a616cd99b96967ada7))
+- **docs:** close 4.4, ship 4.12's capability, record the 4.0.0 verification ([2a6e980](https://github.com/minipuft/claude-prompts-mcp/commit/2a6e980bdb157954b2f474aeaeb238b03459b461))
+- **docs:** close 4.5, record shape A as implemented, row the last unobserved link ([584f6db](https://github.com/minipuft/claude-prompts-mcp/commit/584f6db29fb207eef80aef33b7214b3597a0f3a8))
+- **docs:** close 4.8 from a live marketplace install, row same-name shadowing ([30f2207](https://github.com/minipuft/claude-prompts-mcp/commit/30f22078be4d3f27d49321dca73a5947e64988c2))
+- **docs:** close all release gates — v3.2.1 finalized across every surface ([009d952](https://github.com/minipuft/claude-prompts-mcp/commit/009d952107e8ea3d0980cbf2126b48adbe3cf14a))
+- **docs:** close E9/E10, file E11 — a ✓ did not mean committed ([37b012e](https://github.com/minipuft/claude-prompts-mcp/commit/37b012e4057518bcba8d32caf452a869f5725889))
+- **docs:** close the push sequence, row the SIGPIPE flake ([6c1d213](https://github.com/minipuft/claude-prompts-mcp/commit/6c1d2134fb8a26e11daee1b07042f31261b939d0))
+- **docs:** close the Renovate remediation plan — the canary merged itself ([3490711](https://github.com/minipuft/claude-prompts-mcp/commit/3490711d58964a97d9b622d7bb38f5e2b1b1a9bc))
+- **docs:** close Tiers 2-3, mark the falsified premises ([c5405be](https://github.com/minipuft/claude-prompts-mcp/commit/c5405be5c7cf1dadb74690ad2f5c278a24230119))
+- **docs:** close Tiers 5-6, apply the owner rulings ([0e9c3ef](https://github.com/minipuft/claude-prompts-mcp/commit/0e9c3efcaa0ae5baf2805233139ddce6a60f058a))
+- **docs:** close Workstream D and E6, correct the D1/D3 site claims ([47636b0](https://github.com/minipuft/claude-prompts-mcp/commit/47636b0b63c901c9a1f91dbe1bd07addc2697a61))
+- **docs:** confirm 4.5 — a git-sourced Codex install has no runtime ([84aa445](https://github.com/minipuft/claude-prompts-mcp/commit/84aa445b2981e8721d43e53e90934fabba922fe1))
+- **docs:** correct the downstream consumption model ([a4e51ca](https://github.com/minipuft/claude-prompts-mcp/commit/a4e51cab14ced6f8354b35121f9ac9c2f4321336))
+- **docs:** defer Tier 5 — Codex integration + rendered-distribution decision ([9f2922e](https://github.com/minipuft/claude-prompts-mcp/commit/9f2922e2d6734bb87e83871be512cd7e1eea587b))
+- **docs:** documentation governance policy and client-install CTA correction ([4bb8955](https://github.com/minipuft/claude-prompts-mcp/commit/4bb89556256ef21aa68667a9650f7b49a3083b22))
+- **docs:** file E8 for the two foreign validate:all reds ([7fcdc4e](https://github.com/minipuft/claude-prompts-mcp/commit/7fcdc4e5cfa2de995931038616cd8dfd21215f0a))
+- **docs:** file E9/E10 — the committed state was six gates behind the tree ([6a3bab3](https://github.com/minipuft/claude-prompts-mcp/commit/6a3bab36394d77dce108dce4ee1d77c5ff3d22af))
+- **docs:** finalize Tier 4 — close the shipping lane, name every open blocker ([d8c806f](https://github.com/minipuft/claude-prompts-mcp/commit/d8c806fe3ad3461d5a95b67ff308554d91c8e3d5))
+- **docs:** flush the extension-icon findings to the deviation log ([7ff6fab](https://github.com/minipuft/claude-prompts-mcp/commit/7ff6fabeec9ffc096d68417e719a4e9d2b4ae489))
+- **docs:** keep each retiring plan with its own deviation log ([b91a260](https://github.com/minipuft/claude-prompts-mcp/commit/b91a2606c327adef93e75876bedfd8a083b7d806))
+- **docs:** link Workflow IR reference from docs index ([06d9630](https://github.com/minipuft/claude-prompts-mcp/commit/06d96303cfd001525bb554d9ed99ec32fd5c34f1))
+- **docs:** mark the brand-asset plan finished ([b11624a](https://github.com/minipuft/claude-prompts-mcp/commit/b11624afbadb2657ce9bfdf10902ec6a8d41c1c1))
+- **docs:** p1 live drive complete — success signal observed; p0 template applied ([0013955](https://github.com/minipuft/claude-prompts-mcp/commit/0013955aa4339100c6671b294a5dabad6d37758f))
+- **docs:** patch mode, version semantics, visibility fields, ship-signal (P5/P7) ([7897f7e](https://github.com/minipuft/claude-prompts-mcp/commit/7897f7e7d3234ba86ad798c95f296719dfba58fa))
+- **docs:** queue adaptive-chain-runtime plans for retirement at release ([c88ebb2](https://github.com/minipuft/claude-prompts-mcp/commit/c88ebb2b8e64f9b038d1f6691e5f60c1ba093a2f))
+- **docs:** queue claims-conformance suite design (token-free functional validation) ([7dc83ae](https://github.com/minipuft/claude-prompts-mcp/commit/7dc83aebd3face038440dedd4c3e42ba9f6d50df))
+- **docs:** record accepted-work lifecycle ([9232acd](https://github.com/minipuft/claude-prompts-mcp/commit/9232acdc920e947ceb4e1583ed82c75bbbfe6c98))
+- **docs:** record Codex skill repair ([a9b4df1](https://github.com/minipuft/claude-prompts-mcp/commit/a9b4df142dea8b8feb6d9b48d716ac6bdd1f2279))
+- **docs:** record commit-preparation verification trail on P6 companions ([1f2e8fb](https://github.com/minipuft/claude-prompts-mcp/commit/1f2e8fb732f6bb5babee1653f8a18a06af3a3d21))
+- **docs:** record E7 — the gate that watched the wrong tree ([717e792](https://github.com/minipuft/claude-prompts-mcp/commit/717e7925e7827c6ff8d3a1c7784883ed03454952))
+- **docs:** record final commit-preparation verification trail ([f6da764](https://github.com/minipuft/claude-prompts-mcp/commit/f6da7645b3d6b2c6b07460a9cde2bafa66800b2a))
+- **docs:** record further commit-preparation verification trail ([ce07dc4](https://github.com/minipuft/claude-prompts-mcp/commit/ce07dc46db32790e4fe54f33de7db5f9568d6eef))
+- **docs:** record GitHub Project rollout ([0481033](https://github.com/minipuft/claude-prompts-mcp/commit/048103302d94f301bb46c1f58a67c031c0b00674))
+- **docs:** record HEAD verification runs in the implementation ledger ([ac07fd1](https://github.com/minipuft/claude-prompts-mcp/commit/ac07fd1b4232d15414ca0828c5a096cd5ef22540))
+- **docs:** record orphan cleanup + nested-delete fix in p1 notes ([5e89d28](https://github.com/minipuft/claude-prompts-mcp/commit/5e89d2821a71be61654991cf8d05c6459f9fcaf7))
+- **docs:** record p1 unknowns-ledger implementation notes + status writeback ([c809943](https://github.com/minipuft/claude-prompts-mcp/commit/c8099435837338c96eb56478977b04ed1c46706a))
+- **docs:** record P5 compile-closure verification runs ([5ce70a7](https://github.com/minipuft/claude-prompts-mcp/commit/5ce70a7137edafb28f5cf072a5c9131a27bb4b78))
+- **docs:** record p5/p6/p7 plan writebacks and implementation notes ([a2af74d](https://github.com/minipuft/claude-prompts-mcp/commit/a2af74dd11c7425c4256994895717f02800fcf1d))
+- **docs:** record P6 plan writebacks + master-plan closure ([860af13](https://github.com/minipuft/claude-prompts-mcp/commit/860af13d074fe09b07d45be7b83b8ab16e510072))
+- **docs:** record PR linkage fallback ([89d6cb2](https://github.com/minipuft/claude-prompts-mcp/commit/89d6cb2467610721dc645718e4b589e8f48c383e))
+- **docs:** record sub-agent delegation contract plan ([ab8ded5](https://github.com/minipuft/claude-prompts-mcp/commit/ab8ded52b1e2b07230d8f52407d9cdf4f6f194a1))
+- **docs:** record the auto-merge-on-major finding ([59f3c3d](https://github.com/minipuft/claude-prompts-mcp/commit/59f3c3d4504f99f91394d5a8f01cddcbc9f1cc15))
+- **docs:** record the breaking bundle and close its plan rows ([82cf4cd](https://github.com/minipuft/claude-prompts-mcp/commit/82cf4cd58ade99d3503c32400a68484eda02fa82))
+- **docs:** record the migration-exposed retirement defect and release validation ([fdc7ea0](https://github.com/minipuft/claude-prompts-mcp/commit/fdc7ea031b5474b22fb29edec99f56b7e447f72b))
+- **docs:** record tiers 0.8-4.3, and what the probes got wrong ([4bc3b6b](https://github.com/minipuft/claude-prompts-mcp/commit/4bc3b6be134dfe3477068634a06cf5e5c38efab3))
+- **docs:** retire codex-prompts-port and downstream-standards-federation plans to reference ([f011130](https://github.com/minipuft/claude-prompts-mcp/commit/f011130f6c9be842479dd6c4ba39f5f9ad16bf6c))
+- **docs:** retire E8, flush the retirement deviations ([e8f84ef](https://github.com/minipuft/claude-prompts-mcp/commit/e8f84efc6f9d85245bc6a4d2c080305637cbc411))
+- **docs:** retire the Renovate notes with their plan ([a61479f](https://github.com/minipuft/claude-prompts-mcp/commit/a61479f3be900008267f3361d115e83705f0b987))
+- **docs:** retire the Renovate notes with their plan, not after it ([274a0de](https://github.com/minipuft/claude-prompts-mcp/commit/274a0def6e481a4cf634c01af3caaacc3bf11f01))
+- **docs:** retire Tier 5 into Tier 6; draft step-10 awesome-claude-code form for owner ([2add00d](https://github.com/minipuft/claude-prompts-mcp/commit/2add00dfaacb64175258b4594f782f645fdbb726))
+- **docs:** row the codex distribution shapes, flag the same risk in gemini ([fec8a60](https://github.com/minipuft/claude-prompts-mcp/commit/fec8a60f41dca2b830e4828bb31ccfab10f6d242))
+- **docs:** row the npm ruling and the codex staleness before Tier 4 ([27cb02a](https://github.com/minipuft/claude-prompts-mcp/commit/27cb02a719e4270187a10b0c4d29e48d04f7b7fd))
+- **docs:** row the release-time sync, correct what joining the fleet costs ([f850cd7](https://github.com/minipuft/claude-prompts-mcp/commit/f850cd73a0efc8f933a6f9d1d0d7ec6300e4825d))
+- **docs:** shipped prompt count 27 -&gt; 28 ([5862564](https://github.com/minipuft/claude-prompts-mcp/commit/586256494f39bd13bb4cd1d9383a18680c06bade))
+- **docs:** stamp the open planning rows, log the release-readiness sweep ([26352a9](https://github.com/minipuft/claude-prompts-mcp/commit/26352a98ccfa72610d3609fc6fcec5e4384ac179))
+- **docs:** state the resource:// opt-in, correct the prompt count, close Tier 0.5 ([1044afd](https://github.com/minipuft/claude-prompts-mcp/commit/1044afd5297d4a9b7dbabc74cefe2ab241450894))
+- **docs:** track the brand-asset plan and close its acquisition-recovery row ([faf69ae](https://github.com/minipuft/claude-prompts-mcp/commit/faf69ae13a6c378eecab5970dda796377e83531f))
+- **docs:** workflow IR reference + chain docs lockstep + CHANGELOG ([af4a8c5](https://github.com/minipuft/claude-prompts-mcp/commit/af4a8c5dcdcc8a7818e16369b45b36f87547c0ff))
+- **planning:** bind retirement plan to issue 210 ([b2fb2de](https://github.com/minipuft/claude-prompts-mcp/commit/b2fb2de290ee30b91689614f5f16a1023cfb241a))
+- **planning:** record GitHub lifecycle linkage ([af83915](https://github.com/minipuft/claude-prompts-mcp/commit/af83915a126954c1f6bf785d7eaba6a246d781d5))
+- **planning:** record isolated review handoff ([5d42f97](https://github.com/minipuft/claude-prompts-mcp/commit/5d42f973afd0530a6ffdecf00f4bbe5e0709f9e0))
+- **planning:** record mainline delivery linkage ([384c76c](https://github.com/minipuft/claude-prompts-mcp/commit/384c76cf193ec9c1c63c39af63a9b3061070cda9))
 
 ### ⚠ BREAKING CHANGES
 
-* **prompts:** chain steps are validated strictly. A key with no schema field now fails the prompt's load, naming the key and its step index, instead of being silently discarded.
-* **mcp-tools:** `resource_manager(resource_type: "prompt", action: "delete")` now requires `confirm: true`, and the `checkpoint` resource type and `clear` action are removed from the tool surface.
+- **prompts:** chain steps are validated strictly. A key with no schema field now fails the prompt's load, naming the key and its step index, instead of being silently discarded.
+- **mcp-tools:** `resource_manager(resource_type: "prompt", action: "delete")` now requires `confirm: true`, and the `checkpoint` resource type and `clear` action are removed from the tool surface.
 
 ### Maintenance
 
-* **release:** target 3.3.0 ([91d7bc1](https://github.com/minipuft/claude-prompts-mcp/commit/91d7bc1819893c6de24c951e0927258c041117d5))
-* target 4.0.0 for the breaking release ([2d00cd6](https://github.com/minipuft/claude-prompts-mcp/commit/2d00cd641fcbd18e6931d4b0ac8d22cd3d0ab0e6))
+- **release:** target 3.3.0 ([91d7bc1](https://github.com/minipuft/claude-prompts-mcp/commit/91d7bc1819893c6de24c951e0927258c041117d5))
+- target 4.0.0 for the breaking release ([2d00cd6](https://github.com/minipuft/claude-prompts-mcp/commit/2d00cd641fcbd18e6931d4b0ac8d22cd3d0ab0e6))
 
 ## [Unreleased]
-
-
 
 ## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 
 ### Fixed
 
-* **ci:** ship package.json in the plugin dist layout; patch protobufjs to 8.7.1 ([655f324](https://github.com/minipuft/claude-prompts-mcp/commit/655f324b7a002778237aac2a706b4c79fe3e1249))
+- **ci:** ship package.json in the plugin dist layout; patch protobufjs to 8.7.1 ([655f324](https://github.com/minipuft/claude-prompts-mcp/commit/655f324b7a002778237aac2a706b4c79fe3e1249))
 
 ## [3.2.0](https://github.com/minipuft/claude-prompts-mcp/compare/v3.1.1...v3.2.0) (2026-08-07)
 
 ### Added
 
 - **Codex CLI support seams:** generic `PLUGIN_ROOT` workspace resolution, a `codex exec` spawn strategy (`SpawnConfig.client` + `CodexModelStrategy`), and a codex skills-sync registration — consumed by the new [codex-prompts](https://github.com/minipuft/codex-prompts) downstream plugin.
+
 * **chains:** let a prompt choose which subagent its delegated steps spawn ([8a4c066](https://github.com/minipuft/claude-prompts-mcp/commit/8a4c0660aabd728af0f72ccb67ef49a2c7a4646f))
 * **ci:** retire finished plans at release and gate the misclassification ([15a71d4](https://github.com/minipuft/claude-prompts-mcp/commit/15a71d404d4d53420802c66b73eb5a030f0c85dc))
 * **hooks:** add the codex client seams to the shared hook library ([98e7f4e](https://github.com/minipuft/claude-prompts-mcp/commit/98e7f4e8871a4c3b31ef40f437a7735e914bf30d))
@@ -298,6 +302,7 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 - **The `analysis` config section is deprecated, and no longer settable from either tool surface.** A `config.json` carrying it **still loads with its values intact** — the section is parsed and ignored for one deprecation cycle, and the server now warns once at startup naming the replacement. What is withdrawn is the ability to _set_ it: `cpm enable analysis` reports `Unknown subsystem`, and both `cpm config set` and `system_control config` reject the five `analysis.semanticAnalysis.…` keys. Scripts that set them were previously writing values no runtime path read; they now receive a non-zero exit instead of a silent no-op. Delete the `analysis` section to silence the warning. The section itself is removed in the next major.
 - **`llm_self_check` gate criteria no longer consult configuration.** The reserved type is unchanged in the gate YAML schema and still auto-passes, so gates declaring it are unaffected. Its skip message previously told the reader to enable a config key that no longer exists; it now names `%judge` and `shell_verify`.
 - **Prompt analysis feedback is no longer suppressed by a disabled flag.** `resource_manager` prompt create/update responses previously printed `⚠️ API Analysis Disabled` and withheld gate suggestions whenever the LLM flag was off — which was every installation, since it defaults off. The underlying analysis is rule-based and needs no model, and a sibling code path already ran it ungated, so the suggestions now always appear.
+
 * **chains:** give the chain run-identifier format one owner ([f4ad2a1](https://github.com/minipuft/claude-prompts-mcp/commit/f4ad2a182e60001f44cf88a509ae60819a25433e))
 * **chains:** rename tenant_id to run_owner_pid and repair the view that never read it ([a0dc36f](https://github.com/minipuft/claude-prompts-mcp/commit/a0dc36f261763efa2ad23a7264d5534aa3745b76))
 * **execution:** drop six ConvertedPrompt fields no producer ever set ([d66356a](https://github.com/minipuft/claude-prompts-mcp/commit/d66356aece725569627b536eaaafb55a0a82de07))
@@ -333,6 +338,7 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 - **The `cpm` CLI could leave the MCP server unable to start.** Version-history commands reached `state.db` through an embedded Python sqlite3 helper carrying its own `CREATE TABLE`, whose shape predated the workspace-isolation columns. Running the CLI before the server's first start created `version_history` without those columns, and the server then failed to boot with `no such column: workspace_id`. The CLI now uses `node:sqlite` directly, resolves the same workspace scope the server does — they previously wrote history under different tenants and could not see each other's versions — and no longer creates any schema.
 - **Database initialization failures now fail startup instead of degrading silently.** A configured database that failed to open was logged at `warn` and swallowed at three startup wiring sites, so the server reported a clean start while running with no audit trail, no argument history, and an inert version-rollback feature. A failed resource-index resync during hot-reload likewise no longer reports "completed successfully".
 - **Codex plugin runtime:** plugin launch no longer depends on Claude root interpolation, and mutable SQLite/log output can be routed to a sandbox-writable runtime root without moving bundled resources.
+
 * **ci:** make plan retirement self-contained and record why it runs on the PR ([cbdfeae](https://github.com/minipuft/claude-prompts-mcp/commit/cbdfeae1c09279e7e53c39770874f8e9213661d2))
 * **ci:** point downstream sync PR bodies at the renamed upstream repo ([410acb7](https://github.com/minipuft/claude-prompts-mcp/commit/410acb7b5e039ef21eb0ebac5f8367c8e13648c7))
 * **ci:** re-add formatted staged files with -f in pre-commit ([59dc266](https://github.com/minipuft/claude-prompts-mcp/commit/59dc266e3c4a832e8830fa190c8afe6da56ea237))
@@ -350,46 +356,46 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 
 ### Documentation
 
-* **docs:** add plan-board frontmatter to the pipeline follow-up plan ([453dfe1](https://github.com/minipuft/claude-prompts-mcp/commit/453dfe1ed223d63bae19992995cc30283845720c))
-* **docs:** add the G4 CI run log to the implementation notes ([2e2c9da](https://github.com/minipuft/claude-prompts-mcp/commit/2e2c9da4715f93d6337003da80f397be22e838dd))
-* **docs:** add the implementation notes both plans should have had ([bdadea3](https://github.com/minipuft/claude-prompts-mcp/commit/bdadea3efac40da2faca06e30386739d9ee86d28))
-* **docs:** bring Tier 2b statuses current — pushes done, main merge is the sole gate ([9fc2a2f](https://github.com/minipuft/claude-prompts-mcp/commit/9fc2a2f1a6761a0c773d6003f37431394d0eaa93))
-* **docs:** close out the sidecar retirement plan and carry its open findings ([a59d58c](https://github.com/minipuft/claude-prompts-mcp/commit/a59d58c30937fcf1df87521204cce3a1e28df9f5))
-* **docs:** close the implementation_plan prompt defect, and correct my own report of it ([ba975e5](https://github.com/minipuft/claude-prompts-mcp/commit/ba975e5cdc045c70ef023dc4d006c29019396504))
-* **docs:** commit the plan-frontmatter rollout and apply the done/reference test ([ba366cd](https://github.com/minipuft/claude-prompts-mcp/commit/ba366cdfb2bbac83c6cbe78f4283be1d656f5c11))
-* **docs:** correct F4's delivery model — it targeted repos with no plans ([a3cdc88](https://github.com/minipuft/claude-prompts-mcp/commit/a3cdc882d33e69e07d0e49ef9a40ccf9a9b7971c))
-* **docs:** drop legacy smithery.yaml — Smithery now takes the MCPB release artifact ([e223088](https://github.com/minipuft/claude-prompts-mcp/commit/e22308866d5ac2e824dc9639fb0eb4614c5cc5ba))
-* **docs:** file Tier F5 — the MCP surface verifier runs in no workflow ([06ed8c3](https://github.com/minipuft/claude-prompts-mcp/commit/06ed8c3861a045cc7b223643d3f52670814de3e4))
-* **docs:** file Tiers 15-16 for the work Tiers 10 and 12 deferred ([251aa67](https://github.com/minipuft/claude-prompts-mcp/commit/251aa67f0467f64b4e11cadf7531e7b5f36219b4))
-* **docs:** finalize the SQLite remediation plan against measured outcomes ([8bb5555](https://github.com/minipuft/claude-prompts-mcp/commit/8bb5555bf66a00fe1a956537c808411717d8a3e4))
-* **docs:** format the plan my frontmatter rollout left unformatted ([5dbf017](https://github.com/minipuft/claude-prompts-mcp/commit/5dbf0179ac34e418c944d043351ac135193a5973))
-* **docs:** log G2 execution deviations in the implementation notes ([9059d07](https://github.com/minipuft/claude-prompts-mcp/commit/9059d0700c08ef023669fa67e8d35c2b778535cd))
-* **docs:** log the tool-schema snapshot recapture in the implementation notes ([a2db54c](https://github.com/minipuft/claude-prompts-mcp/commit/a2db54cf39124dbfd2a266abb3b87888d13392d6))
-* **docs:** make the retirement script publishable and file the federation tier ([f6de2ec](https://github.com/minipuft/claude-prompts-mcp/commit/f6de2ecace7f6360435842770adaef35b4412c98))
-* **docs:** mark F9 and F11 resolved where a reader actually looks ([50954b1](https://github.com/minipuft/claude-prompts-mcp/commit/50954b1ebbdf9bc6eec1d3cd9b02553382239364))
-* **docs:** mark tier completion where it is scannable, and correct F14 twice ([a8f1ba3](https://github.com/minipuft/claude-prompts-mcp/commit/a8f1ba348b1b4d69d7f33390bbead000cf001099))
-* **docs:** rebrand to Wolfflow — rename repo references, README identity, plan records ([9d9eeb4](https://github.com/minipuft/claude-prompts-mcp/commit/9d9eeb44915950e9aec2dd43d81a3aa3e53fffea))
-* **docs:** reclaim the -mcp repo suffix; prepare registry integration files ([8506b76](https://github.com/minipuft/claude-prompts-mcp/commit/8506b76bdbf5700cc9f62331d0fb18f2ec30a5c7))
-* **docs:** reconcile the SSE references left behind by the transport removal ([ffcdc95](https://github.com/minipuft/claude-prompts-mcp/commit/ffcdc959ae6b6a796b8ec11abae8f3882c326276))
-* **docs:** record the codex port -- alignment rule, changelog, plan + notes ([75960b3](https://github.com/minipuft/claude-prompts-mcp/commit/75960b395471d01c04acef853eda1caee918e528))
-* **docs:** record the Tier 8 stage domain-ownership review and scope Tiers 11-14 ([bb9fdb6](https://github.com/minipuft/claude-prompts-mcp/commit/bb9fdb6fa3290945b05224633ce332905f569455))
-* **docs:** record Tier F5 execution — three plan premises corrected ([1df409a](https://github.com/minipuft/claude-prompts-mcp/commit/1df409adeda0695e4c3e7de3f140a406bf6e62e5))
-* **docs:** record where the validation-mechanism work landed, and why it is three commits ([1bbc304](https://github.com/minipuft/claude-prompts-mcp/commit/1bbc30485e904894a5c18c61ae625b30eaae6803))
-* **docs:** revert Wolfflow branding to Claude Prompts; align README with MCP-ecosystem conventions ([848f7db](https://github.com/minipuft/claude-prompts-mcp/commit/848f7dbacf48864c982408ea38a0c8d1365b66f6))
-* **docs:** scope the Python hook contract to the durable surface ([774252f](https://github.com/minipuft/claude-prompts-mcp/commit/774252f77ef7fd2bf1cdc9ad24edaabd37e43548))
-* **docs:** strip trailing whitespace that fails the PR-range hygiene check ([e0d3255](https://github.com/minipuft/claude-prompts-mcp/commit/e0d325571afca81b51f7fec26d6b34266d17e840))
-* **mcp-tools:** use the framework vocabulary in the gate-veto comment ([9133654](https://github.com/minipuft/claude-prompts-mcp/commit/91336540a1195b9cd7bfbb9ec162bd9b407ebd3b))
-* **scripts:** cite the plan convention at a path every consumer can reach ([06ef228](https://github.com/minipuft/claude-prompts-mcp/commit/06ef228e6389a2828b287f770cc6922744dbabf8))
+- **docs:** add plan-board frontmatter to the pipeline follow-up plan ([453dfe1](https://github.com/minipuft/claude-prompts-mcp/commit/453dfe1ed223d63bae19992995cc30283845720c))
+- **docs:** add the G4 CI run log to the implementation notes ([2e2c9da](https://github.com/minipuft/claude-prompts-mcp/commit/2e2c9da4715f93d6337003da80f397be22e838dd))
+- **docs:** add the implementation notes both plans should have had ([bdadea3](https://github.com/minipuft/claude-prompts-mcp/commit/bdadea3efac40da2faca06e30386739d9ee86d28))
+- **docs:** bring Tier 2b statuses current — pushes done, main merge is the sole gate ([9fc2a2f](https://github.com/minipuft/claude-prompts-mcp/commit/9fc2a2f1a6761a0c773d6003f37431394d0eaa93))
+- **docs:** close out the sidecar retirement plan and carry its open findings ([a59d58c](https://github.com/minipuft/claude-prompts-mcp/commit/a59d58c30937fcf1df87521204cce3a1e28df9f5))
+- **docs:** close the implementation_plan prompt defect, and correct my own report of it ([ba975e5](https://github.com/minipuft/claude-prompts-mcp/commit/ba975e5cdc045c70ef023dc4d006c29019396504))
+- **docs:** commit the plan-frontmatter rollout and apply the done/reference test ([ba366cd](https://github.com/minipuft/claude-prompts-mcp/commit/ba366cdfb2bbac83c6cbe78f4283be1d656f5c11))
+- **docs:** correct F4's delivery model — it targeted repos with no plans ([a3cdc88](https://github.com/minipuft/claude-prompts-mcp/commit/a3cdc882d33e69e07d0e49ef9a40ccf9a9b7971c))
+- **docs:** drop legacy smithery.yaml — Smithery now takes the MCPB release artifact ([e223088](https://github.com/minipuft/claude-prompts-mcp/commit/e22308866d5ac2e824dc9639fb0eb4614c5cc5ba))
+- **docs:** file Tier F5 — the MCP surface verifier runs in no workflow ([06ed8c3](https://github.com/minipuft/claude-prompts-mcp/commit/06ed8c3861a045cc7b223643d3f52670814de3e4))
+- **docs:** file Tiers 15-16 for the work Tiers 10 and 12 deferred ([251aa67](https://github.com/minipuft/claude-prompts-mcp/commit/251aa67f0467f64b4e11cadf7531e7b5f36219b4))
+- **docs:** finalize the SQLite remediation plan against measured outcomes ([8bb5555](https://github.com/minipuft/claude-prompts-mcp/commit/8bb5555bf66a00fe1a956537c808411717d8a3e4))
+- **docs:** format the plan my frontmatter rollout left unformatted ([5dbf017](https://github.com/minipuft/claude-prompts-mcp/commit/5dbf0179ac34e418c944d043351ac135193a5973))
+- **docs:** log G2 execution deviations in the implementation notes ([9059d07](https://github.com/minipuft/claude-prompts-mcp/commit/9059d0700c08ef023669fa67e8d35c2b778535cd))
+- **docs:** log the tool-schema snapshot recapture in the implementation notes ([a2db54c](https://github.com/minipuft/claude-prompts-mcp/commit/a2db54cf39124dbfd2a266abb3b87888d13392d6))
+- **docs:** make the retirement script publishable and file the federation tier ([f6de2ec](https://github.com/minipuft/claude-prompts-mcp/commit/f6de2ecace7f6360435842770adaef35b4412c98))
+- **docs:** mark F9 and F11 resolved where a reader actually looks ([50954b1](https://github.com/minipuft/claude-prompts-mcp/commit/50954b1ebbdf9bc6eec1d3cd9b02553382239364))
+- **docs:** mark tier completion where it is scannable, and correct F14 twice ([a8f1ba3](https://github.com/minipuft/claude-prompts-mcp/commit/a8f1ba348b1b4d69d7f33390bbead000cf001099))
+- **docs:** rebrand to Wolfflow — rename repo references, README identity, plan records ([9d9eeb4](https://github.com/minipuft/claude-prompts-mcp/commit/9d9eeb44915950e9aec2dd43d81a3aa3e53fffea))
+- **docs:** reclaim the -mcp repo suffix; prepare registry integration files ([8506b76](https://github.com/minipuft/claude-prompts-mcp/commit/8506b76bdbf5700cc9f62331d0fb18f2ec30a5c7))
+- **docs:** reconcile the SSE references left behind by the transport removal ([ffcdc95](https://github.com/minipuft/claude-prompts-mcp/commit/ffcdc959ae6b6a796b8ec11abae8f3882c326276))
+- **docs:** record the codex port -- alignment rule, changelog, plan + notes ([75960b3](https://github.com/minipuft/claude-prompts-mcp/commit/75960b395471d01c04acef853eda1caee918e528))
+- **docs:** record the Tier 8 stage domain-ownership review and scope Tiers 11-14 ([bb9fdb6](https://github.com/minipuft/claude-prompts-mcp/commit/bb9fdb6fa3290945b05224633ce332905f569455))
+- **docs:** record Tier F5 execution — three plan premises corrected ([1df409a](https://github.com/minipuft/claude-prompts-mcp/commit/1df409adeda0695e4c3e7de3f140a406bf6e62e5))
+- **docs:** record where the validation-mechanism work landed, and why it is three commits ([1bbc304](https://github.com/minipuft/claude-prompts-mcp/commit/1bbc30485e904894a5c18c61ae625b30eaae6803))
+- **docs:** revert Wolfflow branding to Claude Prompts; align README with MCP-ecosystem conventions ([848f7db](https://github.com/minipuft/claude-prompts-mcp/commit/848f7dbacf48864c982408ea38a0c8d1365b66f6))
+- **docs:** scope the Python hook contract to the durable surface ([774252f](https://github.com/minipuft/claude-prompts-mcp/commit/774252f77ef7fd2bf1cdc9ad24edaabd37e43548))
+- **docs:** strip trailing whitespace that fails the PR-range hygiene check ([e0d3255](https://github.com/minipuft/claude-prompts-mcp/commit/e0d325571afca81b51f7fec26d6b34266d17e840))
+- **mcp-tools:** use the framework vocabulary in the gate-veto comment ([9133654](https://github.com/minipuft/claude-prompts-mcp/commit/91336540a1195b9cd7bfbb9ec162bd9b407ebd3b))
+- **scripts:** cite the plan convention at a path every consumer can reach ([06ef228](https://github.com/minipuft/claude-prompts-mcp/commit/06ef228e6389a2828b287f770cc6922744dbabf8))
 
 ### ⚠ BREAKING CHANGES
 
-* **chains:** schema v20 renames chain_sessions.tenant_id and chain_run_registry.tenant_id to run_owner_pid, and drops `lifecycle` from v_execution_status. Both tables are derived/ephemeral and are dropped by the bump, so no data migrates.
-* **runtime:** `--transport=sse` and `transport: "sse"` in config.json are rejected at startup rather than silently resolved to another transport. Use `streamable-http`.
-* **runtime:** The deprecated HTTP+SSE transport is removed; use `--transport=streamable-http`. The Streamable HTTP transport no longer issues or requires an `Mcp-Session-Id` header.
+- **chains:** schema v20 renames chain_sessions.tenant_id and chain_run_registry.tenant_id to run_owner_pid, and drops `lifecycle` from v_execution_status. Both tables are derived/ephemeral and are dropped by the bump, so no data migrates.
+- **runtime:** `--transport=sse` and `transport: "sse"` in config.json are rejected at startup rather than silently resolved to another transport. Use `streamable-http`.
+- **runtime:** The deprecated HTTP+SSE transport is removed; use `--transport=streamable-http`. The Streamable HTTP transport no longer issues or requires an `Mcp-Session-Id` header.
 
 ### Maintenance
 
-* **server:** pin the next release to 3.2.0 ([e709a1c](https://github.com/minipuft/claude-prompts-mcp/commit/e709a1cd9f8eb97ce4ae7b1eab9a31b43a65d6ae))
+- **server:** pin the next release to 3.2.0 ([e709a1c](https://github.com/minipuft/claude-prompts-mcp/commit/e709a1cd9f8eb97ce4ae7b1eab9a31b43a65d6ae))
 
 ## [3.1.1](https://github.com/minipuft/claude-prompts/compare/v3.1.0...v3.1.1) (2026-08-03)
 

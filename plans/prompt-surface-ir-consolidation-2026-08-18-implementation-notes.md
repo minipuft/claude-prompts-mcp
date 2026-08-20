@@ -53,14 +53,20 @@ and its auto-detect semantics and routes them through `>>design_muse` + the surf
 in one line under step 3 Route. Parity preserved, duplication not.
 
 **R-4 — OQ (interview 2026-08-19): Tier D is fixed in this session, not deferred. OWNER-RULED.**
-D.2 landed. D.1 did not, for a reason the ruling could not have anticipated — see R-9.
+Both landed. D.2 on 2026-08-19; D.1 only on 2026-08-20, and only after R-9 established it was a
+different defect in a different subsystem and the owner re-authorized it on that basis. Shipped
+in `2f84df65`.
 
 **R-5 — plan-row-tracking locates a row's status by HEADER-DRIVEN COLUMN LOOKUP. OWNER-RULED
 2026-08-19.** `validate-plan-row-tracking.js:239` scans the whole line for a glyph, so a row whose
 Status cell reads ✓ fails when its Change text quotes ☐. Rejected: positional second-cell (silently
 stops grading tables with another shape — a false negative in the gate built to prevent exactly
 that), code-span exclusion (would not have caught the observed case, whose glyphs were bare prose),
-and leaving it (an unenforced convention). NOT YET IMPLEMENTED.
+and leaving it (an unenforced convention).
+**IMPLEMENTED 2026-08-20** in `2f84df65` — `statusColumnByLine()` + whole-row fallback, 5
+self-tests, mutation-checked. The fallback earned itself on landing:
+`resource-manager-settability-matrix-2026-08-13.md` puts its glyph in cell 0 under a `#`/`Gap`
+header, so the rejected positional option would have stopped grading three real open rows.
 
 **R-6 — `backlog → active` flips on the FIRST SOURCE EDIT WHILE A BACKLOG PLAN IS BOUND.
 OWNER-RULED 2026-08-19**, after the interview surfaced that both obvious readings fail: flipping on
@@ -68,7 +74,12 @@ plan-file edit leaves today's gap open (editing source before touching the plan 
 order), and flipping on Read makes browsing mutate tracked files. The chosen trigger is the exact
 moment `notes-skeleton.py` already evaluates — a source edit with a bound plan — so both halves are
 already computed and no new signal is invented. Measured blast radius at ruling time: 1 backlog
-plan, 0 open rows. NOT YET IMPLEMENTED.
+plan, 0 open rows.
+**IMPLEMENTED 2026-08-20** in `~/.claude/hooks` (`notes-skeleton.py` + `plan_hygiene.py`) — 4
+tests, mutation-checked, promotion announced in the hook's systemMessage rather than silent.
+`apply_status`'s "NOTHING CALLS THIS AUTOMATICALLY" note was corrected rather than left
+asserting something false: it now names this one automatic caller and why an ACT-based flip
+differs from the INFERENCE-based rewriting that note exists to forbid.
 
 **R-7 — shared-worktree concurrency: capture the pattern, do not act. OWNER-RULED 2026-08-19.**
 Three collisions in one session (row 3.5 swept into a foreign commit; a foreign `git reset`
@@ -78,7 +89,11 @@ worktrees, single-writer convention. Feeds `/knowledge-capture` as a third sight
 **R-8 — validation-ledger command extraction records the PARSED command, not a grep of the Bash
 input. RULED BY ME 2026-08-19, flagged to the owner as mine rather than theirs.** The ledger
 currently captures prose from heredocs (`npm run validate:all' PLUS`). No design ambiguity: a
-ledger of commands should hold commands. NOT YET IMPLEMENTED.
+ledger of commands should hold commands.
+**IMPLEMENTED 2026-08-20** in `~/.claude/hooks/lib/command_patterns.py` as `executable_text()`,
+which strips heredoc BODIES before the scan; 3 tests, mutation-checked. Root cause was narrower
+than "records a grep of the Bash input": the extractor was already line-accurate, but a heredoc
+body is data, and prose quoting `npm run validate:all` was being read as a run of it.
 
 **R-9 — D.1 is a DIFFERENT DEFECT than filed, and its fix is unruled. SURFACED 2026-08-20.**
 The owner authorized "fix Tier D now" on the understanding that both rows were argument-default
@@ -88,8 +103,11 @@ defects. D.2 was; D.1 is not. After the D.2 fix, D.1's symptom CHANGED from
 Chain mode resolves script tools from the GLOBAL scripts directory only, so a prompt-scoped tool
 under `resources/prompts/<id>/tools/<tool>/` is unreachable from a chain. That is the script-tool
 registry/scope subsystem, not the parser. Authorization does not transfer across that boundary, so
-the row is marked ⚠ with its premise rewritten and the fix left unruled rather than widened
-silently.
+the row was marked ⚠ with its premise rewritten and the fix left unruled rather than widened
+silently. **Resolved 2026-08-20**: the owner ruled it a bug and authorized the fix. The chain
+renderer now passes `promptDir`, so `WorkspaceScriptLoader` can try the prompt-local path it
+already supported. `docs/guides/script-tools.md:583` documents prompt-local resolution with no
+chain caveat — the doc was already correct and the code was the bug, so no doc change was owed.
 
 ## Deviations
 

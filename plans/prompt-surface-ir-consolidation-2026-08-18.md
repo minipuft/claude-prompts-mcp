@@ -311,7 +311,7 @@ done_criteria:
   | One execution prompt                               | rg sweep (T3 gate)                  | No live tier_execute reference                   |
   | Authored plans are IR-compilable                   | 5.3 live drive                      | Workflow accepted, order matches Depends         |
   | Review is per-node                                 | 5.3 live drive                      | Gate verdict submitted mid-run, not at end       |
-  | Fan-out still held                                 | T4 row stays ☐ until S1–S6 flip     | agentType absent from emitted submissions        |
+  | Fan-out RELEASED (criterion inverted 2026-08-20)   | T4 shipped; S1–S6 terminal 2026-08-18 | agentType/subagentModel emission PRESENT in the prompt |
   | Suite green                                        | Tier 5 gate                         | build + verify:mcp + validate:all                |
 
 documentation:
@@ -326,7 +326,7 @@ risks:
   |-------------------------------------------------------------|--------|-------------------------------------------------------------------|------------------------------------------------------|
   | Consolidated prompt too long (dilution)                    | medium | §B/§D deleted, not merged; target < 160 lines; measure at T2 gate | Version history via resource_manager rollback        |
   | In-flight plans authored for tier_execute                  | low    | T1 shape is byte-compatible; old plans compile under new dispatch | Old plan rows still readable — Depends semantics unchanged |
-  | S1–S6 never close → T4 permanent ☐                         | medium | Hold point stamped with falsifier; plan closes T1–T3+T5 without it | N/A — T4 is additive                                 |
+  | ~~S1–S6 never close → T4 permanent hold~~ RESOLVED 2026-08-18 | medium | Did not materialise: S1–S6 went terminal a day before execution. The stamp was correct and nothing READ it — the reusable lesson is that a hold point needs a detector, not just a falsifier | N/A — T4 shipped |
   | OQ2 default wrong (sub_agent_step_* unfit as row executor) | medium | OQ2 ruled before T2; a spike node in 5.3 validates the choice     | Re-rule OQ2, single-file re-edit of 2.1              |
 
 release:
@@ -334,7 +334,18 @@ release:
   scope             : prompts
 
 growth_capture:
-  - [ ] Pattern: "consolidate AT the migration moment, not before" — 3rd sighting candidate for /knowledge-capture
-  - [ ] Memory: update project_subagent_delegation_defect entry when T4 unblocks
-  - [ ] Skill: /plan §Plan Medium may gain the row→node mapping contract once validated by 5.3
+  - [x] Pattern: "consolidate AT the migration moment, not before" — CONFIRMED, not novel.
+        Counted the sightings rather than trusting the row: the exact claim appears in this plan
+        only. The principle it instantiates is ALREADY canonical — cleanup-standards §"Parity Gates
+        Are Debt, Not Safety" owns the same-PR rule and "a gate you cannot retire is a bug". One
+        plan is one sighting however emphatic, so nothing was promoted. Recorded as a confirmation.
+  - [x] Memory: project_subagent_delegation_defect rewritten — it asserted "plan ACTIVE, S1–S6
+        open" against a plan that went `reference` with every row terminal on 2026-08-18. Kept
+        rather than deleted, re-scoped to the durable half: a hold point that named its falsifier
+        and no DETECTOR. MEMORY.md index line updated to match.
+  - [x] Skill: /plan gained §Rows Compile — a POINTER plus the two load-bearing constraints (row
+        ids slug to kebab node ids; Depends holds row ids and becomes the edges), not a copy. The
+        full mapping stays owned by >>implementation_plan's plan_table step; duplicating it across
+        tiers is the anti-pattern /knowledge-capture names. Justified by a real gap: a plan written
+        by hand through /plan would otherwise emit rows that cannot compile.
 ```
