@@ -23,6 +23,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -395,7 +396,66 @@ function runStep(step, index, total) {
   return { script: step.script, status, durationMs, output };
 }
 
-function printSummary(results, totalMs) {
+/**
+ * Where the suite records what it found.
+ *
+ * The runner is the ONLY thing that knows this. Measured 2026-08-20: a Bash PostToolUse hook
+ * cannot learn it — `tool_response` carries no exit status under any name, and the hook does not
+ * fire at all when a command exits non-zero. The plan-hygiene validation ledger tried to infer it
+ * anyway and produced 91 of 91 entries reading `ran`, zero `ok`, zero `FAIL`, with a passing test
+ * that fabricated the payload it wanted. So the verdict is written HERE, by the process holding
+ * it, and nothing downstream has to guess.
+ *
+ * Gitignored (`.cache/`): this is session evidence, not authored content.
+ */
+const RECEIPT_PATH = path.join(SERVER_ROOT, '.cache', 'validation-receipt.json');
+
+/** Previous run's receipt, or null. Never throws — a missing receipt is the normal first run. */
+function readReceipt() {
+  try {
+    return JSON.parse(readFileSync(RECEIPT_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record this run, carrying `firstSeen` forward for steps that were ALREADY failing.
+ *
+ * That carry-forward is the whole point. "2 of 44 failed" cannot tell you whether you broke
+ * something or walked into it, and answering it by hand cost three separate investigations in one
+ * session (2026-08-20) against a worktree shared with another agent. A step failing since before
+ * this run is attributable to something else; a step whose `firstSeen` is this run is yours.
+ *
+ * Fails soft: a receipt that cannot be written must never turn a green suite red.
+ */
+function writeReceipt(results) {
+  const previous = readReceipt();
+  const seenBefore = new Map(
+    (previous?.failing ?? []).map((entry) => [entry.script, entry.firstSeen])
+  );
+  const now = new Date().toISOString();
+  const failing = results
+    .filter((entry) => entry.status !== 0)
+    .map((entry) => ({
+      script: entry.script,
+      status: entry.status,
+      firstSeen: seenBefore.get(entry.script) ?? now,
+    }));
+
+  try {
+    mkdirSync(path.dirname(RECEIPT_PATH), { recursive: true });
+    writeFileSync(
+      RECEIPT_PATH,
+      `${JSON.stringify({ ts: now, steps: results.length, failing }, null, 2)}\n`
+    );
+  } catch {
+    // Recording is a convenience; validating is the job.
+  }
+  return { failing, now };
+}
+
+function printSummary(results, totalMs, attribution) {
   const failures = results.filter((entry) => entry.status !== 0);
   const nameWidth = Math.max(...results.map((entry) => entry.script.length));
 
@@ -420,8 +480,13 @@ function printSummary(results, totalMs) {
   // Re-printed rather than merely named. With 30 steps of output above, "steps 4 and 27 failed"
   // still means scrolling — and reading every failure at once is the entire point of the runner.
   console.log(`\n❌ ${failures.length} of ${results.length} steps failed:`);
+  const firstSeen = new Map((attribution?.failing ?? []).map((e) => [e.script, e.firstSeen]));
   for (const failure of failures) {
-    console.log(`\n── ${failure.script} (exit ${failure.status}) ──`);
+    // NEW vs pre-existing, so nobody re-derives it by hand against a shared worktree.
+    const seen = firstSeen.get(failure.script);
+    const origin =
+      seen === undefined || seen === attribution?.now ? 'NEW this run' : `failing since ${seen}`;
+    console.log(`\n── ${failure.script} (exit ${failure.status}) — ${origin} ──`);
     console.log(failure.output || '(no output)');
   }
 }
@@ -435,7 +500,7 @@ async function main() {
   const results = suite.map((step, index) => runStep(step, index, suite.length));
   const totalMs = Number((process.hrtime.bigint() - startedAt) / 1_000_000n);
 
-  printSummary(results, totalMs);
+  printSummary(results, totalMs, writeReceipt(results));
   process.exit(results.some((entry) => entry.status !== 0) ? 1 : 0);
 }
 
