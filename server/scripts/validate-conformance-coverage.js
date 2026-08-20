@@ -14,7 +14,7 @@
 // WHY THIS EXISTS (parameter half, added 2026-08-17)
 // The framework check has no vocabulary for TOOL PARAMETERS: `workflow` shipped on `prompt_engine`
 // with zero conformance rows and this gate stayed green, because it only ever asked about
-// `resources/frameworks/`. Re-measured in `plans/techincal_debt/test-modernization-roadmap.md`
+// `resources/frameworks/`. Re-measured in `plans/reference/technical-debt/test-modernization-roadmap.md`
 // (Re-measurement 2026-08-17) as the first open finding — this is that finding's closer. The same
 // shape of gap: a declared surface (`tooling/contracts/*.json`) with no corpus cross-check.
 //
@@ -287,7 +287,7 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ...exceptionGroup(
     'resource_manager',
     ['from_version', 'to_version', 'limit', 'skip_version'],
-    'Versioning field beyond rollback\'s `version`; the corpus exercises `action:rollback` (with ' +
+    "Versioning field beyond rollback's `version`; the corpus exercises `action:rollback` (with " +
       '`version`) but not `action:compare` (from_version/to_version), `action:history` (limit), ' +
       'or an update carrying skip_version.',
     'A conformance scenario exercising `action:compare` or `action:history`, or an update with ' +
@@ -323,7 +323,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
  * declared exception. The exceptions themselves are audited separately, by `auditExceptions`
  * below — this function only reports parameters that carry NO exception at all.
  */
-function findUncoveredParameters(contracts, argsByTool, exceptions = PARAMETER_COVERAGE_EXCEPTIONS) {
+function findUncoveredParameters(
+  contracts,
+  argsByTool,
+  exceptions = PARAMETER_COVERAGE_EXCEPTIONS
+) {
   const exceptionKeys = new Set(exceptions.map((e) => `${e.tool}::${e.parameter}`));
   const problems = [];
 
@@ -375,7 +379,10 @@ function auditParameterExceptions(
       }
       const covered = argsByTool.get(exception.tool) ?? new Set();
       if (covered.has(exception.parameter)) {
-        return { verdict: VERDICT.SATISFIED, detail: 'the parameter is now exercised in the corpus' };
+        return {
+          verdict: VERDICT.SATISFIED,
+          detail: 'the parameter is now exercised in the corpus',
+        };
       }
       return { verdict: VERDICT.LOAD_BEARING };
     },
@@ -454,7 +461,12 @@ function selfTest() {
   {
     const argsByTool = collectCorpusArgs('scenarios: []\n');
     const exceptions = [
-      { tool: 'fake_tool', parameter: 'excused_param', reason: 'fixture', closedBy: 'fixture tier' },
+      {
+        tool: 'fake_tool',
+        parameter: 'excused_param',
+        reason: 'fixture',
+        closedBy: 'fixture tier',
+      },
     ];
     const contracts = [fixtureContract(['excused_param'])];
     const uncovered = findUncoveredParameters(contracts, argsByTool, exceptions);
@@ -479,8 +491,7 @@ function selfTest() {
     );
     cases.push({
       name: 'exception with empty closedBy is rejected',
-      ok:
-        audit.problems.length === 1 && audit.problems[0].message.includes('no closedBy'),
+      ok: audit.problems.length === 1 && audit.problems[0].message.includes('no closedBy'),
       detail: JSON.stringify(audit.problems),
     });
   }
@@ -493,7 +504,11 @@ function selfTest() {
     const argsByTool = collectCorpusArgs(
       "scenarios:\n  - id: x\n    requests: [{ tool: fake_tool, args: { my_param: 'v' } }]\n"
     );
-    const uncoveredParams = findUncoveredParameters([fixtureContract(['my_param'])], argsByTool, []);
+    const uncoveredParams = findUncoveredParameters(
+      [fixtureContract(['my_param'])],
+      argsByTool,
+      []
+    );
     cases.push({
       name: 'framework and parameter checks are independent',
       ok: uncoveredFrameworksHere.length === 0 && uncoveredParams.length === 0,
@@ -528,7 +543,11 @@ function selfTest() {
       { tool: 'fake_tool', parameter: 'real_param', reason: 'fixture', closedBy: 'fixture' },
       { tool: 'fake_tool', parameter: 'nonexistent_param', reason: 'fixture', closedBy: 'fixture' },
     ];
-    const audit = auditParameterExceptions([fixtureContract(['real_param'])], argsByTool, exceptions);
+    const audit = auditParameterExceptions(
+      [fixtureContract(['real_param'])],
+      argsByTool,
+      exceptions
+    );
     cases.push({
       name: 'dangling (SUBJECT_MISSING) exception is flagged',
       ok:
@@ -606,7 +625,10 @@ if (uncoveredParameters.length > 0) {
   );
 }
 
-const exceptionProblemCount = reportExceptionAudit('conformance-coverage:parameters', exceptionAudit);
+const exceptionProblemCount = reportExceptionAudit(
+  'conformance-coverage:parameters',
+  exceptionAudit
+);
 if (exceptionProblemCount > 0) failed = true;
 
 if (failed) process.exit(1);

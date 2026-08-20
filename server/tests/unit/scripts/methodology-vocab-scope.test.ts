@@ -35,7 +35,7 @@ describe('methodology-vocab scope — files the old walk could not reach', () =>
 
 describe('methodology-vocab scope — deliberate exclusions', () => {
   it.each([
-    ['plans/techincal_debt/some-plan.md', 'archived plan files'],
+    ['plans/technical-debt/some-plan.md', 'archived plan files'],
     ['plans/reference/nested/deep/notes.md', 'plans at any depth'],
     ['CHANGELOG.md', 'historical release record'],
     ['cli/dist/index.js', 'build artifact'],

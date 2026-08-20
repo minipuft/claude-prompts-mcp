@@ -33,7 +33,7 @@ module.exports = {
   coverageReporters: ['text', 'lcov'],
   // Coverage ratchet: floor thresholds to prevent regression.
   // Baseline measured 2026-02-24: stmts 37.8%, branches 31.5%, funcs 42.0%, lines 38.3%
-  // Target: 80% (see plans/techincal_debt/test-modernization-roadmap.md)
+  // Target: 80% (see plans/reference/technical-debt/test-modernization-roadmap.md)
   coverageThreshold: {
     global: {
       statements: 35,

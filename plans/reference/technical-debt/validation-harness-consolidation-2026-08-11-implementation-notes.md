@@ -17,13 +17,13 @@ executing the plan. Conservative option taken, logged, work continued.
 
 ## Validation runs
 
-- 2026-08-12 00:02 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - <<'PYEOF' import re p='plans/techincal_debt/validation-me` · ran
-- 2026-08-12 00:02 · `python3 - <<'PYEOF' import re p='plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md' s=open(p).read() ` · ran
+- 2026-08-12 00:02 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - <<'PYEOF' import re p='plans/technical-debt/validation-me` · ran
+- 2026-08-12 00:02 · `python3 - <<'PYEOF' import re p='plans/reference/technical-debt/validation-mechanism-architecture-2026-08-05.md' s=open(p).read() ` · ran
 - 2026-08-12 00:01 · `cd server && echo "0.14 — vocab guard clean + green?"; git status --short scripts/validate-no-methodology-vocab.js | rg ` · ran
 - 2026-08-11 23:58 · `git diff -- server/eslint.config.js | rg "^[+-]" | rg -v "^(\+\+\+|---)" | head -30; echo "..."; echo "total +/- lines: ` · ran
 - 2026-08-11 23:58 · `npm run -s validate:format 2>&1 | rg warn; echo "--- ownership of each ---"; cd /home/minipuft/Applications/claude-promp` · ran
-- 2026-08-11 23:58 · `python3 - <<'PYEOF' p='../plans/techincal_debt/validation-harness-consolidation-2026-08-11.md' s=open(p).read() s=s.repl` · ran
-- 2026-08-11 23:56 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - <<'PYEOF' p='plans/techincal_debt/validation-harness-cons` · ran
+- 2026-08-11 23:58 · `python3 - <<'PYEOF' p='../plans/reference/technical-debt/validation-harness-consolidation-2026-08-11.md' s=open(p).read() s=s.repl` · ran
+- 2026-08-11 23:56 · `cd /home/minipuft/Applications/claude-prompts-mcp && python3 - <<'PYEOF' p='plans/technical-debt/validation-harness-cons` · ran
 - 2026-08-11 23:56 · `npx prettier --write .dependency-cruiser.cjs >/dev/null 2>&1 && npx prettier --check .dependency-cruiser.cjs 2>&1|tail -` · ran
 - 2026-08-11 23:54 · `npm run -s validate:format 2>&1 | rg warn; echo "--- my touched files formatted? ---"; npx prettier --check .dependency-` · ran
 - 2026-08-11 23:54 · `npm run validate:all 2>&1 | rg "FAIL|steps passed|steps failed|suite-membership" | tail -6` · ran

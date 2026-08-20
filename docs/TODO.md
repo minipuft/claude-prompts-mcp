@@ -82,8 +82,8 @@ resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")
 
 | Area                 | Now       | Target                   | Plan                                                                                          |
 | -------------------- | --------- | ------------------------ | --------------------------------------------------------------------------------------------- |
-| Test coverage        | Unit only | Unit + Integration + E2E | [test-modernization-roadmap](../plans/reference/techincal_debt/test-modernization-roadmap.md) |
-| Coverage enforcement | None      | 80% threshold            | [test-modernization-roadmap](../plans/reference/techincal_debt/test-modernization-roadmap.md) |
+| Test coverage        | Unit only | Unit + Integration + E2E | [test-modernization-roadmap](../plans/reference/technical-debt/test-modernization-roadmap.md) |
+| Coverage enforcement | None      | 80% threshold            | [test-modernization-roadmap](../plans/reference/technical-debt/test-modernization-roadmap.md) |
 | TypeScript strict    | Full      | Keep strict enabled      | -                                                                                             |
 | Bundle size          | ~4.5MB    | < 2MB (tree-shaking)     | -                                                                                             |
 
@@ -91,7 +91,7 @@ resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")
 
 Found 2026-07-28 while authoring a prompt with `inline_gate_definitions`. All reproduced against v2.1.0.
 
-**Tier-gated plan**: [arg-gate-pipeline-fixes.md](../plans/reference/techincal_debt/arg-gate-pipeline-fixes.md) — T0 ✓ and T1 ✓ complete ([ADR 0001](adr/0001-gate-resolution-precedence.md) accepted). **T1.5 (one owner for gate resolution) now blocks T2/T3** — discovery found gate selection split across three places, two of them unreachable. Resume with `>>strategicImplement task:"execute tier T1.5" plan_path:"plans/reference/techincal_debt/arg-gate-pipeline-fixes.md"`.
+**Tier-gated plan**: [arg-gate-pipeline-fixes.md](../plans/reference/technical-debt/arg-gate-pipeline-fixes.md) — T0 ✓ and T1 ✓ complete ([ADR 0001](adr/0001-gate-resolution-precedence.md) accepted). **T1.5 (one owner for gate resolution) now blocks T2/T3** — discovery found gate selection split across three places, two of them unreachable. Resume with `>>strategicImplement task:"execute tier T1.5" plan_path:"plans/reference/technical-debt/arg-gate-pipeline-fixes.md"`.
 
 - [x] **Single-quoted option baking corrupts values containing apostrophes.** _(FIXED 2026-07-28, T0 — `serializeOptionValue`/`parseQuotedValue` in `jsonUtils.ts`; both `argument-parser.ts` regexes now share one escape-aware convention. Uncommitted.)_ `mergeOptionsIntoCommand` ([`00-request-normalization-stage.ts:216`](../server/src/engine/execution/pipeline/stages/00-request-normalization-stage.ts)) serializes MCP `options` string values as `` `'${value}'` `` with no escaping; the key/value regex ([`argument-parser.ts:249`](../server/src/engine/execution/parsers/argument-parser.ts)) then matches `'([^']*)'` and stops at the first embedded `'`. The value is silently truncated **and** trailing prose is re-parsed into phantom arguments — `theme:'… the creed line 'the void' … Target: dark ground.'` yields `theme` truncated plus a spurious `Target` argument. Fix: escape embedded quotes, or select a quote character not present in the value. Severity: silent data corruption + argument injection.
 
@@ -115,7 +115,7 @@ Found 2026-07-28 while authoring a prompt with `inline_gate_definitions`. All re
 
 ### Test Modernization
 
-See [test-modernization-roadmap.md](../plans/reference/techincal_debt/test-modernization-roadmap.md) for the comprehensive 6-phase plan:
+See [test-modernization-roadmap.md](../plans/reference/technical-debt/test-modernization-roadmap.md) for the comprehensive 6-phase plan:
 
 - [ ] **Phase 1**: Coverage infrastructure (thresholds, CI, helpers)
 - [ ] **Phase 2**: Test classification audit & migration (8 sub-phases analyzing all 67 test files)

@@ -1,6 +1,6 @@
 ---
 title: "Reader-without-producer sweep — Implementation Notes"
-plan: plans/techincal_debt/reader-without-producer-sweep-2026-08-05.md
+plan: plans/reference/technical-debt/reader-without-producer-sweep-2026-08-05.md
 date: 2026-08-05
 status: reference
 tags: [technical-debt, gates, dead-code]

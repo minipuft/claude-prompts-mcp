@@ -2,7 +2,7 @@
  * SessionActionHandler — id-namespace resolution and scope enforcement.
  *
  * Regression coverage for F12 in
- * `plans/techincal_debt/resource-versioning-consolidation-2026-08-17.md`.
+ * `plans/reference/technical-debt/resource-versioning-consolidation-2026-08-17.md`.
  *
  * `session clear` used to try the id as a session id and, on failure, fall through to
  * `clearSessionsForChain(id)`. A stale, mistyped, or out-of-scope session id therefore escalated

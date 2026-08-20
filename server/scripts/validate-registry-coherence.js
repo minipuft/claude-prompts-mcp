@@ -9,7 +9,7 @@
  * `delete` in the process that made it, until the next server restart — and the two causes an
  * operator would naturally suspect, a wrong id and a failed write, were both wrong, with the file
  * on disk proving the write had worked. Gates: `b7102dd9`. Frameworks: the `update`/`reload` half
- * of `plans/techincal_debt/framework-resource-lifecycle-2026-08-18.md`.
+ * of `plans/reference/technical-debt/framework-resource-lifecycle-2026-08-18.md`.
  *
  * Both times the awaited `onRefresh()` was the decoy. It resolves to the application's FULL SERVER
  * REFRESH, which reloads prompt data — so for prompts it genuinely IS the registration, and for

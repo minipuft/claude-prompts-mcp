@@ -7,7 +7,7 @@ tags: [cleanup, gates, config, breaking-candidate]
 
 # Semantic LLM Side-Client Retirement
 
-**Status**: **COMPLETE** (`reference` — cited by the follow-up sweep, so it stays in the tree rather than archiving) — T0 decided; T1, T2, T2.5, T3, T3.5, T3.6, T4, T5 all landed · F10, F12 resolved · F9, F11 carried to [reader-without-producer-sweep](techincal_debt/reader-without-producer-sweep-2026-08-05.md) so they survive archival
+**Status**: **COMPLETE** (`reference` — cited by the follow-up sweep, so it stays in the tree rather than archiving) — T0 decided; T1, T2, T2.5, T3, T3.5, T3.6, T4, T5 all landed · F10, F12 resolved · F9, F11 carried to [reader-without-producer-sweep](./technical-debt/reader-without-producer-sweep-2026-08-05.md) so they survive archival
 **Created**: 2026-08-05
 **Supersedes nothing.** Follows the `llmIntegration.mode` fix (same session), which made the config
 surface honest enough for this removal to be scoped.
@@ -270,7 +270,7 @@ Both were **created by** 2.5.3, not merely adjacent to it — removing the write
 
 ### F9 — Two more reader-without-producer surfaces, different lineage — CARRIED, then RESOLVED
 
-**Moved to [reader-without-producer-sweep](techincal_debt/reader-without-producer-sweep-2026-08-05.md#f9)
+**Moved to [reader-without-producer-sweep](./technical-debt/reader-without-producer-sweep-2026-08-05.md#f9)
 and executed there 2026-08-05 (`7a43f996`).** Original text below; note it names a
 `GateValidator.getRetryHints` that does not exist, and `StepResult.validationResults` when the
 whole interface was dead.
@@ -598,7 +598,7 @@ reverted; `rg FALSIFICATION src/ tests/ ../cli/src` → 0.
 
 ### F11 — `ContentAnalyzer` is handed a config it never reads — CARRIED, then RESOLVED
 
-**Moved to [reader-without-producer-sweep](techincal_debt/reader-without-producer-sweep-2026-08-05.md#f11)
+**Moved to [reader-without-producer-sweep](./technical-debt/reader-without-producer-sweep-2026-08-05.md#f11)
 and executed there 2026-08-06 (`558e4dc8`)** — the plumbing only. The prediction below that it
 "has to survive until the removal major" was **wrong**: it bundled the internal plumbing with the
 config types the parser still reads. Only the section itself waits for the major. Original text

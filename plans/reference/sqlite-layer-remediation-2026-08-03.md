@@ -13,7 +13,7 @@ tags: [persistence, sqlite, validation-gates, technical-debt]
 6.1/6.2/6.3/6.4/6.5a/6.5b/6.5/6.6 done. 6.2 was resolved differently from either option the plan
 offered — **both were measured false** — see its execution record.
 
-`status: reference` rather than `done`: `plans/techincal_debt/validation-mechanism-architecture-2026-08-05.md`
+`status: reference` rather than `done`: `plans/reference/technical-debt/validation-mechanism-architecture-2026-08-05.md`
 cites this plan, so archiving it would break an inbound link from active work. The release
 workflow moves it to `plans/reference/` (tracked) on the next run of `plans:retire --apply`.
 

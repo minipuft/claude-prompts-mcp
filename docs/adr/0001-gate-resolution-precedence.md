@@ -7,7 +7,7 @@
 ## Context
 
 Gate selection is currently specified in three places that disagree, and two of the three are not
-reachable at runtime. Before any of `plans/techincal_debt/arg-gate-pipeline-fixes.md` T2/T3 can be
+reachable at runtime. Before any of `plans/reference/technical-debt/arg-gate-pipeline-fixes.md` T2/T3 can be
 built, the project needs one stated order that implementations can be checked against.
 
 ### Measured current state
@@ -259,7 +259,7 @@ criterion): both state fields and their 12 reads, `GateResolutionInput.clientSel
 
 **Carried forward as a follow-up**: the audit that found this was field-by-field. A mechanical
 check for declared-and-read-but-never-written state fields would have caught F2 and rank 90 at once.
-Logged in `plans/techincal_debt/pipeline-followup-2026-08-02.md`.
+Logged in `plans/reference/technical-debt/pipeline-followup-2026-08-02.md`.
 
 ## Prior art
 
@@ -329,7 +329,7 @@ Two cautions taken from the same sources:
 
 ### Follow-ups
 
-- Plan `plans/techincal_debt/arg-gate-pipeline-fixes.md` T2 (2.1-2.5) and T3 (3.1-3.5) are unblocked
+- Plan `plans/reference/technical-debt/arg-gate-pipeline-fixes.md` T2 (2.1-2.5) and T3 (3.1-3.5) are unblocked
   by this ADR.
 - **Correction to plan item 2.4**: its named file, `gate-enforcement-authority.ts`, owns verdict
   parsing, enforcement-mode resolution and retry limits — not selection. The nesting rule belongs
@@ -362,7 +362,7 @@ Two cautions taken from the same sources:
 
 ## References
 
-- Plan: `plans/techincal_debt/arg-gate-pipeline-fixes.md` (T1 row 1.1; T2/T3 gated on this ADR)
+- Plan: `plans/reference/technical-debt/arg-gate-pipeline-fixes.md` (T1 row 1.1; T2/T3 gated on this ADR)
 - Issue log: `docs/TODO.md` § Known Issues — Argument & Gate Pipeline
 - `docs/guides/injection-control.md` (hierarchy, modifiers), `docs/guides/gates.md`,
   `docs/reference/prompt-yaml-schema.md`, `docs/reference/gate-configuration.md`

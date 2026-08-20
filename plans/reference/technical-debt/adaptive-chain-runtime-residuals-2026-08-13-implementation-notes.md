@@ -115,7 +115,7 @@ stays main-thread. No pushes without owner approval.
   hardened generator. Falsified; 222 targeted tests green. TIER B COMPLETE (A+B+C+D+move).
   Uncommitted.
 - **Settability audit ✓ (2026-08-13)** — matrix persisted to
-  `plans/techincal_debt/resource-manager-settability-matrix-2026-08-13.md` (267 lines,
+  `plans/technical-debt/resource-manager-settability-matrix-2026-08-13.md` (267 lines,
   code-cited): 7 set-unreachable, 7 unset-broken, 2 missing typed ops, 1 NEW gate-surface
   data loss; create_prompt/prompt_builder bridge confirmed broken
   (`user_message_template_file`/`system_message_file` params never read by resource_manager).

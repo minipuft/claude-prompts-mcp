@@ -190,7 +190,7 @@ different obligations:
 | `done`      | `plans/archive/`   | no — gitignored | Nothing cites it. Git history is the archive.                                                 |
 | `reference` | `plans/reference/` | **yes**         | Something still cites it (an ADR, a successor plan, a doc), so its citers need it to resolve. |
 
-Both preserve the subpath (`plans/techincal_debt/x.md` → `plans/<dest>/techincal_debt/x.md`) and
+Both preserve the subpath (`plans/technical-debt/x.md` → `plans/<dest>/technical-debt/x.md`) and
 re-base relative links for the added depth. Relocating a `reference` plan additionally rewrites
 every **inbound** link to it, across the sources declared by this repository. The workflow stages
 the complete retirement transaction rather than duplicating that source list in YAML.

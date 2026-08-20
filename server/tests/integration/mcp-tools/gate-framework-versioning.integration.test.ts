@@ -2,7 +2,7 @@
  * Gate + Framework Versioning Through the Real Write Path
  *
  * Closes the coverage gap recorded as F10 in
- * `plans/techincal_debt/resource-versioning-consolidation-2026-08-17.md`: the existing
+ * `plans/reference/technical-debt/resource-versioning-consolidation-2026-08-17.md`: the existing
  * `version-history-workflow.test.ts` exercises gate and framework versioning only at the
  * VersionHistoryService level (a resourceType string passed to a simulated manager). It never
  * reaches `GateLifecycleProcessor` or `GateVersioningProcessor`, which is where F1 and F2 live —
