@@ -298,6 +298,22 @@ describe('UnifiedCommandParser fuzzy prompt suggestions', () => {
     await expect(parser.parseCommand('xyzzy123', fuzzyPrompts)).rejects.not.toThrow(/Did you mean/);
   });
 
+  // 'xyzzy123' above is a SINGLE token, so it never reaches the word-overlap
+  // term and passed vacuously. Multi-token nonsense is where the term bites:
+  // before the minOverlapWordLength floor, 'co' matched 'code' and every
+  // query scored at least once.
+  test('short words in multi-token nonsense do not score overlap', async () => {
+    await expect(parser.parseCommand('zz_co_qq', fuzzyPrompts)).rejects.not.toThrow(/Did you mean/);
+  });
+
+  test('words at the floor still score overlap', async () => {
+    // 'cod' is exactly minOverlapWordLength (3) and is a substring of 'code',
+    // so it must still reach code_review. This pins the floor at 3, not higher.
+    await expect(parser.parseCommand('zzz_cod_qqq', fuzzyPrompts)).rejects.toThrow(
+      /Did you mean.*code_review/
+    );
+  });
+
   test('suggests prompts when using >> prefix with typo', async () => {
     await expect(parser.parseCommand('>>anaylze_code', fuzzyPrompts)).rejects.toThrow(
       /Did you mean.*analyze_code/

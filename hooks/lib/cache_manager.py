@@ -14,6 +14,7 @@ from db_reader import (
     load_gates,
     load_prompts,
 )
+from suggestion_scoring import SCORING
 
 
 class ArgumentInfo(TypedDict):
@@ -210,12 +211,13 @@ def levenshtein_distance(a: str, b: str) -> int:
 def fuzzy_match_prompt_id(query: str, max_results: int = 3) -> list[str]:
     """
     Find fuzzy matches for a prompt ID using multi-factor scoring.
-    Same algorithm as TypeScript generatePromptSuggestions().
 
-    Scoring:
-    - Prefix match: 100 points
-    - Word overlap: 30 points per word
-    - Levenshtein: 50 - (distance * 10) points
+    Weights and thresholds come from the SSOT contract
+    (server/tooling/contracts/registries/suggestion-scoring.json), which
+    command-parser.ts reads too. Only the traversal is written twice: the hook
+    scores locally to avoid a server round-trip on a prompt that does not
+    exist. Do not reintroduce literals here -- the previous version of this
+    docstring claimed parity with the TypeScript scorer and nothing enforced it.
 
     Args:
         query: The prompt ID to match against
@@ -239,21 +241,30 @@ def fuzzy_match_prompt_id(query: str, max_results: int = 3) -> list[str]:
 
         # Prefix match (highest value - user typing partial name)
         if id_lower.startswith(query_lower) or query_lower.startswith(id_lower):
-            score += 100
+            score += SCORING["prefixMatchScore"]
 
-        # Word overlap (medium value - related prompts)
+        # Word overlap (medium value - related prompts).
+        # Words shorter than the floor are skipped: this term matches on
+        # unbounded substring containment, so a two-letter word like "no"
+        # matches "notes" and every query would score at least once. The
+        # contract carries the measurement behind the floor.
         id_words = set(id_lower.replace("-", "_").split("_"))
         for qw in query_words:
+            if len(qw) < SCORING["minOverlapWordLength"]:
+                continue
             for iw in id_words:
                 if qw in iw or iw in qw:
-                    score += 30
+                    score += SCORING["wordOverlapScore"]
                     break
 
         # Levenshtein distance (lower = better)
         distance = levenshtein_distance(query_lower, id_lower)
-        threshold = max(3, len(query_lower) // 2)
+        threshold = max(
+            SCORING["levenshteinMinThreshold"],
+            len(query_lower) // SCORING["levenshteinLengthDivisor"],
+        )
         if distance <= threshold:
-            score += max(0, 50 - distance * 10)
+            score += max(0, SCORING["levenshteinBaseScore"] - distance * SCORING["levenshteinPenaltyPerEdit"])
 
         if score > 0:
             # Store lowercase ID to align with MCP server case-insensitive matching

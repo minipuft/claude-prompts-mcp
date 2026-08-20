@@ -1,0 +1,18 @@
+{
+  "$comment": "SSOT for prompt-id 'Did you mean' scoring. Read by BOTH matchers: server/src/engine/execution/parsers/command-parser.ts (import assertion) and hooks/lib/suggestion_scoring.py (runtime read). The two were hand-mirrored before 2026-08-19 and drifted by construction -- cache_manager.py's docstring said 'Same algorithm as TypeScript generatePromptSuggestions()', which is a promise no check enforced.",
+  "version": 1,
+  "scoring": {
+    "prefixMatchScore": 100,
+    "wordOverlapScore": 30,
+    "minOverlapWordLength": 3,
+    "levenshteinBaseScore": 50,
+    "levenshteinPenaltyPerEdit": 10,
+    "levenshteinMinThreshold": 3,
+    "levenshteinLengthDivisor": 2,
+    "maxResults": 3
+  },
+  "rationale": {
+    "minOverlapWordLength": "Measured 2026-08-19 against the 99-prompt live library. The word-overlap term scores on unbounded substring containment, so before this floor existed a two-letter query word matched broadly -- '\"notes\".includes(\"no\")' scored 30 and cleared the 'score > 0' filter, which is why '>>zzzqqq_no_such_thing' returned note_integration, note_refinement, notes. Sweeping the floor 1..5 over five real typos and six nonsense strings: typo top-1 accuracy stays 5/5 at every value, while nonsense-silent goes 2/6 (floor 1), 3/6 (2), 5/6 (3), and gains nothing further at 4 or 5. 3 is the smallest floor that captures the whole gain. Gating the id-word side as well changed no outcome on this library, so it is deliberately not done.",
+    "remainingMatch": "'the_quick_brown_fox' still matches 'quick_decision' at floor 3. That is correct -- 'quick' is a genuine shared word, not noise."
+  }
+}

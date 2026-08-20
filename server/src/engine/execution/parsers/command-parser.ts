@@ -16,6 +16,7 @@ import { tokenizeCommand } from './command-tokenizer.js';
 import { RESERVED_OPERATORS } from './operator-patterns.js';
 import { normalizeSymbolicPrefixes } from './parser-utils.js';
 import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
+import scoringContract from '../../../../tooling/contracts/registries/suggestion-scoring.json' with { type: 'json' };
 
 import type { TokenizedCommand } from './command-tokenizer.js';
 import type { ConvertedPrompt, ExecutionModifier, ExecutionModifiers } from '../types.js';
@@ -587,6 +588,7 @@ export class UnifiedCommandParser {
    */
   private generatePromptSuggestions(promptId: string, availablePrompts: ConvertedPrompt[]): string {
     const query = promptId.toLowerCase();
+    const s = scoringContract.scoring;
 
     const scored = availablePrompts
       .map((prompt) => {
@@ -595,30 +597,39 @@ export class UnifiedCommandParser {
 
         // Exact prefix match (highest value - user typing partial name)
         if (id.startsWith(query) || query.startsWith(id)) {
-          score += 100;
+          score += s.prefixMatchScore;
         }
 
-        // Word overlap (medium value - related prompts)
+        // Word overlap (medium value - related prompts).
+        // Words shorter than the floor are skipped: this term matches on
+        // unbounded substring containment, so a two-letter word like "no"
+        // matches "notes" and every query would score. See the contract's
+        // rationale for the measurement that set the floor.
         const queryWords = query.split(/[_-]/);
         const idWords = id.split(/[_-]/);
-        const wordOverlap = queryWords.filter((w) =>
-          idWords.some((iw) => iw.includes(w) || w.includes(iw))
+        const wordOverlap = queryWords.filter(
+          (w) =>
+            w.length >= s.minOverlapWordLength &&
+            idWords.some((iw) => iw.includes(w) || w.includes(iw))
         ).length;
-        score += wordOverlap * 30;
+        score += wordOverlap * s.wordOverlapScore;
 
         // Levenshtein distance (inverse - lower distance = higher score)
         const distance = this.levenshteinDistance(query, id);
         // Dynamic threshold based on query length (longer queries allow more edits)
-        const threshold = Math.max(3, Math.floor(query.length / 2));
+        const threshold = Math.max(
+          s.levenshteinMinThreshold,
+          Math.floor(query.length / s.levenshteinLengthDivisor)
+        );
         if (distance <= threshold) {
-          score += Math.max(0, 50 - distance * 10);
+          score += Math.max(0, s.levenshteinBaseScore - distance * s.levenshteinPenaltyPerEdit);
         }
 
         return { prompt, score };
       })
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
+      .slice(0, s.maxResults);
 
     if (scored.length > 0) {
       return `Did you mean: ${scored.map((s) => s.prompt.id).join(', ')}?`;
