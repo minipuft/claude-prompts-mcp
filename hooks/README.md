@@ -56,11 +56,18 @@ Triggers after `prompt_engine` calls. Tracks chain state and pending gates.
 
 Blocks `prompt_engine` calls that violate gate discipline:
 
-| Check                 | Trigger                                   | Denial Message                                      |
-| --------------------- | ----------------------------------------- | --------------------------------------------------- |
-| FAIL verdict          | `gate_verdict: "GATE_REVIEW: FAIL - ..."` | "Gate failed: {reason}. Review criteria and retry." |
-| Missing user_response | `chain_id` without `user_response`        | "Chain resume requires user_response."              |
-| Pending gate          | `chain_id` with unresolved gate           | "Include gate_verdict: PASS\|FAIL"                  |
+| Check        | Trigger                                                     | Denial Message                                                                                                               |
+| ------------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| FAIL verdict | `gate_verdict` with overall FAIL (object or legacy string)  | "Gate FAIL: {reason}. Review the failing criteria ... resubmit."                                                             |
+| Pending gate | `chain_id` carrying NO resolution parameter while gate open | "Gate review required: ... submit gate_verdict. If the gate cannot be satisfied, these parameters also resolve it: {exits}." |
+
+The pending-gate check accepts every **resolution verb** the server accepts — `gate_verdict`,
+`gate_action` (retry/skip/abort), `cancel` — read from `lib/_generated/resolution_verbs.py`,
+which `server npm run generate:contracts` emits from parameters flagged `resolvesPendingGate`
+in `tooling/contracts/prompt-engine.json`. Never hardcode the verb list in the hook: the
+hardcoded model denied `gate_action: "abort"` and `cancel: true` (both server-supported exits),
+so a pending gate trapped its own abort (fixed 2026-08-20). If the generated module is missing
+or unreadable the check fails open — the server enforces gates authoritatively.
 
 **Test manually:**
 

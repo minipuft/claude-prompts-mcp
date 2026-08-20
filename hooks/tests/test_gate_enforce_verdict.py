@@ -14,6 +14,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -72,6 +73,70 @@ class TestStructuredVerdict:
         )
         assert code == 0
         assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+class TestPendingGateResolution:
+    """A pending gate must accept every contract-flagged resolution verb.
+
+    The hook's previous hardcoded model (chain_id without gate_verdict -> deny) blocked
+    `cancel: true` and `gate_action: "abort"` — both server-supported exits — so a pending
+    gate trapped its own abort (2026-08-20). The verb set now comes from
+    lib/_generated/resolution_verbs.py, emitted by server/scripts/generate-contracts.ts.
+    """
+
+    PENDING: ClassVar[dict] = {"pending_gate": "code-review"}
+
+    def run_pending(self, monkeypatch, capsys, tool_input):
+        monkeypatch.setattr(hook_mod, "load_session_state", lambda _sid: dict(self.PENDING))
+        return run_hook(monkeypatch, capsys, tool_input)
+
+    def test_cancel_true_allows(self, monkeypatch, capsys):
+        code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "cancel": True})
+        assert code == 0
+        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+    @pytest.mark.parametrize("action", ["retry", "skip", "abort"])
+    def test_gate_action_allows(self, monkeypatch, capsys, action):
+        code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "gate_action": action})
+        assert code == 0
+        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+    def test_bare_resume_denies_and_names_exits(self, monkeypatch, capsys):
+        code, out = self.run_pending(
+            monkeypatch,
+            capsys,
+            {"chain_id": "chain-demo#1", "user_response": "step output"},
+        )
+        assert code == 0
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        # Verdict-first message, exits named as the fallback line.
+        assert "gate_verdict" in reason
+        assert "cancel" in reason
+        assert "gate_action" in reason
+
+    def test_cancel_false_still_denies(self, monkeypatch, capsys):
+        code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "cancel": False})
+        assert code == 0
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_missing_artifact_fails_open(self, monkeypatch, capsys):
+        monkeypatch.setattr(hook_mod, "load_resolution_params", lambda: None)
+        code, out = self.run_pending(
+            monkeypatch,
+            capsys,
+            {"chain_id": "chain-demo#1", "user_response": "step output"},
+        )
+        assert code == 0
+        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+    def test_generated_artifact_matches_contract_flags(self):
+        """Parity: the shipped artifact carries exactly the contract's flagged parameters."""
+        contract_path = HOOKS_DIR.parent / "server" / "tooling" / "contracts" / "prompt-engine.json"
+        contract = json.loads(contract_path.read_text())
+        flagged = {p["name"] for p in contract["parameters"] if p.get("resolvesPendingGate") is True}
+        assert flagged, "contract flags no resolution parameters"
+        assert hook_mod.load_resolution_params() == flagged
 
 
 class TestLegacyStringVerdict:

@@ -11,6 +11,7 @@ export interface ToolParameter {
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
   includeInDescription?: boolean; // If false, param is in schema but not tool description
+  resolvesPendingGate?: boolean; // True when supplying this param resolves a pending gate review
 }
 
 export interface ToolCommand {

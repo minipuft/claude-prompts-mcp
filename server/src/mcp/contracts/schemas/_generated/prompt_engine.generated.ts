@@ -11,6 +11,7 @@ export interface ToolParameter {
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
   includeInDescription?: boolean; // If false, param is in schema but not tool description
+  resolvesPendingGate?: boolean; // True when supplying this param resolves a pending gate review
 }
 
 export interface ToolCommand {
@@ -86,6 +87,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       'Rationales are single-line and trimmed. Multi-line is rejected rather than collapsed: only the first non-empty line is parsed, so the remainder would be lost silently.',
       'The legacy string branch and the four non-primary verdict patterns are retired once no client has submitted a string verdict for one release cycle, measured via the `source` field on ParsedGateVerdict.',
     ],
+    resolvesPendingGate: true,
   },
   {
     name: 'gate_action',
@@ -98,6 +100,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
     ],
     enum: ['retry', 'skip', 'abort'],
+    resolvesPendingGate: true,
   },
   {
     name: 'gates',
@@ -133,6 +136,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; no other parameter is read. Moved here from system_control session cancel because a chain id is held BECAUSE you are running the chain, so ending that run is part of running it — system_control keeps list/inspect/clear, which are keyed on a session_id read from a listing. Cancel retains the session's state and artifacts; remove them with system_control(action:\"session\", operation:\"clear\").",
     status: 'working',
     compatibility: 'canonical',
+    resolvesPendingGate: true,
   },
   {
     name: 'options',

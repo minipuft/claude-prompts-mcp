@@ -32,6 +32,13 @@ export const parameterSchema = z.object({
   enum: z.array(z.string()).optional(), // For enum types with explicit values
   /** If false, param is accepted by schema but not shown in tool description (reduces token usage) */
   includeInDescription: z.boolean().optional(),
+  /**
+   * True when supplying this parameter is a valid response to a pending gate review.
+   * Generated into `hooks/lib/_generated/resolution_verbs.py` so the PreToolUse gate hook
+   * enforces the SAME move set the server accepts, instead of a private approximation —
+   * the private model blocked `cancel` and `gate_action` twice (2026-08-20).
+   */
+  resolvesPendingGate: z.boolean().optional(),
 });
 
 export type ParameterDefinition = z.infer<typeof parameterSchema>;

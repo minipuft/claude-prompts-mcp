@@ -20,6 +20,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const CONTRACTS_DIR = path.join(ROOT, 'tooling', 'contracts');
 const GENERATED_META_DIR = path.join(ROOT, 'src', 'mcp', 'contracts', 'schemas', '_generated');
+// Python artifact consumed by hooks/gate-enforce.py. Lives in the repo-root hooks tree (not
+// server/src) because `prepack` rsyncs ../hooks into the package, which is how downstream
+// adapter repos receive hook code.
+const HOOKS_GENERATED_DIR = path.resolve(ROOT, '..', 'hooks', 'lib', '_generated');
 
 interface ToolDescriptionsConfig {
   version: string;
@@ -218,6 +222,68 @@ function generateToolDescriptions(
 // metadata (.generated.ts), tool descriptions (.json), and docs (.md).
 
 /**
+ * Emit the pending-gate resolution verbs for the Python gate hook.
+ *
+ * `hooks/gate-enforce.py` (PreToolUse) must accept exactly the moves the server accepts while a
+ * gate review is pending. Its previous hardcoded model rotted twice — it denied
+ * `gate_action: "abort"` and `cancel: true`, both server-supported exits, trapping sessions
+ * behind their own pending gate (2026-08-20). Parameters flagged `resolvesPendingGate: true`
+ * in the prompt-engine contract are the single source; this artifact is how the hook reads it.
+ *
+ * Throws when the contract exists but flags nothing: an empty set would make the hook deny
+ * every chain_id call — silently recreating the trap this artifact exists to prevent.
+ */
+async function generateResolutionVerbs(
+  contracts: LoadedContract[],
+  checkMode: boolean
+): Promise<boolean> {
+  const promptEngine = contracts.find(({ contract }) => contract.tool === 'prompt_engine');
+  if (!promptEngine) {
+    return false;
+  }
+
+  const verbs = promptEngine.contract.parameters
+    .filter((p) => p.resolvesPendingGate === true)
+    .map((p) => p.name)
+    .sort((a, b) => a.localeCompare(b));
+
+  if (verbs.length === 0) {
+    throw new Error(
+      '[generate-contracts] prompt-engine.json flags no parameter with resolvesPendingGate. ' +
+        'An empty set would make hooks/gate-enforce.py deny every pending-gate call, including ' +
+        'cancel and gate_action. Flag the resolution parameters or remove the hook consumer.'
+    );
+  }
+
+  const initContent = '"""Generated package marker. Do not edit."""\n';
+  const moduleContent = [
+    '"""Pending-gate resolution verbs. Generated from tooling/contracts/prompt-engine.json.',
+    '',
+    'Regenerate with `npm run generate:contracts` (server/). Do not edit.',
+    '"""',
+    '',
+    'PENDING_GATE_RESOLUTION_PARAMS: frozenset[str] = frozenset(',
+    '    {',
+    ...verbs.map((name) => `        "${name}",`),
+    '    }',
+    ')',
+    '',
+  ].join('\n');
+
+  const initChanged = await writeFileIfChanged(
+    path.join(HOOKS_GENERATED_DIR, '__init__.py'),
+    initContent,
+    checkMode
+  );
+  const moduleChanged = await writeFileIfChanged(
+    path.join(HOOKS_GENERATED_DIR, 'resolution_verbs.py'),
+    moduleContent,
+    checkMode
+  );
+  return initChanged || moduleChanged;
+}
+
+/**
  * Format TypeScript content with prettier for consistent output
  */
 function formatWithPrettier(content: string, cwd: string): string {
@@ -390,6 +456,7 @@ async function main(): Promise<void> {
       '  notes?: string[];',
       '  enum?: string[]; // For enum types with explicit values',
       '  includeInDescription?: boolean; // If false, param is in schema but not tool description',
+      '  resolvesPendingGate?: boolean; // True when supplying this param resolves a pending gate review',
       '}',
       '',
       'export interface ToolCommand {',
@@ -493,6 +560,12 @@ async function main(): Promise<void> {
   }
 
   // mcp-schemas.ts generation removed — Zod schemas now hand-written in src/mcp/tools/schemas/
+
+  const resolutionVerbsChanged = await generateResolutionVerbs(loaded, checkMode);
+  changed = changed || resolutionVerbsChanged;
+  if (resolutionVerbsChanged) {
+    console.log('[generate-contracts] Generated hooks/lib/_generated/resolution_verbs.py');
+  }
 
   if (checkMode && changed) {
     throw new Error('Contract artifacts were regenerated. Re-run without --check to update files.');

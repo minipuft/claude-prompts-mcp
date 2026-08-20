@@ -4,7 +4,10 @@ PreToolUse hook: Enforce gate verdicts on prompt_engine calls.
 
 Blocks:
 1. GATE_REVIEW: FAIL without retry attempt
-2. Missing gate_verdict when resuming a chain that requires it
+2. Chain resumes carrying NO pending-gate resolution parameter while a gate is pending.
+   The accepted resolution verbs (gate_verdict, gate_action, cancel, ...) are generated
+   from the server contract into lib/_generated/resolution_verbs.py — never hardcoded
+   here, so the hook cannot deny an exit the server supports.
 
 Allows Claude to self-correct before the tool executes.
 """
@@ -26,6 +29,27 @@ def parse_hook_input() -> dict:
         return json.load(sys.stdin)
     except json.JSONDecodeError:
         return {}
+
+
+def load_resolution_params() -> frozenset[str] | None:
+    """Load the pending-gate resolution verbs generated from the server contract.
+
+    The set is emitted by server/scripts/generate-contracts.ts from parameters flagged
+    `resolvesPendingGate` in tooling/contracts/prompt-engine.json, so this hook accepts
+    exactly the moves the server accepts. A hardcoded model here rotted twice — it denied
+    `gate_action: "abort"` and `cancel: true`, trapping sessions behind their own pending
+    gate (2026-08-20).
+
+    Returns None when the artifact is missing or unreadable: the caller fails open,
+    because the server enforces gates authoritatively and a broken hook must never
+    re-create the trap.
+    """
+    try:
+        from _generated.resolution_verbs import PENDING_GATE_RESOLUTION_PARAMS
+
+        return PENDING_GATE_RESOLUTION_PARAMS
+    except Exception:
+        return None
 
 
 def main():
@@ -84,25 +108,38 @@ def main():
             print(json.dumps(hook_response))
             sys.exit(0)
 
-    # Check 2: Resuming chain without required gate_verdict
-    if chain_id and not gate_verdict:
-        # Load session state to check if gate was pending
-        session_id = hook_input.get("session_id", "")
-        state = load_session_state(session_id) if session_id else None
-
-        if state and state.get("pending_gate"):
-            gate = state["pending_gate"]
-            hook_response = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"Gate review required: {gate}. Review your output against the gate criteria before continuing."
-                    ),
-                }
-            }
-            print(json.dumps(hook_response))
+    # Check 2: Resuming chain without any resolution parameter while a gate is pending.
+    # Any contract-flagged resolution verb (gate_verdict, gate_action, cancel, ...) passes:
+    # they are all server-supported responses to a pending gate, and denying them is how a
+    # gate blocks its own abort.
+    if chain_id:
+        resolution_params = load_resolution_params()
+        if resolution_params is None:
+            # Fail open: without the generated verb set this hook cannot tell a valid
+            # resolution from a bare resume — the server still enforces the gate.
             sys.exit(0)
+
+        if not any(tool_input.get(name) for name in resolution_params):
+            # Load session state to check if gate was pending
+            session_id = hook_input.get("session_id", "")
+            state = load_session_state(session_id) if session_id else None
+
+            if state and state.get("pending_gate"):
+                gate = state["pending_gate"]
+                exits = ", ".join(sorted(resolution_params - {"gate_verdict"}))
+                hook_response = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"Gate review required: {gate}. Review your output against the "
+                            "gate criteria and submit gate_verdict. If the gate cannot be "
+                            f"satisfied, these parameters also resolve it: {exits}."
+                        ),
+                    }
+                }
+                print(json.dumps(hook_response))
+                sys.exit(0)
 
     # All checks passed - allow tool execution
     sys.exit(0)
