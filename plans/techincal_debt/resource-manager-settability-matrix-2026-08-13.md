@@ -1,9 +1,14 @@
 ---
 title: "resource_manager settability parity — audit matrix"
 date: 2026-08-13
-status: backlog
+status: active
 tags: []
 ---
+
+> **Row-status re-measurement 2026-08-19.** Two §8 gaps were closed incidentally by other
+> sessions and are marked `✓` below with their commits. Every remaining row is stamped with an
+> as-of date and the observation that flips it. The prose in §1–§7 still describes the
+> 2026-08-13 tree and has NOT been rewritten — read §8 for current status.
 
 # resource_manager Settability Matrix — Prompt Resource Surface
 
@@ -195,11 +200,11 @@ system-message.md`). `rg -n "user_message_template_file|system_message_file" src
 
 | #   | Gap                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Severity                                | Instrument                                                                                                                                                                                 | Size                  |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| 1   | Gate `activation`/`retry_config` silently **deleted** by any update that omits them (no fallback to `existingGate`, unlike `name`/`type`/`description`/`guidance` on the same call)                                                                                                                                                                                                                                                                                 | **Data loss**                           | Scalars→update: mirror the merge pattern already proven for prompts (`PRESERVED_PROMPT_YAML_KEYS`) in `gate-lifecycle-processor.handleUpdate`                                              | S                     |
-| 2   | `system_message` cannot be **unset** — `writesSystemMessage = Boolean(promptData.systemMessage) && (...)` checks value truthiness instead of `suppliedKeys.has('systemMessage')`, so an explicit `system_message: ''` is silently dropped and `system-message.md` is never touched                                                                                                                                                                                  | Unsettable                              | Bodies→update/patch: fix the boolean condition to match every sibling field's `suppliedKeys` check; delete `system-message.md` + drop `systemMessageFile` key when cleared                 | S                     |
-| 3   | `tools[]` cannot be cleared (empty array is treated as "no change," preserving the old on-disk id list) and **no per-tool delete exists** — a removed id's `tools/{id}/` directory orphans forever                                                                                                                                                                                                                                                                  | Unsettable + unreachable delete         | Collections→typed operation: `tool_operation: 'add'\|'remove'\|'replace'` mirroring `chain_step_operation`, with a companion delete in `createOrUpdateTools` for ids dropped from the list | M                     |
-| 4   | Preserved fields (`register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`) are settable but **never unsettable** — once explicit, they freeze permanently (self-documented "FREEZE HAZARD") with no path back to "inherit from category/global default"                                                                                                                                                                                              | Unsettable                              | Scalars→update: accept an explicit `null` sentinel (distinct from omission) threaded through `resolvePreservedPromptYamlFields` to mean "remove this key"                                  | S–M                   |
-| 5   | No typed per-item op for `arguments` (`argument_updates` designed, not started) or single chain-step field edits; compounded by `inspect detail:full` never surfacing `arguments[].validation`/`defaultValue` or step `inputMapping`/`outputMapping`/`retries`/`subagentModel`/`agentType`/`framework`/`inlineGateIds`/`visibility`/`delegation` — an LLM reconstructing a full-array replace from what `inspect` shows risks silently dropping fields it never saw | Workflow-compensated / latent data loss | Collections→typed operation (`argument_updates`; `chain_step_operation:'update'`) + inspect→emit the currently-hidden sub-fields                                                           | M (ops) + S (inspect) |
+| ✓ 1 | Gate `activation`/`retry_config` silently **deleted** by any update that omits them (no fallback to `existingGate`, unlike `name`/`type`/`description`/`guidance` on the same call)                                                                                                                                                                                                                                                                                 | **Data loss**                           | Scalars→update: mirror the merge pattern already proven for prompts (`PRESERVED_PROMPT_YAML_KEYS`) in `gate-lifecycle-processor.handleUpdate`                                              | S                     |
+| ☐ 2 | `system_message` cannot be **unset** — `writesSystemMessage = Boolean(promptData.systemMessage) && (...)` checks value truthiness instead of `suppliedKeys.has('systemMessage')`, so an explicit `system_message: ''` is silently dropped and `system-message.md` is never touched                                                                                                                                                                                  | Unsettable                              | Bodies→update/patch: fix the boolean condition to match every sibling field's `suppliedKeys` check; delete `system-message.md` + drop `systemMessageFile` key when cleared                 | S                     |
+| ☐ 3 | `tools[]` cannot be cleared (empty array is treated as "no change," preserving the old on-disk id list) and **no per-tool delete exists** — a removed id's `tools/{id}/` directory orphans forever                                                                                                                                                                                                                                                                  | Unsettable + unreachable delete         | Collections→typed operation: `tool_operation: 'add'\|'remove'\|'replace'` mirroring `chain_step_operation`, with a companion delete in `createOrUpdateTools` for ids dropped from the list | M                     |
+| ☐ 4 | Preserved fields (`register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`) are settable but **never unsettable** — once explicit, they freeze permanently (self-documented "FREEZE HAZARD") with no path back to "inherit from category/global default"                                                                                                                                                                                              | Unsettable                              | Scalars→update: accept an explicit `null` sentinel (distinct from omission) threaded through `resolvePreservedPromptYamlFields` to mean "remove this key"                                  | S–M                   |
+| ◐ 5 | No typed per-item op for `arguments` (`argument_updates` designed, not started) or single chain-step field edits; compounded by `inspect detail:full` never surfacing `arguments[].validation`/`defaultValue` or step `inputMapping`/`outputMapping`/`retries`/`subagentModel`/`agentType`/`framework`/`inlineGateIds`/`visibility`/`delegation` — an LLM reconstructing a full-array replace from what `inspect` shows risks silently dropping fields it never saw | Workflow-compensated / latent data loss | Collections→typed operation (`argument_updates`; `chain_step_operation:'update'`) + inspect→emit the currently-hidden sub-fields                                                           | M (ops) + S (inspect) |
 
 Also flagged, not in the top 5 by severity but cheap to fix and cited above:
 
@@ -216,6 +221,78 @@ Also flagged, not in the top 5 by severity but cheap to fix and cited above:
   undiscoverable from the tool schema. (Cosmetic/contract-completeness, not a settability gap. S.)
 - `chain_step_operation:'replace'` is a documented no-op alias for the plain `chain_steps`
   parameter — reads as "replace one step" but does nothing; naming confusion only. (Cosmetic. XS.)
+
+### Row status (re-measured 2026-08-19 against HEAD)
+
+Marker on each row above: `✓` closed · `◐` partly closed · `☐` open. Open rows carry an as-of
+date and the observation that flips them, per `cleanup-standards.md` — an unmarked `☐` is not
+checkable.
+
+- **✓ 1 — CLOSED by `dc1c5f75`** (`fix(gates): preserve gate.yaml fields the caller did not
+supply on update`). `gate-lifecycle-processor.handleUpdate` now falls back to
+  `existingDefinition.pass_criteria/activation/retry_config`, and `gate-file-writer.ts` grew
+  `resolvePreservedGateYamlFields`, deriving its preserved set from `GATE_YAML_DECLARED_KEYS` so
+  a future schema field is carried automatically. Closed incidentally — the commit's comment
+  cites this audit by filename.
+
+- **☐ 2 — OPEN.** `file-operations.ts:578` still reads
+  `Boolean(promptData.systemMessage) && (isFreshDirectory || suppliedKeys.has('systemMessage'))`,
+  verbatim the audited condition.
+  _(as of 2026-08-19 · flips when an update sending `system_message: ''` deletes
+  `system-message.md` and drops the `systemMessageFile` key)_
+
+- **☐ 3 — OPEN.** `rg tool_operation` returns zero hits across `src/` and `tooling/`;
+  `buildPromptYamlData` still falls back to `existingYaml.tools` whenever the supplied array is
+  empty, so `[]` remains "no change".
+  _(as of 2026-08-19 · flips when `tools: []` clears the id list AND a dropped id's
+  `tools/{id}/` directory is removed)_
+
+- **☐ 4 — OPEN.** All five preserved params are still `.optional()` with no `.nullable()` member,
+  and `resolvePreservedPromptYamlFields` still branches on `supplied !== undefined`, so an
+  explicit `null` would be written into the YAML rather than removing the key.
+  _(as of 2026-08-19 · flips when `register_with_mcp: null` removes the key from `prompt.yaml`)_
+
+- **◐ 5 — PARTLY CLOSED by `ce93c8ac`** (`feat(mcp-tools): add argument_updates parameter for
+prompt updates`). The originally-scoped "Fix D" landed: `prompt/operations/argument-updates.ts`
+  merges by name, the router passes it through unrenamed, `create` refuses it, and combining it
+  with `arguments` is refused. Its merge logic rode along in `5c3198b5`, which that commit's body
+  records. Two companions remain open:
+  - single chain-step field edit — `chain_step_operation` is still
+    `['add','remove','reorder','replace']` and `'replace'` is still the no-op at
+    `validation.ts:443`.
+    _(as of 2026-08-19 · flips when an `update`-at-index operation exists)_
+  - `inspect` sub-field surfacing — `prompt-discovery-processor.ts` names no `defaultValue`,
+    `validation`, `inputMapping`, `outputMapping` or `inlineGateIds`.
+    _(as of 2026-08-19 · flips when `inspect format:'json'` returns the literal `arguments` and
+    `chainSteps` arrays)_
+
+Sequence order note: the two closures were increments **1 and 5**, skipping 2-4. §9's ordering
+argument (smallest-first, proving the write-scope pattern before the typed ops) was overtaken by
+events and is no longer the reason to pick the next row.
+
+### Also-flagged and SF rows (re-measured 2026-08-19)
+
+- ◐ Gate `severity`/`enforcementMode`/`gate_type` — the data-loss half closed with row 1
+  (`gate-file-writer.ts` now preserves them from disk); still **not settable**, `GateManagerInput`
+  does not declare them.
+  _(as of 2026-08-19 · flips when a create/update call can author `severity`)_
+- ☐ `create_prompt` file-reference bridge — `rg "user_message_template_file|system_message_file"
+src/` still returns zero.
+  _(as of 2026-08-19 · flips when either name resolves in `src/`)_
+- ☐ Category resource type — `resource_type` is still `z.enum(['prompt','gate','framework'])`;
+  `category.yaml` still has zero writer.
+  _(as of 2026-08-19 · flips when a tool call writes a `category.yaml`)_
+- ☐ Framework's 11 passthrough fields — still undeclared.
+  _(as of 2026-08-19 · flips when they appear in `resourceManagerInputSchema`)_
+- ☐ **SF-1** — `framework_gates` still undeclared; the contract mentions it only inside the
+  `phases` parameter's prose. (Original falsifier stands.)
+- ☐ **SF-2** — the confirm guard still sits above dispatch (`router.ts:76-80`) with no `dry_run`
+  exemption, and `HANDLER_OWNED_CONFIRMATION` is still `Set(['prompt:delete'])` alone. `d57a9c55`
+  reworked this guard without exempting previews. (Original falsifier stands.)
+- ☐ **SF-3** — `framework-lifecycle-processor.ts` still calls `recordEditResult` at :160 and
+  `writeFrameworkFiles` at :176. (Original falsifier stands.)
+- ☐ **SF-4** — `builtInFrameworks = ['cageerf','react','5w1h','scamper']` literal still at :244.
+  (Original falsifier stands.)
 
 ## 9. Proposed increment sequence — "settability parity" follow-up
 
@@ -239,6 +316,105 @@ Also flagged, not in the top 5 by severity but cheap to fix and cited above:
    flows.
 7. **Category resource type** — largest-scope item (new resource kind end-to-end); defer until the
    above prove out the write-scope/preservation pattern this would reuse.
+
+---
+
+## 10. Owner decisions — interview 2026-08-19
+
+Five rulings. Each names what it decides and what it costs, so a later reader can tell a decision
+from a default.
+
+### D1 — "remove this field" is an explicit `unset: [keys]` parameter
+
+Not a `null` sentinel and not per-field natural empties. Values and removal become orthogonal:
+`unset: ['system_message', 'register_with_mcp']` alongside ordinary value edits.
+
+Rows 2, 3 and 4 are **one diagnosis**, not three bugs — the tool had no way to express the verb
+"remove". Fixing them separately would have produced three conventions for one verb.
+
+Reuses the `suppliedKeys` write-scope machinery Fix B already built, and avoids the failure mode
+where an MCP client serializes absent and `null` identically. Every future clearable field is then
+free. Also dissolves row 3's "empty array means no change" ambiguity without a schema argument:
+`tools: []` keeps meaning "set to empty", `unset: ['tools']` means remove.
+
+### D2 — dropping a script tool deletes `tools/{id}/`, but only via an explicit removal verb
+
+`unset: ['tools']` and `tool_operation: 'remove'` delete the directory. A narrowed `tools` array
+only unbinds and leaves files alone.
+
+The split is deliberate: explicit removal verbs are destructive, value-shaped edits are not. An
+ordinary metadata update carrying a stale `tools` array must never become silently destructive —
+that is the class row 1 and Fix A were both about.
+
+Requires `confirm: true` on the destructive path and rollback coverage inside the existing
+mutation transaction.
+
+### D3 — preview becomes an action, not a flag
+
+`dry_run` is removed; `action: 'preview'` replaces it. Preview is simply not in
+`DESTRUCTIVE_ACTIONS`, so it never reaches the router's confirm guard at all.
+
+This makes non-destructiveness **structural** rather than a condition someone can get backwards —
+which is exactly how SF-2 happened. D2 forces the issue: once `unset` is destructive, a caller
+needs to preview it without first confirming the thing they are trying to preview.
+
+Supersedes SF-2's original instrument (adding pairs to `HANDLER_OWNED_CONFIRMATION`); that set
+stays as-is.
+
+### D4 — this arc rides the in-flight major and removes both dead members
+
+`[Unreleased]` already carries three breaking entries, so 5.0.0 is accruing. This arc takes:
+
+- `dry_run` removed → `action: 'preview'` (D3)
+- `chain_step_operation: 'replace'` — the vestigial no-op at `validation.ts:443` — removed, and
+  replaced by a real `'update'`-at-index operation, closing row 5b
+
+No deprecation window and no parallel paths, per `cleanup-standards.md` §Parity Gates Are Debt.
+The alternative (additive now, remove at 6.0.0) was rejected specifically because a stated
+retirement condition still needs something to notice it came true — the failure this project has
+already recorded.
+
+Both are reachable-shape-union changes, which the Public API Contract prices as breaking. Two
+CHANGELOG breaking entries required.
+
+### D5 — `resources/prompts/` becomes bundled-only and fully tracked
+
+Personal prompts move to the `MCP_WORKSPACE` overlay. `server/resources/prompts/.gitignore` (a
+deny-by-default `*` + 21-line allowlist) is deleted.
+
+This closes **P7-F4**. The overlay is not new machinery — CLAUDE.md already names `MCP_WORKSPACE`
+as the SSOT for all paths, with workspace resources overlaying bundled ones; it simply was not
+being used for this. Measured at decision time: 17 categories on disk, 8 in the allowlist, so
+`analysis`, `creative`, `debugging`, `general`, `tools`, `pr-review`, `resume`,
+`knowledge-capture`, `content_processing` and `framework-authoring` are invisible to git, as are
+most of `documentation/` and `development/`.
+
+Cost is a real migration of live personal prompts, felt daily until it settles.
+
+### D6 — sequencing: migration is tier 1 and blocks the rest
+
+The tracking migration lands **before** any unset/preview work.
+
+The reason is review integrity, not tidiness: D2's deletion path removes files under
+`resources/prompts/`, and reviewing that diff is meaningless while ten categories are invisible to
+git. Building the destructive path first would mean writing and reviewing it against a tree that
+cannot show its blast radius.
+
+### Resulting tier order
+
+| Tier | Work                                                                         | Closes                     |
+| ---- | ---------------------------------------------------------------------------- | -------------------------- |
+| T1   | Prompt-tracking migration to `MCP_WORKSPACE`; delete the resources gitignore | P7-F4, D5                  |
+| T2   | `unset: [keys]` parameter + `action: 'preview'`; remove `dry_run`            | rows 2 and 4, SF-2, D1, D3 |
+| T3   | `tool_operation` + directory deletion on explicit removal, behind `confirm`  | row 3, D2                  |
+| T4   | `chain_step_operation: 'update'`; remove `'replace'`                         | row 5b, D4                 |
+
+**Deferred, and still open with their falsifiers**: SF-1, SF-3, SF-4, gate
+`severity`/`enforcementMode`/`gate_type` settability, `inspect format:'json'` (row 5c), the
+`category` resource type, and the `create_prompt` file-reference bridge. §9's original
+"defer the category type until the write-scope pattern proves out" condition HAS now come true
+(Fix A/B shipped) — it is deferred on scope, not on that condition, and this note is here so the
+next reader does not re-derive it.
 
 ---
 
