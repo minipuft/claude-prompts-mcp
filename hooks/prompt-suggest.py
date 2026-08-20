@@ -18,6 +18,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import cast
 
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -411,6 +412,30 @@ def format_prompt_suggestion(prompt_id: str, info: PromptInfo, score: int = 0) -
     return f"  >>{prompt_id}{chain_tag}: {desc}"
 
 
+def format_unknown_prompt_message(invoked_prompt: str, suggestions: list[str]) -> str:
+    """
+    Render the unknown-prompt message, including each suggestion's argument
+    signature so a corrected re-invocation can be typed without a second lookup.
+
+    A suggestion whose metadata will not resolve still gets a line: a name the
+    user can retype is more useful than dropping it because its arguments are
+    unavailable.
+    """
+    if not suggestions:
+        return f"Unknown prompt '{invoked_prompt}'. No similar prompts found."
+
+    lines = [f"Unknown prompt '{invoked_prompt}'. Did you mean:"]
+    for suggestion in suggestions:
+        info = get_prompt_by_id(suggestion)
+        raw_args = info.get("arguments", []) if info else []
+        # isinstance narrows to dict, not to the TypedDict, so the cast is what
+        # keeps format_arg_signature's parameter type honest.
+        args: list[ArgumentInfo] = [cast(ArgumentInfo, arg) for arg in raw_args if isinstance(arg, dict)]
+        signature = ", ".join(format_arg_signature(arg) for arg in args[:5]) if args else "(no args)"
+        lines.append(f"  >>{suggestion} {signature}")
+    return "\n".join(lines)
+
+
 def format_user_message(
     command: str,
     parsed_args: dict[str, str],
@@ -691,11 +716,7 @@ def main():
         # This saves tokens by avoiding a failing server round-trip
         if invoked_prompt and prompt_info is None:
             suggestions = fuzzy_match_prompt_id(invoked_prompt)
-
-            if suggestions:
-                message = f"Unknown prompt '{invoked_prompt}'. Did you mean: {', '.join(suggestions)}?"
-            else:
-                message = f"Unknown prompt '{invoked_prompt}'. No similar prompts found."
+            message = format_unknown_prompt_message(invoked_prompt, suggestions)
 
             # Return message WITHOUT directive (no tool call needed)
             hook_response = {
@@ -721,11 +742,21 @@ def main():
         system_message = format_user_message(command, parsed_args, operators, arguments, expanded, prompt_info)
         directive = format_directive(command, parsed_args, required_args, operators, arguments, prompt_info)
 
+        # Both channels carry the resolution line, deliberately. `systemMessage`
+        # is rendered by the CLI but dropped entirely by clients that do not
+        # consume hook events -- T3 Code emits hook.started/progress/completed
+        # and has no consumer for any of them -- so without this a successful
+        # >>invocation shows the user nothing while a failed one shows
+        # everything, because the unknown-prompt path above has always assigned
+        # the same string to both fields. `additionalContext` is injected into
+        # the conversation rather than carried as a hook event, so it is the
+        # channel that survives. The directive keeps its trailing position: the
+        # blocking instruction must stay the last thing read.
         hook_response = {
             "systemMessage": system_message,  # Compact user confirmation
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
-                "additionalContext": directive,  # Structured directive for Claude
+                "additionalContext": f"{system_message}\n{directive}",
             },
         }
         print(json.dumps(hook_response))
