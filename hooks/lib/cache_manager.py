@@ -267,10 +267,13 @@ def fuzzy_match_prompt_id(query: str, max_results: int = 3) -> list[str]:
             score += max(0, SCORING["levenshteinBaseScore"] - distance * SCORING["levenshteinPenaltyPerEdit"])
 
         if score > 0:
-            # Store lowercase ID to align with MCP server case-insensitive matching
-            scored.append((id_lower, score))
+            # Score on the folded id, but return the id as authored. Matching is
+            # case-insensitive on both sides, so the folded key is an
+            # implementation detail -- returning it made suggestions print names
+            # that do not exist (strategicImplement -> "strategicimplement").
+            scored.append((prompt_id, score))
 
-    # Sort by score descending, return top N (already lowercase)
+    # Sort by score descending, return top N (authored casing preserved)
     scored.sort(key=lambda x: x[1], reverse=True)
     return [pid for pid, _ in scored[:max_results]]
 

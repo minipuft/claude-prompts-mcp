@@ -266,82 +266,20 @@ def get_required_args(prompt_info: PromptInfo | None, parsed_args: dict[str, str
     return required
 
 
-def get_chain_step_args(
-    prompt_ids: list[str],
-) -> list[tuple[str, list[ArgumentInfo]]]:
-    """Fetch arguments for each prompt in a chain.
-
-    Args:
-        prompt_ids: List of prompt IDs in chain order
-
-    Returns:
-        List of (prompt_id, arguments) tuples
-    """
-    result: list[tuple[str, list[ArgumentInfo]]] = []
-    for pid in prompt_ids:
-        info = get_prompt_by_id(pid)
-        args = info.get("arguments", []) if info else []
-        result.append((pid, args))
-    return result
-
-
-def format_arg_signature(arg: ArgumentInfo, include_desc: bool = False) -> str:
+def format_arg_signature(arg: ArgumentInfo) -> str:
     """Format a single argument for display.
 
     Args:
-        arg: Argument dict with name, type, required, description
-        include_desc: If True, append truncated description for context
+        arg: Argument dict with name, type, required
 
     Returns:
-        Compact format: name*:type or name*:type (description...)
+        Compact format: name*:type
     """
     name = arg.get("name", "unknown")
     arg_type = arg.get("type", "string")
     required = arg.get("required", False)
     req_marker = "*" if required else ""
-    base = f"{name}{req_marker}:{arg_type}"
-
-    if include_desc:
-        desc = arg.get("description", "")
-        if desc:
-            # Truncate long descriptions for token efficiency
-            short = desc[:50] + "..." if len(desc) > 50 else desc
-            return f"{base} ({short})"
-    return base
-
-
-def format_chain_step_args(
-    step_data: list[tuple[str, list[ArgumentInfo]]],
-    current_step: int = 1,
-    total_steps: int = 0,
-) -> list[str]:
-    """Format chain steps with their arguments (balanced mode).
-
-    Args:
-        step_data: List of (prompt_id, arguments) tuples
-        current_step: 1-based current step (arrow marker)
-        total_steps: Total steps (for header)
-
-    Returns:
-        Lines including header and step list
-    """
-    total = total_steps or len(step_data)
-    lines = [f"[MCP Chain] Step {current_step}/{total}"]
-
-    for i, (pid, args) in enumerate(step_data, start=1):
-        # Arrow marker for current step
-        marker = "→" if i == current_step else " "
-
-        # Balanced: first 2 args get descriptions, rest signature only
-        arg_parts = []
-        for j, arg in enumerate(args[:5]):  # Max 5 args shown
-            sig = format_arg_signature(arg, include_desc=(j < 2))
-            arg_parts.append(sig)
-
-        arg_str = ", ".join(arg_parts) if arg_parts else "(no args)"
-        lines.append(f"  {marker}{i}. >>{pid}: {arg_str}")
-
-    return lines
+    return f"{name}{req_marker}:{arg_type}"
 
 
 def format_chain_preview(
@@ -379,30 +317,11 @@ def format_chain_preview(
     # Case 2: Ad-hoc chain (using --> syntax)
     if adhoc_chain and len(adhoc_chain) > 1:
         lines = [f"[Chain Workflow] {len(adhoc_chain)} steps:"]
-        for i, prompt_id in enumerate(adhoc_chain):
-            lines.append(f"  {i + 1}. {prompt_id}")
+        for i, step_id in enumerate(adhoc_chain):
+            lines.append(f"  {i + 1}. {authored_id(step_id)}")
         return lines
 
     return []
-
-
-def format_tool_call(prompt_id: str, info: dict) -> str:
-    """Generate a copy-paste ready tool call."""
-    args = info.get("arguments", [])
-
-    if not args:
-        return f'prompt_engine(command:">>{prompt_id}")'
-
-    # Build options object
-    options_parts = []
-    for arg in args:
-        name = arg.get("name", "")
-        default = arg.get("default")
-        placeholder = f'"{default}"' if default else f'"<{name}>"'
-        options_parts.append(f'"{name}": {placeholder}')
-
-    options_str = ", ".join(options_parts)
-    return f'prompt_engine(command:">>{prompt_id}", options:{{{options_str}}})'
 
 
 def format_prompt_suggestion(prompt_id: str, info: PromptInfo, score: int = 0) -> str:
@@ -410,6 +329,25 @@ def format_prompt_suggestion(prompt_id: str, info: PromptInfo, score: int = 0) -
     chain_tag = f" [{info.get('chain_steps', 0)}]" if info.get("is_chain") else ""
     desc = info.get("description", "")[:60]
     return f"  >>{prompt_id}{chain_tag}: {desc}"
+
+
+def authored_id(candidate: str, info: PromptInfo | None = None) -> str:
+    """
+    The prompt id as the registry authored it.
+
+    Resolution is case-insensitive on both sides -- command-parser.ts folds case
+    to find the prompt and then returns `found.id` -- so the folded lookup key is
+    an implementation detail. Printing that key teaches a spelling that does not
+    exist: two ids carry case today, `strategicImplement` and `diagnosisCard`.
+
+    Takes the record where the caller already has one, so display resolves
+    through the registry rather than through whatever string was used to look it
+    up. An unresolvable name falls back to what the user typed, which is the only
+    honest thing to echo when there is no record to be faithful to.
+    """
+    record = info if info is not None else get_prompt_by_id(candidate)
+    authored = (record or {}).get("id")
+    return authored if isinstance(authored, str) and authored else candidate
 
 
 def format_unknown_prompt_message(invoked_prompt: str, suggestions: list[str]) -> str:
@@ -462,7 +400,8 @@ def format_user_message(
     # Extract prompt ID from command (handle @framework >>prompt syntax)
     # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
     match = re.search(r">>\s*([a-zA-Z0-9_-]+)", command)
-    prompt_id = match.group(1).lower() if match else command.lower()
+    typed = match.group(1) if match else command
+    prompt_id = authored_id(typed, prompt_info)
 
     if expanded:
         return _format_expanded_message(prompt_id, command, parsed_args, operators, arguments, prompt_info)

@@ -178,7 +178,7 @@ input'` used `xyzzy123` — a _single_ token, which never reaches the word-overl
 throughout the entire lifetime of the defect. Multi-token nonsense is where the term bites, and
 that case now has a test on both sides.
 
-### ☐ 6 — The echoed prompt id is case-folded, the command is not
+### ✓ 6 — The echoed prompt id is case-folded, the command is not
 
 `[>> prompt_engine] strategicimplement` renders lowercase while the directive below it carries
 `command:">>strategicImplement"`. `detect_prompt_invocation()` lowercases for cache lookup and the
@@ -186,7 +186,122 @@ display reuses that value. Cosmetic, pre-existing, and newly _visible_ because r
 in front of the user — copying the echoed id gives a name that differs from what was typed.
 Verification: `>>strategicImplement` echoes the id with its original casing while cache lookup
 stays case-folded.
-_(as of 2026-08-19 · flips when someone copies the echoed id and it round-trips unchanged)_
+**✓ 2026-08-20 — the truth is the registry's authored `id`.** The system had already decided:
+`command-parser.ts:537-539` folds case to _find_ the prompt and then returns `found.id`. The hook
+was the only place printing the folded lookup key. Two of 99 ids carry case — `strategicImplement`
+and `diagnosisCard` — and both are in daily use.
+
+Rule adopted: **display resolves through the record.** `authored_id(candidate, info=None)` takes
+the record where the caller already has one, so no folded key is available to print by accident;
+an unresolvable name falls back to what was typed, which is the only honest echo when there is no
+record to be faithful to.
+
+| Site                                        | Before                                 | After                             |
+| ------------------------------------------- | -------------------------------------- | --------------------------------- |
+| `cache_manager.fuzzy_match_prompt_id`       | returned `id_lower` by design          | returns the authored id           |
+| the echo (`format_user_message`)            | `match.group(1).lower()`               | `authored_id(typed, prompt_info)` |
+| ad-hoc chain steps (`format_chain_preview`) | printed the folded step ids            | each step resolved                |
+| `format_prompt_suggestion`                  | _already correct_ — returns cache keys | unchanged                         |
+
+Falsifier met — `>>diagnosiscrd` → `>>diagnosisCard`. All three spellings
+(`strategicImplement` / `strategicimplement` / `STRATEGICIMPLEMENT`) echo the authored form, while
+`command:"..."` keeps what the user typed verbatim, because the server parses that string.
+
+**Rejected: making lowercase the truth.** Case is not identity here (resolution folds case _and_
+delimiters, so two ids differing only by case cannot coexist), which argues for
+canonical-by-construction ids. It fails on cost: renaming `strategicImplement` →
+`strategic_implement` breaks that spelling everywhere, because the delimiter fallback normalises
+`[-_]+ → _` but cannot _insert_ an underscore into `strategicimplement`. That buys a smaller
+invariant for a permanent alias table. No id-format validator was added either — once display
+resolves through the record a case-carrying id is harmless, and a gate guarding a closed class of
+bug is one nobody can retire.
+
+### ✓ 7 — Three dead display helpers in prompt-suggest.py
+
+`format_tool_call` (:389), `get_chain_step_args` (:269), and `format_chain_step_args` (:313) are
+defined and never called — found while enumerating display sites for row 6. Same shape as the
+`createDidYouMeanSuggestion` deletion in row 5. Left in place deliberately: outside row 6's
+approved scope, and `cleanup-standards.md` §Do or Kill says the row is the record, not a mental
+note. Verification: `rg` shows a call site, or they are deleted.
+**✓ 2026-08-20 — 87 lines removed.** Re-measured first, because the file had changed twice that
+day and another session was live in the tree: `rg` across the repo (excluding `node_modules`,
+`.history`, `logs`, `plans`) returned only `def` lines for all three. Authored anchors `:389`,
+`:269`, `:313` matched measured exactly — no drift. No dynamic dispatch: the only `getattr` in
+`hooks/` is conftest's mock validator.
+
+| Removed                                | Lines |
+| -------------------------------------- | ----- |
+| `format_tool_call`                     | 21    |
+| `format_chain_step_args`               | 36    |
+| `get_chain_step_args`                  | 21    |
+| `format_arg_signature(include_desc=…)` | 9     |
+
+The fourth is the orphan the deletion created: `format_chain_step_args` was the only caller passing
+`include_desc=True`, so that branch became unreachable the moment it went. Removing the three and
+leaving a permanently-false parameter is the partial removal `cleanup-standards.md` names as an
+anti-pattern.
+
+Survivors verified rather than assumed: `ArgumentInfo` and `format_arg_signature` both live on
+through row 4's `format_unknown_prompt_message`. File 860 → 773 lines. All three live display paths
+driven end-to-end after the cut — hit with arguments, ad-hoc two-step chain, and the miss path that
+exercises the reduced `format_arg_signature` (`>>diagnosisCard signals:string`).
+
+### ✓ 8 — `lint:ratchet` is red, and NOT from this work
+
+`max-lines` warnings went baseline=1 → current=2. Attributed, not assumed:
+`server/src/engine/execution/operators/chain-operator-executor.ts` is modified in the working tree
+by **another session** — it threads a `promptDir` parameter through `renderTemplateString`, is 1384
+lines against 1374 at HEAD, and its mtime (00:15:23) is later than this work's last edit
+(00:12:33). The other offender, `modules/chains/manager.ts`, is unmodified and is the baseline's
+single entry.
+
+No file touched by rows 3-7 appears in the `max-lines` report. Per the execution protocol a red
+check caused by another workstream is not this tier's failure and must not be fixed here — but it
+IS recorded, because a gate nobody can pass blocks every later tier.
+**✓ 2026-08-20 — resolved by the other session, not by this work.** The falsifier fired on its
+first branch: `chain-operator-executor.ts` is now 1369 lines (was 1384) and no longer clears the
+counted-line limit. `lint:ratchet` passes, and `manager.ts` is again the baseline's single entry.
+The file is still modified in the working tree — the other session kept going and shrank it. No
+baseline was regenerated, and nothing here touched that file.
+
+Closed on evidence rather than left standing: a `⚠` that outlives its condition reads as a live
+blocker to the next person, which is the stale-marker failure `cleanup-standards.md` describes in
+both polarities.
+
+### ☐ 9 — Operator syntax inside an argument VALUE is parsed as command structure
+
+Found by hitting it twice while dispatching row 7, in two independent components:
+
+1. **`prompt_engine` rejected a valid single-prompt call.** `command:">>strategicImplement"` with a
+   `task` whose prose contained `>>a --> >>b` failed with
+   `Single prompt command required for framework resolution`. Removing only the `-->` from the
+   argument text — same command, same everything else — made the identical call succeed. The chain
+   delimiter is being read out of an argument value.
+2. **The PostToolUse hook invented a chain id from a filename.** It emitted
+   `chain_id="chain-operator-executor"`, extracted from the string `chain-operator-executor.ts`
+   appearing in the task prose, because the id pattern `^chain-[a-zA-Z0-9_-]+` matches inside it.
+
+Both are the same shape: **content the user supplied as data is being scanned for control syntax.**
+Consequence today is a confusing rejection and a bogus id; the general shape is that any task text
+mentioning `-->`, `>>`, or a `chain-*` filename can steer or break dispatch. Writing about this
+system inside a task for this system is a normal thing to do, so the collision is not exotic.
+
+Verification: a `task` value containing `-->`, `==>`, `>>step`, and `chain-foo.ts` executes as a
+single prompt, and the PostToolUse hook reports no chain id.
+_(as of 2026-08-20 · flips when the above round-trips clean)_
+
+### ☐ 10 — `strategicImplement` sessions never clear, and report `Step 2/1`
+
+`system_control action:"session" operation:"list"` shows **9 active sessions**, one per
+`strategicImplement` run from 02:27 onward, all reading `Progress: Step 2/1` — a current step past
+the declared total, on a chain whose gate verdict was submitted and accepted. Nothing reaps them.
+
+Not blocking anything observed, but it is unbounded growth in visible state, and `Step 2/1` means
+either the step counter or the total is wrong for every single-step run.
+
+Verification: after a completed `strategicImplement` run, `session list` shows no residual entry
+for it, and no session reports a step greater than its total.
+_(as of 2026-08-20 · flips when a completed run leaves no active session behind)_
 
 ## Sequencing
 

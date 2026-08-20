@@ -95,6 +95,85 @@ sweep and its numbers live in the contract's `rationale` field, next to the valu
 `the_quick_brown_fox` still matches `quick_decision`. That is correct, not residue — "quick" is a
 genuine shared word.
 
+## Row 6 execution (2026-08-20)
+
+**No deviation from the approved shape.** Two behaviour changes plus one helper, as scoped.
+
+**Discovered — three more dead helpers.** Enumerating every display site turned up
+`format_tool_call`, `get_chain_step_args`, and `format_chain_step_args`: defined, never called.
+The same shape as row 5's `createDidYouMeanSuggestion`, and the second time in two days that
+walking a call graph found dead code in this file. Deliberately NOT deleted — the user scoped row
+6 to the display fix, and having already widened scope once today (row 5's contract), the
+disciplined move was to record row 7 rather than take the liberty twice.
+
+**Discovered — a concurrent session is editing this repo.**
+`server/src/engine/execution/operators/chain-operator-executor.ts` appeared modified between two
+`git status` runs in the same session: absent at the row-5 scope check, present at the row-6 one,
+mtime 00:15:23 against this work's last edit at 00:12:33, threading a `promptDir` parameter
+through `renderTemplateString`. It pushed `max-lines` from baseline=1 to current=2 and turned
+`lint:ratchet` red.
+
+Attributed rather than assumed, and left alone: no file touched by rows 3-7 appears in the
+`max-lines` report. Recorded as row 8 (⚠) because a gate nobody can pass blocks every later tier.
+This is also the first live instance of the exact condition the t3-md overlap panel was built to
+detect — two actors in one repo inside the same minutes — arriving the day after that panel
+shipped with its live branch still unobserved.
+
+**Rows 3-5 were committed by another actor while row 6 was in progress**, in four commits between
+23:59:28 and 00:03:52, all authored as `minipuft`:
+
+```
+b5b1904c  fix(contracts): give both suggestion matchers one scoring contract and a word floor
+c17864d9  refactor(server): delete the unreachable did-you-mean duplicate
+488e5bb1  fix(hooks): carry the >> resolution line on the channel clients actually read
+e01b4038  docs(docs): archive the script-tools notes its plan retirement left behind
+```
+
+**Verified intact, not assumed**: all four row-5 artifacts are on disk and tracked, and the floor
+is still applied in both matchers (`cache_manager.py:253`, `command-parser.ts:612`). Nothing was
+lost or mangled. An intermediate `git status` in this session showed those paths missing, which
+read as deletion; they had been committed. Recorded because the wrong reading was the obvious one.
+
+**Row 6 remains uncommitted** — `hooks/lib/cache_manager.py`, `hooks/prompt-suggest.py`, and
+`hooks/tests/test_prompt_id_display_fidelity.py`.
+
+**Consequence for committing**: `git commit -a` here would still sweep up the other session's
+in-progress `chain-operator-executor.ts`, `symbolic-command-builder.ts`, and
+`yaml-prompt-loader.ts`. Any commit of row 6 must name its three paths explicitly.
+
+## Row 7 execution (2026-08-20)
+
+**No deviation.** Three dead helpers deleted as scoped, plus the one orphan the deletion created.
+
+**The orphan is the part worth remembering.** `format_chain_step_args` was the only caller passing
+`include_desc=True` to `format_arg_signature`, so removing it made that branch unreachable. Cutting
+the three functions and leaving a parameter that can now only ever be false is exactly the partial
+removal `cleanup-standards.md` names — the dead code would have survived the dead-code deletion.
+Checking what a removal orphans is a step, not a courtesy.
+
+**Discovered — argument values are scanned for control syntax (row 9).** Dispatching row 7 failed
+twice with `Single prompt command required for framework resolution` before the cause was clear: the
+`task` argument contained `>>a --> >>b` as prose, and the chain delimiter was read out of the
+argument value. Removing only the `-->` — same command, same everything else — made the identical
+call succeed. Then the PostToolUse hook emitted `chain_id="chain-operator-executor"`, extracted from
+the filename `chain-operator-executor.ts` in the same prose. Two components, one shape: data scanned
+as syntax. Writing about this system inside a task for this system is ordinary, so this is not an
+exotic collision.
+
+**Discovered — nine unreaped sessions (row 10).** `session list` shows one active session per
+`strategicImplement` run since 02:27, all reading `Step 2/1` on runs whose gate verdicts were
+accepted.
+
+**Row 8 closed by evidence, not by this work.** `chain-operator-executor.ts` is now 1369 lines
+(was 1384); the other session kept working and shrank it under the counted-line limit.
+`lint:ratchet` passes and `manager.ts` is again the baseline's single entry. Closed rather than left
+standing: a `⚠` that outlives its condition reads as a live blocker to whoever comes next.
+
+**Gate scope came from the project's own SSOT.** `scripts/classify-validation-scope.js` classifies
+this change as `{"scope":"hooks","reason":"Only Python hooks and documentation changed."}`, whose
+declared gate is `validate:python`. The TS gates were run anyway and both pass — that is how row 8's
+resolution was noticed.
+
 ## Validation ledger
 
 | What                                          | Command                                                              | Result                                                                                         |
@@ -111,6 +190,17 @@ genuine shared word.
 | **Row 5** — `npm run validate:python`         | ruff + pyrefly + pytest                                              | PASS — **210 passed** (8 new)                                                                  |
 | **Row 5** — registry/contract/arch validators | `registry-coherence`, `operator-registry-drift`, `contracts`, `arch` | all PASS                                                                                       |
 | **Row 5** — falsifier                         | `>>zzzqqq_no_such_thing` / `>>test_defult`                           | silent / resolves — both halves met                                                            |
+| **Row 6** — `npm run validate:python`         | ruff + pyrefly + pytest                                              | PASS — **220 passed** (10 new)                                                                 |
+| **Row 6** — `npm run typecheck`               | strict TS                                                            | PASS                                                                                           |
+| **Row 6** — `npm run typecheck:tests:ratchet` | tests/ regression gate                                               | PASS (369, no regressions)                                                                     |
+| **Row 6** — `npm run test:ci`                 | full unit suite                                                      | **2678 passed**, 1 skipped                                                                     |
+| **Row 6** — `npm run lint:ratchet`            | ESLint regression gate                                               | **RED — attributed to another session, see row 8**                                             |
+| **Row 6** — falsifier                         | `>>diagnosiscrd`                                                     | → `>>diagnosisCard` — met                                                                      |
+| **Row 7** — `npm run validate:python`         | the declared gate for `hooks` scope                                  | PASS — **220 passed**                                                                          |
+| **Row 7** — `npm run typecheck`               | strict TS                                                            | PASS                                                                                           |
+| **Row 7** — `npm run lint:ratchet`            | ESLint regression gate                                               | **PASS** — row 8 resolved itself                                                               |
+| **Row 7** — live drive                        | hit w/ args · ad-hoc chain · miss w/ suggestions                     | all three render; `>>diagnosisCard signals:string` proves the reduced `format_arg_signature`   |
+| **Row 7** — residue                           | `rg` for all four removed names                                      | none                                                                                           |
 
 **Not validated, and cannot be from here**: whether `additionalContext` renders inline in a T3
 _thread_. Every check above ran in a terminal, where both channels are visible — which is exactly
