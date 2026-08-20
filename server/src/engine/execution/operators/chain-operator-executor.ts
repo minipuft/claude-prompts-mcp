@@ -179,10 +179,11 @@ export class ChainOperatorExecutor {
           targetIndex
         );
 
-        const renderedTemplate = await this.renderTemplate(
-          convertedPrompt,
+        const renderedTemplate = await this.renderTemplateString(
+          convertedPrompt.userMessageTemplate,
           templateContext,
-          targetStep.promptId
+          targetStep.promptId,
+          convertedPrompt.promptDir
         );
 
         const intentForReview = this.buildOriginalIntentSection(chainContext);
@@ -482,7 +483,8 @@ export class ChainOperatorExecutor {
     const renderedTemplate = await this.renderTemplateString(
       convertedPrompt.userMessageTemplate,
       templateContext,
-      step.promptId
+      step.promptId,
+      convertedPrompt.promptDir
     );
 
     const lines: string[] = [];
@@ -1203,22 +1205,11 @@ export class ChainOperatorExecutor {
     return result;
   }
 
-  private async renderTemplate(
-    convertedPrompt: ConvertedPrompt,
-    templateContext: Record<string, unknown>,
-    promptId: string
-  ): Promise<string> {
-    return this.renderTemplateString(
-      convertedPrompt.userMessageTemplate,
-      templateContext,
-      promptId
-    );
-  }
-
   private async renderTemplateString(
     templateString: string,
     templateContext: Record<string, unknown>,
-    promptId: string
+    promptId: string,
+    promptDir?: string
   ): Promise<string> {
     try {
       // Use reference resolver if available, otherwise fall back to standard template processing
@@ -1230,7 +1221,11 @@ export class ChainOperatorExecutor {
           templateContext,
           {},
           referenceResolver,
-          { scriptResolver: scriptReferenceResolver }
+          // `promptDir` enables prompt-local script lookup (WorkspaceScriptLoader tries
+          // `${promptDir}/tools/${id}/` before workspace `resources/scripts/${id}/`). Omitting
+          // it made a prompt with its own tool render standalone but fail as a chain step,
+          // naming only the workspace path. 18-execution-stage always passed it.
+          { scriptResolver: scriptReferenceResolver, promptDir }
         );
         return result.content;
       }

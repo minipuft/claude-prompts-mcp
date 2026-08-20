@@ -313,7 +313,15 @@ export function discoverYamlPrompts(categoryDir: string, prefix: string = ''): s
       entry.name.endsWith('.yaml') &&
       entry.name !== 'prompts.yaml' &&
       entry.name !== 'category.yaml' &&
-      entry.name !== 'prompt.yaml'
+      entry.name !== 'prompt.yaml' &&
+      // `tool.yaml` is a script-tool manifest under a prompt's reserved `tools/${id}/`
+      // directory, reached because discovery ALWAYS recurses (above). It is a reserved
+      // filename in the same sense as the three preceding it — not a prompt in a shape the
+      // prompt schema could ever accept. Without this, every boot logged
+      // `[PromptLoader] Invalid YAML in .../tools/word_count/tool.yaml: Prompt must have
+      // userMessageTemplate/... defined` at ERROR level for a file that is not a prompt,
+      // which is how a log level stops meaning anything.
+      entry.name !== 'tool.yaml'
     ) {
       // File pattern: {prompt_id}.yaml (skip metadata and directory-indicator files)
       const baseName = entry.name.replace(/\.yaml$/, '');

@@ -52,6 +52,45 @@ excludes from the surviving-unique list (which names only §A, §E, §F, §G). T
 and its auto-detect semantics and routes them through `>>design_muse` + the surface creative skills
 in one line under step 3 Route. Parity preserved, duplication not.
 
+**R-4 — OQ (interview 2026-08-19): Tier D is fixed in this session, not deferred. OWNER-RULED.**
+D.2 landed. D.1 did not, for a reason the ruling could not have anticipated — see R-9.
+
+**R-5 — plan-row-tracking locates a row's status by HEADER-DRIVEN COLUMN LOOKUP. OWNER-RULED
+2026-08-19.** `validate-plan-row-tracking.js:239` scans the whole line for a glyph, so a row whose
+Status cell reads ✓ fails when its Change text quotes ☐. Rejected: positional second-cell (silently
+stops grading tables with another shape — a false negative in the gate built to prevent exactly
+that), code-span exclusion (would not have caught the observed case, whose glyphs were bare prose),
+and leaving it (an unenforced convention). NOT YET IMPLEMENTED.
+
+**R-6 — `backlog → active` flips on the FIRST SOURCE EDIT WHILE A BACKLOG PLAN IS BOUND.
+OWNER-RULED 2026-08-19**, after the interview surfaced that both obvious readings fail: flipping on
+plan-file edit leaves today's gap open (editing source before touching the plan is the common
+order), and flipping on Read makes browsing mutate tracked files. The chosen trigger is the exact
+moment `notes-skeleton.py` already evaluates — a source edit with a bound plan — so both halves are
+already computed and no new signal is invented. Measured blast radius at ruling time: 1 backlog
+plan, 0 open rows. NOT YET IMPLEMENTED.
+
+**R-7 — shared-worktree concurrency: capture the pattern, do not act. OWNER-RULED 2026-08-19.**
+Three collisions in one session (row 3.5 swept into a foreign commit; a foreign `git reset`
+emptying a commit; foreign file moves reddening validate:format). Rejected for now: per-session
+worktrees, single-writer convention. Feeds `/knowledge-capture` as a third sighting.
+
+**R-8 — validation-ledger command extraction records the PARSED command, not a grep of the Bash
+input. RULED BY ME 2026-08-19, flagged to the owner as mine rather than theirs.** The ledger
+currently captures prose from heredocs (`npm run validate:all' PLUS`). No design ambiguity: a
+ledger of commands should hold commands. NOT YET IMPLEMENTED.
+
+**R-9 — D.1 is a DIFFERENT DEFECT than filed, and its fix is unruled. SURFACED 2026-08-20.**
+The owner authorized "fix Tier D now" on the understanding that both rows were argument-default
+defects. D.2 was; D.1 is not. After the D.2 fix, D.1's symptom CHANGED from
+`Missing required field: text` to `Template rendering failed`, and the swallowed cause is
+`ScriptNotRegisteredError: Script "word_count" not found. Searched: .../resources/scripts/word_count`.
+Chain mode resolves script tools from the GLOBAL scripts directory only, so a prompt-scoped tool
+under `resources/prompts/<id>/tools/<tool>/` is unreachable from a chain. That is the script-tool
+registry/scope subsystem, not the parser. Authorization does not transfer across that boundary, so
+the row is marked ⚠ with its premise rewritten and the fix left unruled rather than widened
+silently.
+
 ## Deviations
 
 | Id       | What the plan asserted                                                                          | What was measured (2026-08-19)                                                                                                                                                                                                                                | Action taken                                                                                                                                                                              |
@@ -84,3 +123,19 @@ in one line under step 3 Route. Parity preserved, duplication not.
   pre-existing, and outside this plan's non_goals (no server src changes for T1–T5). Not chased.
   Flips when a step output containing all four headers passes structural review with no
   improvement notice. Belongs to whichever plan owns the phase-guard evaluator.
+
+- **U-4 — the PromptLoader tries to load tool manifests as prompts.** Observed in server stderr on
+  every boot during the D.1 probe: `[ERROR] [PromptLoader] Invalid YAML in
+.../reference_demo/tools/word_count/tool.yaml: Prompt must have userMessageTemplate/
+userMessageTemplateFile, chainSteps, or systemMessage defined`. The loader walks a prompt's
+  `tools/` subdirectory and grades each `tool.yaml` against the PROMPT schema, which it can never
+  satisfy. Harmless today (the error is logged and the tool still works on the single-prompt path)
+  but it is a permanent ERROR-level line on every startup, which trains readers to ignore the level.
+  Adjacent to D.1, discovered while probing it, and NOT part of any ruled scope. Flips when a boot
+  with `reference_demo` present logs no PromptLoader error for a `tools/**/tool.yaml`.
+- **U-5 — my own live-drive probe reported a false PASS.** The first `/tmp/probe-tierD.mjs`
+  predicate tested only for `Missing required field`, so it passed a chain response whose body was
+  `[ERROR] Template rendering failed`. A probe whose predicate is narrower than the failure it is
+  hunting is a vacuous check — the same class as a gate that cannot observe the files a row wrote,
+  which this plan's own step 6 warns about. Corrected mid-session; recorded because I wrote the
+  warning and then tripped it.

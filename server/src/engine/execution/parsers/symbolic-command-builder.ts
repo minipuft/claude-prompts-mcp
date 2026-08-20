@@ -287,17 +287,20 @@ export class SymbolicCommandBuilder {
     const defaults = this.collectArgumentDefaults(prompt);
 
     if (!sanitizedArgs?.trim()) {
-      if (Object.keys(fallbackArgs ?? {}).length > 0) {
-        return {
-          processedArgs: { ...defaults, ...fallbackArgs },
-          resolvedPlaceholders: {},
-          inlineCriteria: normalizedSeed,
-        };
-      }
-
+      // Empty args resolve through ArgumentParser, not through collectArgumentDefaults alone.
+      // That helper reads author-declared `defaultValue` only, while the parser's fallback
+      // strategy (`canHandle: () => true`) resolves EVERY declared argument through the full
+      // ladder: author default -> promptDefaults -> environment -> `{value:'', empty_fallback}`.
+      // The direct command path has always gone through the parser, so returning the narrower
+      // set here made one prompt render two ways depending on whether a symbolic operator was
+      // present: `>>reference_demo` rendered text="" while `>>reference_demo :: code-quality`
+      // dropped `text` and failed its script tool's input validation. The empty-args case is
+      // the ONLY one a gate-token-only command produces, which is why attaching a gate to any
+      // prompt whose arguments are all optional-or-defaulted was a latent failure.
+      const resolved = await this.parseArgumentsSafely('', prompt);
       return {
-        processedArgs: defaults,
-        resolvedPlaceholders: {},
+        processedArgs: { ...resolved.processedArgs, ...defaults, ...(fallbackArgs ?? {}) },
+        resolvedPlaceholders: resolved.resolvedPlaceholders,
         inlineCriteria: normalizedSeed,
       };
     }
@@ -322,13 +325,10 @@ export class SymbolicCommandBuilder {
     argsString: string,
     prompt: ConvertedPrompt
   ): Promise<ParsedArgumentsResult> {
-    if (!argsString?.trim()) {
-      return {
-        processedArgs: {},
-        resolvedPlaceholders: {},
-      };
-    }
-
+    // No empty-string short-circuit. An empty argument string is a REAL case the parser
+    // answers (its fallback strategy resolves every declared argument), and returning `{}`
+    // here would silently defeat the empty-args path above — the guard stood exactly where
+    // the defect was.
     try {
       const argResult = await this.argumentParser.parseArguments(
         argsString,

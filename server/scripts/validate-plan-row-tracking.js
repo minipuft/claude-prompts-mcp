@@ -220,6 +220,76 @@ export function auditPlanText(planPath, content, tracked) {
 }
 
 /**
+ * Split a markdown table row into trimmed cells, honouring `\|` escapes.
+ *
+ * Escaped pipes matter: plan prose regularly contains shell pipelines inside a cell
+ * (`rg ... \| grep -c`), and splitting on those shifts every later column by one — which would
+ * move the status column under a gate that reads it positionally.
+ */
+function cellsOf(line) {
+  const trimmed = line.trim();
+  const inner = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+  const body = inner.endsWith('|') && !inner.endsWith('\\|') ? inner.slice(0, -1) : inner;
+  return body.split(/(?<!\\)\|/).map((cell) => cell.trim());
+}
+
+/** A markdown separator row: `| --- | :--: |`. */
+function isSeparatorRow(line) {
+  const cells = cellsOf(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+/** The header cell that names the status column. `St` is this repo's convention; `Status` is spelled out elsewhere. */
+const STATUS_HEADER = /^(?:st|status)$/i;
+
+/**
+ * For every line index, the status-column index of the table it belongs to.
+ *
+ * Why a header lookup rather than "the second cell": a row's status is identified by its COLUMN,
+ * and scanning the whole row for a glyph made a row whose Status cell reads ✓ fail because its
+ * Change text quoted a ☐ while describing the vocabulary (measured 2026-08-19 on three rows).
+ * Position alone was rejected for the opposite failure — it silently stops grading any table
+ * shaped differently, and a false negative in this gate is exactly what it exists to prevent.
+ *
+ * A table whose header names no status column maps to `undefined`, and the callers fall back to
+ * scanning the whole row. That keeps today's coverage rather than trading a false positive for a
+ * silent gap.
+ */
+function statusColumnByLine(lines) {
+  const byLine = new Array(lines.length).fill(undefined);
+  let current;
+
+  for (const [index, line] of lines.entries()) {
+    if (!line.trim().startsWith('|')) {
+      current = undefined;
+      continue;
+    }
+    if (isSeparatorRow(line)) continue;
+
+    const next = lines[index + 1];
+    const isHeader = next !== undefined && next.trim().startsWith('|') && isSeparatorRow(next);
+    if (isHeader) {
+      const found = cellsOf(line).findIndex((cell) => STATUS_HEADER.test(cell));
+      current = found === -1 ? undefined : found;
+      continue;
+    }
+    byLine[index] = current;
+  }
+
+  return byLine;
+}
+
+/**
+ * The text a status mark must appear in for the row to count as carrying it.
+ *
+ * Falls back to the whole line when the table declares no status column.
+ */
+function statusTextOf(line, column) {
+  if (column === undefined) return line;
+  return cellsOf(line)[column] ?? '';
+}
+
+/**
  * Rule 2 — an open row in an ACTIVE plan must carry `as of <date> · flips when <observation>`.
  *
  * Pure, like rule 1, so the self-test feeds it fabricated plans.
@@ -235,9 +305,14 @@ export function auditOpenRows(planPath, content, grandfathered = GRANDFATHERED_O
     return { violations, stamped, graded: false };
   }
 
-  for (const [index, line] of content.split('\n').entries()) {
-    if (!line.startsWith('|') || !line.includes(OPEN_MARK)) continue;
+  const openLines = content.split('\n');
+  const openStatusColumn = statusColumnByLine(openLines);
 
+  for (const [index, line] of openLines.entries()) {
+    if (!line.startsWith('|')) continue;
+    if (!statusTextOf(line, openStatusColumn[index]).includes(OPEN_MARK)) continue;
+
+    // The stamp may sit anywhere in the row, so it is matched against the whole line.
     if (OPEN_STAMP.test(line)) {
       stamped += 1;
       continue;
@@ -269,8 +344,12 @@ export function auditClosedRows(planPath, content) {
 
   if (planStatus(content) !== 'active') return { violations, stamped, graded: false };
 
-  for (const [index, line] of content.split('\n').entries()) {
-    if (!line.startsWith('|') || !line.includes(CLOSED_MARK)) continue;
+  const closedLines = content.split('\n');
+  const closedStatusColumn = statusColumnByLine(closedLines);
+
+  for (const [index, line] of closedLines.entries()) {
+    if (!line.startsWith('|')) continue;
+    if (!statusTextOf(line, closedStatusColumn[index]).includes(CLOSED_MARK)) continue;
 
     if (CLOSED_STAMP.test(line)) {
       stamped += 1;
@@ -543,6 +622,31 @@ function selfTest() {
   );
 
   // ---- Rule 3: the closed-no-change row must carry its own stamp too -------------------------
+  // --- status-column identification (2026-08-19) ------------------------------------------
+  // Three rows failed whose Status cell read ✓ while their Change text quoted a ☐ describing the
+  // glyph vocabulary. Reading the whole row cannot separate an ASSERTED status from a MENTIONED
+  // one. These pin both directions: the false positive is gone AND real open rows still fail.
+  openCase(
+    'a ✓ row whose prose merely MENTIONS ☐ is not treated as open',
+    `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | compile ☐ rows into a submission |`,
+    false
+  );
+  openCase(
+    'a genuinely open row is still caught when the table declares a St column',
+    `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ☐ | real pending work |`,
+    true
+  );
+  openCase(
+    'a table with NO status header falls back to whole-row scanning, not to silence',
+    `${ACTIVE}| Item | Note |\n| --- | --- |\n| thing | ☐ still pending |`,
+    true
+  );
+  openCase(
+    'an escaped pipe inside a cell does not shift the status column',
+    `${ACTIVE}| # | St | Verify |\n| --- | --- | --- |\n| 1.1 | ✓ | \`rg x \\| grep -c ☐\` |`,
+    false
+  );
+
   const closedCase = (name, text, expectFail, planPath = 'plans/fake.md') => {
     const { violations } = auditClosedRows(planPath, text);
     const failed = violations.length > 0;
@@ -555,6 +659,12 @@ function selfTest() {
       console.log(`✔ self-test: ${name}`);
     }
   };
+
+  closedCase(
+    'a ✓ row whose prose mentions ⊘ is not treated as closed-no-change',
+    `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | glyphs are ☐/✓/⚠/⊘ |`,
+    false
+  );
 
   closedCase(
     'a bare ⊘ row in an active plan is caught',
