@@ -237,6 +237,7 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'subagent_model',
       'agent_type',
       'execution_hint',
+      'composer',
     ],
     'Prompt create/update payload field. workspace-and-mutations.yaml exercises `create` with ' +
       'only name/category/description/user_message_template, and `update` with only ' +
