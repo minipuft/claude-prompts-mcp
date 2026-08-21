@@ -12,11 +12,13 @@ import express, { Request, Response } from 'express';
 
 import { McpToolRouter } from '../tools/index.js';
 
+import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { ConfigManager, Logger, ToolResponse } from '#shared/types/index.js';
 import type { ResourceManagerInput } from '../tools/resource-manager/core/types.js';
 
 import { PromptAssetManager } from '#modules/prompts/index.js';
+import { buildPromptCatalogSummary } from '#modules/prompts/prompt-catalog.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '#modules/prompts/prompt-refresh-service.js';
 
 /**
@@ -29,7 +31,7 @@ export class ApiRouter {
   private mcpToolsManager: McpToolRouter | undefined;
   private promptsData: PromptData[] = [];
   private categories: Category[] = [];
-  private convertedPrompts: any[] = [];
+  private convertedPrompts: ConvertedPrompt[] = [];
 
   constructor(
     logger: Logger,
@@ -46,7 +48,11 @@ export class ApiRouter {
   /**
    * Update data references
    */
-  updateData(promptsData: PromptData[], categories: Category[], convertedPrompts: any[]): void {
+  updateData(
+    promptsData: PromptData[],
+    categories: Category[],
+    convertedPrompts: ConvertedPrompt[]
+  ): void {
     this.promptsData = promptsData;
     this.categories = categories;
     this.convertedPrompts = convertedPrompts;
@@ -129,22 +135,32 @@ export class ApiRouter {
     app.get('/prompts', (_req: Request, res: Response) => {
       const result = {
         categories: this.categories,
-        prompts: this.promptsData.map((prompt) => ({
-          id: prompt.id,
-          name: prompt.name,
-          category: prompt.category,
-          description: prompt.description,
-          arguments: prompt.arguments,
-        })),
+        prompts: this.convertedPrompts.map(buildPromptCatalogSummary),
       };
       res.json(result);
+    });
+
+    // This compatibility API is not authenticated, so detail stays metadata-only. An authenticated
+    // adapter may project buildPromptCatalogDetail when executable content is required.
+    app.get('/prompts/:promptId', (req: Request, res: Response) => {
+      const promptIdParam = req.params['promptId'];
+      const promptId = Array.isArray(promptIdParam) ? promptIdParam[0] : promptIdParam;
+      const prompt = this.convertedPrompts.find((candidate) => candidate.id === promptId);
+
+      if (prompt === undefined) {
+        return res.status(404).json({ error: `Prompt not found: ${promptId}` });
+      }
+
+      return res.json(buildPromptCatalogSummary(prompt));
     });
 
     // Get prompts by category
     app.get('/categories/:categoryId/prompts', (req: Request, res: Response) => {
       const categoryIdParam = req.params['categoryId'];
       const categoryId = Array.isArray(categoryIdParam) ? categoryIdParam[0] : categoryIdParam;
-      const categoryPrompts = this.promptsData.filter((prompt) => prompt.category === categoryId);
+      const categoryPrompts = this.convertedPrompts
+        .filter((prompt) => prompt.category === categoryId)
+        .map(buildPromptCatalogSummary);
 
       if (categoryPrompts.length === 0) {
         return res.status(404).json({ error: `No prompts found for category: ${categoryId}` });

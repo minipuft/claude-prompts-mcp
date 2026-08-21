@@ -56,6 +56,7 @@ export function toYamlPromptId(promptId: string): string {
  * not cosmetic.
  */
 export const PRESERVED_PROMPT_YAML_KEYS = [
+  'composer',
   'injection',
   'registerWithMcp',
   'mcpPromptMode',

@@ -193,6 +193,8 @@ export interface ResourceManagerInput {
     defaultValue?: unknown;
     validation?: ArgumentValidationYaml;
   }>;
+  /** [Prompt] Explicit mapping from a client composer draft to a declared text argument. */
+  composer?: { inputArgument: string };
   /**
    * [Prompt] Update-only structured per-field overlay onto EXISTING arguments, addressed by
    * `name` (Fix D, tier-b-settability-proposal §2 / P6-F16). Kept in lockstep with the
@@ -233,7 +235,8 @@ export interface ResourceManagerInput {
     framework_gates?: boolean;
   };
   /**
-   * The five prompt-level fields the YAML writer preserves rather than builds (OQ-P7-8). Kept in
+   * Prompt-level fields the YAML writer preserves rather than builds (OQ-P7-8 plus composer
+   * metadata). Kept in
    * lockstep with `resourceManagerInputSchema` and with `PromptYamlSchema` — the value is written
    * verbatim into `prompt.yaml`, so a wider type here would describe values the loader rejects.
    * `register_with_mcp` and `mcp_prompt_mode` freeze the prompt against its category/global

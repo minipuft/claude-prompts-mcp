@@ -192,6 +192,7 @@ export class ResourceManagerRouter {
       chain_step_order: args.chain_step_order,
       tools: args.tools,
       gate_configuration: args.gate_configuration,
+      composer: args.composer,
       // OQ-P7-8. Pass-through, no renaming: `UPDATE_FIELDS` owns the single snake_case →
       // camelCase mapping these take on their way into the YAML, so a second translation here
       // would be the hidden router transformation mcp-contracts.md bans.

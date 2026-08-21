@@ -32,7 +32,8 @@ export const UPDATE_FIELDS: Record<string, string> = {
   // is declared `[Framework]` in tooling/contracts/resource-manager.json. With the alias gone the
   // field needs no special handling and clears like every other one.
   gate_configuration: 'gateConfiguration',
-  // OQ-P7-8 (owner ruling 2026-08-13). The five fields `PRESERVED_PROMPT_YAML_KEYS` carries
+  composer: 'composer',
+  // OQ-P7-8 (owner ruling 2026-08-13). The fields `PRESERVED_PROMPT_YAML_KEYS` carries
   // forward are now also settable. These entries are what makes an explicitly supplied value
   // reach `promptData` — and `resolvePreservedPromptYamlFields` gives `promptData` precedence
   // over the on-disk value, so "set" and "preserve" are one write model with a fallback, not the
@@ -63,7 +64,12 @@ export const UPDATE_FIELDS: Record<string, string> = {
  * default it was inheriting, on every edit, without anyone asking. That is DEV-T1-3's hazard made
  * unconditional. They reach the YAML only when a caller sets them explicitly.
  */
-export const SNAPSHOT_PRESERVED_FIELDS = ['injection', 'subagentModel', 'agentType'] as const;
+export const SNAPSHOT_PRESERVED_FIELDS = [
+  'composer',
+  'injection',
+  'subagentModel',
+  'agentType',
+] as const;
 
 /**
  * Project a live prompt onto the canonical snapshot shape `updatePrompt` records.
@@ -83,7 +89,7 @@ export const SNAPSHOT_PRESERVED_FIELDS = ['injection', 'subagentModel', 'agentTy
  * on the source stays absent from the projection. Without it a recorded snapshot omits a field the
  * file still carries, and a rollback to that version restores a prompt the version never described
  * — it would land on whatever the on-disk preservation happened to be holding. With it, every
- * snapshot recorded from this point describes the whole authored state of those three fields.
+ * snapshot recorded from this point describes the whole authored state of those fields.
  */
 export function canonicalPromptSnapshot(
   id: string,

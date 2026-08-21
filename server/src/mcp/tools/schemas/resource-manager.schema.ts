@@ -13,6 +13,7 @@ import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/templ
 import {
   ArgumentValidationSchema,
   ChainStepSchema,
+  PromptComposerMetadataSchema,
   PromptInjectionConfigSchema,
 } from '#modules/prompts/prompt-schema.js';
 
@@ -119,6 +120,8 @@ export const resourceManagerInputSchema = z
      * uses (authored identity here, match key there) and every other field is optional in both.
      */
     arguments: z.array(promptArgumentSchema).optional(),
+    /** [Prompt] Explicit mapping from a client composer draft to a declared text argument. */
+    composer: PromptComposerMetadataSchema.optional(),
     /**
      * [Prompt] Update-only structured per-field overlay onto EXISTING arguments, addressed by
      * `name` (Fix D, tier-b-settability-proposal §2 / P6-F16). `name` must match an argument this

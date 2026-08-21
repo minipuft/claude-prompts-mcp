@@ -65,6 +65,45 @@ export const PromptArgumentSchema = z.object({
 
 export type PromptArgumentYaml = z.infer<typeof PromptArgumentSchema>;
 
+/** Composer-specific presentation metadata consumed by interactive clients. */
+export const PromptComposerMetadataSchema = z
+  .object({
+    /** Declared text argument that receives the current composer draft. */
+    inputArgument: z.string().min(1, 'Composer input argument is required'),
+  })
+  .strict();
+
+export type PromptComposerMetadataYaml = z.infer<typeof PromptComposerMetadataSchema>;
+
+function validateComposerInputArgument(
+  data: {
+    arguments: PromptArgumentYaml[];
+    composer?: PromptComposerMetadataYaml;
+  },
+  ctx: z.RefinementCtx
+): void {
+  const inputArgument = data.composer?.inputArgument;
+  if (inputArgument === undefined) return;
+
+  const argument = data.arguments.find((candidate) => candidate.name === inputArgument);
+  if (argument === undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['composer', 'inputArgument'],
+      message: `Composer inputArgument '${inputArgument}' must name a declared argument`,
+    });
+    return;
+  }
+
+  if (argument.type !== undefined && argument.type !== 'string') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['composer', 'inputArgument'],
+      message: `Composer inputArgument '${inputArgument}' must reference a string argument`,
+    });
+  }
+}
+
 // ============================================
 // Visibility Policy Schema (P5)
 // ============================================
@@ -370,6 +409,8 @@ export const PromptDataSchema = z
     // Optional fields
     /** Arguments accepted by this prompt */
     arguments: z.array(PromptArgumentSchema).default([]),
+    /** Optional mapping from an interactive composer draft to one declared text argument. */
+    composer: PromptComposerMetadataSchema.optional(),
     /** Gate configuration for validation */
     gateConfiguration: PromptGateConfigurationSchema.optional(),
     /** Prompt-level injection control (resolved between step and chain config) */
@@ -387,7 +428,8 @@ export const PromptDataSchema = z
     /** Default host agent for this prompt's delegated steps (a step may override it) */
     agentType: z.string().min(1).optional(),
   })
-  .passthrough(); // Allow additional fields for extensibility
+  .passthrough()
+  .superRefine(validateComposerInputArgument); // Allow additional fields for extensibility
 
 export type PromptDataYaml = z.infer<typeof PromptDataSchema>;
 
@@ -468,6 +510,8 @@ export const PromptYamlSchema = z
     // Arguments
     /** Arguments accepted by this prompt */
     arguments: z.array(PromptArgumentSchema).default([]),
+    /** Optional mapping from an interactive composer draft to one declared text argument. */
+    composer: PromptComposerMetadataSchema.optional(),
 
     // Gate configuration
     /** Gate configuration for validation */
@@ -514,7 +558,8 @@ export const PromptYamlSchema = z
       message:
         'Prompt must have userMessageTemplate/userMessageTemplateFile, chainSteps, or systemMessage defined',
     }
-  );
+  )
+  .superRefine(validateComposerInputArgument);
 
 export type PromptYaml = z.infer<typeof PromptYamlSchema>;
 

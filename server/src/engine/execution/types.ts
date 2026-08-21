@@ -41,6 +41,8 @@ export interface ConvertedPrompt {
   systemMessage?: string;
   userMessageTemplate: string;
   arguments: PromptArgument[];
+  /** Interactive composer mapping copied from the prompt's authored metadata. */
+  composer?: { inputArgument: string };
   // Chain-related properties (isChain removed - now derived from chainSteps presence)
   chainSteps?: ChainStep[];
   /** Whether to register this prompt with MCP. Resolved from prompt/category/global defaults. */

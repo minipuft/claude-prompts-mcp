@@ -15,6 +15,7 @@ describe('UPDATE_FIELDS map', () => {
       arguments: 'arguments',
       chain_steps: 'chainSteps',
       gate_configuration: 'gateConfiguration',
+      composer: 'composer',
       // OQ-P7-8: the five fields `PRESERVED_PROMPT_YAML_KEYS` carries forward became settable
       // (owner ruling 2026-08-13). Listed exhaustively rather than spread from the preserved
       // constant, because this assertion's job is to notice a map that grew without anyone saying
@@ -41,7 +42,7 @@ describe('UPDATE_FIELDS map', () => {
   });
 
   it('covers all updatable complex fields', () => {
-    const complexFields = ['arguments', 'chain_steps'];
+    const complexFields = ['arguments', 'chain_steps', 'composer'];
     for (const field of complexFields) {
       expect(UPDATE_FIELDS).toHaveProperty(field);
     }

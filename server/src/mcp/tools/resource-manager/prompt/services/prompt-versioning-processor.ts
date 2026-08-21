@@ -303,7 +303,7 @@ export class PromptVersioningProcessor {
     }
 
     // PHASE 3 — write. Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
-    // rollback inherits the on-disk field preservation Tier 1.4 established, so the five
+    // rollback inherits the on-disk field preservation Tier 1.4 established, so the
     // prompt-level fields the writer builds no value for survive a rollback exactly as they
     // survive an update. `ALL_PROMPT_DATA_KEYS`: rollback owns the WHOLE restored state (Fix B,
     // tier-b-settability-proposal §2/§5) — there is no "what did THIS call touch" to narrow

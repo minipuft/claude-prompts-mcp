@@ -692,6 +692,8 @@ export interface PromptData {
   file: string;
   /** Arguments accepted by this prompt */
   arguments: PromptArgument[];
+  /** Interactive composer mapping authored by this prompt, when declared. */
+  composer?: PromptComposerMetadata;
   /** Optional gates for validation (legacy format) */
   gates?: GateDefinition[];
   /** Gate configuration (YAML format) */
@@ -721,6 +723,11 @@ export interface PromptData {
   subagentModel?: 'heavy' | 'standard' | 'fast';
   /** Default host agent for this prompt's delegated steps (a step may override it) */
   agentType?: string;
+}
+
+/** Presentation metadata for clients that insert prompts into a composer. */
+export interface PromptComposerMetadata {
+  inputArgument: string;
 }
 
 // ===== End of Type Definitions =====

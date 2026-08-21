@@ -217,3 +217,62 @@ describe('validatePromptSchema — chain step id uniqueness (PromptDataSchema pa
     expect(result.errors).toEqual([]);
   });
 });
+
+describe('prompt composer input mapping', () => {
+  const basePrompt = {
+    id: 'compose_prompt',
+    name: 'Compose Prompt',
+    description: 'A prompt with composer metadata',
+    userMessageTemplate: 'Do {{task}}',
+  };
+
+  it('accepts omitted composer metadata without changing existing prompts', () => {
+    expect(validatePromptYaml({ ...basePrompt, arguments: [] }).valid).toBe(true);
+  });
+
+  it('accepts a mapping to an explicit string argument', () => {
+    const result = validatePromptYaml({
+      ...basePrompt,
+      arguments: [{ name: 'task', type: 'string', required: true }],
+      composer: { inputArgument: 'task' },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.data?.composer).toEqual({ inputArgument: 'task' });
+  });
+
+  it('accepts a mapping to an argument with the existing implicit string type', () => {
+    const result = validatePromptYaml({
+      ...basePrompt,
+      arguments: [{ name: 'task' }],
+      composer: { inputArgument: 'task' },
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects a mapping to an undeclared argument', () => {
+    const result = validatePromptYaml({
+      ...basePrompt,
+      arguments: [{ name: 'topic', type: 'string' }],
+      composer: { inputArgument: 'task' },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join('\n')).toContain('must name a declared argument');
+  });
+
+  it.each(['number', 'boolean', 'object', 'array'] as const)(
+    'rejects a mapping to a %s argument',
+    (type) => {
+      const result = validatePromptYaml({
+        ...basePrompt,
+        arguments: [{ name: 'task', type }],
+        composer: { inputArgument: 'task' },
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join('\n')).toContain('must reference a string argument');
+    }
+  );
+});

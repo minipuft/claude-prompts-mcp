@@ -162,6 +162,10 @@ export class PromptConverter {
           mcpPromptMode: resolveMcpPromptMode(promptData),
         };
 
+        if (promptData.composer !== undefined) {
+          convertedPrompt.composer = promptData.composer;
+        }
+
         if (promptData.agentType != null) {
           convertedPrompt.agentType = promptData.agentType;
         }

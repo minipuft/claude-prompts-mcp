@@ -29,6 +29,18 @@ describe('yamlToPromptData', () => {
     expect(result.subagentModel).toBe('fast');
   });
 
+  it('passes explicit composer metadata through without inference', () => {
+    const result = yamlToPromptData(
+      makeMinimalYaml({
+        arguments: [{ name: 'task', type: 'string', required: true }],
+        composer: { inputArgument: 'task' },
+      })
+    );
+
+    expect(result.composer).toEqual({ inputArgument: 'task' });
+    expect(yamlToPromptData(makeMinimalYaml()).composer).toBeUndefined();
+  });
+
   it('carries agentType at both prompt and step level', () => {
     // Two levels because the resolution is `step ?? prompt ?? 'chain-executor'`. If only one
     // level survived the loader, the other would silently fall through to the default and the

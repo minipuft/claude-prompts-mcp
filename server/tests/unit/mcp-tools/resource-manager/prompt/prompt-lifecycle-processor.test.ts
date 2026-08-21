@@ -157,7 +157,7 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
     category: 'general',
     description: 'Reviews a code function for defects',
     userMessageTemplate: 'Review: {{snippet}}',
-    arguments: [],
+    arguments: [{ name: 'task', required: false }],
     chainSteps: [],
     gateConfiguration: { include: ['pre-existing'] },
   };
@@ -224,7 +224,7 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
 });
 
 /**
- * OQ-P7-8 (owner ruling 2026-08-13). The five fields the YAML writer preserves rather than builds
+ * OQ-P7-8 (owner ruling 2026-08-13). The fields the YAML writer preserves rather than builds
  * are now settable through `create` and `update`.
  *
  * These assert on the payload handed to `updatePromptImplementation` rather than on written YAML:
@@ -236,8 +236,8 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
   /**
    * A live prompt as the LOADER produces one: `registerWithMcp` and `mcpPromptMode` are always
    * populated because `PromptConverter` RESOLVES them through prompt → category → global →
-   * default, while `subagentModel`, `agentType` and `injection` appear only when the file declared
-   * them. That asymmetry is the whole reason the canonical snapshot projects three of the five and
+   * default, while `composer`, `subagentModel`, `agentType` and `injection` appear only when the
+   * file declared them. That asymmetry is why the canonical snapshot projects the authored fields and
    * refuses the other two — a fixture carrying only the authored three would make the refusal
    * untestable.
    */
@@ -247,7 +247,8 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
     category: 'general',
     description: 'Reviews a code function for defects',
     userMessageTemplate: 'Review: {{snippet}}',
-    arguments: [],
+    arguments: [{ name: 'task', required: false }],
+    composer: { inputArgument: 'task' },
     chainSteps: [],
     registerWithMcp: true,
     mcpPromptMode: 'expand',
@@ -283,6 +284,7 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
   }
 
   const cases = [
+    ['composer', { inputArgument: 'task' }],
     ['injection', { 'gate-guidance': { enabled: true, target: 'gates' } }],
     ['register_with_mcp', false, 'registerWithMcp'],
     ['mcp_prompt_mode', 'launch', 'mcpPromptMode'],
@@ -310,6 +312,7 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
         description: 'A new prompt',
         category: 'general',
         user_message_template: 'Do {{task}}',
+        arguments: [{ name: 'task' }],
         [parameter]: value,
       } as never);
 
@@ -330,6 +333,7 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
 
     const written = updatePromptImplementation.mock.calls[0][0];
     for (const key of [
+      'composer',
       'injection',
       'registerWithMcp',
       'mcpPromptMode',
@@ -360,17 +364,18 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
   });
 
   /**
-   * The other half: the three fields whose live value IS the authored one are projected, so the
+   * The other half: the fields whose live value IS the authored one are projected, so the
    * snapshot this payload becomes describes the prompt's whole state. Without this, a rollback to
    * a version recorded by an unrelated edit restores a prompt that version never described — it
    * lands on whatever on-disk preservation happens to be holding at rollback time.
    */
-  test('an unrelated update carries the three authored preserved fields forward', async () => {
+  test('an unrelated update carries the authored preserved fields forward', async () => {
     const { processor, updatePromptImplementation } = createUpdateProcessor();
 
     await processor.updatePrompt({ id: 'review_code', description: 'Updated' } as never);
 
     const written = updatePromptImplementation.mock.calls[0][0];
+    expect(written.composer).toEqual({ inputArgument: 'task' });
     expect(written.subagentModel).toBe('heavy');
     expect(written.agentType).toBe('code-lifecycle-auditor');
     expect(written.injection).toEqual({ 'system-prompt': { enabled: false } });

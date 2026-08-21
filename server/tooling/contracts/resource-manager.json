@@ -140,6 +140,13 @@
       "includeInDescription": false
     },
     {
+      "name": "composer",
+      "type": "object<{inputArgument:string}>",
+      "description": "[Prompt] Interactive composer metadata. inputArgument must name a declared string argument; clients may map their current draft only when this field is present.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
       "name": "injection",
       "type": "object",
       "description": "[Prompt] Prompt-level injection control. Keys: system-prompt, gate-guidance, style-guidance; each takes {enabled?: boolean, frequency?: {mode: every|first-only|never, interval?: number}, target?: steps|gates|both}. A prompt's own declaration outranks the chain or category it runs inside. Omit to leave the prompt's existing block untouched.",
@@ -346,6 +353,7 @@
         "chain_steps",
         "tools",
         "gate_configuration",
+        "composer",
         "injection",
         "register_with_mcp",
         "mcp_prompt_mode",
@@ -370,6 +378,7 @@
         "chain_steps",
         "tools",
         "gate_configuration",
+        "composer",
         "injection",
         "register_with_mcp",
         "mcp_prompt_mode",

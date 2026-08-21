@@ -160,11 +160,12 @@ describe('FileOperations canonical prompt writes', () => {
    * accepts and emitted nothing for the rest, so every update through `resource_manager` deleted
    * them. `subagentModel` and `agentType` govern `==>` delegation, so the loss was behavioural.
    *
-   * One test per field rather than one asserting all five, so a writer that drops exactly one
+   * One test per field rather than one aggregate assertion, so a writer that drops exactly one
    * produces exactly one failure naming it.
    */
   describe('field preservation across an update', () => {
     const declaredFields = {
+      composer: { inputArgument: 'task' },
       injection: { 'system-prompt': { enabled: false } },
       registerWithMcp: false,
       mcpPromptMode: 'launch',
@@ -175,7 +176,7 @@ describe('FileOperations canonical prompt writes', () => {
     async function seedThenUpdateDescription(): Promise<Record<string, unknown>> {
       const operations = new FileOperations({ logger, configManager });
       // Seed through the writer itself, then re-declare the fields on disk. Since OQ-P7-8 the tool
-      // CAN set all five, but this case is the other half of the contract: an update that supplies
+      // CAN set every preserved field, but this case is the other half of the contract: an update that supplies
       // none of them must leave a hand-authored file exactly as it found it.
       await operations.updatePromptImplementation({
         id: 'delegating_prompt',
@@ -183,7 +184,7 @@ describe('FileOperations canonical prompt writes', () => {
         category: 'general',
         description: 'Original description',
         userMessageTemplate: 'Delegate {{task}}',
-        arguments: [],
+        arguments: [{ name: 'task', type: 'string' }],
         tools: [],
       });
       const yamlPath = join(promptsDir, 'general', 'delegating_prompt', 'prompt.yaml');
@@ -197,6 +198,8 @@ describe('FileOperations canonical prompt writes', () => {
           "mcpPromptMode: 'launch'",
           "subagentModel: 'heavy'",
           "agentType: 'code-lifecycle-auditor'",
+          'composer:',
+          '  inputArgument: task',
         ].join('\n')}\n`,
         'utf8'
       );
@@ -209,7 +212,7 @@ describe('FileOperations canonical prompt writes', () => {
         category: 'general',
         description: 'Updated description',
         userMessageTemplate: 'Delegate {{task}}',
-        arguments: [],
+        arguments: [{ name: 'task', type: 'string' }],
         tools: [],
       });
 
@@ -259,10 +262,11 @@ describe('FileOperations canonical prompt writes', () => {
    * OQ-P7-8. `resolvePreservedPromptYamlFields` is the precedence rule the whole feature rests on:
    * a supplied value wins, an omitted one falls back to the file. The preservation tests above
    * cover the fallback; these cover the supplied branch, which had no reachable caller until the
-   * five tool parameters existed.
+   * explicit tool parameters existed.
    */
   describe('an explicitly supplied value overrides the on-disk declaration', () => {
     const authored = {
+      composer: { inputArgument: 'task' },
       injection: { 'system-prompt': { enabled: false } },
       registerWithMcp: false,
       mcpPromptMode: 'launch',
@@ -271,6 +275,7 @@ describe('FileOperations canonical prompt writes', () => {
     } as const;
 
     const supplied = {
+      composer: { inputArgument: 'request' },
       injection: { 'gate-guidance': { enabled: true, target: 'gates' } },
       registerWithMcp: true,
       mcpPromptMode: 'expand',
@@ -288,7 +293,10 @@ describe('FileOperations canonical prompt writes', () => {
         category: 'general',
         description: 'Original description',
         userMessageTemplate: 'Delegate {{task}}',
-        arguments: [],
+        arguments: [
+          { name: 'task', type: 'string' },
+          { name: 'request', type: 'string' },
+        ],
         tools: [],
         ...authored,
       });
@@ -299,7 +307,10 @@ describe('FileOperations canonical prompt writes', () => {
         category: 'general',
         description: 'Updated description',
         userMessageTemplate: 'Delegate {{task}}',
-        arguments: [],
+        arguments: [
+          { name: 'task', type: 'string' },
+          { name: 'request', type: 'string' },
+        ],
         tools: [],
         ...overrides,
       });

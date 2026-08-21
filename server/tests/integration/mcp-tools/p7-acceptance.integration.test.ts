@@ -113,7 +113,8 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
     description: 'A prompt used to exercise the P7 acceptance clauses',
     userMessageTemplate: SEED_TEMPLATE,
     systemMessage: 'Be precise.',
-    arguments: [],
+    arguments: [{ name: 'input', type: 'string', required: true }],
+    composer: { inputArgument: 'input' },
     chainSteps: [],
     registerWithMcp: true,
     mcpPromptMode: 'expand',
@@ -348,6 +349,7 @@ describe('P7 acceptance — driven run against a real engine', () => {
     expect(run.filesAfterRollback['user-message.md']).toContain('Answer in paragraphs.');
     expect(run.filesAfterRollback['user-message.md']).not.toContain('Answer in bullets.');
     expect(run.filesAfterRollback['user-message.md']).toContain('Leave this section alone.');
+    expect(run.filesAfterRollback['prompt.yaml']).toContain('inputArgument: input');
 
     // Go-forward: the rollback is one new row holding the restored state; the target row is
     // untouched, and nothing anywhere is a "Pre-rollback snapshot".
@@ -355,6 +357,7 @@ describe('P7 acceptance — driven run against a real engine', () => {
     const rollbackRow = run.rowsByVersion.get(run.latestAfterRollback);
     expect(rollbackRow?.description).toBe(`Rollback to v${run.latestAfterEdit}`);
     expect(rollbackRow?.snapshot).toEqual(run.rowsByVersion.get(run.latestAfterEdit)?.snapshot);
+    expect(rollbackRow?.snapshot['composer']).toEqual({ inputArgument: 'input' });
     for (const { description } of run.rowsByVersion.values()) {
       expect(description).not.toContain('Pre-rollback snapshot');
     }

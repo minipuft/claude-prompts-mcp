@@ -92,6 +92,21 @@ describe('resource_manager argument contract', () => {
     expect(parsed.agent_type).toBe('code-lifecycle-auditor');
   });
 
+  it('preserves explicit composer metadata through the tool schema', () => {
+    const parsed = resourceManagerInputSchema.parse({
+      ...base,
+      composer: { inputArgument: 'task' },
+    });
+
+    expect(parsed.composer).toEqual({ inputArgument: 'task' });
+    expect(() =>
+      resourceManagerInputSchema.parse({
+        ...base,
+        composer: { input_argument: 'task' },
+      })
+    ).toThrow();
+  });
+
   it('rejects values outside the loader vocabulary for the preserved fields', () => {
     // The value is written verbatim into `prompt.yaml`, so a shape wider here than
     // `PromptYamlSchema` is accepted at the call and rejected at LOAD — the prompt is dropped with

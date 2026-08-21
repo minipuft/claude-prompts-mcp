@@ -220,11 +220,12 @@ describe('ResourceManagerRouter', () => {
      * `updatePrompt` directly and never crosses this boundary. This is the only assertion in the
      * suite that would fail on a forgotten pass-through.
      */
-    test('passes the five preserved-field parameters through to the prompt handler', async () => {
+    test('passes preserved-field parameters through to the prompt handler', async () => {
       const args = {
         resource_type: 'prompt',
         action: 'update',
         id: 'review_code',
+        composer: { inputArgument: 'task' },
         injection: { 'system-prompt': { enabled: false } },
         register_with_mcp: false,
         mcp_prompt_mode: 'launch',
@@ -238,6 +239,7 @@ describe('ResourceManagerRouter', () => {
         string,
         unknown
       >;
+      expect(forwarded['composer']).toEqual({ inputArgument: 'task' });
       expect(forwarded['injection']).toEqual({ 'system-prompt': { enabled: false } });
       expect(forwarded['register_with_mcp']).toBe(false);
       expect(forwarded['mcp_prompt_mode']).toBe('launch');

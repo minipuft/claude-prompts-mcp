@@ -42,6 +42,7 @@ export type resource_managerParamName =
   | 'chain_steps'
   | 'tools'
   | 'gate_configuration'
+  | 'composer'
   | 'injection'
   | 'register_with_mcp'
   | 'mcp_prompt_mode'
@@ -222,6 +223,15 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'object',
     description:
       '[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'composer',
+    type: 'object<{inputArgument:string}>',
+    description:
+      '[Prompt] Interactive composer metadata. inputArgument must name a declared string argument; clients may map their current draft only when this field is present.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -469,6 +479,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'chain_steps',
       'tools',
       'gate_configuration',
+      'composer',
       'injection',
       'register_with_mcp',
       'mcp_prompt_mode',
@@ -494,6 +505,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'chain_steps',
       'tools',
       'gate_configuration',
+      'composer',
       'injection',
       'register_with_mcp',
       'mcp_prompt_mode',

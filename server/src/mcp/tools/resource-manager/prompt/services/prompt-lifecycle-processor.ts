@@ -167,7 +167,7 @@ export class PromptLifecycleProcessor {
       gateConfiguration: args['gate_configuration'],
     };
 
-    // OQ-P7-8: the same five fields `update` can set, on `create` too — a field settable only
+    // OQ-P7-8: the same preserved fields `update` can set, on `create` too — a field settable only
     // after the prompt exists forces a create-then-update dance for something authorable in one
     // call, and leaves `create` and `update` accepting different vocabularies (the
     // accepted-here/ignored-there asymmetry P7-D4 exists to kill). Written through the same
