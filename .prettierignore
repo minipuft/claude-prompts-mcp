@@ -37,3 +37,8 @@ hooks/.pyrefly-baseline.json
 # `--check` pass. Re-test on any prettier major upgrade — this is an upstream instability,
 # not a property of the prose.
 plans/reference/sqlite-layer-remediation-2026-08-03.md
+
+# Generated contract artifacts consumed by Python hooks and the OpenCode plugin.
+# server/scripts/generate-contracts.ts owns their formatting; a prettier rewrite here
+# would be reverted on the next generate:contracts run and fail validate:contracts.
+hooks/lib/_generated/*.json

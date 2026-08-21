@@ -859,6 +859,17 @@
         },
         "type": "array"
       },
+      "composer": {
+        "additionalProperties": false,
+        "properties": {
+          "inputArgument": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["inputArgument"],
+        "type": "object"
+      },
       "confirm": {
         "type": "boolean"
       },

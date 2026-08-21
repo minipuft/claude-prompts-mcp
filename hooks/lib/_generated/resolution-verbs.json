@@ -1,1 +1,5 @@
-["cancel", "gate_action", "gate_verdict"]
+[
+  "cancel",
+  "gate_action",
+  "gate_verdict"
+]
