@@ -21,6 +21,8 @@ CRITERIA UNDER TEST (enumerated — a behaviour not listed here is not covered)
   B. resource_index     : prompts, gates, styles, frameworks — including the resource-type spelling
   C. chain liveness     : PID filtering, terminal-run exclusion, and the documented fallback
   D. view repair (v20)  : the primary read path returns rows, and terminal runs stay out of both
+  E. cross-client scope : recovery is keyed by the session's own recorded chain; the unscoped
+                          newest-chain-of-any-live-PID scan (the 2026-08 leakage defect) is dead
 """
 
 import json
@@ -126,10 +128,12 @@ def _chain_session_state(
 
 @pytest.fixture
 def state_db(tmp_path, monkeypatch):
-    """Build a state.db carrying the server's real schema, at the path workspace.py resolves.
+    """Build a state.db carrying the server's real schema, at a path workspace.py resolves.
 
-    `get_state_db_path()` looks for {MCP_WORKSPACE}/server/runtime-state/state.db and returns None
-    when the file is absent, so the directory layout is load-bearing rather than cosmetic.
+    Seeded at the legacy {MCP_WORKSPACE}/server/runtime-state layout, which
+    `get_state_db_path()` probes after {MCP_WORKSPACE}/runtime-state; the layout
+    is load-bearing rather than cosmetic (TestStateDbPathResolution covers the
+    precedence).
     """
     workspace = tmp_path / "workspace"
     runtime_state = workspace / "server" / "runtime-state"
@@ -304,7 +308,7 @@ class TestResourceIndexReads:
         assert db_reader.load_prompts() is None
         assert db_reader.load_gates() is None
         assert db_reader.get_prompt_by_id_from_db("anything") is None
-        assert db_reader.load_active_chain_state() is None
+        assert db_reader.load_active_chain_state("chain-demo") is None
         assert db_reader.get_valid_styles_from_db() == []
         assert db_reader.get_valid_frameworks_from_db() == []
 
@@ -316,7 +320,7 @@ class TestActiveChainState:
     def test_returns_state_for_a_live_owner(self, state_db):
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
 
-        state = db_reader.load_active_chain_state()
+        state = db_reader.load_active_chain_state("chain-demo")
 
         assert state is not None
         assert state["chain_id"] == "chain-demo"
@@ -326,7 +330,7 @@ class TestActiveChainState:
     def test_rows_owned_by_a_dead_process_are_skipped(self, state_db):
         _insert_session(state_db, str(_dead_pid()), _chain_session_state())
 
-        assert db_reader.load_active_chain_state() is None
+        assert db_reader.load_active_chain_state("chain-demo") is None
 
     def test_a_non_numeric_owner_is_skipped(self, state_db):
         """A non-PID value must not be coerced into a liveness check.
@@ -337,12 +341,12 @@ class TestActiveChainState:
         """
         _insert_session(state_db, "claude-prompts-mcp", _chain_session_state())
 
-        assert db_reader.load_active_chain_state() is None
+        assert db_reader.load_active_chain_state("chain-demo") is None
 
     def test_a_finished_chain_with_nothing_pending_is_not_active(self, state_db):
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=3, total=3))
 
-        assert db_reader.load_active_chain_state() is None
+        assert db_reader.load_active_chain_state("chain-demo") is None
 
     def test_a_final_step_awaiting_a_gate_verdict_is_still_active(self, state_db):
         _insert_session(
@@ -355,7 +359,7 @@ class TestActiveChainState:
             ),
         )
 
-        state = db_reader.load_active_chain_state()
+        state = db_reader.load_active_chain_state("chain-demo")
 
         assert state is not None
         assert state["pending_gate"] == "code-quality, test-coverage"
@@ -372,7 +376,7 @@ class TestActiveChainState:
             ),
         )
 
-        state = db_reader.load_active_chain_state()
+        state = db_reader.load_active_chain_state("chain-demo")
 
         assert state is not None
         assert state["pending_shell_verify"] == "npm test"
@@ -387,7 +391,7 @@ class TestActiveChainState:
         state_db.execute("DROP VIEW v_execution_status")
         state_db.commit()
 
-        state = db_reader.load_active_chain_state()
+        state = db_reader.load_active_chain_state("chain-demo")
 
         assert state is not None
         assert state["current_step"] == 1
@@ -402,7 +406,7 @@ class TestActiveChainState:
         state_db.execute("DELETE FROM chain_sessions")
         state_db.commit()
 
-        assert db_reader.load_active_chain_state() is None
+        assert db_reader.load_active_chain_state("chain-demo") is None
 
 
 # ── D. View repair (schema v20) ───────────────────────────────────────────────
@@ -425,7 +429,7 @@ class TestExecutionViewIsLive:
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
         conn = db_reader._connect_readonly()
         try:
-            state = db_reader._load_from_execution_view(conn)
+            state = db_reader._load_from_execution_view(conn, "chain-demo")
         finally:
             conn.close()
 
@@ -446,9 +450,200 @@ class TestExecutionViewIsLive:
             run_status=terminal,
         )
 
-        assert db_reader.load_active_chain_state() is None
+        assert db_reader.load_active_chain_state("chain-demo") is None
 
         # And again with the view removed, so the session-table fallback is the path under test.
         state_db.execute("DROP VIEW v_execution_status")
         state_db.commit()
+        assert db_reader.load_active_chain_state("chain-demo") is None
+
+
+# ── E. Cross-client scoping ───────────────────────────────────────────────────
+
+
+class TestCrossClientScoping:
+    """Several clients' MCP servers can share one state.db. Recovery keyed by
+    "newest active chain owned by any live PID" injected one client's chain
+    into another client's conversation (measured 2026-08-21: an OpenCode-owned
+    chain surfaced in a Claude Code compact recovery). These pin the fix:
+    selection requires the chain THIS session recorded.
+    """
+
+    SESSION = "sess-scope-test"
+
+    def _record_session_chain(self, chain_id: str = "chain-demo") -> None:
+        from session_state import save_session_state
+
+        save_session_state(self.SESSION, {"chain_id": chain_id, "current_step": 1, "total_steps": 3})
+
+    def test_the_unscoped_scan_is_dead(self, state_db):
+        """THE leak regression: an active chain with a live owner exists, and a
+        call without a chain_id must not return it."""
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+
         assert db_reader.load_active_chain_state() is None
+
+    def test_a_foreign_chain_id_is_not_served(self, state_db):
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+
+        assert db_reader.load_active_chain_state("chain-someone-elses#1") is None
+
+    def test_a_session_with_no_recorded_chain_recovers_nothing(self, state_db):
+        """End-to-end leak regression: a foreign active chain sits in state.db,
+        and a conversation that never recorded a chain must not adopt it."""
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+
+        assert db_reader.load_recoverable_chain_state(self.SESSION) is None
+        assert db_reader.load_recoverable_chain_state(None) is None
+        assert db_reader.load_recoverable_chain_state("") is None
+
+    def test_the_sessions_own_chain_is_recovered_fresh(self, state_db):
+        """The session recorded chain-demo; state.db has newer step data for it
+        — recovery returns the fresh db state, not the stale snapshot."""
+        self._record_session_chain("chain-demo")
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+
+        state = db_reader.load_recoverable_chain_state(self.SESSION)
+
+        assert state is not None
+        assert state["chain_id"] == "chain-demo"
+        assert state["current_step"] == 2
+
+    def test_a_terminal_chain_is_not_resurrected_from_the_snapshot(self, state_db):
+        """state.db is reachable and says the session's chain finished — the
+        stale hooks-state snapshot (retained 24h) must not revive it."""
+        self._record_session_chain("chain-demo")
+        _insert_session(
+            state_db,
+            str(LIVE_PID),
+            _chain_session_state(current=1, total=3, run_status="completed"),
+            run_status="completed",
+        )
+
+        assert db_reader.load_recoverable_chain_state(self.SESSION) is None
+
+    def test_a_live_zero_step_gated_run_serves_the_snapshot(self, state_db):
+        """A gated single-prompt execution sits at step 0/0 — a shape the db
+        converters do not serve — while its gate is genuinely pending. Live
+        row + live owner must fall back to the session snapshot, not expire
+        (caught by driving the fixed hook against a real pending gate)."""
+        from session_state import save_session_state
+
+        save_session_state(
+            self.SESSION,
+            {"chain_id": "chain-demo", "current_step": 0, "total_steps": 0, "pending_gate": "code-quality"},
+        )
+        _insert_session(
+            state_db,
+            str(LIVE_PID),
+            _chain_session_state(
+                current=0,
+                total=0,
+                pending_gate_review={"gateIds": ["code-quality"], "attemptCount": 1},
+            ),
+        )
+
+        state = db_reader.load_recoverable_chain_state(self.SESSION)
+
+        assert state is not None
+        assert state["pending_gate"] == "code-quality"
+
+    def test_an_untracked_run_type_serves_the_snapshot(self, state_db):
+        """No chain_sessions row exists for the session's chain while state.db
+        is reachable — the live shape of a gated single-prompt run, which is
+        not row-tracked. The session's own snapshot serves."""
+        from session_state import save_session_state
+
+        save_session_state(
+            self.SESSION,
+            {"chain_id": "chain-demo", "current_step": 0, "total_steps": 0, "pending_gate": "code-quality"},
+        )
+
+        state = db_reader.load_recoverable_chain_state(self.SESSION)
+
+        assert state is not None
+        assert state["pending_gate"] == "code-quality"
+
+    def test_a_dead_owner_expires_the_chain(self, state_db):
+        """The owning server exited (or its rows were PID-deleted): recovery
+        expires rather than continuing against a server that cannot resume it."""
+        self._record_session_chain("chain-demo")
+        _insert_session(state_db, str(_dead_pid()), _chain_session_state(current=1, total=3))
+
+        assert db_reader.load_recoverable_chain_state(self.SESSION) is None
+
+    def test_without_a_server_db_the_session_snapshot_serves(self, no_state_db):
+        """Degraded mode parity with the pre-fix fallback: no state.db is
+        reachable, so the session's own snapshot is the best available truth."""
+        self._record_session_chain("chain-demo")
+
+        state = db_reader.load_recoverable_chain_state(self.SESSION)
+
+        assert state is not None
+        assert state["chain_id"] == "chain-demo"
+        assert state["current_step"] == 1
+
+
+class TestStateDbPathResolution:
+    """The server writes {MCP_RUNTIME_ROOT || MCP_WORKSPACE}/runtime-state/state.db
+    (paths.ts getRuntimeRoot). The hook read {workspace}/server/runtime-state only,
+    so with MCP_WORKSPACE at the repo root it read a database its own session's
+    server never writes — and the only chains it could find were other clients'.
+    """
+
+    def test_the_servers_actual_layout_is_preferred(self, tmp_path, monkeypatch):
+        import workspace
+
+        ws = tmp_path / "ws"
+        primary = ws / "runtime-state"
+        legacy = ws / "server" / "runtime-state"
+        primary.mkdir(parents=True)
+        legacy.mkdir(parents=True)
+        (primary / "state.db").touch()
+        (legacy / "state.db").touch()
+        monkeypatch.setenv("MCP_WORKSPACE", str(ws))
+        for leaked in (
+            "MCP_RUNTIME_ROOT",
+            "CLAUDE_PLUGIN_ROOT",
+            "PLUGIN_ROOT",
+            "GEMINI_EXTENSION_PATH",
+            "extensionPath",
+        ):
+            monkeypatch.delenv(leaked, raising=False)
+
+        assert workspace.get_state_db_path() == primary / "state.db"
+
+    def test_the_legacy_server_layout_still_serves(self, tmp_path, monkeypatch):
+        import workspace
+
+        ws = tmp_path / "ws"
+        legacy = ws / "server" / "runtime-state"
+        legacy.mkdir(parents=True)
+        (legacy / "state.db").touch()
+        monkeypatch.setenv("MCP_WORKSPACE", str(ws))
+        for leaked in (
+            "MCP_RUNTIME_ROOT",
+            "CLAUDE_PLUGIN_ROOT",
+            "PLUGIN_ROOT",
+            "GEMINI_EXTENSION_PATH",
+            "extensionPath",
+        ):
+            monkeypatch.delenv(leaked, raising=False)
+
+        assert workspace.get_state_db_path() == legacy / "state.db"
+
+    def test_mcp_runtime_root_outranks_the_workspace(self, tmp_path, monkeypatch):
+        import workspace
+
+        ws = tmp_path / "ws"
+        (ws / "runtime-state").mkdir(parents=True)
+        (ws / "runtime-state" / "state.db").touch()
+        rt = tmp_path / "rt"
+        (rt / "runtime-state").mkdir(parents=True)
+        (rt / "runtime-state" / "state.db").touch()
+        monkeypatch.setenv("MCP_WORKSPACE", str(ws))
+        monkeypatch.setenv("MCP_RUNTIME_ROOT", str(rt))
+        for leaked in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
+            monkeypatch.delenv(leaked, raising=False)
+
+        assert workspace.get_state_db_path() == rt / "runtime-state" / "state.db"

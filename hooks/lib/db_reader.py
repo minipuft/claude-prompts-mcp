@@ -193,8 +193,104 @@ def _is_pid_alive(pid: int) -> bool:
         return False
 
 
-def load_active_chain_state() -> dict | None:
+def load_recoverable_chain_state(session_id: str | None) -> dict | None:
+    """Load the chain state THIS conversation may recover — and no other.
+
+    Cross-client scoping (interview 1A, hook side): several MCP server
+    processes — launched by different clients — can share one state.db, so
+    "the newest active chain owned by any live PID" is not this session's
+    chain. Recovery is therefore keyed by the chain this session recorded in
+    hooks-state.db (written by the PostToolUse chain tracker); state.db only
+    refreshes that specific chain. A session that recorded nothing recovers
+    nothing.
+
+    Degradation ladder:
+      - no session row, or no chain_id in it     → None (nothing to recover)
+      - state.db reachable, chain active + live  → fresh state from state.db
+      - state.db reachable, chain row live but
+        not in a step shape the converters serve
+        (a gated single-prompt execution is 0/0),
+        or no row at all (that run type is not
+        row-tracked; measured live 2026-08-21)   → the session snapshot —
+        which is this session's OWN recorded chain, so it can never be foreign
+      - state.db reachable, chain row(s) exist
+        and every one is terminal or dead-owned  → None (expired — do NOT
+        resurrect from the session snapshot; it is stale by definition here)
+      - no state.db reachable                    → the session snapshot as-is
+        (the pre-existing fallback for hosts without a readable server db)
+    """
+    if not session_id:
+        return None
+    from session_state import load_session_state
+
+    session = load_session_state(session_id)
+    if not session:
+        return None
+    chain_id = session.get("chain_id") or ""
+    if not chain_id:
+        return None
+
+    conn = _connect_readonly()
+    if not conn:
+        return dict(session)
+    try:
+        result = _load_from_execution_view(conn, chain_id)
+        if result is not None:
+            return result
+        result = _load_from_session_table(conn, chain_id)
+        if result is not None:
+            return result
+        return dict(session) if _chain_row_is_alive(conn, chain_id) else None
+    except (sqlite3.Error, json.JSONDecodeError, KeyError, TypeError):
+        return None
+    finally:
+        conn.close()
+
+
+def _chain_row_is_alive(conn: sqlite3.Connection, chain_id: str) -> bool:
+    """False only when row(s) exist for the chain and every one is terminal
+    or owned by a dead server PID — the shapes where a snapshot replay would
+    resume a run nothing can serve.
+
+    Everything else is True: a live non-terminal row whose step shape the
+    converters do not return (a gated single-prompt execution at 0/0 still
+    carries a real pending gate), NO row at all (that run type is not
+    row-tracked — measured live 2026-08-21 against a pending single-prompt
+    gate; and a graceful server exit deletes rows only when the conversation
+    is over, where the session id changes anyway), and schema drift (fails
+    open, matching the pre-scoping fallback). The snapshot this admits is
+    always the session's own recorded chain, never another client's.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT run_owner_pid, run_status FROM chain_sessions WHERE chain_id = ?",
+            (chain_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return True
+    if not rows:
+        return True
+    for row in rows:
+        if row["run_status"] in TERMINAL_RUN_STATUSES:
+            continue
+        try:
+            pid = int(row["run_owner_pid"])
+        except (ValueError, TypeError):
+            continue
+        if _is_pid_alive(pid):
+            return True
+    return False
+
+
+def load_active_chain_state(chain_id: str | None = None) -> dict | None:
     """Load active chain session state from server's execution SSOT.
+
+    Requires the chain_id to look up. The unscoped form — scan every row and
+    return the newest active chain owned by any live server PID — is the
+    defect that injected one client's chain into another client's
+    conversation, so a call without a chain_id deliberately returns None
+    instead of scanning. Callers that want "this conversation's chain" use
+    load_recoverable_chain_state(session_id).
 
     Read order (highest-fidelity first):
       1. v_execution_status view (Tier 1 — SEP-1686 cross-language SSOT;
@@ -217,22 +313,24 @@ def load_active_chain_state() -> dict | None:
     workspace id in kv_state; there is deliberately no fallback to the old name,
     since both tables are dropped by the bump that renames them.
     """
+    if not chain_id:
+        return None
     conn = _connect_readonly()
     if not conn:
         return None
     try:
-        result = _load_from_execution_view(conn)
+        result = _load_from_execution_view(conn, chain_id)
         if result is not None:
             return result
 
-        return _load_from_session_table(conn)
+        return _load_from_session_table(conn, chain_id)
     except (sqlite3.Error, json.JSONDecodeError, KeyError, TypeError):
         return None
     finally:
         conn.close()
 
 
-def _load_from_execution_view(conn: sqlite3.Connection) -> dict | None:
+def _load_from_execution_view(conn: sqlite3.Connection, chain_id: str) -> dict | None:
     """Query v_execution_status — Tier 1 cross-language SSOT view.
 
     Boundary check uses run_status (Tier 2): rows with run_status in
@@ -246,9 +344,11 @@ def _load_from_execution_view(conn: sqlite3.Connection) -> dict | None:
             "SELECT run_owner_pid, chain_id, run_status, current_step, total_steps, "
             "last_activity, pending_gate_review, pending_shell_verification "
             "FROM v_execution_status "
-            "WHERE run_status IS NULL "
-            "OR run_status NOT IN ('completed', 'failed', 'cancelled') "
-            "ORDER BY last_activity DESC, updated_at DESC"
+            "WHERE chain_id = ? "
+            "AND (run_status IS NULL "
+            "OR run_status NOT IN ('completed', 'failed', 'cancelled')) "
+            "ORDER BY last_activity DESC, updated_at DESC",
+            (chain_id,),
         )
         rows = cursor.fetchall()
     except sqlite3.OperationalError:
@@ -330,10 +430,13 @@ def _parse_json_field(raw: object) -> object:
         return None
 
 
-def _load_from_session_table(conn: sqlite3.Connection) -> dict | None:
+def _load_from_session_table(conn: sqlite3.Connection, chain_id: str) -> dict | None:
     """Query chain_sessions per-row table. Returns session for a live PID, or None."""
     try:
-        cursor = conn.execute("SELECT run_owner_pid, chain_id, state FROM chain_sessions ORDER BY updated_at DESC")
+        cursor = conn.execute(
+            "SELECT run_owner_pid, chain_id, state FROM chain_sessions WHERE chain_id = ? ORDER BY updated_at DESC",
+            (chain_id,),
+        )
         rows = cursor.fetchall()
     except sqlite3.OperationalError:
         return None

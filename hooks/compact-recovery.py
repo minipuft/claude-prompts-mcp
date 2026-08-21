@@ -20,8 +20,8 @@ from pathlib import Path
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
-from db_reader import load_active_chain_state
-from session_state import ChainState, format_chain_reminder, load_session_state
+from db_reader import load_recoverable_chain_state
+from session_state import ChainState, format_chain_reminder
 
 
 def parse_hook_input() -> dict:
@@ -36,12 +36,10 @@ def main():
     hook_input = parse_hook_input()
     session_id = hook_input.get("session_id", "")
 
-    # SSOT: read from server's state.db (works without PostToolUse hook)
-    state: ChainState | None = load_active_chain_state()  # type: ignore[assignment]
-
-    # Fallback: hooks-state.db (if PostToolUse populated it)
-    if not state and session_id:
-        state = load_session_state(session_id)
+    # Session-scoped recovery: only the chain THIS conversation recorded via
+    # PostToolUse tracking is eligible; state.db refreshes that chain and can
+    # never substitute another client's newer chain (cross-client leakage fix).
+    state: ChainState | None = load_recoverable_chain_state(session_id)  # type: ignore[assignment]
 
     if not state:
         sys.exit(0)

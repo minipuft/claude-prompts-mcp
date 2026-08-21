@@ -36,8 +36,8 @@ from cache_manager import (
     match_prompts_to_intent,
 )
 from config_loader import is_expanded_output
-from db_reader import load_active_chain_state
-from session_state import ChainState, format_chain_reminder, load_session_state
+from db_reader import load_recoverable_chain_state
+from session_state import ChainState, format_chain_reminder
 
 # Import generated operator patterns (SSOT: server/tooling/contracts/operators.json)
 try:
@@ -764,11 +764,9 @@ def main():
         sys.exit(0)
 
     # === CHAIN ENFORCEMENT: Active chain needs continuation ===
-    # SSOT: read from server's state.db (works without PostToolUse hook)
-    session_state: ChainState | None = load_active_chain_state()  # type: ignore[assignment]
-    # Fallback: hooks-state.db (if PostToolUse populated it)
-    if not session_state and session_id:
-        session_state = load_session_state(session_id)
+    # Session-scoped: only the chain this conversation recorded is enforced;
+    # an unscoped state.db read here injected other clients' chains.
+    session_state: ChainState | None = load_recoverable_chain_state(session_id)  # type: ignore[assignment]
     if session_state:
         chain_id = session_state.get("chain_id", "")
         step = session_state.get("current_step", 0)

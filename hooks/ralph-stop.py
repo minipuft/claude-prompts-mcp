@@ -26,7 +26,7 @@ from pathlib import Path
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
-from db_reader import load_active_chain_state
+from db_reader import load_recoverable_chain_state
 from verify_active_store import (
     clear_verify_active_state,
     load_verify_active_state,
@@ -373,9 +373,10 @@ def main():
     verify_state = load_verify_state(hook_session_id or None)
 
     if not verify_state:
-        # No active verification — check for active chain before allowing stop
-        # SSOT: server's state.db (PID-scoped rows, WAL mode for concurrent reads)
-        chain_state = load_active_chain_state()
+        # No active verification — check for active chain before allowing stop.
+        # Session-scoped: an unscoped read here let another client's chain
+        # block THIS session's Stop event (cross-client leakage fix).
+        chain_state = load_recoverable_chain_state(hook_session_id or None)
         if chain_state:
             chain_id = chain_state.get("chain_id", "")
             step = chain_state.get("current_step", 0)
@@ -383,7 +384,7 @@ def main():
             pending_gate = chain_state.get("pending_gate")
 
             # Block if: steps remain OR pending gate/verify at final step
-            # (load_active_chain_state already filters truly completed chains)
+            # (load_recoverable_chain_state already filters truly completed chains)
             needs_continuation = chain_id and step > 0 and step < total
             needs_review = chain_id and step > 0 and pending_gate
 

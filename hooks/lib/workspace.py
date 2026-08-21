@@ -95,16 +95,32 @@ def get_runtime_state_dir(fallback: Path) -> Path:
     """Get the runtime-state directory for transient state files."""
     workspace = get_workspace_root()
     if workspace:
-        # MCP server writes to {workspace}/server/runtime-state/ (serverRoot = workspace/server)
+        # Hook-owned state (hooks-state.db, verify-state.db). Kept under
+        # {workspace}/server/runtime-state so existing session rows survive;
+        # the SERVER's state.db location is get_state_db_path(), not this.
         return workspace / "server" / "runtime-state"
     return fallback
 
 
 def get_state_db_path() -> Path | None:
-    """Get path to the MCP server's state.db (read-only from hooks)."""
+    """Get path to the MCP server's state.db (read-only from hooks).
+
+    Mirrors the server's own derivation (paths.ts getRuntimeRoot): the server
+    writes {MCP_RUNTIME_ROOT || MCP_WORKSPACE}/runtime-state/state.db. The
+    {workspace}/server/runtime-state layout is probed last for servers whose
+    MCP_WORKSPACE (or package root) resolves to the server directory itself —
+    reading only that layout made the hook read a database its own session's
+    server never writes.
+    """
+    candidates: list[Path] = []
+    runtime_root = os.environ.get("MCP_RUNTIME_ROOT")
+    if runtime_root and runtime_root.strip():
+        candidates.append(Path(runtime_root) / "runtime-state" / "state.db")
     workspace = get_workspace_root()
     if workspace:
-        db_path = workspace / "server" / "runtime-state" / "state.db"
+        candidates.append(workspace / "runtime-state" / "state.db")
+        candidates.append(workspace / "server" / "runtime-state" / "state.db")
+    for db_path in candidates:
         if db_path.exists():
             return db_path
     return None

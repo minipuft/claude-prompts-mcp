@@ -85,7 +85,7 @@ echo $?  # Output: 0
 
 ### `compact-recovery.py` (SessionStart, matcher: "compact")
 
-Re-injects active chain state after compaction. Reads from SQLite (`state.db`) and outputs a continuation directive to stdout, which Claude Code adds to post-compaction context. Replaces the former `pre-compact.py` (PreCompact), which was a side-effects-only event that could not inject context.
+Re-injects active chain state after compaction. Recovery is scoped to the chain THIS conversation recorded (via the PostToolUse chain tracker in `hooks-state.db`); the server's `state.db` refreshes that specific chain and never substitutes another client's chain, since several clients' MCP servers can share one `state.db`. Outputs a continuation directive to stdout, which Claude Code adds to post-compaction context. Replaces the former `pre-compact.py` (PreCompact), which was a side-effects-only event that could not inject context.
 
 ## Configuration
 
@@ -178,7 +178,7 @@ hooks/
 
 ## Data Access
 
-Hooks read prompt/gate metadata from `server/runtime-state/state.db` (SQLite, read-only via `db_reader.py`). Session state is stored in `server/runtime-state/hooks-state.db` (SQLite, read-write via `hook_state_store.py`).
+Hooks read prompt/gate metadata from the server's `state.db` (SQLite, read-only via `db_reader.py`), resolved the same way the server resolves its write path: `{MCP_RUNTIME_ROOT || MCP_WORKSPACE}/runtime-state/state.db`, with the legacy `{workspace}/server/runtime-state/` layout probed as a fallback. Hook-owned session state is stored in `server/runtime-state/hooks-state.db` (SQLite, read-write via `hook_state_store.py`).
 
 ## Other Platforms
 
