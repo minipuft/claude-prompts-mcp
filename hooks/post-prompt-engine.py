@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import (
+    clear_session_state,
     parse_prompt_engine_response,
     save_session_state,
 )
@@ -57,6 +58,13 @@ def main():
     state = parse_prompt_engine_response(content)
 
     if not state:
+        # A verdict/cancel submission whose response carries no further chain
+        # markers means the tracked state RESOLVED (e.g. gate PASS → "Execution
+        # complete."). Clear the row: sessions previously kept their pending
+        # state for the 24h retention window, and recovery hooks re-injected
+        # long-resolved gates after compaction.
+        if isinstance(tool_input, dict) and (tool_input.get("gate_verdict") or tool_input.get("cancel")):
+            clear_session_state(session_id)
         sys.exit(0)
 
     # Extract chain_id from tool_input (higher priority than regex parsing)
@@ -64,6 +72,17 @@ def main():
         input_chain_id = tool_input.get("chain_id", "")
         if input_chain_id:
             state["chain_id"] = input_chain_id
+
+    # Terminal boundary: an explicit completion marker with nothing pending
+    # means the run is over — clear the row instead of saving a snapshot that
+    # only the 24h sweep would ever remove. The step numbers alone cannot
+    # decide this: "Step 2 of 2" (final step delivered, still in flight) and
+    # "Chain complete (2/2)" both parse to 2/2, so the marker text is the
+    # discriminator.
+    run_is_complete = bool(re.search(r"[Cc]hain complete|Execution complete", content))
+    if run_is_complete and not state.get("pending_gate") and not state.get("pending_shell_verify"):
+        clear_session_state(session_id)
+        sys.exit(0)
 
     # Save state for this session
     save_session_state(session_id, state)
