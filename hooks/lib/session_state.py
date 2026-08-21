@@ -3,6 +3,8 @@ Session state manager for Claude Code hooks.
 Tracks chain/gate state per conversation session via SQLite (hooks-state.db).
 """
 
+import json
+import os
 import re
 from typing import Any, TypedDict, cast
 
@@ -13,6 +15,36 @@ from hook_state_store import (
     load_state,
     save_state,
 )
+
+# Extraction patterns shared with the opencode-prompts plugin. The generated
+# hooks/lib/_generated/extraction-patterns.json is the single source (regenerate
+# with `npm run generate:contracts` in server/); these hardcoded defaults are the
+# fail-open fallback used when the generated file is missing or unreadable, so a
+# stale checkout degrades to today's behavior rather than crashing the hook.
+_DEFAULT_PATTERNS = {
+    "step": r"(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\s*\(?(\d+)\s*(?:of|/)\s*(\d+)",
+    "chainId": r"(chain-[a-zA-Z0-9_#-]+)",
+    "gateHeader": r"\*\*(?:Structural \+ Gate |Structural |Gate )?Review Required\*\*",
+    "gatesList": r"\*\*Gates\*\*:\s*(.+?)(?:\n|$)",
+    "structuredVerdict": r'"overall"\s*:\s*"(PASS|FAIL)"',
+}
+
+
+def _load_patterns() -> dict[str, str]:
+    patterns = dict(_DEFAULT_PATTERNS)
+    try:
+        path = os.path.join(os.path.dirname(__file__), "_generated", "extraction-patterns.json")
+        with open(path, encoding="utf-8") as f:
+            generated = json.load(f)
+        for key, value in generated.items():
+            if isinstance(value, str) and value:
+                patterns[key] = value
+    except (OSError, ValueError):
+        pass
+    return patterns
+
+
+_PATTERNS = _load_patterns()
 
 
 class ChainState(TypedDict, total=False):
@@ -95,14 +127,14 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
 
     # Detect step indicators: "Step 1 of 3", "step 2/4", "Progress 1/2",
     # "Chain complete (2/2)", "complete (2/2)", etc.
-    step_match = re.search(r"(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\s*\(?(\d+)\s*(?:of|/)\s*(\d+)", content)
+    step_match = re.search(_PATTERNS["step"], content)
     if step_match:
         state["current_step"] = int(step_match.group(1))
         state["total_steps"] = int(step_match.group(2))
 
     # Detect chain_id from resume token pattern: "chain-<name>#<run>"
     # Must start with "chain-" (hyphen) to avoid matching literal "chain_id" parameter names
-    chain_match = re.search(r"(chain-[a-zA-Z0-9_#-]+)", content)
+    chain_match = re.search(_PATTERNS["chainId"], content)
     if chain_match:
         state["chain_id"] = chain_match.group(1)
 
@@ -113,8 +145,8 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
     #   **Structural Review Required** (attempt X/Y) (legacy)
     #   **Structural + Gate Review Required**        (legacy)
     # Followed by: **Gates**: gate-id-1, gate-id-2
-    gate_review_match = re.search(r"\*\*(?:Structural \+ Gate |Structural |Gate )?Review Required\*\*", content)
-    gates_list_match = re.search(r"\*\*Gates\*\*:\s*(.+?)(?:\n|$)", content)
+    gate_review_match = re.search(_PATTERNS["gateHeader"], content)
+    gates_list_match = re.search(_PATTERNS["gatesList"], content)
 
     if gate_review_match or gates_list_match:
         # Extract gate IDs from **Gates**: id1, id2

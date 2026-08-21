@@ -400,9 +400,9 @@ const CLIENT_REGISTRY: Record<string, ClientConfig> = {
     variant: 'opencode',
     outputDir: { user: '~/.config/opencode/skills', project: '.opencode/skills' },
     capabilities: {
-      scripts: false,
-      references: false,
-      assets: false,
+      scripts: true,
+      references: true,
+      assets: true,
       subagents: true,
       skillFrontmatterHooks: false,
     },
@@ -1474,27 +1474,157 @@ function literalArgumentsAfterCompile(
   return [...found].sort();
 }
 
-function compileTemplate(template: string, _args: IRArgument[]): string {
-  let result = template;
+/**
+ * Supplied-argument values for condition evaluation in exported templates.
+ *
+ * Production callers never supply anything — export renders the reader's view, where
+ * arguments arrive as trailing free text — so every condition is falsy and the
+ * else-preference ruling (F18) decides. The parameter exists for tests, which pass
+ * values to exercise first-truthy branch selection.
+ */
+export type SuppliedArgs = Record<string, string> | undefined;
 
+/**
+ * Evaluate one template condition: `word`, `not word`, `a or b`, `x == "lit"`.
+ *
+ * A bare word is truthy only when supplied with a non-empty value; an `==` comparison
+ * when the supplied value equals the literal; `not` negates; `or` is top-level disjunction.
+ * Unknown forms are falsy — the fidelity detector reports them rather than guessing.
+ */
+function evaluateCondition(expr: string, supplied: SuppliedArgs): boolean {
+  return expr
+    .trim()
+    .split(/\s+or\s+/)
+    .some((disjunct) => {
+      const d = disjunct.trim();
+      const negated = /^not\s+(.+)$/.exec(d);
+      if (negated) return !evaluateCondition(negated[1]!, supplied);
+      const comparison = /^(\w+)\s*==\s*(.+)$/.exec(d);
+      if (comparison) {
+        const literalRaw = comparison[2]!.trim();
+        const literal = /^["'](.*)["']$/.exec(literalRaw)?.[1] ?? literalRaw;
+        return (supplied?.[comparison[1]!] ?? '') === literal;
+      }
+      if (/^\w+$/.test(d)) return Boolean(supplied?.[d]);
+      return false;
+    });
+}
+
+/** Template tag tokens the chain compiler walks: if / elif / else / endif. */
+const TEMPLATE_TAG_RE = /\{%-?\s*(if|elif|else|endif)\b([^%]*?)-?%\}/g;
+/** Chain opener, matched against the remaining segment to locate the next chain. */
+const IF_OPEN_RE = /\{%-?\s*if\s+([\s\S]*?)\s*-?%\}/;
+
+interface TemplateBranch {
+  condition: string | null;
+  raw: string;
+}
+
+/**
+ * Select the branch text a skill reader gets from one parsed if/elif/else chain.
+ *
+ * First condition that evaluates truthy wins; otherwise the else branch when present
+ * (F18 — at export nothing is supplied, so this is the usual path); otherwise a lone
+ * bare-word `{% if %}` keeps its content, because that block is usually the primary
+ * instruction path rather than a mutually-exclusive case. An elif or expression chain
+ * without else renders empty: its branches are mutually exclusive by construction, and
+ * emitting the first one would present case-specific instructions for a case that was
+ * never chosen.
+ */
+function selectBranch(branches: TemplateBranch[], supplied: SuppliedArgs): string {
+  const truthy = branches.find(
+    (b) => b.condition !== null && evaluateCondition(b.condition, supplied)
+  );
+  if (truthy) return truthy.raw.trim();
+  const elseBranch = branches.find((b) => b.condition === null);
+  if (elseBranch) return elseBranch.raw.trim();
+  const loneSimpleIf =
+    branches.length === 1 &&
+    branches[0]!.condition !== null &&
+    /^\s*\w+\s*$/.test(branches[0]!.condition);
+  return (loneSimpleIf ? branches[0]!.raw : '').trim();
+}
+
+/**
+ * Compile every `{% if %}` chain in the segment, innermost nesting included.
+ *
+ * Walks tag tokens with depth counting so an outer chain's matching endif is found even
+ * when branches contain their own chains; each selected branch's content is compiled
+ * recursively before emission. Unbalanced input (an `{% if %}` with no matching endif)
+ * passes through verbatim rather than swallowing the rest of the template.
+ */
+function compileTemplateChains(segment: string, supplied: SuppliedArgs): string {
+  const openMatch = IF_OPEN_RE.exec(segment);
+  if (!openMatch) return segment;
+  const before = segment.slice(0, openMatch.index);
+  const afterOpen = openMatch.index + openMatch[0].length;
+
+  const branches: TemplateBranch[] = [{ condition: openMatch[1]!.trim(), raw: '' }];
+  let depth = 1;
+  let contentStart = afterOpen;
+  let endIdx = -1;
+  let match: RegExpExecArray | null;
+  TEMPLATE_TAG_RE.lastIndex = afterOpen;
+  while ((match = TEMPLATE_TAG_RE.exec(segment))) {
+    const kind = match[1]!;
+    if (kind === 'if') {
+      depth++;
+      continue;
+    }
+    if (kind === 'endif') {
+      depth--;
+      if (depth === 0) {
+        branches[branches.length - 1]!.raw = segment.slice(contentStart, match.index);
+        endIdx = match.index + match[0].length;
+        break;
+      }
+      continue;
+    }
+    if (depth === 1 && (kind === 'elif' || kind === 'else')) {
+      branches[branches.length - 1]!.raw = segment.slice(contentStart, match.index);
+      branches.push({ condition: kind === 'else' ? null : match[2]!.trim(), raw: '' });
+      contentStart = match.index + match[0].length;
+    }
+  }
+
+  if (endIdx === -1) {
+    return before + openMatch[0] + compileTemplateChains(segment.slice(afterOpen), supplied);
+  }
+
+  const chosen = branches.find(
+    (b) => b.condition !== null && evaluateCondition(b.condition, supplied)
+  );
+  const elseBranch = branches.find((b) => b.condition === null);
+  const fallback =
+    elseBranch ??
+    (branches.length === 1 && /^\s*\w+\s*$/.test(branches[0]!.condition ?? '')
+      ? branches[0]!
+      : { condition: null, raw: '' });
+  const selected = chosen ?? fallback;
+  return (
+    before +
+    compileTemplateChains(selected.raw, supplied) +
+    compileTemplateChains(segment.slice(endIdx), supplied)
+  );
+}
+
+export function compileTemplate(
+  template: string,
+  _args: IRArgument[],
+  supplied?: Record<string, string>
+): string {
   // `{% if arg %}A{% else %}B{% endif %}` compiles to B, not A.
   //
   // The if-branch is written for the case where `arg` was supplied, and in a skill
   // it never is -- arguments are appended as trailing free text, never substituted.
   // So keeping A emits a placeholder that cannot bind AND discards the fallback,
   // which is usually the enumeration telling the reader what belongs there. B is
-  // the only branch that is ever true for a skill reader.
-  result = result.replace(
-    /\{%-?\s*if\s+(\w+)\s*-?%\}([\s\S]*?)(?:\{%-?\s*else\s*-?%\}([\s\S]*?))?\{%-?\s*endif\s*-?%\}/g,
-    (_match, _varName: string, ifContent: string, elseContent?: string) => {
-      return (elseContent ?? ifContent).trim();
-    }
+  // the only branch that is ever true for a skill reader. compileIfChain owns the
+  // full selection rules, including elif chains and complex expressions.
+  return compileTemplateChains(template, supplied).replace(
+    /\{\{\s*(\w+)\s*\}\}/g,
+    (_match, varName: string) => `{${varName}}`
   );
-
-  // Replace {{argName}} with {argName} (readable named placeholder)
-  result = result.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, varName: string) => `{${varName}}`);
-
-  return result;
 }
 
 /** Detect Nunjucks control flow syntax ({% if %}, {% for %}, etc.) in content. */
@@ -1525,7 +1655,7 @@ const BARE_VARIABLE_BODY = /^\s*\w+\s*$/;
  *
  * Pure: the caller owns emission, so the same detection serves export, diff, and tests.
  */
-function findTemplateFidelityGaps(ir: SkillIR): TemplateFidelityGap[] {
+export function findTemplateFidelityGaps(ir: SkillIR): TemplateFidelityGap[] {
   const gaps: TemplateFidelityGap[] = [];
   const sources: Array<[string, string | null]> = [
     ['system message', ir.systemMessage],
@@ -1551,6 +1681,28 @@ function findTemplateFidelityGaps(ir: SkillIR): TemplateFidelityGap[] {
     // `if` is compiled (branch kept); every other block passes through untouched.
     for (const match of content.matchAll(/\{%-?\s*(for|set|macro|block)\s/g)) {
       gaps.push({ kind: 'control-flow', detail: `${label}: {% ${match[1]} %} survives verbatim` });
+    }
+
+    // elif chains now COMPILE (see compileIfChain), but at export nothing is supplied,
+    // so every condition is falsy: the else branch wins and each if/elif branch is
+    // dropped; a chain without else renders empty. Name the construct so the author
+    // knows their conditional text may not appear in the exported skill.
+    for (const match of content.matchAll(/\{%-?\s*elif\b/g)) {
+      gaps.push({
+        kind: 'control-flow',
+        detail: `${label}: {% elif %} compiles to the fallback — export renders only the else branch, or nothing without one`,
+      });
+    }
+
+    // Complex if-expressions also compile, but against unsupplied arguments: name the
+    // expression so the author can move its content into an unconditional section.
+    for (const match of content.matchAll(/\{%-?\s*if\s+([^%}]*?)\s*-?%\}/g)) {
+      const operator = /==|\bor\b|\bnot\b/.exec(match[1] ?? '')?.[0];
+      if (!operator) continue;
+      gaps.push({
+        kind: 'expression',
+        detail: `${label}: {% if ${operator} %} evaluates against unsupplied args — export keeps only the fallback`,
+      });
     }
 
     // The else-branch is discarded with no trace in the output.
@@ -1603,22 +1755,18 @@ function reportTemplateFidelityGaps(
 /**
  * Compiles Nunjucks templates to plain text for Agent Skills (no template syntax).
  * - {{argName}} → {argName} (readable placeholder)
- * - {% if argName %}content{% endif %} → content (always included)
+ * - {% if %} chains → the selected branch text, via the shared compileIfChain rules
  */
-function compileTemplateToPlaintext(template: string, _args: IRArgument[]): string {
-  let result = template;
-
+export function compileTemplateToPlaintext(
+  template: string,
+  _args: IRArgument[],
+  supplied?: Record<string, string>
+): string {
   // Same else-branch preference as `compileTemplate` -- see the reasoning there.
-  result = result.replace(
-    /\{%-?\s*if\s+(\w+)\s*-?%\}([\s\S]*?)(?:\{%-?\s*else\s*-?%\}([\s\S]*?))?\{%-?\s*endif\s*-?%\}/g,
-    (_match, _varName: string, ifContent: string, elseContent?: string) =>
-      (elseContent ?? ifContent).trim()
+  return compileTemplateChains(template, supplied).replace(
+    /\{\{\s*(\w+)\s*\}\}/g,
+    (_match, varName: string) => `{${varName}}`
   );
-
-  // Replace {{argName}} with readable {argName}
-  result = result.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, varName: string) => `{${varName}}`);
-
-  return result;
 }
 
 /** Output subdirectory for a resource. Flat structure — clients expect one level. */
@@ -2243,8 +2391,13 @@ function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean }
 /**
  * Emits gate output files (gate.yaml + guidance.md) for registered gates.
  */
-function emitGateFiles(gateRefs: IRGateRef[], subDir: string): OutputFile[] {
+export function emitGateFiles(
+  gateRefs: IRGateRef[],
+  subDir: string,
+  skillId?: string
+): OutputFile[] {
   const files: OutputFile[] = [];
+  const manifestGates: Array<Record<string, unknown>> = [];
   for (const ref of gateRefs) {
     if (ref.source !== 'registered' || !ref.gateYamlContent) continue;
     files.push({
@@ -2257,6 +2410,29 @@ function emitGateFiles(gateRefs: IRGateRef[], subDir: string): OutputFile[] {
         content: ref.guidanceContent,
       });
     }
+    // Machine-readable manifest entry — lets enforcement tooling (opencode-prompts
+    // plugin) read gate ids and criteria without a YAML dependency. Plan row 2.3.
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = (yaml.load(ref.gateYamlContent) as Record<string, unknown>) ?? {};
+    } catch {
+      parsed = {};
+    }
+    manifestGates.push({
+      id: ref.id,
+      ...((ref.name ?? parsed['name']) ? { name: (ref.name ?? parsed['name']) as string } : {}),
+      ...((ref.type ?? parsed['type']) ? { type: (ref.type ?? parsed['type']) as string } : {}),
+      ...((ref.description ?? parsed['description'])
+        ? { description: (ref.description ?? parsed['description']) as string }
+        : {}),
+      ...(Array.isArray(parsed['pass_criteria']) ? { pass_criteria: parsed['pass_criteria'] } : {}),
+    });
+  }
+  if (skillId && manifestGates.length > 0) {
+    files.push({
+      relativePath: `${subDir}/gates/index.json`,
+      content: `${JSON.stringify({ skill: skillId, gates: manifestGates }, null, 2)}\n`,
+    });
   }
   return files;
 }
@@ -2431,7 +2607,7 @@ function buildClaudeCodeSkill(
   }
 
   // Gate files (gate.yaml + guidance.md)
-  files.push(...emitGateFiles(ir.gateRefs, subDir));
+  files.push(...emitGateFiles(ir.gateRefs, subDir, ir.id));
 
   // Doc files (docs/*.md bundled from source prompt)
   files.push(...emitDocFiles(ir.docFiles, subDir));
@@ -2597,7 +2773,7 @@ function buildAgentSkillsSkill(
   }
 
   // Gate files (gate.yaml + guidance.md)
-  files.push(...emitGateFiles(ir.gateRefs, subDir));
+  files.push(...emitGateFiles(ir.gateRefs, subDir, ir.id));
 
   // Doc files (behind assets capability)
   if (config.capabilities.assets) {

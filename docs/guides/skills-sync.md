@@ -74,12 +74,12 @@ exports:
 
 The CLI knows how to target each client without configuration:
 
-| Client      | Output Dir (user)     | Output Dir (project) | Adapter                       |
-| ----------- | --------------------- | -------------------- | ----------------------------- |
-| claude-code | `~/.claude/skills/`   | `.claude/skills/`    | Claude Code frontmatter       |
-| cursor      | `~/.cursor/skills/`   | `.cursor/skills/`    | Agent Skills (Cursor variant) |
-| codex       | `~/.codex/skills/`    | `agents/`            | Agent Skills (standard)       |
-| opencode    | `~/.opencode/skills/` | `.opencode/skills/`  | Agent Skills (strict subset)  |
+| Client      | Output Dir (user)            | Output Dir (project) | Adapter                       |
+| ----------- | ---------------------------- | -------------------- | ----------------------------- |
+| claude-code | `~/.claude/skills/`          | `.claude/skills/`    | Claude Code frontmatter       |
+| cursor      | `~/.cursor/skills/`          | `.cursor/skills/`    | Agent Skills (Cursor variant) |
+| codex       | `~/.codex/skills/`           | `agents/`            | Agent Skills (standard)       |
+| opencode    | `~/.config/opencode/skills/` | `.opencode/skills/`  | Agent Skills (strict subset)  |
 
 Override any output directory via the `overrides` key in `skills-sync.yaml`.
 
@@ -158,6 +158,12 @@ Two constraints shape the emitted command path. A hook command runs in the sessi
 | `project` | `${CLAUDE_PROJECT_DIR}/...` — portable across checkouts                                       |
 
 Clients on the Agent Skills adapter (Cursor, Codex, OpenCode, Agent Plugins) assign no meaning to a frontmatter `hooks` key, so they receive the prose protocol and their gate section says so explicitly rather than claiming enforcement that is not there.
+
+**OpenCode enforcement via plugin.** Every gated export also ships a machine-readable `gates/index.json` manifest (skill id + per-gate id/name/type/description/pass_criteria) beside the per-gate artifacts. The [opencode-prompts](https://github.com/minipuft/opencode-prompts) plugin reads that manifest: when the agent reads a skill whose folder carries it, the session's gates arm, further tool calls are blocked until a `GATE_REVIEW: PASS|FAIL` verdict clears them, and armed state persists across restarts. This restores mechanical review for OpenCode without a Stop event — blocking the next tool call instead of the turn's end.
+
+### Template Compilation Fidelity
+
+Export compiles `{% if %}` chains — including `{% elif %}` ladders, nested chains, and complex expressions (`==`, `or`, `not`) — for every client. At export time no argument values exist, so every condition is falsy: an else branch wins, an elif/expression chain without else renders empty, and a lone bare-word `{% if %}` keeps its content (that block is usually the primary instruction path). The exporter warns by name when a source uses elif or expression conditions, because their non-fallback branches will not appear in the skill.
 
 > [!NOTE]
 > Beyond this gate hook, Skills Sync exports **prompt content** only. Runtime features like chain tracking, session state, and argument substitution require a **client plugin** installed separately — e.g., [opencode-prompts](https://github.com/minipuft/opencode-prompts) for OpenCode, [gemini-prompts](https://github.com/minipuft/gemini-prompts) for Gemini. Each plugin layers on top of the base installation to add client-specific hooks.

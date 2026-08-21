@@ -1,0 +1,7 @@
+{
+  "step": "(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\\s*\\(?(\\d+)\\s*(?:of|/)\\s*(\\d+)",
+  "chainId": "(chain-[a-zA-Z0-9_#-]+)",
+  "gateHeader": "\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*",
+  "gatesList": "\\*\\*Gates\\*\\*:\\s*(.+?)(?:\n|$)",
+  "structuredVerdict": "\"overall\"\\s*:\\s*\"(PASS|FAIL)\""
+}

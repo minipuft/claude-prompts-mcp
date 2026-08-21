@@ -270,6 +270,23 @@ async function generateResolutionVerbs(
     '',
   ].join('\n');
 
+  // JSON twin of the verb set — consumed by the opencode-prompts plugin's pre-tool
+  // handler so TS and Python stay contract-synced without hand-copying (plan row 2.1,
+  // plans/opencode-parity-p1-close-client-gaps-2026-08-21.md).
+  const verbsJsonContent = `${JSON.stringify([...verbs].sort(), null, 2)}\n`;
+
+  // Extraction-pattern sources — the single source both the Python hooks loader and the
+  // opencode-prompts plugin compile their matchers from (plan row 2.2). Values are
+  // regex SOURCE strings; consumers compile them with their language's engine.
+  const extractionPatterns = {
+    step: '(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\\s*\\(?(\\d+)\\s*(?:of|/)\\s*(\\d+)',
+    chainId: '(chain-[a-zA-Z0-9_#-]+)',
+    gateHeader: '\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*',
+    gatesList: '\\*\\*Gates\\*\\*:\\s*(.+?)(?:\n|$)',
+    structuredVerdict: '"overall"\\s*:\\s*"(PASS|FAIL)"',
+  };
+  const patternsJsonContent = `${JSON.stringify(extractionPatterns, null, 2)}\n`;
+
   const initChanged = await writeFileIfChanged(
     path.join(HOOKS_GENERATED_DIR, '__init__.py'),
     initContent,
@@ -280,7 +297,17 @@ async function generateResolutionVerbs(
     moduleContent,
     checkMode
   );
-  return initChanged || moduleChanged;
+  const jsonChanged = await writeFileIfChanged(
+    path.join(HOOKS_GENERATED_DIR, 'resolution-verbs.json'),
+    verbsJsonContent,
+    checkMode
+  );
+  const patternsChanged = await writeFileIfChanged(
+    path.join(HOOKS_GENERATED_DIR, 'extraction-patterns.json'),
+    patternsJsonContent,
+    checkMode
+  );
+  return initChanged || moduleChanged || jsonChanged || patternsChanged;
 }
 
 /**
@@ -564,7 +591,9 @@ async function main(): Promise<void> {
   const resolutionVerbsChanged = await generateResolutionVerbs(loaded, checkMode);
   changed = changed || resolutionVerbsChanged;
   if (resolutionVerbsChanged) {
-    console.log('[generate-contracts] Generated hooks/lib/_generated/resolution_verbs.py');
+    console.log(
+      '[generate-contracts] Generated hooks/lib/_generated/resolution_verbs.py + resolution-verbs.json'
+    );
   }
 
   if (checkMode && changed) {
