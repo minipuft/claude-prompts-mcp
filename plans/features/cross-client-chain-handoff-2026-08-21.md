@@ -44,7 +44,7 @@ leakage defect; the replacement must be explicit, single-use, and auditable.
   wrong run — the claim verb must resolve through the row's `session_id` (or rowid),
   with `chain_id` as the human handle only.
 
-## Design Decisions (confirmed at T0 exit, 2026-08-21)
+## Design Decisions (✓ confirmed at T0 exit, 2026-08-21)
 
 | Decision            | Chosen                                                                                                        | Rejected                                 | Why                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -54,7 +54,7 @@ leakage defect; the replacement must be explicit, single-use, and auditable.
 | Donor-exit survival | Out of scope v1: claim requires the donor row to still exist (donor server alive or exited uncleanly)         | Durable handoff table                    | Posture change to a durable table is a migration-grade decision; measure demand first                  |
 | Hook adoption       | Claiming conversation's PostToolUse tracking records the chain on the first post-claim call — no hook changes | Push rows into the claimer's hooks-state | The scoping fix already keys on the session's own recording; claim + first call satisfies it naturally |
 
-## Open Questions (all four RULED 2026-08-21 — T1 was compiled against these rulings)
+## Open Questions (✓ all four RULED 2026-08-21 — T1 was compiled against these rulings)
 
 - **OQ-1 RULED 2026-08-21** (T0 evidence, implementation notes §T0): blueprint present
   in 7/7 observed runs; absence is possible by construction and `manager.ts:2347`
