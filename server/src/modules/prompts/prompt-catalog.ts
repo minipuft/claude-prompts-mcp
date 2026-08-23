@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptArgument } from '#shared/types/index.js';
 
-export interface PromptCatalogArgument {
+interface PromptCatalogArgument {
   name: string;
   description: string | null;
   required: boolean;

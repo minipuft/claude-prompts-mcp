@@ -726,7 +726,7 @@ export interface PromptData {
 }
 
 /** Presentation metadata for clients that insert prompts into a composer. */
-export interface PromptComposerMetadata {
+interface PromptComposerMetadata {
   inputArgument: string;
 }
 

@@ -1482,7 +1482,7 @@ function literalArgumentsAfterCompile(
  * else-preference ruling (F18) decides. The parameter exists for tests, which pass
  * values to exercise first-truthy branch selection.
  */
-export type SuppliedArgs = Record<string, string> | undefined;
+type SuppliedArgs = Record<string, string> | undefined;
 
 /**
  * Evaluate one template condition: `word`, `not word`, `a or b`, `x == "lit"`.
