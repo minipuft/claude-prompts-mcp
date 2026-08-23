@@ -194,6 +194,12 @@ export interface ChainSession {
   blueprint?: SessionBlueprint;
   lifecycle?: ChainSessionLifecycle;
   /**
+   * Single-use handoff token (2A). Minted by the owning server on
+   * `prompt_engine(chain_id, handoff:true)`, stored on the run row, and nulled when another
+   * session claims the run. Present only between mint and claim.
+   */
+  handoffToken?: string;
+  /**
    * SEP-1686-aligned run-level status. Sticky on terminal values
    * ('completed' | 'failed' | 'cancelled') — once set, transitions are refused.
    * Defaults to 'working' on createSession.
@@ -266,6 +272,17 @@ export interface ChainSessionSummary {
 export interface ChainSessionLookupOptions extends StateStoreOptions {
   includeDormant?: boolean;
 }
+
+/**
+ * Outcome of claiming a handed-off run (plan 2A). The registry produces the first three; the
+ * store adds `no-blueprint` after inspecting what it received (OQ-1: a run nothing can resume
+ * is refused rather than loaded).
+ */
+export type ChainHandoffClaimResult =
+  | { status: 'claimed'; session: ChainSession }
+  | { status: 'unknown-token' }
+  | { status: 'workspace-mismatch'; rowWorkspaceId: string; claimantWorkspaceId: string }
+  | { status: 'no-blueprint'; chainId: string };
 
 export interface ChainSessionService {
   /**
@@ -360,6 +377,16 @@ export interface ChainSessionService {
    * non-cancelled state (completed/failed).
    */
   cancelChain(sessionId: string, scope?: StateStoreOptions): Promise<boolean>;
+  /**
+   * Mint a single-use handoff token for a live run (plan 2A). Minting again rotates it.
+   * Undefined for an unknown, out-of-scope, or terminal run.
+   */
+  mintHandoffToken(
+    sessionId: string,
+    scope?: StateStoreOptions
+  ): Promise<{ token: string; chainId: string; sessionId: string } | undefined>;
+  /** Claim a run minted elsewhere and load it here; every refusal names its reason (plan 2A). */
+  claimHandoff(token: string): Promise<ChainHandoffClaimResult>;
   completeStep(
     sessionId: string,
     nodeId: string,

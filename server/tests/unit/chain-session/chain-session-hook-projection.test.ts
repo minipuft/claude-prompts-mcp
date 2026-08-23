@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { ChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
+import type { ChainRunRegistry, ClaimRunResult } from '../../../src/modules/chains/run-registry.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 
@@ -80,8 +80,12 @@ class InMemoryRunRegistry implements ChainRunRegistry {
   async load(): Promise<ChainSession[]> {
     return (this.saved ?? []).map(cloneSession);
   }
-  async save(sessions: readonly ChainSession[]): Promise<void> {
+  async save(sessions: readonly ChainSession[]): Promise<string[]> {
     this.saved = sessions.map(cloneSession);
+    return [];
+  }
+  claimRunByToken(): ClaimRunResult {
+    return { status: 'unknown-token' };
   }
   deleteRunsForOwners(): void {}
 }

@@ -17,7 +17,7 @@ import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { ChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
+import type { ChainRunRegistry, ClaimRunResult } from '../../../src/modules/chains/run-registry.js';
 import type { ChainSession } from '../../../src/shared/types/index.js';
 
 /**
@@ -366,8 +366,13 @@ class InMemoryRunRegistry implements ChainRunRegistry {
     return this.rows.map(cloneSession);
   }
 
-  async save(sessions: readonly ChainSession[]): Promise<void> {
+  async save(sessions: readonly ChainSession[]): Promise<string[]> {
     this.rows = sessions.map(cloneSession);
+    return [];
+  }
+
+  claimRunByToken(): ClaimRunResult {
+    return { status: 'unknown-token' };
   }
 
   deleteRunsForOwners(): void {}

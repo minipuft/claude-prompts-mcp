@@ -23,6 +23,7 @@ import type {
   StepMetadata,
 } from '#shared/types/chain-execution.js';
 import type {
+  ChainHandoffClaimResult,
   ChainSession,
   ChainSessionLifecycle,
   SessionBlueprint,
@@ -37,7 +38,18 @@ export interface ChainRunRegistry {
   /** Every run owned by the scope's run owner, with its nodes in position order. */
   load(scope?: StateStoreOptions): Promise<ChainSession[]>;
   /** Replace the scope owner's runs wholesale. Must run inside the caller's transaction. */
-  save(sessions: readonly ChainSession[], scope?: StateStoreOptions): Promise<void>;
+  /**
+   * Replace this owner's runs with `sessions`. Returns the session ids that were NOT written
+   * because another owner has claimed them since (2A handoff) — the caller evicts those from
+   * memory, since the claimer's row is now the run.
+   */
+  save(sessions: readonly ChainSession[], scope?: StateStoreOptions): Promise<string[]>;
+  /**
+   * Transfer the run carrying `token` to the owner/scope in `scope`, nulling the token in the
+   * same statement so it cannot be claimed twice (2A). Refuses a row whose workspace differs
+   * from the claimant's when both are known.
+   */
+  claimRunByToken(token: string, scope?: StateStoreOptions): ClaimRunResult;
   /** Drop every run owned by a process that is no longer alive. */
   deleteRunsForOwners(ownerPids: readonly string[]): void;
 }
@@ -67,7 +79,11 @@ interface ChainRunRow {
   created_at: number | null;
   last_activity: number | null;
   run_completed_at: number | null;
+  handoff_token: string | null;
 }
+
+/** What a registry claim hands back: the run, or the reason it was refused at the row level. */
+export type ClaimRunResult = Exclude<ChainHandoffClaimResult, { status: 'no-blueprint' }>;
 
 interface ChainRunNodeRow {
   session_id: string;
@@ -107,7 +123,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
 
     const runRows = this.db.query<ChainRunRow>(
       `SELECT session_id, chain_id, run_status, current_node_id, state,
-              created_at, last_activity, run_completed_at
+              created_at, last_activity, run_completed_at, handoff_token
          FROM chain_runs
         WHERE run_owner_pid = ?`,
       [runOwnerPid]
@@ -147,7 +163,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
    * unless a separate reconciling DELETE ran anyway. The caller (`persistSessions`) owns the
    * transaction, so the window where a PID has no rows is never observable.
    */
-  async save(sessions: readonly ChainSession[], scope?: StateStoreOptions): Promise<void> {
+  async save(sessions: readonly ChainSession[], scope?: StateStoreOptions): Promise<string[]> {
     const runOwnerPid = resolveRunOwnerPid(scope);
     const organizationId = scope?.organizationId ?? null;
     const workspaceId = scope?.workspaceId ?? null;
@@ -159,13 +175,24 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     );
     this.db.run('DELETE FROM chain_runs WHERE run_owner_pid = ?', [runOwnerPid]);
 
+    // A run another owner has claimed (2A) still sits in this process's memory until the next
+    // persist — which is now. Its row survived the owner-scoped DELETE above because the claim
+    // rewrote run_owner_pid, so inserting it again would collide on the primary key and take the
+    // whole save down. Skip it and report it, so the caller evicts the stale copy.
+    const claimedElsewhere = this.findRunsOwnedByOthers(
+      sessions.map((session) => session.sessionId),
+      runOwnerPid
+    );
+
     const updatedAt = Date.now();
     for (const session of sessions) {
+      if (claimedElsewhere.has(session.sessionId)) continue;
       this.db.run(
         `INSERT INTO chain_runs (
            session_id, chain_id, base_chain_id, run_owner_pid, organization_id, workspace_id,
-           run_status, current_node_id, state, created_at, last_activity, run_completed_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           run_status, current_node_id, state, created_at, last_activity, run_completed_at,
+           handoff_token
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           session.sessionId,
           session.chainId,
@@ -179,6 +206,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           session.startTime,
           session.lastActivity,
           session.runCompletedAt ?? null,
+          session.handoffToken ?? null,
         ]
       );
 
@@ -218,6 +246,72 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
         );
       });
     }
+    return [...claimedElsewhere];
+  }
+
+  /** Session ids among `sessionIds` whose row is currently owned by someone other than `ownerPid`. */
+  private findRunsOwnedByOthers(sessionIds: readonly string[], ownerPid: string): Set<string> {
+    const result = new Set<string>();
+    if (sessionIds.length === 0) return result;
+    const placeholders = sessionIds.map(() => '?').join(', ');
+    const rows = this.db.query<{ session_id: string }>(
+      `SELECT session_id FROM chain_runs
+        WHERE session_id IN (${placeholders}) AND run_owner_pid != ?`,
+      [...sessionIds, ownerPid]
+    );
+    for (const row of rows) result.add(row.session_id);
+    return result;
+  }
+
+  claimRunByToken(token: string, scope?: StateStoreOptions): ClaimRunResult {
+    const claimantPid = resolveRunOwnerPid(scope);
+    const claimantWorkspace = scope?.workspaceId ?? null;
+    const claimantOrganization = scope?.organizationId ?? null;
+
+    const row = this.db.queryOne<ChainRunRow & { workspace_id: string | null }>(
+      `SELECT session_id, chain_id, run_status, current_node_id, state,
+              created_at, last_activity, run_completed_at, handoff_token, workspace_id
+         FROM chain_runs
+        WHERE handoff_token = ?`,
+      [token]
+    );
+    if (row === null) return { status: 'unknown-token' };
+
+    // OQ-3: a claim never rewrites workspace scope. Known-and-different is refused; an unknown
+    // side (NULL) is not evidence of a mismatch.
+    if (
+      row.workspace_id !== null &&
+      claimantWorkspace !== null &&
+      row.workspace_id !== claimantWorkspace
+    ) {
+      return {
+        status: 'workspace-mismatch',
+        rowWorkspaceId: row.workspace_id,
+        claimantWorkspaceId: claimantWorkspace,
+      };
+    }
+
+    // Ownership transfer and token burn in ONE statement: a second claimant racing on the same
+    // token finds no row matching it, rather than a window where both own the run.
+    this.db.run(
+      `UPDATE chain_runs
+          SET run_owner_pid = ?, organization_id = COALESCE(?, organization_id),
+              workspace_id = COALESCE(?, workspace_id), handoff_token = NULL
+        WHERE session_id = ? AND handoff_token = ?`,
+      [claimantPid, claimantOrganization, claimantWorkspace, row.session_id, token]
+    );
+
+    const nodeRows = this.db.query<ChainRunNodeRow>(
+      `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
+              is_placeholder, rendered_at, responded_at, completed_at,
+              declared_sections_json, origin, origin_unknown_id
+         FROM chain_run_nodes
+        WHERE session_id = ?
+        ORDER BY position`,
+      [row.session_id]
+    );
+    const session = reconstructSession({ ...row, handoff_token: null }, nodeRows);
+    return { status: 'claimed', session };
   }
 
   deleteRunsForOwners(ownerPids: readonly string[]): void {
@@ -390,6 +484,9 @@ function reconstructSession(row: ChainRunRow, nodeRows: readonly ChainRunNodeRow
 
   applyResidual(session, residual);
   if (row.run_completed_at !== null) session.runCompletedAt = row.run_completed_at;
+  if (row.handoff_token !== null && row.handoff_token !== '') {
+    session.handoffToken = row.handoff_token;
+  }
 
   return session;
 }

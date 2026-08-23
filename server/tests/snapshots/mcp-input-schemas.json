@@ -11,6 +11,11 @@
         "pattern": "^chain-[a-zA-Z0-9_-]+(?:#\\d+)?$",
         "type": "string"
       },
+      "claim_token": {
+        "description": "<present>",
+        "minLength": 1,
+        "type": "string"
+      },
       "command": {
         "description": "<present>",
         "minLength": 1,
@@ -171,6 +176,10 @@
           ]
         },
         "type": "array"
+      },
+      "handoff": {
+        "description": "<present>",
+        "type": "boolean"
       },
       "observations": {
         "description": "<present>",

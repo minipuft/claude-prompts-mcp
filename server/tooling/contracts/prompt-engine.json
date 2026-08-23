@@ -105,6 +105,18 @@
       "resolvesPendingGate": true
     },
     {
+      "name": "handoff",
+      "type": "boolean",
+      "description": "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands; your copy is retired on the next persist after that.",
+      "status": "working"
+    },
+    {
+      "name": "claim_token",
+      "type": "string",
+      "description": "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE \u2014 it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name. A claim never rewrites workspace scope; a run from another workspace is refused.",
+      "status": "working"
+    },
+    {
       "name": "options",
       "type": "record",
       "description": "Execution options forwarded downstream.",

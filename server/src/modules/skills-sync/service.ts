@@ -163,7 +163,7 @@ interface IRChainStepContent {
   userMessage: string | null;
 }
 
-interface SkillIR {
+export interface SkillIR {
   id: string;
   name: string;
   description: string;

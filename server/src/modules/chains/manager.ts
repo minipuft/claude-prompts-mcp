@@ -10,6 +10,7 @@
  * Sessions are saved to disk after every change and loaded on initialization.
  */
 
+import { randomBytes } from 'node:crypto';
 import { DirectChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
 import { ArgumentHistoryTracker, TextReferenceStore } from '../text-refs/index.js';
 
@@ -26,6 +27,7 @@ import type {
   GateReviewPrompt,
 } from '#shared/types/chain-execution.js';
 import type {
+  ChainHandoffClaimResult,
   ChainSession,
   ChainSessionLookupOptions,
   ChainSessionService,
@@ -357,12 +359,15 @@ export class ChainSessionStore implements ChainSessionService {
       const sessions = Array.from(this.activeSessions.values());
       if (!db) {
         // No DB engine wired — fall back to non-transactional save (test contexts).
-        await this.runRegistry.save(sessions, this.runScope);
+        this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope));
         return;
       }
       db.beginTransaction();
       try {
-        await this.runRegistry.save(sessions, this.runScope);
+        const claimedElsewhere = await this.runRegistry.save(sessions, this.runScope);
+        // Evict BEFORE the projection so the hook view does not re-advertise a run this
+        // process no longer owns.
+        this.evictClaimedSessions(claimedElsewhere);
         this.projectToHookView(db);
         db.commit();
       } catch (txError) {
@@ -843,6 +848,75 @@ export class ChainSessionStore implements ChainSessionService {
    *    for the SEP-1686 StepLifecycle migration; here we leave step metadata untouched and
    *    rely on runStatus terminality + step-level stickiness to prevent further progression.
    */
+  /**
+   * Drop sessions another server has claimed (2A). The registry reports them from `save`;
+   * the in-memory copy here is stale by definition, and keeping it would let this process
+   * advance a run whose row it can no longer write.
+   */
+  private evictClaimedSessions(sessionIds: readonly string[]): void {
+    for (const sessionId of sessionIds) {
+      const session = this.activeSessions.get(sessionId);
+      if (session === undefined) continue;
+      this.activeSessions.delete(sessionId);
+      this.chainSessionMapping.get(session.chainId)?.delete(sessionId);
+      this.logger.info(
+        `[Handoff] Session ${sessionId} (${session.chainId}) claimed by another server; evicted`
+      );
+    }
+  }
+
+  /**
+   * Mint a single-use handoff token for a live run (2A). Minting again rotates the token —
+   * the previous one can no longer claim. Returns undefined for an unknown, out-of-scope, or
+   * terminal run.
+   */
+  async mintHandoffToken(
+    sessionId: string,
+    scope?: StateStoreOptions
+  ): Promise<{ token: string; chainId: string; sessionId: string } | undefined> {
+    const session = this.getSessionForMutation(sessionId, scope);
+    if (session === undefined) return undefined;
+    if (isTerminalRunStatus(session.runStatus ?? 'working')) {
+      this.logger.warn(`[Handoff] Refusing to mint for terminal session ${sessionId}`);
+      return undefined;
+    }
+    // 20 random bytes, base64url: unguessable, shell/URL safe, pasted exactly once.
+    const token = `hnd_${randomBytes(20).toString('base64url')}`;
+    session.handoffToken = token;
+    session.lastActivity = Date.now();
+    await this.saveSessions();
+    this.logger.info(`[Handoff] Minted token for session ${sessionId} (${session.chainId})`);
+    return { token, chainId: session.chainId, sessionId };
+  }
+
+  /**
+   * Claim a run minted elsewhere (2A): transfer its row to this server, load it into memory
+   * as a dormant session, and persist. Refuses when the row has no blueprint (OQ-1) — nothing
+   * here could resume it.
+   */
+  async claimHandoff(token: string): Promise<ChainHandoffClaimResult> {
+    await this.initPromise;
+    const result = this.runRegistry.claimRunByToken(token, this.runScope);
+    if (result.status !== 'claimed') return result;
+
+    const session = result.session;
+    if (!session.blueprint) {
+      this.logger.warn(`[Handoff] Claimed ${session.chainId} carries no blueprint; refusing`);
+      return { status: 'no-blueprint', chainId: session.chainId };
+    }
+    if (!(session.state.stepStates instanceof Map)) session.state.stepStates = new Map();
+    session.lifecycle = 'dormant';
+    session.lastActivity = Date.now();
+    this.activeSessions.set(session.sessionId, session);
+    const sessionIds = this.chainSessionMapping.get(session.chainId) ?? new Set<string>();
+    sessionIds.add(session.sessionId);
+    this.chainSessionMapping.set(session.chainId, sessionIds);
+    this.ensureRunMappingConsistency();
+    await this.saveSessions();
+    this.logger.info(`[Handoff] Claimed ${session.chainId} (session ${session.sessionId})`);
+    return result;
+  }
+
   async cancelChain(sessionId: string, scope?: StateStoreOptions): Promise<boolean> {
     const session = this.getSessionForMutation(sessionId, scope);
     if (session === undefined) {

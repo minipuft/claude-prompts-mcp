@@ -71,6 +71,27 @@ from step 1 — only an explicit `force_restart` does.
 
 ---
 
+### Handing a Run to Another Client
+
+A run is owned by the conversation that started it and the server process serving that
+conversation; nothing crosses clients implicitly. To continue a run from another client
+(Codex, OpenCode, a different Claude Code conversation), the owner exports it and the
+other side claims it:
+
+```
+prompt_engine(chain_id:"chain-research#1", handoff:true)   # owner: mints hnd_… token
+prompt_engine(claim_token:"hnd_…")                         # other client: claims + resumes
+```
+
+The token is single-use and is the only key the claimer sends — run numbers are a
+per-server sequence, so two servers sharing one `state.db` can both hold a
+`chain-research#1`, and a claim by name could pick the wrong one. The claim rewrites the
+row's owner and burns the token in one statement, then resumes the run in the same call so
+the claimer receives the current step immediately. The donor keeps its copy until its next
+persist, where it notices the row is no longer its own and retires it. A claim never
+rewrites workspace scope, and a run whose persisted state carries no blueprint is refused
+by name rather than loaded as something nothing can resume.
+
 ## Step Identity
 
 Each step in a chain has a stable node id, not just a position. Internally, steps are addressed by

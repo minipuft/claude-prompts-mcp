@@ -219,6 +219,15 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'report, distinguishing it from the current default-level assertions.'
   ),
 
+  ...exceptionGroup(
+    'prompt_engine',
+    ['handoff', 'claim_token'],
+    'Cross-client handoff (plan 2A): minting needs a live run and claiming needs a SECOND ' +
+      'server process sharing the same state.db, which the single-server conformance harness ' +
+      'cannot spawn today.',
+    'A two-server conformance scenario (plan 2A row 2.2): mint in process A, claim in process ' +
+      'B, resume executes in B, and a second claim on the spent token is refused by name.'
+  ),
   // ── resource_manager ─────────────────────────────────────────────────────
   ...exceptionGroup(
     'resource_manager',

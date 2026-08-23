@@ -184,13 +184,18 @@ import type { Logger } from '../logging/index.js';
  * a majority of unterminated entries into the history feature that reads them. `version_history`
  * and `skills_sync_manifests` are `durable` and are snapshot/restored across this bump.
  *
+ * v25: `chain_runs.handoff_token` (nullable TEXT) — the single-use cross-client handoff token
+ * (plan 2A). `chain_runs`/`chain_run_nodes`/`chain_sessions` are `ephemeral`, so this bump drops
+ * live runs on first start; they are per-PID rows of servers that must restart to read the new
+ * column anyway. Nothing durable is touched.
+ *
  * v16: retired the `StepState` enum. Persisted step `state` values `rendered` and
  * `response_captured` no longer exist — both are now lifecycle `working`, distinguished by the
  * `renderedAt` / `respondedAt` substate timestamps. `StepSubstate.responseAt` was also renamed to
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 24;
+const SCHEMA_VERSION = 25;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -717,7 +722,10 @@ export class SqliteEngine implements DatabasePort {
         state TEXT NOT NULL,
         created_at INTEGER,
         last_activity INTEGER,
-        run_completed_at INTEGER
+        run_completed_at INTEGER,
+        -- Single-use cross-client handoff token (2A). NULL except between mint and claim;
+        -- the claim nulls it in the same UPDATE that rewrites run_owner_pid.
+        handoff_token TEXT
       );
 
       -- One row per node of a run, in run order. position is the per-run order and is

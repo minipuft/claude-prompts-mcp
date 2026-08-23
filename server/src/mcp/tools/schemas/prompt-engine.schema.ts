@@ -193,6 +193,10 @@ const PARAM_DEFAULTS = {
     "Start a new execution instead of resuming. Cannot be combined with 'chain_id'. Redundant with a plain 'command'; it matters when the command text itself carries a chain id.",
   chain_id:
     'Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.',
+  handoff:
+    "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands.",
+  claim_token:
+    "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE — it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name.",
   cancel:
     "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; nothing else is read. Distinct from 'force_restart': cancel ENDS this run and starts nothing, while force_restart abandons it and immediately begins a new one. The session's state and artifacts survive a cancel — remove them with system_control(action:\"session\", operation:\"clear\").",
   gate_verdict:
@@ -246,6 +250,14 @@ function buildCoreFields(resolve: DescriptionResolver) {
     // part of running it. `system_control session` keeps list/inspect/clear, which are operator
     // work across runs you are not in and are keyed on `session_id` from a listing.
     cancel: z.boolean().optional().describe(resolve('cancel', PARAM_DEFAULTS.cancel)),
+    // 2A handoff: export this run to another client (mint) / import one minted elsewhere
+    // (claim). Both are chain-lifecycle verbs and live here for the same reason cancel does.
+    handoff: z.boolean().optional().describe(resolve('handoff', PARAM_DEFAULTS.handoff)),
+    claim_token: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(resolve('claim_token', PARAM_DEFAULTS.claim_token)),
 
     user_response: z
       .string()
@@ -370,8 +382,8 @@ export function buildPromptEngineSchema(
   return withSourceExclusivity(buildWidestSchema(resolve, verdictValidator, verdictMessage));
 }
 
-/** The three command sources, in the order the rejection message names them. */
-const COMMAND_SOURCE_PARAMETERS = ['command', 'chain_id', 'workflow'] as const;
+/** The four command sources, in the order the rejection message names them. */
+const COMMAND_SOURCE_PARAMETERS = ['command', 'chain_id', 'workflow', 'claim_token'] as const;
 
 /**
  * Reject a call that carries more than one command source.
@@ -396,7 +408,7 @@ function withSourceExclusivity<
     (value) => COMMAND_SOURCE_PARAMETERS.filter((name) => value[name] !== undefined).length <= 1,
     {
       message:
-        "Provide exactly one of 'command', 'chain_id' or 'workflow'. A workflow submission is a complete run description and cannot be combined with a command string or a resume token.",
+        "Provide exactly one of 'command', 'chain_id', 'workflow' or 'claim_token'. A workflow submission is a complete run description and cannot be combined with a command string or a resume token; a claim token names the run it resumes.",
     }
   );
 }

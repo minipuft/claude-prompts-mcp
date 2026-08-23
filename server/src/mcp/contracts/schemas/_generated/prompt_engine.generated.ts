@@ -31,6 +31,8 @@ export type prompt_engineParamName =
   | 'gates'
   | 'force_restart'
   | 'cancel'
+  | 'handoff'
+  | 'claim_token'
   | 'options'
   | 'observations'
   | 'workflow';
@@ -137,6 +139,22 @@ export const prompt_engineParameters: ToolParameter[] = [
     status: 'working',
     compatibility: 'canonical',
     resolvesPendingGate: true,
+  },
+  {
+    name: 'handoff',
+    type: 'boolean',
+    description:
+      "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands; your copy is retired on the next persist after that.",
+    status: 'working',
+    compatibility: 'canonical',
+  },
+  {
+    name: 'claim_token',
+    type: 'string',
+    description:
+      "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE — it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name. A claim never rewrites workspace scope; a run from another workspace is refused.",
+    status: 'working',
+    compatibility: 'canonical',
   },
   {
     name: 'options',

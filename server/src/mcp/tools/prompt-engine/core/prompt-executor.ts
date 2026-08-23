@@ -409,6 +409,10 @@ export class PromptExecutor {
       chain_id?: string;
       /** Stop the run named by `chain_id`. See `handleCancel`. */
       cancel?: boolean;
+      /** Mint a single-use handoff token for the run named by `chain_id` (2A). See `handleHandoff`. */
+      handoff?: boolean;
+      /** Claim a run minted elsewhere and resume it here (2A). See `handleClaim`. */
+      claim_token?: string;
       gate_verdict?: string;
       gate_action?: 'retry' | 'skip' | 'abort';
       user_response?: string;
@@ -435,6 +439,19 @@ export class PromptExecutor {
     if (args.cancel === true) {
       return await this.handleCancel(args.chain_id, sdkExtra);
     }
+    // `handoff` is the same shape as cancel: it names an existing run and starts nothing.
+    if (args.handoff === true) {
+      return await this.handleHandoff(args.chain_id, sdkExtra);
+    }
+    // `claim_token` transfers a run here and then FALLS THROUGH as a plain resume of it, so the
+    // claimer receives the current step in the same call and its PostToolUse tracking records
+    // the chain id from the rendered response (the hook-adoption decision in plan 2A).
+    let claimedChainId: string | undefined;
+    if (typeof args.claim_token === 'string' && args.claim_token.trim().length > 0) {
+      const claim = await this.handleClaim(args.claim_token.trim());
+      if (claim.refusal !== undefined) return claim.refusal;
+      claimedChainId = claim.chainId;
+    }
 
     const normalizedCommand = typeof args.command === 'string' ? args.command.trim() : '';
     const chainIdFromCommand = this.extractChainId(normalizedCommand);
@@ -453,7 +470,7 @@ export class PromptExecutor {
 
     const commandValue = shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined;
     const chainIdValue =
-      args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined);
+      claimedChainId ?? args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined);
 
     // A workflow's own `gates` ride the SAME request channel as the `gates` parameter, rather
     // than a second IR-specific gate path (OQ-P6-8). That channel is already node-addressed:
@@ -591,6 +608,108 @@ export class PromptExecutor {
       ],
       isError: false,
     };
+  }
+
+  /**
+   * Mint a single-use handoff token for the run named by `chainId` (plan 2A).
+   *
+   * Same placement rule as cancel: the caller holds the chain id because they are running the
+   * chain, and exporting that run to another client is part of running it. The token is the
+   * ONLY key the claimer needs — `chain_id` run numbers are a per-server sequence and collide
+   * across servers sharing a db, so a claim keyed on the name could select the wrong run.
+   */
+  private async handleHandoff(
+    chainId: string | undefined,
+    sdkExtra: unknown
+  ): Promise<ToolResponse> {
+    if (chainId === undefined || chainId.trim().length === 0) {
+      return this.textError(
+        '❌ `handoff: true` requires `chain_id` — it names the run to export.\n\n' +
+          'Use `system_control(action:"session", operation:"list")` to find one.'
+      );
+    }
+    const scope = this.resolveRequestScope(sdkExtra);
+    const trimmed = chainId.trim();
+    const session = this.chainSessionStore.getSessionByChainIdentifier(trimmed, {
+      ...scope,
+      includeDormant: true,
+    });
+    const minted = await this.chainSessionStore.mintHandoffToken(
+      session?.sessionId ?? trimmed,
+      scope
+    );
+    if (minted === undefined) {
+      return this.textError(
+        `⚠️ **Handoff Not Minted**: \`${trimmed}\`\n\n` +
+          'The run is in a terminal state (completed/failed/cancelled), or no run with that id ' +
+          'exists in this workspace.'
+      );
+    }
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `🔑 **Handoff Token Minted**: \`${minted.chainId}\`\n\n` +
+            `Token: \`${minted.token}\`\n\n` +
+            'From the other client, claim and continue with:\n' +
+            `\`prompt_engine(claim_token:"${minted.token}")\`\n\n` +
+            'The token is single-use and dies with the run. Minting again rotates it. This ' +
+            'conversation may keep advancing the run until the claim lands; after that its ' +
+            'copy is retired on the next persist.',
+        },
+      ],
+      isError: false,
+    };
+  }
+
+  /**
+   * Claim a run minted elsewhere (plan 2A). On success the caller resumes it in the same
+   * request; every refusal names its reason, because a claim that silently does nothing is the
+   * "missing blueprint" incident that motivated the feature.
+   */
+  private async handleClaim(
+    token: string
+  ): Promise<
+    { chainId: string; refusal?: undefined } | { chainId?: undefined; refusal: ToolResponse }
+  > {
+    const result = await this.chainSessionStore.claimHandoff(token);
+    switch (result.status) {
+      case 'claimed':
+        return { chainId: result.session.chainId };
+      case 'unknown-token':
+        return {
+          refusal: this.textError(
+            '❌ **Claim Refused**: no run carries this token.\n\n' +
+              'It was never minted here, was already claimed (tokens are single-use), was ' +
+              'rotated by a newer `handoff`, or the run ended. Ask the owning client to mint ' +
+              'again with `prompt_engine(chain_id, handoff:true)`.'
+          ),
+        };
+      case 'workspace-mismatch':
+        return {
+          refusal: this.textError(
+            `❌ **Claim Refused**: the run belongs to workspace \`${result.rowWorkspaceId}\` and ` +
+              `this request is scoped to \`${result.claimantWorkspaceId}\`. A handoff never ` +
+              'rewrites workspace scope.'
+          ),
+        };
+      case 'no-blueprint':
+        return {
+          refusal: this.textError(
+            `❌ **Claim Refused**: \`${result.chainId}\` was transferred but carries no ` +
+              'blueprint, so nothing here can resume it. Restart it from its command instead.'
+          ),
+        };
+      default: {
+        const unreachable: never = result;
+        return { refusal: this.textError(`❌ **Claim Refused**: ${JSON.stringify(unreachable)}`) };
+      }
+    }
+  }
+
+  private textError(text: string): ToolResponse {
+    return { content: [{ type: 'text' as const, text }], isError: true };
   }
 
   /**

@@ -828,6 +828,11 @@ export class McpToolRouter {
               // framework routes, and this). Verified live, not by unit test: only a real
               // tools/call can show whether the value arrives.
               ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
+              // Fourth instance (2026-08-21): `handoff`/`claim_token` typechecked end-to-end and
+              // were dead on the wire until the two-server live drive showed `handoff:true`
+              // rendering the prompt instead of minting. Same allowlist, same lesson.
+              ...(args.handoff !== undefined ? { handoff: args.handoff } : {}),
+              ...(args.claim_token?.trim() ? { claim_token: args.claim_token.trim() } : {}),
               ...(args.options != null ? { options: args.options } : {}),
               ...(args.observations != null ? { observations: args.observations } : {}),
               // Passed through unchanged. Unlike `gates` below there is nothing to normalize:

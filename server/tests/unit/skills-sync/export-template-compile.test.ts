@@ -36,6 +36,12 @@ function minimalIR(userMessage: string): SkillIR {
     gateRefs: [],
     chainStepContents: [],
     docFiles: [],
+    gateData: null,
+    frameworkData: null,
+    styleData: null,
+    extensions: {},
+    sourcePaths: [],
+    sourceHash: '',
   };
 }
 
