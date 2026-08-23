@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: infra-config
+kind: domain
+lifecycle: canonical
+description: Loads and resolves server configuration.
+children: internal
+publicEntry: index.ts

@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: versioning
+kind: domain
+lifecycle: canonical
+description: Owns version history, comparison, rollback, and resource snapshots.
+children: internal
+publicEntry: index.ts

@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: infra-hooks
+kind: adapter
+lifecycle: canonical
+description: Integrates server behavior with supported hook surfaces.
+children: internal
+publicEntry: index.ts

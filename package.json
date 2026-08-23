@@ -9,6 +9,9 @@
   ],
   "scripts": {
     "prepare": "husky || true",
+    "guidance:sync": "node scripts/sync-project-guidance.js --write",
+    "guidance:check": "node scripts/sync-project-guidance.js --check",
+    "guidance:self-test": "node scripts/sync-project-guidance.js --self-test",
     "mcpb:validate": "mcpb validate manifest.json",
     "sync": "bash scripts/sync-to-cache.sh",
     "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'",

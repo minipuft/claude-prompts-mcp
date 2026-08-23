@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: formatting
+kind: domain
+lifecycle: canonical
+description: Owns response styles and output formatting behavior.
+children: internal
+publicEntry: index.ts

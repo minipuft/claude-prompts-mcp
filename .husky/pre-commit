@@ -71,6 +71,18 @@ if [ -n "$ROOT_FORMATTABLE" ]; then
   printf '%s\n' "$ROOT_FORMATTABLE" | xargs git add -f --
 fi
 
+# Project guidance compatibility projection. Claude-owned files are canonical; AGENTS.md is the
+# generated filename Codex and OpenCode prefer. Render from the INDEX so a partially staged source
+# file cannot leak unstaged guidance into the commit. This runs after formatting so both source and
+# projection contain the same committed bytes.
+GUIDANCE_CHANGES=$(printf '%s\n' "$STAGED_FILES" | grep -E '^(CLAUDE\.md|AGENTS\.md|\.claude/rules/.*\.md|scripts/sync-project-guidance\.js)$' || true)
+if [ -n "$GUIDANCE_CHANGES" ]; then
+  echo "📝 Regenerating project AGENTS.md from canonical Claude guidance..."
+  node scripts/sync-project-guidance.js --write --from-index
+  git add -f -- AGENTS.md
+  echo "✅ Project guidance projection updated and staged"
+fi
+
 # Restore local Python lint/format parity when hooks change
 HOOK_CHANGES=$(printf '%s\n' "$STAGED_FILES" | grep '^hooks/' || true)
 if [ -n "$HOOK_CHANGES" ]; then

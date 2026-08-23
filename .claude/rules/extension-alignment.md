@@ -4,76 +4,49 @@ paths:
   - ".claude-plugin/**"
   - "manifest.json"
   - "mcp.json"
+  - "server/scripts/synchronize-downstream-lock.js"
 ---
 
 # Multi-Platform Extension Alignment
 
-**Upstream hooks are the single source; downstream repos adapt, never fork.**
+**Upstream hook behavior here; downstream host adapters translate it without forking its policy.**
 
-This repo ships the Claude Desktop extension and the Claude Code plugin. Three sibling repos
-port the hook system to other hosts. Hook logic lives in `hooks/*.py` + `hooks/lib/` here —
-downstream repos consume it as an npm dependency and register thin adapters.
+## Distribution Boundaries
 
-## Distribution Channels
+| Host           | Repository         | Integration shape                                        |
+| -------------- | ------------------ | -------------------------------------------------------- |
+| Claude Desktop | this repo          | `manifest.json`; no hooks                                |
+| Claude Code    | this repo          | `.claude-plugin/plugin.json` + `hooks/hooks.json`        |
+| Gemini CLI     | `gemini-prompts`   | npm dependency, shared `hooks/lib`, thin Python adapters |
+| Codex CLI      | `codex-prompts`    | npm dependency, shared `hooks/lib`, Codex adapters       |
+| OpenCode       | `opencode-prompts` | independent TypeScript behavioral port                   |
 
-| Platform       | Repo               | Mechanism                                                           | Hook config                    |
-| -------------- | ------------------ | ------------------------------------------------------------------- | ------------------------------ |
-| Claude Desktop | this repo          | `manifest.json` (MCPB)                                              | none (no hooks)                |
-| Claude Code    | this repo          | `.claude-plugin/plugin.json`                                        | `hooks/hooks.json`             |
-| Gemini CLI     | `gemini-prompts`   | npm dep + `hooks/lib` symlink + Python adapters                     | `hooks/hooks.json` (that repo) |
-| OpenCode       | `opencode-prompts` | independent TypeScript plugin rewrite                               | `index.ts` (that repo)         |
-| Codex CLI      | `codex-prompts`    | npm dep + `hooks/lib` symlink + adapters over `_codex_bootstrap.py` | `hooks/hooks.json` (that repo) |
+Host-specific event names, payload parsing, and tool aliases belong in adapters. Shared policy and
+Python behavior belong in `hooks/lib/`; do not branch shared logic on the host.
 
-## Hook Event Mapping (measured 2026-08-03 against each repo's shipped config)
+## Change Gate
 
-| Behavior                  | Claude Code                                   | Codex CLI                                                  | Gemini CLI                                             |
-| ------------------------- | --------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
-| `>>` syntax detection     | `UserPromptSubmit`                            | `UserPromptSubmit`                                         | `BeforeAgent`                                          |
-| Gate verdict enforcement  | `PreToolUse` `.*prompt_engine`                | `PreToolUse` `.*prompt_engine`                             | `BeforeTool` `prompt_engine`                           |
-| Delegation enforcement    | `PreToolUse` `Edit\|Write\|Bash\|Task\|Agent` | `PreToolUse` `Bash\|apply_patch\|collaborationspawn_agent` | `BeforeTool` `write_file\|replace\|bash\|task_tool\|…` |
-| Chain/gate tracking       | `PostToolUse` `.*prompt_engine`               | `PostToolUse` `.*prompt_engine`                            | `AfterTool` `prompt_engine`                            |
-| Ralph telemetry           | `PostToolUse` `Edit\|Write\|Bash`             | `PostToolUse` `Bash\|apply_patch`                          | `AfterTool` `write_file\|replace\|bash\|task_tool`     |
-| Stop blocking (Ralph)     | `Stop`                                        | `Stop` (timeout 120s)                                      | `SessionEnd` (cleanup only)                            |
-| Compaction handling       | `SessionStart` (`compact`) — recover after    | `SessionStart` (`compact`) — recover after                 | `PreCompress` (`manual\|auto`) — save before           |
-| Skill-first reminder      | unregistered                                  | `SessionStart` (`startup\|resume`), catalog-free           | —                                                      |
-| Subagent gate enforcement | unregistered                                  | not portable on 0.146 (encrypted inter-agent payloads)     | —                                                      |
+When hook behavior changes:
 
-OpenCode is a behavioral port, not an adapter port — its event names and coverage live in
-`opencode-prompts` and are narrower (no prompt-submit, stop, or subagent hooks).
+- Update the upstream hook and `hooks/hooks.json` together.
+- Re-check Gemini and Codex adapters, matcher names, and tool aliases against the changed event.
+- Port the behavior explicitly to OpenCode; it does not consume the Python adapter layer.
+- Update `hooks/README.md` and downstream compatibility docs.
+- Re-lock downstream packages with `server/scripts/synchronize-downstream-lock.js` after release.
 
-**Codex divergences (0.146, measured)**: subagent task payloads are encrypted/absent from
-transcripts, and plugin `.mcp.json` values are not interpolated (`${CLAUDE_PLUGIN_ROOT}` passes
-through literally; server must be registered globally via `codex mcp add`). Details:
-`codex-prompts` README §Known divergences.
+When the MCP launch surface changes, keep `manifest.json`, `.claude-plugin/plugin.json`, and
+`mcp.json` aligned; downstream repositories own their host-native config files.
 
-## Alignment Checklist
+## Dated Capability Evidence
 
-**When modifying hooks in this repo:**
+Codex divergences were last measured on 2026-08-21 with Codex CLI 0.148.0: subagent task payloads
+were unavailable for portable enforcement, and plugin `.mcp.json` variables were not interpolated.
+Re-verify these claims after a Codex upgrade rather than treating the version snapshot as policy.
+OpenCode remains a behavioral port with a different hook event surface.
 
-- [ ] Update `hooks/*.py` and `hooks/hooks.json` here (Claude Code source of truth)
-- [ ] gemini-prompts + codex-prompts: refresh the npm dep, re-check adapter matchers and
-      tool-name remaps (`CODEX_TOOL_NAMES`, Gemini tool aliases) against the new behavior
-- [ ] opencode-prompts: port the behavior explicitly — nothing is shared with the TS rewrite
-- [ ] Update `hooks/README.md` and the mapping table above
-- [ ] Behavior branching on host belongs in the adapter, never in `hooks/lib/`
+Session-start hooks must finish within five seconds, take a cheap path before heavy work, and fail
+silently when they are advisory. A host that treats hook-launch failure as blocking needs a shipped
+adapter before the hook is registered.
 
-**Host seams (upstream, already built — extend, don't duplicate):**
-
-- `workspace.py` env chain: `MCP_WORKSPACE` → `CLAUDE_PLUGIN_ROOT` → `PLUGIN_ROOT` (Codex native) → Gemini paths
-- `cli_spawner.SpawnConfig.client` (`"claude" | "codex"`, env default `RALPH_SPAWN_CLIENT`) picks the spawn CLI
-- `model_strategies` registry maps capability tiers per client (`codex` → `gpt-5.6-sol`)
-
-**When modifying the MCP server config surface:**
-
-- [ ] `manifest.json` (Claude Desktop) and `.claude-plugin/plugin.json` → `mcp.json` (Claude Code)
-- [ ] Downstream repos bundle their own server config (`gemini-extension.json`, `.mcp.json`)
-
-**When releasing:** this repo versions via release-please; downstream repos version
-independently and re-lock via `server/scripts/synchronize-downstream-lock.js` after publish.
-
-## Performance Standards
-
-All SessionStart-class hooks (any host): complete in <5s, quick-check before heavy work,
-exit silently on failure — a broken reminder must not break session start. On Codex,
-a hook that fails to _launch_ is treated as a BLOCK on its event — downstream repos must
-ship adapters before hook trust is granted.
+Client capability matrix: `docs/reference/client-capabilities.md`. Skills and rule propagation:
+`docs/guides/skills-sync.md`.

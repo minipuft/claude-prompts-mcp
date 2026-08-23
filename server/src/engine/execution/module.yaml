@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: engine-execution
+kind: domain
+lifecycle: canonical
+description: Parses commands and coordinates the staged client-guided execution pipeline.
+children: internal

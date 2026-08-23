@@ -6,6 +6,10 @@ module.exports = {
     // ============================================
     // Layer hierarchy: shared(L0) → infra(L1) → engine(L2) → modules(L3) → mcp(L4)
     // Each layer can only import from layers below it.
+    // runtime/ is the application composition boundary and may wire all five layers.
+    // cli-shared/ is a host adapter outside the server request path. Its observed imports remain
+    // visible in the generated module catalog; no second permission policy is encoded in
+    // module.yaml descriptors.
 
     // --- Layer 0: shared/ (foundation, imports nothing) ---
     {

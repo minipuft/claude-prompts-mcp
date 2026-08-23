@@ -166,6 +166,14 @@ jobs:
         working-directory: .
         run: node server/scripts/validate-plan-row-tracking.js
 
+      # CLAUDE.md, AGENTS.md, and .claude/rules/*.md are documentation paths, so their pull
+      # requests intentionally skip validate:all. The full route checks this inside that suite;
+      # lightweight routes run the same byte comparison here so a stale projection cannot merge.
+      - name: Validate project guidance projection (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: node scripts/sync-project-guidance.js --check
+
       - name: Confirm lightweight validation
         if: needs.classify.outputs.scope != 'full'
         working-directory: .

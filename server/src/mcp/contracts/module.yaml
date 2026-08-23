@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: mcp-contracts
+kind: protocol
+lifecycle: canonical
+description: Defines runtime-facing MCP contract metadata and generated schemas.
+children: internal

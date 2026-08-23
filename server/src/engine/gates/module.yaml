@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: engine-gates
+kind: domain
+lifecycle: canonical
+description: Selects, enhances, and evaluates quality-gate guidance.
+children: internal

@@ -145,108 +145,54 @@ This design means:
 
 ## Quick Start for Developers
 
-### Codebase Map
+### Semantic Module Boundaries
 
-```
-server/src/
-├── runtime/                    # Application lifecycle
-│   └── application.ts          # 4-phase startup orchestrator
-├── server/transport/           # STDIO + Streamable HTTP protocol handlers
-├── mcp-tools/                  # MCP tool layer
-│   ├── index.ts                # Registers 3 MCP tools
-│   ├── prompt-engine/          # → PromptExecutionPipeline
-│   │   └── core/               # PromptExecutor + PipelineBuilder + PipelineDependencies
-│   ├── resource-manager/       # Unified router
-│   │   └── prompt/             # Prompt CRUD (handler → lifecycle/discovery/versioning)
-│   ├── gate-manager/           # Gate CRUD
-│   │   ├── core/               # Thin handler + context
-│   │   └── services/           # GateLifecycleProcessor, GateDiscoveryProcessor, GateVersioningProcessor
-│   ├── framework-manager/      # Framework CRUD
-│   │   ├── core/               # Thin handler + context
-│   │   └── services/           # FrameworkLifecycleProcessor, FrameworkDiscoveryProcessor, etc.
-│   └── system-control/         # System administration
-│       ├── core/               # Router + action handler base + types
-│       └── handlers/           # 11 action handlers (status, framework, gates, session, etc.)
-├── execution/                  # Execution layer
-│   ├── pipeline/stages/        # 24 stage files (thin orchestrators)
-│   ├── pipeline/state/         # Accumulators (gates, diagnostics)
-│   ├── pipeline/decisions/     # Decision services (injection, gates)
-│   ├── parsers/                # Command parsing + blueprint resolution
-│   ├── capture/                # Step capture service
-│   ├── formatting/             # Response assembly + context types
-│   ├── context/                # ExecutionContext + type guards
-│   ├── planning/               # Execution planner
-│   └── reference/              # Reference resolution
-├── prompts/                    # Prompt registry + hot-reload
-├── frameworks/                 # Framework system
-│   ├── framework/            # YAML loaders, validation
-│   └── framework-manager.ts    # Stateless orchestrator
-├── gates/                      # Quality validation
-│   ├── core/                   # GateLoader, validators
-│   ├── registry/               # GateRegistry, GenericGateGuide
-│   ├── hot-reload/             # GateHotReloadCoordinator
-│   ├── judge/                  # Judge resource collection + menu formatting
-│   └── services/               # Gate resolution, enhancement, verdict processing
-├── styles/                     # Response formatting
-│   ├── core/                   # StyleDefinitionLoader, schema
-│   ├── hot-reload/             # StyleHotReloadCoordinator
-│   └── style-manager.ts        # Style orchestration
-├── scripts/                    # Script tool system
-│   ├── detection/              # Tool detection service
-│   ├── execution/              # Script executor
-│   └── core/                   # Definition loader
-├── chain-session/              # Multi-step workflow state (SQLite-backed)
-├── text-references/            # ArgumentHistoryTracker (SQLite-backed)
-├── tracking/                   # Resource change audit logging
-├── database/                   # SqliteEngine + SqliteStateStore
-├── mcp-contracts/schemas/      # Generated Zod schemas
-└── action-metadata/            # Action definitions and telemetry
-server/resources/               # Hot-reloaded resource definitions
-├── frameworks/              # Framework definitions
-│   └── {framework-id}/
-│       ├── framework.yaml    # Configuration
-│       ├── phases.yaml         # Phase definitions
-│       └── system-prompt.md    # Injected guidance
-├── gates/                      # Gate definitions
-│   └── {gate-id}/
-│       ├── gate.yaml           # Configuration
-│       └── guidance.md         # Guidance content (inlined at load)
-└── styles/                     # Style definitions
-    └── {style-id}/
-        ├── style.yaml          # Configuration
-        └── guidance.md         # Guidance content (inlined at load)
-```
+The source tree is organized by semantic boundaries rather than by a directory list maintained in
+this document. Each governed boundary has a colocated `module.yaml` that records its identity,
+responsibility, lifecycle, child-boundary policy, and optional public entry point. A boundary whose
+`children` value is `semantic` requires descriptors on its direct child modules. A boundary marked
+`internal` owns its nested directories as implementation detail.
+
+Descriptors explain what a boundary is. Import permission remains in
+`server/.dependency-cruiser.cjs`, which validates the dependency graph. The generated
+[Semantic Module Catalog](../reference/module-catalog.md) combines both views: authored boundary
+meaning and observed imports. Use that catalog for the current boundary inventory instead of adding
+a source tree here.
+
+| Boundary                | Responsibility                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `server/src/runtime`    | Composes the application and owns process lifecycle.                           |
+| `server/src/mcp`        | Adapts protocol contracts, transports, metadata, and the three public tools.   |
+| `server/src/engine`     | Parses commands and coordinates execution, frameworks, and gates.              |
+| `server/src/modules`    | Owns prompt, chain, resource, workflow, and authoring behavior.                |
+| `server/src/infra`      | Provides configuration, persistence, HTTP support, logging, and observability. |
+| `server/src/shared`     | Provides cross-layer types, abstractions, and pure utilities.                  |
+| `server/src/cli-shared` | Adapts shared behavior for the standalone CLI surface.                         |
 
 ### Common Tasks
 
-| Task                  | Where to Look                                                         |
-| --------------------- | --------------------------------------------------------------------- |
-| Add new prompt        | `server/prompts/[category]/` - create `.md` + update `prompts.json`   |
-| Modify pipeline stage | `server/src/execution/pipeline/stages/`                               |
-| Add framework         | `server/resources/frameworks/{id}/` - create YAML + MD files          |
-| Add/modify gate       | `server/resources/gates/{id}/` - create `gate.yaml` + `guidance.md`   |
-| Add/modify style      | `server/resources/styles/{id}/` - create `style.yaml` + `guidance.md` |
-| Debug session issues  | `server/src/chain-session/` + `runtime-state/state.db`                |
-| Update configuration  | `server/config.json`                                                  |
-| Modify tool schemas   | `server/tooling/contracts/*.json` then `npm run generate:contracts`   |
+| Task                                      | Where to Look                                                                                       |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Add or modify a prompt                    | Use the MCP resource workflow in [Build Your First Prompt](../tutorials/build-first-prompt.md).     |
+| Modify execution behavior                 | Start with the `engine-execution` boundary in the [module catalog](../reference/module-catalog.md). |
+| Add or modify a framework, gate, or style | Use the relevant MCP resource workflow in the [MCP tools reference](../reference/mcp-tools.md).     |
+| Add a semantic boundary                   | Run `npm --prefix server run scaffold:module -- --help` and supply the required descriptor fields.  |
+| Debug persisted state                     | Consult [SQLite Persistence](sqlite-persistence.md) for table and writer ownership.                 |
+| Modify tool schemas                       | Edit `server/tooling/contracts/*.json`, then run `npm --prefix server run generate:contracts`.      |
 
 ### Entry Points
 
-| File                                                   | Purpose                           |
-| ------------------------------------------------------ | --------------------------------- |
-| `src/index.ts`                                         | Server startup                    |
-| `src/mcp-tools/index.ts`                               | Tool registration                 |
-| `src/mcp-tools/prompt-engine/core/prompt-executor.ts`  | Prompt engine orchestration       |
-| `src/mcp-tools/prompt-engine/core/pipeline-builder.ts` | Pipeline construction (22 stages) |
-| `src/execution/pipeline/prompt-execution-pipeline.ts`  | Pipeline stage execution          |
-| `src/mcp-tools/system-control/core/system-control.ts`  | System control routing            |
-| `src/prompts/registry.ts`                              | Prompt management                 |
-| `src/frameworks/framework-manager.ts`                  | Framework logic                   |
-| `src/gates/gate-manager.ts`                            | Gate orchestration                |
-| `src/gates/registry/gate-registry.ts`                  | Gate lifecycle management         |
-| `src/styles/style-manager.ts`                          | Style orchestration               |
-| `src/tracking/resource-change-tracker.ts`              | Change audit logging              |
-| `src/database/sqlite-engine.ts`                        | SQLite persistence layer          |
+| File                                                         | Purpose                                |
+| ------------------------------------------------------------ | -------------------------------------- |
+| `src/index.ts`                                               | Server startup.                        |
+| `src/runtime/application.ts`                                 | Application composition and lifecycle. |
+| `src/mcp/tools/index.ts`                                     | Public MCP tool registration.          |
+| `src/engine/execution/pipeline/prompt-execution-pipeline.ts` | Pipeline stage execution.              |
+| `src/modules/prompts/registry.ts`                            | Prompt discovery and lookup.           |
+| `src/engine/frameworks/framework-manager.ts`                 | Framework selection and lookup.        |
+| `src/engine/gates/gate-manager.ts`                           | Gate selection and orchestration.      |
+| `src/modules/formatting/style-manager.ts`                    | Style selection and formatting.        |
+| `src/infra/database/sqlite-engine.ts`                        | SQLite persistence infrastructure.     |
 
 ---
 
@@ -778,7 +724,7 @@ Four-phase startup:
 3. **Module Init**: MCP tools, transports, execution engine
 4. **Launch**: Health monitoring, graceful shutdown
 
-### Transports (`src/server/transport/`)
+### Transports (`src/infra/http/transport/`)
 
 | Transport       | Protocol                       | Use Case                    | Status |
 | --------------- | ------------------------------ | --------------------------- | ------ |
@@ -802,22 +748,22 @@ one place the transports genuinely diverge — see `CLAUDE.md` Core Principle 3.
 
 Transport is selected at startup. Both modes share the same message handling.
 
-### Prompts (`src/prompts/`)
+### Prompts (`src/modules/prompts/`)
 
 - **Registry**: Dynamic registration with category organization
 - **Hot-Reload**: File watching with debounced updates
 - **Templates**: Nunjucks with custom filters and async rendering
 
-### Frameworks (`src/frameworks/`)
+### Frameworks (`src/engine/frameworks/`)
 
 - **Manager**: Stateless orchestration, loads definitions from framework registry
 - **State Store**: Persists active framework to SQLite `framework_state` table
 - **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, Liquescent implementations
 
-### Gates (`src/gates/`)
+### Gates (`src/engine/gates/`)
 
 - **Manager**: Orchestrates gate lifecycle and validation
-- **Registry**: Hot-reloaded gate definitions from `server/gates/`
+- **Registry**: Hot-reloaded gate definitions from `server/resources/gates/`
 - **Services**: Gate resolution, guidance rendering, compositional gates
 
 ### Telemetry (`src/infra/observability/telemetry/`)
@@ -834,13 +780,13 @@ The hook system is the single fan-out point for pipeline/gate/chain events. The 
 
 See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for configuration, attribute reference, and troubleshooting.
 
-### Styles (`src/styles/`)
+### Styles (`src/modules/formatting/`)
 
 - **Manager**: Orchestrates style lifecycle
-- **Registry**: Hot-reloaded style definitions from `server/styles/`
+- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`
 - **Loader**: YAML + MD parsing with schema validation
 
-### Execution (`src/execution/`)
+### Execution (`src/engine/execution/`)
 
 - **Pipeline**: 22-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
 - **Parsers**: Multi-format (symbolic `-->`, JSON, key=value)
@@ -879,7 +825,7 @@ tooling/contracts/*.json          # Source of truth
         │
         ▼ npm run generate:contracts
         │
-src/mcp-contracts/schemas/_generated/
+src/mcp/contracts/schemas/_generated/
 ├── mcp-schemas.ts                # Zod schemas for validation
 ├── tool-descriptions.contracts.json  # Tool descriptions
 └── *.generated.ts                # Per-tool TypeScript types

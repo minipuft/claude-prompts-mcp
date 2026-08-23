@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: infra-logging
+kind: shared
+lifecycle: canonical
+description: Provides structured logging primitives and configuration.
+children: internal
+publicEntry: index.ts

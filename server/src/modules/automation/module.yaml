@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: automation
+kind: domain
+lifecycle: canonical
+description: Owns automation-oriented resource and workflow behavior.
+children: internal

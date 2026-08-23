@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: mcp-http
+kind: protocol
+lifecycle: canonical
+description: Implements the Streamable HTTP MCP transport boundary.
+children: internal

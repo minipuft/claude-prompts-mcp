@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: server-source
+kind: application
+lifecycle: canonical
+description: Server source composition root.
+children: semantic
+publicEntry: index.ts

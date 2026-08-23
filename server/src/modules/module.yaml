@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: application-modules
+kind: layer
+lifecycle: canonical
+description: Feature modules that own prompt, chain, resource, and authoring behavior.
+children: semantic

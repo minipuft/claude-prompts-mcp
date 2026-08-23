@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: mcp-boundary
+kind: layer
+lifecycle: canonical
+description: Model Context Protocol contracts, transports, metadata, and tool adapters.
+children: semantic

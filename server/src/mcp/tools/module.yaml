@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: mcp-tools
+kind: protocol
+lifecycle: canonical
+description: Registers and routes the three public MCP tools.
+children: internal
+publicEntry: index.ts

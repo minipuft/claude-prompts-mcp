@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: semantic
+kind: domain
+lifecycle: canonical
+description: Owns semantic indexing and related retrieval behavior.
+children: internal

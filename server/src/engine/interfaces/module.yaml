@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: engine-interfaces
+kind: protocol
+lifecycle: canonical
+description: Contracts exposed by the execution engine to collaborating layers.
+children: internal

@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: shared
+kind: layer
+lifecycle: canonical
+description: Foundation types and pure utilities available to every source layer.
+children: semantic

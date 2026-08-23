@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: runtime
+kind: runtime
+lifecycle: canonical
+description: Application composition and process lifecycle entrypoints.
+children: internal

@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: hot-reload
+kind: domain
+lifecycle: canonical
+description: Coordinates file observation and registry refresh behavior.
+children: internal

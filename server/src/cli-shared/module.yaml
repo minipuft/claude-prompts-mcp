@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: cli-shared
+kind: adapter
+lifecycle: canonical
+description: Shared implementation used by the standalone CLI integration surface.
+children: internal
+publicEntry: index.ts

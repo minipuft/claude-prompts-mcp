@@ -1,0 +1,8 @@
+schemaVersion: 1
+id: workflow-ir
+kind: domain
+lifecycle: canonical
+description: Validates and compiles planner-submitted workflow graphs.
+children: internal
+docs:
+  - docs/reference/workflow-ir.md

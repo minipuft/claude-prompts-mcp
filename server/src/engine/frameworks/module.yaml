@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: engine-frameworks
+kind: domain
+lifecycle: canonical
+description: Loads, validates, selects, and applies reasoning frameworks.
+children: internal

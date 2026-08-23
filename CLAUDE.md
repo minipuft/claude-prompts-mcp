@@ -5,7 +5,7 @@
 ## Core Principles
 
 1. **MCP Tooling Only** -- Prompts, templates, chains flow through MCP tools. Manual edits under `server/prompts/**` forbidden.
-2. **Contracts as SSOT** -- Schemas generated from `tooling/contracts/*.json`. Run `npm run generate:contracts`, never edit `_generated/`.
+2. **Contract ownership** -- Hand-written schemas under `src/mcp/tools/schemas/` own runtime validation; `tooling/contracts/*.json` own descriptions and parameter metadata generated into `src/mcp/contracts/schemas/_generated/`. Run `npm run generate:contracts`, never edit `_generated/`.
 3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
 5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran.
@@ -92,7 +92,9 @@ mistake was made and reverted on 2026-08-15. Two gates keep the relationship hon
 | Topic                                        | Doc                                      |
 | -------------------------------------------- | ---------------------------------------- |
 | Architecture & runtime                       | `docs/architecture/overview.md`          |
+| SQLite persistence                           | `docs/architecture/sqlite-persistence.md` |
 | MCP tools & symbolic commands                | `docs/reference/mcp-tools.md`            |
+| MCP contract maintenance                     | `docs/guides/mcp-contract-maintenance.md` |
 | Prompt authoring                             | `docs/tutorials/build-first-prompt.md`   |
 | Chains lifecycle                             | `docs/concepts/chains-lifecycle.md`      |
 | Gates                                        | `docs/guides/gates.md`                   |
@@ -241,7 +243,9 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 
 ## Key Constraints
 
-- **MCP Contract Dev**: Verify upstream first (`grep -rn "paramName" src/mcp-tools/*/core/manager.ts`). Layer alignment: Contract -> Generated -> Types -> Router -> Manager -> Service must agree.
+- **MCP Contract Dev**: Verify upstream first (`rg "paramName" src/mcp/tools src/modules src/engine`). Contract, schema, generated metadata, router, manager/types, and service must agree.
+- **Client-work boundary**: Prompt and chain steps guide the client LLM; the server does not execute shell commands or mutate the client's workspace. Resource operations may write only server-owned resource and runtime-state paths.
+- **Guidance owner**: `PromptGuidanceService` remains the central framework-guidance service. Do not introduce a parallel coordinator/orchestrator with overlapping responsibility.
 - **Framework validity**: Always `frameworkManager.getFramework(id)` -- never hardcode framework lists.
 - **Consolidation over addition**: Enhance existing systems vs creating new ones.
 - **Pipeline state**: Use `context.gates`, `context.frameworkAuthority`, `context.diagnostics` -- never mutate arrays directly.
@@ -249,8 +253,10 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 - **Commit convention**: Conventional Commits enforced. Scopes (`commitlint.config.mjs` is the enforced list; keep this and `CONTRIBUTING.md` in lockstep with it): `server`, `cli`, `runtime`, `pipeline`, `gates`, `frameworks`, `prompts`, `chains`, `styles`, `scripts`, `hooks`, `resources`, `mcp-tools`, `contracts`, `parsers`, `ci`, `deps`, `config`, `logging`, `metrics`, `docs`, `tests`, `semantic`, `execution`.
 - **Environment**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 
--> `.claude/rules/mcp-contracts.md` for full contract protocol (auto-loaded)
--> `.claude/rules/sqlite-persistence.md` for the table map, `tenant_id`/`run_owner_pid` split, and durable-table rules (glob-loaded)
+-> `.claude/rules/mcp-contracts.md` for critical contract constraints (path-loaded)
+-> `.claude/rules/sqlite-persistence.md` for critical persistence constraints (path-loaded)
+-> `docs/guides/mcp-contract-maintenance.md` for the full contract procedure
+-> `docs/architecture/sqlite-persistence.md` for the table map, scope split, and schema history
 -> `docs/architecture/overview.md` for architecture, pipeline stages, subsystems
 -> `docs/reference/mcp-tools.md` for MCP tool workflows, symbolic command language
 -> `docs/guides/injection-control.md` for injection types, frequency, hierarchy

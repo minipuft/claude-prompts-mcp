@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: infrastructure
+kind: layer
+lifecycle: canonical
+description: Configuration, persistence, transport support, logging, and observability infrastructure.
+children: semantic

@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: infra-http
+kind: protocol
+lifecycle: canonical
+description: Provides HTTP infrastructure used by the Streamable HTTP transport.
+children: internal
+publicEntry: index.ts

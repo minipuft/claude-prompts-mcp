@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: shared-types
+kind: shared
+lifecycle: canonical
+description: Cross-layer TypeScript contracts and data shapes.
+children: internal
+publicEntry: index.ts

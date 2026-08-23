@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: shared-utils
+kind: shared
+lifecycle: canonical
+description: Pure cross-layer utility functions.
+children: internal
+publicEntry: index.ts

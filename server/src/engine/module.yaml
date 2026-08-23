@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: execution-engine
+kind: layer
+lifecycle: canonical
+description: Client-guided execution, framework, and gate decision logic.
+children: semantic

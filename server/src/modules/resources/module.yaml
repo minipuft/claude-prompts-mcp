@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: resources
+kind: domain
+lifecycle: canonical
+description: Owns resource verification and mutation transactions.
+children: internal
+publicEntry: index.ts

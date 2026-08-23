@@ -4,7 +4,41 @@ Define prompts once as YAML. Export as native skills to Claude Code, Cursor, Cod
 
 ## Why
 
-Each AI coding tool expects a different skill format. Your prompts live as YAML in `server/resources/` — the single source of truth. Skills Sync compiles them into each client's native format so you author once and distribute everywhere.
+Each AI coding tool expects a different skill format. MCP prompts live as YAML in
+`server/resources/` — the source of truth for repository-compiled prompt skills. Skills Sync
+compiles them into each client's native format so you author once and distribute everywhere.
+
+This is distinct from the user's cross-client operational configuration: shared hand-authored
+skills, rules, and global instructions are canonical in `~/.claude`, with Codex and OpenCode as
+one-way downstream projections. Do not pull downstream edits into `~/.claude`; edit the Claude
+source. Codex's `~/.codex/rules/` is command-execution policy rather than a Markdown-rule target.
+The global instruction projection retains `CLAUDE.md` and emits one on-demand dispatch entry per
+rule for both clients; it does not concatenate every rule body into always-loaded context.
+
+Repository instructions use a separate compatibility projection. The repository's `CLAUDE.md`
+and `.claude/rules/*.md` are authored sources; `npm run guidance:sync` renders a compact semantic
+projection into the tracked `AGENTS.md` that Codex and OpenCode prefer. The projection includes
+selected handbook sections and one dispatch entry per scoped rule, not the full rule bodies. The
+pre-commit hook renders from the Git index so partially staged files cannot leak unstaged
+instructions, while `npm run guidance:check` and CI reject a stale or over-budget projection. Do
+not edit `AGENTS.md` directly.
+
+### Project rule portability
+
+| Client      | Native project guidance                                   | Target-scoped rule activation                                         |
+| ----------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
+| Claude Code | `CLAUDE.md` + `.claude/rules/*.md`                        | Yes, through rule frontmatter `paths:`                                |
+| Codex       | hierarchical `AGENTS.md` files                            | No frontmatter equivalent; default project guidance budget is 32 KiB  |
+| OpenCode    | `AGENTS.md`/`CLAUDE.md` + configured `instructions` files | No target-matching equivalent; instruction globs choose files to load |
+
+The generated dispatch preserves the conditional decision without pretending the clients share
+Claude Code's loader: when a task touches a listed pattern, Codex or OpenCode reads the referenced
+canonical rule before editing. Adding per-file client hooks for three rules would duplicate native
+loader logic and is intentionally deferred until measured misses justify mechanical enforcement.
+
+Behavior references: [Claude Code memory](https://code.claude.com/docs/en/memory),
+[Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md), and
+[OpenCode rules](https://opencode.ai/docs/rules/).
 
 | Problem                            | Solution                                       | Result                                                    |
 | ---------------------------------- | ---------------------------------------------- | --------------------------------------------------------- |

@@ -84,6 +84,13 @@ else
 fi
 
 if [ "$VALIDATION_SCOPE" = "docs" ]; then
+  echo ""
+  echo "Project guidance projection..."
+  node scripts/sync-project-guidance.js --check || {
+    echo "❌ Project guidance projection is stale"
+    exit 1
+  }
+
   # Plan hygiene runs HERE, not only in `validate:all`. A plan-only change classifies as `docs`
   # (`scripts/classify-validation-scope.js`), and the docs route skips the suite entirely — so
   # registering this check only in the suite left it dead on the one kind of push it exists to

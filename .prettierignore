@@ -17,6 +17,12 @@ manifest.json
 # `JSON.stringify(…, 2)`, so it is now machine-formatted for the same reason its render is.
 plugin.json
 
+# Compact semantic projection of CLAUDE.md plus .claude/rules/*.md. Formatting it independently
+# would create bytes the generator immediately replaces.
+AGENTS.md
+# Generated from module.yaml metadata plus dependency-cruiser JSON; generator owns exact bytes.
+docs/reference/module-catalog.md
+
 # Written by pyrefly (`validate:python` regenerates it with --baseline). It emits no
 # trailing newline, which prettier requires — so the file oscillates between the two
 # tools and fails validate:format whenever pyrefly last touched it.

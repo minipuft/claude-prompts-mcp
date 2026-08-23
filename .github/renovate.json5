@@ -116,7 +116,7 @@
         "- [ ] `npm view typescript-eslint peerDependencies.typescript` admits 7 — today `<6.1.0` (this also gates TS **6.1**)",
         "- [ ] `npm run validate:arch` prints a NON-ZERO module count — under TS 7 dependency-cruiser cruises **0 modules and exits 0**",
         "",
-        "The third one is why this note exists. dependency-cruiser does not fail on an unsupported TypeScript; it emits a `warn`, finds nothing to parse, and reports success over an empty graph — green CI with every layer and cycle rule switched off. `scripts/validate-arch.js` now asserts a module floor so that state fails instead of passing, but read the checklist before trusting a green run on a TypeScript major.",
+        "The third one is why this note exists. dependency-cruiser does not fail on an unsupported TypeScript; it can report success over an empty graph — green CI with every layer and cycle rule switched off. `scripts/validate-arch.ts` reads structured JSON and asserts a module floor so that state fails instead of passing, but read the checklist before trusting a green run on a TypeScript major.",
         "",
         "Minor and patch updates within TS 6.x are fine and need none of this.",
       ],

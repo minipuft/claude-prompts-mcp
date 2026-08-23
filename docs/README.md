@@ -35,6 +35,7 @@ _I have a specific problem to solve._
 - **[Ralph Loops](guides/ralph-loops.md)**: Autonomous verification loops until tests pass.
 - **[Script Tools](guides/script-tools.md)**: Run Python scripts inside prompts.
 - **[Client Integration](guides/client-integration.md)**: Configure per-client MCP installation with `--client` presets.
+- **[MCP Contract Maintenance](guides/mcp-contract-maintenance.md)**: Keep schemas, contracts, generated metadata, routers, and services aligned.
 - **[Identity Scope](guides/identity-scope.md)**: Configure multi-tenant workspace/organization isolation.
 - **[Troubleshooting](guides/troubleshooting.md)**: Diagnose common errors.
 - **[Release Process](guides/release-process.md)**: How we ship updates.
@@ -50,6 +51,7 @@ _I need to look up syntax or API details._
 - **[Prompt Schema](reference/prompt-yaml-schema.md)**: `prompt.yaml` configuration.
 - **[Chain Schema](reference/chain-schema.md)**: `chainSteps` configuration.
 - **[Workflow IR](reference/workflow-ir.md)**: Node/edge shape, caps, and rejection vocabulary for a submitted workflow.
+- **[Semantic Module Catalog](reference/module-catalog.md)**: Generated boundary responsibilities and observed imports.
 - **[Gate Configuration](reference/gate-configuration.md)**: `gate.yaml` configuration.
 - **[Template Syntax](reference/template-syntax.md)**: Nunjucks + custom extensions.
 - **[Client Capabilities](reference/client-capabilities.md)**: Client preset matrix, profile mapping, and integration limits.
@@ -64,6 +66,7 @@ _I want to understand how it works._
 - **[Chains Lifecycle](concepts/chains-lifecycle.md)**: State machine and session management.
 - **[Quality Gates](concepts/quality-gates.md)**: Precedence ladder and verification types.
 - **[Architecture Overview](architecture/overview.md)**: Runtime, transports, pipeline.
+- **[SQLite Persistence](architecture/sqlite-persistence.md)**: Table contracts, durability, scope, schema bumps, and writer ownership.
 
 > [!TIP]
 > **Want the big picture?** [Architecture Overview](architecture/overview.md) maps the full request lifecycle from input to validated output.

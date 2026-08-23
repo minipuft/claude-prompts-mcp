@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: infra-observability
+kind: domain
+lifecycle: canonical
+description: Provides tracing and operational telemetry infrastructure.
+children: internal

@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: chains
+kind: domain
+lifecycle: canonical
+description: Owns chain sessions, execution records, mutation, and persistence behavior.
+children: internal

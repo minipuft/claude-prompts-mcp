@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: text-references
+kind: domain
+lifecycle: canonical
+description: Tracks and resolves reusable text argument references.
+children: internal
+publicEntry: index.ts

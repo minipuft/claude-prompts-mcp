@@ -274,6 +274,28 @@ Analyzes available templates, reasoning frameworks, validation rules, and styles
 
 Author workflows as YAML templates. Export as native skills to your client.
 
+> [!IMPORTANT]
+> There are two source-of-truth scopes. MCP prompt YAML under `server/resources/` is canonical
+> for skills compiled by this repository. Shared user-authored operational skills, rules, and
+> global instructions are canonical in `~/.claude`; Codex and OpenCode installations are
+> one-way downstream consumers and must not be edited independently. Codex uses per-skill
+> symlinks; Codex and OpenCode share a generated global `AGENTS.md` containing the global
+> `CLAUDE.md` plus compact rule dispatch. OpenCode natively discovers `~/.claude/skills` and loads
+> that generated file through its `instructions` configuration. `~/.codex/rules/` remains
+> reserved for Codex command-execution policy.
+
+Repository guidance follows the same ownership rule. `CLAUDE.md` plus `.claude/rules/*.md` are
+canonical; the tracked `AGENTS.md` is a generated compact projection for clients that prefer that
+filename. It carries selected project-wide handbook sections plus conditional dispatch entries for
+every Claude rule rather than copying all rule bodies into always-loaded context. The renderer
+enforces Codex's documented default 32 KiB project-guidance budget. A pre-commit hook regenerates
+it from staged source bytes, and CI rejects drift:
+
+```bash
+npm run guidance:sync   # regenerate AGENTS.md
+npm run guidance:check  # verify the committed projection
+```
+
 ```yaml
 # skills-sync.yaml — choose what to export
 registrations:

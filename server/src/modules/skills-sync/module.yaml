@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: skills-sync
+kind: domain
+lifecycle: canonical
+description: Exports and synchronizes skills across supported clients.
+children: internal

@@ -78,6 +78,9 @@ CHANGELOG* text
 CONTRIBUTING* text
 *.md text
 
+# Client-consumed guidance projection; edit CLAUDE.md and .claude/rules/*.md instead.
+AGENTS.md text eol=lf linguist-generated=true
+
 # TypeScript and JavaScript configuration
 tsconfig.json text
 jsconfig.json text

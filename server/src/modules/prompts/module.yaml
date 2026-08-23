@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: prompts
+kind: domain
+lifecycle: canonical
+description: Owns prompt discovery, schema, registry, and lifecycle behavior.
+children: internal
+publicEntry: index.ts

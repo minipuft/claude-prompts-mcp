@@ -103,10 +103,31 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:agent-guidance',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED by byte equality — changing either a canonical source or the projection alone fails until AGENTS.md is regenerated from CLAUDE.md plus the project rules',
+  },
+  {
     script: 'validate:arch',
     io: 'read',
-    reads: ['spawn'],
+    reads: ['declared'],
     converse: 'unexamined',
+  },
+  {
+    script: 'validate:module-descriptors',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED both ways — a semantic parent with an undescribed child fails, and an internal parent with a nested descriptor also fails',
+  },
+  {
+    script: 'validate:module-catalog',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse:
+      'CHECKED by byte equality — changing descriptor metadata, source imports, or the generated catalog alone fails until the projection is regenerated',
   },
   {
     script: 'validate:filesize',

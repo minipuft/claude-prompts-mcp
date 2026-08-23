@@ -1,0 +1,6 @@
+schemaVersion: 1
+id: shared-core
+kind: shared
+lifecycle: canonical
+description: Core abstractions shared without importing upper layers.
+children: internal

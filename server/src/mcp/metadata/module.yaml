@@ -1,0 +1,8 @@
+schemaVersion: 1
+id: mcp-metadata
+kind: protocol
+lifecycle: canonical
+description: Builds MCP server and capability metadata.
+children: internal
+docs:
+  - server/src/mcp/metadata/README.md
