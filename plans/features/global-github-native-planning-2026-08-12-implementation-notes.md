@@ -72,6 +72,7 @@ Companion: [`global-github-native-planning-2026-08-12.md`](global-github-native-
 | Config-repo pilot     | local-root detect, plan lint, `plan-setup --no-cache`, live Issue inspection                         | PASS as an advisory measurement: two active plans lint clean, zero Issues, 11 opt-in setup changes, and disabled Discussions reported without mutation     |
 | Standards-repo pilot  | local-root detect, corpus inspection, `plan-setup --no-cache`, live Issue inspection                 | PASS as a negative control: no plan corpus, one open Issue, 11 opt-in setup changes, and disabled Discussions reported without mutation                    |
 | Enforcement decision  | three-repository evidence review                                                                     | PASS: retain advisory behavior; do not make aggregate setup validation a publication blocker                                                               |
+| Closing PR            | [#241](https://github.com/minipuft/claude-prompts-mcp/pull/241)                                      | OPEN: targets `main` with `Closes #224`; merge will complete the retained Tier 6.1 trace                                                                   |
 
 ## Current boundary
 
@@ -88,9 +89,9 @@ The Tier 6.1 live drive began 2026-08-15 on a revised subject (DEV-T6-3). Discus
 now records the Node-launcher decision and Issue #224 is its accepted-work output. The local
 implementation routes every installed Claude Code hook through the launcher and has focused plus
 repository-wide validation evidence. This is the first Discussion in the repository, so
-`.github/DISCUSSION_TEMPLATE/idea.yml` (5.4) is exercised rather than merely present. Remaining
-leg: commit the implementation and open a PR with `Closes #224`; merge then supplies the retained
-Discussion → Issue → Project → plan → PR closure trace.
+`.github/DISCUSSION_TEMPLATE/idea.yml` (5.4) is exercised rather than merely present. PR
+[#241](https://github.com/minipuft/claude-prompts-mcp/pull/241) now carries `Closes #224` and targets
+`main`; merge supplies the retained Discussion → Issue → Project → plan → PR closure trace.
 
 Two facts about the drive are worth keeping: the Issue preceded the Discussion, so the conversion is
 recorded by cross-reference rather than GitHub's native convert action; and the `triage` label places
@@ -114,5 +115,5 @@ mutated.
 
 ## Remaining closeout
 
-- Complete the Tier 6.1 drive on its revised subject: Discussion #225 → Issue #224 → Project #1 → plan tracking → PR closure. The decision and implementation are recorded; the commit/PR leg is open.
+- Merge PR #241 to close Issue #224 and complete the retained Tier 6.1 trace.
 - Decide whether the private Project should become public after the live drive.
