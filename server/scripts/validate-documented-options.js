@@ -67,6 +67,8 @@ const NOT_OUR_OPTIONS = new Set([
   // Generic placeholder in "All flags accept both `--flag=value` and `--flag value`".
   '--flag',
   '--type', // ripgrep's --type, quoted in an ADR's caller-search note
+  '--include', // grep's --include, used in contract-maintenance search examples
+  '--name-only', // git diff --name-only, used in a generated-artifact check
 ]);
 
 /** Read a file relative to the repo root, empty string when absent. */

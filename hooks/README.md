@@ -14,6 +14,22 @@ Behavior guardrails for Claude when using the prompt engine. Catches missed `>>`
 
 Hooks activate automatically. Type `>>analyze` and watch the suggestion appear.
 
+### Python interpreter resolution
+
+Installed hooks run through `python-hook-runner.cjs` instead of invoking a Python command
+directly. The plugin already requires Node.js, so the runner can select a Python 3 interpreter for
+the host platform without adding shell-specific branches to each hook:
+
+- Windows: `py -3`, then `python3`, then `python`
+- macOS and Linux: `python3`, then `python`
+
+The runner advances to the next candidate only when a command is absent. Once an interpreter starts,
+the hook's exit status is returned unchanged; a failing hook is not retried with another Python
+installation. If no candidate exists, the runner exits 127 and prints the installation requirement.
+
+The direct `python3 hooks/*.py` commands below are contributor-side tests, not the installed plugin
+contract.
+
 ## Why Hooks?
 
 | Problem                          | Hook                    | Result                                 |
@@ -117,7 +133,7 @@ Set in `server/config.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/python-hook-runner.cjs\" \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py\""
           }
         ]
       }
@@ -128,7 +144,7 @@ Set in `server/config.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/python-hook-runner.cjs\" \"${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py\""
           }
         ]
       }
@@ -139,7 +155,7 @@ Set in `server/config.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gate-enforce.py"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/python-hook-runner.cjs\" \"${CLAUDE_PLUGIN_ROOT}/hooks/gate-enforce.py\""
           }
         ]
       }
@@ -150,7 +166,7 @@ Set in `server/config.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compact-recovery.py"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/python-hook-runner.cjs\" \"${CLAUDE_PLUGIN_ROOT}/hooks/compact-recovery.py\""
           }
         ]
       }
@@ -164,6 +180,7 @@ Set in `server/config.json`:
 ```text
 hooks/
 ├── hooks.json              # Claude Code hooks config
+├── python-hook-runner.cjs  # Cross-platform Python 3 interpreter selection
 ├── prompt-suggest.py       # UserPromptSubmit - syntax detection
 ├── post-prompt-engine.py   # PostToolUse - chain/gate tracking
 ├── gate-enforce.py         # PreToolUse - gate verdict enforcement
