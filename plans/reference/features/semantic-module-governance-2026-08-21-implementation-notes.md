@@ -2,7 +2,7 @@
 title: "Canonical agent instructions and semantic module governance — implementation notes"
 plan: semantic-module-governance-2026-08-21.md
 date: 2026-08-23
-status: active
+status: reference
 tags: [architecture, implementation-notes, dependency-cruiser]
 ---
 
