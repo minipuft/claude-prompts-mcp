@@ -19,12 +19,39 @@ export { TransportRouter, createTransportRouter, TransportType };
 /**
  * Server Manager class
  */
+/**
+ * Loopback by default; `0.0.0.0` only when the operator asks for it by name.
+ *
+ * `listen(port)` with no host binds every interface, which put this server on the LAN
+ * while both startup log lines claimed `http://localhost:PORT` — the log asserted the
+ * safer of the two behaviours. The MCP Streamable HTTP transport says a local server
+ * SHOULD bind 127.0.0.1 rather than all interfaces, and the previous default was the
+ * opposite of that with nothing recording the choice.
+ */
+function resolveBindHost(): string {
+  const configured = process.env['MCP_HTTP_HOST']?.trim();
+  return configured === undefined || configured.length === 0 ? '127.0.0.1' : configured;
+}
+
+/** A non-loopback bind is legitimate behind a proxy, and always worth saying out loud. */
+function warnIfPubliclyBound(logger: Logger, host: string): void {
+  const loopback = new Set(['127.0.0.1', 'localhost', '::1']);
+  if (loopback.has(host)) return;
+
+  logger.warn(
+    `[http] bound to ${host}, which is reachable beyond this machine. Ensure ` +
+      `MCP_HTTP_ALLOWED_ORIGINS names the origins you expect and that the tool write ` +
+      `endpoints have MCP_TOOLS_WRITE_TOKEN set.`
+  );
+}
+
 export class ServerLifecycle {
   private logger: Logger;
   private transportRouter: TransportRouter;
   private apiRouter: ApiRouterPort | undefined;
   private httpServer?: Server;
   private port: number;
+  private bindHost: string;
 
   constructor(
     logger: Logger,
@@ -36,6 +63,7 @@ export class ServerLifecycle {
     this.transportRouter = transportRouter;
     this.apiRouter = apiRouter;
     this.port = configManager.getPort();
+    this.bindHost = resolveBindHost();
   }
 
   /**
@@ -93,9 +121,12 @@ export class ServerLifecycle {
           return;
         }
 
-        httpServer.listen(this.port, () => {
-          this.logger.info(`Streamable HTTP running on http://localhost:${this.port}`);
-          this.logger.info(`Connect to http://localhost:${this.port}/mcp for MCP connections`);
+        httpServer.listen(this.port, this.bindHost, () => {
+          this.logger.info(`Streamable HTTP running on http://${this.bindHost}:${this.port}`);
+          this.logger.info(
+            `Connect to http://${this.bindHost}:${this.port}/mcp for MCP connections`
+          );
+          warnIfPubliclyBound(this.logger, this.bindHost);
           resolve();
         });
 
@@ -151,9 +182,12 @@ export class ServerLifecycle {
         return;
       }
 
-      httpServer.listen(this.port, () => {
-        this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
-        this.logger.info(`Streamable HTTP transport ready at http://localhost:${this.port}/mcp`);
+      httpServer.listen(this.port, this.bindHost, () => {
+        this.logger.info(`MCP Prompts Server running on http://${this.bindHost}:${this.port}`);
+        this.logger.info(
+          `Streamable HTTP transport ready at http://${this.bindHost}:${this.port}/mcp`
+        );
+        warnIfPubliclyBound(this.logger, this.bindHost);
         resolve();
       });
 
