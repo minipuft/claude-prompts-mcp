@@ -83,18 +83,39 @@ interface Harness {
 function createHarness(workspaceDir: string): Harness {
   const promptsDir = join(workspaceDir, 'prompts');
   const logger = createLogger();
+  let livePrompt: Record<string, unknown>;
+  let convertedPrompts: Record<string, unknown>[];
+  const configManager = {
+    getConfigPath: () => join(workspaceDir, 'config.yaml'),
+    getServerRoot: () => workspaceDir,
+    getResolvedPromptsDirectory: () => promptsDir,
+  } as unknown as ConfigManager;
   const dependencies = {
     logger,
+    configManager,
     semanticAnalyzer: new ContentAnalyzer(createLogger()),
-    onRefresh: jest.fn(async () => {}),
+    onRefresh: jest.fn(async () => {
+      const promptLoader = new PromptLoader(logger);
+      const { promptsData } = await promptLoader.loadFromDirectories(promptsDir);
+      const converter = new PromptConverter(logger, promptLoader);
+      const converted = await converter.convertMarkdownPromptsToJson(promptsData, promptsDir);
+      const reloaded = converted.find((prompt) => prompt.id === PROMPT_ID);
+      if (reloaded !== undefined) {
+        for (const key of Object.keys(livePrompt)) delete livePrompt[key];
+        Object.assign(livePrompt, reloaded);
+      }
+      convertedPrompts = converted.map((prompt) =>
+        prompt.id === PROMPT_ID ? livePrompt : (prompt as unknown as Record<string, unknown>)
+      );
+    }),
     onRestart: jest.fn(async () => {}),
   };
   const fileOperations = new FileOperations({
     logger,
-    configManager: { getResolvedPromptsDirectory: () => promptsDir } as unknown as ConfigManager,
+    configManager,
   });
 
-  const livePrompt: Record<string, unknown> = {
+  livePrompt = {
     id: PROMPT_ID,
     name: 'Patch Target',
     category: CATEGORY,
@@ -104,6 +125,7 @@ function createHarness(workspaceDir: string): Harness {
     arguments: [],
     chainSteps: [],
   };
+  convertedPrompts = [livePrompt];
 
   const recordEditResult = jest.fn(async () => ({ version: 3, success: true })) as jest.Mock;
   const rollback: RollbackMock = jest.fn(async () => ({
@@ -116,9 +138,10 @@ function createHarness(workspaceDir: string): Harness {
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations,
-    getData: () => ({ convertedPrompts: [livePrompt] }),
+    getData: () => ({ convertedPrompts }),
     versionHistoryService: {
       isAutoVersionEnabled: () => true,
+      loadHistory: jest.fn(async () => ({ current_version: 3 })),
       recordEditResult,
       rollback,
       // Bridge the test-configured `rollback` double into the two-phase contract the processor
@@ -525,7 +548,9 @@ describe('tools/category preservation and create pre-verify (Fix A + Fix C)', ()
       user_message_template: 'Hello {{name}}',
     } as never);
 
-    expect(response.isError).toBe(false);
+    if (response.isError) {
+      throw new Error(response.content.map((part) => ('text' in part ? part.text : '')).join(''));
+    }
     const promptDir = join(harness.promptsDir, 'general', validId);
     expect(existsSync(promptDir)).toBe(true);
     expect(existsSync(join(promptDir, 'prompt.yaml'))).toBe(true);
@@ -751,7 +776,11 @@ describe('argument_updates — structured per-field overlay (Fix D)', () => {
       ],
     } as never);
 
-    expect(overlaidResponse.isError).toBe(false);
+    if (overlaidResponse.isError) {
+      throw new Error(
+        overlaidResponse.content.map((part) => ('text' in part ? part.text : '')).join('')
+      );
+    }
     expect(fullResponse.isError).toBe(false);
 
     // Only `team.description` changed — `period` is deep-equal to the seeded base, byte-identical

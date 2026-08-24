@@ -73,6 +73,8 @@ export interface PipelineInternalState {
     normalizedCommand?: string;
     /** Request-level options passed through */
     requestOptions?: Record<string, unknown>;
+    /** Typed prompt arguments that must not be coerced through command-string parsing. */
+    requestInputs?: Record<string, unknown>;
   };
 
   /**

@@ -3,7 +3,7 @@
   "version": 1,
   "summary": "Unified resource management for prompts, gates, and frameworks. Use resource_type to specify the resource kind, then action for the operation.",
   "toolDescription": {
-    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nUPDATE: update(id, description:\"new\") \u2014 only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
+    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | validate | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> update dry_run:true -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
     "shortDescription": "Manage prompts, gates, and frameworks",
     "category": "management",
     "frameworkAware": {
@@ -21,8 +21,8 @@
     },
     {
       "name": "action",
-      "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]",
-      "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework). Versioning: history/rollback/compare (prompt/gate/framework).",
+      "type": "enum[create|validate|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]",
+      "description": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. Framework-only: switch. Versioning: history/rollback/compare.",
       "status": "working",
       "required": true
     },
@@ -334,9 +334,41 @@
       "description": "[Versioning] Skip auto-versioning on update. Default: false.",
       "status": "working",
       "includeInDescription": false
+    },
+    {
+      "name": "expected_version",
+      "type": "number",
+      "description": "[Prompt update] Optimistic concurrency token. Refuses the update before any write/version when the current recorded version differs. Read it from inspect/validate/create/update structured receipts. Cannot be combined with skip_version:true and requires versioning enabled.",
+      "status": "working",
+      "includeInDescription": true
     }
   ],
   "commands": [
+    {
+      "id": "prompt:validate",
+      "summary": "Validate and normalize a prompt creation draft without writing files or versions.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "description",
+        "category",
+        "user_message_template",
+        "system_message",
+        "arguments",
+        "chain_steps",
+        "tools",
+        "gate_configuration",
+        "composer",
+        "injection",
+        "register_with_mcp",
+        "mcp_prompt_mode",
+        "subagent_model",
+        "agent_type",
+        "execution_hint"
+      ]
+    },
     {
       "id": "prompt:create",
       "summary": "Create a prompt/chain with metadata and arguments.",
@@ -383,7 +415,8 @@
         "register_with_mcp",
         "mcp_prompt_mode",
         "subagent_model",
-        "agent_type"
+        "agent_type",
+        "expected_version"
       ]
     },
     {
@@ -531,6 +564,10 @@
     }
   ],
   "conditionalRequirements": {
+    "validate": {
+      "resource_type": "prompt",
+      "message": "The 'validate' action is only valid for resource_type: 'prompt'"
+    },
     "switch": {
       "resource_type": "framework",
       "message": "The 'switch' action is only valid for resource_type: 'framework'"

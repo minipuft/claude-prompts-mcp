@@ -11,7 +11,7 @@ import type { UnifiedCommandParser } from '../../../../src/engine/execution/pars
 import type { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
 import type { SymbolicCommandParseResult } from '../../../../src/engine/execution/parsers/types/operator-types.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
+import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -29,7 +29,9 @@ const createMockSymbolicCommandBuilder = (
     ...overrides,
   }) as unknown as SymbolicCommandBuilder;
 
-const createArgumentResult = (processedArgs: Record<string, unknown>): ArgumentParsingResult => ({
+const createArgumentResult = (
+  processedArgs: Record<string, string | number | boolean | null>
+): ArgumentParsingResult => ({
   processedArgs,
   resolvedPlaceholders: {},
   validationResults: [],
@@ -91,6 +93,79 @@ describe('CommandParsingStage', () => {
       'name="World"',
       convertedPrompt,
       expect.any(Object)
+    );
+  });
+
+  test('merges structured inputs without coercion using inline > inputs > options > defaults', async () => {
+    const parseResult = {
+      promptId: 'art_prompt',
+      rawArgs: 'mode="inline"',
+      format: 'simple' as const,
+      commandType: 'single' as const,
+      confidence: 0.95,
+      metadata: {
+        originalCommand: '>>art_prompt mode="inline"',
+        parseStrategy: 'simple',
+        detectedFormat: 'simple',
+        warnings: [],
+      },
+    };
+    const validateResolvedArguments = jest.fn();
+    const mockCommandParser: Partial<UnifiedCommandParser> = {
+      parseCommand: jest.fn<UnifiedCommandParser['parseCommand']>().mockResolvedValue(parseResult),
+    };
+    const mockArgumentParser: Partial<ArgumentParser> = {
+      parseArguments: jest
+        .fn<ArgumentParser['parseArguments']>()
+        .mockResolvedValue(createArgumentResult({ mode: 'inline', note: 'default' })),
+      validateResolvedArguments,
+    };
+    const convertedPrompt: ConvertedPrompt = {
+      id: 'art_prompt',
+      name: 'Art Prompt',
+      description: '',
+      category: 'creative',
+      userMessageTemplate: '{{ palette | dump }} {{ composition | dump }} {{ mode }} {{ note }}',
+      arguments: [
+        { name: 'palette', type: 'array', required: true },
+        { name: 'composition', type: 'object', required: true },
+        { name: 'mode', type: 'string', required: true },
+        { name: 'note', type: 'string', required: false },
+      ],
+    };
+    const inputs = {
+      palette: ['ochre', 'ultramarine'],
+      composition: { weights: { edge: 0.7 }, references: [{ id: 'r1' }] },
+      mode: 'typed',
+      note: String.raw`C:\art\refs and "quotes"`,
+    };
+    const context = new ExecutionContext({
+      command: '>>art_prompt mode="inline"',
+      options: { mode: 'legacy', note: 'legacy' },
+      inputs,
+    } as never);
+    context.state.normalization.requestOptions = { mode: 'legacy', note: 'legacy' };
+    context.state.normalization.requestInputs = inputs;
+
+    const stage = new CommandParsingStage(
+      mockCommandParser as UnifiedCommandParser,
+      mockArgumentParser as ArgumentParser,
+      () => [convertedPrompt],
+      createLogger(),
+      createMockSymbolicCommandBuilder()
+    );
+
+    await stage.execute(context);
+
+    expect(context.getPromptArgs()).toEqual({
+      palette: ['ochre', 'ultramarine'],
+      composition: { weights: { edge: 0.7 }, references: [{ id: 'r1' }] },
+      mode: 'inline',
+      note: String.raw`C:\art\refs and "quotes"`,
+    });
+    expect(validateResolvedArguments).toHaveBeenCalledWith(
+      convertedPrompt,
+      context.getPromptArgs()
     );
   });
 

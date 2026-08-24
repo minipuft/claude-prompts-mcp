@@ -123,8 +123,12 @@ export function canonicalPromptSnapshot(
  */
 const ACTION_REQUIREMENTS: Record<string, { required: string[]; example: string }> = {
   create: {
-    required: ['id', 'name', 'description', 'user_message_template'],
+    required: ['id', 'name', 'description'],
     example: `{action:'create', id:'my_prompt', name:'My Prompt', description:'What it does', user_message_template:'Process {{input}}'}`,
+  },
+  validate: {
+    required: ['id', 'name', 'description'],
+    example: `{action:'validate', id:'my_prompt', name:'My Prompt', description:'What it does', user_message_template:'Process {{input}}'}`,
   },
   update: {
     required: ['id'],

@@ -586,6 +586,32 @@ describe('MCP Server Smoke Tests', () => {
       expect(result.content[0]?.text).toContain('System Status');
     }, 25000);
 
+    it('preserves resource_manager structured content on the MCP wire', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.callTool(
+        'resource_manager',
+        { resource_type: 'prompt', action: 'inspect', id: 'create_prompt', detail: 'full' },
+        1
+      )) as {
+        isError: boolean;
+        structuredContent?: {
+          action?: string;
+          id?: string;
+          resource_root?: string;
+          current_version?: number;
+        };
+      };
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        action: 'inspect',
+        id: 'create_prompt',
+      });
+      expect(result.structuredContent?.resource_root).toContain('resources/prompts');
+      expect(typeof result.structuredContent?.current_version).toBe('number');
+    }, 25000);
+
     it('rejects a request whose headers omit the method', async () => {
       const client = new ModernMcpClient(await startModernServer());
 

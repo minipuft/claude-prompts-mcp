@@ -208,6 +208,8 @@ const PARAM_DEFAULTS = {
   gates:
     'Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).',
   options: 'Additional execution options (key-value pairs) passed through to execution.',
+  inputs:
+    'Typed prompt arguments. Use for arrays/objects or values that must bypass command-string quoting. Inline command arguments win on duplicate keys.',
   workflow:
     'Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with `command` and `chain_id` — sending more than one is rejected. SHAPE: {version:1, nodes:[{id:"kebab-case", promptId:"...", args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:["chain_history"|"previous_step_output"|"unknowns_ledger"], expose?:[...]}, subagentModel?:"heavy"|"standard"|"fast", agentType?:"...", framework?:"...", retries?:0, inlineGateIds?:["gate-id"]}], edges?:[{from:"node-a", to:"node-b"}], gates?:[...same as `gates`, target_step_id addresses a node id...], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>}}. EDGES ARE DEPENDENCIES, NOT BRANCHES: they are linearized (Kahn, ties broken by declaration order) into one run order; with no edges the order is `nodes[]` as written. Structural caps are enforced and may only be narrowed; `declaredCostCeiling` is recorded, never enforced. An invalid workflow is rejected with one addressed line per problem and NOTHING is created — no run, no session. Example: {version:1, nodes:[{id:"research", promptId:"research_docs"},{id:"draft", promptId:"write_summary"}], edges:[{from:"research", to:"draft"}]}',
   observations:
@@ -269,6 +271,11 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .record(z.string(), z.any())
       .optional()
       .describe(resolve('options', PARAM_DEFAULTS.options)),
+
+    inputs: z
+      .record(z.string(), z.any())
+      .optional()
+      .describe(resolve('inputs', PARAM_DEFAULTS.inputs)),
 
     observations: z
       .array(unknownObservationSchema)

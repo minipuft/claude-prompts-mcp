@@ -6,7 +6,11 @@ import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { FilterParser } from '../search/filter-parser.js';
 import { PromptMatcher } from '../search/prompt-matcher.js';
-import { validateChainStepReferences, validateRequiredFields } from '../utils/validation.js';
+import {
+  canonicalPromptSnapshot,
+  validateChainStepReferences,
+  validateRequiredFields,
+} from '../utils/validation.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 
@@ -260,6 +264,8 @@ export class PromptDiscoveryProcessor {
     }
 
     const classification = await this.promptAnalyzer.analyzePrompt(prompt);
+    const history = await this.context.versionHistoryService.loadHistory('prompt', prompt.id);
+    const currentVersion = history?.current_version ?? 0;
     const gateConfig = prompt.gateConfiguration;
     const { detail } = args as { detail?: string };
     const isFull = detail === 'full';
@@ -267,6 +273,7 @@ export class PromptDiscoveryProcessor {
     let response = `🔍 **Prompt Inspect**: ${prompt.name} (\`${prompt.id}\`)\n\n`;
     response += `⚡ **Type**: ${classification.executionType}\n`;
     response += `🧠 **Requires Framework**: ${classification.requiresFramework ? 'Yes' : 'No'}\n`;
+    response += `📜 **Current Version**: ${currentVersion}\n`;
     if (prompt.description) {
       response += `📝 **Description**: ${prompt.description}\n`;
     }
@@ -356,6 +363,16 @@ export class PromptDiscoveryProcessor {
 
     return {
       content: [{ type: 'text' as const, text: response }],
+      structuredContent: {
+        action: 'inspect',
+        resource_type: 'prompt',
+        id: prompt.id,
+        current_version: currentVersion,
+        prompt: canonicalPromptSnapshot(prompt.id, prompt),
+        config_path: this.context.dependencies.configManager.getConfigPath(),
+        server_root: this.context.dependencies.configManager.getServerRoot(),
+        resource_root: this.context.dependencies.configManager.getResolvedPromptsDirectory(),
+      },
       isError: false,
     };
   }

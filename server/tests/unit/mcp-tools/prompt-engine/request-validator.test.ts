@@ -275,6 +275,15 @@ describe('McpToolRequestValidator', () => {
   });
 
   describe('validatePartial()', () => {
+    test('preserves typed inputs without string coercion', () => {
+      const inputs = {
+        palette: ['ochre', 'ultramarine'],
+        composition: { weights: { edge: 0.7 } },
+      };
+
+      expect(McpToolRequestValidator.validatePartial({ inputs })).toEqual({ inputs });
+    });
+
     it('should validate partial request with valid fields', () => {
       const partial = {
         command: '>>test',

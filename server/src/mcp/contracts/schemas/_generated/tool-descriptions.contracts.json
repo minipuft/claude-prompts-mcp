@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-08-23T00:14:54.833Z",
+  "lastUpdated": "2026-08-24T00:58:19.473Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -21,7 +21,8 @@
         "cancel": "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; no other parameter is read. Moved here from system_control session cancel because a chain id is held BECAUSE you are running the chain, so ending that run is part of running it — system_control keeps list/inspect/clear, which are keyed on a session_id read from a listing. Cancel retains the session's state and artifacts; remove them with system_control(action:\"session\", operation:\"clear\").",
         "handoff": "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands; your copy is retired on the next persist after that.",
         "claim_token": "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE — it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name. A claim never rewrites workspace scope; a run from another workspace is refused.",
-        "options": "Execution options forwarded downstream.",
+        "options": "Legacy prompt argument/options map. Values remain typed; inline command arguments take precedence. Prefer `inputs` for prompt arguments, especially arrays and objects.",
+        "inputs": "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default.",
         "observations": {
           "type": "array",
           "description": "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false, target_step_id?:'...'}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement). `target_step_id` on a discovered entry names the downstream step (stable node id, e.g. 'draft-outline' or 'n3') the adaptive mutation policy skips if this unknown later resolves 'irrelevant'."
@@ -38,18 +39,19 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | validate | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> update dry_run:true -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
       "shortDescription": "Manage prompts, gates, and frameworks",
       "category": "management",
       "parameters": {
         "resource_type": "Type of resource to manage. Routes to appropriate handler.",
-        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework). Versioning: history/rollback/compare (prompt/gate/framework).",
+        "action": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. Framework-only: switch. Versioning: history/rollback/compare.",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",
         "description": "Resource description explaining its purpose (create/update).",
         "enabled_only": "Filter list to enabled resources only. Default: true.",
         "confirm": "Required `true` for destructive actions — `delete` and `rollback` both refuse without it. Deletion cannot be undone: rollback cannot restore a deleted prompt.",
-        "reason": "Audit reason for reload/delete/switch operations."
+        "reason": "Audit reason for reload/delete/switch operations.",
+        "expected_version": "[Prompt update] Optimistic concurrency token. Refuses the update before any write/version when the current recorded version differs. Read it from inspect/validate/create/update structured receipts. Cannot be combined with skip_version:true and requires versioning enabled."
       },
       "frameworkAware": {
         "enabled": "🗂️ RESOURCE MANAGER [FRAMEWORK]: Operations reflect active framework context.",

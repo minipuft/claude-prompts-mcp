@@ -70,6 +70,7 @@ export type ResourceAction =
   | 'delete'
   | 'list'
   | 'inspect'
+  | 'validate' // prompt only, non-mutating draft validation
   | 'reload'
   | 'analyze_type' // prompt only
   | 'analyze_gates' // prompt only
@@ -128,7 +129,12 @@ export const CROSS_WORKSPACE_READ_ACTIONS: ReadonlySet<ResourceAction> = new Set
   'compare',
 ]);
 
-export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
+export const PROMPT_ONLY_ACTIONS: ResourceAction[] = [
+  'validate',
+  'analyze_type',
+  'analyze_gates',
+  'guide',
+];
 export const FRAMEWORK_ONLY_ACTIONS: ResourceAction[] = ['switch'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
 export const COMMON_ACTIONS: ResourceAction[] = [
@@ -308,6 +314,8 @@ export interface ResourceManagerInput {
   limit?: number;
   /** [Versioning] Skip auto-versioning for this update */
   skip_version?: boolean;
+  /** [Prompt update] Refuse unless this is still the current recorded version. */
+  expected_version?: number;
 }
 
 /**

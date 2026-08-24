@@ -161,6 +161,10 @@ export class McpToolRequestValidator {
       result.options = partialRequest.options;
     }
 
+    if (partialRequest.inputs !== undefined) {
+      result.inputs = partialRequest.inputs;
+    }
+
     return Object.freeze(result);
   }
 }

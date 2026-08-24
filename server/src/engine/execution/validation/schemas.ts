@@ -140,6 +140,7 @@ export const mcpToolRequestSchema = z
       force_restart: z.boolean().optional(),
       gates: z.array(gateSpecificationSchema).optional(),
       options: z.record(z.string(), z.any()).optional(),
+      inputs: z.record(z.string(), z.any()).optional(),
     },
     {
       error: (issue) => {

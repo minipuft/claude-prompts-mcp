@@ -144,6 +144,9 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
         case 'create':
           response = await this.lifecycleService.createPrompt(args);
           break;
+        case 'validate':
+          response = await this.lifecycleService.validatePrompt(args);
+          break;
         case 'analyze_type':
           response = await this.discoveryService.analyzePromptType(args);
           break;

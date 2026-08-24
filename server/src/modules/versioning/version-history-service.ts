@@ -1,5 +1,7 @@
 // @lifecycle canonical - Core service for managing resource version history
 
+import { isDeepStrictEqual } from 'node:util';
+
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
@@ -378,7 +380,11 @@ export class VersionHistoryService {
     if (latest === 0) return false;
     const entry = await this.getVersion(resourceType, resourceId, latest);
     if (entry === null) return false;
-    return JSON.stringify(entry.snapshot) === JSON.stringify(live);
+    // Snapshots cross a JSON persistence boundary, which drops `undefined` object members while
+    // preserving array order. Compare against that persisted shape, but use structural equality so
+    // loader-induced object key reordering does not create a phantom bridge row.
+    const persistedLive = JSON.parse(JSON.stringify(live)) as Record<string, unknown>;
+    return isDeepStrictEqual(entry.snapshot, persistedLive);
   }
 
   /**

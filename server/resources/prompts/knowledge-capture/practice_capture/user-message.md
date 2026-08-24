@@ -95,7 +95,7 @@ Invoke `/knowledge-capture` and evaluate maturity only after capture succeeds:
 1. Count independent sightings and cite each evidence record.
 2. Search existing skills and rules twice: by source terms and by the behavior the finding serves.
 3. Classify the proposal: `none`, `project-only`, `extend-skill`, `extend-rule`, or `new-skill-candidate`.
-4. Prefer the existing owner. A new skill requires a genuinely new methodology with no current owner.
+4. Prefer the existing owner. A new skill requires a genuinely distinct operating procedure with no current owner.
 5. Present the exact target and compact proposed change.
 6. Ask for explicit user confirmation. Do not edit the framework during this run.
 

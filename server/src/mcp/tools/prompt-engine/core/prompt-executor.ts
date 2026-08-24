@@ -419,6 +419,8 @@ export class PromptExecutor {
       /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
       gates?: import('#shared/types/execution.js').GateSpecification[];
       options?: Record<string, unknown>;
+      /** Typed prompt arguments that bypass command-string parsing. */
+      inputs?: Record<string, unknown>;
       /** Typed unknowns discovered/resolved by the current step. Threaded through unchanged (Tier 3 consumes it). */
       observations?: UnknownObservation[];
       /**
@@ -502,6 +504,7 @@ export class PromptExecutor {
       ...(mergedGates.length > 0 && { gates: mergedGates }),
       ...(args.workflow != null && { workflow: args.workflow }),
       ...(args.options && { options: args.options }),
+      ...(args.inputs && { inputs: args.inputs }),
       ...(args.observations != null ? { observations: args.observations } : {}),
       ...(sdkExtra != null ? { _extra: sdkExtra as Record<string, unknown> } : {}),
     } as McpToolRequest;

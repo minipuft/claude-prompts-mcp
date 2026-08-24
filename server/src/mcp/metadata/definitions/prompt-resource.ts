@@ -23,8 +23,18 @@ const promptResourceActions = [
     displayName: 'Create Prompt',
     category: 'lifecycle',
     status: 'working',
-    requiredArgs: ['id', 'name', 'description', 'user_message_template'],
-    description: 'Create or overwrite a prompt or chain with gate_configuration inline.',
+    requiredArgs: ['id', 'name', 'description'],
+    description:
+      'Create a validated prompt or chain with user_message_template, chain_steps, or system_message.',
+    issues: [],
+  },
+  {
+    id: 'validate',
+    displayName: 'Validate Prompt Draft',
+    category: 'lifecycle',
+    status: 'working',
+    requiredArgs: ['id', 'name', 'description'],
+    description: 'Validate and normalize a creation draft without writing files or versions.',
     issues: [],
   },
   {
@@ -157,6 +167,7 @@ const PROMPT_RESOURCE_PARAMETER_NAMES: resource_managerParamName[] = [
   'from_version',
   'to_version',
   'skip_version',
+  'expected_version',
   'limit',
 ];
 

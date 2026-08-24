@@ -13,6 +13,7 @@ import { FileOperations } from '../../../../../src/mcp/tools/resource-manager/pr
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
+import type { PromptDraftInput } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-draft-service.js';
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
 
 const createLogger = () =>
@@ -24,6 +25,18 @@ const createLogger = () =>
   }) as unknown as Logger;
 
 const createSemanticAnalyzer = () => new ContentAnalyzer(createLogger());
+
+const createTestConfigManager = (promptsDir = '/test/prompts') =>
+  ({
+    getConfigPath: () => '/test/config.yaml',
+    getServerRoot: () => '/test',
+    getResolvedPromptsDirectory: () => promptsDir,
+  }) as unknown as ConfigManager;
+
+const createTestVersionHistory = (autoVersion = false) => ({
+  isAutoVersionEnabled: () => autoVersion,
+  loadHistory: jest.fn(async () => null),
+});
 
 /**
  * Builds the processor with real analysis collaborators and exactly one stub.
@@ -38,27 +51,35 @@ const createSemanticAnalyzer = () => new ContentAnalyzer(createLogger());
  */
 function createProcessor() {
   const logger = createLogger();
-  const onRefresh = jest.fn(async () => {});
+  const convertedPrompts: Record<string, unknown>[] = [];
+  let writtenPrompt: Record<string, unknown> | undefined;
+  const onRefresh = jest.fn(async () => {
+    if (writtenPrompt !== undefined)
+      convertedPrompts.splice(0, convertedPrompts.length, writtenPrompt);
+  });
   // `onRefresh` is reached via handleSystemRefresh after the response is assembled, so it is a
   // required collaborator even though it contributes nothing to the text under test.
   const dependencies = {
     logger,
+    configManager: createTestConfigManager(),
     semanticAnalyzer: createSemanticAnalyzer(),
     onRefresh,
     onRestart: jest.fn(async () => {}),
   };
   // Typed argument so `mock.calls[0][0]` is reachable — an untyped jest.fn() infers a
   // zero-length tuple and indexing it is a type error, not just a lint nit.
-  const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
-    message: 'written',
-  }));
+  const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
+    writtenPrompt = promptData;
+    return { message: 'written', affectedFiles: ['/test/prompts/general/review_code/prompt.yaml'] };
+  });
 
   const context = {
     dependencies,
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations: { updatePromptImplementation },
-    getData: () => ({ convertedPrompts: [] }),
+    getData: () => ({ convertedPrompts }),
+    versionHistoryService: createTestVersionHistory(),
   } as unknown as PromptResourceContext;
 
   return {
@@ -82,7 +103,7 @@ const codePromptArgs = {
   category: 'general',
   user_message_template: 'Review this code function and report any defects: {{snippet}}',
   arguments: [{ name: 'snippet', type: 'string', required: true }],
-};
+} satisfies PromptDraftInput;
 
 function textOf(response: { content: Array<{ text?: string }> }): string {
   return response.content.map((part) => part.text ?? '').join('');
@@ -171,23 +192,26 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
    */
   function createUpdateProcessor() {
     const logger = createLogger();
+    let currentPrompt: Record<string, unknown> = existingPrompt;
     const dependencies = {
       logger,
+      configManager: createTestConfigManager(),
       semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
-      message: 'written',
-    }));
+    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
+      currentPrompt = promptData;
+      return { message: 'written' };
+    });
 
     const context = {
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation },
-      getData: () => ({ convertedPrompts: [existingPrompt] }),
-      versionHistoryService: { isAutoVersionEnabled: () => false },
+      getData: () => ({ convertedPrompts: [currentPrompt] }),
+      versionHistoryService: createTestVersionHistory(),
       textDiffService: new ObjectDiffGenerator(),
       comparisonEngine: new ComparisonEngine(logger),
     } as unknown as PromptResourceContext;
@@ -259,23 +283,26 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
 
   function createUpdateProcessor(prompt: Record<string, unknown> = livePrompt) {
     const logger = createLogger();
+    let currentPrompt = prompt;
     const dependencies = {
       logger,
+      configManager: createTestConfigManager(),
       semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
-      message: 'written',
-    }));
+    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
+      currentPrompt = promptData;
+      return { message: 'written' };
+    });
 
     const context = {
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation },
-      getData: () => ({ convertedPrompts: [prompt] }),
-      versionHistoryService: { isAutoVersionEnabled: () => false },
+      getData: () => ({ convertedPrompts: [currentPrompt] }),
+      versionHistoryService: createTestVersionHistory(),
       textDiffService: new ObjectDiffGenerator(),
       comparisonEngine: new ComparisonEngine(logger),
     } as unknown as PromptResourceContext;
@@ -435,15 +462,18 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
 
   function createFailingVersionProcessor() {
     const logger = createLogger();
+    let currentPrompt: Record<string, unknown> = existingPrompt;
     const dependencies = {
       logger,
+      configManager: createTestConfigManager(),
       semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
-      message: 'written',
-    }));
+    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
+      currentPrompt = promptData;
+      return { message: 'written' };
+    });
     // P7 row 2.4: the update path records through `recordEditResult` (go-forward numbering);
     // the abort posture is asserted against that seam.
     const recordEditResult = jest.fn(async () => {
@@ -455,8 +485,11 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation },
-      getData: () => ({ convertedPrompts: [existingPrompt] }),
-      versionHistoryService: { isAutoVersionEnabled: () => true, recordEditResult },
+      getData: () => ({ convertedPrompts: [currentPrompt] }),
+      versionHistoryService: {
+        ...createTestVersionHistory(true),
+        recordEditResult,
+      },
       textDiffService: new ObjectDiffGenerator(),
       comparisonEngine: new ComparisonEngine(logger),
     } as unknown as PromptResourceContext;
@@ -489,21 +522,27 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
     const logger = createLogger();
     const dependencies = {
       logger,
+      configManager: createTestConfigManager(),
       semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
-      message: 'written',
-    }));
+    let currentPrompt: Record<string, unknown> = existingPrompt;
+    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
+      currentPrompt = promptData;
+      return { message: 'written' };
+    });
     const recordEditResult = jest.fn(async () => ({ success: true, version: 7, bridged: false }));
     const context = {
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation },
-      getData: () => ({ convertedPrompts: [existingPrompt] }),
-      versionHistoryService: { isAutoVersionEnabled: () => true, recordEditResult },
+      getData: () => ({ convertedPrompts: [currentPrompt] }),
+      versionHistoryService: {
+        ...createTestVersionHistory(true),
+        recordEditResult,
+      },
       textDiffService: new ObjectDiffGenerator(),
       comparisonEngine: new ComparisonEngine(logger),
     } as unknown as PromptResourceContext;
@@ -552,23 +591,23 @@ describe('PromptLifecycleProcessor.createPrompt rejects update-only verbs (OQ-P7
   test('rejects patch on create before any side effect', async () => {
     const { processor, updatePromptImplementation } = createProcessor();
 
-    await expect(
-      processor.createPrompt({
-        ...codePromptArgs,
-        patch: [{ field: 'description', old_string: 'x', new_string: 'y' }],
-      } as never)
-    ).rejects.toThrow(/patch.*create/i);
+    const response = await processor.createPrompt({
+      ...codePromptArgs,
+      patch: [{ field: 'description', old_string: 'x', new_string: 'y' }],
+    } as never);
 
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/patch.*update-only/i);
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
 
   test('rejects dry_run on create before any side effect', async () => {
     const { processor, updatePromptImplementation } = createProcessor();
 
-    await expect(
-      processor.createPrompt({ ...codePromptArgs, dry_run: true } as never)
-    ).rejects.toThrow(/dry_run.*create/i);
+    const response = await processor.createPrompt({ ...codePromptArgs, dry_run: true } as never);
 
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/dry_run.*update-only/i);
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
 
@@ -580,13 +619,13 @@ describe('PromptLifecycleProcessor.createPrompt rejects update-only verbs (OQ-P7
   test('rejects argument_updates on create before any side effect', async () => {
     const { processor, updatePromptImplementation } = createProcessor();
 
-    await expect(
-      processor.createPrompt({
-        ...codePromptArgs,
-        argument_updates: [{ name: 'snippet', description: 'y' }],
-      } as never)
-    ).rejects.toThrow(/argument_updates.*create/i);
+    const response = await processor.createPrompt({
+      ...codePromptArgs,
+      argument_updates: [{ name: 'snippet', description: 'y' }],
+    } as never);
 
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/argument_updates.*update-only/i);
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
 });
@@ -619,15 +658,14 @@ describe('PromptLifecycleProcessor category ship warning (P7-D4)', () => {
     // Read-only copy of the file that actually governs shipping — never written back to.
     copyFileSync(bundledGitignorePath, join(promptsDir, '.gitignore'));
 
+    const configManager = createTestConfigManager(promptsDir);
     const dependencies = {
       logger: createLogger(),
+      configManager,
       semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const configManager = {
-      getResolvedPromptsDirectory: () => promptsDir,
-    } as unknown as ConfigManager;
     const fileOperations = new FileOperations({ logger: dependencies.logger, configManager });
 
     const context = {
@@ -636,6 +674,7 @@ describe('PromptLifecycleProcessor category ship warning (P7-D4)', () => {
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations,
       getData: () => ({ convertedPrompts: [] }),
+      versionHistoryService: createTestVersionHistory(),
       textDiffService: new ObjectDiffGenerator(),
     } as unknown as PromptResourceContext;
 

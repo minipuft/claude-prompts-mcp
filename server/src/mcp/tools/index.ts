@@ -834,6 +834,7 @@ export class McpToolRouter {
               ...(args.handoff !== undefined ? { handoff: args.handoff } : {}),
               ...(args.claim_token?.trim() ? { claim_token: args.claim_token.trim() } : {}),
               ...(args.options != null ? { options: args.options } : {}),
+              ...(args.inputs != null ? { inputs: args.inputs } : {}),
               ...(args.observations != null ? { observations: args.observations } : {}),
               // Passed through unchanged. Unlike `gates` below there is nothing to normalize:
               // `workflowIRSchema` is `.strict()` at every level, so a parsed workflow carries
@@ -920,6 +921,9 @@ export class McpToolRouter {
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
+              ...(toolResponse.structuredContent != null
+                ? { structuredContent: toolResponse.structuredContent }
+                : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -1083,6 +1087,9 @@ export class McpToolRouter {
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
+              ...(toolResponse.structuredContent != null
+                ? { structuredContent: toolResponse.structuredContent }
+                : {}),
             };
           } catch (error) {
             this.logger.error(

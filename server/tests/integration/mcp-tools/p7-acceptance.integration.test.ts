@@ -31,6 +31,8 @@ import { PromptAnalyzer } from '../../../src/mcp/tools/resource-manager/prompt/a
 import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import { PromptLifecycleProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 import { PromptVersioningProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.js';
+import { PromptConverter } from '../../../src/modules/prompts/converter.js';
+import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
@@ -73,15 +75,32 @@ interface Harness {
 async function createHarness(workspaceDir: string): Promise<Harness> {
   const promptsDir = join(workspaceDir, 'prompts');
   const logger = createLogger();
+  let livePrompt: Record<string, unknown>;
+  const configManager = {
+    getConfigPath: () => join(workspaceDir, 'config.yaml'),
+    getServerRoot: () => workspaceDir,
+    getResolvedPromptsDirectory: () => promptsDir,
+  } as unknown as ConfigManager;
   const dependencies = {
     logger,
+    configManager,
     semanticAnalyzer: new ContentAnalyzer(createLogger()),
-    onRefresh: jest.fn(async () => {}),
+    onRefresh: jest.fn(async () => {
+      const promptLoader = new PromptLoader(logger);
+      const { promptsData } = await promptLoader.loadFromDirectories(promptsDir);
+      const converter = new PromptConverter(logger, promptLoader);
+      const converted = await converter.convertMarkdownPromptsToJson(promptsData, promptsDir);
+      const reloaded = converted.find((prompt) => prompt.id === PROMPT_ID);
+      if (reloaded !== undefined) {
+        for (const key of Object.keys(livePrompt)) delete livePrompt[key];
+        Object.assign(livePrompt, reloaded);
+      }
+    }),
     onRestart: jest.fn(async () => {}),
   };
   const fileOperations = new FileOperations({
     logger,
-    configManager: { getResolvedPromptsDirectory: () => promptsDir } as unknown as ConfigManager,
+    configManager,
   });
 
   // `SqliteEngine.getInstance` is a process-wide singleton: a later caller's `serverRoot` is
@@ -106,7 +125,7 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
   // never carries, and a key order that differs from the canonical construction. This is what a
   // real post-reload ConvertedPrompt looks like — if the processors stop projecting it through
   // canonicalPromptSnapshot, every edit here bridges and the row-count assertions fail.
-  const livePrompt: Record<string, unknown> = {
+  livePrompt = {
     id: PROMPT_ID,
     name: 'Acceptance Target',
     category: CATEGORY,
@@ -182,7 +201,9 @@ async function runDrive(harness: Harness): Promise<DriveObservations> {
     id: PROMPT_ID,
     user_message_template: EDITED_TEMPLATE,
   } as never);
-  expect(editResponse.isError).toBe(false);
+  if (editResponse.isError) {
+    throw new Error(editResponse.content.map((part) => ('text' in part ? part.text : '')).join(''));
+  }
   harness.syncLive({ ...harness.livePrompt, userMessageTemplate: EDITED_TEMPLATE });
   const latestAfterEdit = await harness.history.getLatestVersion('prompt', PROMPT_ID);
 

@@ -131,6 +131,29 @@ scenarios:
     # create produced), then records its own result as v2 — so v2 is the deterministic number here.
     expect: { text_contains: '**Version 2** saved' }
 
+  - id: prompt-update-refuses-a-stale-expected-version
+    claim_source: >-
+      resource_manager contract — `expected_version` is an optimistic-concurrency token and a
+      mismatch refuses the update before any prompt file is written.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_expected_version
+          name: Conformance Expected Version
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_EXPECTED_VERSION_V1
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_expected_version
+          expected_version: 999
+          user_message_template: CONFORMANCE_EXPECTED_VERSION_V2
+    expect: { error_contains: 'expected version 999' }
+
   - id: prompt-update-is-live-after-reload
     claim_source: >-
       README § "All hot-reloadable" — an updated prompt body is served by the running server

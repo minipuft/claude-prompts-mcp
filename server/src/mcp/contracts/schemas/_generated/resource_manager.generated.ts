@@ -69,7 +69,8 @@ export type resource_managerParamName =
   | 'from_version'
   | 'to_version'
   | 'limit'
-  | 'skip_version';
+  | 'skip_version'
+  | 'expected_version';
 export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'resource_type',
@@ -81,9 +82,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'action',
-    type: 'enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]',
+    type: 'enum[create|validate|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
     description:
-      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework). Versioning: history/rollback/compare (prompt/gate/framework).',
+      'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. Framework-only: switch. Versioning: history/rollback/compare.',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -460,9 +461,44 @@ export const resource_managerParameters: ToolParameter[] = [
     compatibility: 'canonical',
     includeInDescription: false,
   },
+  {
+    name: 'expected_version',
+    type: 'number',
+    description:
+      '[Prompt update] Optimistic concurrency token. Refuses the update before any write/version when the current recorded version differs. Read it from inspect/validate/create/update structured receipts. Cannot be combined with skip_version:true and requires versioning enabled.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: true,
+  },
 ];
 
 export const resource_managerCommands: ToolCommand[] = [
+  {
+    id: 'prompt:validate',
+    summary: 'Validate and normalize a prompt creation draft without writing files or versions.',
+    parameters: [
+      'resource_type',
+      'action',
+      'id',
+      'name',
+      'description',
+      'category',
+      'user_message_template',
+      'system_message',
+      'arguments',
+      'chain_steps',
+      'tools',
+      'gate_configuration',
+      'composer',
+      'injection',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+      'subagent_model',
+      'agent_type',
+      'execution_hint',
+    ],
+    status: 'working',
+  },
   {
     id: 'prompt:create',
     summary: 'Create a prompt/chain with metadata and arguments.',
@@ -511,6 +547,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'mcp_prompt_mode',
       'subagent_model',
       'agent_type',
+      'expected_version',
     ],
     status: 'working',
   },

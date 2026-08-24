@@ -119,7 +119,13 @@
     {
       "name": "options",
       "type": "record",
-      "description": "Execution options forwarded downstream.",
+      "description": "Legacy prompt argument/options map. Values remain typed; inline command arguments take precedence. Prefer `inputs` for prompt arguments, especially arrays and objects.",
+      "status": "working"
+    },
+    {
+      "name": "inputs",
+      "type": "record",
+      "description": "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default.",
       "status": "working"
     },
     {

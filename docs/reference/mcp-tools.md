@@ -212,9 +212,11 @@ character, not a literal backslash**:
 
 **Double any backslash you mean literally** — Windows paths and regexes are the common cases.
 
-This applies only to values you type by hand. Values passed through the `options` parameter are
-serialized and unescaped automatically, so they round-trip losslessly with no escaping on your
-part — a Windows path or a regex in `options` arrives exactly as sent.
+This applies only to values typed into `command`. Values passed through `inputs` or `options`
+bypass the command grammar and retain their original JSON types, so paths, regular expressions,
+nested objects, and arrays arrive exactly as sent. Use `inputs` for prompt arguments; `options` is
+the legacy/execution-hint channel. Resolution precedence is: explicit inline argument → `inputs`
+→ `options` → prompt default.
 
 ### Operators Quick Reference
 
@@ -305,7 +307,8 @@ prompt_engine(command:"%judge analysis_report")
 | `gate_action`   | enum    | `retry`, `skip`, or `abort` after gate failure                                                                                                                                                                                    |
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                            |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                         |
-| `options`       | object  | Optional execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) to help delegation strategy selection when transport metadata is unavailable.                              |
+| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                |
+| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                    |
 | `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                       |
 | `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                             |
 
@@ -606,6 +609,11 @@ prompt_engine(command:">>create_gate id:'code-quality' name:'Code Quality' type:
 - `>>create_prompt` — Prompt/chain authoring
 - `>>create_framework` — Framework authoring
 
+`>>create_prompt` uses a stricter lifecycle than the older auto-create examples: design →
+`resource_manager(action:"validate")` → user confirmation → `action:"create"` → render smoke
+test. Its adapter only maps author-facing field names; canonical validation and writes remain in
+`resource_manager`.
+
 See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
 > [!TIP]
@@ -635,17 +643,18 @@ resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
 
 All resource types support these actions:
 
-| Action     | Purpose                  | Required Params                    | Note                        |
-| ---------- | ------------------------ | ---------------------------------- | --------------------------- |
-| `list`     | List all resources       | —                                  | _Prefer `resource://` URIs_ |
-| `inspect`  | Get resource details     | `id`                               | _Prefer `resource://` URIs_ |
-| `create`   | Create new resource      | `id`, type-specific                |                             |
-| `update`   | Modify existing resource | `id`, fields to update             |                             |
-| `delete`   | Remove resource          | `id`, `confirm:true`               | `dry_run:true` to preview   |
-| `reload`   | Hot-reload from disk     | `id` (optional)                    |                             |
-| `history`  | View version history     | `id`                               |                             |
-| `rollback` | Restore previous version | `id`, `version`, `confirm:true`    | `dry_run:true` to preview   |
-| `compare`  | Compare two versions     | `id`, `from_version`, `to_version` |                             |
+| Action     | Purpose                  | Required Params                      | Note                        |
+| ---------- | ------------------------ | ------------------------------------ | --------------------------- |
+| `list`     | List all resources       | —                                    | _Prefer `resource://` URIs_ |
+| `inspect`  | Get resource details     | `id`                                 | _Prefer `resource://` URIs_ |
+| `validate` | Preview prompt creation  | `id`, `name`, `description`, content | Prompt-only; never writes   |
+| `create`   | Create new resource      | `id`, type-specific                  |                             |
+| `update`   | Modify existing resource | `id`, fields to update               |                             |
+| `delete`   | Remove resource          | `id`, `confirm:true`                 | `dry_run:true` to preview   |
+| `reload`   | Hot-reload from disk     | `id` (optional)                      |                             |
+| `history`  | View version history     | `id`                                 |                             |
+| `rollback` | Restore previous version | `id`, `version`, `confirm:true`      | `dry_run:true` to preview   |
+| `compare`  | Compare two versions     | `id`, `from_version`, `to_version`   |                             |
 
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 
@@ -664,7 +673,7 @@ ReadMcpResourceTool uri="resource://prompt/security_audit"
 # Create a prompt
 resource_manager(
   resource_type:"prompt",
-  action:"create",
+  action:"validate",
   id:"weekly_report",
   name:"Weekly Report Generator",
   category:"reporting",
@@ -675,6 +684,8 @@ resource_manager(
     {"name":"date_range", "type":"string", "required":true, "defaultValue":"this_week"}
   ]
 )
+
+# After reviewing the normalized draft, repeat the same call with action:"create".
 
 # Update a prompt
 resource_manager(resource_type:"prompt", action:"update", id:"weekly_report", description:"Updated")
@@ -693,6 +704,36 @@ If `category` isn't shipped in the repo — excluded by `server/resources/prompt
 `create` and `update` still succeed, and the response appends a warning naming the file and the
 exact `!<category>/` and `!<category>/**` lines to add to ship it. A workspace overlay with no
 `.gitignore` of its own never warns.
+
+#### Prompt Authoring and Maintenance
+
+`action:"validate"` runs the same prompt-ID, content-union, template, reference, argument, chain,
+gate, and complete script-tool checks as `create`, but writes no file, records no version, and does
+not refresh the registry. Creation accepts inline content only: `user_message_template`, non-empty
+`chain_steps`, or `system_message`. Author-provided file paths are not part of the tool contract.
+Script tools must be complete definitions containing at least `id`, `name`, and executable
+`script`; an array of tool IDs is not a creation payload.
+
+Successful prompt writes return a machine-readable receipt with `config_path`, `server_root`,
+`resource_root`, `affected_files`, category ship status, refresh status, whether the expected state
+loaded after refresh, and the current version. A write whose refreshed registry does not match the
+produced prompt is reported as an error, even when the filesystem transaction itself succeeded.
+
+Maintain an existing prompt through one bounded sequence:
+
+```text
+inspect(detail:"full")
+→ update(dry_run:true, expected_version:<current_version>)
+→ approval
+→ update(expected_version:<current_version>)
+→ reload
+→ prompt_engine render smoke test
+→ retain the write receipt
+```
+
+`expected_version` is an optimistic-concurrency token. A stale value returns the current version
+and writes nothing; it cannot be combined with `skip_version:true`, because then the token would
+not advance.
 
 #### Patch Mode (Partial Update)
 
@@ -839,6 +880,7 @@ resource_manager(
 | `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit) |
 | `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                 |
 | `dry_run`               | Preview an `update`/`patch`, a `rollback`, or a `delete` without writing — no version consumed                                    |
+| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                  |
 | `chain_steps`           | Chain step definitions                                                                                                            |
 | `gate_configuration`    | Gate include/exclude lists                                                                                                        |
 | `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                               |

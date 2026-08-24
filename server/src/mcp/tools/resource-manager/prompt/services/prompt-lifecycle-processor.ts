@@ -1,15 +1,16 @@
 // @lifecycle canonical - Prompt create/update/delete operations.
 
+import { PromptDraftService, type PromptDraftInput } from './prompt-draft-service.js';
+import {
+  PromptMutationReceiptService,
+  type PromptMutationReceipt,
+} from './prompt-mutation-receipt-service.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { mergeArgumentUpdates, type PromptArgumentUpdate } from '../operations/argument-updates.js';
-import {
-  ALL_PROMPT_DATA_KEYS,
-  FileOperations,
-  PRESERVED_PROMPT_YAML_KEYS,
-} from '../operations/file-operations.js';
+import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
 import {
   PATCH_TARGET_FIELDS,
   applyTemplatePatches,
@@ -23,15 +24,14 @@ import {
   applyChainStepOperation,
   canonicalPromptSnapshot,
   diagnosePromptWrite,
-  normalizePromptId,
   validateChainStepReferences,
-  validatePromptId,
   validateRequiredFields,
   validateToolDefinitions,
 } from '../utils/validation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData } from '#modules/prompts/types.js';
+import type { PromptResourceInput } from '../../core/types.js';
 import type { CategoryShipStatus } from '../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
@@ -44,6 +44,8 @@ export class PromptLifecycleProcessor {
   private readonly comparisonEngine: ComparisonEngine;
   private readonly textDiffService: ObjectDiffGenerator;
   private readonly fileOperations: FileOperations;
+  private readonly draftService: PromptDraftService;
+  private readonly receiptService: PromptMutationReceiptService;
 
   constructor(context: PromptResourceContext) {
     this.context = context;
@@ -51,173 +53,84 @@ export class PromptLifecycleProcessor {
     this.comparisonEngine = context.comparisonEngine;
     this.textDiffService = context.textDiffService;
     this.fileOperations = context.fileOperations;
+    this.draftService = new PromptDraftService(() => this.getConvertedPrompts());
+    this.receiptService = new PromptMutationReceiptService(context);
   }
 
-  async createPrompt(args: any): Promise<ToolResponse> {
-    // OQ-P7-9: `patch` and `dry_run` are update-only verbs — `patch` targets an existing
-    // prompt's stored template, and `dry_run` previews a diff against one. Neither has a
-    // referent on `create`. The schema accepts both on every action (P7 row 3.4/3.5 kept them
-    // action-agnostic there), so silent acceptance here would be the exact accepted-here/
-    // ignored-there asymmetry P7-D4 exists to kill. Checked first, before any side effect —
-    // ahead of even required-field validation.
-    if (args?.patch !== undefined) {
-      throw new PromptError(
-        '\'patch\' is not valid on action:"create" — there is no existing prompt to patch. ' +
-          'Supply the full template via `user_message_template`, or create the prompt first and ' +
-          'patch it with action:"update".'
-      );
-    }
-    if (args?.dry_run !== undefined) {
-      throw new PromptError(
-        '\'dry_run\' is not valid on action:"create" — there is no existing prompt to diff ' +
-          'against. Create the prompt, then use action:"update" with `dry_run` to preview edits.'
-      );
-    }
-    // Fix D (tier-b-settability-proposal §2): `argument_updates` overlays fields onto an
-    // EXISTING argument by name — a `create` has no prior arguments to overlay onto, the same
-    // "no referent on create" reasoning as `patch`/`dry_run` above (OQ-P7-9 precedent).
-    if ((args as { argument_updates?: unknown }).argument_updates !== undefined) {
-      throw new PromptError(
-        '\'argument_updates\' is not valid on action:"create" — there is no existing argument to ' +
-          'overlay updates onto. Supply the full `arguments` array, or create the prompt first ' +
-          'and refine an argument with action:"update".'
-      );
-    }
-
-    validateRequiredFields(args, ['id', 'name', 'description', 'user_message_template']);
-    const rawId = String(args.id);
-    validatePromptId(rawId);
-
-    // Normalize ID: hyphens/spaces → underscores (canonical form)
-    const canonicalId = normalizePromptId(rawId);
-
-    // Check for duplicate (normalized ID already exists)
-    const existing = this.getConvertedPrompts().find(
-      (p) => normalizePromptId(p.id) === canonicalId
-    );
-    if (existing) {
+  async validatePrompt(args: PromptDraftInput): Promise<ToolResponse> {
+    const result = this.draftService.prepare(args);
+    if (!result.valid) {
       return {
         content: [
           {
             type: 'text' as const,
-            text: `❌ **Prompt creation blocked**: A prompt with ID \`${existing.id}\` already exists.\nThe requested ID \`${rawId}\` normalizes to \`${canonicalId}\` which conflicts with the existing prompt.\n\n💡 Hyphens and underscores are treated as equivalent in prompt IDs.`,
+            text: `❌ **Prompt draft invalid** — nothing written, no version recorded.\n\n${result.errors
+              .map((error) => `- ${error}`)
+              .join('\n')}`,
           },
         ],
+        structuredContent: {
+          action: 'validate',
+          valid: false,
+          errors: result.errors,
+          warnings: result.warnings,
+          mutated: false,
+        },
         isError: true,
       };
     }
 
-    // Use normalized ID from here forward
-    (args as Record<string, unknown>)['id'] = canonicalId;
-
-    const typedArgs = args as {
-      id: string;
-      user_message_template: string;
-      system_message?: string;
+    const currentVersion = await this.getCurrentVersion(result.draft.canonicalId);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `✅ **Prompt draft valid**: \`${result.draft.canonicalId}\`\n\n` +
+            `Nothing written; no version recorded. Re-send with action:"create" to persist it.` +
+            this.formatWarnings(result.draft.warnings),
+        },
+      ],
+      structuredContent: {
+        action: 'validate',
+        valid: true,
+        normalized_id: result.draft.canonicalId,
+        draft: result.draft.promptData,
+        warnings: result.draft.warnings,
+        current_version: currentVersion,
+        mutated: false,
+      },
+      isError: false,
     };
-    const refValidator = new PromptReferenceValidator(this.getConvertedPrompts());
-    const refValidation = refValidator.validate(
-      typedArgs.id,
-      typedArgs.user_message_template,
-      typedArgs.system_message
-    );
+  }
 
-    if (!refValidation.valid) {
-      const errorDetails = refValidation.errors
-        .map((e) => `• **${e.type}**: ${e.details}`)
-        .join('\n');
+  async createPrompt(args: PromptDraftInput): Promise<ToolResponse> {
+    const prepared = this.draftService.prepare(args);
+    if (!prepared.valid) {
       return {
         content: [
           {
             type: 'text' as const,
-            text: `❌ **Prompt creation blocked** due to reference errors:\n\n${errorDetails}\n\n💡 Ensure all referenced prompts exist before creating this prompt.`,
+            text: `❌ **Prompt creation blocked** — nothing written.\n\n${prepared.errors
+              .map((error) => `- ${error}`)
+              .join('\n')}`,
           },
         ],
+        structuredContent: {
+          action: 'create',
+          valid: false,
+          errors: prepared.errors,
+          warnings: prepared.warnings,
+          mutated: false,
+        },
         isError: true,
       };
     }
 
-    if (args.tools && args.tools.length > 0) {
-      const toolErrors = validateToolDefinitions(args.tools);
-      if (toolErrors.length > 0) {
-        const errorDetails = toolErrors.map((e) => `• ${e}`).join('\n');
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `❌ **Prompt creation blocked** due to tool validation errors:\n\n${errorDetails}\n\n💡 Check tool definitions for required fields (id, name, script) and valid values.`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    }
-
-    const promptData: any = {
-      id: args.id,
-      name: args.name,
-      category: args.category || 'general',
-      description: args.description,
-      systemMessage: args.system_message,
-      userMessageTemplate: args.user_message_template,
-      arguments: args.arguments || [],
-      isChain: args.is_chain || false,
-      chainSteps: args.chain_steps || [],
-      tools: args.tools || [],
-      gateConfiguration: args['gate_configuration'],
-    };
-
-    // OQ-P7-8: the same preserved fields `update` can set, on `create` too — a field settable only
-    // after the prompt exists forces a create-then-update dance for something authorable in one
-    // call, and leaves `create` and `update` accepting different vocabularies (the
-    // accepted-here/ignored-there asymmetry P7-D4 exists to kill). Written through the same
-    // `UPDATE_FIELDS` map so the two paths cannot drift, and only for parameters actually
-    // supplied: an undefined value here would be a key the writer's preservation resolver has to
-    // ignore, and on `create` there is no on-disk file to fall back to anyway.
-    // Narrowed once rather than reaching into `any` per access, matching `updatePrompt`'s
-    // `suppliedArgs`/`promptFields` pair below.
-    const suppliedArgs = args as Record<string, unknown>;
-    const promptFields = promptData as Record<string, unknown>;
-    const preservedKeys = PRESERVED_PROMPT_YAML_KEYS as readonly string[];
-    for (const [argKey, dataKey] of Object.entries(UPDATE_FIELDS)) {
-      if (preservedKeys.includes(dataKey) && suppliedArgs[argKey] !== undefined) {
-        promptFields[dataKey] = suppliedArgs[argKey];
-      }
-    }
-
-    // Chain step reference validation (non-blocking warnings)
-    let chainIntegrityWarnings: string[] = [];
-    if (promptData.chainSteps.length > 0) {
-      const allPromptIds = this.getConvertedPrompts().map((p) => p.id);
-      chainIntegrityWarnings = validateChainStepReferences(
-        promptData.chainSteps,
-        allPromptIds
-      ).warnings;
-    }
-
-    // Produced-state validation (P7-F12 / Fix C — mirrors the update path's pre-write hop at
-    // `diagnosePromptWrite(beforeContent, promptData)` below). Without this, the only check on
-    // create was `file-operations.ts` `validateFile` AFTER the files were already written —
-    // schema-only, so it cannot see a Nunjucks syntax error, and a broken template landed on
-    // disk with a success response. `before` is `null`: a brand-new prompt has no pre-existing
-    // state to amnesty a defect against, so every defect `diagnosePromptWrite` finds is blocking
-    // (`validation.ts` — `before == null` puts every defect in `blocking`, none in
-    // `preExisting`). Runs ahead of the write; create spends no version row, so there is no
-    // "nothing was written and no version was consumed" clause to state here — just "nothing was
-    // written".
-    const createDiagnosis = diagnosePromptWrite(null, promptData);
-    if (createDiagnosis.blocking.length > 0) {
-      const details = createDiagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `❌ **Prompt creation blocked** — the resulting prompt is invalid:\n\n${details}\n\n💡 Nothing was written.`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    const promptData = prepared.draft.promptData as any;
+    const { canonicalId, warnings: chainIntegrityWarnings } = prepared.draft;
+    const displayName = String(promptData['name']);
+    const description = String(promptData['description']);
 
     // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
     // against — so it passes the full key set rather than computing one (Fix B, tier-b-
@@ -228,8 +141,8 @@ export class PromptLifecycleProcessor {
     );
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
-    let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n`;
-    response += `📝 ${args.description}\n`;
+    let response = `✅ **Prompt Created**: ${displayName} (${canonicalId})\n`;
+    response += `📝 ${description}\n`;
     response += `${analysis.feedback}`;
 
     if (analysis.suggestions.length > 0) {
@@ -291,11 +204,30 @@ export class PromptLifecycleProcessor {
 
     response += this.buildCategoryShipWarning(writeResult.categoryShipStatus);
 
-    await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
+    const verification = await this.receiptService.complete({
+      action: 'create',
+      id: canonicalId,
+      expectedPrompt: promptData,
+      operation: writeResult,
+      fullRestart: args.full_restart === true,
+      refresh: () => this.context.dependencies.onRefresh(),
+      reason: `Prompt created: ${canonicalId}`,
+    });
+    response += this.formatMutationReceipt(verification.receipt);
+    if (!verification.verified) {
+      response += `\n❌ **Post-write verification failed**: ${verification.error}\n`;
+    }
 
     return {
       content: [{ type: 'text' as const, text: response }],
-      isError: false,
+      structuredContent: {
+        action: 'create',
+        valid: true,
+        receipt: verification.receipt,
+        warnings: chainIntegrityWarnings,
+        mutated: true,
+      },
+      isError: !verification.verified,
     };
   }
 
@@ -303,6 +235,10 @@ export class PromptLifecycleProcessor {
     validateRequiredFields(args, ['id']);
 
     const currentPrompt = this.getConvertedPrompts().find((prompt) => prompt.id === args.id);
+    const concurrencyRefusal = await this.checkExpectedVersion(args as PromptResourceInput);
+    if (concurrencyRefusal !== undefined) {
+      return concurrencyRefusal;
+    }
     let beforeAnalysis = null;
     // Projected, not spread: a raw ConvertedPrompt carries loader-resolved runtime keys the
     // recorded snapshot shape never has, which would make recordEditResult's bridge check see
@@ -631,11 +567,28 @@ export class PromptLifecycleProcessor {
 
     response += this.buildCategoryShipWarning(result.categoryShipStatus);
 
-    await this.handleSystemRefresh(args.full_restart, `Prompt updated: ${args.id}`);
+    const verification = await this.receiptService.complete({
+      action: 'update',
+      id: String(args.id),
+      expectedPrompt: promptData,
+      operation: result,
+      fullRestart: args.full_restart === true,
+      refresh: () => this.context.dependencies.onRefresh(),
+      reason: `Prompt updated: ${String(args.id)}`,
+    });
+    response += this.formatMutationReceipt(verification.receipt);
+    if (!verification.verified) {
+      response += `\n❌ **Post-write verification failed**: ${verification.error}\n`;
+    }
 
     return {
       content: [{ type: 'text' as const, text: response }],
-      isError: false,
+      structuredContent: {
+        action: 'update',
+        receipt: verification.receipt,
+        mutated: true,
+      },
+      isError: !verification.verified,
     };
   }
 
@@ -801,6 +754,72 @@ export class PromptLifecycleProcessor {
       content: [{ type: 'text' as const, text }],
       isError: false,
     };
+  }
+
+  private async checkExpectedVersion(args: PromptResourceInput): Promise<ToolResponse | undefined> {
+    if (args.expected_version === undefined) return undefined;
+
+    if (args.skip_version === true) {
+      return this.blockedUpdate(
+        '❌ **Prompt update blocked**: `expected_version` cannot be combined with ' +
+          '`skip_version:true` because the concurrency token would not advance. Nothing was written.'
+      );
+    }
+    if (!this.context.versionHistoryService.isAutoVersionEnabled()) {
+      return this.blockedUpdate(
+        '❌ **Prompt update blocked**: `expected_version` requires prompt versioning to be enabled. ' +
+          'Nothing was written.'
+      );
+    }
+
+    const currentVersion = await this.getCurrentVersion(String(args.id));
+    if (currentVersion === args.expected_version) return undefined;
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `❌ **Prompt update conflict**: expected version ${args.expected_version}, ` +
+            `but '${String(args.id)}' is now version ${currentVersion}.\n\n` +
+            `Nothing was written and no version was consumed. Inspect the prompt again, ` +
+            `reapply the intended edit, and resend with expected_version:${currentVersion}.`,
+        },
+      ],
+      structuredContent: {
+        action: 'update',
+        conflict: true,
+        id: String(args.id),
+        expected_version: args.expected_version,
+        current_version: currentVersion,
+        mutated: false,
+      },
+      isError: true,
+    };
+  }
+
+  private async getCurrentVersion(id: string): Promise<number> {
+    const history = await this.context.versionHistoryService.loadHistory('prompt', id);
+    return history?.current_version ?? 0;
+  }
+
+  private formatMutationReceipt(receipt: PromptMutationReceipt): string {
+    const files =
+      receipt.affected_files.length > 0
+        ? receipt.affected_files.map((file) => `\n- ${file}`).join('')
+        : '\n- (none reported)';
+    return (
+      `\n📍 **Write Receipt**\n` +
+      `- Resource root: \`${receipt.resource_root}\`\n` +
+      `- Refresh: \`${receipt.refresh_status}\`\n` +
+      `- Current version: \`${receipt.current_version}\`\n` +
+      `- Affected files:${files}\n`
+    );
+  }
+
+  private formatWarnings(warnings: readonly string[]): string {
+    if (warnings.length === 0) return '';
+    return `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join('\n')}`;
   }
 
   private async handleSystemRefresh(fullRestart: boolean = false, reason: string): Promise<void> {

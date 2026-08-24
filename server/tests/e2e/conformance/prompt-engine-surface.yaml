@@ -44,6 +44,18 @@ scenarios:
     requests: [{ tool: prompt_engine, args: { command: '>>reference_demo text:"hello world"' } }]
     expect: { text_contains: 'hello world' }
 
+  - id: typed-inputs
+    claim_source: >-
+      prompt_engine contract — `inputs` carries typed prompt arguments without projecting them
+      through command-string syntax. The rendered marker proves the structured field reached the
+      prompt argument rather than being ignored.
+    requests:
+      - tool: prompt_engine
+        args:
+          command: '>>reference_demo'
+          inputs: { text: STRUCTURED_INPUT_MARKER }
+    expect: { text_contains: 'STRUCTURED_INPUT_MARKER' }
+
   # ── Gate presets: the README table states the retry counts AND timeouts ─────
   #
   # These three rows asserted `ok: true` until 2026-08-11 and could assert nothing more: the

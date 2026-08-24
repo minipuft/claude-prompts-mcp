@@ -344,8 +344,9 @@ export type PromptResourceAction =
       action: 'create';
       id: string;
       name: string;
-      user_message_template: string;
+      description: string;
     } & BasePromptResourceArgs)
+  | ({ action: 'validate'; id: string; name: string; description: string } & BasePromptResourceArgs)
   | ({ action: 'update'; id: string } & BasePromptResourceArgs)
   | { action: 'delete'; id: string }
   | { action: 'reload' }
@@ -359,6 +360,7 @@ export interface PromptEngineArgs {
   command: string;
   force_restart?: boolean;
   options?: ExecutionOptions;
+  inputs?: Record<string, unknown>;
 }
 
 /**

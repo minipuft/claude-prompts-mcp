@@ -21,7 +21,7 @@ import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/pr
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
-import type { Logger } from '../../../../../src/shared/types/index.js';
+import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
 
 const TEMPLATE = [
   '## Context',
@@ -62,15 +62,23 @@ function createProcessor(
   }
 ) {
   const logger = createLogger();
+  let currentPrompt = existingPrompt;
+  const configManager = {
+    getConfigPath: () => '/test/config.yaml',
+    getServerRoot: () => '/test',
+    getResolvedPromptsDirectory: () => '/test/prompts',
+  } as unknown as ConfigManager;
   const dependencies = {
     logger,
+    configManager,
     semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh: jest.fn(async () => {}),
     onRestart: jest.fn(async () => {}),
   };
-  const updatePromptImplementation = jest.fn(async (_promptData: Record<string, unknown>) => ({
-    message: 'written',
-  }));
+  const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
+    currentPrompt = promptData;
+    return { message: 'written' };
+  });
   const recordEditResult = jest.fn(
     async (
       _type: string,
@@ -86,8 +94,12 @@ function createProcessor(
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations: { updatePromptImplementation },
-    getData: () => ({ convertedPrompts: [existingPrompt] }),
-    versionHistoryService: { isAutoVersionEnabled: () => true, recordEditResult },
+    getData: () => ({ convertedPrompts: [currentPrompt] }),
+    versionHistoryService: {
+      isAutoVersionEnabled: () => true,
+      loadHistory: jest.fn(async () => ({ current_version: 7 })),
+      recordEditResult,
+    },
     textDiffService: new ObjectDiffGenerator(),
     comparisonEngine: new ComparisonEngine(logger),
   } as unknown as PromptResourceContext;

@@ -22,7 +22,7 @@ export class ArgumentSchemaValidator {
 
   constructor(private readonly overrides: PromptSchemaOverrides = {}) {}
 
-  validate(prompt: ConvertedPrompt, args: Record<string, any>): SchemaValidationResult {
+  validate(prompt: ConvertedPrompt, args: Record<string, unknown>): SchemaValidationResult {
     if (!prompt.arguments.length) {
       return { success: true, issues: [] };
     }

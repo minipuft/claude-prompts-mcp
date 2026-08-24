@@ -1,48 +1,7 @@
 // @lifecycle canonical - Pins the option-value escape contract (T0 pre-merge check).
 import { describe, expect, it } from '@jest/globals';
 
-import { parseQuotedValue, serializeOptionValue } from '../../../src/shared/utils/jsonUtils.js';
-
-/**
- * Simulate the full wire path for a value passed via the `options` parameter:
- * RequestNormalizationStage serializes it into the command string, the argument parser captures the inside of
- * the quotes, and `parseQuotedValue` decodes it before the prompt sees it.
- */
-const roundTrip = (value: string): string => {
-  const wire = serializeOptionValue(value);
-  return parseQuotedValue(wire.slice(1, -1));
-};
-
-describe('option values passed through `options` round-trip losslessly', () => {
-  // The T0 plan flagged "a value containing a literal backslash changes meaning" as a
-  // pre-merge risk. Measured, that is not true of this path: the encoder escapes and the
-  // decoder unescapes, so backslashes survive. The risk is real only for hand-authored
-  // command strings, pinned in the next block.
-
-  it.each([
-    ['Windows path', 'C:\\Users\\dev\\project'],
-    ['regex with classes', String.raw`^GATE_REVIEW:\s*(PASS|FAIL)\s*-\s*(.+)$`],
-    ['regex with groups', String.raw`function\s+\w+\s*\(`],
-    ['regex with quantifiers', String.raw`\d{4}-\d{2}-\d{2}`],
-    ['escaped dot', String.raw`bridge\.scss|--spice`],
-    ['apostrophe', "it's a lifted ground"],
-    ['double quote', 'the "lifted" ground'],
-    ['both quote kinds', `it's a "lifted" ground`],
-    ['colon-bearing prose', 'ground lifted. Target: dark ground.'],
-    ['real newline', '**Standards:**\n- Criterion 1'],
-    ['tab', 'a\tb'],
-    ['trailing backslash', 'ends with\\'],
-    ['only backslashes', '\\\\\\'],
-    ['empty', ''],
-  ])('%s survives unchanged', (_label, value) => {
-    expect(roundTrip(value)).toBe(value);
-  });
-
-  it('serializes non-strings without quoting them', () => {
-    expect(serializeOptionValue(42)).toBe('42');
-    expect(serializeOptionValue(true)).toBe('true');
-  });
-});
+import { parseQuotedValue } from '../../../src/shared/utils/jsonUtils.js';
 
 describe('hand-authored quoted values treat backslash as an escape', () => {
   // This is the one genuinely breaking behavior of the T0 change, and it is deliberate: the

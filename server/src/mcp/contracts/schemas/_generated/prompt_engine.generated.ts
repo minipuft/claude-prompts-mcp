@@ -34,6 +34,7 @@ export type prompt_engineParamName =
   | 'handoff'
   | 'claim_token'
   | 'options'
+  | 'inputs'
   | 'observations'
   | 'workflow';
 export const prompt_engineParameters: ToolParameter[] = [
@@ -159,7 +160,16 @@ export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'options',
     type: 'record',
-    description: 'Execution options forwarded downstream.',
+    description:
+      'Legacy prompt argument/options map. Values remain typed; inline command arguments take precedence. Prefer `inputs` for prompt arguments, especially arrays and objects.',
+    status: 'working',
+    compatibility: 'canonical',
+  },
+  {
+    name: 'inputs',
+    type: 'record',
+    description:
+      'Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default.',
     status: 'working',
     compatibility: 'canonical',
   },

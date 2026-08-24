@@ -2,6 +2,30 @@
 
 Stop copy-pasting the same instructions into Claude. Define them once, invoke them anywhere.
 
+## Recommended: Author Through MCP
+
+Use `>>create_prompt` when an agent is helping design the prompt. It produces a canonical
+`resource_manager` draft, previews it without writing, asks for confirmation, then creates and
+smoke-renders it. For a prompt you have already designed, call the lifecycle directly:
+
+```text
+resource_manager(
+  resource_type:"prompt",
+  action:"validate",
+  id:"hello",
+  name:"Hello World",
+  description:"A simple greeting prompt",
+  user_message_template:"Hello {{name}}!",
+  arguments:[{"name":"name", "type":"string", "required":true}]
+)
+```
+
+Review the normalized draft, then repeat the same payload with `action:"create"`. The returned
+receipt names the resource root, affected files, refresh/load result, ship status, and current
+version. The file layouts below explain what the server writes and remain useful for reading or
+importing existing prompt collections; agents should not bypass `resource_manager` to maintain
+managed prompts.
+
 ## Why This Matters
 
 | Problem                 | Solution             | Result                            |
@@ -16,7 +40,7 @@ Stop copy-pasting the same instructions into Claude. Define them once, invoke th
 
 Best for short, simple prompts. Everything lives in one `.yaml` file.
 
-### Create the file
+### Resulting file
 
 `resources/prompts/general/hello/prompt.yaml`:
 

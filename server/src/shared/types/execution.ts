@@ -149,6 +149,12 @@ export interface McpToolRequest {
   readonly options?: Record<string, unknown>;
 
   /**
+   * Typed prompt arguments supplied outside the command-string grammar.
+   * Inline command arguments take precedence when the same key is present.
+   */
+  readonly inputs?: Record<string, unknown>;
+
+  /**
    * Typed unknowns discovered/resolved by the current step, feeding the
    * per-run unknowns ledger. Tier 1/2: threaded through unchanged; not yet
    * consumed by the pipeline (lands in Tier 3).

@@ -482,6 +482,22 @@ describe('VersionHistoryService', () => {
       expect(bridge!.description).toContain('Bridge');
     });
 
+    it('recordEditResult: object key order does not create a phantom bridge', async () => {
+      await service.saveVersion('gate', 'key-order', {
+        arguments: [{ name: 'input', type: 'string', required: true }],
+      });
+
+      const result = await service.recordEditResult(
+        'gate',
+        'key-order',
+        { arguments: [{ name: 'input', required: true, type: 'string' }] },
+        { arguments: [{ name: 'input', required: true, type: 'number' }] }
+      );
+
+      expect(result.bridged).toBe(false);
+      expect(result.version).toBe(2);
+    });
+
     it('should fail when target version does not exist', async () => {
       const result = await service.rollback('gate', 'test-gate', 99, { x: 1 });
 

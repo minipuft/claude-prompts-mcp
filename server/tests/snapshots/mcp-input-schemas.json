@@ -181,6 +181,14 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "inputs": {
+        "additionalProperties": {},
+        "description": "<present>",
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
       "observations": {
         "description": "<present>",
         "items": {
@@ -526,6 +534,7 @@
           "reload",
           "list",
           "inspect",
+          "validate",
           "analyze_type",
           "analyze_gates",
           "guide",
@@ -901,6 +910,11 @@
       "execution_hint": {
         "enum": ["single", "chain"],
         "type": "string"
+      },
+      "expected_version": {
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
       },
       "filter": {
         "type": "string"

@@ -64,6 +64,7 @@ export const resourceManagerInputSchema = z
       'reload',
       'list',
       'inspect',
+      'validate',
       'analyze_type',
       'analyze_gates',
       'guide',
@@ -275,6 +276,8 @@ export const resourceManagerInputSchema = z
     limit: z.number().optional(),
     /** [Versioning] Skip auto-versioning on update. */
     skip_version: z.boolean().optional(),
+    /** [Prompt update] Refuse a stale write unless the current version matches. */
+    expected_version: z.number().int().nonnegative().optional(),
   })
   .passthrough();
 

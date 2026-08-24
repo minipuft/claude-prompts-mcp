@@ -7,8 +7,6 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionRouterPort, ToolResponse } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 
-import { serializeOptionValue } from '#shared/utils/index.js';
-
 type ToolRouter = (
   targetTool: string,
   params: Record<string, any>,
@@ -103,11 +101,10 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
     }
 
     if (command) {
-      // Bake MCP options into the command string so the argument parser
-      // sees them as normal inline args (before validation runs)
-      context.state.normalization.normalizedCommand = context.mcpRequest.options
-        ? this.mergeOptionsIntoCommand(command, context.mcpRequest.options)
-        : command;
+      // Request-level values stay typed. Command text is parsed only for values the caller
+      // actually authored inline; projecting objects/arrays into it coerces them to
+      // "[object Object]" before the parser can recover their type.
+      context.state.normalization.normalizedCommand = command;
     } else {
       delete context.state.normalization.normalizedCommand;
     }
@@ -155,6 +152,10 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
 
     if (context.mcpRequest.options) {
       context.state.normalization.requestOptions = { ...context.mcpRequest.options };
+    }
+
+    if (context.mcpRequest.inputs) {
+      context.state.normalization.requestInputs = { ...context.mcpRequest.inputs };
     }
 
     return true;
@@ -212,18 +213,6 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
       context.setResponse(this.buildErrorResponse(`❌ Error: ${message}`));
       return true;
     }
-  }
-
-  private mergeOptionsIntoCommand(command: string, options: Record<string, unknown>): string {
-    const parts = [command];
-    for (const [key, value] of Object.entries(options)) {
-      // Skip keys already present as inline args (key= or key:)
-      if (new RegExp(`\\b${key}\\s*[=:]`).test(command)) continue;
-      if (value === undefined || value === null) continue;
-      const serialized = serializeOptionValue(value);
-      parts.push(`${key}:${serialized}`);
-    }
-    return parts.join(' ');
   }
 
   private buildErrorResponse(message: string): ToolResponse {

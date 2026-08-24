@@ -62,6 +62,22 @@ describe('resource_manager argument contract', () => {
     expect(arg?.name).toBe('feature');
   });
 
+  it('accepts validate and preserves a non-negative expected_version', () => {
+    const parsed = resourceManagerInputSchema.parse({
+      resource_type: 'prompt',
+      action: 'validate',
+      id: 'draft',
+      name: 'Draft',
+      description: 'Draft description',
+      system_message: 'System-only content',
+      expected_version: 0,
+    });
+
+    expect(parsed.action).toBe('validate');
+    expect(parsed.expected_version).toBe(0);
+    expect(() => resourceManagerInputSchema.parse({ ...base, expected_version: -1 })).toThrow();
+  });
+
   it('rejects a type outside the loader vocabulary', () => {
     // Was `z.string()`, so `str` reached the YAML and failed at LOAD time instead of at the call.
     expect(() =>

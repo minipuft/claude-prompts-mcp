@@ -246,6 +246,34 @@ describe('ResourceManagerRouter', () => {
       expect(forwarded['subagent_model']).toBe('heavy');
       expect(forwarded['agent_type']).toBe('code-lifecycle-auditor');
     });
+
+    test('passes prompt validation and concurrency parameters through without coercion', async () => {
+      await router.handleAction(
+        {
+          resource_type: 'prompt',
+          action: 'validate',
+          id: 'draft_prompt',
+          name: 'Draft Prompt',
+          description: 'Draft description',
+          system_message: 'System-only prompt',
+          expected_version: 12,
+          full_restart: true,
+          is_chain: false,
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(mockPromptResourceHandler.handleAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'validate',
+          expected_version: 12,
+          full_restart: true,
+          is_chain: false,
+          system_message: 'System-only prompt',
+        }),
+        {}
+      );
+    });
   });
 
   describe('action validation', () => {

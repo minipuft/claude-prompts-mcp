@@ -1,4 +1,5 @@
 // @lifecycle canonical - Parses incoming commands into structured operators.
+import { getExplicitArgumentKeys } from '../../parsers/argument-parser.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -130,7 +131,13 @@ export class CommandParsingStage extends BasePipelineStage {
           (idOrName) => this.findConvertedPrompt(idOrName)
         );
 
-        this.mergeRequestOptions(symbolicCommand.promptArgs, context);
+        const symbolicPrompt = this.findConvertedPrompt(symbolicCommand.promptId);
+        this.mergeRequestArguments(
+          symbolicCommand.promptArgs,
+          parseResult.rawArgs,
+          symbolicPrompt,
+          context
+        );
 
         context.parsedCommand = symbolicCommand;
         this.logExit({
@@ -141,7 +148,7 @@ export class CommandParsingStage extends BasePipelineStage {
         return;
       }
 
-      context.parsedCommand = await this.buildDirectCommand(parseResult);
+      context.parsedCommand = await this.buildDirectCommand(parseResult, context);
 
       this.logExit({
         promptId: context.parsedCommand.promptId,
@@ -247,7 +254,8 @@ export class CommandParsingStage extends BasePipelineStage {
    * Build ParsedCommand for non-symbolic (direct) commands.
    */
   private async buildDirectCommand(
-    parseResult: import('../../parsers/command-parser.js').CommandParseResult
+    parseResult: import('../../parsers/command-parser.js').CommandParseResult,
+    context: ExecutionContext
   ): Promise<ParsedCommand> {
     const convertedPrompt = this.findConvertedPrompt(parseResult.promptId);
     if (!convertedPrompt) {
@@ -266,8 +274,12 @@ export class CommandParsingStage extends BasePipelineStage {
       promptArgs: (argResult as any).processedArgs,
     };
 
-    // Options already baked into command string by RequestNormalizationStage (normalizedCommand).
-    // mergeRequestOptions only needed for symbolic path (line 91).
+    this.mergeRequestArguments(
+      parsedCommand.promptArgs,
+      parseResult.rawArgs,
+      convertedPrompt,
+      context
+    );
 
     if (convertedPrompt.chainSteps?.length) {
       parsedCommand.commandType = 'chain';
@@ -322,31 +334,34 @@ export class CommandParsingStage extends BasePipelineStage {
     return parsedCommand;
   }
 
-  /**
-   * Merge requestOptions into promptArgs (options parameter from prompt_engine call).
-   * Options values override empty/falsy placeholder values from prompt definitions
-   * but inline args (truthy values) still take precedence.
-   */
-  private mergeRequestOptions(
+  /** Merge defaults, legacy options, and typed inputs while preserving explicit inline values. */
+  private mergeRequestArguments(
     promptArgs: Record<string, any> | undefined,
+    rawArgs: string,
+    prompt: ConvertedPrompt | undefined,
     context: ExecutionContext
   ): void {
     const requestOptions = context.state.normalization.requestOptions;
-    if (!requestOptions || typeof requestOptions !== 'object' || !promptArgs) {
+    const requestInputs = context.state.normalization.requestInputs;
+    if (
+      promptArgs === undefined ||
+      prompt === undefined ||
+      (requestOptions === undefined && requestInputs === undefined)
+    ) {
       return;
     }
 
-    for (const [key, value] of Object.entries(requestOptions)) {
-      const existing = promptArgs[key];
-      const isFalsyOrEmpty =
-        existing === undefined ||
-        existing === null ||
-        existing === '' ||
-        (Array.isArray(existing) && existing.length === 0);
-      if (!(key in promptArgs) || isFalsyOrEmpty) {
-        promptArgs[key] = value;
+    const explicitKeys = new Set(getExplicitArgumentKeys(rawArgs));
+    for (const values of [requestOptions, requestInputs]) {
+      if (values === undefined) continue;
+      for (const [key, value] of Object.entries(values)) {
+        if (!explicitKeys.has(key)) {
+          promptArgs[key] = value;
+        }
       }
     }
+
+    this.argumentParser.validateResolvedArguments(prompt, promptArgs);
   }
 
   private findConvertedPrompt(idOrName: string): ConvertedPrompt | undefined {

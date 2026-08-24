@@ -1,70 +1,62 @@
 id: create_prompt
 name: Create Prompt
-description: Guided prompt/chain creation with examples and validation. Outputs structured JSON for resource_manager.
+description: >-
+  Designs, previews, confirms, and creates canonical prompts through
+  resource_manager without duplicating validation.
 category: prompt-authoring
 userMessageTemplateFile: user-message.md
-
-# Script tools for validation and auto-execution
-tools:
-  - prompt_builder
-
 arguments:
-  # Design workflow arguments
   - name: name
     type: string
-    description: Prompt name (e.g., "Code Review", "Research Summary")
+    description: Prompt name for design or creation
     required: false
   - name: purpose
     type: string
-    description: Core purpose in 1-2 sentences
+    description: Core purpose in one or two sentences
     required: false
   - name: prompt_type
     type: string
-    description: "'template' (default) for basic prompts, 'script' for validation/automation with tools, 'chain' for multi-step workflows"
+    description: 'Design mode: template, script, chain, or system-only'
     required: false
-
-  # Validation workflow - flat args matching schema.json for script tool detection
   - name: id
     type: string
-    description: Lowercase-underscored identifier (e.g., 'code_review', 'research_summary')
+    description: Stable prompt identifier
     required: false
   - name: category
     type: string
-    description: Prompt category (e.g., 'development', 'analysis', 'documentation')
+    description: Prompt category
     required: false
   - name: description
     type: string
-    description: Brief description of what the prompt does
+    description: What the prompt does
     required: false
   - name: systemMessage
     type: string
-    description: System message content (inline)
-    required: false
-  - name: systemMessageFile
-    type: string
-    description: Path to system-message.md file
+    description: Inline system message
     required: false
   - name: userMessageTemplate
     type: string
-    description: User message template with {{variable}} placeholders
-    required: false
-  - name: userMessageTemplateFile
-    type: string
-    description: Path to user-message.md file
+    description: Inline Nunjucks user-message template
     required: false
   - name: arguments
     type: array
-    description: Argument definitions array
+    description: Typed prompt argument definitions
     required: false
   - name: gateConfiguration
     type: object
-    description: Gate configuration object
+    description: Gate configuration
     required: false
   - name: chainSteps
     type: array
-    description: Chain step definitions (for chain prompts)
+    description: Chain step definitions
     required: false
   - name: registerWithMcp
     type: boolean
-    description: Register as MCP tool (default false)
+    description: Expose through native MCP prompts
     required: false
+  - name: tools
+    type: array
+    description: Complete inline script-tool definitions
+    required: false
+tools:
+  - prompt_builder

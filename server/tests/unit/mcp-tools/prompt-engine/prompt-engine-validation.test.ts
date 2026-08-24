@@ -121,6 +121,39 @@ describe('PromptEngine Validation', () => {
     // These unit tests require extensive mocking that is brittle and low value.
   });
 
+  test('forwards structured inputs to the pipeline without command-string serialization', async () => {
+    const execute = jest.fn(async (_request?: unknown) => ({
+      content: [{ type: 'text' as const, text: 'ok' }],
+      isError: false,
+    }));
+    jest
+      .spyOn(
+        engine as unknown as { getPromptExecutionPipeline: () => unknown },
+        'getPromptExecutionPipeline'
+      )
+      .mockReturnValue({ execute });
+    const inputs = {
+      palette: ['ochre', 'ultramarine'],
+      composition: { weights: { edge: 0.7 }, references: [{ id: 'r1' }] },
+      note: String.raw`C:\art\refs and "quotes"`,
+    };
+
+    await engine.executePromptCommand(
+      { command: '>>art_prompt mode="inline"', inputs, options: { mode: 'legacy' } },
+      {}
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: '>>art_prompt mode="inline"',
+        inputs,
+        options: { mode: 'legacy' },
+      })
+    );
+    const forwardedRequest = execute.mock.calls[0]?.[0] as { command: string } | undefined;
+    expect(forwardedRequest?.command).not.toContain('[object Object]');
+  });
+
   /**
    * `cancel` relocated here from `system_control session cancel` (Tier 7).
    *

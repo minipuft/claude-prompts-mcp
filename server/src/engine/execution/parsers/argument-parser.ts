@@ -51,6 +51,23 @@ const scanKeyValueKeys = (rawArgs: string): string[] =>
     .map((match) => match[1])
     .filter((key): key is string => key !== undefined);
 
+/** Keys authored explicitly in command text, used to preserve inline precedence. */
+export function getExplicitArgumentKeys(rawArgs: string): string[] {
+  const trimmed = rawArgs.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    const parsed = safeJsonParse(trimmed);
+    if (
+      parsed.success &&
+      parsed.data !== null &&
+      typeof parsed.data === 'object' &&
+      !Array.isArray(parsed.data)
+    ) {
+      return Object.keys(parsed.data as Record<string, unknown>);
+    }
+  }
+  return scanKeyValueKeys(rawArgs);
+}
+
 /**
  * Processing result with detailed metadata
  */
@@ -118,6 +135,22 @@ export class ArgumentParser {
     this.logger.debug(
       `ArgumentParser initialized with ${this.strategies.length} processing strategies and schema validation`
     );
+  }
+
+  /** Validate the final typed argument map after request-level inputs have been merged. */
+  validateResolvedArguments(prompt: ConvertedPrompt, args: Record<string, unknown>): void {
+    const validation = this.schemaValidator.validate(prompt, args);
+    if (validation.success) return;
+
+    throw new ArgumentValidationError(validation.issues, {
+      id: prompt.id,
+      arguments: prompt.arguments.map((argument) => ({
+        name: argument.name,
+        ...(argument.type !== undefined ? { type: argument.type } : {}),
+        required: argument.required,
+        ...(argument.validation !== undefined ? { validation: argument.validation } : {}),
+      })),
+    });
   }
 
   /**
