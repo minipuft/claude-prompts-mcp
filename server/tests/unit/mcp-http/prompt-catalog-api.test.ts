@@ -39,8 +39,13 @@ describe('prompt catalog HTTP API', () => {
       })
   );
 
-  async function start(prompts: ConvertedPrompt[]): Promise<string> {
-    const router = new ApiRouter(logger, configManager);
+  async function start(
+    prompts: ConvertedPrompt[],
+    catalogReadToken: string | null = null
+  ): Promise<string> {
+    const router = new ApiRouter(logger, configManager, undefined, undefined, {
+      catalogReadToken,
+    });
     router.updateData([], [], prompts);
     server = router.createApp().listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => server?.once('listening', resolve));
@@ -95,5 +100,47 @@ describe('prompt catalog HTTP API', () => {
     expect(detail).not.toHaveProperty('systemMessage');
     expect(missingResponse.status).toBe(404);
     await expect(missingResponse.json()).resolves.toEqual({ error: 'Prompt not found: missing' });
+  });
+
+  it('fails closed when authenticated catalog detail is not configured', async () => {
+    const origin = await start([prompt()]);
+
+    const response = await fetch(`${origin}/api/v1/catalog/prompts/strategicImplement`);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    await expect(response.json()).resolves.toEqual({
+      error: 'Catalog detail endpoint is unavailable',
+    });
+  });
+
+  it('protects executable prompt detail and authenticates before lookup', async () => {
+    const origin = await start(
+      [prompt({ systemMessage: 'Use the approved plan.' })],
+      'catalog-read-token'
+    );
+
+    const unauthorizedResponse = await fetch(`${origin}/api/v1/catalog/prompts/strategicImplement`);
+    const badTokenResponse = await fetch(`${origin}/api/v1/catalog/prompts/missing`, {
+      headers: { authorization: 'Bearer wrong-token' },
+    });
+    const detailResponse = await fetch(`${origin}/api/v1/catalog/prompts/strategicImplement`, {
+      headers: { authorization: 'Bearer catalog-read-token' },
+    });
+
+    expect(unauthorizedResponse.status).toBe(401);
+    await expect(unauthorizedResponse.json()).resolves.toEqual({ error: 'Unauthorized' });
+    expect(badTokenResponse.status).toBe(401);
+    await expect(badTokenResponse.json()).resolves.toEqual({ error: 'Unauthorized' });
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.headers.get('cache-control')).toBe('no-store');
+    await expect(detailResponse.json()).resolves.toMatchObject({
+      summary: { id: 'strategicImplement' },
+      userMessageTemplate: 'Implement {{ task }}',
+      systemMessage: 'Use the approved plan.',
+    });
+    expect(JSON.stringify(jest.mocked(logger.debug).mock.calls)).not.toContain(
+      'catalog-read-token'
+    );
   });
 });

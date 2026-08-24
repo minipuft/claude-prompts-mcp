@@ -4,6 +4,7 @@
  * Handles Express app setup, middleware, and REST API endpoints
  */
 
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'path';
@@ -18,7 +19,10 @@ import type { ConfigManager, Logger, ToolResponse } from '#shared/types/index.js
 import type { ResourceManagerInput } from '../tools/resource-manager/core/types.js';
 
 import { PromptAssetManager } from '#modules/prompts/index.js';
-import { buildPromptCatalogSummary } from '#modules/prompts/prompt-catalog.js';
+import {
+  buildPromptCatalogDetail,
+  buildPromptCatalogSummary,
+} from '#modules/prompts/prompt-catalog.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '#modules/prompts/prompt-refresh-service.js';
 
 /**
@@ -32,17 +36,22 @@ export class ApiRouter {
   private promptsData: PromptData[] = [];
   private categories: Category[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
+  private catalogReadToken: string | null;
 
   constructor(
     logger: Logger,
     configManager: ConfigManager,
     promptManager?: PromptAssetManager,
-    mcpToolsManager?: McpToolRouter
+    mcpToolsManager?: McpToolRouter,
+    options: { catalogReadToken?: string | null } = {}
   ) {
     this.logger = logger;
     this.configManager = configManager;
     this.promptManager = promptManager;
     this.mcpToolsManager = mcpToolsManager;
+    const catalogReadToken = options.catalogReadToken?.trim();
+    this.catalogReadToken =
+      catalogReadToken === undefined || catalogReadToken.length === 0 ? null : catalogReadToken;
   }
 
   /**
@@ -93,7 +102,10 @@ export class ApiRouter {
 
     // Add request logging middleware
     app.use((req, _res, next) => {
-      this.logger.debug(`${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}`);
+      const sanitizedHeaders = { ...req.headers };
+      delete sanitizedHeaders.authorization;
+      delete sanitizedHeaders.cookie;
+      this.logger.debug(`${req.method} ${req.url} - Headers: ${JSON.stringify(sanitizedHeaders)}`);
       next();
     });
   }
@@ -154,6 +166,28 @@ export class ApiRouter {
       return res.json(buildPromptCatalogSummary(prompt));
     });
 
+    // Executable prompt content is reserved for authenticated server-side catalog adapters.
+    app.get('/api/v1/catalog/prompts/:promptId', (req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-store');
+
+      if (this.catalogReadToken === null) {
+        return res.status(503).json({ error: 'Catalog detail endpoint is unavailable' });
+      }
+      if (!this.hasValidCatalogReadToken(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const promptIdParam = req.params['promptId'];
+      const promptId = Array.isArray(promptIdParam) ? promptIdParam[0] : promptIdParam;
+      const prompt = this.convertedPrompts.find((candidate) => candidate.id === promptId);
+
+      if (prompt === undefined) {
+        return res.status(404).json({ error: `Prompt not found: ${promptId}` });
+      }
+
+      return res.json(buildPromptCatalogDetail(prompt));
+    });
+
     // Get prompts by category
     app.get('/categories/:categoryId/prompts', (req: Request, res: Response) => {
       const categoryIdParam = req.params['categoryId'];
@@ -168,6 +202,18 @@ export class ApiRouter {
 
       return res.json(categoryPrompts);
     });
+  }
+
+  private hasValidCatalogReadToken(req: Request): boolean {
+    const authorization = req.header('authorization');
+    if (authorization?.startsWith('Bearer ') !== true) return false;
+
+    const candidate = authorization.slice('Bearer '.length).trim();
+    if (candidate.length === 0 || this.catalogReadToken === null) return false;
+
+    const expectedDigest = createHash('sha256').update(this.catalogReadToken).digest();
+    const candidateDigest = createHash('sha256').update(candidate).digest();
+    return timingSafeEqual(expectedDigest, candidateDigest);
   }
 
   /**
@@ -454,5 +500,7 @@ export function createApiRouter(
   promptManager?: PromptAssetManager,
   mcpToolsManager?: McpToolRouter
 ): ApiRouter {
-  return new ApiRouter(logger, configManager, promptManager, mcpToolsManager);
+  return new ApiRouter(logger, configManager, promptManager, mcpToolsManager, {
+    catalogReadToken: process.env['MCP_CATALOG_READ_TOKEN'],
+  });
 }

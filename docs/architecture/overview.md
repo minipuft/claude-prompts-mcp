@@ -748,6 +748,11 @@ one place the transports genuinely diverge — see `CLAUDE.md` Core Principle 3.
 
 Transport is selected at startup. Both modes share the same message handling.
 
+The compatibility REST catalog keeps `/prompts` and `/prompts/:promptId` metadata-only. Server-side
+clients that need executable template content use `GET /api/v1/catalog/prompts/:promptId` with a
+bearer token supplied through `MCP_CATALOG_READ_TOKEN`. The protected route fails closed when the
+token is not configured and marks responses `Cache-Control: no-store`.
+
 ### Prompts (`src/modules/prompts/`)
 
 - **Registry**: Dynamic registration with category organization
