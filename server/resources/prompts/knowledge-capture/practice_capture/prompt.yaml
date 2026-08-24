@@ -1,0 +1,81 @@
+id: practice_capture
+name: Practice Capture
+description: >-
+  Capture new references, techniques, reactions, and related evidence into the
+  Practice Library through its verified writer, then optionally propose an
+  approval-gated skill or rule promotion.
+category: knowledge-capture
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: evidence
+    type: string
+    description: >-
+      URLs, files, screenshots, repository links, or conversation evidence to
+      preserve
+    required: true
+  - name: why_it_matters
+    type: string
+    description: Why the evidence stood out or may matter in later work
+    required: true
+  - name: reaction
+    type: string
+    description: Optional subjective response or preference signal
+    required: false
+  - name: context
+    type: string
+    description: Optional projects, media, or workflows where this may transfer
+    required: false
+  - name: assets
+    type: string
+    description: Optional local PNG, JPEG, or WebP paths to preserve as evidence
+    required: false
+  - name: collection
+    type: string
+    description: Optional existing or proposed Practice Library collection
+    required: false
+  - name: promotion
+    type: string
+    description: >-
+      Type: none | evaluate. Defaults to capture-only; evaluate produces a
+      proposal but never edits the framework.
+    required: false
+    defaultValue: none
+gateConfiguration:
+  inline_gate_definitions:
+    - name: Practice Evidence Integrity
+      type: validation
+      scope: session
+      description: >-
+        Capture preserves provenance and semantic distinctions, reuses the
+        canonical writer, and passes deterministic validation.
+      pass_criteria:
+        - >-
+          Exact source locators and canonical identities are retained without
+          inventing unavailable attribution
+        - REPORTED, OBSERVED, INFERRED, and REACTION claims remain distinct
+        - >-
+          Duplicate and semantic-role searches are completed before new records
+          are proposed
+        - Only established record kinds and safe inert asset formats are used
+        - >-
+          practice.cli capture, validate, and deterministic build pass before
+          success is claimed
+    - name: Promotion Authority
+      type: validation
+      scope: session
+      description: >-
+        Framework promotion is absent by default and remains evidence-backed and
+        approval-gated when evaluated.
+      pass_criteria:
+        - Capture-only mode reports no framework mutation
+        - >-
+          Promotion evaluation cites independent evidence and searches existing
+          owners before proposing a destination
+        - >-
+          A proposed change names the exact existing skill, rule, project
+          surface, or justified new-skill candidate
+        - >-
+          No skill, rule, profile, or public artifact is changed without
+          explicit user confirmation
+registerWithMcp: false

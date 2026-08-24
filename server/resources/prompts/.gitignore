@@ -19,6 +19,12 @@ documentation/*
 development/*
 !development/strategicImplement/
 !development/strategicImplement/**
+!development/design_muse/
+!development/design_muse/**
+!knowledge-capture/
+knowledge-capture/*
+!knowledge-capture/practice_capture/
+!knowledge-capture/practice_capture/**
 !planning/
 !planning/**
 workflow/sync_indexes/
