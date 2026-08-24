@@ -1,7 +1,7 @@
 ---
 title: "Canonical agent instructions and semantic module governance"
 date: 2026-08-21
-status: active
+status: reference
 tags: [architecture, documentation, validation, dependency-cruiser]
 ---
 
@@ -572,10 +572,10 @@ scope: architecture
 
 ### Growth capture
 
-- [ ] Evaluate “local semantic metadata + generated volatile views” for `/knowledge-capture` after implementation evidence exists.
-- [ ] Record the owner’s final symlink and descriptor-scope preferences in project memory if they recur outside this repository.
-- [ ] Update a skill only if execution reveals a reusable correction to planning, validation routing, or dependency-graph generation.
-- [ ] Log any user correction immediately in the observations ledger.
+- [x] Evaluate “local semantic metadata + generated volatile views” for `/knowledge-capture` after implementation evidence exists. — Evaluated 2026-08-23: one project-level sighting, below the three-sighting promotion threshold. Captured in the sibling notes' Growth Capture section and in the descriptor/catalog documentation rather than as a global rule.
+- [x] Record the owner’s final symlink and descriptor-scope preferences in project memory if they recur outside this repository. — Not recurred outside this repository as of 2026-08-23; ruling R1 (projection over symlink) and R4 (boundary-scoped lifecycle) are recorded in the sibling notes. Revives if a second repository needs the same projection decision.
+- [x] Update a skill only if execution reveals a reusable correction to planning, validation routing, or dependency-graph generation. — No skill changed. The eight deviations were plan-premise drift specific to this delivery, not reusable corrections to the planning or routing method.
+- [x] Log any user correction immediately in the observations ledger. — Logged: `~/.claude/observations.jsonl` carries the 2026-08-20 symlink convention entry and its 2026-08-23 supersession by the generated-projection ruling.
 
 ### Final validation sequence
 
