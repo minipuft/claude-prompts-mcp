@@ -32,9 +32,10 @@
  *      minutes, and the dependency tree is identical by construction.
  *
  * SELF-VERIFYING. Wiring hooks and reporting success without checking is how this failure mode
- * survived in the first place, so the last step asserts `.husky/_/pre-push` exists and is
- * executable, and fails loudly naming the remedy if it does not. A bootstrap that cannot prove it
- * bootstrapped is the same class of defect it exists to fix.
+ * survived in the first place, so the last steps assert the linked tree reads clean to
+ * `git status` and that `.husky/_/pre-push` exists and is executable, and fail loudly naming the
+ * remedy if not. A bootstrap that cannot prove it bootstrapped is the same class of defect it
+ * exists to fix.
  *
  * REJECTED: pointing `core.hooksPath` at an absolute path in the main worktree. It would fix
  * resolution for every worktree at once, but `.git/config` is shared, so every linked worktree
@@ -154,6 +155,21 @@ for (const relative of ['node_modules', path.join('server', 'node_modules')]) {
   }
   symlinkSync(source, destination, 'dir');
   console.log(`📦 Linked ${relative} from the main worktree`);
+}
+
+// The linked tree must read as clean. `.gitignore` names `node_modules` WITHOUT a trailing slash
+// on purpose: `node_modules/` matches directories only, and the links above are symlinks, so
+// with the slash every linked worktree showed `?? node_modules` forever. That is not cosmetic —
+// `server/scripts/typecheck-committed.js` short-circuits on `git status --porcelain` being empty,
+// so the untracked links disabled its fast path on every push, and `git add -A` would stage an
+// absolute-path symlink. Assert it here so a future ignore-rule edit cannot regress it silently.
+const dirty = git(['status', '--porcelain'], target);
+if (dirty !== '') {
+  fail(
+    `the new worktree is not clean after bootstrap:\n${dirty}\n` +
+      '  Linked node_modules must be ignored (see the `node_modules` patterns in .gitignore —\n' +
+      '  no trailing slash, or symlinks are not matched).'
+  );
 }
 
 // Prove it. An unverified bootstrap is the defect this script exists to fix.
