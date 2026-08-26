@@ -179,6 +179,89 @@ describe('ScriptReferenceResolver', () => {
     });
   });
 
+  describe('raw-block containment (Tier 2.3 security probe)', () => {
+    // `{% raw %}` runs BEFORE Nunjucks, over raw template text, and is the only thing
+    // stopping a template that DOCUMENTS `{{script:id}}` from executing it. A hole here
+    // does not leak data directly — it runs a script that a reader believed was inert,
+    // which is a side effect before a guaranteed parse error.
+
+    it('does not execute a reference inside a closed raw block', async () => {
+      const loader = createMockLoader({ analyzer: mockScriptTool });
+      const executor = createMockExecutor({ analyzer: { count: 42 } });
+      const resolver = new ScriptReferenceResolver(mockLogger, loader, executor);
+
+      const result = await resolver.preResolve('{% raw %}{{script:analyzer}}{% endraw %}', {});
+
+      expect(result.diagnostics.scriptsResolved).toBe(0);
+      expect(result.scriptResults.size).toBe(0);
+    });
+
+    it('does not execute a reference after an UNCLOSED raw block', async () => {
+      // An unclosed tag covers the rest of the template by design: Nunjucks rejects
+      // the template anyway, so the only question is whether a script ran first.
+      const loader = createMockLoader({ analyzer: mockScriptTool });
+      const executor = createMockExecutor({ analyzer: { count: 42 } });
+      const resolver = new ScriptReferenceResolver(mockLogger, loader, executor);
+
+      const result = await resolver.preResolve('{% raw %}{{script:analyzer}}', {});
+
+      expect(result.diagnostics.scriptsResolved).toBe(0);
+    });
+
+    it('does not execute a reference inside a nested raw opener', async () => {
+      // The block pattern is lazy, so the inner opener falls INSIDE the first
+      // range. What must not happen is the inner tag resetting containment.
+      const loader = createMockLoader({ analyzer: mockScriptTool });
+      const executor = createMockExecutor({ analyzer: { count: 42 } });
+      const resolver = new ScriptReferenceResolver(mockLogger, loader, executor);
+
+      const result = await resolver.preResolve(
+        '{% raw %}A{% raw %}{{script:analyzer}}{% endraw %}',
+        {}
+      );
+
+      expect(result.diagnostics.scriptsResolved).toBe(0);
+    });
+
+    it('does not execute a reference after a closed block followed by an unclosed one', async () => {
+      const loader = createMockLoader({ analyzer: mockScriptTool });
+      const executor = createMockExecutor({ analyzer: { count: 42 } });
+      const resolver = new ScriptReferenceResolver(mockLogger, loader, executor);
+
+      const result = await resolver.preResolve(
+        '{% raw %}A{% endraw %}B{% raw %}{{script:analyzer}}',
+        {}
+      );
+
+      expect(result.diagnostics.scriptsResolved).toBe(0);
+    });
+
+    it('DOES execute a reference that sits outside every raw block', async () => {
+      // The containment must not become a blanket refusal — otherwise the previous
+      // four assertions would pass on a resolver that never resolves anything.
+      const loader = createMockLoader({ analyzer: mockScriptTool });
+      const executor = createMockExecutor({ analyzer: { count: 42 } });
+      const resolver = new ScriptReferenceResolver(mockLogger, loader, executor);
+
+      const result = await resolver.preResolve(
+        '{% raw %}{{script:analyzer}}{% endraw %} then {{script:analyzer}}',
+        {}
+      );
+
+      expect(result.diagnostics.scriptsResolved).toBe(1);
+    });
+
+    it('does not let whitespace-control tag spellings slip past containment', async () => {
+      const loader = createMockLoader({ analyzer: mockScriptTool });
+      const executor = createMockExecutor({ analyzer: { count: 42 } });
+      const resolver = new ScriptReferenceResolver(mockLogger, loader, executor);
+
+      const result = await resolver.preResolve('{%- raw -%}{{script:analyzer}}{%- endraw -%}', {});
+
+      expect(result.diagnostics.scriptsResolved).toBe(0);
+    });
+  });
+
   describe('preResolve()', () => {
     it('should resolve script reference and replace with output', async () => {
       const loader = createMockLoader({ analyzer: mockScriptTool });
