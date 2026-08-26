@@ -23,6 +23,10 @@ export {
   resetDefaultShellVerifyExecutor,
 } from './shell-verify-executor.js';
 
+// `shell-command-allowlist.js` is deliberately NOT re-exported here. Its only
+// production consumer is the executor beside it, which imports it directly, and
+// widening the barrel would add exports nothing reads.
+
 // Message formatting services (extracted from ShellVerificationStage)
 export type {
   GateShellVerifyResult,

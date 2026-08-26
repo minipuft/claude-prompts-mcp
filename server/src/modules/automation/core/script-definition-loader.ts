@@ -472,7 +472,13 @@ export class ScriptToolDefinitionLoader {
     // The Zod schema transforms 'parameter_match' -> 'schema_match' and logs deprecation warning
     // So yamlConfig.trigger is already transformed if it was 'parameter_match'
     let trigger = yamlConfig.trigger ?? DEFAULT_EXECUTION_CONFIG.trigger;
-    let confirm = yamlConfig.confirm ?? DEFAULT_EXECUTION_CONFIG.confirm ?? false;
+    // Final fallback is `true`, not `false`. `ExecutionConfig.confirm` is optional, so this
+    // branch is reachable the moment `DEFAULT_EXECUTION_CONFIG.confirm` is left unset -- and
+    // it used to resolve to `false`, silently contradicting that constant's own "Confirmation
+    // is required by default (secure by default)" and the schema's `.default(true)`. A script
+    // tool runs an author-supplied file through an interpreter, so an unspecified confirmation
+    // setting must deny, never auto-run.
+    let confirm = yamlConfig.confirm ?? DEFAULT_EXECUTION_CONFIG.confirm ?? true;
 
     // Handle deprecated mode field migration
     if (yamlConfig.mode !== undefined && yamlConfig.mode !== 'auto') {

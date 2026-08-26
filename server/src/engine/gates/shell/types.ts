@@ -76,6 +76,13 @@ export interface ShellVerifyResult {
   command: string;
   /** Whether the command timed out */
   timedOut?: boolean;
+  /**
+   * Set when the command was refused by the operator allowlist and therefore
+   * never ran. Distinct from a failure: `passed: false` with `refused` unset
+   * means the command ran and returned non-zero, which is a verified negative.
+   * A consumer reporting results must not present a refusal as a verification.
+   */
+  refused?: boolean;
 }
 
 /**
@@ -113,6 +120,12 @@ export interface ShellVerifyExecutorConfig {
   defaultWorkingDir?: string;
   /** Enable debug logging */
   debug?: boolean;
+  /**
+   * Commands this executor may run. Omit to read `MCP_SHELL_VERIFY_ALLOWLIST`
+   * from the environment at each execution; pass a list to override it
+   * (tests, and embedders that hold their own operator configuration).
+   */
+  allowlist?: readonly string[];
 }
 
 /**

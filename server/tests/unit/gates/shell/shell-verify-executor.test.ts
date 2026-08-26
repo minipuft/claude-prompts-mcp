@@ -20,13 +20,26 @@ import {
   SHELL_VERIFY_DEFAULT_TIMEOUT,
   SHELL_VERIFY_MAX_TIMEOUT,
 } from '../../../../src/engine/gates/constants.js';
+import { SHELL_VERIFY_ALLOW_ALL } from '../../../../src/engine/gates/shell/shell-command-allowlist.js';
 
 describe('ShellVerifyExecutor', () => {
   let executor: ShellVerifyExecutor;
 
+  // This suite exercises PROCESS MECHANICS -- exit codes, timeouts, output capture,
+  // environment filtering -- not authorization. Since 2026-08-25 the executor refuses
+  // any command the operator has not allowlisted, so every executor built here declares
+  // that it accepts any command. Authorization is covered by
+  // tests/unit/gates/shell-command-allowlist.test.ts. Leaving these to rely on an
+  // implicit default would let the security control silently decide their outcome.
+  const ALLOW_ALL: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
+
   beforeEach(() => {
     resetDefaultShellVerifyExecutor();
-    executor = createShellVerifyExecutor({ debug: false, defaultTimeout: 5000 });
+    executor = createShellVerifyExecutor({
+      debug: false,
+      defaultTimeout: 5000,
+      allowlist: ALLOW_ALL,
+    });
   });
 
   afterEach(() => {
@@ -35,13 +48,14 @@ describe('ShellVerifyExecutor', () => {
 
   describe('constructor and configuration', () => {
     it('should use default timeout when not specified', () => {
-      const defaultExecutor = createShellVerifyExecutor();
+      const defaultExecutor = createShellVerifyExecutor({ allowlist: ALLOW_ALL });
       // Verify by running a command and checking it doesn't use 0 timeout
       expect(defaultExecutor).toBeDefined();
     });
 
     it('should accept custom configuration', () => {
       const customExecutor = createShellVerifyExecutor({
+        allowlist: ALLOW_ALL,
         defaultTimeout: 10000,
         maxTimeout: 30000,
         defaultWorkingDir: '/tmp',
@@ -135,6 +149,7 @@ describe('ShellVerifyExecutor', () => {
     it('should set timedOut flag when command exceeds timeout', async () => {
       const shortTimeoutExecutor = createShellVerifyExecutor({
         defaultTimeout: 100, // Very short timeout
+        allowlist: ALLOW_ALL,
       });
 
       const result = await shortTimeoutExecutor.execute({
@@ -157,7 +172,7 @@ describe('ShellVerifyExecutor', () => {
     });
 
     it('should clamp timeout to maximum allowed', async () => {
-      const executor = createShellVerifyExecutor({ maxTimeout: 1000 });
+      const executor = createShellVerifyExecutor({ maxTimeout: 1000, allowlist: ALLOW_ALL });
 
       // Even with very long timeout, should be clamped
       const result = await executor.execute({
@@ -170,6 +185,7 @@ describe('ShellVerifyExecutor', () => {
 
     it('should use default timeout from config when not specified', async () => {
       const customExecutor = createShellVerifyExecutor({
+        allowlist: ALLOW_ALL,
         defaultTimeout: 2000,
       });
 
@@ -267,6 +283,7 @@ describe('ShellVerifyExecutor', () => {
 
     it('should use default working directory when not specified', async () => {
       const executor = createShellVerifyExecutor({
+        allowlist: ALLOW_ALL,
         defaultWorkingDir: '/tmp',
       });
 

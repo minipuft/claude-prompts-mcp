@@ -16,6 +16,7 @@
  */
 
 import { SHELL_VERIFY_DEFAULT_TIMEOUT, SHELL_VERIFY_MAX_TIMEOUT } from '../constants.js';
+import { isCommandAllowed, loadShellVerifyAllowlist } from './shell-command-allowlist.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
 import type { ShellVerifyGate, ShellVerifyResult, ShellVerifyExecutorConfig } from './types.js';
@@ -48,12 +49,26 @@ export class ShellVerifyExecutor {
   private readonly maxTimeout: number;
   private readonly defaultWorkingDir: string;
   private readonly debug: boolean;
+  private readonly allowlist: readonly string[] | undefined;
 
   constructor(config: ShellVerifyExecutorConfig = {}) {
     this.defaultTimeout = config.defaultTimeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT;
     this.maxTimeout = config.maxTimeout ?? SHELL_VERIFY_MAX_TIMEOUT;
     this.defaultWorkingDir = config.defaultWorkingDir ?? process.cwd();
     this.debug = config.debug ?? false;
+    this.allowlist = config.allowlist;
+  }
+
+  /**
+   * Resolve the allowlist for this call.
+   *
+   * Read per execution rather than cached at construction because the default
+   * executor is a process-lifetime singleton, and a value captured once would
+   * make the control untestable and unable to follow a re-read of the operator's
+   * environment. An injected list (tests, embedders) always wins.
+   */
+  private resolveAllowlist(): readonly string[] {
+    return this.allowlist ?? loadShellVerifyAllowlist();
   }
 
   /**
@@ -73,6 +88,23 @@ export class ShellVerifyExecutor {
         stderr: 'Empty command provided',
         durationMs: 0,
         command: command ?? '',
+      };
+    }
+
+    // The gate is refused, not downgraded to advisory. A gate that reports as
+    // passed while having verified nothing is the defect this repository already
+    // records fixing; and one hostile gate must not take the server down, so the
+    // refusal is scoped to this gate and execution continues.
+    const decision = isCommandAllowed(command, this.resolveAllowlist());
+    if (!decision.allowed) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr: `Shell verification refused: ${decision.reason ?? 'command not permitted'}`,
+        durationMs: 0,
+        command,
       };
     }
 

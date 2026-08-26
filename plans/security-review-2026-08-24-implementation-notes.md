@@ -58,26 +58,41 @@ Layering, strongest first:
 
 ## Deviations
 
-| ID  | Tier | Authored premise | Measured evidence |
-| --- | ---- | ---------------- | ----------------- |
-| —   | —    | —                | —                 |
+| ID       | Tier | Authored premise                                               | Measured evidence                                                                                                                                                                                                                                                             |
+| -------- | ---- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEV-T1-1 | 1.1  | `gate-schema.ts` at `src/engine/gates/gate-schema.ts`          | Path is `src/engine/gates/core/gate-schema.ts`. Line numbers (359, 116, 120, 122) were all exact — only the directory drifted                                                                                                                                                 |
+| DEV-T1-2 | 1.1  | C3 anchored at `infra/config/index.ts:188`                     | `:188` is `DEFAULT_RESOURCES_CONFIG.gates.enabled` (do gate _resources_ load). The gate _system_ default is `DEFAULT_GATES_CONFIG.enabled` at `:170`. Both `true`, so C3 stands; the citation was wrong                                                                       |
+| DEV-T1-3 | 1.1  | C4: `shell_env` is author-controlled, framed as leakage        | Refined. `buildSafeEnvironment` filters the _parent_ env through `SAFE_ENV_ALLOWLIST` before every spawn, so outbound leakage is already handled. The author's `shell_env` is merged last, unfiltered — that is _injection_, and it survives the allowlist. Raised as row 1.6 |
+| DEV-T1-4 | 1.2  | "place a gate, run a prompt" implies the gate must be selected | Stronger than authored: the gate ran **without being named** and with **no `gate_verdict`**. Placing the file is the whole exploit                                                                                                                                            |
+| DEV-T1-5 | 1.4  | Script tools need "the same treatment" as `shell_verify`       | They do not. The script path passes an argv **array**, never reaching `sh -c`, and already refuses unless `confirm: false`. The repo held the right control on the weaker sink and none on the stronger one                                                                   |
+| DEV-T1-6 | 1.2  | —                                                              | **Probe harness defect, self-inflicted.** A stray `config.json` left in `MCP_WORKSPACE` from an earlier arm was auto-discovered by the server and hung every subsequent `tools/call`. Three "results" recorded before this was caught were vacuous — see the ledger           |
 
 ## Findings ledger
 
 Format is defined in the plan. `SUSPECTED` never reports as `CONFIRMED`.
 
-| ID  | Class                  | Status    | Summary                                                                                                                                       |
-| --- | ---------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1  | Elevation of privilege | CONFIRMED | `shell_verify` runs an author string via `sh -c` (`process.ts:381`)                                                                           |
-| C2  | Elevation of privilege | CONFIRMED | Gate with no `activation` is always active; warning only (`gate-schema.ts:359`)                                                               |
-| C3  | Configuration          | CONFIRMED | Gate system on by default (`infra/config/index.ts:188`)                                                                                       |
-| C4  | Elevation of privilege | CONFIRMED | `shell_command` unconstrained; `shell_working_dir`/`shell_env` author-controlled                                                              |
-| C5  | Documentation          | CONFIRMED | `CLAUDE.md:247` claims the server does not execute shell commands; it does                                                                    |
-| C6  | Configuration          | CONFIRMED | 5 of 25 shipped gates carry no `activation` block, so "always active" is the shipped norm for 20% — a hostile gate omitting it looks ordinary |
-| S1  | Tampering              | SUSPECTED | Path traversal on resource ids — grep found no guard, unprobed (Tier 2.1)                                                                     |
+| ID  | Class                  | Status    | Summary                                                                                                                                                                                                                                              |
+| --- | ---------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | Elevation of privilege | CONFIRMED | `shell_verify` runs an author string via `sh -c` (`process.ts:381`)                                                                                                                                                                                  |
+| C2  | Elevation of privilege | CONFIRMED | Gate with no `activation` is always active; warning only (`gate-schema.ts:359`)                                                                                                                                                                      |
+| C3  | Configuration          | CONFIRMED | Gate system on by default (`infra/config/index.ts:188`)                                                                                                                                                                                              |
+| C4  | Elevation of privilege | CONFIRMED | `shell_command` unconstrained; `shell_working_dir`/`shell_env` author-controlled                                                                                                                                                                     |
+| C5  | Documentation          | CLOSED    | `CLAUDE.md:247` claimed the server does not execute shell commands; it does. Rewritten 2026-08-25 to state the capability and name its control                                                                                                       |
+| C6  | Configuration          | CONFIRMED | 5 of 25 shipped gates carry no `activation` block, so "always active" is the shipped norm for 20% — a hostile gate omitting it looks ordinary                                                                                                        |
+| C7  | Elevation of privilege | CLOSED    | `shell_verify` had no allowlist and the operator had no dial. Closed 2026-08-25 by `MCP_SHELL_VERIFY_ALLOWLIST`, enforced in `shell-verify-executor.ts` at the single point both authoring channels converge                                         |
+| C8  | Configuration          | CONFIRMED | `script-definition-loader.ts:475` fell back to `confirm ?? false` while the constant it reads documents "secure by default" and the schema declares `.default(true)`. Dead today, one edit from live. Fixed 2026-08-25                               |
+| S2  | Configuration          | SUSPECTED | `gates.enabled=false` may only narrow the advertised `inputSchema` rather than stop execution: the master switch short-circuits `GateService.getGuidanceText`, but `20-gate-review-stage.ts:168` loads gate definitions directly. Unprobed — row 1.5 |
+| S1  | Tampering              | SUSPECTED | Path traversal on resource ids — grep found no guard, unprobed (Tier 2.1)                                                                                                                                                                            |
 
 ## Validation ledger
 
-| Date       | Tier | Command                          | Result |
-| ---------- | ---- | -------------------------------- | ------ |
-| 2026-08-24 | —    | plan authored; no probes run yet | —      |
+| Date       | Tier | Command                                                            | Result                                                                                       |
+| ---------- | ---- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| 2026-08-24 | —    | plan authored; no probes run yet                                   | —                                                                                            |
+| 2026-08-25 | 1.2  | live STDIO probe, gate with no `activation`, benign marker         | **marker written** — arbitrary execution from a dropped file, gate unnamed, no verdict       |
+| 2026-08-25 | 1.2  | three arms with `MCP_CONFIG_PATH` set                              | **VACUOUS** — server hung; stray workspace `config.json`. Discarded, not recorded as results |
+| 2026-08-25 | 1.3  | 3-arm re-drive (none / exact / unrelated), each asserted `calls=2` | refused / executed / refused — the dial works and is not a blanket unlock                    |
+| 2026-08-25 | 1.3  | channel-2 arms (`:: verify`), incl. `echo *` vs `echo hi > file`   | refused / refused / executed — metacharacter rule holds                                      |
+| 2026-08-25 | 1.3  | `jest tests/unit/gates/shell-command-allowlist.test.ts`            | 25/25 pass                                                                                   |
+| 2026-08-25 | 1.x  | `npm run typecheck` · `typecheck:tests:ratchet`                    | pass · 367 errors, no regressions                                                            |
+| 2026-08-25 | 1.x  | `npm run validate:all`                                             | 45/48 → after fixes: lint:ratchet OK, knip-ratchet OK, plan-row-tracking OK                  |

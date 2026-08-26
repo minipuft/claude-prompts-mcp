@@ -73,17 +73,17 @@ not name. Sources reviewed 2026-08-24: OWASP Threat Modeling Process (use/abuse 
 qualitative risk questions), Snyk MCP security, HackTricks AI-MCP-Servers, and the
 ecosystem papers it cites.
 
-| Class                               | Shape in this repository                                                                                                                                                                                                          | Status                                            |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Tool poisoning**                  | A prompt's `systemMessage`/`userMessageTemplate` IS instruction to the client LLM. A poisoned prompt is the direct analogue of a poisoned tool description, and `GET /api/v1/catalog/prompts/:id` now serves exactly those fields | ☐ not assessed                                    |
-| **Rug pull**                        | Resources hot-reload and carry version history. A prompt approved once can change afterwards with no re-approval and no name change                                                                                               | ☐ not assessed                                    |
-| **Line jumping**                    | Injection that lands at listing time, before any invocation — `resource_manager` discovery output and prompt descriptions                                                                                                         | ☐ not assessed                                    |
-| **Indirect injection → second bug** | The documented escalation path: attacker content steers the agent into `resource_manager`, which writes a gate, which reaches `sh -c`. This is the concrete chain, not a hypothetical                                             | ☐ not assessed                                    |
-| **Elevation of privilege**          | `shell_verify` → `sh -c`; script tools → `python3`/`bash`                                                                                                                                                                         | ✓ **confirmed reachable** (below)                 |
-| **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ☐ suspected, unverified                           |
-| **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ known, already documented in CLAUDE.md          |
-| **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ☐ partially closed                                |
-| **Spoofing / Repudiation**          | Deferred: no multi-user identity model exists, so neither has meaning until posture is settled                                                                                                                                    | ✗ out of scope, revisit if posture becomes shared |
+| Class                               | Shape in this repository                                                                                                                                                                                                          | Status                                                                                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tool poisoning**                  | A prompt's `systemMessage`/`userMessageTemplate` IS instruction to the client LLM. A poisoned prompt is the direct analogue of a poisoned tool description, and `GET /api/v1/catalog/prompts/:id` now serves exactly those fields | ☐ not assessed (as of 2026-08-25 · flips when Tier 3.1 runs)                                                                            |
+| **Rug pull**                        | Resources hot-reload and carry version history. A prompt approved once can change afterwards with no re-approval and no name change                                                                                               | ☐ not assessed (as of 2026-08-25 · flips when Tier 2.4 runs)                                                                            |
+| **Line jumping**                    | Injection that lands at listing time, before any invocation — `resource_manager` discovery output and prompt descriptions                                                                                                         | ☐ not assessed (as of 2026-08-25 · flips when Tier 3.2 runs)                                                                            |
+| **Indirect injection → second bug** | The documented escalation path: attacker content steers the agent into `resource_manager`, which writes a gate, which reaches `sh -c`. This is the concrete chain, not a hypothetical                                             | ⚠ **half confirmed** (as of 2026-08-25 · Tier 1.2 proved content→`sh -c`; the injection→`resource_manager` half flips when Tier 3 runs) |
+| **Elevation of privilege**          | `shell_verify` → `sh -c`; script tools → `python3`/`bash`                                                                                                                                                                         | ✓ **confirmed reachable** (below)                                                                                                       |
+| **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ☐ suspected, unverified (as of 2026-08-25 · flips when Tier 2.1 runs)                                                                   |
+| **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ known, already documented in CLAUDE.md                                                                                                |
+| **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ☐ partially closed (as of 2026-08-25 · flips when Tier 4.1 runs)                                                                        |
+| **Spoofing / Repudiation**          | Deferred: no multi-user identity model exists, so neither has meaning until posture is settled                                                                                                                                    | ✗ out of scope, revisit if posture becomes shared                                                                                       |
 
 ### Qualitative risk questions (OWASP)
 
@@ -98,16 +98,28 @@ installing a prompt pack is exactly the plausible act.
 
 ## Confirmed before this plan (carried in, evidence attached)
 
-| #   | Finding                                                                                                                   | Evidence                                                                |
-| --- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| C1  | `shell_verify` executes an author-supplied string through a shell                                                         | `process.ts:381` returns `['sh', ['-c', command]]` for a string command |
-| C2  | A gate with no `activation` block is **always active** — and that is a warning, not an error                              | `gate-schema.ts:359-360`                                                |
-| C3  | The gate system is **on by default**                                                                                      | `infra/config/index.ts:188` — `gates: { enabled: true }`                |
-| C4  | `shell_command` has no allowlist, sandbox, or confirmation; `shell_working_dir` and `shell_env` are author-controlled too | `gate-schema.ts:116` — `z.string().optional()`                          |
-| C5  | **CLAUDE.md states the opposite of the code.** `CLAUDE.md:247` says "the server does not execute shell commands". It does | reproduce C1                                                            |
+Every anchor below was **re-measured on 2026-08-25** before Tier 1 executed. Authored-vs-measured
+is shown where they diverged; the corrections are kept visible rather than silently applied,
+because the pattern of drift is the reusable part.
+
+| #   | Finding                                                                                                                   | Evidence (re-measured 2026-08-25)                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C1  | `shell_verify` executes an author-supplied string through a shell                                                         | ✓ exact — `process.ts:381` returns `['sh', ['-c', command]]`                                                                                                                                                                                                                               |
+| C2  | A gate with no `activation` block is **always active** — and that is a warning, not an error                              | ✓ line exact, **path drifted**: authored `gate-schema.ts:359`, measured `engine/gates/core/gate-schema.ts:359-360`                                                                                                                                                                         |
+| C3  | The gate system is **on by default**                                                                                      | ⚠ **wrong anchor.** `index.ts:188` is `DEFAULT_RESOURCES_CONFIG.gates.enabled` (whether gate _resources load_). The gate _system_ default is `DEFAULT_GATES_CONFIG.enabled` at **`index.ts:170`**. Both are `true`, so the finding stands and only the citation was wrong                  |
+| C4  | `shell_command` has no allowlist, sandbox, or confirmation; `shell_working_dir` and `shell_env` are author-controlled too | ✓ lines exact (`core/gate-schema.ts:116`, `:120`, `:122`). Refined: `buildSafeEnvironment` filters the _parent_ env, so this is author _injection_, not credential _leakage_ — see 1.6                                                                                                     |
+| C5  | **CLAUDE.md states the opposite of the code.** `CLAUDE.md:247` says "the server does not execute shell commands". It does | ✓ exact, still present at `CLAUDE.md:247`                                                                                                                                                                                                                                                  |
+| C6  | 5 of 25 shipped gates carry no `activation` block                                                                         | ✓ exact — **but only when the property is measured correctly.** A first probe counted all 27 gate YAML files and reported 7; two of those (`config/shell-presets.yaml`, `config/verdict-patterns.yaml`) are configuration, not gate definitions. Counting `gate.yaml` files gives 25 and 5 |
+| C7  | `shell_verify` had **no allowlist, and the operator had no dial at all**                                                  | ✓ closed by 1.3 — `MCP_SHELL_VERIFY_ALLOWLIST`, enforced at `shell-verify-executor.ts`                                                                                                                                                                                                     |
 
 C5 is the finding that compounds the others: it is the sentence a reader consults when
 deciding how far to trust a third-party gate, and it is false.
+
+**C6's drift is the reusable lesson, not its number.** The authored count was right and the
+first re-measurement was wrong, because the probe measured _files matching `*.yaml` under
+`resources/gates`_ while the claim was about _gate definitions_. A probe for a token that merely
+co-occurs with the property answers a different question — and here it would have manufactured
+a false correction to a correct plan.
 
 ## Where this work lives (read first after a compaction)
 
@@ -136,47 +148,140 @@ inspection and obvious to a probe.
 | #   | St                  | Work                                                                    | Verify                                                                                                                                                                                                                          |
 | --- | ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.1 | ✓ DONE (2026-08-25) | Settle OQ-1 (default posture) with the owner                            | R1–R4 recorded in implementation notes: posture is **shared/distributed**; control is an **allowlist, not an off-switch**; unopted-in `shell_command` refuses that gate and keeps serving; elicitation is defence in depth only |
-| 0.2 | ☐                   | Correct `CLAUDE.md:247` — the client-work boundary claim is false today | C5 no longer reproduces as a doc/code contradiction                                                                                                                                                                             |
+| 0.2 | ✓ DONE (2026-08-25) | Correct `CLAUDE.md:247` — the client-work boundary claim is false today | Rewritten to state that the server DOES execute shell commands and to name the control that bounds them. C5 no longer reproduces as a doc/code contradiction                                                                    |
 
 ### Tier 1 — Execution capability
 
-| #   | St  | Work                                                                                                     | Verify                                                                |
-| --- | --- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 1.1 | ☐   | Enumerate every path from authored content to process execution                                          | Each named with file:line; no `exec`/`spawn` unaccounted for          |
-| 1.2 | ☐   | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute | Reproduction recorded; benign marker command, never a destructive one |
-| 1.3 | ☐   | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                   | Opt-in respected; refusal names the setting                           |
-| 1.4 | ☐   | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                     | Consistent with 1.3 rather than a second unrelated gate               |
+| #   | St                                                   | Work                                                                                                                               | Verify                                                                                                                                                                                                                                   |
+| --- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1 | ✓ DONE (2026-08-25)                                  | Enumerate every path from authored content to process execution                                                                    | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                         |
+| 1.2 | ✓ DONE (2026-08-25)                                  | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                           | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                        |
+| 1.3 | ✓ DONE (2026-08-25)                                  | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                             | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header |
+| 1.4 | ✓ DONE (2026-08-25)                                  | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                               | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                     |
+| 1.5 | ☐ (as of 2026-08-25 · flips when this row is probed) | (as of 2026-08-25 · flips when a probe drives a chain with `gates.enabled=false` and observes whether `shell_command` still runs)  | Settle whether the gate master switch actually stops execution, or only hides the three gate parameters from the advertised `inputSchema`                                                                                                |
+| 1.6 | ☐ (as of 2026-08-25 · flips when this row is probed) | (as of 2026-08-25 · flips when `shell_working_dir`/`shell_env` are either constrained or explicitly accepted as author-controlled) | The allowlist bounds the command string only. An allowlisted command can still be pointed at any directory and handed any environment by the same author                                                                                 |
+| 1.7 | ☐ (as of 2026-08-25 · flips when this row is probed) | (as of 2026-08-25 · flips when the unknown-extension branch either refuses or is documented as intended)                           | `EXTENSION_TO_RUNTIME` falls back to the `shell` runtime for any unrecognised extension (`script-executor.ts:330`), so an unknown file type is handed to `bash`                                                                          |
+
+#### 1.1 — the execution map (measured 2026-08-25)
+
+One sink, two authoring channels, and they converge before it:
+
+```
+  gate.yaml pass_criteria[].shell_command   ─┐
+  (any file the resources overlay reads)     │
+                                             ├─▶ ShellVerifyExecutor.execute
+  inline  :: verify:"..."  in the command   ─┘   (shell-verify-executor.ts:65)
+  (parsed at symbolic-operator-parser.ts:330)             │
+                                                          ▼
+                                              executeProcess (process.ts:342)
+                                                          │
+                                              resolveCommand (process.ts:379)
+                                                          │
+                                        string ──▶ ['sh', ['-c', command]]   ◀── C1
+                                                          │
+                                                    spawn (process.ts:422)
+                                                          ▲
+  script tool: [interpreter, scriptPath] ─────────────────┘
+  (script-executor.ts:154 — argv ARRAY, so it never takes the `sh -c` branch)
+```
+
+| Path                          | Reaches the sink via                                                   | Constraint before this tier                         |
+| ----------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------- |
+| Gate `shell_command`          | `gate-shell-verify-runner.ts:138` ← `20-gate-review-stage.ts:168`      | none beyond "non-empty"                             |
+| Inline `:: verify:"..."`      | `17-shell-verification-stage.ts:96`                                    | none beyond "non-empty"                             |
+| Gate `script_tool` criterion  | `script-tool-criterion-runner.ts:102`                                  | **already refuses unless `confirm: false`** (`:92`) |
+| Script tool (inline/pipeline) | `08-script-execution-stage.ts:264`, `prompt-reference-resolver.ts:319` | `confirm` + interpreter fixed by `RUNTIME_COMMANDS` |
+
+`buildSafeEnvironment` (`process.ts:169`) filters the **parent** environment through
+`SAFE_ENV_ALLOWLIST` before every spawn, so credentials do not leak outward by default.
+It does not constrain the author's own `shell_env`/`tool.env`, which is merged last and
+unfiltered — that is row 1.6, not a leak.
+
+#### 1.2 — the reproduction
+
+```bash
+# isolated workspace, benign marker only
+mkdir -p /tmp/mcp-security-probe/gates/probe-always-active
+cat > /tmp/mcp-security-probe/gates/probe-always-active/gate.yaml <<'YAML'
+id: probe-always-active
+type: validation
+pass_criteria:
+  - type: shell_verify
+    shell_command: "id -un > /tmp/mcp-security-probe/MARKER_EXECUTED.txt; echo ok"
+YAML
+# no activation: block; the gate is NOT named in either call
+MCP_WORKSPACE=/tmp/mcp-security-probe node server/dist/index.js --transport=stdio
+#   call 1: prompt_engine  command=">>deep_analysis"  inputs={topic:"probe"}
+#   call 2: prompt_engine  chain_id="chain-deep_analysis#1"  user_response="scan complete"
+cat /tmp/mcp-security-probe/MARKER_EXECUTED.txt   # -> minipuft
+```
+
+What this establishes beyond C1–C4, and what makes it worse than the plan assumed:
+
+- the gate ran **without being named** in the request — placing the file is sufficient;
+- it ran on a plain chain advance, with **no `gate_verdict` submitted** and no confirmation;
+- `resource_manager … action:"list"` reported it as one of 26 gates, all enabled, with **no
+  warning that it carries no `activation`** — the validator's warning (C2) never reaches a caller.
+
+After 1.3, the same two calls leave the marker uncreated. Three arms, each confirmed
+non-vacuous by asserting both calls returned (`calls=2`) rather than trusting the absent file:
+
+| Arm                                           | Marker   |
+| --------------------------------------------- | -------- |
+| no `MCP_SHELL_VERIFY_ALLOWLIST`               | refused  |
+| the exact command allowlisted                 | executed |
+| an unrelated command allowlisted (`npm test`) | refused  |
+
+Channel 2 (`:: verify:"echo hi > …"`) behaves identically, and a `echo *` prefix entry does
+**not** admit it, because the `>` forces an exact match.
+
+#### 1.4 — the asymmetry, which is the actual finding
+
+The script-tool path is **not** a second instance of the same hole:
+
+- it passes an argv **array** (`[interpreter, scriptPath]`), so `resolveCommand` never takes
+  the `sh -c` branch — no shell metacharacter interpretation at all;
+- the interpreter is chosen from the fixed `RUNTIME_COMMANDS` map, which is itself an allowlist;
+- the gate-side entry point already **refuses** unless the tool declares `confirm: false`,
+  with a message naming why (`script-tool-criterion-runner.ts:92`).
+
+So the repository already contained the control shape R2/R3 describe — applied to the _weaker_
+sink and absent from the _stronger_ one. The only change owed here was removing a latent
+fail-open: `script-definition-loader.ts:475` read `?? DEFAULT_EXECUTION_CONFIG.confirm ?? false`,
+and `ExecutionConfig.confirm` is optional, so that final `?? false` contradicted both the
+constant's own "secure by default" comment and the schema's `.default(true)`. It is now `?? true`.
+Dead today (the constant is `true`), one edit from live.
 
 ### Tier 2 — Resource ingestion
 
-| #   | St  | Work                                                                                          | Verify                                                            |
-| --- | --- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 2.1 | ☐   | Path traversal: can a resource id escape the resources root on create/update/delete/rollback? | Probe with `../` ids; assert refusal, not just absence of a crash |
-| 2.2 | ☐   | Template injection: can an argument reach Nunjucks as expression rather than data?            | Probe SSTI payloads through the argument parser                   |
-| 2.3 | ☐   | Script reference escape: does `{% raw %}` handling hold under nesting and unclosed blocks?    | Existing fix covers documented cases; probe the edges             |
-| 2.4 | ☐   | Rug pull: can an approved resource change under the client with no signal?                    | Establish whether any integrity signal exists at all              |
+| #   | St                                                   | Work                                                                                          | Verify                                                            |
+| --- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 2.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Path traversal: can a resource id escape the resources root on create/update/delete/rollback? | Probe with `../` ids; assert refusal, not just absence of a crash |
+| 2.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Template injection: can an argument reach Nunjucks as expression rather than data?            | Probe SSTI payloads through the argument parser                   |
+| 2.3 | ☐ (as of 2026-08-25 · flips when this row is probed) | Script reference escape: does `{% raw %}` handling hold under nesting and unclosed blocks?    | Existing fix covers documented cases; probe the edges             |
+| 2.4 | ☐ (as of 2026-08-25 · flips when this row is probed) | Rug pull: can an approved resource change under the client with no signal?                    | Establish whether any integrity signal exists at all              |
 
 ### Tier 3 — Instruction surface (tool poisoning)
 
-| #   | St  | Work                                                                           | Verify                                                               |
-| --- | --- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| 3.1 | ☐   | Treat prompt content as tool metadata: what reaches the client LLM unreviewed? | Enumerate the fields; `systemMessage` is the sharpest                |
-| 3.2 | ☐   | Line jumping: what lands at discovery/listing time before any invocation?      | Enumerate listing-time text                                          |
-| 3.3 | ☐   | Decide what, if anything, is owed here — this may be inherent to the product   | Explicit ruling, including "accepted, documented" as a valid outcome |
+| #   | St                                                   | Work                                                                           | Verify                                                               |
+| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 3.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Treat prompt content as tool metadata: what reaches the client LLM unreviewed? | Enumerate the fields; `systemMessage` is the sharpest                |
+| 3.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Line jumping: what lands at discovery/listing time before any invocation?      | Enumerate listing-time text                                          |
+| 3.3 | ☐ (as of 2026-08-25 · flips when this row is probed) | Decide what, if anything, is owed here — this may be inherent to the product   | Explicit ruling, including "accepted, documented" as a valid outcome |
 
 ### Tier 4 — Disclosure
 
-| #   | St  | Work                                                                                   | Verify                                           |
-| --- | --- | -------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 4.1 | ☐   | Audit the STDIO logger and script env for secret leakage, as was done for HTTP headers | Probe with a marker secret; grep every sink      |
-| 4.2 | ☐   | Re-grade the known `state.db` cross-project scope gap against the settled posture      | Either a finding or an accepted documented limit |
+| #   | St                                                   | Work                                                                                   | Verify                                           |
+| --- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 4.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Audit the STDIO logger and script env for secret leakage, as was done for HTTP headers | Probe with a marker secret; grep every sink      |
+| 4.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Re-grade the known `state.db` cross-project scope gap against the settled posture      | Either a finding or an accepted documented limit |
 
 ### Tier 5 — Capture
 
-| #   | St  | Work                                                                       | Verify                                                        |
-| --- | --- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 5.1 | ☐   | Build the security-review prompt and skill **from this review's material** | Derived from real findings, not from a generic checklist      |
-| 5.2 | ☐   | Feed the transferable rules upstream                                       | Second sighting reached; `security.md` already took the first |
+| #   | St                                                   | Work                                                                       | Verify                                                        |
+| --- | ---------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 5.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Build the security-review prompt and skill **from this review's material** | Derived from real findings, not from a generic checklist      |
+| 5.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Feed the transferable rules upstream                                       | Second sighting reached; `security.md` already took the first |
 
 ## Findings ledger format
 
