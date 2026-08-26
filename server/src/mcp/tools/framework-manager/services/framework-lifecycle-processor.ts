@@ -13,6 +13,7 @@ import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
+import { assertPathInside } from '#shared/utils/path-containment.js';
 
 /**
  * Optional framework fields that can be copied directly from input to framework data.
@@ -250,7 +251,11 @@ export class FrameworkLifecycleProcessor {
 
     // Get framework directory path
     const serverRoot = this.ctx.configManager.getServerRoot();
-    const frameworkDir = path.join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
+    const frameworksRoot = path.join(serverRoot, 'resources', 'frameworks');
+    const frameworkDir = path.join(frameworksRoot, id.toLowerCase());
+    // This rebuilds the path rather than calling `getFrameworkDir`, so it needs its own
+    // assertion -- a guard on the shared helper alone would leave this delete unguarded.
+    assertPathInside(frameworksRoot, frameworkDir, 'framework id');
 
     if (!existsSync(frameworkDir)) {
       return this.error(`Framework directory not found: ${frameworkDir}`);

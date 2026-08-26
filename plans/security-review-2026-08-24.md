@@ -76,11 +76,11 @@ ecosystem papers it cites.
 | Class                               | Shape in this repository                                                                                                                                                                                                          | Status                                                                                                                                  |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Tool poisoning**                  | A prompt's `systemMessage`/`userMessageTemplate` IS instruction to the client LLM. A poisoned prompt is the direct analogue of a poisoned tool description, and `GET /api/v1/catalog/prompts/:id` now serves exactly those fields | ☐ not assessed (as of 2026-08-25 · flips when Tier 3.1 runs)                                                                            |
-| **Rug pull**                        | Resources hot-reload and carry version history. A prompt approved once can change afterwards with no re-approval and no name change                                                                                               | ☐ not assessed (as of 2026-08-25 · flips when Tier 2.4 runs)                                                                            |
+| **Rug pull**                        | Resources hot-reload and carry version history. A prompt approved once can change afterwards with no re-approval and no name change                                                                                               | ✓ **confirmed** — no integrity or approval signal exists at all (Tier 2.4)                                                              |
 | **Line jumping**                    | Injection that lands at listing time, before any invocation — `resource_manager` discovery output and prompt descriptions                                                                                                         | ☐ not assessed (as of 2026-08-25 · flips when Tier 3.2 runs)                                                                            |
 | **Indirect injection → second bug** | The documented escalation path: attacker content steers the agent into `resource_manager`, which writes a gate, which reaches `sh -c`. This is the concrete chain, not a hypothetical                                             | ⚠ **half confirmed** (as of 2026-08-25 · Tier 1.2 proved content→`sh -c`; the injection→`resource_manager` half flips when Tier 3 runs) |
 | **Elevation of privilege**          | `shell_verify` → `sh -c`; script tools → `python3`/`bash`                                                                                                                                                                         | ✓ **confirmed reachable** (below)                                                                                                       |
-| **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ☐ suspected, unverified (as of 2026-08-25 · flips when Tier 2.1 runs)                                                                   |
+| **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ✓ **CONFIRMED then CLOSED** — two vectors reproduced, containment assertion landed (Tier 2.1)                                           |
 | **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ known, already documented in CLAUDE.md                                                                                                |
 | **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ☐ partially closed (as of 2026-08-25 · flips when Tier 4.1 runs)                                                                        |
 | **Spoofing / Repudiation**          | Deferred: no multi-user identity model exists, so neither has meaning until posture is settled                                                                                                                                    | ✗ out of scope, revisit if posture becomes shared                                                                                       |
@@ -254,12 +254,60 @@ Dead today (the constant is `true`), one edit from live.
 
 ### Tier 2 — Resource ingestion
 
-| #   | St                                                   | Work                                                                                          | Verify                                                            |
-| --- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 2.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Path traversal: can a resource id escape the resources root on create/update/delete/rollback? | Probe with `../` ids; assert refusal, not just absence of a crash |
-| 2.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Template injection: can an argument reach Nunjucks as expression rather than data?            | Probe SSTI payloads through the argument parser                   |
-| 2.3 | ☐ (as of 2026-08-25 · flips when this row is probed) | Script reference escape: does `{% raw %}` handling hold under nesting and unclosed blocks?    | Existing fix covers documented cases; probe the edges             |
-| 2.4 | ☐ (as of 2026-08-25 · flips when this row is probed) | Rug pull: can an approved resource change under the client with no signal?                    | Establish whether any integrity signal exists at all              |
+| #   | St                  | Work                                                                                                                              | Verify                                                                                                                                                                                                                                     |
+| --- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2.1 | ✓ DONE (2026-08-25) | Path traversal: can a resource id escape the resources root on create/update/delete/rollback?                                     | **S1 CONFIRMED on two vectors, both now closed.** Reproduced live with benign files; refused after the fix with the escape target empty and all three calls answered. See the reproduction below                                           |
+| 2.2 | ⚠ PARTIAL           | Template injection: can an argument reach Nunjucks as expression rather than data?                                                | **Refuted on the direct path**: `{{ 7*7 }}` supplied as an argument value rendered literally as `{{ 7*7 }}`, not `49`. Arguments insert as data. The chain step-output path was NOT settled — split out as row 2.5 rather than claimed     |
+| 2.3 | ☐                   | (as of 2026-08-25 · flips when `{% raw %}` is probed under nesting and an unclosed block)                                         | Script reference escape: existing fix covers documented cases; the edges are unprobed. `script-reference-resolver.ts:84-90` carries both `RAW_BLOCK_PATTERN` and `RAW_OPEN_PATTERN`, so the unclosed case is at least contemplated in code |
+| 2.4 | ✓ DONE (2026-08-25) | Rug pull: can an approved resource change under the client with no signal?                                                        | **No integrity or approval signal exists.** Zero hits for checksum/integrity/signature/approve/trusted/fingerprint across `modules/resources/` and `modules/prompts/`. The only hashing is observability — see below                       |
+| 2.5 | ☐                   | (as of 2026-08-25 · flips when a chain step's captured output is shown to be rendered as a template rather than inserted as data) | Split from 2.2. Chain steps pass captured output forward; whether that output is ever re-rendered by Nunjucks is the remaining SSTI question, and the probe run did not surface the payload in observable output either way                |
+| 2.6 | ☐                   | (as of 2026-08-25 · flips when the write-receipt path is shown to be derived from the actual write target)                        | The pre-fix prompt writer printed `Resource root: …/server/resources/prompts` in its receipt while writing to `/tmp`. Containment now prevents the escape, but the receipt still reports a root it does not verify it wrote under          |
+
+#### 2.1 — the reproduction (S1, settled)
+
+Two vectors, both arbitrary file write as the server user, reachable by any caller of
+`resource_manager` — which includes an agent acting on content it merely read.
+
+| Vector            | Guard before                                                | Result                                                                                                    |
+| ----------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| prompt `id`       | `/^[a-zA-Z][a-zA-Z0-9_-]*$/` (`prompt/utils/validation.ts`) | **refused** — S1 does not hold here                                                                       |
+| prompt `category` | length ≤50 only; **no format rule**                         | **wrote outside the root** and reported `✅ Prompt Created`                                               |
+| gate `id`         | **none at all**                                             | **wrote outside the root**, listed the escaped paths as "Files created", and "Registered in the registry" |
+
+```bash
+# benign marker files only, isolated workspace
+resource_manager resource_type:prompt action:create id:"probeWhere"   category:"../../../../../../../tmp/mcp-sec-escape/viacat" …
+# -> ✅ Prompt Created … Resource root: …/server/resources/prompts
+ls /tmp/mcp-sec-escape/viacat/probewhere/   # prompt.yaml  user-message.md
+```
+
+The receipt naming a root it had not written under is what makes this hard to notice from the
+tool surface alone; it is row 2.6.
+
+**The fix is a containment assertion, not another field rule.** Prompt ids were already safe
+because someone had added a regex; category and gate id were unsafe because nobody had. Adding
+two more regexes would protect exactly the two vectors found and leave the next path-bearing
+parameter unprotected. `shared/utils/path-containment.ts` asserts the property that actually
+matters — the RESOLVED path is inside the root — at each write site, so an unenumerated vector
+still cannot escape. `validateCategoryName` also gained the missing format rule, for the better
+error message rather than as the guarantee.
+
+Guarded sites: `prompt/operations/file-operations.ts` (both dir constructions),
+`gate-file-writer.ts`, `gate-lifecycle-processor.ts` (delete), `framework-file-writer.ts`
+(`getFrameworkDir`, the single chokepoint for framework read/write/delete), and
+`framework-lifecycle-processor.ts` (which rebuilds the path instead of calling that helper, so a
+guard on the helper alone would have left it open).
+
+#### 2.4 — what exists instead of an integrity signal
+
+`resource-change-tracker.ts` computes sha256 over resource content and records
+`resource_changes` with a `previousHash`. That **detects** change after the fact; it is
+observability, not approval. There is no signed, pinned, or approved state for a resource, so a
+prompt or gate approved once can change afterwards with no re-approval and no name change, and
+nothing consulted at execution time would object.
+
+Grading this against the posture (R1, shared/distributed) is deliberately left to Tier 3.3,
+which owns the "accepted, documented" outcome — the same question shaped differently.
 
 ### Tier 3 — Instruction surface (tool poisoning)
 

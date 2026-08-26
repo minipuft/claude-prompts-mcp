@@ -11,6 +11,7 @@ import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { assertPathInside } from '#shared/utils/path-containment.js';
 
 export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -201,6 +202,7 @@ export class GateLifecycleProcessor {
     // does not know, and logs when that happens.
     const gatesDir = this.ctx.configManager.getGatesDirectory();
     const gateDir = path.join(gatesDir, id);
+    assertPathInside(gatesDir, gateDir, 'gate id');
 
     if (!existsSync(gateDir)) {
       return this.error(`Gate directory not found: ${gateDir}`);

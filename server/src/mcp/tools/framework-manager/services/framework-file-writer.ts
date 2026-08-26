@@ -18,6 +18,7 @@ import {
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
+import { assertPathInside } from '#shared/utils/path-containment.js';
 import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
 import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
@@ -503,7 +504,14 @@ export class FrameworkFileWriter {
    */
   public getFrameworkDir(id: string): string {
     const serverRoot = this.configManager.getServerRoot();
-    return join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
+    const frameworksRoot = join(serverRoot, 'resources', 'frameworks');
+    const frameworkDir = join(frameworksRoot, id.toLowerCase());
+    // Every framework read, write, and delete resolves its directory here, so this is the
+    // one place the containment invariant has to hold. `toLowerCase()` does not remove a
+    // `..`, and framework ids carry no format rule -- the same shape that let a gate id
+    // write outside the resource root (reproduced 2026-08-25).
+    assertPathInside(frameworksRoot, frameworkDir, 'framework id');
+    return frameworkDir;
   }
 
   private needsPhasesFile(data: Partial<FrameworkCreationData>): boolean {

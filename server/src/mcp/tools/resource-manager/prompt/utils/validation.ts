@@ -267,6 +267,22 @@ export function validateCategoryName(category: string): void {
   if (category.length > 50) {
     throw new ValidationError('Category name must be 50 characters or less');
   }
+
+  // A category is a single directory name under the prompts root, and it reaches
+  // `path.join(promptsDir, category, id)` directly. Until 2026-08-25 this function checked
+  // only emptiness and length, so a `../`-bearing category wrote a prompt outside the root
+  // and the tool still reported success -- while `validatePromptId` right above had carried
+  // an equivalent allowlist since it was written. The asymmetry is the whole defect.
+  //
+  // The write is ALSO guarded by `assertPathInside` at the join itself, which is what makes
+  // the invariant hold for fields nobody thought to validate. This rule exists so the caller
+  // gets a message naming the parameter rather than a containment failure.
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9 _-]*$/.test(category)) {
+    throw new ValidationError(
+      'Category must start with a letter or digit and contain only alphanumeric characters, ' +
+        'spaces, underscores, and hyphens — it names one directory, so separators and ".." are rejected'
+    );
+  }
 }
 
 /**
