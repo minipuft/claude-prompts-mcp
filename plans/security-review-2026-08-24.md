@@ -109,6 +109,22 @@ installing a prompt pack is exactly the plausible act.
 C5 is the finding that compounds the others: it is the sentence a reader consults when
 deciding how far to trust a third-party gate, and it is false.
 
+## Where this work lives (read first after a compaction)
+
+|                           |                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Worktree                  | `/home/minipuft/Applications/claude-prompts-mcp-security` — created via `npm run worktree:create`, hooks verified live |
+| Branch                    | `security/review-execution`, based on the plan commit                                                                  |
+| Main checkout             | `/home/minipuft/Applications/claude-prompts-mcp`, parked on `main` and clean — do not work there                       |
+| This plan, as a PR        | #246 (plan only; the review itself is not in it)                                                                       |
+| Related open PRs          | #245 transport hardening (breaking), #247 worktree session guidance                                                    |
+| Rulings + findings ledger | `plans/security-review-2026-08-24-implementation-notes.md` — R1–R4, C1–C6, S1                                          |
+| Tier 0                    | closed. **Tier 1.1 is the next action**: enumerate every content-to-execution path with file:line                      |
+
+Probes run against a server started from this worktree, in an isolated
+`MCP_WORKSPACE`, with benign marker commands only — never a destructive payload. Set a
+non-default `PORT`: the main checkout may be running one.
+
 ## Execution plan
 
 Each tier ends with findings **reproduced against a running server**, never asserted from
@@ -117,10 +133,10 @@ inspection and obvious to a probe.
 
 ### Tier 0 — Posture ruling
 
-| #   | St  | Work                                                                    | Verify                                              |
-| --- | --- | ----------------------------------------------------------------------- | --------------------------------------------------- |
-| 0.1 | ☐   | Settle OQ-1 (default posture, fail-open vs fail-closed) with the owner  | Ruling recorded in implementation notes             |
-| 0.2 | ☐   | Correct `CLAUDE.md:247` — the client-work boundary claim is false today | C5 no longer reproduces as a doc/code contradiction |
+| #   | St                  | Work                                                                    | Verify                                                                                                                                                                                                                          |
+| --- | ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.1 | ✓ DONE (2026-08-25) | Settle OQ-1 (default posture) with the owner                            | R1–R4 recorded in implementation notes: posture is **shared/distributed**; control is an **allowlist, not an off-switch**; unopted-in `shell_command` refuses that gate and keeps serving; elicitation is defence in depth only |
+| 0.2 | ☐                   | Correct `CLAUDE.md:247` — the client-work boundary claim is false today | C5 no longer reproduces as a doc/code contradiction                                                                                                                                                                             |
 
 ### Tier 1 — Execution capability
 
