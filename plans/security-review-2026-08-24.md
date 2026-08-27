@@ -81,8 +81,8 @@ ecosystem papers it cites.
 | **Indirect injection → second bug** | The documented escalation path: attacker content steers the agent into `resource_manager`, which writes a gate, which reaches `sh -c`. This is the concrete chain, not a hypothetical                                             | ⚠ **server half confirmed; payoff downgraded** — the agent-steering half is a client property, not reproducible here. Terminal step closed by Tier 1 (Tier 3)                           |
 | **Elevation of privilege**          | `shell_verify` → `sh -c`; script tools → `python3`/`bash`                                                                                                                                                                         | ✓ **confirmed reachable** (below)                                                                                                                                                       |
 | **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ✓ **CONFIRMED then CLOSED** — two vectors reproduced, containment assertion landed (Tier 2.1)                                                                                           |
-| **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ known, already documented in CLAUDE.md                                                                                                                                                |
-| **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ☐ partially closed (as of 2026-08-25 · flips when Tier 4.1 runs)                                                                                                                        |
+| **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ **re-graded (4.2): accepted limit, and the doc was WRONG** — `version_history` is workspace-scoped; the real defect is a written-but-never-read `workspace_id` (row 4.3)              |
+| **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ✓ **CLOSED (4.1)** — no leak across 5 sinks, positive-control verified; `SAFE_ENV_ALLOWLIST` is default-deny and the server's own credentials are now test-pinned                       |
 | **Spoofing / Repudiation**          | Deferred: no multi-user identity model exists, so neither has meaning until posture is settled                                                                                                                                    | ✗ out of scope, revisit if posture becomes shared                                                                                                                                       |
 
 ### Qualitative risk questions (OWASP)
@@ -409,10 +409,62 @@ residual harm is instruction-surface poisoning — which is 3.1/3.2, and accepte
 
 ### Tier 4 — Disclosure
 
-| #   | St                                                   | Work                                                                                   | Verify                                           |
-| --- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 4.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Audit the STDIO logger and script env for secret leakage, as was done for HTTP headers | Probe with a marker secret; grep every sink      |
-| 4.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Re-grade the known `state.db` cross-project scope gap against the settled posture      | Either a finding or an accepted documented limit |
+| #   | St                  | Work                                                                                                                          | Verify                                                                                                                                                                               |
+| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 4.1 | ✓ DONE (2026-08-25) | Audit the STDIO logger and script env for secret leakage, as was done for HTTP headers                                        | **No leak found**, across 5 sinks, with a positive control proving the scan works. Server's own credentials now covered by a test                                                    |
+| 4.2 | ✓ DONE (2026-08-25) | Re-grade the known `state.db` cross-project scope gap against the settled posture                                             | **Accepted limit — and the documentation was wrong in the pessimistic direction.** `version_history` IS workspace-scoped; the real defect is a written-but-never-read `workspace_id` |
+| 4.3 | ☐                   | (as of 2026-08-25 · flips when `workspace_id` is either read by a scoped query or dropped from the four tables that write it) | An indexed column with writers and zero readers. `sqlite-persistence.md` already states the rule — _scope reads and writes together_ — and nothing enforces it                       |
+
+#### 4.1 — the leakage probe
+
+Three marker secrets were placed in the server's environment, including the one credential
+the server genuinely reads (`MCP_CATALOG_READ_TOKEN`), then four calls were driven — two
+normal, two error paths, since error messages are a classic leak sink.
+
+| Sink                         | `MCP_CATALOG_READ_TOKEN` | generic key | `AWS_SECRET_ACCESS_KEY` |
+| ---------------------------- | ------------------------ | ----------- | ----------------------- |
+| tool responses (stdout)      | 0                        | 0           | 0                       |
+| STDIO logger (stderr)        | 0                        | 0           | 0                       |
+| `logs/mcp-server.log` (95KB) | 0                        | 0           | 0                       |
+| `runtime-state/state.db`     | 0                        | 0           | 0                       |
+| any file in the workspace    | 0                        | 0           | 0                       |
+
+**The null result is not vacuous.** The same scan finds `test_default` and the bogus prompt
+id `no_such_prompt_zzz` in the log file, so it can observe what is there; and the four calls
+returned real responses including both error paths.
+
+What makes this hold is `SAFE_ENV_ALLOWLIST` (`shared/utils/process.ts`), which is
+**default-deny**: a child receives only the ~30 named variables. That means the server's own
+secrets are excluded by construction rather than by a rule anyone wrote about them — which is
+precisely why a test now pins it. Adding an `MCP_*` entry later would look harmless and would
+hand the catalog credential to every `shell_verify` command, including one authored in a
+third-party gate.
+
+Author-supplied `shell_env` / `tool.env` still merge last, unfiltered. That is injection, not
+disclosure, and it remains row 1.6.
+
+#### 4.2 — the re-grade, and a documentation correction
+
+The gap is real but **narrower than `CLAUDE.md` described**, and the description was wrong in
+both halves. Measured 2026-08-25:
+
+| CLAUDE.md claimed                                                | Measured                                                                                                                                            |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "`kv_state` is the only table that writes `workspace_id`"        | False. `version_history:168`, `execution-record-store:143`, and `run-registry:192` all write it                                                     |
+| "rollback history is shared across every project on the machine" | False. Every `version_history` query filters `tenant_id`, which `resolveContinuityScopeId` resolves to `workspaceId ?? organizationId ?? 'default'` |
+
+The actual defect is the inverse of the documented one: `workspace_id` has **writers and no
+readers** — zero queries in those three modules filter on it. An indexed column that is
+written and never consulted is worse than an absent one, because the next person to add a
+scoped query will reasonably assume it is authoritative. `.claude/rules/sqlite-persistence.md`
+already states the violated rule (_scope reads and writes together_, and _a green
+phantom-column gate proves a writer NAMES a column, not that anything consults it_), so this
+is drift between the rule and the handbook summarising it, not a missing rule. Raised as 4.3.
+
+**Graded against R1 (shared/distributed): accepted, documented limit.** The residual exposure
+is a process that resolves no workspace sharing the `'default'` bucket with every other such
+process. `CLAUDE.md` now says so, and keeps the superseded claim visible — a security claim
+that overstates exposure gets discounted wholesale once a reader checks one instance of it.
 
 ### Tier 5 — Capture
 

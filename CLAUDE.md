@@ -157,7 +157,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 ```
 prompt_engine  → PromptExecutor → PipelineBuilder → Pipeline (22 stages)
 resource_manager → Router → Handler (≤125 lines) → Processors (lifecycle/discovery/versioning)
-system_control → SystemControl Router → 11 action handlers
+system_control → SystemControl Router → 12 action handlers
 ```
 
 | Tool                           | Handler                     | Processors                                                                                                                                                                               |
@@ -166,7 +166,7 @@ system_control → SystemControl Router → 11 action handlers
 | `resource_manager` (gate)      | `GateToolHandler`           | `GateLifecycleProcessor`, `GateDiscoveryProcessor`, `GateVersioningProcessor`                                                                                                            |
 | `resource_manager` (framework) | `FrameworkToolHandler`      | `FrameworkLifecycleProcessor`, `FrameworkDiscoveryProcessor`, `FrameworkVersioningProcessor`, `FrameworkValidator`                                                                       |
 | `prompt_engine`                | `PromptExecutor`            | `PipelineBuilder` (factory), `ChainSessionRouter`                                                                                                                                        |
-| `system_control`               | `ConsolidatedSystemControl` | 11 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `status`) |
+| `system_control`               | `ConsolidatedSystemControl` | 12 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `skills_sync`, `status`) -- `skills_sync` was absent from this list while present on disk, measured 2026-08-25 |
 
 ## Runtime State (SQLite -- never commit `state.db`)
 
@@ -181,7 +181,9 @@ system_control → SystemControl Router → 11 action handlers
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates, but `version_history` and `skills_sync_manifests` are durable: `ensureSchema()` snapshots their rows, recreates, and restores by column intersection. Adding a `NOT NULL` column with no default to either makes the restore throw by design -- that change needs a real migration. Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 
-**`state.db` is shared across projects, but workspace isolation is delivered by `kv_state` alone.** One file serves every project, so isolation would have to come from `workspace_id` -- and `kv_state` is the only table that writes it. Four others declare **and index** scope columns no writer populates, so their rows are global; for `version_history` that means rollback history is shared across every project on the machine. Which four, and what closes each: `.claude/rules/sqlite-persistence.md`. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
+**`state.db` is shared across projects, and `workspace_id` is not what isolates it.** One file serves every project. `workspace_id` is written by `kv_state`, `version_history`, `execution_records`, and `chain_runs` -- and **read by none of them**: zero queries in those modules filter on it (measured 2026-08-25). It is an indexed column with a writer and no reader, which is worse than an absent one, because a later scoped query will reasonably assume it is authoritative. `.claude/rules/sqlite-persistence.md` states the rule this violates: _scope reads and writes together_, and a green phantom-column gate proves a writer NAMES a column, not that anything consults it.
+
+What actually isolates `version_history` is `tenant_id`, which `resolveContinuityScopeId` resolves to `workspaceId ?? organizationId ?? 'default'` -- so rollback history IS workspace-scoped, and every read filters on it. **This paragraph previously claimed the opposite** ("`kv_state` is the only table that writes it… rollback history is shared across every project on the machine"); both halves were false, and the error is kept visible here because a security claim that overstates exposure gets discounted wholesale once someone checks it. The residual limit is real but narrower: a process that resolves no workspace shares the `'default'` bucket with every other such process. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
 
 ## Public API Contract (what a major version protects)
 

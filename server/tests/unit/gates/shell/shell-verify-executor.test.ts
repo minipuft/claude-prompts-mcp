@@ -239,6 +239,36 @@ describe('ShellVerifyExecutor', () => {
       }
     });
 
+    it("should NOT pass this server's OWN credentials to a child", async () => {
+      // Security review 2026-08-25, Tier 4.1. `SAFE_ENV_ALLOWLIST` is default-deny, so
+      // these are excluded by construction rather than by an explicit rule -- which is
+      // exactly why they need a test. Adding an `MCP_*` entry later would look harmless
+      // and would hand the catalog credential to every shell_verify command, including
+      // one authored in a third-party gate.
+      const vars = {
+        MCP_CATALOG_READ_TOKEN: 'catalog-secret-probe',
+        MCP_SHELL_VERIFY_ALLOWLIST: 'allowlist-value-probe',
+      };
+      const originals = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+      Object.assign(process.env, vars);
+
+      try {
+        const result = await executor.execute({
+          command: 'echo "$MCP_CATALOG_READ_TOKEN|$MCP_SHELL_VERIFY_ALLOWLIST"',
+        });
+
+        expect(result.stdout).not.toContain('catalog-secret-probe');
+        expect(result.stdout).not.toContain('allowlist-value-probe');
+        // The command itself ran -- otherwise the assertions above prove nothing.
+        expect(result.stdout.trim()).toBe('|');
+      } finally {
+        for (const [k, v] of Object.entries(originals)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
+    });
+
     it('should NOT pass GITHUB_TOKEN variable', async () => {
       const originalToken = process.env.GITHUB_TOKEN;
       process.env.GITHUB_TOKEN = 'ghp_test_token_12345';
