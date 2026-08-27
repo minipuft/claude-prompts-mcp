@@ -502,3 +502,194 @@ instead of dying with it. None is fixed; each names what would close it.
 
 SF-1 and SF-2 surfaced in the R-5 message-honesty audit; SF-3 and SF-4 were adjacent findings that
 audit reported and nothing else recorded.
+
+---
+
+## 11. T1 re-measurement — 2026-08-27
+
+Ran before the first T1 edit, per the re-measure-before-you-trust-it rule. §10's D5 and D6 are
+**not** rewritten in place; the rows below supersede them and say what is actually true.
+
+### 11.1 Inventory: authored vs measured
+
+| Claim (as authored)                      | Authored   | Measured 2026-08-27 | Verdict                                                 |
+| ---------------------------------------- | ---------- | ------------------- | ------------------------------------------------------- |
+| Categories on disk                       | 17         | 17                  | holds                                                   |
+| Categories named in the allowlist        | 8          | 8                   | holds                                                   |
+| "13 of 17 categories gitignored" (P7-F4) | 13         | 13                  | holds as a count, **misleads as a framing** — see below |
+| `prompt.yaml` on disk                    | 121        | 122                 | drifted +1                                              |
+| `prompt.yaml` tracked by git             | not stated | **39**              | new measurement                                         |
+
+**The category framing undercounts the problem by roughly half.** Four of the eight _allowed_
+categories are only partially allowed, and the single largest pool of invisible prompts sits
+inside one of them:
+
+| Category             | on disk | tracked | hidden |
+| -------------------- | ------- | ------- | ------ |
+| `development`        | 32      | 2       | **30** |
+| `analysis`           | 19      | 0       | 19     |
+| `resume`             | 9       | 0       | 9      |
+| `general`            | 6       | 0       | 6      |
+| `knowledge-capture`  | 6       | 1       | 5      |
+| `pr-review`          | 5       | 0       | 5      |
+| `content_processing` | 3       | 0       | 3      |
+| `creative`           | 3       | 0       | 3      |
+| `debugging`          | 1       | 0       | 1      |
+| `documentation`      | 3       | 2       | 1      |
+| `workflow`           | 4       | 3       | 1      |
+| **total hidden**     |         |         | **83** |
+
+83 of 122 prompts (68%) are invisible to git — not the ~13/17 ≈ 76% of _categories_ the framing
+suggests, and the worst offender is a category the allowlist admits. Probes over
+`resources/prompts/` still need `rg --no-ignore`; that half of P7-F4 stands.
+
+Also measured: `framework-authoring/` and `tools/` are **empty directories** (0 prompts each).
+D5 lists both among the categories "invisible to git", which is true and irrelevant — they hide
+nothing.
+
+### 11.2 Blocking findings — rows, not prose
+
+| #     | Status | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Verification                                                                                                                                         |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T1-F1 | ☐      | **The prompt overlay is read-only through the tool.** `data-loader.ts:123` merges `getOverlayResourceDirs('prompts', promptsPath)` at load, so overlay prompts are discoverable and executable. Every _write_ path resolves one directory — `configManager.getResolvedPromptsDirectory()` at `file-operations.ts:248` and `:452`. Moving a personal prompt to the overlay therefore makes `resource_manager update` fork a copy into `server/resources/prompts/` rather than edit it in place. D5 as written converts 83 live, writable prompts into read-only ones.                                                                                                                 | flips when a `resource_manager` update to an overlay-resident prompt rewrites the overlay file and creates nothing under `server/resources/prompts/` |
+| T1-F2 | ☐      | **`MCP_WORKSPACE` is the repo root, so "the overlay" is also inside the repo.** Measured off the live server (`/proc/<pid>/environ`): `MCP_WORKSPACE=/home/minipuft/Applications/claude-prompts-mcp`, `MCP_RESOURCES_PATH=<repo>/server/resources`. `getOverlayResourceDirs` (`paths.ts:359`) checks `<ws>/prompts/` and `<ws>/resources/prompts/` — both inside the git repo. D5's move relocates personal prompts from one in-repo ignored directory to another; it does not get them out of the repo. `MCP_WORKSPACE` is set by `.mcp.json` interpolating `${CLAUDE_PLUGIN_ROOT}`, which is necessarily the repo, so pointing it elsewhere is itself a decision D5 does not make. | flips when the resolved overlay prompts directory is outside the repo working tree                                                                   |
+| T1-F3 | ☐      | **Deleting `.gitignore` silently retires the P7-D4 ship-status subsystem.** `readCategoryShipStatus` (`file-operations.ts:424-439`) reads `${promptsDir}/.gitignore` and returns `ships: true` unconditionally when the file is absent. Live consumers: `resolveCategoryShipStatus`, `buildCategoryShipWarning` (`prompt-lifecycle-processor.ts`), and `category_ship_status` on the mutation receipt (`prompt-mutation-receipt-service.ts`). Delete the file and all three go permanently silent while still shipping as code — a parallel system with a nicer name, per `cleanup-standards.md`. D5 does not mention them.                                                          | flips when either the subsystem is deleted in the same change, or the gitignore deletion is shown not to make it constant                            |
+
+### 11.3 Consequence for D6's sequencing
+
+D6 blocks T2-T4 behind T1. Its stated reason is review integrity for **file deletion**: "D2's
+deletion path removes files under `resources/prompts/`, and reviewing that diff is meaningless
+while ten categories are invisible to git."
+
+That reason is real and it scopes to **T3 only**. T2 (`unset: [keys]` + `action: 'preview'`) and
+T4 (`chain_step_operation: 'update'`) delete no prompt files — they change the tool's parameter
+surface and its write-scope logic. Nothing in D6's argument reaches them.
+
+**Superseding order**: T1 blocks **T3**. T2 and T4 are unblocked and may proceed first.
+D6 stands as written for T3; it is over-broad for T2/T4 and this row records why.
+
+### 11.4 Status of D5
+
+⚠ **D5's premise is falsified** by T1-F1 and T1-F2 and its blast radius is understated by T1-F3.
+The decision it records — "personal prompts move to the `MCP_WORKSPACE` overlay; delete the
+resources gitignore" — cannot be executed as written, because the destination is read-only through
+the tool and is still inside the repo. D5 is **not** killed: the problem it names (P7-F4) is real
+and re-measured larger than authored. It needs a fresh owner ruling on destination and on the
+ship-status subsystem before T1 has an executable shape.
+
+_(as of 2026-08-27 · flips when a destination is chosen that is both writable through
+`resource_manager` and outside the repo working tree)_
+
+---
+
+## 12. D7 — write-path destination ruling (owner, 2026-08-27)
+
+Supersedes D5's destination clause. D5's _problem_ (P7-F4) stands; its _mechanism_ is replaced.
+
+### 12.1 The root cause is smaller and worse than "the overlay is read-only"
+
+T1-F1 said writes cannot reach the overlay. Re-probed: the reason is not an overlay limitation.
+**The write path never consults path resolution at all.**
+
+| Path  | Resolver                                                              | Honors `MCP_RESOURCES_PATH` / `MCP_WORKSPACE`                     |
+| ----- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Read  | `pathResolver.getPromptsPath()` (`data-loader.ts:59`)                 | yes — full chain (`paths.ts:249-262`)                             |
+| Write | `configManager.getResolvedPromptsDirectory()` (`config/index.ts:571`) | **no** — `resolve(dirname(configPath), config.prompts.directory)` |
+
+`ConfigManager` contains zero references to `PathResolver`; its own doc comment at `:568` concedes
+"PathResolver is the preferred source of truth" and then does not use it. So today, setting
+`MCP_RESOURCES_PATH=/elsewhere` moves every read and **no** write: reads serve `/elsewhere`, writes
+land in the package's own `resources/prompts`. That is a live defect on the shipped configuration
+surface, not a consequence of D5.
+
+The two happen to coincide on this machine — `<repo>/server/config.json` + `directory:
+"resources/prompts"` resolves to the same path `MCP_RESOURCES_PATH` names — which is why it has
+never been felt here.
+
+### 12.2 Ruling: source-first, workspace as copy-on-write fallback, never silent
+
+Neither "write where it was loaded from" nor "always follow `MCP_WORKSPACE`" is right alone.
+
+**Write-back-to-source alone makes the package writable.** This is a binary distribution
+(CLAUDE.md §Public API Contract) — under npm or `.mcpb` install, `server/resources/prompts` sits
+inside `node_modules` or the extension bundle. Writing an edit there means the edit is destroyed by
+the next reinstall and appears in no backup. That is the failure `MCP_WORKSPACE` exists to prevent.
+
+**Precedence alone silently forks.** "Always write to the workspace" means editing a bundled prompt
+produces a shadow copy with no signal, and the tool would be inferring a structural verb from
+context — the exact class D1 legislated against for `unset`.
+
+The composition:
+
+1. Writes resolve through **`PathResolver`**, the same chain reads use. (Root-cause fix; closes 12.1.)
+2. Each loaded prompt records **which root it came from**. Not recorded today — `PromptData.file`
+   is a path relative to a base (`yaml-prompt-loader.ts:518`) and names no root.
+3. `update` on a prompt whose source root is writable → **writes in place**. This is the common
+   case and it is what "write where it was loaded from" gets right.
+4. `update` on a **bundled** prompt when a distinct workspace exists → **copy-on-write shadow**
+   into the workspace, reported on the receipt. The loader already makes this work:
+   `mergePromptResults` gives the overlay the win on id conflict (`data-loader.ts:204-212`).
+5. `delete` of a bundled prompt → **refuse**, naming the shadow as the alternative. A shadow cannot
+   express absence, and a tombstone format would be a new durable contract for one verb. Refusing
+   has a sibling precedent in this repo: `framework-lifecycle-processor` already guards deletion of
+   built-in frameworks.
+
+When workspace equals package root — the current local setup — there is no second root, steps 3-5
+collapse to "write in place", and behavior is unchanged. The migration becomes possible rather than
+mandatory.
+
+### 12.3 Consequence for T1-F3 (ship-status subsystem)
+
+Under D7 the question `readCategoryShipStatus` answers by parsing `.gitignore` — "will this
+category ship?" — is answered structurally by which root the write landed in. The subsystem is
+superseded rather than deleted-for-cleanliness, and the receipt field `category_ship_status` is
+replaced by the write-destination the receipt already has to carry. T1-F3 closes as part of T1.5.
+
+### 12.4 T1 rows
+
+| #    | Status | Change                                                                                                                                                                                                                    | Depends | Verification                                                                                                                       |
+| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| T1.1 | ✓      | `ConfigLoader.getResolvedPromptsDirectory()` delegates to an injected `PromptsPathSource` port (the live `PathResolver`, wired at `runtime/context.ts:113`); config-relative resolution stays as the no-resolver fallback | —       | **PASSED with a negative control** — see §12.5                                                                                     |
+| T1.2 | ☐      | Loaded prompts record their source root                                                                                                                                                                                   | T1.1    | a prompt loaded from an overlay reports the overlay root, one from the bundle reports the package root                             |
+| T1.3 | ☐      | `update` writes to the source root; falls back to copy-on-write into the workspace when the source root is the bundle and a workspace exists                                                                              | T1.2    | update to an overlay-resident prompt rewrites the overlay file and creates nothing under `server/resources/prompts` (closes T1-F1) |
+| T1.4 | ☐      | `delete` of a bundled prompt refuses with the shadow named as the alternative                                                                                                                                             | T1.2    | delete of a bundled prompt under a distinct workspace returns a refusal and removes no file                                        |
+| T1.5 | ☐      | Receipt reports the write destination root; `category_ship_status` + `readCategoryShipStatus` retired in the same change                                                                                                  | T1.3    | `rg "readCategoryShipStatus\|resolveCategoryShipStatus"` returns zero; receipt names the root (closes T1-F3)                       |
+| T1.6 | ☐      | Migrate the 83 personal prompts to a workspace outside the repo; delete `server/resources/prompts/.gitignore`                                                                                                             | T1.5    | `git ls-files server/resources/prompts \| grep -c prompt.yaml` equals the on-disk count (closes P7-F4, D5)                         |
+
+D6's block now reads: **T1 blocks T3.** T2 and T4 remain unblocked per §11.3.
+
+### 12.5 T1.1 verification — 2026-08-27
+
+Verified by driving the real tool, not by a green suite. A spawned `dist/index.js --transport=stdio`
+with `MCP_RESOURCES_PATH` pointed at a temp copy of the resources tree, then one
+`resource_manager` create, then a check of which tree the file landed in.
+
+| Build         | create `isError` | landed in override tree | landed in package tree |
+| ------------- | ---------------- | ----------------------- | ---------------------- |
+| HEAD (no fix) | `true`           | no                      | **YES — the defect**   |
+| with T1.1     | `false`          | **YES**                 | no                     |
+
+The negative control is the point: the pre-fix run reproduces the bug on demand, so the passing
+run is evidence about the change rather than about the environment. Without it, "the file is in the
+override tree" is equally consistent with the fix working and with the probe never having been
+capable of failing.
+
+Regression coverage: `tests/unit/infra/config/prompts-write-destination.test.ts` (3 cases —
+delegation, no-resolver fallback, explicit-override precedence). Full unit suite 212 suites /
+2725 tests green; `typecheck`, `lint:ratchet`, `typecheck:tests:ratchet`, `validate:arch` all clean
+(arch: 0 errors, 12 pre-existing warnings, none in the touched files).
+
+**Coverage gap, stated rather than papered over**: the unit tests cover `ConfigLoader`'s branch,
+not the one-line wiring at `runtime/context.ts:113` that supplies the resolver. Deleting that
+argument would leave every unit test green and silently restore the defect. The end-to-end probe
+above is what covers it, and it is not in CI. Row T1.7 below.
+
+| #    | Status | Change                                                                                                                        | Depends | Verification                                                                        |
+| ---- | ------ | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| T1.7 | ☐      | Land the write-destination end-to-end probe as an e2e test so the `context.ts` wiring is covered by CI, not by a local script | T1.1    | removing the `pathResolver` argument at `runtime/context.ts:113` turns a CI job red |
+
+### 12.6 Incidental finding
+
+| #     | Status | Finding                                                                                                                                                                                                                                                                                                                                                                   | Verification                                                                         |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| T1-F4 | ☐      | In the pre-fix control the create response carried `isError: true` while its body led with `✅ **Prompt Created**`. The verification service evidently caught the write/read divergence, but the assembled text still opens by claiming success. Observed directly; the captured body was truncated at 400 chars, so whether a later line qualifies it was NOT confirmed. | flips when a response with `isError: true` is shown not to open with a success claim |
