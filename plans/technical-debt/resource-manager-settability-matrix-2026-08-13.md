@@ -693,3 +693,50 @@ above is what covers it, and it is not in CI. Row T1.7 below.
 | #     | Status | Finding                                                                                                                                                                                                                                                                                                                                                                   | Verification                                                                         |
 | ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | T1-F4 | ☐      | In the pre-fix control the create response carried `isError: true` while its body led with `✅ **Prompt Created**`. The verification service evidently caught the write/read divergence, but the assembled text still opens by claiming success. Observed directly; the captured body was truncated at 400 chars, so whether a later line qualifies it was NOT confirmed. | flips when a response with `isError: true` is shown not to open with a success claim |
+
+### 12.7 T1-F5 — a worktree silently serves a different prompt set (2026-08-27)
+
+Raised by the owner while reviewing T1.1. Measured, not reasoned:
+
+| checkout                   | prompts | categories |
+| -------------------------- | ------- | ---------- |
+| main                       | **122** | 17         |
+| `-settability` worktree    | 39      | 9          |
+| `-security` worktree       | 39      | 8          |
+| `t3code-046db55b` worktree | 39      | 8          |
+
+`git worktree add` checks out tracked files only, and 83 of 122 prompts are gitignored, so every
+worktree is missing exactly the untracked 83. `.mcp.json` interpolates `${CLAUDE_PLUGIN_ROOT}` into
+**both** `MCP_WORKSPACE` and `MCP_RESOURCES_PATH`, so a session launched with
+`--plugin-dir <worktree>` serves that worktree's 39.
+
+Two consequences, and the second is data loss:
+
+1. **Gates that name a prompt cannot fire.** `>>tech_recommendation` is among the 83 — and the
+   owner's global CLAUDE.md hard-gates on it (`BEFORE(NewAlgorithm | ShaderTechnique |
+Optimization) → REQUIRE(>>tech_recommendation)`). In a worktree it resolves to "Unknown prompt"
+   with did-you-mean suggestions. Nothing reports that the catalog is a subset; the prompt is
+   simply absent. `>>design_muse`, `>>strategicImplement`, `>>implementation_plan`,
+   `>>documentation_change` and `>>practice_capture` survive, because those five sit in allowlisted
+   directories — so the failure is _partial_, which is worse than total: the surface looks working.
+
+2. **A prompt authored from a worktree dies with the worktree.** Post-T1.1 the write correctly
+   follows `MCP_RESOURCES_PATH`, which in a worktree-launched session is the worktree's own
+   `server/resources/prompts` — gitignored there too. `git worktree remove` refuses a dirty tree,
+   but `--force` does not, and the prompt is unrecoverable: never committed, never in the main
+   checkout.
+
+T1.1 does not cause this and does not fix it. It is the same root as P7-F4 seen from the other
+side: **the prompts are stored in a location whose contents depend on which checkout you opened**,
+and the fix is the same — a prompt store that is not inside any checkout.
+
+This reprices T1.6. It was filed as tracking hygiene ("83 prompts invisible to git"); it is
+actually the thing standing between the owner and losing prompts, and it makes worktrees — which
+this repo's own guidance recommends for concurrent sessions — unsafe for authoring.
+
+| #     | Status | Change                                                                                                                                             | Depends | Verification                                                                                |
+| ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| T1-F5 | ☐      | Personal prompt store moves outside every checkout, so the served catalog does not depend on which worktree launched the session (folds into T1.6) | T1.3    | prompt count served from a fresh worktree equals the count served from main                 |
+| T1.8  | ☐      | Startup logs the resolved prompts root and the count served, so a subset catalog is visible rather than silent                                     | —       | launching from a worktree emits a line naming the root and a count that differs from main's |
+
+_(as of 2026-08-27 · T1-F5 flips when a fresh worktree serves the same prompt count as main)_
