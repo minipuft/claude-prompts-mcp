@@ -84,6 +84,28 @@ Formatting is covered by `validate:format` in the full route. `pre-push` checks 
 repo-level JSON/MD/YAML files in the push range. Anything a generator owns belongs in
 `.prettierignore` with a reason -- otherwise the generator and Prettier disagree.
 
+**Every formatting gate CHECKS; none of them writes** (since 2026-08-25). `pre-commit` and
+`lint-staged` used to `prettier --write` the staged paths and re-`git add` them, so the bytes
+committed were not the bytes any gate had validated -- each check ran against one version of
+the file and the commit captured another. Formatting-only, so the blast radius was small, but
+it is the same shape as a step that silently changes an artifact after the check that blessed
+it. It also broke anchored editing: a rewrite between a read and the next fixed-string edit
+makes that edit miss **silently**, which cost real work here on 2026-08-25. `--check` is also
+a strict subset of CI, which only ever checks -- the old `--write` was a local step CI does
+not run, which this section otherwise forbids. Fix with `npm --prefix server run format`
+(repo-level, same file set `validate:format` reads) or `format:server` (server sources).
+
+**Format at authoring time; the gate is a backstop, not the boundary.** A gate you routinely
+fail is a gate in the wrong place -- so format on save (editors) or as part of the edit itself
+(agents: run `format` on what you touched BEFORE you validate, not after a hook rejects it).
+This only works if your editor and the gate agree, which needs one contract per file: prettier
+resolves the NEAREST config, so `server/**` takes `server/.prettierrc.json` (printWidth 100)
+and everything else takes the root `.prettierrc.json` (printWidth 80). The root file was added
+2026-08-25 and pins what was already happening -- root paths previously resolved NO config and
+ran on prettier's built-in defaults, so the contract was whatever the installed major version
+happened to do, and an editor plugin resolving its own settings would silently disagree with
+the gate. Verified at the time: adding it reformatted zero files on either side.
+
 ## Documentation Map
 
 | Topic                                        | Doc                                      |

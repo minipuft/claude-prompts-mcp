@@ -60,15 +60,36 @@ if [ -n "$SERVER_STAGED" ]; then
   (cd "$SERVER_DIR" && npm run -s lint:staged)
 fi
 
-# Format repo-level JSON/Markdown/YAML files with server's Prettier
+# Check formatting of repo-level JSON/Markdown/YAML files with server's Prettier.
+#
+# CHECK, not write (changed 2026-08-25). This used to `prettier --write` the staged paths and
+# then `git add` them, which meant the bytes committed were not the bytes anything had
+# validated: every gate in this hook ran against one version of the file and the commit
+# captured another. Formatting-only, so the blast radius was small -- but it is the same shape
+# as the defects the security review kept finding, where a step silently changes the artifact
+# after the check that blessed it.
+#
+# It also broke editing tools. A rewrite between an agent's read and its next anchored edit
+# makes fixed-string replacements miss silently, which cost real work in this repo on
+# 2026-08-25 (plan implementation notes reported as written while the file was unchanged).
+#
+# `--check` is additionally a strict subset of CI, which runs `validate:format` (also
+# `--check`). The previous `--write` was a step CI does not run -- exactly what CLAUDE.md
+# § Validation Gates forbids.
 ROOT_FORMATTABLE=$(printf '%s\n' "$STAGED_FILES" | grep -v '^server/' | grep -E '\.(json|md|ya?ml)$' || true)
 if [ -n "$ROOT_FORMATTABLE" ]; then
-  echo "📝 Formatting staged repo-level text files..."
-  printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --write
-  # -f: every path here was already staged by the committer, and some tracked
-  # paths (.claude/rules/) are gitignored -- a plain re-add refuses those and
-  # fails the hook for files this repo deliberately tracks.
-  printf '%s\n' "$ROOT_FORMATTABLE" | xargs git add -f --
+  echo "🔍 Checking formatting of staged repo-level text files..."
+  if ! printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --check; then
+    echo ""
+    echo "❌ Staged files are not Prettier-formatted."
+    echo ""
+    echo "   Fix them:  npm --prefix $SERVER_DIR run format"
+    echo "   Then re-stage:  git add -f -- <the files above>"
+    echo ""
+    echo "   -f because some tracked paths (.claude/rules/) are gitignored, and a plain"
+    echo "   re-add refuses those."
+    exit 1
+  fi
 fi
 
 # Project guidance compatibility projection. Claude-owned files are canonical; AGENTS.md is the
