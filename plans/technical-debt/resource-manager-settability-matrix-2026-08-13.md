@@ -740,3 +740,85 @@ this repo's own guidance recommends for concurrent sessions — unsafe for autho
 | T1.8  | ☐      | Startup logs the resolved prompts root and the count served, so a subset catalog is visible rather than silent                                     | —       | launching from a worktree emits a line naming the root and a count that differs from main's |
 
 _(as of 2026-08-27 · T1-F5 flips when a fresh worktree serves the same prompt count as main)_
+
+---
+
+## 13. Resource storage model — option space (pre-interview brainstorm, 2026-08-27)
+
+Written BEFORE the interview so the questions can ask direction rather than enumerate options.
+Nothing here is decided.
+
+### 13.1 The actual shape of the problem
+
+T1-F5 and P7-F4 are not prompt problems. Measured 2026-08-27:
+
+| Resource type | Read resolution                                              | Write resolution                                                                                                                |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| prompts       | `PathResolver` full chain + overlay merge                    | `ConfigManager.getResolvedPromptsDirectory()` — **fixed T1.1**, now delegates                                                   |
+| gates         | `PathResolver` + overlay merge (`module-initializer.ts:199`) | `ConfigManager.getGatesDirectory()` = `join(dirname(configPath),'resources','gates')` — hardcoded, reads neither config nor env |
+| frameworks    | `PathResolver` + overlay merge (`:218`)                      | `RuntimeFrameworkLoader.resolveFrameworksDir()` — its own chain                                                                 |
+| styles        | `PathResolver` + overlay merge (`:228`)                      | separate                                                                                                                        |
+
+The read side is one coherent model applied four times. The write side is four independent
+resolvers that were never reconciled with it. T1.1 reconciled one. **The defect class is
+"read and write disagree about where a resource lives", and prompts are one instance of four.**
+
+Everything downstream follows from that asymmetry: the overlay is unreachable for writes, a
+worktree serves a subset, and a gitignore ends up load-bearing as the bundled/personal boundary.
+
+### 13.2 Axis A — where does the personal store live?
+
+| Option                                                                | Buys                                                                                                                                                | Costs                                                                                                         |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| A1 One global store, e.g. `~/.claude-prompts/resources/`              | Same catalog from every checkout, worktree, and project. Simplest resolution chain. Closes T1-F5 outright.                                          | No project-scoped prompts; a repo-specific prompt pollutes every project                                      |
+| A2 Per-project store outside the repo, keyed by the existing scope id | Project-specific prompts stay scoped. Reuses the identity machinery `state.db` already has (`CLAUDE_PROJECT_DIR` -> cwd basename, `--workspace-id`) | Two stores to reason about; scope-id derivation is basename-based, so two projects sharing a basename collide |
+| A3 Both: global store + optional per-project overlay                  | Matches how most tools do it (global config + project config)                                                                                       | Precedence rules, and "which store did my prompt go to" becomes a real question                               |
+| A4 XDG (`$XDG_DATA_HOME/claude-prompts/`)                             | Platform-correct; orthogonal to A1/A2/A3 (it is a _path_ choice, not a _scoping_ choice)                                                            | One more env var in the chain                                                                                 |
+
+Note A2's precedent is real but narrow: CLAUDE.md records that of the tables declaring scope
+columns, **only `kv_state` has a writer**, so per-project scoping in this codebase is currently one
+table deep. Choosing A2 means committing to scope-correctness in a second subsystem.
+
+### 13.3 Axis B — what is the relationship between roots?
+
+- **B1 bundled/personal**: two named tiers. Bundled ships with the package and is read-only;
+  personal is the only writable root. Simple, and makes "never write into `node_modules`" structural.
+- **B2 ordered roots**: N roots in precedence order, all readable, the first _writable_ one wins.
+  Generalizes (a team could add a shared root); more machinery.
+
+B1 is a special case of B2 with N=2. Recommendation if unconstrained: implement B2's resolution and
+ship B1's configuration, so the general case exists without a second concept being exposed yet.
+
+### 13.4 Axis C — what does `create` do by default, and can you author a bundled resource?
+
+Once the store splits, `create` needs a destination and the tool has no verb for one.
+
+- C1 always personal; authoring a shipped example is a repo file operation, not a tool operation.
+  (Conflicts with the handbook's "MCP Tooling Only" rule for `server/prompts/**`.)
+- C2 explicit `target: 'personal' | 'bundled'`, defaulting to personal. One more parameter, and
+  it is the same "make the verb explicit" shape D1 chose for `unset`.
+- C3 infer from category — bundled categories take bundled writes. This is the gitignore-as-policy
+  pattern that produced P7-F4; not recommended, listed so it is visibly rejected.
+
+### 13.5 Axis D — scope of the fix
+
+- D-i prompts only now, other three types later (matches current tiering; leaves three known-broken
+  writers in place, and the gate writer is hardcoded rather than merely under-resolved)
+- D-ii one shared write-resolution port applied to all four types in one arc
+- D-iii unify the write side behind `PathResolver` for all four, defer the bundled/personal split to
+  a second arc
+
+### 13.6 Axis E — migration of the existing 83
+
+Whatever A resolves to, the 83 untracked prompts in the main checkout have to move, and they exist
+in exactly one place on one machine. Options: one-shot move with a verified manifest; copy-then-
+verify-then-delete; or a first-run import that leaves the originals. E is a safety question, not a
+design question, and the backup taken 2026-08-19 (121/121 `prompt.yaml`, 333 files, `gzip -t` OK)
+is the floor under it — it needs re-taking at 122 before any move.
+
+### 13.7 What is NOT in question
+
+- The bundled tree must never be written by the tool under an npm/`.mcpb` install (D7).
+- Reads already merge overlays correctly for all four types; that machinery stays.
+- `git`-tracking is a _consequence_ of where the store lives, not the mechanism. P7-F4 gets closed
+  by the storage decision, not by a gitignore edit.
