@@ -64,11 +64,31 @@ is not. Every probe must state which property it measures — the C6 mis-count (
 under `resources/gates` vs actual gate definitions) is the worked example of a probe that
 answered a different question and nearly manufactured a false correction to a correct claim.
 
-**`>>tech_recommendation` was not run**: it is referenced by the global rules but **is not in
-this server's catalog** (measured 2026-08-25 — nearest installed are `investigate_unknown`,
-`deep_analysis`, `triage`). A technique survey was judged unwarranted once the answer resolved
-to "extend machinery that already exists" rather than "choose among novel techniques". Revisit
-if the scope widens past declared contracts.
+**`>>tech_recommendation` was RUN, then cancelled — and an earlier claim here was false.**
+
+This section first stated the prompt "is not in this server's catalog". That was wrong. It is
+real, loaded, and answered both an `inspect` and a live invocation. The false reading came from
+a probe harness running against the **security worktree** with an isolated `MCP_WORKSPACE`;
+the prompt is one of the 83 untracked personal resources, so it exists only in the main
+checkout's working tree. The error is kept visible because it is the same shape as the defects
+this plan exists to prevent: a probe measured one catalog and the result was reported as a
+property of another.
+
+It was then cancelled deliberately (`chain-tech_recommendation#1`), for a recorded reason
+rather than a judgement call. The prompt's "Inspiration & Prior Art" block demands Shadertoy /
+GDC / Codrops / motion-design sources and Day-1 `bash` install steps. This question is
+policy-and-architecture — there is no package to install and no visual surface — so the block
+mis-fires exactly as `plans/reference/technical-debt/arg-gate-pipeline-fixes.md` already
+records:
+
+> **Prompt defect — second occurrence confirmed, trigger met.** The "Design Enrichment
+> (visual/creative/UI work)" block mis-fires on non-visual work. First seen in
+> `>>implementation_plan`; on 2026-07-29 the same block fired inside `>>tech_recommendation`
+> on a policy-resolution question… It is a **shared block**, so the fix is one place, not two.
+
+That row is still `- [ ]`. Today is the **third sighting**, on the same class of input, and the
+deferral rule's trigger was already met at the second. Fixing the shared block is a prerequisite
+for `>>tech_recommendation` being usable on non-visual questions at all.
 
 ## Tiers
 
