@@ -80,6 +80,8 @@ Layering, strongest first:
 | DEV-T4-1 | 4.2  | The plan carried `state.db` scope as "known, already documented" | Re-measuring falsified the documentation in the PESSIMISTIC direction — it claimed wider exposure than exists. A carried-in "already known" item is an inventory like any other                                                                                                                                                                                                        |
 | DEV-T4-2 | 4.1  | Secret leakage is plausible and needs a fix                      | Refuted. `SAFE_ENV_ALLOWLIST` is default-deny, so the server's own credentials are excluded by construction rather than by any rule naming them — which is why a test now pins them                                                                                                                                                                                                    |
 | DEV-T4-3 | 4.x  | Anchored string edits to this file are reliable                  | **They are not, and this file lost content because of it.** Prettier reformats markdown table padding, so fixed-spacing anchors silently stopped matching and `str.replace` no-opped without error. Tier 2/3/4 findings were reported as recorded while the file was unchanged. Caught by `git status` showing no diff. Every edit here now asserts, or rewrites the section wholesale |
+| DEV-T5-1 | 5.1  | Tier 5 produces "the prompt AND the skill"                       | Only the prompt. `/security` already exists with `security.md` as its rule; a second artifact over the same domain is the parallel-system shape this repo's standards forbid. The capability-dial material extended the existing rule instead                                                                                                                                          |
+| DEV-T5-2 | 5.2  | "second sighting reached" is the promotion bar                   | Only for extending an existing domain rule. CLAUDE.md's bar for promotion is THREE independent sightings — the positive-control pattern clears it (4, two from prior sessions); the capability-dial one does not, and is recorded as a second-sighting extension rather than dressed up as a promotion                                                                                 |
 
 ## Findings ledger
 
@@ -111,26 +113,29 @@ Format is defined in the plan. `SUSPECTED` never reports as `CONFIRMED`.
 
 ## Validation ledger
 
-| Date       | Tier | Command                                                                     | Result                                                                                       |
-| ---------- | ---- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 2026-08-24 | —    | plan authored; no probes run yet                                            | —                                                                                            |
-| 2026-08-25 | 1.2  | live STDIO probe, gate with no `activation`, benign marker                  | **marker written** — arbitrary execution from a dropped file, gate unnamed, no verdict       |
-| 2026-08-25 | 1.2  | three arms with `MCP_CONFIG_PATH` set                                       | **VACUOUS** — server hung; stray workspace `config.json`. Discarded, not recorded as results |
-| 2026-08-25 | 1.3  | 3-arm re-drive (none / exact / unrelated), each asserted `calls=2`          | refused / executed / refused — the dial works and is not a blanket unlock                    |
-| 2026-08-25 | 1.3  | channel-2 arms (`:: verify`), incl. `echo *` vs `echo hi > file`            | refused / refused / executed — metacharacter rule holds                                      |
-| 2026-08-25 | 1.3  | `jest tests/unit/gates/shell-command-allowlist.test.ts`                     | 25/25 pass                                                                                   |
-| 2026-08-25 | 2.1  | live probe: prompt `category` + gate `id` traversal, benign files           | **both wrote outside the resource root**; tool reported success both times                   |
-| 2026-08-25 | 2.1  | same two probes after the fix, plus a legitimate-create positive control    | both refused, escape dir empty, all 3 calls answered; legitimate creates unaffected          |
-| 2026-08-25 | 2.2  | argument value `{{ 7*7 }}` through a live prompt render                     | rendered literally — direct-path SSTI refuted                                                |
-| 2026-08-25 | 2.3  | 6 raw-block cases (nested, unclosed, whitespace-control) + positive control | all pass — containment holds and is not a blanket refusal                                    |
-| 2026-08-25 | 2.4  | grep for checksum/integrity/signature/approve/trusted/fingerprint           | zero hits in `modules/resources/`, `modules/prompts/`                                        |
-| 2026-08-25 | 2.5  | `template-value-is-data.test.ts` incl. constructor SSTI payload             | values never evaluated; template-authored `{{ 7*7 }}` still yields 49                        |
-| 2026-08-25 | 3.2  | 4 discovery surfaces read with markers, output cap raised to 400k           | 3 of 4 carry prompt text with no invocation; `detail:"full"` carried `systemMessage`         |
-| 2026-08-25 | 3.4  | live drive of `list detail:"full"` after the change                         | 0 body blocks, 37 pointers; catalogue ~167KB → 27.7KB                                        |
-| 2026-08-25 | 3.4  | mutation check: re-added the `systemMessage` emission                       | 1 test failed, reverted clean — the assertion is load-bearing                                |
-| 2026-08-25 | 3.5  | live drive of `prompts/list`                                                | title==name for 0/34; titles now human-readable                                              |
-| 2026-08-25 | 4.1  | 3 marker secrets, 4 calls (2 error paths), 5 sinks scanned                  | 0 hits; positive control finds `test_default` + bogus id in the log                          |
-| 2026-08-25 | 4.2  | grep every `workspace_id` write and every query filtering on it             | 4 writers, 0 readers; `version_history` isolates on `tenant_id` instead                      |
-| 2026-08-25 | —    | `npm run typecheck` · `typecheck:tests:ratchet`                             | pass · 367 errors, no regressions (ratchet caught +2 that `typecheck` cannot see)            |
-| 2026-08-25 | —    | `npm run test:ci`                                                           | 215 suites, 2782 passed                                                                      |
-| 2026-08-25 | —    | `npm run validate:all`                                                      | 48/48                                                                                        |
+| Date       | Tier | Command                                                                              | Result                                                                                       |
+| ---------- | ---- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| 2026-08-24 | —    | plan authored; no probes run yet                                                     | —                                                                                            |
+| 2026-08-25 | 1.2  | live STDIO probe, gate with no `activation`, benign marker                           | **marker written** — arbitrary execution from a dropped file, gate unnamed, no verdict       |
+| 2026-08-25 | 1.2  | three arms with `MCP_CONFIG_PATH` set                                                | **VACUOUS** — server hung; stray workspace `config.json`. Discarded, not recorded as results |
+| 2026-08-25 | 1.3  | 3-arm re-drive (none / exact / unrelated), each asserted `calls=2`                   | refused / executed / refused — the dial works and is not a blanket unlock                    |
+| 2026-08-25 | 1.3  | channel-2 arms (`:: verify`), incl. `echo *` vs `echo hi > file`                     | refused / refused / executed — metacharacter rule holds                                      |
+| 2026-08-25 | 1.3  | `jest tests/unit/gates/shell-command-allowlist.test.ts`                              | 25/25 pass                                                                                   |
+| 2026-08-25 | 2.1  | live probe: prompt `category` + gate `id` traversal, benign files                    | **both wrote outside the resource root**; tool reported success both times                   |
+| 2026-08-25 | 2.1  | same two probes after the fix, plus a legitimate-create positive control             | both refused, escape dir empty, all 3 calls answered; legitimate creates unaffected          |
+| 2026-08-25 | 2.2  | argument value `{{ 7*7 }}` through a live prompt render                              | rendered literally — direct-path SSTI refuted                                                |
+| 2026-08-25 | 2.3  | 6 raw-block cases (nested, unclosed, whitespace-control) + positive control          | all pass — containment holds and is not a blanket refusal                                    |
+| 2026-08-25 | 2.4  | grep for checksum/integrity/signature/approve/trusted/fingerprint                    | zero hits in `modules/resources/`, `modules/prompts/`                                        |
+| 2026-08-25 | 2.5  | `template-value-is-data.test.ts` incl. constructor SSTI payload                      | values never evaluated; template-authored `{{ 7*7 }}` still yields 49                        |
+| 2026-08-25 | 3.2  | 4 discovery surfaces read with markers, output cap raised to 400k                    | 3 of 4 carry prompt text with no invocation; `detail:"full"` carried `systemMessage`         |
+| 2026-08-25 | 3.4  | live drive of `list detail:"full"` after the change                                  | 0 body blocks, 37 pointers; catalogue ~167KB → 27.7KB                                        |
+| 2026-08-25 | 3.4  | mutation check: re-added the `systemMessage` emission                                | 1 test failed, reverted clean — the assertion is load-bearing                                |
+| 2026-08-25 | 3.5  | live drive of `prompts/list`                                                         | title==name for 0/34; titles now human-readable                                              |
+| 2026-08-25 | 4.1  | 3 marker secrets, 4 calls (2 error paths), 5 sinks scanned                           | 0 hits; positive control finds `test_default` + bogus id in the log                          |
+| 2026-08-25 | 4.2  | grep every `workspace_id` write and every query filtering on it                      | 4 writers, 0 readers; `version_history` isolates on `tenant_id` instead                      |
+| 2026-08-25 | —    | `npm run typecheck` · `typecheck:tests:ratchet`                                      | pass · 367 errors, no regressions (ratchet caught +2 that `typecheck` cannot see)            |
+| 2026-08-25 | —    | `npm run test:ci`                                                                    | 215 suites, 2782 passed                                                                      |
+| 2026-08-25 | —    | `npm run validate:all`                                                               | 48/48                                                                                        |
+| 2026-08-25 | 5.1  | `resource_manager create` + `inspect` of `>>security_review` against the live server | created, `refresh_status: loaded`, resolves                                                  |
+| 2026-08-25 | 5.2  | `~/.claude/scripts/check-rules.sh`                                                   | 15 files passed size, 0 failures; `dev-workflow.md` condensed back under its soft limit      |
+| 2026-08-25 | 5.2  | `git commit` in `~/.claude` staging ONLY the two rule files                          | `f0f567c`; the other session's 15 modified / 10 deleted files left untouched                 |

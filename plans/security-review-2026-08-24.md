@@ -152,15 +152,15 @@ inspection and obvious to a probe.
 
 ### Tier 1 — Execution capability
 
-| #   | St                                                   | Work                                                                                                                               | Verify                                                                                                                                                                                                                                   |
-| --- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1 | ✓ DONE (2026-08-25)                                  | Enumerate every path from authored content to process execution                                                                    | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                         |
-| 1.2 | ✓ DONE (2026-08-25)                                  | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                           | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                        |
-| 1.3 | ✓ DONE (2026-08-25)                                  | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                             | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header |
-| 1.4 | ✓ DONE (2026-08-25)                                  | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                               | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                     |
-| 1.5 | ☐ (as of 2026-08-25 · flips when this row is probed) | (as of 2026-08-25 · flips when a probe drives a chain with `gates.enabled=false` and observes whether `shell_command` still runs)  | Settle whether the gate master switch actually stops execution, or only hides the three gate parameters from the advertised `inputSchema`                                                                                                |
-| 1.6 | ☐ (as of 2026-08-25 · flips when this row is probed) | (as of 2026-08-25 · flips when `shell_working_dir`/`shell_env` are either constrained or explicitly accepted as author-controlled) | The allowlist bounds the command string only. An allowlisted command can still be pointed at any directory and handed any environment by the same author                                                                                 |
-| 1.7 | ☐ (as of 2026-08-25 · flips when this row is probed) | (as of 2026-08-25 · flips when the unknown-extension branch either refuses or is documented as intended)                           | `EXTENSION_TO_RUNTIME` falls back to the `shell` runtime for any unrecognised extension (`script-executor.ts:330`), so an unknown file type is handed to `bash`                                                                          |
+| #   | St                  | Work                                                                                                                               | Verify                                                                                                                                                                                                                                   |
+| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1 | ✓ DONE (2026-08-25) | Enumerate every path from authored content to process execution                                                                    | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                         |
+| 1.2 | ✓ DONE (2026-08-25) | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                           | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                        |
+| 1.3 | ✓ DONE (2026-08-25) | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                             | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header |
+| 1.4 | ✓ DONE (2026-08-25) | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                               | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                     |
+| 1.5 | ☐                   | (as of 2026-08-25 · flips when a probe drives a chain with `gates.enabled=false` and observes whether `shell_command` still runs)  | Settle whether the gate master switch actually stops execution, or only hides the three gate parameters from the advertised `inputSchema`                                                                                                |
+| 1.6 | ☐                   | (as of 2026-08-25 · flips when `shell_working_dir`/`shell_env` are either constrained or explicitly accepted as author-controlled) | The allowlist bounds the command string only. An allowlisted command can still be pointed at any directory and handed any environment by the same author                                                                                 |
+| 1.7 | ☐                   | (as of 2026-08-25 · flips when the unknown-extension branch either refuses or is documented as intended)                           | `EXTENSION_TO_RUNTIME` falls back to the `shell` runtime for any unrecognised extension (`script-executor.ts:330`), so an unknown file type is handed to `bash`                                                                          |
 
 #### 1.1 — the execution map (measured 2026-08-25)
 
@@ -468,10 +468,49 @@ that overstates exposure gets discounted wholesale once a reader checks one inst
 
 ### Tier 5 — Capture
 
-| #   | St                                                   | Work                                                                       | Verify                                                        |
-| --- | ---------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 5.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Build the security-review prompt and skill **from this review's material** | Derived from real findings, not from a generic checklist      |
-| 5.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Feed the transferable rules upstream                                       | Second sighting reached; `security.md` already took the first |
+| #   | St                  | Work                                                                       | Verify                                                                                                                                                             |
+| --- | ------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 5.1 | ✓ DONE (2026-08-25) | Build the security-review prompt and skill **from this review's material** | `>>security_review` created via `resource_manager` (rule 1: MCP tooling only) and verified by `inspect` against the live server. Every section traces to a finding |
+| 5.2 | ✓ DONE (2026-08-25) | Feed the transferable rules upstream                                       | Two promotions committed to `~/.claude` (`f0f567c`); `check-rules.sh` 15 files passed, 0 failures                                                                  |
+
+#### 5.1 — what the prompt encodes, and where each part came from
+
+Not a generic OWASP checklist. Every phase is something this review learned by getting it wrong
+first:
+
+| Prompt section                                                  | Earned by                                                                          |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Phase 0 posture blocks everything                               | R1 — the same `shell_verify` is a feature or an RCE depending on who authors gates |
+| "the boundary is where content becomes code, not the transport" | Tier 1.1 — one `spawn`, two authoring channels, both transports                    |
+| `SUSPECTED` as a first-class state                              | S1 — "grep found no guard" was half wrong, and the real vectors were different     |
+| Probe rule 1: name the property                                 | C6 — counted `*.yaml` instead of gate definitions                                  |
+| Probe rule 2: null needs a control                              | Tier 1 vacuous greens + Tier 3.2 truncation false negative                         |
+| Probe rule 3: refusal ≠ verified negative                       | The allowlist's `refused` flag                                                     |
+| Probe rule 4: re-measure carried-in items                       | DEV-T4-1 — "already documented" was false in the pessimistic direction             |
+| Phase 3 dial test + "accepted, documented"                      | R2/R3 and Tier 3.3                                                                 |
+| Phase 4 close the loop on the docs                              | C5 and C16, both false handbook claims                                             |
+
+It lands **untracked**, in the operator's personal collection, per the ruling recorded in
+`CLAUDE.md` §Resource tracking. That is the expected outcome of authoring through the sanctioned
+MCP path, not an oversight.
+
+**No separate skill was created.** `/security` already exists and `security.md` is its rule; a
+second artifact covering the same domain would be the parallel-system shape this repo's own
+standards forbid. The capability-dial material went into the existing rule instead — which is
+what 5.2 is.
+
+#### 5.2 — what was promoted, with sighting counts
+
+| Destination                       | Pattern                                    | Sightings                                                                                                                                                                               |
+| --------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/.claude/rules/dev-workflow.md` | **A null result needs a positive control** | **4**, two from prior sessions: a gate green 11/11 on a dead action; a test surviving a mutation via early-return; three vacuous "switch blocked it" results; a truncated marker search |
+| `~/.claude/rules/security.md`     | **Capability dials**                       | **2** — the transport review gave this file its Local Listener Checklist; this review is the second                                                                                     |
+
+The counts are stated because CLAUDE.md's promotion rule is 3 independent sightings. The
+`dev-workflow` pattern clears it. The `security.md` addition is a **second-sighting extension of
+an existing domain rule**, not a promotion to CLAUDE.md — the weaker bar the plan's own row 5.2
+anticipated. Recording the difference matters more than the outcome: a pattern promoted at two
+sightings and presented as three is how a rule set fills with guesses.
 
 ## Findings ledger format
 
