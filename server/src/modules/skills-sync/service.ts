@@ -2919,6 +2919,52 @@ function hashOutputFiles(files: OutputFile[]): string {
   return computeContentHash(files.map((f) => f.content));
 }
 
+/**
+ * Detect a resource whose output directory is an alias into somewhere OUTSIDE the client's base
+ * directory — a per-skill symlink such as `~/.codex/skills/dev-workflow -> ~/.claude/skills/dev-workflow`.
+ *
+ * The per-client collision guard in the export/sync loops keys on the BASE directory's realpath,
+ * so two clients with distinct bases pass it even when one skill directory under them is the same
+ * inode. Measured 2026-08-27: the codex pass wrote its render through exactly that link and
+ * replaced the claude-code render (hooks stripped, `managed-client: codex`) seconds after the
+ * claude-code pass had written it and saved its manifest; `diff` then reported the claude-code
+ * export as locally modified — correctly — against a file the exporter itself had clobbered.
+ *
+ * Returns the offending output subdirectory and where it really resolves, or `null` when every
+ * output path stays inside the base. Only EXISTING ancestors are resolved: a directory `mkdir`
+ * is about to create cannot alias anything. A missing base directory is likewise not an alias.
+ */
+function findForeignAliasForResource(
+  baseDir: string,
+  files: readonly OutputFile[]
+): { relativeDir: string; target: string } | null {
+  let baseReal: string;
+  try {
+    baseReal = realpathSync(baseDir);
+  } catch {
+    return null;
+  }
+  const checked = new Set<string>();
+  for (const file of files) {
+    let dir = path.dirname(path.join(baseDir, file.relativePath));
+    while (dir !== baseDir && dir.startsWith(baseDir) && !existsSync(dir)) {
+      dir = path.dirname(dir);
+    }
+    if (dir === baseDir || checked.has(dir)) continue;
+    checked.add(dir);
+    let real: string;
+    try {
+      real = realpathSync(dir);
+    } catch {
+      continue;
+    }
+    if (real !== baseReal && !real.startsWith(baseReal + path.sep)) {
+      return { relativeDir: path.relative(baseDir, dir), target: real };
+    }
+  }
+  return null;
+}
+
 // ─── Section 8: Export Command ──────────────────────────────────────────────
 
 async function exportCommand(
@@ -3010,6 +3056,17 @@ async function exportCommand(
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
+
+        const alias = findForeignAliasForResource(baseDir, outputFiles);
+        if (alias) {
+          const reason =
+            `output directory ${alias.relativeDir} resolves outside ${baseDir} (→ ${alias.target}); ` +
+            "not written — it would overwrite another client's export through the link. " +
+            'Replace the link with a real directory and re-run.';
+          output.warn(`  ${ir.id}: ${reason}`);
+          report.failures.push({ id: ir.id, reason });
+          continue;
+        }
 
         for (const file of outputFiles) {
           // Contained against the OUTPUT dir, not the resources root: this writer's destination is
@@ -3363,6 +3420,17 @@ async function syncCommand(
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
+
+        const alias = findForeignAliasForResource(baseDir, outputFiles);
+        if (alias) {
+          const reason =
+            `output directory ${alias.relativeDir} resolves outside ${baseDir} (→ ${alias.target}); ` +
+            "not written — it would overwrite another client's export through the link. " +
+            'Replace the link with a real directory and re-run.';
+          output.warn(`  ${ir.id}: ${reason}`);
+          report.failures.push({ id: ir.id, reason });
+          continue;
+        }
 
         for (const file of outputFiles) {
           // Contained against the OUTPUT dir, not the resources root: this writer's destination is

@@ -5,7 +5,7 @@
  * reporting. F10 adoption rides the same path, so it is driven here too.
  */
 import { mkdtempSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile, symlink, access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -102,6 +102,27 @@ describe('sync and diff commands end to end (F11)', () => {
       out
     ).then((report) => ({ report, out }));
   }
+
+  it('sync refuses to write a skill directory that is a symlink out of the base dir', async () => {
+    // Same defect as the export test (2026-08-27 codex→claude-code clobber), on the sync path:
+    // the guard sits at the second write site, so it needs its own falsifiable assertion.
+    await writePrompt('aliased');
+    await writePrompt('plain');
+    const foreignDir = path.join(tmpDir, 'other-client', 'aliased');
+    await mkdir(foreignDir, { recursive: true });
+    const sentinel = '---\nmanaged-client: other\n---\nFOREIGN RENDER — must survive\n';
+    await writeFile(path.join(foreignDir, 'SKILL.md'), sentinel);
+    await symlink(foreignDir, path.join(outputDir, 'aliased'), 'dir');
+
+    const { report, out } = await run({ command: 'sync' });
+
+    expect(await readFile(path.join(foreignDir, 'SKILL.md'), 'utf-8')).toBe(sentinel);
+    expect(report.failures.map((f) => f.id)).toContain('aliased');
+    expect(out.warns.some((w) => w.includes('aliased') && w.includes('resolves outside'))).toBe(
+      true
+    );
+    await access(path.join(outputDir, 'plain', 'SKILL.md'));
+  });
 
   it('sync writes skills and reports what it wrote', async () => {
     await writePrompt('kept_prompt');
