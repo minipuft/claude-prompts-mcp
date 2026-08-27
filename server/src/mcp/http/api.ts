@@ -4,13 +4,14 @@
  * Handles Express app setup, middleware, and REST API endpoints
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'path';
 
 import express, { Request, Response } from 'express';
 
+import { ApiSecurityBoundary } from './api-security.js';
+import { PromptAuthorityApi } from './prompt-authority-api.js';
 import { McpToolRouter } from '../tools/index.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -36,22 +37,34 @@ export class ApiRouter {
   private promptsData: PromptData[] = [];
   private categories: Category[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
-  private catalogReadToken: string | null;
+  private readonly security: ApiSecurityBoundary;
+  private readonly promptAuthority: PromptAuthorityApi;
 
   constructor(
     logger: Logger,
     configManager: ConfigManager,
     promptManager?: PromptAssetManager,
     mcpToolsManager?: McpToolRouter,
-    options: { catalogReadToken?: string | null } = {}
+    options: {
+      catalogReadToken?: string | null;
+      catalogWriteToken?: string | null;
+      allowedOrigins?: readonly string[];
+    } = {}
   ) {
     this.logger = logger;
     this.configManager = configManager;
     this.promptManager = promptManager;
     this.mcpToolsManager = mcpToolsManager;
-    const catalogReadToken = options.catalogReadToken?.trim();
-    this.catalogReadToken =
-      catalogReadToken === undefined || catalogReadToken.length === 0 ? null : catalogReadToken;
+    this.security = new ApiSecurityBoundary({
+      readToken: options.catalogReadToken,
+      writeToken: options.catalogWriteToken,
+      allowedOrigins: options.allowedOrigins,
+    });
+    this.promptAuthority = new PromptAuthorityApi({
+      logger,
+      getPrompts: () => this.convertedPrompts,
+      runAction: (input) => this.runResourceManagerAction(input),
+    });
   }
 
   /**
@@ -73,6 +86,9 @@ export class ApiRouter {
   createApp(): express.Application {
     const app = express();
 
+    // Security runs before JSON parsing so unauthorized writes never consume request bodies.
+    this.security.register(app);
+
     // Setup middleware
     this.setupMiddleware(app);
 
@@ -86,19 +102,8 @@ export class ApiRouter {
    * Setup Express middleware
    */
   private setupMiddleware(app: express.Application): void {
-    // Enable CORS for Cursor integration
-    app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-      if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-      }
-      return next();
-    });
-
     // Add JSON body parser middleware
-    app.use(express.json());
+    app.use(express.json({ limit: '1mb' }));
 
     // Add request logging middleware
     app.use((req, _res, next) => {
@@ -170,13 +175,6 @@ export class ApiRouter {
     app.get('/api/v1/catalog/prompts/:promptId', (req: Request, res: Response) => {
       res.setHeader('Cache-Control', 'no-store');
 
-      if (this.catalogReadToken === null) {
-        return res.status(503).json({ error: 'Catalog detail endpoint is unavailable' });
-      }
-      if (!this.hasValidCatalogReadToken(req)) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
       const promptIdParam = req.params['promptId'];
       const promptId = Array.isArray(promptIdParam) ? promptIdParam[0] : promptIdParam;
       const prompt = this.convertedPrompts.find((candidate) => candidate.id === promptId);
@@ -187,6 +185,8 @@ export class ApiRouter {
 
       return res.json(buildPromptCatalogDetail(prompt));
     });
+
+    this.promptAuthority.register(app);
 
     // Get prompts by category
     app.get('/categories/:categoryId/prompts', (req: Request, res: Response) => {
@@ -202,18 +202,6 @@ export class ApiRouter {
 
       return res.json(categoryPrompts);
     });
-  }
-
-  private hasValidCatalogReadToken(req: Request): boolean {
-    const authorization = req.header('authorization');
-    if (authorization?.startsWith('Bearer ') !== true) return false;
-
-    const candidate = authorization.slice('Bearer '.length).trim();
-    if (candidate.length === 0 || this.catalogReadToken === null) return false;
-
-    const expectedDigest = createHash('sha256').update(this.catalogReadToken).digest();
-    const candidateDigest = createHash('sha256').update(candidate).digest();
-    return timingSafeEqual(expectedDigest, candidateDigest);
   }
 
   /**
@@ -502,5 +490,10 @@ export function createApiRouter(
 ): ApiRouter {
   return new ApiRouter(logger, configManager, promptManager, mcpToolsManager, {
     catalogReadToken: process.env['MCP_CATALOG_READ_TOKEN'],
+    catalogWriteToken: process.env['MCP_CATALOG_WRITE_TOKEN'],
+    allowedOrigins: (process.env['MCP_HTTP_ALLOWED_ORIGINS'] ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
   });
 }

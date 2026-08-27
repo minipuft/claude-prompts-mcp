@@ -753,6 +753,40 @@ clients that need executable template content use `GET /api/v1/catalog/prompts/:
 bearer token supplied through `MCP_CATALOG_READ_TOKEN`. The protected route fails closed when the
 token is not configured and marks responses `Cache-Control: no-store`.
 
+The Agent Workbench authority projection exposes the existing `resource_manager` prompt owner as
+structured HTTP without creating a second writer or history:
+
+| Method | Endpoint                                  | Credential | Parameters                                          | Success                                             |
+| ------ | ----------------------------------------- | ---------- | --------------------------------------------------- | --------------------------------------------------- |
+| `GET`  | `/api/v1/authority/prompts/{id}`          | read       | `id: string`                                        | executable detail plus `current_version`            |
+| `GET`  | `/api/v1/authority/prompts/{id}/history`  | read       | `limit: integer` (`1..100`, default `20`)           | ordered version metadata                            |
+| `GET`  | `/api/v1/authority/prompts/{id}/compare`  | read       | `from_version`, `to_version`: non-negative integers | unified diff and stats                              |
+| `POST` | `/api/v1/authority/prompts/{id}/dry-run`  | write      | `expected_version` plus strict update fields        | validation, diff, resulting prompt; nothing written |
+| `POST` | `/api/v1/authority/prompts/{id}/apply`    | write      | dry-run fields plus `confirmed: true`               | canonical mutation receipt                          |
+| `POST` | `/api/v1/authority/prompts/{id}/rollback` | write      | `version`, `expected_version`, `confirmed: true`    | restored/current versions and refresh status        |
+
+Example apply request:
+
+```http
+POST /api/v1/authority/prompts/implementation_plan/apply
+Authorization: Bearer <MCP_CATALOG_WRITE_TOKEN>
+Content-Type: application/json
+
+{
+  "expected_version": 7,
+  "confirmed": true,
+  "user_message_template": "Create a plan for {{ task }}"
+}
+```
+
+Errors are sanitized JSON: `400 bad_request`, `401 unauthorized`, `403 forbidden_origin`,
+`409 conflict`, `422 rejected`, `429 rate_limited`, or `503 authority_unavailable`. Reads allow 120
+requests/minute per peer and writes allow 30. Read and write tokens must differ; equal values fail
+closed for writes. `MCP_HTTP_ALLOWED_ORIGINS` contains the exact comma-separated origins allowed to
+call HTTP APIs from a browser. Requests without `Origin` remain valid for server-side clients.
+Authentication and rate limiting run before body parsing or prompt lookup, responses are
+`no-store`, and credentials are removed from request logs.
+
 ### Prompts (`src/modules/prompts/`)
 
 - **Registry**: Dynamic registration with category organization

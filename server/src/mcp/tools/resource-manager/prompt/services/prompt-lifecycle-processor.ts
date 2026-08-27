@@ -752,6 +752,18 @@ export class PromptLifecycleProcessor {
 
     return {
       content: [{ type: 'text' as const, text }],
+      structuredContent: {
+        action: 'update',
+        id: String(promptData['id']),
+        dry_run: true,
+        valid: true,
+        mutated: false,
+        has_changes: diff.hasChanges,
+        diff: diff.diff,
+        stats: diff.stats,
+        resulting_prompt: promptData,
+        warnings: preExisting.map((defect) => defect.message),
+      },
       isError: false,
     };
   }
