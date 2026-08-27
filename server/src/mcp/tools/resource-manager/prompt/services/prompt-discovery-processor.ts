@@ -160,14 +160,27 @@ export class PromptDiscoveryProcessor {
             }
           }
 
-          // System message (full content)
-          if (prompt.systemMessage) {
-            result += `\n**System Message**:\n\`\`\`\n${prompt.systemMessage}\n\`\`\`\n`;
-          }
-
-          // User message template (full content)
-          if (prompt.userMessageTemplate) {
-            result += `\n**User Message Template**:\n\`\`\`\n${prompt.userMessageTemplate}\n\`\`\`\n`;
+          // Instruction bodies are DELIBERATELY not listed here. A catalogue call names no
+          // prompt, so returning every prompt's `systemMessage` served two things badly:
+          //
+          //  - exposure: one listing call handed over the whole instruction surface of every
+          //    installed prompt, including any that arrived in a third-party pack;
+          //  - correctness: a `systemMessage` is not a description. Measured 2026-08-25, 10 of
+          //    11 shipped ones are second-person instruction ("You are a creative director…"),
+          //    so a catalogue returned a pile of competing role assignments the model is not
+          //    executing. That is role ambiguity, not information.
+          //
+          // `inspect` with `detail:"full"` still returns both bodies, because there the caller
+          // has named the one prompt they want. Nothing became unreachable; it now takes asking.
+          // The pointer names `detail:"full"` explicitly -- a bare `inspect` returns metadata
+          // only, so omitting it would send the reader to a call that does not answer them.
+          const bodies: string[] = [];
+          if (prompt.systemMessage) bodies.push('system message');
+          if (prompt.userMessageTemplate) bodies.push('user message template');
+          if (bodies.length > 0) {
+            result +=
+              `\n**Content**: ${bodies.join(' + ')} — ` +
+              `\`action:"inspect", id:"${prompt.id}", detail:"full"\`\n`;
           }
 
           // Chain steps (full details)

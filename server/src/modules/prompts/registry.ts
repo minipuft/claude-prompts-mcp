@@ -167,7 +167,14 @@ export class PromptRegistry {
           target.registerPrompt(
             prompt.id,
             {
-              title: prompt.id,
+              // `title` is the human-readable label, distinct from the registered name --
+              // the SDK's own example registers `'review-code'` with `title: 'Code Review'`.
+              // This passed `prompt.id`, making it byte-identical to the name for 34/34
+              // registered prompts: ~775 bytes of zero-information duplication in every
+              // `prompts/list`, which clients typically fetch at connect (measured
+              // 2026-08-25). Every prompt already authors a real name (`Codebase Protocol
+              // Initialization` vs `codebase_protocol_init`); it was simply never sent.
+              title: prompt.name || prompt.id,
               description: prompt.description || `Prompt: ${prompt.id}`,
               argsSchema,
             },

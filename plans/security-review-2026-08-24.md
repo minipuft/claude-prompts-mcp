@@ -73,17 +73,17 @@ not name. Sources reviewed 2026-08-24: OWASP Threat Modeling Process (use/abuse 
 qualitative risk questions), Snyk MCP security, HackTricks AI-MCP-Servers, and the
 ecosystem papers it cites.
 
-| Class                               | Shape in this repository                                                                                                                                                                                                          | Status                                                                                                                                  |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tool poisoning**                  | A prompt's `systemMessage`/`userMessageTemplate` IS instruction to the client LLM. A poisoned prompt is the direct analogue of a poisoned tool description, and `GET /api/v1/catalog/prompts/:id` now serves exactly those fields | ☐ not assessed (as of 2026-08-25 · flips when Tier 3.1 runs)                                                                            |
-| **Rug pull**                        | Resources hot-reload and carry version history. A prompt approved once can change afterwards with no re-approval and no name change                                                                                               | ✓ **confirmed** — no integrity or approval signal exists at all (Tier 2.4)                                                              |
-| **Line jumping**                    | Injection that lands at listing time, before any invocation — `resource_manager` discovery output and prompt descriptions                                                                                                         | ☐ not assessed (as of 2026-08-25 · flips when Tier 3.2 runs)                                                                            |
-| **Indirect injection → second bug** | The documented escalation path: attacker content steers the agent into `resource_manager`, which writes a gate, which reaches `sh -c`. This is the concrete chain, not a hypothetical                                             | ⚠ **half confirmed** (as of 2026-08-25 · Tier 1.2 proved content→`sh -c`; the injection→`resource_manager` half flips when Tier 3 runs) |
-| **Elevation of privilege**          | `shell_verify` → `sh -c`; script tools → `python3`/`bash`                                                                                                                                                                         | ✓ **confirmed reachable** (below)                                                                                                       |
-| **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ✓ **CONFIRMED then CLOSED** — two vectors reproduced, containment assertion landed (Tier 2.1)                                           |
-| **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ known, already documented in CLAUDE.md                                                                                                |
-| **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ☐ partially closed (as of 2026-08-25 · flips when Tier 4.1 runs)                                                                        |
-| **Spoofing / Repudiation**          | Deferred: no multi-user identity model exists, so neither has meaning until posture is settled                                                                                                                                    | ✗ out of scope, revisit if posture becomes shared                                                                                       |
+| Class                               | Shape in this repository                                                                                                                                                                                                          | Status                                                                                                                                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tool poisoning**                  | A prompt's `systemMessage`/`userMessageTemplate` IS instruction to the client LLM. A poisoned prompt is the direct analogue of a poisoned tool description, and `GET /api/v1/catalog/prompts/:id` now serves exactly those fields | ✓ **confirmed, ACCEPTED** — 4 fields reach the model unreviewed; ruled inherent (Tier 3.3)                                                                                              |
+| **Rug pull**                        | Resources hot-reload and carry version history. A prompt approved once can change afterwards with no re-approval and no name change                                                                                               | ✓ **confirmed** — no integrity or approval signal exists at all (Tier 2.4)                                                                                                              |
+| **Line jumping**                    | Injection that lands at listing time, before any invocation — `resource_manager` discovery output and prompt descriptions                                                                                                         | ✓ **CONFIRMED; partly closed** — `prompts/list` still carries every `description` at connect (accepted, 3.3). `list detail:"full"` no longer returns instruction bodies (closed by 3.4) |
+| **Indirect injection → second bug** | The documented escalation path: attacker content steers the agent into `resource_manager`, which writes a gate, which reaches `sh -c`. This is the concrete chain, not a hypothetical                                             | ⚠ **server half confirmed; payoff downgraded** — the agent-steering half is a client property, not reproducible here. Terminal step closed by Tier 1 (Tier 3)                           |
+| **Elevation of privilege**          | `shell_verify` → `sh -c`; script tools → `python3`/`bash`                                                                                                                                                                         | ✓ **confirmed reachable** (below)                                                                                                                                                       |
+| **Tampering**                       | Path traversal on resource ids into file writes                                                                                                                                                                                   | ✓ **CONFIRMED then CLOSED** — two vectors reproduced, containment assertion landed (Tier 2.1)                                                                                           |
+| **Information disclosure**          | `state.db` shared across projects; four tables declare scope columns no writer populates, so their rows are global                                                                                                                | ✓ known, already documented in CLAUDE.md                                                                                                                                                |
+| **Information disclosure**          | Secrets in logs — fixed for HTTP request headers, never audited for the STDIO logger or script env                                                                                                                                | ☐ partially closed (as of 2026-08-25 · flips when Tier 4.1 runs)                                                                                                                        |
+| **Spoofing / Repudiation**          | Deferred: no multi-user identity model exists, so neither has meaning until posture is settled                                                                                                                                    | ✗ out of scope, revisit if posture becomes shared                                                                                                                                       |
 
 ### Qualitative risk questions (OWASP)
 
@@ -311,11 +311,101 @@ which owns the "accepted, documented" outcome — the same question shaped diffe
 
 ### Tier 3 — Instruction surface (tool poisoning)
 
-| #   | St                                                   | Work                                                                           | Verify                                                               |
-| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| 3.1 | ☐ (as of 2026-08-25 · flips when this row is probed) | Treat prompt content as tool metadata: what reaches the client LLM unreviewed? | Enumerate the fields; `systemMessage` is the sharpest                |
-| 3.2 | ☐ (as of 2026-08-25 · flips when this row is probed) | Line jumping: what lands at discovery/listing time before any invocation?      | Enumerate listing-time text                                          |
-| 3.3 | ☐ (as of 2026-08-25 · flips when this row is probed) | Decide what, if anything, is owed here — this may be inherent to the product   | Explicit ruling, including "accepted, documented" as a valid outcome |
+| #   | St                  | Work                                                                           | Verify                                                                                                                                                          |
+| --- | ------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1 | ✓ DONE (2026-08-25) | Treat prompt content as tool metadata: what reaches the client LLM unreviewed? | Four fields enumerated below. `systemMessage` is the sharpest, as authored                                                                                      |
+| 3.2 | ✓ DONE (2026-08-25) | Line jumping: what lands at discovery/listing time before any invocation?      | **Three surfaces confirmed by untruncated probe.** `resource_manager list detail:"full"` returns every prompt's `systemMessage` in one call, with no invocation |
+| 3.3 | ✓ DONE (2026-08-25) | Decide what, if anything, is owed here — this may be inherent to the product   | **RULED: accepted, documented.** Serving prompt text to a client LLM IS the product; what was owed is the statement, now in `CLAUDE.md` §Instruction surface    |
+
+| 3.4 | ✓ DONE (2026-08-25) | Discovery amplification: `list detail:"full"` returned every prompt's instruction bodies | **Bodies removed from the catalogue.** Measured: 139,824 bytes (~35k tokens) no longer returned by one listing call — the response went ~167KB → 27.7KB, an 83% cut. `inspect` + `detail:"full"` still returns both. 6 unit tests, mutation-checked |
+| 3.5 | ✓ DONE (2026-08-25) | `prompts/list` sent `title` byte-identical to `name` for 34/34 prompts | **`title` now carries the human name.** `registry.ts` passed `prompt.id`; the SDK's own example registers `'review-code'` with `title: 'Code Review'`, so this was a misuse of the field, not just waste. Measured after: title==name for **0/34**. 2 unit tests |
+
+#### 3.1 — the instruction surface, measured
+
+| Field                   | Reaches the client                                      | Reviewed by anything? |
+| ----------------------- | ------------------------------------------------------- | --------------------- |
+| `systemMessage`         | on invocation, and via `list detail:"full"` without one | no                    |
+| `userMessageTemplate`   | on invocation                                           | no                    |
+| `description`           | **at connect**, via MCP `prompts/list`                  | no                    |
+| argument `description`s | **at connect**, via MCP `prompts/list`                  | no                    |
+
+Nothing sanitises, marks, or attributes any of it. A workspace-authored prompt and a
+bundled one are indistinguishable in the payload the model receives, which is what makes
+this the direct analogue of a poisoned tool description.
+
+#### 3.2 — the reproduction (line jumping)
+
+A prompt was created carrying distinct markers in `description` and `system_message`, then
+four discovery surfaces were read with **no invocation of that prompt**. Output limits were
+raised to 400k first, because a 3k truncation had produced a clean-looking false negative on
+the first pass:
+
+| Surface                               | `description` | `systemMessage` |
+| ------------------------------------- | ------------- | --------------- |
+| `tools/list`                          | no            | no              |
+| `prompts/list` (MCP standard)         | **yes**       | no              |
+| `resource_manager list detail:"full"` | **yes**       | **yes**         |
+| `resource_manager inspect`            | **yes**       | no              |
+
+`prompts/list` is the one that matters most for reach: MCP clients typically fetch it at
+connect, so a poisoned `description` lands in the model's context automatically, with no
+user action beyond having the server configured.
+
+#### 3.4 / 3.5 — what the catalogue owed
+
+3.3 accepted the per-prompt instruction surface as inherent. These two are the parts that
+were **not** inherent, and both were closed:
+
+|                        | before                                                         | after                                                                          |
+| ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `list detail:"full"`   | ~167KB, every prompt's `systemMessage` + `userMessageTemplate` | 27.7KB, metadata + a pointer                                                   |
+| `prompts/list` `title` | `prompt.id` — identical to `name`, 34/34                       | `prompt.name` — `Codebase Protocol Initialization` vs `codebase_protocol_init` |
+
+The listing cut is worth more than its byte count suggests. A `systemMessage` is not a
+description: 10 of 11 shipped ones are second-person instruction, so a catalogue was
+returning role assignments the model is not executing. Removing them fixes an exposure and
+an ambiguity with one change.
+
+**One correction caught in the live drive.** The first pointer read
+`action:"inspect", id:"…"` — but a bare `inspect` returns metadata only; the bodies sit
+behind `detail:"full"`. The pointer would have sent readers to a call that does not answer
+them. Verified against a running server before and after, not from reading.
+
+**Alternative rejected for 3.5**: dropping `title` entirely saves ~775 bytes rather than
+spending +222 to carry real names. Rejected because the field is not waste, it was
+_misused_ — the SDK documents it as the human display label, and this repo already authors
+those names and had simply never sent them. Revisit if a token budget ever makes 222 bytes
+matter more than every client losing readable prompt labels.
+
+#### 3.3 — the ruling
+
+**Accepted and documented, not fixed.** A prompt is instruction by definition; a server that
+sanitised prompt text into inertness would not be this product. The `cleanup-standards.md`
+test for a real dial does not apply — there is no behaviour here anyone would choose between.
+
+What was actually missing was the statement. A reader deciding whether to install a
+third-party prompt pack had nothing in the docs telling them the pack's `systemMessage`
+becomes instruction to their model, or that a single listing call hands it over. That is now
+`CLAUDE.md` §Instruction surface.
+
+Two things bound the acceptance, and both are load-bearing:
+
+- the HTTP route serving the same fields **is** credential-gated (`MCP_CATALOG_READ_TOKEN`,
+  503 when unset, 401 on a bad token, authenticated before it looks the prompt up). The MCP
+  surface is ungated by design, because the operator chose the client;
+- the escalation chain's terminal step is closed as of Tier 1. A poisoned gate can still
+  reach the model as text, but it can no longer reach `sh -c`.
+
+#### Threat-model row settled: indirect injection → second bug
+
+Tier 1.2 proved the second half (content → `sh -c`). The first half — attacker content
+steering an agent into calling `resource_manager` — is a property of the CLIENT's agent, not
+of this server, and is not reproducible here; claiming it either way from this repository
+would be evidence about nothing.
+
+What changed is the payoff rather than the reachability. Before Tier 1, that chain ended in
+arbitrary code execution. It now ends in a gate that refuses and names the setting, so the
+residual harm is instruction-surface poisoning — which is 3.1/3.2, and accepted above.
 
 ### Tier 4 — Disclosure
 
