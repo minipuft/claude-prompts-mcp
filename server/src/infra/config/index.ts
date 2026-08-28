@@ -238,6 +238,7 @@ const DEFAULT_CONFIG: Config = {
 export interface ResourcePathSource {
   getPromptsPath(): string;
   getGatesPath(): string;
+  getFrameworksPath(): string;
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
@@ -615,6 +616,25 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getServerRoot(): string {
     return path.dirname(this.configPath);
+  }
+
+  /**
+   * Get frameworks directory path — the destination every framework WRITE and DELETE resolves
+   * through (`framework-file-writer.ts:504`, via `getFrameworkDir`).
+   *
+   * Third instance of the same defect as prompts and gates: `getFrameworkDir` composed
+   * `join(getServerRoot(), 'resources', 'frameworks', id)`, so it ignored `PathResolver` while
+   * framework reads were overlay-merged through it (`module-initializer.ts:218`). The delete path
+   * makes this sharper than the other two — `rm(frameworkDir, {recursive: true})` against a
+   * mis-resolved root removes a directory in the package tree.
+   */
+  getFrameworksDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getFrameworksPath();
+    }
+
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'frameworks');
   }
 
   /**

@@ -60,6 +60,7 @@ export interface ConfigManager {
   getResolvedPromptsDirectory(overridePath?: string): string;
   getServerRoot(): string;
   getGatesDirectory(): string;
+  getFrameworksDirectory(): string;
 
   // ── Config reload ────────────────────────────────────────────────────
 

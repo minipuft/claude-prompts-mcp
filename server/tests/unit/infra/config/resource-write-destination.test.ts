@@ -28,6 +28,7 @@ function resolverAt(root: string): ResourcePathSource {
   return {
     getPromptsPath: () => path.join(root, 'prompts'),
     getGatesPath: () => path.join(root, 'gates'),
+    getFrameworksPath: () => path.join(root, 'frameworks'),
   };
 }
 
@@ -106,6 +107,30 @@ describe('prompt write destination', () => {
 
     try {
       expect(manager.getGatesDirectory()).toBe(path.join(dir, 'resources', 'gates'));
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('resolves the frameworks directory through the path source too', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      // Frameworks were the third instance, and the one where getting it wrong is destructive:
+      // `FrameworkFileWriter.deleteFramework` does `rm(frameworkDir, {recursive: true})` on
+      // whatever this resolves to.
+      expect(manager.getFrameworksDirectory()).toBe('/somewhere/else/resources/frameworks');
+      expect(manager.getFrameworksDirectory().startsWith(dir)).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('falls back to the config-relative frameworks directory without a path source', async () => {
+    const { manager, dir, cleanup } = await loaderWith();
+
+    try {
+      expect(manager.getFrameworksDirectory()).toBe(path.join(dir, 'resources', 'frameworks'));
     } finally {
       await cleanup();
     }

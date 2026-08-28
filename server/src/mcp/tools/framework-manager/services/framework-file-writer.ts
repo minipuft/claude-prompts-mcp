@@ -502,8 +502,7 @@ export class FrameworkFileWriter {
    * Used by versioning service to locate history files.
    */
   public getFrameworkDir(id: string): string {
-    const serverRoot = this.configManager.getServerRoot();
-    return join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
+    return join(this.configManager.getFrameworksDirectory(), id.toLowerCase());
   }
 
   private needsPhasesFile(data: Partial<FrameworkCreationData>): boolean {

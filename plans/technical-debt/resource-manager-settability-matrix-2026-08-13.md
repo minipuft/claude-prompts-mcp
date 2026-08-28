@@ -930,3 +930,45 @@ positive control" describes.
 `strict-boolean-expressions` errors. Measured per-rule against a freshly built main rather than
 trusting the ratchet, found both, and fixed them (`if (x)` on a nullable object needs
 `if (x !== undefined)`). Branch now measures 3094, identical to main — zero net lint debt.
+
+### 14.6 T1.10 verification — 2026-08-27
+
+The framework row did not behave like the first two, and the difference is the finding.
+
+**The write fix alone BROKE framework creation.** With only the writer delegating, a create under
+an overridden root wrote the files correctly and then failed: `Framework 'x' not found on disk`,
+followed by a rollback that deleted them. Attributed before acting: the server log named the
+directory it had just written and deleted (`/tmp/probe-*/resources/frameworks/...`), so the writer
+was right and the _reader_ was looking elsewhere.
+
+Two read-side defects, both pre-existing, both invisible until the write path stopped sharing their
+mistake:
+
+| #     | Status | Defect                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T1.12 | ✓      | `getDefaultRuntimeLoader(config)` discarded `config` whenever the singleton already existed (`if (!defaultLoader)`), so framework directory resolution depended on call order and the losing branch silently fell back to the package tree. `module-initializer.ts:216` carries a comment asserting the required order — an invariant with no enforcement. Now re-applies when a caller supplies config |
+| T1.13 | ✓      | `FrameworkRegistry` constructed its **own** `RuntimeFrameworkLoader` (`registry.ts:81`) instead of the configured singleton, and `framework-manager.ts:128` calls `createFrameworkRegistry(logger)` with no config — so the registry's loader _always_ fell back to the package tree. A fourth resolver for one resource type. Now shares the singleton unless a caller pins its own config             |
+
+| Build                 | override tree            | package tree | reported                          |
+| --------------------- | ------------------------ | ------------ | --------------------------------- |
+| without T1.10         | no                       | **YES**      | success — created and registered  |
+| T1.10 writer only     | written then rolled back | no           | **failure** — "not found on disk" |
+| T1.10 + T1.12 + T1.13 | **YES**                  | no           | success                           |
+
+**The correction to §14.1 and to the T1.9 commit message.** Both said framework reads were
+"overlay-merged through `PathResolver` (`module-initializer.ts:218`)". That is true of the default
+singleton and false of the registry, which is the instance every `resource_manager` framework
+operation actually uses. Framework reads ignored `MCP_RESOURCES_PATH` exactly as writes did.
+
+So the general claim in §13.1 — "the read side is one coherent model applied four times" — is
+**wrong for frameworks**. Reads and writes agreed there only because both were broken, which is why
+nothing had ever reported it. Corrected rather than quietly amended, because the pattern is the
+reusable part: **two subsystems agreeing is not evidence either is right**, and fixing one side of
+a matched pair is how you find out.
+
+**Test surface.** Adding one method to the `ConfigManager` interface broke four unit cases and
+twelve integration cases through `as unknown as ConfigManager` stubs — the cast is precisely why
+`typecheck` could not see them, and `typecheck:tests:ratchet` passed too because the cast makes the
+stub well-typed. Only running the suites found it. `cli/` swept: zero references to any changed
+symbol. Integration suite 57/57, unit 212 suites / 2729 tests, `validate:arch` 0 errors, branch
+eslint 3093 vs main 3094.

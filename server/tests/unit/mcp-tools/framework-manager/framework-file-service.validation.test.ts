@@ -22,6 +22,9 @@ describe('FrameworkFileWriter canonical writes', () => {
     } as unknown as Logger;
     configManager = {
       getServerRoot: () => workspaceDir,
+      // The writer asks for the frameworks directory directly now (T1.10) rather than composing
+      // it from the server root, so the stub has to answer that question. Same on-disk layout.
+      getFrameworksDirectory: () => join(workspaceDir, 'resources', 'frameworks'),
     } as unknown as ConfigManager;
   });
 
