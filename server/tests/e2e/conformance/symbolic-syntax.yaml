@@ -173,8 +173,26 @@ scenarios:
 
   - id: operator-delegation
     claim_source: 'README symbolic syntax — "==>" delegates a step to a subagent'
-    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt ==> >>minimal_prompt' } }]
-    expect: { ok: true }
+    # `ok: true` was provably blind here: a `==>` that parsed and then rendered the step INLINE
+    # returns a successful response with no handoff at all — exactly the shape a 2026-08-27 stdio
+    # probe first mistook for "delegation never renders", before a %clean positive control showed
+    # the brief does render once the chain reaches the delegated step (plan Tier 2). This scenario
+    # is that control as a corpus row: `%clean` drops framework injection so no step-1 phase-guard
+    # gate intercepts the resume, the chain advances to the delegated step 2, and its response
+    # carries the self-contained EXECUTION BRIEF. `EXECUTION BRIEF` is the client-agnostic
+    # observable — the delimiter renders under every delegation strategy; the `general-purpose`
+    # executor name is host-specific (this corpus runs as a neutral client) and is pinned instead
+    # by the in-process test `delegated-resume-brief.integration.test.ts`.
+    requests:
+      - tool: prompt_engine
+        args: { command: '%clean >>minimal_prompt ==> >>minimal_prompt' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'step one output'
+    expect: { text_contains: 'EXECUTION BRIEF' }
 
   - id: operator-gate
     # Verbatim from the README rather than a paraphrase: the published string IS the claim, and a
