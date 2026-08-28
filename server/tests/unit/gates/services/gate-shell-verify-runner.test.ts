@@ -1,3 +1,4 @@
+import { createShellVerifyExecutor } from '../../../../src/engine/gates/shell/shell-verify-executor.js';
 import { describe, expect, jest, test, beforeEach } from '@jest/globals';
 
 import {
@@ -159,7 +160,12 @@ describe('runGateShellVerifications', () => {
       ]),
     } as any;
 
-    const results = await runGateShellVerifications(['code-quality'], gateProvider);
+    const results = await runGateShellVerifications(
+      ['code-quality'],
+      gateProvider,
+      undefined,
+      createShellVerifyExecutor({})
+    );
     expect(results).toHaveLength(0);
   });
 
@@ -179,7 +185,12 @@ describe('runGateShellVerifications', () => {
       ]),
     } as any;
 
-    const results = await runGateShellVerifications(['test'], gateProvider);
+    const results = await runGateShellVerifications(
+      ['test'],
+      gateProvider,
+      undefined,
+      createShellVerifyExecutor({})
+    );
     expect(results).toHaveLength(0);
   });
 
@@ -191,7 +202,12 @@ describe('runGateShellVerifications', () => {
       loadGates: jest.fn().mockResolvedValue([]),
     } as any;
 
-    const results = await runGateShellVerifications(['nonexistent'], gateProvider);
+    const results = await runGateShellVerifications(
+      ['nonexistent'],
+      gateProvider,
+      undefined,
+      createShellVerifyExecutor({})
+    );
     expect(results).toHaveLength(0);
   });
 });

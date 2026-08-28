@@ -16,6 +16,7 @@ import type { GatesConfig } from '#shared/types/core-config.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ScriptToolRuntimeProvider } from '../../../gates/services/script-tool-criterion-runner.js';
+import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-executor.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 
@@ -35,6 +36,13 @@ export interface GateReviewCollaborators {
    * this whole criteria type inert.
    */
   scriptToolRuntime?: ScriptToolRuntimeProvider;
+  /**
+   * Executor for `shell_verify` criteria. The SAME instance the inline
+   * `:: verify:` path uses, so the gate master switch and the operator allowlist
+   * it carries govern both. Absent, `shell_verify` criteria are skipped rather
+   * than run ungoverned — a control that is only sometimes wired is not a control.
+   */
+  shellVerifyExecutor?: ShellVerifyExecutor;
 }
 
 /**
@@ -163,12 +171,14 @@ export class GateReviewStage extends BasePipelineStage {
       // `shell_stdin_source: 'agent_response'` can verify response-content claims
       // (file paths, line numbers, symbols) against ground truth.
       let shellSection = '';
-      if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
+      const shellVerifyExecutor = this.collaborators.shellVerifyExecutor;
+      if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0 && shellVerifyExecutor) {
         const agentResponse = context.mcpRequest?.user_response;
         const shellResults = await runGateShellVerifications(
           pendingReview.gateIds,
           this.gateDefinitionProvider,
-          agentResponse !== undefined ? { agentResponse } : undefined
+          agentResponse !== undefined ? { agentResponse } : undefined,
+          shellVerifyExecutor
         );
         // `script_tool` criteria run beside `shell_verify` rather than instead of it: a gate
         // may declare both, and the two answer different questions — an exit code versus a

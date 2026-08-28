@@ -14,9 +14,9 @@ import {
   SHELL_STDIN_SOURCE_AGENT_RESPONSE,
   SHELL_VERIFY_MAX_RESPONSE_BYTES,
 } from '../constants.js';
-import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
+import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../shell/shell-verify-message-formatter.js';
 import type { ShellVerifyGate } from '../shell/types.js';
 
@@ -111,15 +111,22 @@ function resolveResponseInjection(
  * @param gateIds - Gate IDs from the pending review
  * @param gateDefinitionProvider - Provider to load gate definitions
  * @param runContext - Optional context (e.g., agent response for stdin injection)
+ * @param executor - The shell verification executor to run criteria through.
+ *   Passed in rather than resolved from a module singleton: the executor now
+ *   carries the gate master switch and the operator allowlist, and a
+ *   process-lifetime instance cannot hold the per-workspace scope those are read
+ *   for. Passing it also converges this path and the inline `:: verify:` path on
+ *   ONE instance, so a control added to the executor cannot cover one and miss
+ *   the other — which is exactly what row 1.5 measured.
  * @returns Results for each gate that had shell_verify criteria (may be empty)
  */
 export async function runGateShellVerifications(
   gateIds: string[],
   gateDefinitionProvider: GateDefinitionProvider,
-  runContext?: GateShellVerifyRunContext
+  runContext: GateShellVerifyRunContext | undefined,
+  executor: ShellVerifyExecutor
 ): Promise<GateShellVerifyResult[]> {
   const results: GateShellVerifyResult[] = [];
-  const executor = getDefaultShellVerifyExecutor();
 
   const gates = await gateDefinitionProvider.loadGates(gateIds);
 

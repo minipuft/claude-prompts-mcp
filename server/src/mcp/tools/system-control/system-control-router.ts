@@ -362,11 +362,42 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     }
   }
 
+  /**
+   * Resolve the scope this request's state reads and writes belong to.
+   *
+   * `workspaceId` is set as well as `continuityScopeId` because the two are read by
+   * DIFFERENT stores and only one of them was being populated. `resolveContinuityScopeId`
+   * — which `GateStateStore` and `SqliteStateStore` key on — reads `workspaceId` and
+   * `organizationId` and has never read `continuityScopeId`; `run-registry` and
+   * `execution-record-store` read `continuityScopeId` first. Returning only the latter
+   * therefore resolved to the literal `'default'` bucket in the gate store, while every
+   * reader of the gate switch used `identity.launchDefaults.workspaceId`.
+   *
+   * Measured 2026-08-27 (row 1.5): `system_control action="gates" operation="disable"`
+   * reported success, `operation="status"` read back `Disabled` from that same dead
+   * bucket, and shell verification, gate guidance and the advertised parameter surface
+   * all continued to see the system as enabled. The switch was inert in every
+   * configuration, because the launch default is derived from cwd whenever nothing
+   * explicit is given, so the two keys never coincide.
+   *
+   * The launch default is the fallback rather than `undefined` for the same reason
+   * `PromptExecutor` uses it: it IS the process's workspace when a request carries no
+   * identity of its own. `continuityScopeId` is left exactly as it was so the stores
+   * keyed on it observe no change.
+   */
   private extractScope(extra: unknown): StateStoreOptions | undefined {
-    if (!extra || typeof extra !== 'object') return undefined;
-    const identity = resolveRequestIdentity(extra as Record<string, unknown>);
-    const scopeId = resolveContinuityScopeId(identity);
-    return scopeId !== 'default' ? { continuityScopeId: scopeId } : undefined;
+    const requestScopeId =
+      extra && typeof extra === 'object'
+        ? resolveContinuityScopeId(resolveRequestIdentity(extra as Record<string, unknown>))
+        : 'default';
+    const launchWorkspaceId = this.configManager?.getConfig().identity?.launchDefaults?.workspaceId;
+    const workspaceId = requestScopeId !== 'default' ? requestScopeId : launchWorkspaceId;
+
+    const scope: StateStoreOptions = {
+      ...(requestScopeId !== 'default' ? { continuityScopeId: requestScopeId } : {}),
+      ...(workspaceId != null ? { workspaceId } : {}),
+    };
+    return Object.keys(scope).length > 0 ? scope : undefined;
   }
 
   private getActionHandler(action: SystemControlActionId): ActionHandler {

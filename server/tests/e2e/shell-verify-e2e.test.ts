@@ -13,7 +13,6 @@ import { join } from 'path';
 import {
   ShellVerifyExecutor,
   createShellVerifyExecutor,
-  resetDefaultShellVerifyExecutor,
 } from '../../src/engine/gates/shell/shell-verify-executor.js';
 import { SymbolicCommandParser } from '../../src/engine/execution/parsers/symbolic-operator-parser.js';
 import type { Logger } from '../../src/infra/logging/index.js';
@@ -23,7 +22,6 @@ describe('Shell Verify E2E', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    resetDefaultShellVerifyExecutor();
     executor = createShellVerifyExecutor({
       defaultTimeout: 30000, // 30 seconds for E2E tests
       debug: false,
@@ -34,7 +32,6 @@ describe('Shell Verify E2E', () => {
   });
 
   afterEach(async () => {
-    resetDefaultShellVerifyExecutor();
     try {
       await rm(tempDir, { recursive: true, force: true });
     } catch {

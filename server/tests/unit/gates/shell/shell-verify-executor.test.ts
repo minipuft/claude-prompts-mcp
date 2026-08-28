@@ -13,7 +13,6 @@
 import {
   ShellVerifyExecutor,
   createShellVerifyExecutor,
-  resetDefaultShellVerifyExecutor,
 } from '../../../../src/engine/gates/shell/shell-verify-executor.js';
 import { SHELL_OUTPUT_MAX_CHARS } from '../../../../src/engine/gates/shell/types.js';
 import {
@@ -34,7 +33,6 @@ describe('ShellVerifyExecutor', () => {
   const ALLOW_ALL: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
 
   beforeEach(() => {
-    resetDefaultShellVerifyExecutor();
     executor = createShellVerifyExecutor({
       debug: false,
       defaultTimeout: 5000,
@@ -42,9 +40,7 @@ describe('ShellVerifyExecutor', () => {
     });
   });
 
-  afterEach(() => {
-    resetDefaultShellVerifyExecutor();
-  });
+  afterEach(() => {});
 
   describe('constructor and configuration', () => {
     it('should use default timeout when not specified', () => {
@@ -389,5 +385,69 @@ describe('ShellVerifyExecutor', () => {
       expect(result.stdout).toContain('PASS');
       expect(result.stdout).toContain('Tests:');
     });
+  });
+});
+
+/**
+ * Row 1.5. Measured 2026-08-27 against a live server: with the gate system
+ * explicitly Disabled — the tool reporting "Gate validation and guidance will be
+ * skipped" — an authored `:: verify:"touch <marker>"` still wrote the marker.
+ * The switch governed guidance, validation and the advertised parameters, and
+ * governed execution not at all.
+ *
+ * The control arm matters as much as the assertion: without it a refusal here is
+ * indistinguishable from an executor that refuses everything.
+ */
+describe('gate master switch (row 1.5)', () => {
+  const ALLOW_ALL = ['UNSAFE_ALLOW_ALL'];
+
+  it('refuses execution while the gate system is disabled, and names the switch', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL,
+      gateSystemEnabled: () => false,
+    });
+
+    const result = await executor.execute({ command: 'echo reached' });
+
+    expect(result.passed).toBe(false);
+    expect(result.refused).toBe(true);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('gate system is disabled');
+    expect(result.stderr).toContain('system_control');
+  });
+
+  it('POSITIVE CONTROL: the same command runs when the switch is on', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL,
+      gateSystemEnabled: () => true,
+    });
+
+    const result = await executor.execute({ command: 'echo reached' });
+
+    expect(result.refused).toBeUndefined();
+    expect(result.stdout).toContain('reached');
+  });
+
+  it('reads the switch per execution, not once at construction', async () => {
+    let enabled = true;
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL,
+      gateSystemEnabled: () => enabled,
+    });
+
+    const before = await executor.execute({ command: 'echo reached' });
+    enabled = false;
+    const after = await executor.execute({ command: 'echo reached' });
+
+    expect(before.refused).toBeUndefined();
+    expect(after.refused).toBe(true);
+  });
+
+  it('leaves execution ungoverned when no resolver is supplied', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL });
+
+    const result = await executor.execute({ command: 'echo reached' });
+
+    expect(result.refused).toBeUndefined();
   });
 });

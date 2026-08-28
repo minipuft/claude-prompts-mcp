@@ -21,6 +21,11 @@ reconstructed at the end.
 | R5  | 2026-08-25 | **Instruction-surface poisoning is accepted and documented, not fixed.** A prompt is instruction by definition; sanitising prompt text into inertness would not be this product. `cleanup-standards.md`'s dial test does not apply — there is no behaviour anyone would choose between. What was owed was the STATEMENT, now in `CLAUDE.md` §Instruction surface. Bounded by two facts: the HTTP route serving the same fields is credential-gated, and Tier 1 closed the chain's terminal step |
 | R4  | 2026-08-25 | **Elicitation is defence in depth, never the primary control.** See the analysis below — an autonomous client can answer it programmatically, which is precisely our threat.                                                                                                                                                                                                                                                                                                                    |
 
+| R5 | 2026-08-27 | **`gates.enabled` is a feature switch, not a security control, and must behave like one.** Today it only narrows the advertised `inputSchema` while stages 05/17 keep running, so an operator who "turned gates off" still executes authored commands. The two controls compose with AND and answer different questions — _does the subsystem run at all_ (flag) vs _what may a running gate execute_ (allowlist). That is the ordinary shape of a stopped daemon plus a policy; the confusion is not the two-control design, it is that the flag currently lies. |
+| R6 | 2026-08-27 | **No allowlist watcher, ever.** An allowlist records operator INTENT; an inventory records what is on disk. A watcher that enrolls newly-discovered scripts converts the first into the second and re-opens Tier 1.2's exact reproduction — an authored file appearing in the resources overlay and executing — automatically, and faster than a human would notice. A new script failing closed until someone allows it is the control working, not falling behind. `UNSAFE_ALLOW_ALL` already covers the accept-everything position. |
+| R7 | 2026-08-27 | **Env keys split by whether they REDIRECT the control or merely widen reach.** `PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH` decide what an allowlisted command name resolves to or loads — refuse them outright, with no opt-out, or the allowlist bounds a string whose meaning the author picks. Ordinary env vars and `shell_working_dir` only widen reach: contain by default, with a configured escape, because a hard block on a legitimate sibling-repo `npm test` pushes operators to `UNSAFE_ALLOW_ALL`, which is strictly worse. |
+| R8 | 2026-08-27 | **Two different "shells" exist here and only one is unsafe.** `resolveCommand` turning a STRING into `['sh', ['-c', cmd]]` (`process.ts:379`) parses metacharacters and is the dangerous form. The `shell` RUNTIME (`RUNTIME_COMMANDS.shell = ['bash','sh']`) builds an argv array — `bash script.sh` — which is the same risk posture as `python script.py` and is what the modern guidance (Node's `execFile`/`spawn` without `shell:true`, vs `exec`) actually prescribes. Measured: no `shell: true` anywhere in `src/`. So 1.7's defect is `shell` being the SILENT DEFAULT for unrecognised extensions, not `shell` existing. |
+
 ### R4 rationale — "can we secure it like the clients do?"
 
 The owner asked whether this is the same class of problem clients solve, and whether their
@@ -56,6 +61,79 @@ Layering, strongest first:
 | Refusal + named setting (R3) | this server, alone     | every client                  | nothing — it is the floor                          |
 | Elicitation                  | the client, if capable | human-driven clients          | autonomous clients; clients lacking the capability |
 | Client hooks (PreToolUse)    | Claude Code only       | Claude Code sessions          | Codex, OpenCode, Gemini consumers                  |
+
+### R8 rationale — is there a safer standard, and should the shell runtime go?
+
+The question "should we remove the shell runtime" conflates two sinks that this review's own
+execution map (Tier 1.1) already separates:
+
+| Form                                      | Shape                             | Who supplies the string | Metacharacters live? |
+| ----------------------------------------- | --------------------------------- | ----------------------- | -------------------- |
+| Gate `shell_command` / inline `:: verify` | `sh -c "<author string>"`         | the resource author     | **yes**              |
+| Script tool `shell` runtime               | `bash /abs/path/script.sh` (argv) | the file on disk        | no                   |
+
+The industry standard being reached for is exactly this distinction, and it is a property of the
+call shape rather than of any library: pass an argv array, never a shell string built from input.
+Node encodes it in its own API split (`exec` spawns a shell; `execFile`/`spawn` without
+`shell: true` do not). This server already satisfies it on the script path — `spawn(cmd, args)`
+at `process.ts:422` sets no `shell` option anywhere in `src/`.
+
+**Measured cost of removing the `shell` runtime outright**: zero `.sh` files under
+`server/resources`, zero `runtime: shell` declarations, and the one bundled script tool is
+`create_gate/tools/gate_builder/script.py`. So it has no bundled consumer — but it is also not the
+unsafe form, so removing it trades a real capability for no measured risk reduction. Fix the silent
+default instead.
+
+**The removal that WOULD pay** is on the other row: `shell_command` accepting an argv array
+(`["npm", "test"]`) rather than a string, which deletes the `sh -c` branch for gates entirely and
+makes the Tier 1 allowlist an exact match rather than a prefix-and-metacharacter check. That is a
+breaking change to the gate schema and to the one bundled gate (`test-suite/gate.yaml`), so it is
+its own row, not a rider on 1.7.
+
+### Row 1.5 — the switch was inert, and the cause was not in the gate code
+
+**Probe (3 arms, benign `touch` marker only, isolated `MCP_WORKSPACE`, port 9741-9743):**
+
+| Arm            | gates | allowlist  | marker | reading                                  |
+| -------------- | ----- | ---------- | ------ | ---------------------------------------- |
+| A control      | on    | permissive | yes    | the probe can observe execution          |
+| B the question | off   | permissive | yes    | **the switch stopped nothing**           |
+| C vacuity      | on    | unset      | no     | a null in B would have been attributable |
+
+The row asked whether the switch stops execution "or only hides the three gate parameters".
+It did neither. `system_control action="gates" operation="disable"` reported success,
+`operation="status"` read back `Disabled`, and shell verification, gate guidance AND the
+advertised parameter surface all continued to see the system as enabled.
+
+**C18 — the scope key was written where nothing reads.** `SystemControlRouter.extractScope`
+returned `{ continuityScopeId }`. `resolveContinuityScopeId` — which `GateStateStore`,
+`SqliteStateStore` and `FrameworkStateStore` all key on — reads `workspaceId` and
+`organizationId`, and has never read `continuityScopeId`. So every `system_control` write
+landed on the literal `'default'` bucket while every reader used
+`identity.launchDefaults.workspaceId`, which is derived from cwd whenever nothing explicit is
+given. The two keys never coincide in any configuration, so the switch was inert in all of them.
+
+**C18 is not confined to gates.** `FrameworkStateStore` keys the same way, and
+`framework-state-store.ts:356` skips persistence outright when the key resolves to `'default'`
+— so `action="framework", operation="switch"` was not merely pooling every workspace onto one
+row, it was never persisting at all. `tests/unit/mcp-tools/system-control/framework-action.test.ts`
+asserted the broken shape and passed throughout, its own comment stating it existed to prevent
+exactly the defect it pinned. That is the sharpest instance this review has produced of a green
+test certifying the bug it was written to catch.
+
+Fix sets `workspaceId` alongside `continuityScopeId`, leaving the latter byte-identical so the
+stores keyed on it (`run-registry`, `execution-record-store`) observe no change.
+
+**Convergence, not just a check.** The two shell paths held DIFFERENT executor instances — the
+one `PipelineBuilder` creates for inline `:: verify:`, and a module singleton
+`gate-shell-verify-runner` reached for. A control added to one would have passed a probe on that
+path and silently missed the other. The singleton had exactly one production caller and could not
+carry a per-workspace scope, so it was deleted rather than also configured; stage 20 now receives
+the same instance. One sink, one control — the same reasoning Tier 1.1 used.
+
+**Verification**: re-probed after the fix — arm B refuses and writes no marker, arm A still
+executes, arm C still refuses on the allowlist. Four unit tests pin the executor behaviour
+including a positive-control arm and a per-execution (not construction-time) read.
 
 ## Deviations
 

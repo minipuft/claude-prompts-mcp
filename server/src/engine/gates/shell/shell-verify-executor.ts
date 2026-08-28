@@ -50,6 +50,7 @@ export class ShellVerifyExecutor {
   private readonly defaultWorkingDir: string;
   private readonly debug: boolean;
   private readonly allowlist: readonly string[] | undefined;
+  private readonly gateSystemEnabled: (() => boolean) | undefined;
 
   constructor(config: ShellVerifyExecutorConfig = {}) {
     this.defaultTimeout = config.defaultTimeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT;
@@ -57,6 +58,7 @@ export class ShellVerifyExecutor {
     this.defaultWorkingDir = config.defaultWorkingDir ?? process.cwd();
     this.debug = config.debug ?? false;
     this.allowlist = config.allowlist;
+    this.gateSystemEnabled = config.gateSystemEnabled;
   }
 
   /**
@@ -88,6 +90,24 @@ export class ShellVerifyExecutor {
         stderr: 'Empty command provided',
         durationMs: 0,
         command: command ?? '',
+      };
+    }
+
+    // The master switch is checked before the allowlist because the two answer
+    // different questions: whether the gate subsystem runs at all, versus what a
+    // running gate may execute. They compose with AND, and an operator who
+    // disabled the system is entitled to have that mean it.
+    if (this.gateSystemEnabled?.() === false) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr:
+          'Shell verification refused: the gate system is disabled. ' +
+          'Re-enable it with system_control action="gates", operation="enable".',
+        durationMs: 0,
+        command,
       };
     }
 
@@ -144,28 +164,4 @@ export class ShellVerifyExecutor {
  */
 export function createShellVerifyExecutor(config?: ShellVerifyExecutorConfig): ShellVerifyExecutor {
   return new ShellVerifyExecutor(config);
-}
-
-// ============================================================================
-// Default Instance Management (singleton pattern)
-// ============================================================================
-
-let defaultExecutor: ShellVerifyExecutor | null = null;
-
-/**
- * Get the default ShellVerifyExecutor instance.
- * Creates one if it doesn't exist.
- */
-export function getDefaultShellVerifyExecutor(): ShellVerifyExecutor {
-  if (!defaultExecutor) {
-    defaultExecutor = new ShellVerifyExecutor();
-  }
-  return defaultExecutor;
-}
-
-/**
- * Reset the default executor (useful for testing).
- */
-export function resetDefaultShellVerifyExecutor(): void {
-  defaultExecutor = null;
 }

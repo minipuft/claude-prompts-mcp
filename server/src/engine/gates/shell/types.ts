@@ -126,6 +126,22 @@ export interface ShellVerifyExecutorConfig {
    * (tests, and embedders that hold their own operator configuration).
    */
   allowlist?: readonly string[];
+  /**
+   * Whether the gate system is currently enabled, read per execution.
+   *
+   * The master switch used to govern only guidance, validation and the three
+   * advertised gate parameters, so a server reporting "Gate validation and
+   * guidance will be skipped" still executed authored `shell_verify` commands
+   * (measured 2026-08-27, row 1.5: marker written with the system Disabled).
+   * A resolver rather than a boolean because the switch is toggled at runtime
+   * by `system_control`, and it must be read for the workspace this instance
+   * serves — an unscoped read resolves to the process default while a client's
+   * toggle wrote to its own row.
+   *
+   * Omit to leave execution ungoverned by the switch (tests, embedders that
+   * have no gate system).
+   */
+  gateSystemEnabled?: () => boolean;
 }
 
 /**

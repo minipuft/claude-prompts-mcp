@@ -135,7 +135,17 @@ export class LightweightGateSystem {
   /**
    * Check if gate system is enabled
    */
-  private isGateSystemEnabled(): boolean {
+  /**
+   * Whether the gate master switch is on for this instance's workspace.
+   *
+   * Public because the shell verification executor must read the SAME source
+   * this class already short-circuits guidance and validation on. The obvious
+   * alternative, `GateManager.isGateSystemEnabled()`, is not that source: its
+   * `setStateManager()` seam has no production caller, so it falls through to
+   * "no state manager, assume enabled" and answers `true` however the switch is
+   * set. A control built on it would never engage.
+   */
+  isGateSystemEnabled(): boolean {
     // If no gate system manager is set, default to enabled for backwards compatibility
     if (!this.gateStateStore) {
       return true;
