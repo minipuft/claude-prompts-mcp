@@ -79,7 +79,8 @@ export interface ConvertedPrompt {
   subagentModel?: 'heavy' | 'standard' | 'fast';
   /**
    * Default host agent for this prompt's delegated steps, from the YAML `agentType:` key.
-   * A step's own `agentType` overrides it; neither present falls back to 'chain-executor'.
+   * A step's own `agentType` overrides it; neither present leaves the choice to the host strategy
+   * (Claude Code: `general-purpose`; other clients: their own default agent).
    */
   agentType?: string;
 }

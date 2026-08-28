@@ -272,7 +272,7 @@ describe('P5 visibility — delegation manifest', () => {
   const delegatedSteps = (
     declarations: readonly (ChainStepPrompt['visibility'] | undefined)[]
   ): ChainStepPrompt[] =>
-    buildSteps(declarations, [undefined, { delegated: true, agentType: 'chain-executor' }]);
+    buildSteps(declarations, [undefined, { delegated: true, agentType: 'general-purpose' }]);
 
   test('the delegated step’s own brief names withheld items and carries none of their values', async () => {
     // R-1: the manifest travels INSIDE the delegated step's own EXECUTION BRIEF, so the run is
@@ -284,7 +284,7 @@ describe('P5 visibility — delegation manifest', () => {
     const render = await renderStep(
       buildSteps(
         [withhold('chain_history', 'unknowns_ledger')],
-        [undefined, undefined, { delegated: true, agentType: 'chain-executor' }]
+        [undefined, undefined, { delegated: true, agentType: 'general-purpose' }]
       ),
       2
     );

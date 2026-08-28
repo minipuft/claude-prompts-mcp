@@ -79,14 +79,17 @@ export const PROPOSED_GATE_REVIEW_TOKEN = 'Proposed Gate Review:';
  * plus, when gates exist, a `Proposed Gate Review` block in the same per-gate shape as
  * `gate_verdict.per_gate`. It is labelled PROPOSED because the worker's verdict is never
  * authoritative: the parent reviews against the same criteria, may override any entry, and is
- * the only party that submits `gate_verdict` — the worker cannot (no MCP tools), which is what
- * keeps judgment with the parent structurally rather than by convention.
+ * the only party that submits `gate_verdict`. The worker-boundary line states that exclusion in
+ * the brief every host renders; until 2026-08-27 it was enforced for Claude Code alone by the
+ * shipped `chain-executor` agent's tool list, and by nothing on any other client.
  */
 export function buildResultContractSection(hasGates: boolean): string {
   const parts = [
     '### Result Contract',
     '',
     'Return your complete work product as plain text — it becomes the chain’s step output verbatim.',
+    '',
+    'You are the worker for this one step. Do not call `prompt_engine` or any other chain tool, and do not put chain metadata or tool calls in your reply — the orchestrating agent owns the run and resumes it with your text.',
   ];
   if (hasGates) {
     parts.push(

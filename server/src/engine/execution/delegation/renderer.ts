@@ -34,8 +34,8 @@ export class DelegationRenderer {
    * (which, on the old path, was the PREVIOUS step's content).
    *
    * `agentType` here is advisory (R-1: content over identity) \u2014 the brief is self-contained, so
-   * any executor can run it; the type names the author's Tier-17 selection, defaulting to
-   * `chain-executor`.
+   * any executor can run it; the type names the author's Tier-17 selection and is undefined
+   * when none was declared — the strategy then renders its host's default agent.
    */
   renderCurrentStepHandoff(payload: DelegationPayload, hints?: RenderingHints): string {
     const strategy = this.resolveStrategy(payload);
@@ -91,7 +91,7 @@ export interface DelegatedStepHandoffInputs {
   readonly stepNumber: number;
   readonly totalSteps: number;
   readonly promptName: string;
-  /** Tier-17 selection (`step ?? prompt`); undefined falls back to the default hint. */
+  /** Tier-17 selection (`step ?? prompt`); undefined when neither declared one. */
   readonly agentType: string | undefined;
   readonly subagentModel: string | undefined;
   readonly clientProfile: RequestClientProfile | undefined;
@@ -102,15 +102,15 @@ export interface DelegatedStepHandoffInputs {
 
 /**
  * Render the handoff instructions for a delegated CURRENT step (R-1/S7). Free function rather
- * than an operator method: everything it needs arrives as plain data, and keeping payload
- * assembly here keeps the `'chain-executor'` default hint in ONE module.
+ * than an operator method: everything it needs arrives as plain data. No default agent is
+ * applied here: that is host vocabulary and lives in the strategy.
  */
 export function renderDelegatedStepHandoff(inputs: DelegatedStepHandoffInputs): string {
   const payload: DelegationPayload = {
     stepNumber: inputs.stepNumber,
     totalSteps: inputs.totalSteps,
     promptName: inputs.promptName,
-    agentType: inputs.agentType ?? 'chain-executor',
+    ...(inputs.agentType != null ? { agentType: inputs.agentType } : {}),
     ...(inputs.clientProfile != null ? { clientProfile: inputs.clientProfile } : {}),
     ...(inputs.subagentModel != null ? { subagentModel: inputs.subagentModel } : {}),
     gateCount: inputs.inlineGateCount ?? (inputs.hasGates ? 1 : 0),

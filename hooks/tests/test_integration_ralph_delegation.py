@@ -201,7 +201,7 @@ class TestConcurrentSessionIsolation:
                 "pending_shell_verify": "npm test",
                 "shell_verify_attempts": 3,
                 "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
+                "delegation_agent_type": "general-purpose",
                 "delegation_model_hint": "sonnet",
             },
         )

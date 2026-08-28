@@ -347,9 +347,10 @@ Set in `prompt.yaml` at the prompt level or per chain step. See the [Chain Schem
 ### Agent Selection
 
 `subagentModel` chooses how capable the sub-agent is. `agentType` chooses which agent it is —
-useful when a step wants a specialist rather than the generic chain runner. Both are advisory
-hints: any executor can run the brief that gets rendered, and `chain-executor` is only the
-default when nothing more specific is set.
+useful when a step wants a specialist rather than the host's general executor. Both are advisory
+hints: any executor can run the brief that gets rendered. The plugin ships no agent of its own —
+with nothing more specific set, a Claude Code handoff names the host's `general-purpose` agent,
+and other clients' handoffs leave the agent to the client's default.
 
 ```yaml
 agentType: Explore # every delegated step in this prompt
@@ -361,8 +362,8 @@ chainSteps:
     agentType: code-reviewer # ...except this one
 ```
 
-**Resolution priority**: step-level `agentType` > prompt-level `agentType` > `chain-executor`.
-Names are host-defined and are not validated by the server.
+**Resolution priority**: step-level `agentType` > prompt-level `agentType` > the host's default.
+Names are host-defined, pass through exactly as written, and are not validated by the server.
 
 ---
 

@@ -13,7 +13,12 @@ export interface DelegationPayload {
   readonly stepNumber: number;
   readonly totalSteps: number;
   readonly promptName: string;
-  readonly agentType: string;
+  /**
+   * Host agent named by the author (step `agentType` > prompt `agentType`). Undefined when
+   * neither declared one: each strategy then renders its host's own default (Claude Code
+   * `general-purpose`) or omits the parameter so the client's default agent applies.
+   */
+  readonly agentType?: string;
   readonly clientProfile?: RequestClientProfile;
   readonly subagentModel?: string;
   readonly gateCount: number;

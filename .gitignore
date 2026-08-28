@@ -1,5 +1,5 @@
 # Dependencies and Package Management
-server/node_modules/
+server/node_modules
 .npm/
 .yarn/
 .pnp.*
@@ -152,7 +152,7 @@ plans/future/
 
 # Test prompts
 server/prompts/general/test_*.md
-node_modules/
+node_modules
 *.tgz
 .osgrep
 

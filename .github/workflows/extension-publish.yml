@@ -189,11 +189,10 @@ jobs:
           mkdir -p "$STAGING_DIR/server"
           cp -r .claude-plugin "$STAGING_DIR/"
           cp .mcp.json "$STAGING_DIR/"
-          # No `|| true` on these: hooks/ and agents/ are runtime components of the
-          # plugin, not optional extras. A silenced copy is how `skills/` kept being
-          # staged for months after the directory was deleted, with nothing failing.
+          # No `|| true` here: hooks/ is a runtime component of the plugin, not an
+          # optional extra. A silenced copy is how `skills/` kept being staged for
+          # months after the directory was deleted, with nothing failing.
           cp -r hooks "$STAGING_DIR/"
-          cp -r agents "$STAGING_DIR/"
           bash scripts/stage-server-runtime.sh server/dist "$STAGING_DIR/server/dist"
           cp -r server/resources "$STAGING_DIR/server/"
           cp server/config.json "$STAGING_DIR/server/"
@@ -221,11 +220,10 @@ jobs:
           test -d "$VERIFY_DIR/server/resources"
           test -f "$VERIFY_DIR/.mcp.json"
           test -f "$VERIFY_DIR/.claude-plugin/plugin.json"
-          # chain-executor backs the `==>` delegation operator: response-assembler.ts
-          # and chain-operator-executor.ts both default agentType to 'chain-executor',
-          # so a dist branch without it breaks delegated chains for every installer.
           test -f "$VERIFY_DIR/hooks/hooks.json"
-          test -f "$VERIFY_DIR/agents/chain-executor.md"
+          # The plugin ships no agents since 2026-08-27: a delegated step's EXECUTION
+          # BRIEF is self-contained and runs on the host's general-purpose agent.
+          test ! -e "$VERIFY_DIR/agents"
           MCP_WORKSPACE="$RUNNER_TEMP/dist-smoke-workspace" node "$VERIFY_DIR/server/dist/index.js" --startup-test
 
       - name: Upload dist artifact
@@ -624,9 +622,8 @@ jobs:
           cp -r .claude-plugin .plugin-staging/
           cp .mcp.json .plugin-staging/
 
-          # Copy hooks and agents. No `|| true` — see the dist staging step above.
+          # Copy hooks. No `|| true` — see the dist staging step above.
           cp -r hooks .plugin-staging/
-          cp -r agents .plugin-staging/
 
           # Copy server (bundled - no node_modules needed)
           mkdir -p .plugin-staging/server
@@ -647,7 +644,7 @@ jobs:
           test -f .plugin-staging/server/package.json
           test -d .plugin-staging/server/resources
           test -f .plugin-staging/hooks/hooks.json
-          test -f .plugin-staging/agents/chain-executor.md
+          test ! -e .plugin-staging/agents
           MCP_WORKSPACE="$RUNNER_TEMP/plugin-smoke-workspace" node .plugin-staging/server/dist/index.js --startup-test
 
           # Create archive
