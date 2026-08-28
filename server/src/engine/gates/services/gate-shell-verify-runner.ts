@@ -124,7 +124,7 @@ export async function runGateShellVerifications(
   gateIds: string[],
   gateDefinitionProvider: GateDefinitionProvider,
   runContext: GateShellVerifyRunContext | undefined,
-  executor: ShellVerifyExecutor
+  executor: ShellVerifyExecutor | undefined
 ): Promise<GateShellVerifyResult[]> {
   const results: GateShellVerifyResult[] = [];
 
@@ -142,7 +142,22 @@ export async function runGateShellVerifications(
         continue;
       }
 
-      const result = await executor.execute(gateConfig);
+      // Fail closed when no executor is wired, matching the `script_tool` sibling. A gate
+      // declaring ground-truth verification that silently contributes nothing is the defect
+      // this criteria type already suffered once; an unmistakable failure is recoverable,
+      // a silent pass is not.
+      const result =
+        executor !== undefined
+          ? await executor.execute(gateConfig)
+          : {
+              passed: false,
+              exitCode: -1,
+              stdout: '',
+              stderr:
+                'shell_verify could not run: no ShellVerifyExecutor is wired into GateReviewStage.',
+              durationMs: 0,
+              command: gateConfig.command,
+            };
 
       results.push({
         gateId: gate.id,

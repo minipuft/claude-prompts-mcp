@@ -39,8 +39,9 @@ export interface GateReviewCollaborators {
   /**
    * Executor for `shell_verify` criteria. The SAME instance the inline
    * `:: verify:` path uses, so the gate master switch and the operator allowlist
-   * it carries govern both. Absent, `shell_verify` criteria are skipped rather
-   * than run ungoverned — a control that is only sometimes wired is not a control.
+   * it carries govern both. Absent, criteria FAIL CLOSED and say so — never
+   * silently skip, which is the defect that left `script_tool` inert and which a
+   * first cut of this wiring reintroduced here.
    */
   shellVerifyExecutor?: ShellVerifyExecutor;
 }
@@ -171,14 +172,13 @@ export class GateReviewStage extends BasePipelineStage {
       // `shell_stdin_source: 'agent_response'` can verify response-content claims
       // (file paths, line numbers, symbols) against ground truth.
       let shellSection = '';
-      const shellVerifyExecutor = this.collaborators.shellVerifyExecutor;
-      if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0 && shellVerifyExecutor) {
+      if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
         const agentResponse = context.mcpRequest?.user_response;
         const shellResults = await runGateShellVerifications(
           pendingReview.gateIds,
           this.gateDefinitionProvider,
           agentResponse !== undefined ? { agentResponse } : undefined,
-          shellVerifyExecutor
+          this.collaborators.shellVerifyExecutor
         );
         // `script_tool` criteria run beside `shell_verify` rather than instead of it: a gate
         // may declare both, and the two answer different questions — an exit code versus a

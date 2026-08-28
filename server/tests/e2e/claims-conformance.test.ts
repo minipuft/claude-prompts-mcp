@@ -479,7 +479,11 @@ describe('claims conformance', () => {
     runtimeRoot = await fs.mkdtemp(path.join(tmpdir(), 'claims-conformance-'));
     proc = startServerWithHttp(port, {
       transport: 'streamable-http',
-      env: { MCP_RUNTIME_ROOT: runtimeRoot },
+      // The gate-preset and verify-loop claims describe shell verification actually running.
+      // Shell execution is default-deny since Tier 1, so a server spawned without the operator
+      // allowlist refuses every command and the claims fail against a refusal message rather
+      // than against the behaviour they document.
+      env: { MCP_RUNTIME_ROOT: runtimeRoot, MCP_SHELL_VERIFY_ALLOWLIST: 'UNSAFE_ALLOW_ALL' },
     });
     // The server takes ~5s to initialize; the helper's 10s default is not enough headroom on a
     // loaded CI runner, and the smoke suite already settled on these values.

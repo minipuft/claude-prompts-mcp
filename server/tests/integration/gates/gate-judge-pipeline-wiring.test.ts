@@ -1,3 +1,4 @@
+import { createShellVerifyExecutor } from '../../../src/engine/gates/shell/shell-verify-executor.js';
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
@@ -104,7 +105,11 @@ function createStageWithGates(
     chainSessionStore,
     loader,
     mockLogger,
-    () => ({ evaluation: configEvaluation })
+    () => ({ evaluation: configEvaluation }),
+    // Production wires this from PipelineBuilder. Absent, shell_verify criteria now fail
+    // closed and say so rather than silently contributing nothing, so a test that means to
+    // exercise them has to supply one. UNSAFE_ALLOW_ALL: these run real commands.
+    { shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }) }
   );
 
   const context = new ExecutionContext({ command: '>>chain' });
