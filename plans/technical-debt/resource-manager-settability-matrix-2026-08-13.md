@@ -822,3 +822,74 @@ is the floor under it — it needs re-taking at 122 before any move.
 - Reads already merge overlays correctly for all four types; that machinery stays.
 - `git`-tracking is a _consequence_ of where the store lives, not the mechanism. P7-F4 gets closed
   by the storage decision, not by a gitignore edit.
+
+---
+
+## 14. D8 — resource storage model ruling (owner, 2026-08-27)
+
+Resolves §13. Two of the three answers narrowed the design rather than picking from it.
+
+### 14.1 The server learns no new concept
+
+**There is no "personal library" in the server.** The generic rule is: **a write goes to the
+highest-precedence writable root; the bundled tree always loads as the fallback.** A personal
+library is that mechanism _configured_ — `MCP_WORKSPACE` pointed at `~/.claude`, whose
+`resources/` overlays the bundled tree — not a feature the server knows about.
+
+This kills §13.4 entirely. `target: 'personal' | 'bundled'` (C2) was the shape §13.4 recommended
+and it is now **rejected**: it would encode the operator's personal setup as a tool parameter every
+user sees. C1 and C3 are moot for the same reason. `create` needs no destination parameter, because
+precedence already determines one.
+
+It also scopes the tooling: **managing the personal library is not server work.** Migration,
+layout, and backup of `~/.claude/resources/` are operator tasks. The server's whole contribution is
+honoring the resolution chain it already publishes.
+
+Consequence for the shipped product: the default is unchanged. With no workspace configured,
+primary and overlay collapse to the bundled tree and every write lands where it does today. The
+personal-library behavior is what an operator gets by setting one env var.
+
+### 14.2 Ruling on each axis
+
+| Axis               | Ruling                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A — store location | **A1 global**, at `~/.claude/resources/`, reached via `MCP_WORKSPACE`. Explicitly NOT a shipped default and not referenced in setup docs or `.mcp.json` |
+| B — root relations | **B2 resolution, B1 configuration** — ordered roots internally, two roots in practice. Unchanged from §13.3's recommendation                            |
+| C — create target  | **Rejected as a concept.** Precedence decides; no parameter                                                                                             |
+| D — scope          | **D-iii: unify all four write paths behind `PathResolver` first; the overlay-preference split lands as a second arc**                                   |
+| E — migration      | Operator task, not server work (14.1). Stays tracked here; re-take the backup at 122 first                                                              |
+
+### 14.3 Revised arc
+
+**Arc 1 — read and write agree about where a resource lives.** No behavior change for anyone;
+purely removes the four-way disagreement. This is the current tier.
+
+| #     | Status | Change                                                                                                                                                 | Verification                                                                             |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| T1.1  | ✓      | prompts write path delegates to `PathResolver`                                                                                                         | done — §12.5, negative control                                                           |
+| T1.9  | ☐      | gates write path delegates; `getGatesDirectory()` currently hardcodes `join(dirname(configPath),'resources','gates')` and reads neither config nor env | `MCP_RESOURCES_PATH=<tmp>` → a gate create writes under `<tmp>`, with a negative control |
+| T1.10 | ☐      | frameworks write path delegates (`RuntimeFrameworkLoader` has its own chain)                                                                           | same shape                                                                               |
+| T1.11 | ☐      | styles write path delegates                                                                                                                            | same shape                                                                               |
+| T1.7  | ☐      | e2e coverage for the wiring, so removing the resolver argument turns CI red                                                                            | unchanged                                                                                |
+| T1.8  | ☐      | startup logs the resolved root and served count per resource type                                                                                      | launching from a worktree emits a differing count                                        |
+
+**Arc 2 — writes prefer the overlay root** (separate plan; opened when Arc 1 lands). Carries the
+source-root provenance (old T1.2), overlay-preferred writes (old T1.3), bundled-delete refusal
+(old T1.4), retirement of the gitignore ship-status subsystem (old T1.5, T1-F3), and the operator
+migration of the 83 (old T1.6, T1-F5).
+
+Old rows T1.2–T1.6 are **not killed** — they move to Arc 2 intact, because D-iii sequences them
+after unification rather than dropping them. Their falsifiers stand as written.
+
+### 14.4 Open item this ruling creates
+
+`MCP_WORKSPACE` is not only the resources root — it also drives runtime state, `config.json`
+resolution, and logs (`paths.ts`). Pointing it at `~/.claude` to get the personal overlay would
+relocate `state.db` and the log directory too, which is a side effect the ruling did not intend
+and may not want.
+
+| #     | Status | Question                                                                                                                                                        | Verification                                                                                     |
+| ----- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| T1-F6 | ☐      | Does the personal overlay need a dedicated env var, or is relocating state/logs alongside resources acceptable? Decide before the operator migration, not after | flips when the operator's `MCP_WORKSPACE` change is shown not to move `state.db` unintentionally |
+
+_(as of 2026-08-27 · blocks Arc 2's migration row only; Arc 1 is unaffected)_
