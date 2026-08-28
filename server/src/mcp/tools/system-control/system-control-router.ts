@@ -40,7 +40,10 @@ import {
   StateStoreOptions,
 } from '#shared/types/index.js';
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import {
+  buildIdentityScope,
+  resolveContinuityScopeId,
+} from '#shared/utils/request-identity-scope.js';
 
 function isSystemControlActionId(value: string): value is SystemControlActionId {
   return (SYSTEM_CONTROL_ACTION_IDS as readonly string[]).includes(value);
@@ -393,11 +396,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     const launchWorkspaceId = this.configManager?.getConfig().identity?.launchDefaults?.workspaceId;
     const workspaceId = requestScopeId !== 'default' ? requestScopeId : launchWorkspaceId;
 
-    const scope: StateStoreOptions = {
-      ...(requestScopeId !== 'default' ? { continuityScopeId: requestScopeId } : {}),
-      ...(workspaceId != null ? { workspaceId } : {}),
-    };
-    return Object.keys(scope).length > 0 ? scope : undefined;
+    return buildIdentityScope({ continuityScopeId: requestScopeId, workspaceId });
   }
 
   private getActionHandler(action: SystemControlActionId): ActionHandler {

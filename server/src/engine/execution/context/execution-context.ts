@@ -16,6 +16,7 @@ import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
 import type { ConvertedPrompt, ExecutionModifiers, ExecutionPlan } from '../types.js';
 
 import { noopLogger } from '#infra/logging/index.js';
+import { buildIdentityScope } from '#shared/utils/request-identity-scope.js';
 
 /**
  * Unified execution context that flows through the new pipeline
@@ -243,19 +244,11 @@ export class ExecutionContext {
    */
   getScopeOptions(): StateStoreOptions | undefined {
     const identity = this.state.identity.context;
-    const scopeId = meaningfulScope(this.state.identity.continuityScopeId);
-    const workspaceId = meaningfulScope(identity?.workspaceId);
-    const organizationId = meaningfulScope(identity?.organizationId);
-
-    if (scopeId === undefined && workspaceId === undefined && organizationId === undefined) {
-      return undefined;
-    }
-
-    return {
-      ...(scopeId !== undefined ? { continuityScopeId: scopeId } : {}),
-      ...(workspaceId !== undefined ? { workspaceId } : {}),
-      ...(organizationId !== undefined ? { organizationId } : {}),
-    };
+    return buildIdentityScope({
+      continuityScopeId: this.state.identity.continuityScopeId,
+      workspaceId: identity?.workspaceId,
+      organizationId: identity?.organizationId,
+    });
   }
 
   hasExplicitChainId(): boolean {
@@ -390,17 +383,3 @@ export class ExecutionContext {
 }
 
 // ExecutionPlan and ExecutionStrategyType are imported from ../types.js
-
-/**
- * A scope value worth persisting, or undefined.
- *
- * `'default'` is the sentinel `resolveContinuityScopeId` returns when no workspace and no
- * organization were resolved. Persisting it would make a column that means "which workspace"
- * answer "none" in a way indistinguishable from a real workspace literally named `default`.
- */
-function meaningfulScope(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  const trimmed = value.trim();
-  if (trimmed === '' || trimmed === 'default') return undefined;
-  return trimmed;
-}

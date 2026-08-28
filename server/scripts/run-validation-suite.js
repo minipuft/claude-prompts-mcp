@@ -329,6 +329,13 @@ export const SUITE = [
       'UNCHECKED and known — catches declaration-dead columns (no writer names them), NOT value-dead ones (a writer names the column and always binds NULL). Follows from substrate ',
   },
   {
+    script: 'validate:scope-producers',
+    io: 'read',
+    reads: ['file'],
+    converse:
+      'CHECKED — falsified 2026-08-27 by restoring the truncating expression at both surviving producers (serving-unit-scope.ts, prompt-executor.ts); the gate reported both. Its one accepted exception audits as load-bearing, so a green run is not a run that reached nothing',
+  },
+  {
     script: 'validate:hooks-registered',
     io: 'read',
     reads: ['file', 'walk'],

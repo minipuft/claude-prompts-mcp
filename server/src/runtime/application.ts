@@ -411,7 +411,13 @@ export class Application {
       // workspace-scoped. `ctx` is the only scope signal available here: the
       // schema is built now, before any call has been dispatched, so the
       // per-call `extra` the rest of the server reads does not exist yet.
-      await this.mcpToolsManager.registerAllTools(server, resolveServingUnitScope(ctx));
+      await this.mcpToolsManager.registerAllTools(
+        server,
+        resolveServingUnitScope(
+          ctx,
+          this.configManager.getConfig().identity?.launchDefaults?.workspaceId
+        )
+      );
       this.registerMcpResources(server);
       // Prompts bind per unit for the same reason tools do. They were the one
       // primitive left on the construction-time shell, so `prompts/list` came
