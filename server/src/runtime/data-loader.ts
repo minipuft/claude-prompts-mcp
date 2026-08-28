@@ -9,6 +9,8 @@ import * as path from 'node:path';
 
 import * as yaml from 'js-yaml';
 
+import { formatResourceInventory } from './resource-inventory.js';
+
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
 import type { Logger } from '#infra/logging/index.js';
@@ -137,13 +139,25 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     }
   }
 
+  // Count AND root together (T1.8), and deliberately NOT gated on `!isQuiet`.
+  //
+  // STDIO transport auto-enables quiet unless --verbose (`options.ts:221`), and STDIO is how every
+  // MCP client launches this server — so a `!isQuiet` guard would have made this line unreachable
+  // in exactly the deployment it exists for. The stated reason for auto-quiet is protocol safety,
+  // which the file logger already provides: INFO goes to `logs/mcp-server.log`, never to stdout.
+  for (const line of formatResourceInventory({
+    resource: 'prompts',
+    root: promptsPath,
+    count: promptsData.length,
+    detail: { label: 'categories', value: categories.length },
+    overlays: overlayPromptsDirs,
+  })) {
+    logger.info(line);
+  }
+
   if (!isQuiet) {
     logger.info('=== PROMPT LOADING RESULTS ===');
-    logger.info(`✓ Loaded ${promptsData.length} prompts from ${categories.length} categories`);
     logger.info(`✓ Converted ${convertedPrompts.length} prompts to MCP format`);
-    if (overlayPromptsDirs.length > 0) {
-      logger.info(`  (includes overlays from ${overlayPromptsDirs.length} additional directories)`);
-    }
   }
 
   // Update downstream managers if available

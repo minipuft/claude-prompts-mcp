@@ -1086,3 +1086,63 @@ Asserting only presence would pass against a server that wrote to both.
 | T1.14 | ☐      | `spawnMcpServer` strips `NODE_ENV`/`JEST_WORKER_ID` from the child env like the new helper does | a server spawned through the shared helper answers `initialize` from inside jest |
 
 _(as of 2026-08-27 · T1.14 flips when the shared helper filters the two vars)_
+
+### 14.8 T1.8 verification — 2026-08-27
+
+Same server binary, two resources roots:
+
+```
+📂 prompts: 39 (9 categories) — .../claude-prompts-mcp-settability/server/resources/prompts
+📂 prompts: 120 (17 categories) — .../claude-prompts-mcp/server/resources/prompts
+```
+
+plus `gates: 25`, `frameworks: 8`, `styles: 4` with their roots, in both. The row's condition —
+"launching from a worktree emits a line naming the root and a count that differs from main" — holds.
+
+**The design nearly shipped dead.** The first cut gated the lines on `!isQuiet`, matching the
+surrounding code. `options.ts:221` auto-enables quiet for STDIO unless `--verbose`, and STDIO is how
+every MCP client launches this server — so the guard would have made the feature unreachable in the
+only deployment it exists for. Caught by running it rather than reading it: the probe emitted
+nothing, and neither did the pre-existing `=== PROMPT LOADING RESULTS ===` header sitting in the
+same block.
+
+The lines are therefore ungated. The stated reason for auto-quiet is protocol safety, which the
+file logger already provides — INFO goes to `logs/mcp-server.log`, never to stdout, which the log
+proves by containing INFO lines during a quiet run.
+
+Structure follows `architecture.md`: `resource-inventory.ts` is a pure formatter returning lines,
+and the single `logResourceInventory` helper in `module-initializer.ts` is where they reach a
+logger — side effect at the orchestration boundary, formatter testable without one.
+
+### 14.9 Findings T1.8 surfaced on its first run
+
+It was built to make a silent subset visible and immediately made one visible.
+
+**Served 120, on disk 123.** Three prompts fail to load outright, as `[ERROR]` in a log file that
+quiet mode means nobody reads:
+
+| Prompt                         | Failure                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| `general/resume_variant_build` | `description: Prompt description is required`                                                |
+| `general/test_gate_chain`      | `chainSteps[].id` not kebab-case; unrecognized keys `userMessage`, `dependsOn`               |
+| `resume/resume_variant_build`  | every `chainSteps[]` entry missing `promptId`/`stepName`; unrecognized keys `name`, `prompt` |
+
+Separately, inline gate definitions are being dropped at `[WARN]` from at least
+`progressive_research`, `implementation_gap_analysis`, `code_review_test`, `practice_capture` and
+`skill_from_docs` — mostly `guidance (must be a string)` and `type` not in
+`validation|guidance`. Those prompts load; their gates do not.
+
+Two of the three broken prompts sit in `general/` and `resume/`, which are untracked (P7-F4), so
+they exist on one machine and no CI can see them.
+
+Also re-measured: **123** `prompt.yaml` on disk, against the 122 recorded in §11.1 two hours
+earlier. A concurrent session added one. The drift is the point — an inventory taken once is a
+claim with a shelf life.
+
+| #     | Status | Change                                                                                                                                                                                                                                                                     | Verification                                                                                    |
+| ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| T1.15 | ☐      | Inventory reports load FAILURES, not just successes — a count of 120 against 123 on disk is still a silent subset. Needs a failure count threaded through `CategoryPromptsResult` (`modules/prompts/types.ts:69`), which today carries only `promptsData` and `categories` | startup line reads `120 (17 categories, 3 failed)` against the current main tree                |
+| T1-F7 | ☐      | Repair the three prompts that fail schema validation, and the five with dropped inline gates                                                                                                                                                                               | a startup against the main tree logs zero `[ERROR] Invalid YAML` and zero `Dropped inline gate` |
+
+_(as of 2026-08-27 · T1.15 flips when the inventory line carries a failure count · T1-F7 flips when
+served count equals on-disk count)_

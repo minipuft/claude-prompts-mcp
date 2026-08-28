@@ -10,6 +10,7 @@ import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
 } from './resource-change-tracking.js';
+import { formatResourceInventory, type ResourceInventory } from './resource-inventory.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
@@ -105,6 +106,18 @@ async function claimStateDatabase(
   if (runtimeDbPath === undefined) return;
   const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
   await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+}
+
+/**
+ * Emit one resource's startup inventory.
+ *
+ * The formatter is pure and returns lines; this is the only place they reach a logger, which keeps
+ * the side effect at the orchestration boundary rather than inside the utility.
+ */
+function logResourceInventory(logger: Logger, inventory: ResourceInventory): void {
+  for (const line of formatResourceInventory(inventory)) {
+    logger.info(line);
+  }
 }
 
 export async function initializeModules(params: ModuleInitParams): Promise<ModuleInitResult> {
@@ -216,7 +229,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
   const frameworksDir = pathResolver?.getFrameworksPath();
   const additionalFrameworksDirs = pathResolver?.getOverlayResourceDirs('frameworks') ?? [];
-  getDefaultRuntimeLoader({
+  const frameworkLoader = getDefaultRuntimeLoader({
     ...(frameworksDir !== undefined ? { frameworksDir } : {}),
     ...(additionalFrameworksDirs.length > 0 ? { additionalFrameworksDirs } : {}),
   });
@@ -226,12 +239,43 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   const stylesDir = pathResolver?.getStylesPath();
   const additionalStylesDirs = pathResolver?.getOverlayResourceDirs('styles') ?? [];
-  getDefaultStyleDefinitionLoader({
+  const styleLoader = getDefaultStyleDefinitionLoader({
     ...(stylesDir !== undefined ? { stylesDir } : {}),
     ...(additionalStylesDirs.length > 0 ? { additionalStylesDirs } : {}),
   });
   if (isVerbose && additionalStylesDirs.length > 0) {
     logger.info(`  📂 Additional style directories: ${additionalStylesDirs.join(', ')}`);
+  }
+
+  // Root + count for the three resource types initialized here (T1.8). Not gated on quiet — see
+  // the matching note in `data-loader.ts`: STDIO auto-enables quiet, so gating would make these
+  // unreachable in the only deployment that matters. INFO goes to the log file, not stdout.
+  {
+    const gatesRoot = pathResolver?.getGatesPath();
+    if (gatesRoot !== undefined) {
+      logResourceInventory(logger, {
+        resource: 'gates',
+        root: gatesRoot,
+        count: gateManager.getStats().totalGates,
+        overlays: additionalGatesDirs,
+      });
+    }
+    if (frameworksDir !== undefined) {
+      logResourceInventory(logger, {
+        resource: 'frameworks',
+        root: frameworksDir,
+        count: frameworkLoader.discoverFrameworks().length,
+        overlays: additionalFrameworksDirs,
+      });
+    }
+    if (stylesDir !== undefined) {
+      logResourceInventory(logger, {
+        resource: 'styles',
+        root: stylesDir,
+        count: styleLoader.discoverStyles().length,
+        overlays: additionalStylesDirs,
+      });
+    }
   }
 
   const chainCount = convertedPrompts.filter((p) => isChainPrompt(p)).length;
