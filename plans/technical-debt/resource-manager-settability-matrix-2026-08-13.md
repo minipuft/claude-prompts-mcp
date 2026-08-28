@@ -972,3 +972,73 @@ twelve integration cases through `as unknown as ConfigManager` stubs — the cas
 stub well-typed. Only running the suites found it. `cli/` swept: zero references to any changed
 symbol. Integration suite 57/57, unit 212 suites / 2729 tests, `validate:arch` 0 errors, branch
 eslint 3093 vs main 3094.
+
+---
+
+## 15. Styles as a resource type, and the systemMessage question (proposed 2026-08-27)
+
+Owner proposal: (a) split styles into their own resource category, (b) have styles replace the
+per-prompt `systemMessage`, since heavy system-prompt engineering is less needed in modern models.
+
+### 15.1 They are not rivals — they already compose
+
+`15-prompt-guidance-stage.ts:161` does `enhanceWithStyle(prompt.systemMessage, styleGuidance)`.
+The style is merged INTO the system message. These are two tiers of one channel: a shared,
+activation-selected tier and a per-prompt tier. "Replace" is the wrong verb for the relationship
+that exists.
+
+The distinction that matters is **selection**. A style is chosen by `activation`
+(`prompt_categories`, `framework_context`, `explicit_request` — `style-schema.ts`), so it is shared
+across every prompt matching the rule. It structurally cannot carry per-prompt content.
+
+### 15.2 Measured: 52 system messages, 9,432 words
+
+| Band    | Count | Character                                               |
+| ------- | ----- | ------------------------------------------------------- |
+| <40w    | 23    | role boilerplate — style-shaped, redundant              |
+| 40–150w | 22    | task contracts: scope limits, role boundaries, "do NOT" |
+| >150w   | 12    | the instruction payload itself                          |
+
+**Evidence FOR the proposal.** `guidance/reasoning` (11w), `guidance/analytical` (13w),
+`guidance/creative` (12w) and `guidance/procedural` (14w) restate the four shipped styles of the
+same name. `development/detect_project_commands` (19w) and
+`content_processing/vault_related_notes_finder` (19w) carry near-identical boilerplate. The
+pr-review family (23–28w) is pure role assignment keyed to one category. This is duplication of a
+layer that already exists, and the owner is right that it earns nothing on a modern model.
+
+**Evidence AGAINST replacing the field.** `development/strategicImplement` is 1,347 words of
+operating contract; `verification_strategy` 977; `implementation_plan` 964. And
+`workflow/investigate_unknown` ("closes exactly one ledger entry") is wrong applied to any sibling
+in `workflow/`. Scope negation and role boundaries are the part models still need told; the generic
+"You are a helpful expert" opener is the part they do not. The corpus contains both.
+
+Also measured: **0 inline, 52 `systemMessageFile`.** Every one is file-referenced, which is the
+same surface §7 finding 3 reports as a broken authoring bridge.
+
+### 15.3 Ruling shape proposed
+
+Not "styles replace `systemMessage`" but **"`systemMessage` keeps only what is prompt-specific;
+anything role-shaped becomes a style."** The criterion is testable rather than a judgment call:
+
+> If the text would read identically for any prompt in its category, it is a style.
+
+Removing the field from `PromptYamlSchema` is a breaking change to a Public API Contract surface
+AND has nowhere to put the 12 substantial ones, so it is not proposed.
+
+### 15.4 Tiers
+
+| Tier   | Work                                                                                                                                          | Notes                                                                                                                                                              |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **T2** | `resource_type: 'style'` — lifecycle / discovery / versioning processors, schema, contract, router, mirroring the gate and framework handlers | Styles already have a schema, loader, activation rules and tool-description overlays; they are simply unauthorable. Same gap shape as the deferred `category` type |
+| **T3** | systemMessage triage: promote the 23 style-shaped messages into styles, strip them from the prompts, keep the 45 that are prompt-specific     | Needs T2 (a destination) and needs `unset: ['system_message']` (the old T2) as the instrument, since the handbook forbids hand-editing under `server/prompts/**`   |
+
+**This reprices gap #2.** `system_message` being unsettable was filed as a settability nit. It is
+the blocker for T3 — 23 prompts cannot be cleaned through MCP tooling until an explicit unset
+exists. Rows 2 and 4's `unset: [keys]` work is the instrument, not a parallel concern.
+
+**Sequencing note.** T2 writes files, so it lands on the unified write path (Arc 1) rather than
+adding a fifth resolver. Style writes will follow whatever Arc 2 rules for overlay preference,
+automatically, because there is now one resolver to change.
+
+_(as of 2026-08-27 · T2 flips when a `resource_manager` call creates a `style.yaml`; T3 flips when
+`rg -c systemMessageFile` over the corpus returns 29)_
