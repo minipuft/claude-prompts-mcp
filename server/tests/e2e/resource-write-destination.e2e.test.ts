@@ -225,7 +225,6 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
       id,
       name: 'Write destination framework probe',
       description: 'Asserts framework writes honor MCP_RESOURCES_PATH.',
-      methodology: 'probe',
       system_prompt_guidance: 'Probe framework guidance for the write-destination check.',
       phases: [{ id: 'probe', name: 'Probe', description: 'probe phase' }],
       framework_gates: [
