@@ -1,5 +1,5 @@
 /**
- * Where prompt WRITES land (T1.1 / D7).
+ * Where resource WRITES land (T1.1, T1.9 / D7, D8 Arc 1).
  *
  * `getResolvedPromptsDirectory()` is the destination every prompt mutation resolves through
  * (`file-operations.ts:248,452`). It used to resolve against the config file alone while READS
@@ -21,9 +21,17 @@ import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 
-import { ConfigLoader, type PromptsPathSource } from '../../../../src/infra/config/index.js';
+import { ConfigLoader, type ResourcePathSource } from '../../../../src/infra/config/index.js';
 
-async function loaderWith(promptsPathSource?: PromptsPathSource) {
+/** A resolver whose every member returns a path far from any config directory. */
+function resolverAt(root: string): ResourcePathSource {
+  return {
+    getPromptsPath: () => path.join(root, 'prompts'),
+    getGatesPath: () => path.join(root, 'gates'),
+  };
+}
+
+async function loaderWith(resourcePaths?: ResourcePathSource) {
   const dir = await mkdtemp(path.join(tmpdir(), 'cfg-write-dest-'));
   const configPath = path.join(dir, 'config.json');
   await writeFile(
@@ -31,15 +39,15 @@ async function loaderWith(promptsPathSource?: PromptsPathSource) {
     JSON.stringify({ prompts: { directory: 'resources/prompts' } }),
     'utf8'
   );
-  const manager = new ConfigLoader(configPath, promptsPathSource);
+  const manager = new ConfigLoader(configPath, resourcePaths);
   await manager.loadConfig();
   return { manager, dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
 describe('prompt write destination', () => {
   it('resolves through the injected path source, so writes follow reads', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
     const overrideRoot = '/somewhere/else/resources/prompts';
-    const { manager, dir, cleanup } = await loaderWith({ getPromptsPath: () => overrideRoot });
 
     try {
       const resolved = manager.getResolvedPromptsDirectory();
@@ -66,9 +74,7 @@ describe('prompt write destination', () => {
   });
 
   it('lets an explicit override outrank the path source', async () => {
-    const { manager, dir, cleanup } = await loaderWith({
-      getPromptsPath: () => '/somewhere/else/resources/prompts',
-    });
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
 
     try {
       expect(manager.getResolvedPromptsDirectory('/explicit/target')).toBe('/explicit/target');
@@ -76,6 +82,30 @@ describe('prompt write destination', () => {
       expect(manager.getResolvedPromptsDirectory('custom/prompts')).toBe(
         path.join(dir, 'custom/prompts')
       );
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('resolves the gates directory through the path source too', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      // Gates were a degree worse than prompts: `getGatesDirectory` hardcoded `resources/gates`
+      // and read neither the config file nor the environment, while gate READS were already
+      // overlay-merged through PathResolver (`module-initializer.ts:199`).
+      expect(manager.getGatesDirectory()).toBe('/somewhere/else/resources/gates');
+      expect(manager.getGatesDirectory().startsWith(dir)).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('falls back to the hardcoded gates directory without a path source', async () => {
+    const { manager, dir, cleanup } = await loaderWith();
+
+    try {
+      expect(manager.getGatesDirectory()).toBe(path.join(dir, 'resources', 'gates'));
     } finally {
       await cleanup();
     }

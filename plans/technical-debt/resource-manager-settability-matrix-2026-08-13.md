@@ -864,14 +864,14 @@ personal-library behavior is what an operator gets by setting one env var.
 **Arc 1 — read and write agree about where a resource lives.** No behavior change for anyone;
 purely removes the four-way disagreement. This is the current tier.
 
-| #     | Status | Change                                                                                                                                                 | Verification                                                                             |
-| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| T1.1  | ✓      | prompts write path delegates to `PathResolver`                                                                                                         | done — §12.5, negative control                                                           |
-| T1.9  | ☐      | gates write path delegates; `getGatesDirectory()` currently hardcodes `join(dirname(configPath),'resources','gates')` and reads neither config nor env | `MCP_RESOURCES_PATH=<tmp>` → a gate create writes under `<tmp>`, with a negative control |
-| T1.10 | ☐      | frameworks write path delegates (`RuntimeFrameworkLoader` has its own chain)                                                                           | same shape                                                                               |
-| T1.11 | ☐      | styles write path delegates                                                                                                                            | same shape                                                                               |
-| T1.7  | ☐      | e2e coverage for the wiring, so removing the resolver argument turns CI red                                                                            | unchanged                                                                                |
-| T1.8  | ☐      | startup logs the resolved root and served count per resource type                                                                                      | launching from a worktree emits a differing count                                        |
+| #     | Status | Change                                                                       | Verification                                      |
+| ----- | ------ | ---------------------------------------------------------------------------- | ------------------------------------------------- |
+| T1.1  | ✓      | prompts write path delegates to `PathResolver`                               | done — §12.5, negative control                    |
+| T1.9  | ✓      | gates write path delegates through the widened `ResourcePathSource` port     | **PASSED with a negative control** — see §14.5    |
+| T1.10 | ☐      | frameworks write path delegates (`RuntimeFrameworkLoader` has its own chain) | same shape                                        |
+| T1.11 | ☐      | styles write path delegates                                                  | same shape                                        |
+| T1.7  | ☐      | e2e coverage for the wiring, so removing the resolver argument turns CI red  | unchanged                                         |
+| T1.8  | ☐      | startup logs the resolved root and served count per resource type            | launching from a worktree emits a differing count |
 
 **Arc 2 — writes prefer the overlay root** (separate plan; opened when Arc 1 lands). Carries the
 source-root provenance (old T1.2), overlay-preferred writes (old T1.3), bundled-delete refusal
@@ -893,3 +893,40 @@ and may not want.
 | T1-F6 | ☐      | Does the personal overlay need a dedicated env var, or is relocating state/logs alongside resources acceptable? Decide before the operator migration, not after | flips when the operator's `MCP_WORKSPACE` change is shown not to move `state.db` unintentionally |
 
 _(as of 2026-08-27 · blocks Arc 2's migration row only; Arc 1 is unaffected)_
+
+### 14.5 T1.9 verification — 2026-08-27
+
+Same instrument as §12.5, pointed at `resource_type: 'gate'`.
+
+| Build        | override tree | package tree | what the tool reported                      |
+| ------------ | ------------- | ------------ | ------------------------------------------- |
+| without T1.9 | no            | **YES**      | full success — "ready to use now", no error |
+| with T1.9    | **YES**       | no           | success                                     |
+
+**Gates had no safety net.** For prompts the verification service caught the write/read divergence
+and returned `isError: true` (§12.5), so the defect was at least detectable downstream. The gate
+path wrote to the wrong tree and reported unqualified success. That makes gates the more dangerous
+of the two despite prompts being the one that got noticed first — the usual asymmetry, where the
+subsystem with worse instrumentation looks healthier.
+
+The port widened from `PromptsPathSource` to `ResourcePathSource` (one member per resource type).
+The transitional alias was **not** kept: the interface was introduced on this branch and has never
+shipped, so an alias would protect no consumer and would be exactly the parallel path
+`cleanup-standards.md` §Parity Gates Are Debt exists to prevent.
+
+Probe hygiene, worth recording because it nearly produced a false pass: the first gate run failed
+with a rollback, and the failure was **attributed before being acted on**. The error named
+`filePath: /tmp/probe-.../resources/gates/...` — the override tree — which proved the fix was
+working and the probe's `pass_criteria` payload was malformed (strings where the schema wants
+`{type, description}`). Fixing the code instead of the probe would have been the wrong move.
+
+An earlier run of the same probe exited 0 with **no output at all**: its source file had been
+cleaned out of `/tmp` and `node` ran an empty file. A vacuous green. Caught only because the output
+was checked rather than the exit code — the failure mode `dev-workflow.md` §"A null result needs a
+positive control" describes.
+
+**Lint accounting**: `lint:ratchet` reported "no regressions" while the project total moved
+3094 → 3096, because the per-rule ceilings had slack to absorb two new
+`strict-boolean-expressions` errors. Measured per-rule against a freshly built main rather than
+trusting the ratchet, found both, and fixed them (`if (x)` on a nullable object needs
+`if (x !== undefined)`). Branch now measures 3094, identical to main — zero net lint debt.

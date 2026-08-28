@@ -230,9 +230,14 @@ const DEFAULT_CONFIG: Config = {
  * `PathResolver` lives in `runtime/` and `infra/` (Layer 1) may import only `shared/`, so this is
  * a port rather than an import — the shape the arch rules prescribe ("shared/types interfaces +
  * constructor injection"). `runtime/context.ts` satisfies it by passing the live PathResolver.
+ *
+ * One member per resource type this loader resolves a directory for. Reads already go through
+ * `PathResolver` for prompts, gates, frameworks and styles alike; these members exist so writes
+ * agree with them (D8 Arc 1).
  */
-export interface PromptsPathSource {
+export interface ResourcePathSource {
   getPromptsPath(): string;
+  getGatesPath(): string;
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
@@ -248,7 +253,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
   constructor(
     configPath: string,
-    private readonly promptsPathSource?: PromptsPathSource
+    private readonly resourcePaths?: ResourcePathSource
   ) {
     super();
     this.configPath = configPath;
@@ -597,9 +602,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       return path.isAbsolute(overridePath) ? overridePath : path.resolve(baseDir, overridePath);
     }
 
-    const resolved = this.promptsPathSource?.getPromptsPath();
-    if (resolved) {
-      return resolved;
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getPromptsPath();
     }
 
     const configured = this.getPromptsDirectory();
@@ -614,10 +618,19 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Get gates directory path (for gate definitions)
-   * Resolves to resources/gates relative to config directory
+   * Get gates directory path (for gate definitions) — the destination every gate WRITE resolves
+   * through (`gate-file-writer.ts:135`, `gate-lifecycle-processor.ts:202,280`).
+   *
+   * Same defect prompts had (see `getResolvedPromptsDirectory`), one degree worse: this did not
+   * merely stop short of `PathResolver`, it hardcoded `resources/gates` and consulted neither the
+   * config file nor the environment. Gate reads DO go through `PathResolver` and are overlay-merged
+   * (`module-initializer.ts:199`), so `MCP_RESOURCES_PATH` moved every gate read and no gate write.
    */
   getGatesDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getGatesPath();
+    }
+
     const configDir = path.dirname(this.configPath);
     return path.join(configDir, 'resources', 'gates');
   }
