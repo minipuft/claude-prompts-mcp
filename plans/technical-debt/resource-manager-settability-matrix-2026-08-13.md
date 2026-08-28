@@ -1042,3 +1042,47 @@ automatically, because there is now one resolver to change.
 
 _(as of 2026-08-27 · T2 flips when a `resource_manager` call creates a `style.yaml`; T3 flips when
 `rg -c systemMessageFile` over the corpus returns 29)_
+
+### 14.7 T1.7 verification — 2026-08-27
+
+The coverage gap §12.5 declared is now closed, and closed with a mutation rather than an assertion
+that it is closed.
+
+Deleted the `pathResolver` argument at `runtime/context.ts:113` — the exact one-line wiring the unit
+tests cannot see — and ran both suites:
+
+| Suite                            | wiring present | wiring removed  |
+| -------------------------------- | -------------- | --------------- |
+| unit (2,729 tests)               | green          | **still green** |
+| `resource-write-destination.e2e` | green          | **3 failed**    |
+
+The unit column is the point. It confirms the gap was real rather than theoretical, and it is why
+this test had to drive an assembled server instead of a constructed `ConfigLoader`. CI runs
+`test:e2e` (`ci.yml:389`), so the row's condition — "removing the resolver argument turns a CI job
+red" — is satisfied against the job that actually runs.
+
+**Two hazards found while building it, both of which produce false greens:**
+
+- **A server spawned from inside jest silently declines to boot.** `src/index.ts:815` skips
+  `main()` when `NODE_ENV === 'test'` or `JEST_WORKER_ID` is set, and a child inheriting
+  `...process.env` from jest inherits both. It starts, does nothing, exits 0 — no output, no error
+  event, no spawn failure. The only symptom is a request that never gets an answer, which reads as
+  a protocol bug rather than a server that refused to start. The helper now strips both vars, and
+  the rpc timeout reports the child's exit instead of a bare "timeout".
+  `tests/e2e/helpers/plugin-test-helpers.ts:60` (`spawnMcpServer`) passes `...process.env`
+  unfiltered and has the same latent defect — row T1.14.
+
+- **The mutation run wrote into the repo.** With the wiring removed the writes land in the package
+  tree, which is the defect being demonstrated, so a red run leaves untracked files in
+  `server/resources/`. Found because the next clean run then failed its own "not in the package
+  tree" assertion — a test contaminated by its own previous failure. `afterAll` now removes the
+  three ids from the package tree unconditionally.
+
+Each case asserts **both** halves — present under the override AND absent under the package root.
+Asserting only presence would pass against a server that wrote to both.
+
+| #     | Status | Change                                                                                          | Verification                                                                     |
+| ----- | ------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| T1.14 | ☐      | `spawnMcpServer` strips `NODE_ENV`/`JEST_WORKER_ID` from the child env like the new helper does | a server spawned through the shared helper answers `initialize` from inside jest |
+
+_(as of 2026-08-27 · T1.14 flips when the shared helper filters the two vars)_
