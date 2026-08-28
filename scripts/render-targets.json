@@ -13,7 +13,7 @@
       "namespaceStatus": "n/a — the canonical tree IS the native package; no client namespace applies",
       "renderKind": "canonical",
       "renders": [],
-      "consumes": ["plugin.json", "mcp.json", "hooks", "agents", "server/dist"],
+      "consumes": ["plugin.json", "mcp.json", "hooks", "server/dist"],
       "output": { "repo": "native-package", "branch": null },
       "placeholderMap": {},
       "hookMapping": null,
@@ -40,7 +40,6 @@
         ".claude-plugin/plugin.json",
         ".mcp.json",
         "hooks",
-        "agents",
         "server/dist"
       ],
       "output": { "repo": "minipuft/claude-prompts-mcp", "branch": "dist" },

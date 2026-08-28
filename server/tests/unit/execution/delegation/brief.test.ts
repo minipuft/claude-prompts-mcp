@@ -82,6 +82,19 @@ describe('delegation brief builders', () => {
     });
   });
 
+  describe('buildResultContractSection worker boundary', () => {
+    test('states the worker boundary with and without gates', () => {
+      // Replaces the tool restriction the shipped chain-executor agent used to carry for Claude
+      // Code alone: every host renders this line, so the worker is told it owns one step and no
+      // chain tool regardless of which agent the client spawned.
+      for (const hasGates of [true, false]) {
+        const section = buildResultContractSection(hasGates);
+        expect(section).toContain('Do not call `prompt_engine`');
+        expect(section).toContain('the orchestrating agent owns the run');
+      }
+    });
+  });
+
   describe('buildWithheldManifestLine', () => {
     test('returns null for an empty manifest', () => {
       expect(buildWithheldManifestLine([])).toBeNull();

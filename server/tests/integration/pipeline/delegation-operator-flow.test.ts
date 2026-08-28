@@ -133,7 +133,7 @@ describe('Delegation Operator (==>) Flow', () => {
 
       expect(delegatedResult.content).toContain('HANDOFF INSTRUCTIONS');
       expect(delegatedResult.content).toContain('Tool: Task');
-      expect(delegatedResult.content).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(delegatedResult.content).toContain('subagent_type: "general-purpose"');
       expect(delegatedResult.currentStepDelegated).toBe(true);
     });
 
@@ -235,7 +235,7 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 2,
       });
       expect(step3Result.content).toContain('HANDOFF INSTRUCTIONS');
-      expect(step3Result.content).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(step3Result.content).toContain('subagent_type: "general-purpose"');
       expect(step3Result.callToAction).toContain('HANDOFF INSTRUCTIONS');
       expect(step3Result.currentStepDelegated).toBe(true);
     });
@@ -369,7 +369,7 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 1,
       });
       expect(delegatedResult.content).toContain('HANDOFF INSTRUCTIONS');
-      expect(delegatedResult.content).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(delegatedResult.content).toContain('subagent_type: "general-purpose"');
     });
 
     test('step without subagentModel adjacent to step with subagentModel stays non-delegated', async () => {
@@ -424,7 +424,7 @@ describe('Delegation Operator (==>) Flow', () => {
   });
 
   describe('agent type resolution', () => {
-    test('step-level agentType takes priority over the chain-executor default', async () => {
+    test('step-level agentType takes priority over the host default', async () => {
       const stepPrompts: ChainStepPrompt[] = [
         { stepNumber: 1, promptId: 'research', args: {} },
         {
@@ -445,8 +445,8 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 1,
       });
 
-      // Step-level agentType wins (namespaced by strategy)
-      expect(result.content).toContain('subagent_type: "claude-prompts:Explore"');
+      // Step-level agentType wins, passed through exactly as written
+      expect(result.content).toContain('subagent_type: "Explore"');
       expect(result.content).not.toContain('chain-executor');
     });
 
@@ -469,7 +469,7 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 1,
       });
 
-      expect(result.content).toContain('subagent_type: "claude-prompts:Explore"');
+      expect(result.content).toContain('subagent_type: "Explore"');
       expect(result.content).not.toContain('chain-executor');
     });
 
@@ -495,11 +495,11 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 1,
       });
 
-      expect(result.content).toContain('subagent_type: "claude-prompts:code-reviewer"');
+      expect(result.content).toContain('subagent_type: "code-reviewer"');
       expect(result.content).not.toContain('Explore');
     });
 
-    test('defaults to namespaced chain-executor when no overrides', async () => {
+    test('defaults to the host general-purpose agent when no overrides', async () => {
       const stepPrompts: ChainStepPrompt[] = [
         { stepNumber: 1, promptId: 'research', args: {} },
         { stepNumber: 2, promptId: 'summarize', args: {}, delegated: true },
@@ -512,7 +512,9 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 1,
       });
 
-      expect(result.content).toContain('subagent_type: "claude-prompts:chain-executor"');
+      expect(result.content).toContain('subagent_type: "general-purpose"');
+      expect(result.content).not.toContain('chain-executor');
+      expect(result.content).not.toContain('claude-prompts:');
     });
   });
 

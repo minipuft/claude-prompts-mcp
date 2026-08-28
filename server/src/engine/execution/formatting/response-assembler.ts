@@ -366,7 +366,7 @@ export class ResponseAssembler {
           ? parsedNextName
           : parsedNext.promptId
         : String(metadata['promptName'] ?? this.resolveNextStepPromptName(context) ?? 'next-step');
-    const agentType = nextStep?.agentType ?? 'chain-executor';
+    const agentType = nextStep?.agentType;
     const subagentModel = nextStep?.subagentModel;
 
     const gateCount = context.gates.getAll().length;
@@ -376,7 +376,7 @@ export class ResponseAssembler {
       stepNumber,
       totalSteps,
       promptName,
-      agentType,
+      ...(agentType != null ? { agentType } : {}),
       ...(clientProfile != null ? { clientProfile } : {}),
       ...(subagentModel != null ? { subagentModel } : {}),
       gateCount,

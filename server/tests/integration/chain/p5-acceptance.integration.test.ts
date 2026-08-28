@@ -227,7 +227,7 @@ const parsedSteps = (): ChainStepPrompt[] => [
     convertedPrompt: PROMPTS[3],
     executionPlan: PLANNED,
     delegated: true,
-    agentType: 'chain-executor',
+    agentType: 'general-purpose',
   },
 ];
 

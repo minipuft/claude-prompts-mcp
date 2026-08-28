@@ -10,8 +10,12 @@ export interface DelegationStrategy {
   /** Map semantic capability hint to a client-specific model name. */
   resolveModel(payload: DelegationPayload): string | undefined;
 
-  /** Format the tool invocation block (tool name + parameters). */
-  formatToolCall(agentType: string, model: string | undefined): string;
+  /**
+   * Format the tool invocation block (tool name + parameters). `agentType` is undefined when
+   * the author declared none; the strategy substitutes its host's default agent or omits the
+   * line so the client's own default applies.
+   */
+  formatToolCall(agentType: string | undefined, model: string | undefined): string;
 
   /** Format enforcement constraints shown after instructions. */
   formatConstraints(): string;
@@ -75,6 +79,34 @@ export function getHandoffProfileStatus(
   return DELEGATION_PROFILE_DESCRIPTORS[profile].status;
 }
 
+/**
+ * Default agent for Claude Code handoffs. The `Task` tool requires a `subagent_type`, and
+ * `general-purpose` is the host's built-in executor: the EXECUTION BRIEF is self-contained
+ * (template, gates, history, Result Contract), so the worker needs no plugin-specific prompt.
+ * The plugin shipped its own `chain-executor` agent until 2026-08-27; it restated the brief
+ * and contradicted it on the verdict shape, and the bare-name namespacing that pointed at it
+ * made every host-catalog agent (`Explore`, `~/.claude/agents/*`) unreachable from a brief.
+ */
+export const CLAUDE_CODE_DEFAULT_AGENT_TYPE = 'general-purpose';
+
+/**
+ * Handoff block for hosts whose spawn call has a default agent of its own. The `agent_type`
+ * line renders only when the author named one, so an undeclared agent leaves the choice to the
+ * client; with no parameters at all the `Parameters:` header is dropped rather than left empty.
+ */
+function formatHandoffBlock(
+  header: string,
+  agentType: string | undefined,
+  model: string | undefined,
+  modelKey: 'model' | 'model_hint'
+): string {
+  const params = [
+    ...(agentType === undefined ? [] : [`  • agent_type: "${agentType}"`]),
+    ...(model === undefined ? [] : [`  • ${modelKey}: "${model}"`]),
+  ];
+  return [header, ...(params.length === 0 ? [] : ['→ Parameters:', ...params])].join('\n');
+}
+
 /** Default strategy for Claude Code (Task tool, Claude model names). */
 export class ClaudeCodeStrategy implements DelegationStrategy {
   readonly clientId = 'claude-code';
@@ -85,13 +117,6 @@ export class ClaudeCodeStrategy implements DelegationStrategy {
     fast: 'haiku',
   };
 
-  /**
-   * @param pluginNamespace Claude Code namespaces plugin agents as
-   *   `{plugin}:{agent}`. Bare agent types (without `:`) are prefixed
-   *   automatically so the rendered CTA matches the Task tool's registry.
-   */
-  constructor(private readonly pluginNamespace: string = 'claude-prompts') {}
-
   resolveModel(payload: DelegationPayload): string | undefined {
     const mapped = ClaudeCodeStrategy.CAPABILITY_MAP[payload.subagentModel ?? ''];
     if (mapped != null) return mapped;
@@ -99,18 +124,16 @@ export class ClaudeCodeStrategy implements DelegationStrategy {
     return 'sonnet';
   }
 
-  /** Resolve bare agent type to namespaced form for Claude Code's Task tool. */
-  private resolveAgentType(agentType: string): string {
-    if (agentType.includes(':')) return agentType;
-    return `${this.pluginNamespace}:${agentType}`;
-  }
-
-  formatToolCall(agentType: string, model: string | undefined): string {
-    const resolved = this.resolveAgentType(agentType);
+  /**
+   * Agent names pass through as written. A bare name is the host catalog (built-ins and
+   * user-level agents carry no namespace); a plugin agent is written `plugin:agent` by its
+   * author. The server cannot see the host registry, so it never rewrites the name.
+   */
+  formatToolCall(agentType: string | undefined, model: string | undefined): string {
     const lines = [
       '\u2192 Tool: Task',
       '\u2192 Parameters:',
-      `  \u2022 subagent_type: "${resolved}"`,
+      `  \u2022 subagent_type: "${agentType ?? CLAUDE_CODE_DEFAULT_AGENT_TYPE}"`,
     ];
     if (model != null) lines.push(`  \u2022 model: "${model}"`);
     return lines.join('\n');
@@ -138,16 +161,8 @@ export class CodexStrategy implements DelegationStrategy {
     return 'codex-standard';
   }
 
-  formatToolCall(agentType: string, model: string | undefined): string {
-    const lines = [
-      '→ Tool: spawn_agent (preferred)',
-      '→ Parameters:',
-      `  • agent_type: "${agentType}"`,
-    ];
-    if (model != null) {
-      lines.push(`  • model: "${model}"`);
-    }
-    return lines.join('\n');
+  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+    return formatHandoffBlock('→ Tool: spawn_agent (preferred)', agentType, model, 'model');
   }
 
   formatConstraints(): string {
@@ -167,16 +182,13 @@ export class GeminiStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string, model: string | undefined): string {
-    const lines = [
+  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+    return formatHandoffBlock(
       "→ Handoff: Use Gemini's sub-agent/handoff capability",
-      '→ Parameters:',
-      `  • agent_type: "${agentType}"`,
-    ];
-    if (model != null) {
-      lines.push(`  • model_hint: "${model}"`);
-    }
-    return lines.join('\n');
+      agentType,
+      model,
+      'model_hint'
+    );
   }
 
   formatConstraints(): string {
@@ -195,16 +207,13 @@ export class OpenCodeStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string, model: string | undefined): string {
-    const lines = [
+  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+    return formatHandoffBlock(
       "→ Handoff: Use OpenCode's agent/sub-agent capability",
-      '→ Parameters:',
-      `  • agent_type: "${agentType}"`,
-    ];
-    if (model != null) {
-      lines.push(`  • model_hint: "${model}"`);
-    }
-    return lines.join('\n');
+      agentType,
+      model,
+      'model_hint'
+    );
   }
 
   formatConstraints(): string {
@@ -223,16 +232,13 @@ export class CursorStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string, model: string | undefined): string {
-    const lines = [
+  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+    return formatHandoffBlock(
       "→ Handoff (experimental/testing): Use Cursor's agent/sub-agent capability",
-      '→ Parameters:',
-      `  • agent_type: "${agentType}"`,
-    ];
-    if (model != null) {
-      lines.push(`  • model_hint: "${model}"`);
-    }
-    return lines.join('\n');
+      agentType,
+      model,
+      'model_hint'
+    );
   }
 
   formatConstraints(): string {
@@ -252,16 +258,13 @@ export class NeutralStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string, model: string | undefined): string {
-    const lines = [
+  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+    return formatHandoffBlock(
       "→ Handoff: Use your client's sub-agent/handoff capability",
-      '→ Parameters:',
-      `  • agent_type: "${agentType}"`,
-    ];
-    if (model != null) {
-      lines.push(`  • model_hint: "${model}"`);
-    }
-    return lines.join('\n');
+      agentType,
+      model,
+      'model_hint'
+    );
   }
 
   formatConstraints(): string {

@@ -60,12 +60,12 @@ The `dist` branch is **force-pushed** after each release for the desktop extensi
 
 ### Distribution Surfaces
 
-| Surface                 | Includes                                                                       | Excludes                                                      |
-| ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| npm `claude-prompts`    | `claude-prompts` + `cpm` bins, resources, hooks                                | external source maps                                          |
-| GitHub Release          | MCPB, versioned `cpm` bundle, SHA-256 checksum, source-map archive             | source and development dependencies                           |
-| MCPB                    | self-contained registered MCP server entry and public resources                | `cpm`, source maps, generated state, duplicate `node_modules` |
-| `dist` / plugin archive | registered MCP server entry, server map, resources, hooks/agents as applicable | unregistered `cpm` bundle and duplicate `node_modules`        |
+| Surface                 | Includes                                                           | Excludes                                                      |
+| ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------- |
+| npm `claude-prompts`    | `claude-prompts` + `cpm` bins, resources, hooks                    | external source maps                                          |
+| GitHub Release          | MCPB, versioned `cpm` bundle, SHA-256 checksum, source-map archive | source and development dependencies                           |
+| MCPB                    | self-contained registered MCP server entry and public resources    | `cpm`, source maps, generated state, duplicate `node_modules` |
+| `dist` / plugin archive | registered MCP server entry, server map, resources, hooks          | unregistered `cpm` bundle and duplicate `node_modules`        |
 
 `server/package.json#version` is the sole release identity. The npm workflow verifies and publishes the same packed tarball; the extension workflow asserts that every named asset reports that version.
 

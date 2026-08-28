@@ -509,7 +509,7 @@ describe('P6 Tier 5: a Workflow IR run is an ordinary chain run — or it writes
           inputMapping: { prior: 'step1_result' },
           visibility: { withhold: ['chain_history'] },
           subagentModel: 'fast',
-          agentType: 'chain-executor',
+          agentType: 'general-purpose',
           framework: 'CAGEERF',
           retries: 2,
         },
@@ -539,7 +539,7 @@ describe('P6 Tier 5: a Workflow IR run is an ordinary chain run — or it writes
       expect(steps[1]?.['inputMapping']).toEqual({ prior: 'step1_result' });
       expect(steps[1]?.['visibility']).toEqual({ withhold: ['chain_history'] });
       expect(steps[1]?.['subagentModel']).toBe('fast');
-      expect(steps[1]?.['agentType']).toBe('chain-executor');
+      expect(steps[1]?.['agentType']).toBe('general-purpose');
       expect(steps[1]?.['framework']).toBe('CAGEERF');
       expect(steps[1]?.['retries']).toBe(2);
     });

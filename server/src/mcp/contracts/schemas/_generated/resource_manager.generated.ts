@@ -276,7 +276,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'agent_type',
     type: 'string',
     description:
-      "[Prompt] Default host agent for this prompt's ==> delegated steps. A step's own agentType overrides it; neither present falls back to chain-executor.",
+      "[Prompt] Default host agent for this prompt's ==> delegated steps. A step's own agentType overrides it; neither present leaves the choice to the client (Claude Code: general-purpose).",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

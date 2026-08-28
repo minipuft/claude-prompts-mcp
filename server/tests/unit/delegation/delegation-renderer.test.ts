@@ -2,6 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 
 import { DelegationRenderer } from '../../../src/engine/execution/delegation/renderer.js';
 import {
+  CLAUDE_CODE_DEFAULT_AGENT_TYPE,
   ClaudeCodeStrategy,
   CodexStrategy,
   CursorStrategy,
@@ -28,7 +29,6 @@ describe('DelegationRenderer', () => {
     stepNumber: 2,
     totalSteps: 3,
     promptName: 'research',
-    agentType: 'chain-executor',
     gateCount: 0,
     hasGates: false,
   };
@@ -38,7 +38,7 @@ describe('DelegationRenderer', () => {
     const result = renderer.renderCurrentStepHandoff(basePayload);
 
     expect(result).toContain('HANDOFF: Execute Step 2 ("research")');
-    expect(result).toContain('subagent_type: "claude-prompts:chain-executor"');
+    expect(result).toContain('subagent_type: "general-purpose"');
     expect(result).toContain('HANDOFF INSTRUCTIONS');
     expect(result).toContain('Pass the EXECUTION BRIEF above');
     expect(result).not.toContain('Pass ALL content above');
@@ -133,7 +133,7 @@ const basePayloadForStrategy: DelegationPayload = {
   stepNumber: 2,
   totalSteps: 3,
   promptName: 'research',
-  agentType: 'chain-executor',
+  agentType: 'worker',
   gateCount: 0,
   hasGates: false,
 };
@@ -146,7 +146,6 @@ describe('ClaudeCodeStrategy', () => {
       stepNumber: 2,
       totalSteps: 3,
       promptName: 'test',
-      agentType: 'chain-executor',
       subagentModel: 'heavy',
       gateCount: 0,
       hasGates: false,
@@ -159,7 +158,6 @@ describe('ClaudeCodeStrategy', () => {
       stepNumber: 2,
       totalSteps: 3,
       promptName: 'test',
-      agentType: 'chain-executor',
       subagentModel: 'standard',
       gateCount: 0,
       hasGates: false,
@@ -172,7 +170,6 @@ describe('ClaudeCodeStrategy', () => {
       stepNumber: 2,
       totalSteps: 3,
       promptName: 'test',
-      agentType: 'chain-executor',
       subagentModel: 'fast',
       gateCount: 0,
       hasGates: false,
@@ -185,7 +182,6 @@ describe('ClaudeCodeStrategy', () => {
       stepNumber: 2,
       totalSteps: 3,
       promptName: 'test',
-      agentType: 'chain-executor',
       gateCount: 3,
       hasGates: true,
     };
@@ -197,35 +193,32 @@ describe('ClaudeCodeStrategy', () => {
       stepNumber: 2,
       totalSteps: 3,
       promptName: 'test',
-      agentType: 'chain-executor',
       gateCount: 1,
       hasGates: true,
     };
     expect(strategy.resolveModel(payload)).toBe('sonnet');
   });
 
-  test('formatToolCall namespaces bare agent type', () => {
-    const result = strategy.formatToolCall('chain-executor', 'sonnet');
+  test('formatToolCall passes a bare host-catalog agent through unchanged', () => {
+    // Built-ins and ~/.claude/agents/* carry no namespace. Prefixing them with the plugin
+    // namespace (the pre-2026-08-27 behaviour) named agents no Task registry had.
+    const result = strategy.formatToolCall('Explore', 'sonnet');
     expect(result).toContain('Tool: Task');
-    expect(result).toContain('subagent_type: "claude-prompts:chain-executor"');
+    expect(result).toContain('subagent_type: "Explore"');
+    expect(result).not.toContain('claude-prompts:');
     expect(result).toContain('model: "sonnet"');
   });
 
-  test('formatToolCall preserves already-namespaced agent type', () => {
+  test('formatToolCall preserves an author-namespaced plugin agent', () => {
     const result = strategy.formatToolCall('custom-plugin:my-agent', 'sonnet');
     expect(result).toContain('subagent_type: "custom-plugin:my-agent"');
   });
 
-  test('formatToolCall omits model when undefined', () => {
-    const result = strategy.formatToolCall('chain-executor', undefined);
-    expect(result).toContain('subagent_type: "claude-prompts:chain-executor"');
+  test('formatToolCall names the host general-purpose agent when none was declared', () => {
+    const result = strategy.formatToolCall(undefined, undefined);
+    expect(result).toContain(`subagent_type: "${CLAUDE_CODE_DEFAULT_AGENT_TYPE}"`);
+    expect(result).toContain('subagent_type: "general-purpose"');
     expect(result).not.toContain('model:');
-  });
-
-  test('accepts custom pluginNamespace', () => {
-    const customStrategy = new ClaudeCodeStrategy('my-plugin');
-    const result = customStrategy.formatToolCall('chain-executor', undefined);
-    expect(result).toContain('subagent_type: "my-plugin:chain-executor"');
   });
 
   test('formatConstraints includes DO NOT and BLOCKED warnings', () => {
@@ -244,7 +237,7 @@ describe('ClaudeCodeStrategy', () => {
     const renderer = new DelegationRenderer(customStrategy);
     const result = renderer.renderCurrentStepHandoff(basePayloadForStrategy); // (S7) render() retired with the envelope path
 
-    expect(result).toContain('custom: chain-executor custom-model');
+    expect(result).toContain('custom: worker custom-model');
     expect(result).toContain('custom constraints');
   });
 });
@@ -293,6 +286,26 @@ describe('additional delegation strategies', () => {
     expect(result).toContain('Handoff (experimental/testing)');
     expect(result).toContain('experimental/testing');
     expect(result).toContain('agent_type: "worker"');
+  });
+
+  test('non-Claude strategies omit agent_type when the author declared none', () => {
+    // Those hosts have a default agent of their own; asserting a Claude name at them would be
+    // a guess. With nothing to list, the Parameters header goes too.
+    for (const strategy of [
+      new CodexStrategy(),
+      new GeminiStrategy(),
+      new OpenCodeStrategy(),
+      new CursorStrategy(),
+      new NeutralStrategy(),
+    ]) {
+      const result = strategy.formatToolCall(undefined, undefined);
+      expect(result).not.toContain('agent_type');
+      expect(result).not.toContain('Parameters:');
+    }
+    const withModel = new CodexStrategy().formatToolCall(undefined, 'codex-high');
+    expect(withModel).toContain('Parameters:');
+    expect(withModel).toContain('model: "codex-high"');
+    expect(withModel).not.toContain('agent_type');
   });
 
   test('delegation profile metadata reports footer prefixes + experimental cursor status', () => {

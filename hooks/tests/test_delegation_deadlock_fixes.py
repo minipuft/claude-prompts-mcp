@@ -105,13 +105,7 @@ class TestDefect1DelegationArming:
         arm pending_delegation and extract the agent type.
         """
         session_id = "defect1-cta"
-        content = (
-            "Step 1 of 3\n\n"
-            "→ Tool: Task\n"
-            "→ Parameters:\n"
-            '  • subagent_type: "claude-prompts:chain-executor"\n'
-            "Handoff via Task tool\n"
-        )
+        content = 'Step 1 of 3\n\n→ Tool: Task\n→ Parameters:\n  • subagent_type: "Explore"\nHandoff via Task tool\n'
 
         code, _ = run_post_prompt_engine(monkeypatch, capsys, session_id=session_id, content=content)
         assert code == 0
@@ -119,9 +113,9 @@ class TestDefect1DelegationArming:
         state = load_session_state(session_id)
         assert state is not None
         assert state.get("pending_delegation") is True
-        assert state.get("delegation_agent_type") == "claude-prompts:chain-executor"
+        assert state.get("delegation_agent_type") == "Explore"
 
-    def test_delegation_cta_without_subagent_type_falls_back_to_chain_executor(
+    def test_delegation_cta_without_subagent_type_falls_back_to_general_purpose(
         self, patch_workspace, monkeypatch, capsys
     ):
         session_id = "defect1-fallback"
@@ -132,7 +126,7 @@ class TestDefect1DelegationArming:
 
         state = load_session_state(session_id)
         assert state.get("pending_delegation") is True
-        assert state.get("delegation_agent_type") == "chain-executor"
+        assert state.get("delegation_agent_type") == "general-purpose"
 
 
 # ── Defect 2: unparsed review-required sets a sentinel, not None ───────────
@@ -197,7 +191,7 @@ class TestDefect3ClearCondition:
                 "total_steps": 3,
                 "pending_gate": None,
                 "pending_delegation": True,
-                "delegation_agent_type": "chain-executor",
+                "delegation_agent_type": "general-purpose",
             },
         )
 
