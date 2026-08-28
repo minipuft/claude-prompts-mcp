@@ -130,3 +130,33 @@ mis-narrate. **A negative control is a second observation, not a repeat of the f
 The control run wrote a probe prompt into the worktree's own `resources/prompts/analysis/` (that
 being the defect it was demonstrating). Removed; `git status` verified clean apart from the four
 intended files.
+
+### DEV-T1-8 — four plan writebacks silently no-opped (2026-08-27)
+
+Found while auditing the plan for closure readiness, not while doing the work. T1.7, T1.8, T1.10
+and T1.11 had all been verified, committed, and reported complete — and all four still read `☐` in
+the plan. Only T1.1 and T1.9 had actually flipped.
+
+**Cause**: `.husky/pre-commit` runs Prettier over repo-level markdown, which reflows table column
+padding. Every writeback after the first commit used an exact full-line `str.replace()` against
+column widths that no longer existed, so it matched nothing and returned the input unchanged. The
+two that worked were the two written with `assert old in t`; the four that failed had no assert.
+
+**Why it matters more than a cosmetic slip**: the plan file is the state machine. Four rows
+claimed open work that was done, which is `cleanup-standards.md` §"A Status Outlives What It
+Described" running in the stale-`☐` direction — the direction that has no gate, because only the
+asserting half of the ledger carries a claim anyone checks. Had the session ended here, the next
+reader would have re-derived four completed tiers.
+
+**Two rules, both cheap:**
+
+- **A writeback that cannot fail is not a writeback.** Every `str.replace` against plan text gets
+  an assert or a post-condition grep. Silence is the failure mode, and the tool reports success.
+- **Match on the row id, not the rendered line.** `^\|\s*(T1\.\d+)\s*\|\s*☐` survives a
+  reformatter; `| T1.10 | ☐      | frameworks write path...` does not. The repair used the former
+  and flipped all six occurrences, including two duplicate rows the exact-match approach had also
+  been missing.
+
+Same family as `feedback_precommit_formatter_defeats_hunk_split`: the commit-time formatter rewrites
+the file out from under an exact-text assumption made before it ran. That memory covers staged
+hunks; this is the same mechanism against plan prose.

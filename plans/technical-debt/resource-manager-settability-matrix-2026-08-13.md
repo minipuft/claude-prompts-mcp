@@ -684,9 +684,9 @@ not the one-line wiring at `runtime/context.ts:113` that supplies the resolver. 
 argument would leave every unit test green and silently restore the defect. The end-to-end probe
 above is what covers it, and it is not in CI. Row T1.7 below.
 
-| #    | Status | Change                                                                                                                        | Depends | Verification                                                                        |
-| ---- | ------ | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
-| T1.7 | ☐      | Land the write-destination end-to-end probe as an e2e test so the `context.ts` wiring is covered by CI, not by a local script | T1.1    | removing the `pathResolver` argument at `runtime/context.ts:113` turns a CI job red |
+| #    | Status | Change                                                                                                                        | Depends | Verification                          |
+| ---- | ------ | ----------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------- |
+| T1.7 | ✓      | Land the write-destination end-to-end probe as an e2e test so the `context.ts` wiring is covered by CI, not by a local script | T1.1    | **PASSED, mutation-verified** — §14.7 |
 
 ### 12.6 Incidental finding
 
@@ -734,10 +734,10 @@ This reprices T1.6. It was filed as tracking hygiene ("83 prompts invisible to g
 actually the thing standing between the owner and losing prompts, and it makes worktrees — which
 this repo's own guidance recommends for concurrent sessions — unsafe for authoring.
 
-| #     | Status | Change                                                                                                                                             | Depends | Verification                                                                                |
-| ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| T1-F5 | ☐      | Personal prompt store moves outside every checkout, so the served catalog does not depend on which worktree launched the session (folds into T1.6) | T1.3    | prompt count served from a fresh worktree equals the count served from main                 |
-| T1.8  | ☐      | Startup logs the resolved prompts root and the count served, so a subset catalog is visible rather than silent                                     | —       | launching from a worktree emits a line naming the root and a count that differs from main's |
+| #     | Status | Change                                                                                                                                             | Depends | Verification                                                                |
+| ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------- |
+| T1-F5 | ☐      | Personal prompt store moves outside every checkout, so the served catalog does not depend on which worktree launched the session (folds into T1.6) | T1.3    | prompt count served from a fresh worktree equals the count served from main |
+| T1.8  | ✓      | Startup logs the resolved prompts root and the count served, so a subset catalog is visible rather than silent                                     | —       | **PASSED** — worktree 39/9 vs main 120/17 — §14.8                           |
 
 _(as of 2026-08-27 · T1-F5 flips when a fresh worktree serves the same prompt count as main)_
 
@@ -864,14 +864,14 @@ personal-library behavior is what an operator gets by setting one env var.
 **Arc 1 — read and write agree about where a resource lives.** No behavior change for anyone;
 purely removes the four-way disagreement. This is the current tier.
 
-| #     | Status | Change                                                                       | Verification                                      |
-| ----- | ------ | ---------------------------------------------------------------------------- | ------------------------------------------------- |
-| T1.1  | ✓      | prompts write path delegates to `PathResolver`                               | done — §12.5, negative control                    |
-| T1.9  | ✓      | gates write path delegates through the widened `ResourcePathSource` port     | **PASSED with a negative control** — see §14.5    |
-| T1.10 | ☐      | frameworks write path delegates (`RuntimeFrameworkLoader` has its own chain) | same shape                                        |
-| T1.11 | ☐      | styles write path delegates                                                  | same shape                                        |
-| T1.7  | ☐      | e2e coverage for the wiring, so removing the resolver argument turns CI red  | unchanged                                         |
-| T1.8  | ☐      | startup logs the resolved root and served count per resource type            | launching from a worktree emits a differing count |
+| #     | Status | Change                                                                       | Verification                                                                                                                      |
+| ----- | ------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| T1.1  | ✓      | prompts write path delegates to `PathResolver`                               | done — §12.5, negative control                                                                                                    |
+| T1.9  | ✓      | gates write path delegates through the widened `ResourcePathSource` port     | **PASSED with a negative control** — see §14.5                                                                                    |
+| T1.10 | ✓      | frameworks write path delegates (`RuntimeFrameworkLoader` has its own chain) | **PASSED with a negative control** — §14.6                                                                                        |
+| T1.11 | ⚠      | styles write path delegates                                                  | **Premise false** — `resource_type` is `z.enum(['prompt','gate','framework'])`; no style write path exists. Closed not-applicable |
+| T1.7  | ✓      | e2e coverage for the wiring, so removing the resolver argument turns CI red  | **PASSED, mutation-verified** — §14.7                                                                                             |
+| T1.8  | ✓      | startup logs the resolved root and served count per resource type            | **PASSED** — worktree 39/9 vs main 120/17 — §14.8                                                                                 |
 
 **Arc 2 — writes prefer the overlay root** (separate plan; opened when Arc 1 lands). Carries the
 source-root provenance (old T1.2), overlay-preferred writes (old T1.3), bundled-delete refusal
