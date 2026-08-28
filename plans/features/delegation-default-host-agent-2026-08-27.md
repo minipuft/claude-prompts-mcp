@@ -1,7 +1,7 @@
 ---
 title: "Delegation default: the host's general agent, no shipped subagent"
 date: 2026-08-27
-status: done
+status: reference
 tags:
   - chains
   - delegation

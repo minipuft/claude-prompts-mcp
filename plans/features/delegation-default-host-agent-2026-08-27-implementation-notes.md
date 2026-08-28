@@ -1,7 +1,7 @@
 ---
 title: "Implementation notes: delegation default host agent"
 date: 2026-08-27
-status: done
+status: reference
 tags: [chains, delegation, plugin-distribution]
 ---
 
