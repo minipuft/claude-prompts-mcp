@@ -329,6 +329,13 @@ export const SUITE = [
       'UNCHECKED and known — catches declaration-dead columns (no writer names them), NOT value-dead ones (a writer names the column and always binds NULL). Follows from substrate ',
   },
   {
+    script: 'validate:resource-path-containment',
+    io: 'read',
+    reads: ['walk'],
+    converse:
+      'CHECKED — falsified 2026-08-28 by deleting the assertPathInside call from framework-file-writer.ts, simulating the merge resolution feat/settability-parity will force. The gate reported it; 2786 unit + 739 integration tests did not, because they exercise the containment helper rather than its callers. The scan also fails closed if the surface matches zero files',
+  },
+  {
     script: 'validate:scope-producers',
     io: 'read',
     reads: ['file'],

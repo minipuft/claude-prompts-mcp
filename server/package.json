@@ -172,6 +172,7 @@
     "validate:table-contracts:self-test": "tsx scripts/validate-table-contracts.ts --self-test",
     "validate:no-phantom-columns": "tsx scripts/validate-no-phantom-columns.ts",
     "validate:scope-producers": "node scripts/validate-scope-producers.js",
+    "validate:resource-path-containment": "node scripts/validate-resource-path-containment.js",
     "validate:no-phantom-columns:self-test": "tsx scripts/validate-no-phantom-columns.ts --self-test",
     "worktree:create": "node ../scripts/create-worktree.js",
     "validate:git-hooks-active": "node scripts/validate-git-hooks-active.js",
