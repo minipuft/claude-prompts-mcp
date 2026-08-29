@@ -201,7 +201,7 @@ const richIR = (): WorkflowIR => ({
   nodes: [
     { id: NODE_1, promptId: 'acc_plan', visibility: { withhold: ['previous_step_output'] } },
     { id: NODE_2, promptId: 'acc_analyze', inlineGateIds: [INLINE_GATE] },
-    { id: NODE_3, promptId: 'acc_write', subagentModel: 'fast', agentType: 'chain-executor' },
+    { id: NODE_3, promptId: 'acc_write', subagentModel: 'fast', agentType: 'general-purpose' },
   ],
 });
 

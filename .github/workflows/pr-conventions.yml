@@ -1,0 +1,112 @@
+name: PR Conventions
+
+# Checks that a pull request body was actually written, and supplies the parts a machine can
+# derive. Companion to CONTRIBUTING.md §Pull Request Process and .github/pull_request_template.md.
+#
+# WHY IT EXISTS. Measured 2026-08-28: `gh pr create --body "..."` bypasses the template silently,
+# and PR #249 opened with invented headings, no verification section, and none of the 18 available
+# labels. That was not one careless PR — no PR in this repository had ever carried a label, and the
+# three most recent used two different body conventions, because the template was unenforced and
+# the better style was unwritten.
+#
+# WHAT IT MEASURES, stated exactly: that the three load-bearing sections exist and are NON-EMPTY
+# once HTML comments are stripped. Presence alone is gameable — an empty `## Summary` passes a
+# presence check and asserts nothing, which is the same defect `cleanup-standards.md` describes for
+# an unmarked checkbox. It does NOT judge prose quality, and it deliberately does not gate labels:
+# the type label is derived here automatically, and a gate you satisfy automatically is theatre.
+#
+# ADVISORY ON PURPOSE. Not listed in `.github/required-contexts.json`, so a red run is visible
+# without blocking a merge.
+#   FLIPS TO REQUIRED WHEN: it has run on 5 consecutive PRs with zero false positives. Add
+#   "PR Conventions" to required-contexts.json at that point and delete this paragraph. An
+#   advisory gate with no promotion condition is permanently advisory, which is the state this
+#   repository's own rules forbid.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-conventions-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventions:
+    name: PR Conventions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Derive the type label from the conventional-commit title
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // Derived, never demanded. The conventional-commit type is already validated by
+            // commitlint on every commit and by the squash-merge title, so inferring from it
+            // cannot disagree with the tree. `security` and `breaking` are NOT inferable and stay
+            // a human decision — which is exactly why this step does not fail when they are absent.
+            const title = context.payload.pull_request.title || '';
+            const type = (title.match(/^([a-z]+)(\(|!|:)/) || [])[1];
+            const map = {
+              fix: 'bug',
+              feat: 'enhancement',
+              docs: 'documentation',
+              perf: 'enhancement',
+              refactor: 'enhancement',
+            };
+            const label = map[type];
+            if (!label) {
+              core.info(`No label mapping for type "${type}" — leaving labels alone.`);
+              return;
+            }
+            const existing = context.payload.pull_request.labels.map((l) => l.name);
+            if (existing.includes(label)) {
+              core.info(`Label "${label}" already present.`);
+              return;
+            }
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: [label],
+            });
+            core.info(`Applied "${label}".`);
+
+      - name: Require the three load-bearing sections, non-empty
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const REQUIRED = ['Summary', 'How it was verified', 'Notes for Reviewers'];
+            const body = context.payload.pull_request.body || '';
+            // Strip HTML comments first: the template ships its guidance inside them, so a body
+            // that is nothing but the untouched template must read as empty, not as filled in.
+            const stripped = body.replace(/<!--[\s\S]*?-->/g, '');
+            const sections = {};
+            let current = null;
+            for (const line of stripped.split('\n')) {
+              const heading = line.match(/^#{2,3}\s+(.*?)\s*$/);
+              if (heading) {
+                current = heading[1];
+                sections[current] = '';
+              } else if (current) {
+                sections[current] += line;
+              }
+            }
+            const problems = [];
+            for (const name of REQUIRED) {
+              if (!(name in sections)) problems.push(`missing section \`## ${name}\``);
+              else if (sections[name].trim().length === 0)
+                problems.push(`section \`## ${name}\` is present but empty`);
+            }
+            if (problems.length === 0) {
+              core.info(`All ${REQUIRED.length} required sections present and non-empty.`);
+              return;
+            }
+            for (const p of problems) core.error(p);
+            core.setFailed(
+              `PR body does not follow .github/pull_request_template.md:\n` +
+                problems.map((p) => `  - ${p}`).join('\n') +
+                `\n\nNote: \`gh pr create --body\` bypasses the template. Use --body-file.`
+            );

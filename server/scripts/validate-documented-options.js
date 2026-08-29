@@ -69,6 +69,8 @@ const NOT_OUR_OPTIONS = new Set([
   '--type', // ripgrep's --type, quoted in an ADR's caller-search note
   '--include', // grep's --include, used in contract-maintenance search examples
   '--name-only', // git diff --name-only, used in a generated-artifact check
+  '--body', // gh pr create --body; CONTRIBUTING warns it bypasses the PR template
+  '--body-file', // gh pr create --body-file; the form CONTRIBUTING tells you to use instead
 ]);
 
 /** Read a file relative to the repo root, empty string when absent. */

@@ -25,6 +25,20 @@ import {
 } from '#modules/prompts/prompt-catalog.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '#modules/prompts/prompt-refresh-service.js';
 
+/*
+ * Loopback origins only. A browser page served from anywhere else has no business
+ * driving a local MCP server, and every non-browser client (which is most MCP
+ * clients) sends no Origin header at all and is unaffected by this list.
+ */
+const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
+  'http://localhost',
+  'https://localhost',
+  'http://127.0.0.1',
+  'https://127.0.0.1',
+  'http://[::1]',
+  'https://[::1]',
+];
+
 /**
  * API Manager class
  */
@@ -37,13 +51,19 @@ export class ApiRouter {
   private categories: Category[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
   private catalogReadToken: string | null;
+  private toolsWriteToken: string | null;
+  private allowedOrigins: Set<string>;
 
   constructor(
     logger: Logger,
     configManager: ConfigManager,
     promptManager?: PromptAssetManager,
     mcpToolsManager?: McpToolRouter,
-    options: { catalogReadToken?: string | null } = {}
+    options: {
+      catalogReadToken?: string | null;
+      toolsWriteToken?: string | null;
+      allowedOrigins?: readonly string[];
+    } = {}
   ) {
     this.logger = logger;
     this.configManager = configManager;
@@ -52,6 +72,22 @@ export class ApiRouter {
     const catalogReadToken = options.catalogReadToken?.trim();
     this.catalogReadToken =
       catalogReadToken === undefined || catalogReadToken.length === 0 ? null : catalogReadToken;
+
+    /*
+     * A SEPARATE token from the read token, deliberately. The catalog token is held by
+     * read-only adapters that render prompt content; letting that same string delete a
+     * prompt would hand every reader the destructive surface too. Least privilege costs
+     * one env var here.
+     */
+    const toolsWriteToken = options.toolsWriteToken?.trim();
+    this.toolsWriteToken =
+      toolsWriteToken === undefined || toolsWriteToken.length === 0 ? null : toolsWriteToken;
+
+    this.allowedOrigins = new Set(
+      (options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS).map((origin) =>
+        origin.trim().toLowerCase().replace(/\/$/, '')
+      )
+    );
   }
 
   /**
@@ -86,11 +122,46 @@ export class ApiRouter {
    * Setup Express middleware
    */
   private setupMiddleware(app: express.Application): void {
-    // Enable CORS for Cursor integration
+    /*
+     * Origin validation runs FIRST, ahead of CORS and ahead of any token check, and it
+     * wraps the whole app — so `/mcp`, `/health` and the REST routes are all covered and
+     * a hostile page is refused before a credential is read.
+     *
+     * This is the DNS rebinding control, and CORS is not a substitute for it: under
+     * rebinding the attacker repoints their own domain at 127.0.0.1, so the browser
+     * treats the request as SAME-ORIGIN, sends no preflight, and any CORS policy is
+     * never consulted. That is why the MCP Streamable HTTP transport makes Origin
+     * validation a MUST rather than a recommendation.
+     *
+     * Comparing Origin against Host would not work either — the attacker owns the
+     * hostname the browser resolved, so both headers carry their domain and the check
+     * would admit exactly the request it exists to stop. Only an expected-origin list
+     * separates the cases.
+     *
+     * A request with NO Origin passes. Browsers always set it; most MCP clients are not
+     * browsers. Rejecting its absence would break every CLI client while stopping
+     * nothing, since an attacker who can set arbitrary headers is not in a browser and
+     * is not subject to this control at all.
+     */
     app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+      const origin = req.header('origin');
+      if (origin !== undefined && !this.isAllowedOrigin(origin)) {
+        this.logger.warn(`[api] rejected cross-origin request from ${origin} to ${req.url}`);
+        return res.status(403).json({ error: 'Origin not allowed' });
+      }
+
+      if (origin !== undefined) {
+        // Echo the specific allowed origin rather than `*`; a wildcard cannot carry
+        // credentials and tells every caller it is welcome.
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Vary', 'Origin');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
+        res.header(
+          'Access-Control-Allow-Headers',
+          'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+        );
+      }
+
       if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
       }
@@ -204,6 +275,53 @@ export class ApiRouter {
     });
   }
 
+  /** Origin matches on scheme+host+port; the port-less defaults admit any port on loopback. */
+  private isAllowedOrigin(origin: string): boolean {
+    const normalized = origin.trim().toLowerCase().replace(/\/$/, '');
+    if (this.allowedOrigins.has(normalized)) return true;
+
+    // `http://localhost:3000` matches the `http://localhost` default.
+    try {
+      const url = new URL(normalized);
+      return this.allowedOrigins.has(`${url.protocol}//${url.hostname}`);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Constant-time bearer comparison against a configured token. */
+  private hasValidBearer(req: Request, expected: string | null): boolean {
+    if (expected === null) return false;
+
+    const authorization = req.header('authorization');
+    if (authorization?.startsWith('Bearer ') !== true) return false;
+
+    const candidate = authorization.slice('Bearer '.length).trim();
+    if (candidate.length === 0) return false;
+
+    const expectedDigest = createHash('sha256').update(expected).digest();
+    const candidateDigest = createHash('sha256').update(candidate).digest();
+    return timingSafeEqual(expectedDigest, candidateDigest);
+  }
+
+  /**
+   * Gate for the four mutating tool routes. Fails closed exactly like the catalog
+   * route: an unconfigured token is a refusal, not an open door.
+   */
+  private requireToolsWriteToken(req: Request, res: Response): boolean {
+    res.setHeader('Cache-Control', 'no-store');
+
+    if (this.toolsWriteToken === null) {
+      res.status(503).json({ error: 'Tool write endpoints are unavailable' });
+      return false;
+    }
+    if (!this.hasValidBearer(req, this.toolsWriteToken)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return false;
+    }
+    return true;
+  }
+
   private hasValidCatalogReadToken(req: Request): boolean {
     const authorization = req.header('authorization');
     if (authorization?.startsWith('Bearer ') !== true) return false;
@@ -220,23 +338,34 @@ export class ApiRouter {
    * Setup tool API routes
    */
   private setupToolRoutes(app: express.Application): void {
+    /*
+     * Every route below MUTATES server-owned resources — create, update, delete, reload.
+     * They were previously reachable with no credential at all, while the read-only
+     * catalog route required a bearer token: a posture where reading a template was
+     * harder than deleting one. Authentication runs before the handler, so a refused
+     * request never reaches `resource_manager`.
+     */
     // Create category endpoint
     app.post('/api/v1/tools/create_category', async (req: Request, res: Response) => {
+      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleCreateCategory(req, res);
     });
 
     // Update prompt endpoint
     app.post('/api/v1/tools/update_prompt', async (req: Request, res: Response) => {
+      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleUpdatePrompt(req, res);
     });
 
     // Delete prompt endpoint
     app.delete('/api/v1/tools/prompts/:id', async (req: Request, res: Response) => {
+      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleDeletePrompt(req, res);
     });
 
     // Reload prompts endpoint
     app.post('/api/v1/tools/reload_prompts', async (req: Request, res: Response) => {
+      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleReloadPrompts(req, res);
     });
   }
@@ -500,7 +629,18 @@ export function createApiRouter(
   promptManager?: PromptAssetManager,
   mcpToolsManager?: McpToolRouter
 ): ApiRouter {
+  const configuredOrigins = process.env['MCP_HTTP_ALLOWED_ORIGINS']
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
   return new ApiRouter(logger, configManager, promptManager, mcpToolsManager, {
     catalogReadToken: process.env['MCP_CATALOG_READ_TOKEN'],
+    toolsWriteToken: process.env['MCP_TOOLS_WRITE_TOKEN'],
+    // Naming any origin REPLACES the loopback defaults rather than adding to them, so an
+    // operator publishing under a real hostname states the full policy in one place.
+    ...(configuredOrigins !== undefined && configuredOrigins.length > 0
+      ? { allowedOrigins: configuredOrigins }
+      : {}),
   });
 }

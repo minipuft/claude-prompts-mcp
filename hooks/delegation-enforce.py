@@ -69,7 +69,8 @@ def main():
     if not state or not state.get("pending_delegation"):
         sys.exit(0)
 
-    agent_type = state.get("delegation_agent_type", "chain-executor")
+    # Default mirrors CLAUDE_CODE_DEFAULT_AGENT_TYPE in the server's delegation strategy.
+    agent_type = state.get("delegation_agent_type", "general-purpose")
     model_hint = state.get("delegation_model_hint")
 
     # Task/Agent tool call = agent is delegating correctly — clear state and allow.

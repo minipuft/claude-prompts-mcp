@@ -753,6 +753,25 @@ clients that need executable template content use `GET /api/v1/catalog/prompts/:
 bearer token supplied through `MCP_CATALOG_READ_TOKEN`. The protected route fails closed when the
 token is not configured and marks responses `Cache-Control: no-store`.
 
+The four mutating routes under `/api/v1/tools/` require a **different** token,
+`MCP_TOOLS_WRITE_TOKEN`, and fail closed the same way. Two tokens rather than one is least
+privilege: the read token is distributed to adapters that render prompt content, and reusing it for
+writes would give every reader the ability to delete a prompt.
+
+Ahead of both sits Origin validation, which the MCP Streamable HTTP transport requires. It wraps the
+entire Express application — `/mcp`, `/health` and the REST routes share one app — and runs before
+any token is read, so a hostile page is refused before a credential is examined. A request whose
+`Origin` is present and not on the allowlist gets `403`; a request with no `Origin` passes, because
+browsers always send it and most MCP clients are not browsers. CORS is not a substitute for this
+check: under DNS rebinding the attacker repoints their own domain at the loopback address, the
+browser therefore considers the request same-origin, no preflight is sent, and no CORS policy is
+consulted. Comparing `Origin` against `Host` fails for the same reason — the attacker owns the
+hostname, so both headers agree.
+
+The listener binds `127.0.0.1` unless `MCP_HTTP_HOST` says otherwise, and a non-loopback bind logs a
+warning naming the two settings an operator then needs. `MCP_HTTP_ALLOWED_ORIGINS` replaces the
+loopback defaults rather than extending them.
+
 ### Prompts (`src/modules/prompts/`)
 
 - **Registry**: Dynamic registration with category organization

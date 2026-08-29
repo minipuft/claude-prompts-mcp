@@ -114,7 +114,7 @@ class TestBuildCommandDispatch:
 class TestCodexModelStrategy:
     def _context(self, hint=None, gates=0):
         return model_strategies.DelegationContext(
-            agent_type="chain-executor",
+            agent_type="general-purpose",
             capability_hint=hint,
             gate_count=gates,
             step_number=1,

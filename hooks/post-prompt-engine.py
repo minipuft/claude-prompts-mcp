@@ -102,7 +102,10 @@ def main():
 
     if has_delegation_cta and step > 0 and step < total and not pending_gate:
         state["pending_delegation"] = True
-        state["delegation_agent_type"] = subagent_match.group(1) if subagent_match else "chain-executor"
+        # Fallback mirrors CLAUDE_CODE_DEFAULT_AGENT_TYPE (server/src/engine/execution/delegation/
+        # strategy.ts). The Claude strategy always emits subagent_type, so this only fires for a
+        # CTA shape the regex above does not know.
+        state["delegation_agent_type"] = subagent_match.group(1) if subagent_match else "general-purpose"
         save_session_state(session_id, state)
 
     if pending_gate:

@@ -100,10 +100,10 @@ describe('compileWorkflowIR — field mapping (acceptance clause d)', () => {
     // Two producers for one flag is how the two invocation paths drift apart. Stage 06's
     // `markDelegatedStepPrompts` derives it from `subagentModel` on every path since P6 Tier 1.
     const compiled = compileValidated(
-      ir({ nodes: [node('gather', { subagentModel: 'fast', agentType: 'chain-executor' })] })
+      ir({ nodes: [node('gather', { subagentModel: 'fast', agentType: 'general-purpose' })] })
     );
     expect(compiled.steps[0]?.subagentModel).toBe('fast');
-    expect(compiled.steps[0]?.agentType).toBe('chain-executor');
+    expect(compiled.steps[0]?.agentType).toBe('general-purpose');
     expect(compiled.steps[0]?.delegated).toBeUndefined();
   });
 

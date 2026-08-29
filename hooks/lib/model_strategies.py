@@ -17,7 +17,7 @@ from typing import Final
 class DelegationContext:
     """Context available for model hint resolution."""
 
-    agent_type: str  # e.g., "chain-executor", "research-agent"
+    agent_type: str  # e.g., "general-purpose", "research-agent"
     capability_hint: str | None  # From server: "high-capability", "standard", "fast"
     gate_count: int  # Number of gates on the step
     step_number: int

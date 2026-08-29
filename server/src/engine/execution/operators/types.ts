@@ -37,7 +37,7 @@ export interface ChainStepPrompt {
   retries?: number;
   /** True if this step should be delegated to a sub-agent via Task tool */
   delegated?: boolean;
-  /** Override agent type for delegation (default: 'chain-executor') */
+  /** Host agent for delegation; undefined leaves the choice to the host strategy */
   agentType?: string;
   /** Capability hint for delegation model selection (step-level override) */
   subagentModel?: 'heavy' | 'standard' | 'fast';
