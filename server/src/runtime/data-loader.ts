@@ -119,12 +119,19 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   //
   // Order is the precedence: `mergePromptResults` lets a later result win on a duplicate id, so
   // bundle → primary → overlays gives the documented "same ID = custom wins".
-  const { result, base: bundledBase } = await loadWithBundledBase(
+  const {
+    result,
+    base: bundledBase,
+    invalid,
+    overridden: bundledOverridden,
+  } = await loadWithBundledBase(
     promptManager,
     promptsPath,
     isDirectory ? promptsPath : path.dirname(promptsPath),
     pathResolver?.getBundledResourceDir('prompts')
   );
+  let overridden = bundledOverridden;
+  let unloadable = invalid;
 
   const promptsData = result.promptsData;
   const categories = result.categories;
@@ -135,7 +142,11 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   for (const overlayDir of overlayPromptsDirs) {
     try {
       const overlayResult = await promptManager.loadAndConvertPrompts(overlayDir, overlayDir);
-      mergePromptResults({ promptsData, categories, convertedPrompts }, overlayResult);
+      overridden += mergePromptResults(
+        { promptsData, categories, convertedPrompts },
+        overlayResult
+      );
+      unloadable += overlayResult.invalid;
       if (isVerbose) {
         logger.info(
           `  📂 Overlay prompts from ${overlayDir}: +${overlayResult.promptsData.length} prompts`
@@ -159,6 +170,10 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     root: promptsPath,
     count: promptsData.length,
     detail: { label: 'categories', value: categories.length },
+    subtractions: [
+      { label: 'invalid', value: unloadable },
+      { label: 'overridden', value: overridden },
+    ],
     overlays: overlayPromptsDirs,
     ...(bundledBase !== undefined ? { base: bundledBase } : {}),
   })) {
@@ -219,7 +234,7 @@ async function loadWithBundledBase(
   promptsPath: string,
   basePath: string,
   bundledDir: string | undefined
-): Promise<{ result: PromptLoadResult; base?: string }> {
+): Promise<{ result: PromptLoadResult; base?: string; invalid: number; overridden: number }> {
   const primary = await promptManager.loadAndConvertPrompts(promptsPath, basePath);
 
   if (
@@ -227,12 +242,17 @@ async function loadWithBundledBase(
     bundledDir === promptsPath ||
     !(await directoryExists(bundledDir))
   ) {
-    return { result: primary };
+    return { result: primary, invalid: primary.invalid, overridden: 0 };
   }
 
   const merged = await promptManager.loadAndConvertPrompts(bundledDir, bundledDir);
-  mergePromptResults(merged, primary);
-  return { result: merged, base: bundledDir };
+  const overridden = mergePromptResults(merged, primary);
+  return {
+    result: merged,
+    base: bundledDir,
+    invalid: merged.invalid + primary.invalid,
+    overridden,
+  };
 }
 
 /** Whether a path exists and is a directory. Absent and not-a-directory are the same answer here. */
@@ -247,8 +267,11 @@ async function directoryExists(candidate: string): Promise<boolean> {
 /**
  * Merge overlay prompt results into the primary arrays.
  * Overlay prompts with matching IDs override primary ones (standard overlay semantics).
- */
-/**
+ *
+ * Returns how many primary prompts the overlay replaced. That number is a subtraction the startup
+ * inventory has to name: without it, `119 served` against `123 on disk` looks like loss, when four
+ * of the four are accounted for (three unloadable, one deliberately overridden).
+ *
  * Exported for direct testing. The merge key is the kind of thing that regresses silently — a
  * wrong key still produces a plausible catalog, just one missing an entry nobody asked about —
  * so it gets a unit test rather than only end-to-end coverage.
@@ -264,7 +287,7 @@ export function mergePromptResults(
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
   }
-): void {
+): number {
   // Merge categories (ensure overlay categories exist, don't replace existing metadata)
   for (const overlayCat of overlay.categories) {
     const exists = target.categories.some((c) => c.name === overlayCat.name);
@@ -273,9 +296,19 @@ export function mergePromptResults(
     }
   }
 
-  // Merge prompts (overlay wins on ID conflict)
+  // Merge prompts (overlay wins on identity conflict).
+  //
+  // Keyed on `category/id`, the same identity `convertedPrompts` uses below. Keyed on bare `id`
+  // these two arrays disagreed about what the catalog contains: measured 2026-08-29, 120 converted
+  // prompts against 119 `promptsData` entries, because `general/resume_variant_build` and
+  // `resume/resume_variant_build` are one prompt to one array and two to the other. Every consumer
+  // then depends on which array it happened to read.
+  const promptIdentityOf = (prompt: PromptData): string => `${prompt.category}/${prompt.id}`;
   for (const overlayPrompt of overlay.promptsData) {
-    const existingIdx = target.promptsData.findIndex((p) => p.id === overlayPrompt.id);
+    const overlayIdentity = promptIdentityOf(overlayPrompt);
+    const existingIdx = target.promptsData.findIndex(
+      (p) => promptIdentityOf(p) === overlayIdentity
+    );
     if (existingIdx !== -1) {
       target.promptsData[existingIdx] = overlayPrompt;
     } else {
@@ -297,15 +330,18 @@ export function mergePromptResults(
   // Category is part of the key because a nested chain step's id is path-qualified relative to its
   // category root (`deep_analysis/initial_scan`), so id alone is unique only within a category.
   const identityOf = (prompt: ConvertedPrompt): string => `${prompt.category}/${prompt.id}`;
+  let overridden = 0;
   for (const overlayConverted of overlay.convertedPrompts) {
     const overlayIdentity = identityOf(overlayConverted);
     const existingIdx = target.convertedPrompts.findIndex((c) => identityOf(c) === overlayIdentity);
     if (existingIdx !== -1) {
       target.convertedPrompts[existingIdx] = overlayConverted;
+      overridden++;
     } else {
       target.convertedPrompts.push(overlayConverted);
     }
   }
+  return overridden;
 }
 
 /** Subset of skills-sync.yaml this module reads. Full schema: modules/skills-sync/service.ts */

@@ -1,16 +1,34 @@
-import { afterEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import path from 'node:path';
 
 import { PathResolver } from '../../../src/runtime/paths.js';
 
-const originalRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-const originalWorkspace = process.env['MCP_WORKSPACE'];
+/**
+ * Every environment variable PathResolver reads, cleared before each case.
+ *
+ * Saving only the two the tests SET left the rest ambient, so the suite's answer depended on the
+ * developer's shell: with `MCP_RESOURCES_PATH` exported — a supported way to point the server at a
+ * personal resource library — `getResourcesPath()` returned that path and the assertion failed on
+ * a machine where nothing was wrong. A test that reads an override must own every override.
+ */
+const PATH_ENV_KEYS = [
+  'MCP_RUNTIME_ROOT',
+  'MCP_WORKSPACE',
+  'MCP_RESOURCES_PATH',
+  'MCP_CONFIG_PATH',
+] as const;
+
+const originalEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]));
+
+beforeEach(() => {
+  for (const key of PATH_ENV_KEYS) delete process.env[key];
+});
 
 afterEach(() => {
-  if (originalRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-  else process.env['MCP_RUNTIME_ROOT'] = originalRuntimeRoot;
-  if (originalWorkspace === undefined) delete process.env['MCP_WORKSPACE'];
-  else process.env['MCP_WORKSPACE'] = originalWorkspace;
+  for (const [key, value] of originalEnv) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 describe('PathResolver writable runtime paths', () => {

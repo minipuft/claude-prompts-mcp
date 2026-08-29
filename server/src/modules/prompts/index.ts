@@ -153,12 +153,13 @@ export class PromptAssetManager {
     promptsData: PromptData[];
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
+    invalid: number;
   }> {
     // Always treat input as a directory (JSON prompts.json format removed)
     const promptsDir = configPathOrDir;
 
     this.logger.info(`Loading prompts from: ${promptsDir}`);
-    const { promptsData, categories } = await this.loadFromDirectories(promptsDir);
+    const { promptsData, categories, invalid } = await this.loadFromDirectories(promptsDir);
     this.logger.info(`Loaded ${promptsData.length} prompts from ${categories.length} categories`);
     this.logCategoryBreakdown(categories, promptsData);
 
@@ -169,7 +170,7 @@ export class PromptAssetManager {
     );
     this.logConversionSummary(promptsData, convertedPrompts);
 
-    return { promptsData, categories, convertedPrompts };
+    return { promptsData, categories, convertedPrompts, invalid };
   }
 
   /**

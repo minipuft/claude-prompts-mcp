@@ -38,6 +38,7 @@ export {
   type IndexedResourceType,
   type ResourceIndexerConfig,
   reportResourceSyncFailures,
+  reportShadowedResources,
   type SyncFailure,
   type SyncResult,
   type ToolLoaderFn,

@@ -10,7 +10,16 @@ import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
 } from './resource-change-tracking.js';
-import { formatResourceInventory, type ResourceInventory } from './resource-inventory.js';
+import {
+  formatIndexReconciliation,
+  formatResourceInventory,
+  type ResourceInventory,
+} from './resource-inventory.js';
+import {
+  indexerResourceRoots,
+  resolveResourceRoots,
+  type ResourceRoots,
+} from './resource-roots.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
@@ -118,40 +127,6 @@ function logResourceInventory(logger: Logger, inventory: ResourceInventory): voi
   for (const line of formatResourceInventory(inventory)) {
     logger.info(line);
   }
-}
-
-/** Every directory that contributes definitions of one resource type, in precedence order. */
-interface ResourceRoots {
-  /** The root the loader treats as primary; a same-id definition here wins. */
-  primary: string | undefined;
-  /** Workspace directories layered over the primary. */
-  overlays: string[];
-  /** The package's own directory, when it is a source distinct from the primary. */
-  bundled: string | undefined;
-  /** What the loader takes as its fallback list: overlays, then the bundled tree last. */
-  additional: string[];
-}
-
-/**
- * Resolve the contributing roots for one resource type.
- *
- * Pure apart from the resolver's own `existsSync` probes. The bundled directory goes LAST in
- * `additional`, not into `overlays`: all three loaders resolve an id as `primary ?? additional[0]
- * ?? …`, so trailing it yields "workspace wins, bundled definitions stay reachable" — the
- * semantics `src/index.ts`'s help has always documented but the code did not implement. Omitted
- * entirely on an ordinary install, where the primary already IS the bundle.
- */
-function resolveResourceRoots(
-  pathResolver: PathResolver | undefined,
-  resourceType: string,
-  primary: string | undefined
-): ResourceRoots {
-  const overlays = pathResolver?.getOverlayResourceDirs(resourceType, primary) ?? [];
-  const candidate = pathResolver?.getBundledResourceDir(resourceType);
-  const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
-  const additional =
-    bundled !== undefined && !overlays.includes(bundled) ? [...overlays, bundled] : overlays;
-  return { primary, overlays, bundled, additional };
 }
 
 /**
@@ -421,7 +396,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
       const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      const { createResourceIndexer, reportResourceSyncFailures } =
+      const { createResourceIndexer, reportResourceSyncFailures, reportShadowedResources } =
         await import('#infra/database/resource-indexer.js');
       const { ScriptToolDefinitionLoader } =
         await import('#modules/automation/core/script-definition-loader.js');
@@ -431,10 +406,23 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
       const indexer = createResourceIndexer(dbManager, logger, {
         resourcesDir,
+        resourceRoots: indexerResourceRoots(pathResolver),
         toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
       });
       const syncResult = await indexer.syncAll();
       reportResourceSyncFailures(syncResult, logger);
+      reportShadowedResources(syncResult, logger);
+      // The index and the catalog are two derivations of one question; compare them rather than
+      // assuming they agree, which is how they came to disagree by 41 prompts unnoticed.
+      const indexedPromptIds = dbManager
+        .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'prompt'")
+        .map((row) => row.id);
+      for (const line of formatIndexReconciliation(
+        convertedPrompts.map((prompt) => prompt.id),
+        indexedPromptIds
+      )) {
+        logger.warn(line);
+      }
       if (isVerbose) logger.info('✅ ResourceIndexer synced to SQLite');
     } catch (error) {
       // `resource_index` is what the Python hooks read; a stale one makes prompt-suggest

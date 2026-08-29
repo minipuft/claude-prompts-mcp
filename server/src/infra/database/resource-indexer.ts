@@ -70,6 +70,27 @@ export interface IndexedResource {
 export type { ToolIndexEntry } from '#shared/types/persistence.js';
 
 /**
+ * How many directory levels below a resource root the scan descends.
+ *
+ * Three covers every shipped layout: `{category}/{chain}/{step}/` is the deepest, and a flat
+ * layout uses one. It is a guard against a pathological tree, not a layout rule — a layout that
+ * needs a fourth level should raise this deliberately rather than discover the limit by having
+ * its resources go missing.
+ */
+const MAX_SCAN_DEPTH = 3;
+
+/** One resource found on disk, with the category that completes its identity. */
+interface ScannedResource {
+  filePath: string;
+  content: string;
+  /**
+   * Declared category, or the containing directory for a nested layout. `undefined` for a flat
+   * layout (gates, frameworks, styles), where a repeated id is always a collision.
+   */
+  category: string | undefined;
+}
+
+/**
  * One resource that could not be synced, with the reason.
  *
  * The counters alone cannot distinguish a resource that failed from one that
@@ -85,6 +106,33 @@ export interface SyncFailure {
 }
 
 /**
+ * One id defined twice, and which definition the index kept.
+ *
+ * The index is keyed `(id, type)` with no category, so a second definition of an id overwrites
+ * the first and the loser becomes unreachable through every id lookup — including the Python
+ * hooks', which key their own dict by id. Silently, until now: 84 prompt files on disk indexed as
+ * 78 rows with nothing logged (measured 2026-08-29).
+ *
+ * `sameCategory` separates the two causes, which need opposite responses. The loaders identify a
+ * prompt by `category/id`, so two definitions sharing both are ONE resource and the higher-precedence
+ * root is supposed to win — that is the documented overlay contract. Two definitions sharing only
+ * the id are two different resources, and indexing one silently deletes the other from every
+ * id lookup. Root is the wrong discriminator: measured 2026-08-29, 18 ids collided across the
+ * workspace and bundled trees, and treating "different root" as benign would have filed all 18
+ * as expected overlay behaviour.
+ */
+export interface ShadowedResource {
+  type: IndexedResourceType;
+  id: string;
+  /** Path to the definition that is indexed and served. */
+  winner: string;
+  /** Path to the definition it hides. */
+  shadowed: string;
+  /** True when both definitions declare the same category — one resource, overridden by precedence. */
+  sameCategory: boolean;
+}
+
+/**
  * Sync result statistics.
  *
  * `errors` is the count of `failures` — the two are maintained together by
@@ -97,11 +145,44 @@ export interface SyncResult {
   unchanged: number;
   errors: number;
   failures: SyncFailure[];
+  /** Ids that were defined more than once; see {@link ShadowedResource}. */
+  shadowed: ShadowedResource[];
 }
 
 /** Empty result — the single place the shape is constructed. */
 function emptySyncResult(): SyncResult {
-  return { added: 0, modified: 0, removed: 0, unchanged: 0, errors: 0, failures: [] };
+  return {
+    added: 0,
+    modified: 0,
+    removed: 0,
+    unchanged: 0,
+    errors: 0,
+    failures: [],
+    shadowed: [],
+  };
+}
+
+/**
+ * Log every duplicated id by path, at a severity matching its cause.
+ *
+ * Deliberately reports identity, not a count: "5 shadowed" tells a reader something is wrong and
+ * nothing about which prompt they can no longer reach. The counts belong on the startup inventory
+ * line; the paths belong here.
+ */
+export function reportShadowedResources(result: SyncResult, logger: Logger): void {
+  const collisions = result.shadowed.filter((s) => !s.sameCategory);
+  const overrides = result.shadowed.filter((s) => s.sameCategory);
+
+  for (const { type, id, winner, shadowed } of collisions) {
+    logger.warn(
+      `ResourceIndexer: duplicate ${type} id '${id}' in two categories — indexed ${winner}, ` +
+        `which leaves ${shadowed} unreachable by id. Rename one or merge them.`
+    );
+  }
+
+  for (const { type, id, winner, shadowed } of overrides) {
+    logger.debug(`ResourceIndexer: ${type} '${id}' from ${winner} overrides ${shadowed}`);
+  }
 }
 
 /**
@@ -394,9 +475,28 @@ function buildMetadata(
 /**
  * Configuration for the resource indexer
  */
+/** Ordered roots per resource type, LOWEST precedence first. */
+export type ResourceRootMap = Partial<Record<IndexedResourceType, string[]>>;
+
 export interface ResourceIndexerConfig {
-  /** Path to the resources directory */
+  /**
+   * Path to the resources directory.
+   *
+   * The default source of roots (`{resourcesDir}/{subdir}` per type) and the anchor `tool_dir` is
+   * reported relative to. On a deployment where resources come from more than one directory,
+   * `resourceRoots` overrides the derivation and this stays the anchor.
+   */
   resourcesDir: string;
+  /**
+   * Every directory contributing definitions, per type, LOWEST precedence first — a later root's
+   * same-id resource overwrites an earlier one, matching the loaders.
+   *
+   * Without this the index is whatever a single directory holds, which stopped being the served
+   * catalog the moment the loaders learned to overlay a workspace onto the bundled tree. The
+   * index is what the Python hooks read, so the gap was not cosmetic: 39 bundled prompts were
+   * loaded, executable, and absent from every hook's view of the world.
+   */
+  resourceRoots?: ResourceRootMap;
   /** Whether to track prompts */
   trackPrompts?: boolean;
   /** Whether to track gates */
@@ -428,6 +528,7 @@ export class ResourceIndexer {
     this.toolLoader = config.toolLoader;
     this.config = {
       resourcesDir: config.resourcesDir,
+      resourceRoots: config.resourceRoots ?? {},
       trackPrompts: config.trackPrompts ?? true,
       trackGates: config.trackGates ?? true,
       trackFrameworks: config.trackFrameworks ?? true,
@@ -460,6 +561,7 @@ export class ResourceIndexer {
         result.unchanged += typeResult.unchanged;
         result.errors += typeResult.errors;
         result.failures.push(...typeResult.failures);
+        result.shadowed.push(...typeResult.shadowed);
       } catch (error) {
         this.logger.error(`ResourceIndexer: Failed to sync ${type}s:`, error);
         recordSyncFailure(result, type, `<all ${type}s>`, error);
@@ -476,6 +578,7 @@ export class ResourceIndexer {
         result.unchanged += toolResult.unchanged;
         result.errors += toolResult.errors;
         result.failures.push(...toolResult.failures);
+        result.shadowed.push(...toolResult.shadowed);
       } catch (error) {
         this.logger.error('ResourceIndexer: Failed to sync tools:', error);
         recordSyncFailure(result, 'tool', '<all tools>', error);
@@ -497,8 +600,6 @@ export class ResourceIndexer {
   async syncResourceType(type: IndexedResourceType, subdir: string): Promise<SyncResult> {
     const result = emptySyncResult();
 
-    const resourceDir = path.join(this.config.resourcesDir, subdir);
-
     // Get current indexed resources of this type
     const indexed = new Map<string, IndexedResource>();
     const rows = this.db.query<IndexedResource>('SELECT * FROM resource_index WHERE type = ?', [
@@ -508,16 +609,7 @@ export class ResourceIndexer {
       indexed.set(row.id, row);
     }
 
-    // Scan filesystem for current resources
-    const current = new Map<string, { filePath: string; content: string }>();
-    try {
-      await this.scanResources(resourceDir, type, current);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
-      }
-      // Directory doesn't exist - all indexed resources should be removed
-    }
+    const current = await this.scanAllRoots(type, subdir, result);
 
     // Process additions and modifications
     for (const [id, { filePath, content }] of current) {
@@ -560,70 +652,181 @@ export class ResourceIndexer {
   }
 
   /**
-   * Scan a directory for resources.
-   * Handles both flat layouts (gates/{id}/gate.yaml) and nested
-   * category layouts (prompts/{category}/{id}/prompt.yaml).
+   * Every resource of one type found across all its roots, lowest precedence first.
+   *
+   * A later root's same-id resource overwrites an earlier one and the loser is recorded as
+   * shadowed — an overwrite is the overlay contract when the category matches and a defect when
+   * it does not.
    */
-  private async scanResources(
-    dir: string,
+  private async scanAllRoots(
     type: IndexedResourceType,
-    results: Map<string, { filePath: string; content: string }>
-  ): Promise<void> {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    const yamlFile = this.getYamlFileName(type);
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-
-      const subDir = path.join(dir, entry.name);
-      const yamlPath = path.join(subDir, yamlFile);
-
+    subdir: string,
+    result: SyncResult
+  ): Promise<Map<string, ScannedResource>> {
+    const current = new Map<string, ScannedResource>();
+    for (const resourceDir of this.rootsFor(type, subdir)) {
       try {
-        // Try flat layout: {type}/{id}/{type}.yaml
-        const content = await fs.readFile(yamlPath, 'utf-8');
-        const data = yaml.load(content) as Record<string, unknown>;
-        const id = (data?.['id'] as string) ?? entry.name;
-        results.set(id, { filePath: yamlPath, content });
+        await this.scanResources(resourceDir, type, current, result);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          // YAML not found at this level — try nested category layout
-          await this.scanCategoryDir(subDir, yamlFile, results);
-        } else {
-          this.logger.debug(`ResourceIndexer: Skipping ${subDir}: ${error}`);
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
         }
+        // An absent root contributes nothing, which is not a failure — an ordinary install has no
+        // workspace root at all. Only when NO root resolves does the map stay empty and the
+        // removal sweep clear the type.
       }
+    }
+    return current;
+  }
+
+  /**
+   * The directories contributing one resource type, LOWEST precedence first.
+   *
+   * Single resolution point: an explicit `resourceRoots` entry wins, otherwise the type's subdir
+   * under `resourcesDir`. Two ways to configure, one way to answer.
+   */
+  private rootsFor(type: IndexedResourceType, subdir: string): string[] {
+    const explicit = this.config.resourceRoots[type];
+    if (explicit !== undefined && explicit.length > 0) return explicit;
+    return [path.join(this.config.resourcesDir, subdir)];
+  }
+
+  /**
+   * A tool directory expressed relative to whichever root contains it.
+   *
+   * Anchoring every tool to `resourcesDir` was correct while that was the only root. A tool under
+   * the bundled tree would now render as a `../../..` walk out of the personal store — a path
+   * that resolves nowhere useful and reads as corruption. An absolute path is the honest fallback
+   * when no root contains it.
+   */
+  private relativeToolDir(toolDir: string): string {
+    const roots = [this.config.resourcesDir, ...Object.values(this.config.resourceRoots).flat()];
+    const containing = roots.filter((root) => !path.relative(root, toolDir).startsWith('..'));
+    if (containing.length === 0) return toolDir;
+    // Longest match: nested roots would otherwise yield a path relative to the outer one.
+    const nearest = containing.reduce((a, b) => (b.length > a.length ? b : a));
+    return path.relative(nearest, toolDir);
+  }
+
+  /**
+   * Record one scanned resource, noting the definition it displaces.
+   *
+   * The map is id-keyed because the index is; this is where an overwrite stops being silent.
+   */
+  private recordScanned(
+    type: IndexedResourceType,
+    id: string,
+    scanned: ScannedResource,
+    results: Map<string, ScannedResource>,
+    result: SyncResult
+  ): void {
+    const previous = results.get(id);
+    if (previous !== undefined) {
+      result.shadowed.push({
+        type,
+        id,
+        winner: scanned.filePath,
+        shadowed: previous.filePath,
+        // Both `undefined` means a flat layout, where two definitions of an id are never one
+        // resource — so an absent category must NOT read as a match.
+        sameCategory: previous.category !== undefined && previous.category === scanned.category,
+      });
+    }
+    results.set(id, scanned);
+  }
+
+  /**
+   * Read one directory's resource definition, or `undefined` when it holds none.
+   *
+   * A missing YAML is the ordinary case for an intermediate directory and is not reported; a
+   * malformed one is, because that resource silently leaves the catalog.
+   */
+  private async readResourceDir(
+    dir: string,
+    root: string,
+    yamlFile: string
+  ): Promise<{ id: string; scanned: ScannedResource } | undefined> {
+    const yamlPath = path.join(dir, yamlFile);
+    let content: string;
+    try {
+      content = await fs.readFile(yamlPath, 'utf-8');
+    } catch {
+      return undefined;
+    }
+
+    try {
+      const data = yaml.load(content) as Record<string, unknown>;
+      // The first segment below the root is the category in every nested layout; a resource
+      // sitting directly under the root (flat layouts) has none.
+      const segments = path.relative(root, dir).split(path.sep);
+      const category =
+        (data?.['category'] as string | undefined) ??
+        (segments.length > 1 ? segments[0] : undefined);
+      return {
+        id: this.identityOf(segments, data),
+        scanned: { filePath: yamlPath, content, category },
+      };
+    } catch (error) {
+      this.logger.debug(`ResourceIndexer: Skipping ${yamlPath}: ${error}`);
+      return undefined;
     }
   }
 
   /**
-   * Scan a category subdirectory for resources one level deeper.
-   * Called when the flat scan doesn't find a YAML file (e.g., prompts/{category}/).
+   * The id a resource is served under, derived the way its loader derives it.
+   *
+   * For prompts that is the path BELOW the category directory, slash-joined — a chain step at
+   * `{category}/{chain}/{step}/` is served as `chain/step`, and `yaml-prompt-loader` overwrites
+   * the file's own `id:` field to say so. Reading `id:` instead produced a different key for every
+   * nested prompt: the index called the step `initial_scan` while `prompt_engine` answered only to
+   * `deep_analysis/initial_scan`, so hooks reading the index handed out ids the tool rejects, and
+   * two unrelated steps sharing a leaf name looked like a duplicate.
+   *
+   * Flat layouts (gates, frameworks, styles) have no category level and keep their declared `id`.
    */
-  private async scanCategoryDir(
-    categoryDir: string,
-    yamlFile: string,
-    results: Map<string, { filePath: string; content: string }>
+  private identityOf(segments: string[], data: Record<string, unknown> | undefined): string {
+    if (segments.length > 1) return segments.slice(1).join('/');
+    return (data?.['id'] as string) ?? segments[0] ?? '';
+  }
+
+  /**
+   * Scan one root for resources, descending until the layout runs out.
+   *
+   * Layouts vary in depth and nest inside each other: gates are `{root}/{id}/gate.yaml`, prompts
+   * are `{root}/{category}/{id}/prompt.yaml`, and a chain's steps are another level down at
+   * `{root}/{category}/{chain}/{step}/prompt.yaml` — while the chain directory holds its OWN
+   * `prompt.yaml`. So finding a definition is not a reason to stop descending.
+   *
+   * The previous scan stopped at two levels, which is why 20 chain-step prompts were served by
+   * the loaders and absent from the index (measured 2026-08-29). {@link MAX_SCAN_DEPTH} bounds
+   * the walk rather than the layout doing it implicitly.
+   */
+  private async scanResources(
+    dir: string,
+    type: IndexedResourceType,
+    results: Map<string, ScannedResource>,
+    result: SyncResult,
+    root: string = dir,
+    depth: number = 0
   ): Promise<void> {
-    let subEntries;
-    try {
-      subEntries = await fs.readdir(categoryDir, { withFileTypes: true });
-    } catch {
-      return; // Category dir doesn't exist or isn't readable
-    }
+    // `readdir` on the root throws ENOENT, which the caller reads as "root contributes nothing".
+    // Below the root a failure is a single unreadable directory, not an absent root.
+    const entries =
+      depth === 0
+        ? await fs.readdir(dir, { withFileTypes: true })
+        : await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    const yamlFile = this.getYamlFileName(type);
 
-    for (const sub of subEntries) {
-      if (!sub.isDirectory()) continue;
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'tools') continue;
 
-      const yamlPath = path.join(categoryDir, sub.name, yamlFile);
-      try {
-        const content = await fs.readFile(yamlPath, 'utf-8');
-        const data = yaml.load(content) as Record<string, unknown>;
-        const id = (data?.['id'] as string) ?? sub.name;
-        results.set(id, { filePath: yamlPath, content });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          this.logger.debug(`ResourceIndexer: Skipping ${categoryDir}/${sub.name}: ${error}`);
-        }
+      const subDir = path.join(dir, entry.name);
+      const found = await this.readResourceDir(subDir, root, yamlFile);
+      if (found !== undefined) {
+        this.recordScanned(type, found.id, found.scanned, results, result);
+      }
+      if (depth + 1 < MAX_SCAN_DEPTH) {
+        await this.scanResources(subDir, type, results, result, root, depth + 1);
       }
     }
   }
@@ -944,7 +1147,7 @@ export class ResourceIndexer {
       },
       ...(tool.env !== undefined && { env: tool.env }),
       script_path: tool.scriptPath,
-      tool_dir: path.relative(this.config.resourcesDir, tool.toolDir),
+      tool_dir: this.relativeToolDir(tool.toolDir),
     };
 
     const contentHash = computeContentHash([
