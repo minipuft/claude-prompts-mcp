@@ -161,3 +161,43 @@ WAL-mode SQLite and a plain `cp`/`tar` can capture a torn page, and it is regene
 
 The prior backup (`resources-prompts-2026-08-19-235626.tar.gz`) was **not** adequate for P1.6 — ten
 days stale at 121 prompts, and prompts only, with zero gates, frameworks or styles.
+
+## P1.5 — staging receipt (2026-08-29)
+
+Owner ruling: the personal store lives at `~/.claude/resources`, reached by `MCP_RESOURCES_PATH`
+alone. `MCP_WORKSPACE` stays at the plugin root, so `config.json`, `state.db` and logs do not move.
+This is SIMPLER than the P1.0 ruling recorded above, and P1.0a is why: that ruling said a personal
+store "must set `MCP_WORKSPACE`", which is true only of the OVERLAY mechanism
+(`getOverlayResourceDirs`, gated on `isUsingCustomWorkspace`). The bundled-base merge added by
+P1.0a is unconditional, so pointing the resources base outside the repo now suffices — the personal
+store becomes the primary (so writes land in it) and the shipped catalog merges underneath.
+Verified live: `MCP_RESOURCES_PATH=/tmp/personal-store` with one prompt served 40, naming both roots.
+
+**Staged, not switched.** 230 files / 84 prompts copied to `~/.claude/resources/prompts`,
+byte-compared against source (0 missing, 0 differing), and confirmed to contain no bundled prompt.
+`.mcp.json` is UNCHANGED and the originals under `server/resources/prompts` are UNTOUCHED, per the
+owner's instruction to stop before either.
+
+`.ignore` was excluded from the copy. It is a ripgrep/fd visibility override that exists only
+because the sibling `.gitignore` excludes `*`; it is tooling, not a prompt, and P1.6 should delete
+it in the same change that deletes the `.gitignore`, or it becomes a file whose stated rationale no
+longer exists.
+
+**Verification, with a positive control.** A real STDIO server against the new store served
+**119 prompts**. That is four short of the 123 files on disk, which looks like loss — so the same
+server was run against today's live single-directory layout as a control. It also served **119**.
+The store is faithful; 119 is simply the correct served count, and the 123-vs-119 gap is
+pre-existing. Without the control this would have read as four prompts destroyed by the move.
+
+The only difference between the two runs is a category: 16 against the control's 17. The extra one
+is `prompts/tools/`, an empty untracked directory containing no files at all, which registers as a
+category and contributes nothing. Nothing to copy, nothing lost.
+
+Reconciling 123 to 119 took three causes, not one — recorded on P5.2, and the duplicate-id half
+split out as P5.6 because it is an identity problem rather than a counting one:
+
+| Cause                            | Count              | Effect                                             |
+| -------------------------------- | ------------------ | -------------------------------------------------- |
+| Invalid YAML                     | 3                  | prompt never loads                                 |
+| Ids duplicated across categories | 5 ids              | later load silently wins; the first is unreachable |
+| Dropped inline gate definitions  | 8 across 6 prompts | prompt loads, enforcement silently absent          |
