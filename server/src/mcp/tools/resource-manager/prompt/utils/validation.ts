@@ -12,6 +12,7 @@ import type { PromptResourceActionId } from '../../../../metadata/definitions/pr
 import type { ToolDefinitionInput } from '../../core/types.js';
 
 import { ResourceVerificationService } from '#modules/resources/services/index.js';
+import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
 import { ValidationError } from '#shared/utils/index.js';
 
 /**
@@ -369,10 +370,11 @@ export function validateToolDefinitions(tools: ToolDefinitionInput[]): string[] 
     }
 
     // Valid runtime values
-    const validRuntimes = ['python', 'node', 'shell', 'auto'];
-    if (tool.runtime && !validRuntimes.includes(tool.runtime)) {
+    // Derived, not restated: this list and the executor's must agree, or a tool
+    // accepted here fails at run time with a different vocabulary.
+    if (tool.runtime && !SUPPORTED_RUNTIMES.includes(tool.runtime)) {
       errors.push(
-        `Tool '${tool.id}' has invalid runtime: '${tool.runtime}'. Valid: ${validRuntimes.join(', ')}`
+        `Tool '${tool.id}' has invalid runtime: '${tool.runtime}'. Valid: ${SUPPORTED_RUNTIMES.join(', ')}`
       );
     }
 

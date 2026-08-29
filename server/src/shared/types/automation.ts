@@ -43,7 +43,19 @@ export interface JSONSchemaDefinition {
  * - shell: Execute as shell script (bash/sh)
  * - auto: Auto-detect from file extension
  */
-export type ScriptRuntime = 'python' | 'node' | 'shell' | 'auto';
+/**
+ * Runtime environments a script tool may declare.
+ *
+ * Lives in `shared` because three layers need it: the zod schema in
+ * `modules/automation`, the create-path validator in the MCP tool layer, and this
+ * type. It was previously written out in each of them with nothing linking the
+ * copies, so adding a runtime meant finding all of them and a missed one would
+ * accept a value nothing could run. `shared` is the only layer all three may
+ * import a value from — dependency-cruiser rejected the alternative placements.
+ */
+export const SUPPORTED_RUNTIMES = ['python', 'node', 'shell', 'auto'] as const;
+
+export type ScriptRuntime = (typeof SUPPORTED_RUNTIMES)[number];
 
 /**
  * Trigger type for tool execution (deterministic, not probabilistic).
