@@ -230,3 +230,73 @@ worktree than the edit, leaving main still carrying the personal path while the 
 restored. Corrected with `git -C <main> checkout -- .mcp.json` and confirmed across all four
 worktrees. Lesson: in a multi-worktree repo, revert with `git -C <explicit path>`, never a bare
 `cp` that depends on ambient cwd.
+
+## Tier P1.5-X — execution record (2026-08-29)
+
+Landed: main fast-forwarded and rebuilt; the redundant resources path removed from the canonical
+`mcp.json`; `MCP_RESOURCES_PATH` set machine-locally in `~/.claude/settings.json` and in
+`~/.config/claude-prompts-catalog.env`; the catalog verified serving the personal library.
+
+`validate:all` 48/48, real exit 0. Not pushed.
+
+### DEV-P15-1 — `.mcp.json` is generated, and I edited the artifact
+
+`.mcp.json` is a RENDERED projection of canonical `mcp.json` (`scripts/render-targets.json`
+declares `canonicalTree.mcp`). My first edit went to the projection. `validate:render-drift` caught
+it by byte-comparing against the source and named the exact line.
+
+Two things worth keeping. The gate did its job — this is what a drift check is for, and it fired on
+the first run after the edit. And the tier's own text pointed at `.mcp.json` throughout, because
+that is the file the launcher reads; nothing in the row said it was generated. A row naming a file
+should name whether that file is authored or produced.
+
+`MCP_RUNTIME_ROOT` is present in `mcp.json` but dropped from the rendered `.mcp.json` — which is why
+the live plugin servers carry no such variable while the systemd unit sets its own. Not a defect;
+the renderer targets a client with no `${PLUGIN_DATA}` equivalent.
+
+### DEV-P15-2 — P1.5c was answerable immediately; the row said it was not
+
+The row asserted that no hand-run probe could establish whether `~/.claude/settings.json` `env`
+reaches an MCP subprocess, and that only a restart would tell. That was wrong. The block already
+held `ANTHROPIC_DEFAULT_HAIKU_MODEL`, so tracing that ONE value settled the mechanism:
+
+    claude process  (pid 819107, 803061)  → ABSENT
+    MCP subprocess  (pid 819203, 803158)  → ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-sonnet-5
+
+Claude Code injects the block into MCP subprocess environments rather than into its own. The
+generalisable part: when a question is "does mechanism X reach Y", look for a value already
+travelling that path before declaring the question unanswerable. An existing setting is a free probe.
+
+### DEV-P15-3 — two of the tier's own assertions failed re-measurement
+
+- Branch was **16** commits ahead, not the 15 the tier asserted.
+- P1.5f's falsifier ("no tracked file contains the personal path") was **unsatisfiable**: 14 tracked
+  files already contain it, all `plans/**` reference prose quoting measured sessions. That is
+  legitimate and permanent, so the row could never have passed. Rescoped to config and source files,
+  where the count is 0 and the property is real.
+
+The pattern: a falsifier written as a repo-wide absolute is almost always too broad, because
+documentation legitimately quotes the thing being forbidden. Scope it to the surface that can
+actually violate it.
+
+### DEV-P15-4 — a stray file from an earlier misdirected `cp`
+
+`server/.mcp.json` was sitting untracked in main — created when the previous turn's revert `cp` ran
+with the shell's cwd inside `server/`. Deleted. It also explains the `??` status that turn, which I
+misread as the file being untracked rather than as a NEW file in a different directory.
+
+Reinforces DEV-P1-8's lesson: in a multi-worktree repo, file operations that depend on ambient cwd
+are how edits land in the wrong tree. Use `git -C <path>` or absolute paths.
+
+### DEV-P15-5 — the systemd unit had the same redundancy as `.mcp.json`
+
+The unit set `Environment=MCP_RESOURCES_PATH=` on line 9 and read `EnvironmentFile=` on line 10, so
+the override would have won only because of line order. Removed the hardcoded line so the env file
+owns the value outright. Same shape as P1.5b, found by asking the same question of a second consumer.
+
+### Counts
+
+Main's bundled tree still holds the 84 originals (P1.6 has not run), so the merged catalog reads
+**120**, not the 119 the settability worktree produced with its 39-prompt bundle. It becomes 119
+once P1.6 removes them. Both exceed the 119 today's live configuration serves, so the cutover loses
+nothing.
