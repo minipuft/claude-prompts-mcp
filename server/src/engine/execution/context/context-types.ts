@@ -24,7 +24,7 @@ export interface NamedInlineGate {
   criteria: string[];
   /** Shell verification config for Ralph Wiggum loops (when using `:: verify:"command"`) */
   shellVerify?: {
-    command: string;
+    command: string | string[];
     timeout?: number;
     workingDir?: string;
   };

@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { formatCommandForDisplay } from './shell-command-allowlist.js';
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from './types.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -70,7 +71,10 @@ export class VerifyActiveStateStore {
     const state: VerifyActiveState = {
       sessionId,
       config: {
-        command: shellVerify.command,
+        // Rendered, not raw: this file is read by the Python Stop hook, whose payload
+        // contract declares a string. Widening it there would break a durable surface
+        // for a value the hook only ever displays.
+        command: formatCommandForDisplay(shellVerify.command),
         timeout: shellVerify.timeout ?? 300000,
         maxIterations: shellVerify.maxIterations ?? SHELL_VERIFY_DEFAULT_MAX_ITERATIONS,
         workingDir: shellVerify.workingDir,

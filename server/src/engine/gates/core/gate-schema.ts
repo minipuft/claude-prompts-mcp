@@ -112,8 +112,36 @@ export const GatePassCriteriaSchema = z
     keyword_count: z.record(z.string(), z.number()).optional(),
 
     // Shell verification options (ground-truth validation via exit code)
-    /** Shell command to execute for verification (exit 0 = pass) */
-    shell_command: z.string().optional(),
+    /**
+     * Command to execute for verification, as argv (exit 0 = pass).
+     *
+     * An ARRAY, not a string, since 2026-08-29. A string was joined into
+     * `sh -c '<string>'`, so the shell parsed whatever the gate author wrote — and a
+     * gate file is exactly what an attacker drops into a workspace. That made the
+     * operator's allowlist a check on TEXT rather than on a command: a prefix entry
+     * like `npm *` had to be defended by enumerating shell metacharacters, and an
+     * enumeration is only ever as good as its last review.
+     *
+     * argv is the structural version of that guarantee, and it is the same move this
+     * codebase already made for resource writes — assert the property (`assertPathInside`)
+     * instead of enumerating the vectors. `["npm", "test"]` cannot become two commands.
+     *
+     * It does NOT make a shell unreachable: `["sh", "-c", "..."]` is still expressible.
+     * That is deliberate and remains bounded by `MCP_SHELL_VERIFY_ALLOWLIST`, where the
+     * operator can see it and has to have chosen it.
+     */
+    shell_command: z
+      .array(z.string(), {
+        // The type error is what an author migrating a gate actually sees, and zod's
+        // default ("expected array, received string") states the shape without the
+        // reason or the fix. This is the only surface that reaches them.
+        error:
+          'shell_command must be an argv array, e.g. ["npm", "test"]. A bare string is no ' +
+          'longer accepted: it was handed to `sh -c`, so the shell parsed whatever the gate ' +
+          'author wrote. Use ["sh", "-c", "..."] if you genuinely need a shell.',
+      })
+      .nonempty()
+      .optional(),
     /** Timeout in milliseconds for shell command (default: 300000) */
     shell_timeout: z.number().int().positive().optional(),
     /** Working directory for shell command execution */
@@ -154,11 +182,20 @@ export const GatePassCriteriaSchema = z
     // that cannot enforce a criterion it declares is worse than a gate with no criterion:
     // it reads as verified. Refuse at load, where the author is looking, rather than
     // failing closed mid-review where they are not.
-    if (criteria.type === 'shell_verify' && isBlank(criteria.shell_command)) {
+    if (
+      criteria.type === 'shell_verify' &&
+      (!Array.isArray(criteria.shell_command) ||
+        criteria.shell_command.length === 0 ||
+        isBlank(criteria.shell_command[0]))
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['shell_command'],
-        message: "shell_verify criteria require a non-empty 'shell_command'",
+        message:
+          "shell_verify criteria require 'shell_command' as a non-empty argv array, e.g. " +
+          '["npm", "test"]. A bare string is no longer accepted: it was passed to `sh -c`, ' +
+          'so the shell parsed it and the operator allowlist could only defend that by ' +
+          'enumerating metacharacters.',
       });
     }
     if (criteria.type === 'script_tool' && isBlank(criteria.script_tool_id)) {

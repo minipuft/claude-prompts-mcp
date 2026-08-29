@@ -8,7 +8,7 @@ guidanceFile: guidance.md
 
 pass_criteria:
   - type: shell_verify
-    shell_command: "npm test"
+    shell_command: ['npm', 'test']
     shell_timeout: 300000
     shell_max_attempts: 3
     shell_preset: full

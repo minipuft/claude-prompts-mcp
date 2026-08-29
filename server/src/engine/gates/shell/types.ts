@@ -29,8 +29,19 @@
  * never constructed, and exposing stash operations to a client is unsafe in a shared worktree.
  */
 export interface ShellVerifyGate {
-  /** The shell command to execute for verification */
-  command: string;
+  /**
+   * The command to execute for verification.
+   *
+   * Two shapes, because the two authoring channels differ in who writes them. A gate
+   * YAML file is authored elsewhere and merely placed, so it supplies ARGV and no shell
+   * parses it. The inline `:: verify:"..."` operator is typed into the invocation by
+   * whoever is driving the server, so it stays a STRING and reaches `sh -c` — where the
+   * allowlist's metacharacter rule is what bounds it.
+   *
+   * Keeping the string form here is not an oversight: the threat this review reproduced
+   * is a dropped FILE, and that channel is the one that no longer parses.
+   */
+  command: string | string[];
   /** Working directory for command execution (defaults to project root) */
   workingDir?: string;
   /** Timeout in milliseconds (defaults to SHELL_VERIFY_DEFAULT_TIMEOUT) */

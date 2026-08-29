@@ -350,7 +350,8 @@ export interface PendingGateReview {
 export interface PendingShellVerificationSnapshot {
   gateId: string;
   shellVerify: {
-    command: string;
+    /** Mirrors `ShellVerifyGate.command`: argv from a gate file, string from `:: verify:`. */
+    command: string | string[];
     timeout?: number;
     workingDir?: string;
     preset?: 'fast' | 'full' | 'extended';

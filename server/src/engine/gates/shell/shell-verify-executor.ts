@@ -16,7 +16,11 @@
  */
 
 import { SHELL_VERIFY_DEFAULT_TIMEOUT, SHELL_VERIFY_MAX_TIMEOUT } from '../constants.js';
-import { isCommandAllowed, loadShellVerifyAllowlist } from './shell-command-allowlist.js';
+import {
+  formatCommandForDisplay,
+  isCommandAllowed,
+  loadShellVerifyAllowlist,
+} from './shell-command-allowlist.js';
 import { isWorkingDirAllowed, loadShellVerifyAllowedDirs } from './shell-working-dir-policy.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
@@ -90,14 +94,18 @@ export class ShellVerifyExecutor {
   async execute(gate: ShellVerifyGate): Promise<ShellVerifyResult> {
     const { command, workingDir, timeout, env, stdin } = gate;
 
-    if (!command || command.trim() === '') {
+    // One rendered form for every message and every result, so a refusal names the
+    // command the same way whichever shape produced it.
+    const display = formatCommandForDisplay(command ?? '');
+
+    if (!command || display.trim() === '') {
       return {
         passed: false,
         exitCode: -1,
         stdout: '',
         stderr: 'Empty command provided',
         durationMs: 0,
-        command: command ?? '',
+        command: display,
       };
     }
 
@@ -115,7 +123,7 @@ export class ShellVerifyExecutor {
           'Shell verification refused: the gate system is disabled. ' +
           'Re-enable it with system_control action="gates", operation="enable".',
         durationMs: 0,
-        command,
+        command: display,
       };
     }
 
@@ -139,7 +147,7 @@ export class ShellVerifyExecutor {
           `${unsafeEnvKeys.join(', ')}, which decide what an allowed command resolves ` +
           `to or loads. Remove them from the gate definition; no setting permits them.`,
         durationMs: 0,
-        command,
+        command: display,
       };
     }
 
@@ -152,7 +160,7 @@ export class ShellVerifyExecutor {
         stdout: '',
         stderr: `Shell verification refused: ${decision.reason ?? 'command not permitted'}`,
         durationMs: 0,
-        command,
+        command: display,
       };
     }
 
@@ -173,12 +181,18 @@ export class ShellVerifyExecutor {
         stdout: '',
         stderr: `Shell verification refused: ${dirDecision.reason ?? 'working directory not permitted'}`,
         durationMs: 0,
-        command,
+        command: display,
       };
     }
 
+    // The one place the union narrows to what `spawn` needs. `executeProcess` wants a
+    // non-empty tuple; emptiness was already rejected above, and the schema rejects it at
+    // load, so this asserts a property two earlier checks established rather than assuming one.
+    const spawnCommand: string | [string, ...string[]] =
+      typeof command === 'string' ? command : (command as [string, ...string[]]);
+
     const result = await executeProcess({
-      command,
+      command: spawnCommand,
       // The value the check approved, not the raw string it approved it from.
       cwd: dirDecision.resolvedDir ?? this.defaultWorkingDir,
       env,
@@ -198,7 +212,7 @@ export class ShellVerifyExecutor {
       stdout: result.stdout,
       stderr: result.stderr,
       durationMs: result.durationMs,
-      command,
+      command: display,
     };
 
     if (result.timedOut === true) {

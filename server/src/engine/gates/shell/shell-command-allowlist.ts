@@ -81,6 +81,20 @@ export const SHELL_VERIFY_ALLOW_ALL = 'UNSAFE_ALLOW_ALL';
  */
 const SHELL_CONTROL_PATTERN = /[;&|`<>\n\r]|\$\(/;
 
+/**
+ * Render a command for display and for allowlist matching.
+ *
+ * Argv is joined on single spaces, so one operator entry (`npm test`) authorises the
+ * same command written either way and nobody has to maintain two allowlists. The join
+ * is LOSSY — `["npm", "a b"]` and `["npm", "a", "b"]` render identically — and that is
+ * acceptable in exactly one direction: it can make the matcher stricter than the argv
+ * shape strictly requires, never more permissive, because a joined string is only ever
+ * compared against entries an operator wrote out.
+ */
+export function formatCommandForDisplay(command: string | readonly string[]): string {
+  return typeof command === 'string' ? command : command.join(' ');
+}
+
 /** Outcome of an allowlist check, carrying the reason a refusal happened. */
 export interface AllowlistDecision {
   allowed: boolean;
@@ -120,8 +134,16 @@ export function loadShellVerifyAllowlist(env: NodeJS.ProcessEnv = process.env): 
  * - an entry ending in `*` allows any command starting with the text before it,
  *   but ONLY when the command carries no shell control characters.
  */
-export function isCommandAllowed(command: string, allowlist: readonly string[]): AllowlistDecision {
-  const normalized = command.trim();
+export function isCommandAllowed(
+  command: string | readonly string[],
+  allowlist: readonly string[]
+): AllowlistDecision {
+  // Argv cannot become two commands, so the metacharacter rule below does not apply to
+  // it. That rule exists only because `sh -c` reparses a string; with argv a `;` is an
+  // argument to the program named in slot 0 and nothing else. Skipping it is what makes
+  // prefix entries genuinely usable for the channel that no longer parses.
+  const isArgv = typeof command !== 'string';
+  const normalized = formatCommandForDisplay(command).trim();
 
   if (normalized === '') {
     return { allowed: false, reason: 'empty command' };
@@ -142,7 +164,7 @@ export function isCommandAllowed(command: string, allowlist: readonly string[]):
     }
   }
 
-  const compound = SHELL_CONTROL_PATTERN.test(normalized);
+  const compound = !isArgv && SHELL_CONTROL_PATTERN.test(normalized);
   if (!compound) {
     for (const entry of allowlist) {
       if (!entry.endsWith('*')) {

@@ -14,6 +14,7 @@ import {
   SHELL_STDIN_SOURCE_AGENT_RESPONSE,
   SHELL_VERIFY_MAX_RESPONSE_BYTES,
 } from '../constants.js';
+import { formatCommandForDisplay } from '../shell/shell-command-allowlist.js';
 
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
@@ -41,7 +42,7 @@ function truncateResponse(text: string, maxBytes: number): string {
 
 /** Pass criterion type for shell_verify criteria — narrowed from the broader union. */
 type ShellVerifyCriteria = {
-  shell_command?: string;
+  shell_command?: string[];
   shell_timeout?: number;
   shell_working_dir?: string;
   shell_env?: Record<string, string>;
@@ -57,7 +58,7 @@ function buildGateConfig(
   runContext: GateShellVerifyRunContext | undefined
 ): ShellVerifyGate | null {
   const command = criteria.shell_command;
-  if (command == null || command.trim() === '') {
+  if (command == null || command.length === 0 || (command[0] ?? '').trim() === '') {
     return null;
   }
 
@@ -156,13 +157,14 @@ export async function runGateShellVerifications(
               stderr:
                 'shell_verify could not run: no ShellVerifyExecutor is wired into GateReviewStage.',
               durationMs: 0,
-              command: gateConfig.command,
+              command: formatCommandForDisplay(gateConfig.command),
+              timedOut: undefined,
             };
 
       results.push({
         gateId: gate.id,
         gateName: gate.name,
-        command: gateConfig.command,
+        command: formatCommandForDisplay(gateConfig.command),
         passed: result.passed,
         exitCode: result.exitCode,
         stdout: result.stdout,
