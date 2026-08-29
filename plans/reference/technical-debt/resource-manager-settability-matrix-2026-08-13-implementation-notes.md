@@ -1,7 +1,7 @@
 ---
 title: "resource_manager settability parity — implementation notes"
 date: 2026-08-19
-status: active
+status: reference
 tags: []
 ---
 

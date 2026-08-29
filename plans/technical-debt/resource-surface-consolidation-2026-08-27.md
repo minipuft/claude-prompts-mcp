@@ -1,0 +1,158 @@
+---
+title: "resource_manager surface consolidation — where resources live and what is authorable"
+date: 2026-08-27
+status: active
+tags: []
+---
+
+# resource_manager Surface Consolidation
+
+Successor to `resource-manager-settability-matrix-2026-08-13.md`, which retires to `reference` with
+every row terminal. That file remains the **audit and decision record** — the field-by-field
+settability matrix (its §1–§8), owner rulings D1–D8 (its §10, §12, §14), the storage-model option
+space (its §13), and the Arc 1 execution record (its §12.5–§14.9). Nothing here restates it; read it
+for why, read this for what is left.
+
+**Why a successor rather than a longer file.** The matrix began as a read-only audit and accreted
+an execution arc, two decision sets and a design. At ~1,200 lines it held five documents with one
+`status:`, so "is it done" had no answer — Arc 1 was complete while 29 rows were open. The audit is
+finished and stable; the work it uncovered is not. Splitting on that seam gives each half a
+lifecycle it can actually reach.
+
+## What already landed (do not redo)
+
+D8 Arc 1 — read and write now agree about where a resource lives. Eleven commits on
+`feat/settability-parity`, `validate:all` 48/48.
+
+| Landed                                                                               | Commit     |
+| ------------------------------------------------------------------------------------ | ---------- |
+| prompt writes resolve through `PathResolver`                                         | `f2abd9c5` |
+| gate writes resolve through `PathResolver`                                           | `4fe5061f` |
+| framework writes resolve; plus the loader-singleton and registry-loader read defects | `9e229e1e` |
+| e2e coverage for the wiring, mutation-verified                                       | `d881dad2` |
+| startup logs the resolved root and served count per resource type                    | `92cafa83` |
+
+Styles were found to have **no** write path (`resource_type` is `z.enum(['prompt','gate','framework'])`),
+so there was nothing to unify — P3.1 below is what would create one.
+
+## Standing constraints
+
+- **The server learns no "personal library" concept** (D8). The rule is: a write goes to the
+  highest-precedence writable root, and the bundled tree always loads as fallback. A personal
+  library is that mechanism configured, not a feature. No `target:` parameter.
+- **Removing a union member is breaking** (CLAUDE.md §Public API Contract). P2 removes `dry_run`
+  and `chain_step_operation:'replace'`; both need CHANGELOG breaking entries and ride the in-flight
+  major.
+- **No parity gates** (`cleanup-standards.md`). Replacements ship on and delete the old path in the
+  same change.
+- **Probes over `resources/prompts/` need `rg --no-ignore`** until P1.6 lands — 83 of 123 prompts
+  are gitignored.
+
+---
+
+## P1 — Storage model, Arc 2
+
+Closes the matrix's T1-F1, T1-F2, T1-F3, T1-F5 and P7-F4. Arc 1 made the four write paths agree
+with the read paths; Arc 2 makes a write prefer the overlay, so a personal store is reachable.
+
+**Blocking question first.** P1.0 gates P1.6 only; P1.1–P1.5 may proceed without it.
+
+| #    | St                                                                                                                                                       | Change                                                                                                                                                           | Depends | Verification                                                                              |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| P1.0 | ☐ (as of 2026-08-27 · flips when the operator's `MCP_WORKSPACE` change is shown not to relocate `state.db` and logs unintentionally)                     | Rule: does the personal overlay need its own env var, or is relocating runtime state and logs alongside resources acceptable? `MCP_WORKSPACE` drives all three   | —       | ruling recorded in the implementation notes with the side effects named                   |
+| P1.1 | ☐ (as of 2026-08-27 · flips when a prompt loaded from an overlay reports the overlay root and one from the bundle reports the package root)              | Loaded resources record their source root. Not recorded today — `PromptData.file` is a path relative to a base (`yaml-prompt-loader.ts:518`) and names no root   | —       | a loaded prompt exposes its source root                                                   |
+| P1.2 | ☐ (as of 2026-08-27 · flips when an update to an overlay-resident prompt rewrites the overlay file and creates nothing under `server/resources/prompts`) | `update` writes to the source root; copy-on-write into the workspace when the source is the bundle and a distinct workspace exists                               | P1.1    | e2e: update an overlay-resident prompt, assert both halves                                |
+| P1.3 | ☐ (as of 2026-08-27 · flips when deleting a bundled prompt under a distinct workspace refuses and removes no file)                                       | `delete` of a bundled resource refuses, naming the shadow as the alternative. A shadow cannot express absence; sibling precedent is the built-in framework guard | P1.1    | e2e: delete a bundled prompt under a workspace, assert refusal and that the file survives |
+| P1.4 | ☐ (as of 2026-08-27 · flips when `rg "readCategoryShipStatus\|resolveCategoryShipStatus"` returns zero and the receipt names the write root)             | Receipt reports the write destination root; retire `category_ship_status` and `readCategoryShipStatus`, whose gitignore-parsing answer becomes structural        | P1.2    | `rg` returns zero; a mutation receipt names the root                                      |
+| P1.5 | ☐ (as of 2026-08-27 · flips when a fresh worktree serves the same prompt count as main)                                                                  | Personal store moves outside every checkout, so the served catalog stops depending on which worktree launched the session                                        | P1.0    | startup inventory from a fresh worktree matches main's count                              |
+| P1.6 | ☐ (as of 2026-08-27 · flips when `git ls-files server/resources/prompts \| grep -c prompt.yaml` equals the on-disk count)                                | Migrate the personal prompts; delete `server/resources/prompts/.gitignore`. **Re-take the backup first** — the 2026-08-19 one captured 121, disk is now 123      | P1.5    | tracked count equals on-disk count                                                        |
+
+**Gate P1**: a prompt authored from a worktree survives that worktree's removal, and
+`server/resources/prompts` has no `.gitignore`.
+
+---
+
+## P2 — Settability verbs
+
+The matrix's rows 2, 3, 4 and 5b, plus SF-2. D1 established these are **one missing verb**
+("remove"), not four defects; fixing them separately would produce four conventions for one verb.
+
+| #    | St                                                                                                                              | Change                                                                                                                                                                                                                | Depends   | Verification                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------ |
+| P2.1 | ☐ (as of 2026-08-27 · flips when `unset: ['system_message']` deletes `system-message.md` and drops the `systemMessageFile` key) | `unset: [keys]` parameter, reusing the `suppliedKeys` write-scope machinery. Closes rows 2 and 4 together and dissolves row 3's "empty array means no change"                                                         | —         | an update sending `unset` removes the key; `tools: []` still means "set to empty"    |
+| P2.2 | ☐ (as of 2026-08-27 · flips when a delete preview runs without `confirm: true`)                                                 | `action: 'preview'` replaces `dry_run`, which is **removed**. Preview is not in `DESTRUCTIVE_ACTIONS`, so non-destructiveness is structural rather than a flag someone can get backwards — which is how SF-2 happened | —         | preview reaches dispatch with no `confirm`; `rg dry_run` returns zero                |
+| P2.3 | ☐ (as of 2026-08-27 · flips when `tools: []` clears the on-disk id list AND a dropped id's `tools/{id}/` directory is removed)  | `tool_operation: 'add'\|'remove'` with directory deletion on explicit removal only, behind `confirm`. A narrowed `tools` array unbinds without deleting                                                               | P2.1      | a removal deletes the directory; a narrowed array does not                           |
+| P2.4 | ☐ (as of 2026-08-27 · flips when an `update`-at-index operation exists and `'replace'` is gone from the enum)                   | `chain_step_operation: 'update'` at index; **remove** the vestigial `'replace'` no-op at `validation.ts:443`                                                                                                          | —         | a single step field edits without resending the array; `rg "'replace'"` returns zero |
+| P2.5 | ☐ (as of 2026-08-27 · flips when `[Unreleased]` names both removals under a breaking heading)                                   | CHANGELOG breaking entries for `dry_run` and `'replace'`, per CONTRIBUTING §Breaking Changes                                                                                                                          | P2.2 P2.4 | `[Unreleased]` carries both                                                          |
+
+**Gate P2**: the tool can express "remove this" for every clearable field, and preview is reachable
+without confirming the thing being previewed.
+
+---
+
+## P3 — Styles as a resource type, and the systemMessage triage
+
+Owner-proposed 2026-08-27. The matrix's §15 holds the measurement; the ruling was **not** "styles
+replace `systemMessage`" but "`systemMessage` keeps only what is prompt-specific; anything
+role-shaped becomes a style", with a testable criterion: _if the text would read identically for any
+prompt in its category, it is a style._
+
+| #    | St                                                                                                               | Change                                                                                                                                             | Depends   | Verification                                                        |
+| ---- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------- |
+| P3.1 | ☐ (as of 2026-08-27 · flips when a `resource_manager` call writes a `style.yaml`)                                | `resource_type: 'style'` — lifecycle / discovery / versioning processors, schema, contract, router, mirroring the gate handler (~1,160 lines)      | —         | create/update/delete/inspect a style through the tool               |
+| P3.2 | ☐ (as of 2026-08-27 · flips when the four `guidance/*` prompts carry no `systemMessageFile` and behave the same) | Pilot: retire the four `guidance/{reasoning,analytical,creative,procedural}` system messages, which restate the four shipped styles by name        | P3.1 P2.1 | the four prompts lose the key; their rendered guidance is unchanged |
+| P3.3 | ☐ (as of 2026-08-27 · flips when `rg -c systemMessageFile` over the corpus returns 29)                           | Promote the remaining style-shaped system messages (23 under 40 words) into styles and strip them via `unset`, keeping the 45 prompt-specific ones | P3.2      | count drops to 29; no prompt loses per-prompt framing               |
+
+**Gate P3**: a style is authorable through the tool, and no `systemMessage` remains that would read
+identically for any sibling in its category.
+
+**Explicitly not in scope**: removing `systemMessage` from `PromptYamlSchema`. It is a breaking
+change to a Public API Contract surface, and the 12 substantial messages (`strategicImplement` at
+1,347 words) have nowhere else to live.
+
+---
+
+## P4 — Deferred surface gaps
+
+Carried from the matrix with their original falsifiers intact. Each is independently shippable;
+none blocks another.
+
+| #    | St                                                                                                                | Change                                                                                                                                                                                                               | Verification                                                             |
+| ---- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| P4.1 | ☐ (as of 2026-08-27 · flips when `framework_gates` appears in the contract with an element shape)                 | **SF-1** — `framework_gates` is hard-required by `FrameworkDraftValidator` but undeclared; its only published shape is an example inside an error response. Declaring it is **narrowing, not breaking**              | the contract names it; a caller can read its shape without a failed call |
+| P4.2 | ☐ (as of 2026-08-27 · flips when a forced write failure leaves no new version row)                                | **SF-3** — framework `update` calls `recordEditResult` (`:160`) before `writeFrameworkFiles` (`:176`), so a failed write leaves a history row for an edit that never landed                                          | a forced failure leaves the ledger unchanged                             |
+| P4.3 | ☐ (as of 2026-08-27 · flips when the deletion guard derives its set from the registry)                            | **SF-4** — `builtInFrameworks = ['cageerf','react','5w1h','scamper']` literal at `:244`, already wrong since `focus`, `liquescent`, `radiant` and `verify` also ship. The handbook forbids hardcoded framework lists | deleting a shipped framework not in the old literal is refused           |
+| P4.4 | ☐ (as of 2026-08-27 · flips when a create/update call can author `severity`)                                      | Gate `severity` / `enforcementMode` / `gate_type` are in the loader schema but undeclared on `GateManagerInput`, so every tool-authored gate takes loader defaults silently                                          | a gate created through the tool carries a non-default `severity`         |
+| P4.5 | ☐ (as of 2026-08-27 · flips when the 11 fields appear in `resourceManagerInputSchema`)                            | Framework's 11 "advanced" fields ride the outer `.passthrough()` — settable but undiscoverable to any client reading the schema                                                                                      | the fields are declared with descriptions                                |
+| P4.6 | ☐ (as of 2026-08-27 · flips when `inspect format:'json'` returns the literal `arguments` and `chainSteps` arrays) | `inspect` never surfaces `arguments[].validation`/`defaultValue` or step `inputMapping`/`outputMapping`/`retries`/`visibility`/`delegation`, so a full-array rewrite reconstructed from it silently drops fields     | a round-trip through inspect loses nothing                               |
+| P4.7 | ☐ (as of 2026-08-27 · flips when a tool call writes a `category.yaml`)                                            | `category` resource type — `CategorySchema` has zero writer in `src/`, so `category.yaml` is hand-authored today, which the MCP-Tooling-Only rule forbids                                                            | a category is authorable through the tool                                |
+| P4.8 | ☐ (as of 2026-08-27 · flips when `user_message_template_file` or `system_message_file` resolves in `src/`)        | `create_prompt`'s `prompt_builder` emits parameter names `resource_manager` never reads, so file-referenced authoring through the guided workflow hard-fails validation                                              | the guided workflow completes in file-reference mode                     |
+
+**Gate P4**: no field is required-but-undeclared, and no shipped resource kind is unauthorable.
+
+---
+
+## P5 — Corrections and hygiene
+
+Findings from the Arc 1 execution that bind future work rather than belonging to it.
+
+| #    | St                                                                                                                 | Change                                                                                                                                                                                                                                                  | Verification                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| P5.1 | ☐ (as of 2026-08-27 · flips when the served prompt count equals the on-disk count)                                 | Repair the three prompts that fail schema validation (`general/resume_variant_build`, `general/test_gate_chain`, `resume/resume_variant_build`) and the five with dropped inline gates. Two sit in untracked categories, so no CI can see them          | a startup logs zero `Invalid YAML` and zero `Dropped inline gate` |
+| P5.2 | ☐ (as of 2026-08-27 · flips when the startup inventory line carries a failure count)                               | Inventory reports load FAILURES, not just successes — 120 served against 123 on disk is still a silent subset. Needs a count threaded through `CategoryPromptsResult` (`modules/prompts/types.ts:69`)                                                   | the line reads `120 (17 categories, 3 failed)`                    |
+| P5.3 | ☐ (as of 2026-08-27 · flips when a server spawned through the shared helper answers `initialize` from inside jest) | `spawnMcpServer` (`tests/e2e/helpers/plugin-test-helpers.ts:60`) passes `...process.env` unfiltered, so a child inherits `NODE_ENV`/`JEST_WORKER_ID` and silently declines to boot (`src/index.ts:815`)                                                 | the helper filters both vars                                      |
+| P5.4 | ☐ (as of 2026-08-27 · flips when a response carrying `isError: true` is shown not to open with a success claim)    | A create response was observed carrying `isError: true` while its body led with `✅ **Prompt Created**`. Observed directly; the captured body was truncated at 400 chars, so whether a later line qualifies it was NOT confirmed — verify before fixing | a failing mutation's first line states the failure                |
+
+**Gate P5**: no gate or probe in this repo reports success for work that did not happen.
+
+---
+
+## Phase order
+
+P1 and P2 are independent and may run in either order. P3.1 is independent; P3.2–P3.3 need P2.1
+(`unset`) as their instrument, because the handbook forbids hand-editing under `server/prompts/**`.
+P4 and P5 are unordered.
+
+**P1 before P2.3** is the one real edge: P2.3 deletes directories under `resources/prompts/`, and
+reviewing that diff is meaningless while 83 prompts are invisible to git (the D6 argument, scoped to
+the row it actually reaches).
