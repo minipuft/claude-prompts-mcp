@@ -366,6 +366,31 @@ export class PathResolver {
   }
 
   /**
+   * The package's own resources directory for a type — always a contributing root.
+   *
+   * `resolveResourceSubdir` returns the FIRST existing candidate and stops, so once a workspace
+   * has `resources/<type>/` the bundled tree is never read. That is not a fallback; it is a
+   * replacement, and it fails three ways depending on the type:
+   *
+   *   - prompts: a workspace holding one prompt serves one prompt, and the 39 bundled ones vanish
+   *     with nothing in the log to distinguish it from a healthy start
+   *   - styles: an empty workspace `styles/` serves zero styles
+   *   - frameworks: the server REFUSES TO START — `FrameworkRegistry.loadBuiltInGuides` throws
+   *     `FATAL: Framework 'cageerf' not found`, because the definitions it requires ship in the
+   *     package and the workspace does not have them
+   *
+   * Measured 2026-08-28 against a real STDIO server for all three. The documented contract
+   * (`src/index.ts` help: "Custom workspace resources overlay bundled ones") describes an overlay;
+   * what shipped was a replacement.
+   *
+   * Callers pass this as the lowest-precedence contributing root so the bundled definitions are
+   * always present and a workspace entry with the same id still wins.
+   */
+  getBundledResourceDir(resourceType: string): string {
+    return join(this.config.packageRoot, 'resources', resourceType);
+  }
+
+  /**
    * Clear the resolution cache (useful for testing or hot-reload scenarios)
    */
   clearCache(): void {

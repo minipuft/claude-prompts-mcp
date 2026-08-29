@@ -79,4 +79,35 @@ describe('formatResourceInventory', () => {
     expect(line).toContain('frameworks: 0');
     expect(line).toContain('/srv/resources/frameworks');
   });
+
+  it('names the bundled base on its own line, distinct from overlays', () => {
+    // Precedence runs opposite ways: an overlay WINS a duplicate id, the base loses. Folding the
+    // base into `overlays` would tell a reader the shipped definition is the live one.
+    const lines = formatResourceInventory({
+      resource: 'frameworks',
+      root: '/ws/resources/frameworks',
+      count: 8,
+      base: '/pkg/resources/frameworks',
+      overlays: ['/ws/frameworks'],
+    });
+
+    expect(lines).toEqual([
+      expect.stringContaining('/ws/resources/frameworks'),
+      '   \u21b3 over bundled base: /pkg/resources/frameworks',
+      '   \u21b3 overlaid from: /ws/frameworks',
+    ]);
+  });
+
+  it('omits the base line when the base IS the root', () => {
+    // The ordinary install: primary and bundle are the same directory, and naming it twice would
+    // read as two contributing sources.
+    expect(
+      formatResourceInventory({
+        resource: 'gates',
+        root: '/pkg/resources/gates',
+        count: 25,
+        base: '/pkg/resources/gates',
+      })
+    ).toHaveLength(1);
+  });
 });

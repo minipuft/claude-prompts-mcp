@@ -29,6 +29,13 @@ export interface ResourceInventory {
   detail?: { label: string; value: number };
   /** Overlay directories merged on top of `root`, if any. */
   overlays?: readonly string[];
+  /**
+   * The bundled directory merged UNDER `root`, when it is a distinct contributing source.
+   *
+   * Distinct from `overlays` because precedence runs the other way: an overlay wins a duplicate
+   * id, the base loses. Reporting it as an overlay would misstate which definition is live.
+   */
+  base?: string;
 }
 
 /**
@@ -38,11 +45,14 @@ export interface ResourceInventory {
  * decision, so this stays testable without a logger and honest about where the side effect is.
  */
 export function formatResourceInventory(inventory: ResourceInventory): string[] {
-  const { resource, root, count, detail, overlays } = inventory;
+  const { resource, root, count, detail, overlays, base } = inventory;
 
   const size = detail !== undefined ? `${count} (${detail.value} ${detail.label})` : `${count}`;
   const lines = [`📂 ${resource}: ${size} — ${root}`];
 
+  if (base !== undefined && base !== root) {
+    lines.push(`   ↳ over bundled base: ${base}`);
+  }
   if (overlays !== undefined && overlays.length > 0) {
     lines.push(`   ↳ overlaid from: ${overlays.join(', ')}`);
   }

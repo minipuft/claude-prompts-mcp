@@ -111,10 +111,19 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   // in a row; only the debounced watcher eventually applied the change.
   promptManager.clearLoaderCache();
 
-  // Load prompts - loadAndConvertPrompts handles both directory and file paths
-  const result = await promptManager.loadAndConvertPrompts(
+  // The bundled tree loads FIRST, so a workspace prompts directory overlays it instead of
+  // replacing it. `resolveResourceSubdir` returns the first existing candidate and stops, so a
+  // workspace holding one prompt used to serve exactly one prompt — the 39 bundled ones silently
+  // gone, and the startup line indistinguishable from a healthy one. Measured 2026-08-28; see
+  // `PathResolver.getBundledResourceDir` for the same defect's fatal form on frameworks.
+  //
+  // Order is the precedence: `mergePromptResults` lets a later result win on a duplicate id, so
+  // bundle → primary → overlays gives the documented "same ID = custom wins".
+  const { result, base: bundledBase } = await loadWithBundledBase(
+    promptManager,
     promptsPath,
-    isDirectory ? promptsPath : path.dirname(promptsPath)
+    isDirectory ? promptsPath : path.dirname(promptsPath),
+    pathResolver?.getBundledResourceDir('prompts')
   );
 
   const promptsData = result.promptsData;
@@ -151,6 +160,7 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     count: promptsData.length,
     detail: { label: 'categories', value: categories.length },
     overlays: overlayPromptsDirs,
+    ...(bundledBase !== undefined ? { base: bundledBase } : {}),
   })) {
     logger.info(line);
   }
@@ -189,6 +199,49 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     convertedPrompts,
     promptsDirectory: promptsPath,
   };
+}
+
+/** One load pass: the prompts, their categories, and the MCP-converted forms. */
+type PromptLoadResult = Awaited<ReturnType<PromptAssetManager['loadAndConvertPrompts']>>;
+
+/**
+ * Load the primary prompts root with the bundled tree merged UNDERNEATH it.
+ *
+ * Order is the precedence: `mergePromptResults` lets the later result win a duplicate id, so
+ * loading the bundle first and merging the primary over it gives the documented "same ID = custom
+ * wins" while keeping the shipped catalog present.
+ *
+ * `base` comes back only when the bundle was a distinct contributing source, so the caller can say
+ * so in the inventory rather than reporting one root for a count drawn from two.
+ */
+async function loadWithBundledBase(
+  promptManager: PromptAssetManager,
+  promptsPath: string,
+  basePath: string,
+  bundledDir: string | undefined
+): Promise<{ result: PromptLoadResult; base?: string }> {
+  const primary = await promptManager.loadAndConvertPrompts(promptsPath, basePath);
+
+  if (
+    bundledDir === undefined ||
+    bundledDir === promptsPath ||
+    !(await directoryExists(bundledDir))
+  ) {
+    return { result: primary };
+  }
+
+  const merged = await promptManager.loadAndConvertPrompts(bundledDir, bundledDir);
+  mergePromptResults(merged, primary);
+  return { result: merged, base: bundledDir };
+}
+
+/** Whether a path exists and is a directory. Absent and not-a-directory are the same answer here. */
+async function directoryExists(candidate: string): Promise<boolean> {
+  try {
+    return (await stat(candidate)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**

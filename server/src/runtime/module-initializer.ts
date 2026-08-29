@@ -120,6 +120,73 @@ function logResourceInventory(logger: Logger, inventory: ResourceInventory): voi
   }
 }
 
+/** Every directory that contributes definitions of one resource type, in precedence order. */
+interface ResourceRoots {
+  /** The root the loader treats as primary; a same-id definition here wins. */
+  primary: string | undefined;
+  /** Workspace directories layered over the primary. */
+  overlays: string[];
+  /** The package's own directory, when it is a source distinct from the primary. */
+  bundled: string | undefined;
+  /** What the loader takes as its fallback list: overlays, then the bundled tree last. */
+  additional: string[];
+}
+
+/**
+ * Resolve the contributing roots for one resource type.
+ *
+ * Pure apart from the resolver's own `existsSync` probes. The bundled directory goes LAST in
+ * `additional`, not into `overlays`: all three loaders resolve an id as `primary ?? additional[0]
+ * ?? …`, so trailing it yields "workspace wins, bundled definitions stay reachable" — the
+ * semantics `src/index.ts`'s help has always documented but the code did not implement. Omitted
+ * entirely on an ordinary install, where the primary already IS the bundle.
+ */
+function resolveResourceRoots(
+  pathResolver: PathResolver | undefined,
+  resourceType: string,
+  primary: string | undefined
+): ResourceRoots {
+  const overlays = pathResolver?.getOverlayResourceDirs(resourceType, primary) ?? [];
+  const candidate = pathResolver?.getBundledResourceDir(resourceType);
+  const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
+  const additional =
+    bundled !== undefined && !overlays.includes(bundled) ? [...overlays, bundled] : overlays;
+  return { primary, overlays, bundled, additional };
+}
+
+/**
+ * The inventory line for a resource type, or `undefined` when its root never resolved.
+ *
+ * `bundled` is reported as `base` and never folded into `overlays`: precedence runs the other way,
+ * and a reader deciding which definition is live needs the two kept apart.
+ */
+function resourceInventoryOf(
+  resource: string,
+  roots: ResourceRoots,
+  count: number
+): ResourceInventory | undefined {
+  if (roots.primary === undefined) return undefined;
+  return {
+    resource,
+    root: roots.primary,
+    count,
+    overlays: roots.overlays,
+    ...(roots.bundled !== undefined ? { base: roots.bundled } : {}),
+  };
+}
+
+/** A loader config naming only the roots that resolved, so an absent one stays absent. */
+function loaderDirsConfig<PrimaryKey extends string, AdditionalKey extends string>(
+  roots: ResourceRoots,
+  primaryKey: PrimaryKey,
+  additionalKey: AdditionalKey
+): Record<string, string | string[]> {
+  return {
+    ...(roots.primary !== undefined ? { [primaryKey]: roots.primary } : {}),
+    ...(roots.additional.length > 0 ? { [additionalKey]: roots.additional } : {}),
+  };
+}
+
 export async function initializeModules(params: ModuleInitParams): Promise<ModuleInitResult> {
   const {
     logger,
@@ -209,73 +276,53 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   // Initialize Gate Manager (Phase 4 - registry-based gate system)
   if (isVerbose) logger.info('🔄 Initializing Gate Manager...');
-  const additionalGatesDirs = pathResolver?.getOverlayResourceDirs('gates') ?? [];
-  const gateManager = await createGateManager(
-    logger,
-    additionalGatesDirs.length > 0
-      ? { registryConfig: { loaderConfig: { additionalGatesDirs } } }
-      : undefined
-  );
+  //
+  // `gatesDir` is supplied explicitly. Left unset, `GateDefinitionLoader` falls back to
+  // `resolveGatesDir()`, which walks up to the PACKAGE's `resources/gates` and consults neither
+  // `MCP_RESOURCES_PATH` nor the workspace — so gate reads ignored both while gate writes have
+  // resolved through `getGatesPath()` since Arc 1. The two only agreed on a default install. It
+  // also made the startup inventory report a root the gates had not been read from: measured
+  // 2026-08-28, `gates: 25 — <workspace>/resources/gates` for a directory holding one gate.
+  const gateRoots = resolveResourceRoots(pathResolver, 'gates', pathResolver?.getGatesPath());
+  const gateManager = await createGateManager(logger, {
+    registryConfig: {
+      loaderConfig: loaderDirsConfig(gateRoots, 'gatesDir', 'additionalGatesDirs'),
+    },
+  });
   if (isVerbose) {
-    const stats = gateManager.getStats();
-    logger.info(`✅ GateManager initialized with ${stats.totalGates} gates`);
-    if (additionalGatesDirs.length > 0) {
-      logger.info(`  📂 Additional gate directories: ${additionalGatesDirs.join(', ')}`);
-    }
+    logger.info(`✅ GateManager initialized with ${gateManager.getStats().totalGates} gates`);
   }
 
   // Initialize framework + style loaders with PathResolver-resolved dirs
   // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
   // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
-  const frameworksDir = pathResolver?.getFrameworksPath();
-  const additionalFrameworksDirs = pathResolver?.getOverlayResourceDirs('frameworks') ?? [];
-  const frameworkLoader = getDefaultRuntimeLoader({
-    ...(frameworksDir !== undefined ? { frameworksDir } : {}),
-    ...(additionalFrameworksDirs.length > 0 ? { additionalFrameworksDirs } : {}),
-  });
-  if (isVerbose && additionalFrameworksDirs.length > 0) {
-    logger.info(`  📂 Additional framework directories: ${additionalFrameworksDirs.join(', ')}`);
-  }
+  // Without the bundled tree trailing the search list, a workspace holding a single framework made
+  // the server throw `FATAL: Framework 'cageerf' not found` at startup — `resolveResourceSubdir`
+  // had made that workspace dir the only frameworks root (see `PathResolver.getBundledResourceDir`).
+  const frameworkRoots = resolveResourceRoots(
+    pathResolver,
+    'frameworks',
+    pathResolver?.getFrameworksPath()
+  );
+  const frameworkLoader = getDefaultRuntimeLoader(
+    loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
+  );
 
-  const stylesDir = pathResolver?.getStylesPath();
-  const additionalStylesDirs = pathResolver?.getOverlayResourceDirs('styles') ?? [];
-  const styleLoader = getDefaultStyleDefinitionLoader({
-    ...(stylesDir !== undefined ? { stylesDir } : {}),
-    ...(additionalStylesDirs.length > 0 ? { additionalStylesDirs } : {}),
-  });
-  if (isVerbose && additionalStylesDirs.length > 0) {
-    logger.info(`  📂 Additional style directories: ${additionalStylesDirs.join(', ')}`);
-  }
+  const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver?.getStylesPath());
+  const styleLoader = getDefaultStyleDefinitionLoader(
+    loaderDirsConfig(styleRoots, 'stylesDir', 'additionalStylesDirs')
+  );
 
   // Root + count for the three resource types initialized here (T1.8). Not gated on quiet — see
   // the matching note in `data-loader.ts`: STDIO auto-enables quiet, so gating would make these
   // unreachable in the only deployment that matters. INFO goes to the log file, not stdout.
-  {
-    const gatesRoot = pathResolver?.getGatesPath();
-    if (gatesRoot !== undefined) {
-      logResourceInventory(logger, {
-        resource: 'gates',
-        root: gatesRoot,
-        count: gateManager.getStats().totalGates,
-        overlays: additionalGatesDirs,
-      });
-    }
-    if (frameworksDir !== undefined) {
-      logResourceInventory(logger, {
-        resource: 'frameworks',
-        root: frameworksDir,
-        count: frameworkLoader.discoverFrameworks().length,
-        overlays: additionalFrameworksDirs,
-      });
-    }
-    if (stylesDir !== undefined) {
-      logResourceInventory(logger, {
-        resource: 'styles',
-        root: stylesDir,
-        count: styleLoader.discoverStyles().length,
-        overlays: additionalStylesDirs,
-      });
-    }
+  const inventories = [
+    resourceInventoryOf('gates', gateRoots, gateManager.getStats().totalGates),
+    resourceInventoryOf('frameworks', frameworkRoots, frameworkLoader.discoverFrameworks().length),
+    resourceInventoryOf('styles', styleRoots, styleLoader.discoverStyles().length),
+  ];
+  for (const inventory of inventories) {
+    if (inventory !== undefined) logResourceInventory(logger, inventory);
   }
 
   const chainCount = convertedPrompts.filter((p) => isChainPrompt(p)).length;
