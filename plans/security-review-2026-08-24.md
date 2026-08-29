@@ -152,17 +152,17 @@ inspection and obvious to a probe.
 
 ### Tier 1 — Execution capability
 
-| #   | St                                                                                                                                                                               | Work                                                                                                                    | Verify                                                                                                                                                                                                                                                                                                                         |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1.1 | ✓ DONE (2026-08-25)                                                                                                                                                              | Enumerate every path from authored content to process execution                                                         | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                                                                                                               |
-| 1.2 | ✓ DONE (2026-08-25)                                                                                                                                                              | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                                                                                                              |
-| 1.3 | ✓ DONE (2026-08-25)                                                                                                                                                              | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                  | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header                                                                                       |
-| 1.4 | ✓ DONE (2026-08-25)                                                                                                                                                              | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                    | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                                                                                                           |
-| 1.5 | ✓ DONE (2026-08-27)                                                                                                                                                              | Settle whether the gate master switch stops execution or only hides parameters                                          | **Neither. It was inert.** Probe: gates Disabled, `status` confirming `Disabled`, marker still written. Root cause was NOT in the gate code — see C18. Fixed, re-probed, 3 arms behave                                                                                                                                         |
-| 1.6 | ✓ DONE (2026-08-29)                                                                                                                                                              | Constrain `shell_working_dir` / `shell_env` per ruling R7 — and close the CLASS, not the two fields the row named       | **Reproduced live, then closed on 3 arms.** Pre-fix, an operator allowlisting exactly `git status` ran the gate author's `git`. Env keys that redirect resolution are refused with no opt-out; directories are contained to operator-declared roots. New gate `validate:spawn-input-guards`, falsified on both axes. See below |
-| 1.7 | ☐                                                                                                                                                                                | (as of 2026-08-25 · flips when the unknown-extension branch either refuses or is documented as intended)                | `EXTENSION_TO_RUNTIME` falls back to the `shell` runtime for any unrecognised extension (`script-executor.ts:330`), so an unknown file type is handed to `bash`                                                                                                                                                                |
-| 1.8 | ☐                                                                                                                                                                                | (as of 2026-08-27 · flips when `shell_command` accepts an argv array and the `sh -c` branch is unreachable from a gate) | Ruling R8. Removes the sink instead of fencing it: with argv, the Tier 1 allowlist becomes an exact match rather than a prefix-plus-metacharacter check. Breaking to the gate schema and to `test-suite/gate.yaml`                                                                                                             |
-| 1.9 | ☐ (as of 2026-08-29 · flips when a script tool declaring `tool.env: {PATH: …}` and `tool.workingDir: '../..'` is driven against a running server and both refusals are observed) | Drive the SCRIPT-TOOL half of 1.6 live                                                                                  | 1.6 closed two sinks; only the gate sink was driven end to end. The script-tool refusals are covered by unit tests, by `validate:spawn-input-guards`, and by the `buildSafeEnvironment` throw — but not by a probe, and this row exists because 1.6 itself produced two vacuous greens that only a live drive exposed          |
+| #   | St                  | Work                                                                                                                    | Verify                                                                                                                                                                                                                                                                                                                         |
+| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1.1 | ✓ DONE (2026-08-25) | Enumerate every path from authored content to process execution                                                         | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                                                                                                               |
+| 1.2 | ✓ DONE (2026-08-25) | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                                                                                                              |
+| 1.3 | ✓ DONE (2026-08-25) | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                  | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header                                                                                       |
+| 1.4 | ✓ DONE (2026-08-25) | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                    | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                                                                                                           |
+| 1.5 | ✓ DONE (2026-08-27) | Settle whether the gate master switch stops execution or only hides parameters                                          | **Neither. It was inert.** Probe: gates Disabled, `status` confirming `Disabled`, marker still written. Root cause was NOT in the gate code — see C18. Fixed, re-probed, 3 arms behave                                                                                                                                         |
+| 1.6 | ✓ DONE (2026-08-29) | Constrain `shell_working_dir` / `shell_env` per ruling R7 — and close the CLASS, not the two fields the row named       | **Reproduced live, then closed on 3 arms.** Pre-fix, an operator allowlisting exactly `git status` ran the gate author's `git`. Env keys that redirect resolution are refused with no opt-out; directories are contained to operator-declared roots. New gate `validate:spawn-input-guards`, falsified on both axes. See below |
+| 1.7 | ✓ DONE (2026-08-29) | Refuse an unclassified extension instead of handing it to `bash`, per ruling R8                                         | **Reproduced live on 3 arms.** Pre-fix a `.rb` tool ran as bash through the real pipeline; post-fix it refuses naming the extension and the fix; declaring `runtime: shell` still runs it. Anchor drifted: authored `script-executor.ts:330`, measured `:348` (`resolveRuntime`)                                               |
+| 1.8 | ☐                   | (as of 2026-08-27 · flips when `shell_command` accepts an argv array and the `sh -c` branch is unreachable from a gate) | Ruling R8. Removes the sink instead of fencing it: with argv, the Tier 1 allowlist becomes an exact match rather than a prefix-plus-metacharacter check. Breaking to the gate schema and to `test-suite/gate.yaml`                                                                                                             |
+| 1.9 | ✓ DONE (2026-08-29) | Drive the script-tool half of 1.6 live                                                                                  | **Both halves reproduced.** `tool.env` setting `PATH` ran the author's `bash` pre-fix and refuses now; `tool.workingDir` escaped the tool directory pre-fix and refuses now. The row existed because 1.6 produced two vacuous greens — and this run produced a third, caught the same way                                      |
 
 #### 1.1 — the execution map (measured 2026-08-25)
 
@@ -333,6 +333,54 @@ shipped and enforced since 2026-08-25, had **never been checked by that gate at 
 because documenting a sibling variable in `docs/` happened to trip it. The gate now also matches
 an `MCP_*` name held in a source constant, and was falsified by renaming a documented variable to
 one nothing defines.
+
+#### 1.7 — the ruling applied, and what it deliberately does not do
+
+R8 is precise about the target: the `shell` RUNTIME builds an argv array (`bash script.sh`)
+and carries the same risk posture as `python script.py`. The defect was `shell` being the
+**silent default** for files nobody had classified, announced at debug level only. So the
+capability stays and only the default goes.
+
+| Arm                              | Result                                       |
+| -------------------------------- | -------------------------------------------- |
+| pre-fix, `runtime: auto`, `.rb`  | **ran as bash** through the live pipeline    |
+| post-fix, `runtime: auto`, `.rb` | refused, message naming `.rb` and `runtime:` |
+| post-fix, `runtime: shell`       | runs                                         |
+
+Arm 3 is the one that distinguishes a refusal from a removal. Without it the first two would
+hold equally against an executor that had simply dropped `shell`.
+
+**Anchor drift**: authored `script-executor.ts:330`, measured `:348`. The row's claim was
+otherwise exact.
+
+**A discovered gap, fixed in the same pass.** The valid-runtime vocabulary was written out
+FOUR times with nothing linking the copies — the `ScriptRuntime` type, the `ScriptRuntimeSchema`
+zod enum, a `validRuntimes` array on the `resource_manager` create path, and implicitly in
+`RUNTIME_COMMANDS`. Adding a runtime meant finding all four, and a missed one would accept a
+value nothing could run. Now one `SUPPORTED_RUNTIMES` in `shared/types/automation.ts`, with the
+others derived. `validate:arch` chose the placement: `shared` is the only layer all three
+consumers may import a value from, and it rejected both of the first two attempts.
+
+Also split one message that reported two different failures identically. An unknown runtime
+NAME is an author error fixable by reading the list; a known runtime whose interpreter is
+missing is an operator's host problem. Both said "No interpreter found", which sent the first
+one to look at their PATH.
+
+#### 1.9 — the script-tool half of 1.6, driven
+
+Opened when 1.6 landed, because only the gate sink had been driven end to end. Closed the same
+day the harness for 1.7 made it cheap:
+
+| Arm                                               | Pre-fix                             | Post-fix |
+| ------------------------------------------------- | ----------------------------------- | -------- |
+| `tool.env` sets `PATH` to a directory it controls | the author's `bash` **ran**         | refused  |
+| `tool.workingDir: ../../../../../elsewhere`       | **escaped**, marker written outside | refused  |
+
+**And this run produced its own vacuous green.** The first working-directory control used six
+`..` where five were needed, so the pre-fix build failed on a nonexistent directory and the
+escape read as "already contained". Third such defect in this tier, each one found only by
+running the pre-fix build. The pattern is stable enough to state plainly: in this codebase a
+probe is not trusted until the arm that SHOULD trip it has been seen to trip.
 
 ### Tier 2 — Resource ingestion
 

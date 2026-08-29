@@ -403,14 +403,48 @@ Complete reference for script tool variables available in templates:
 
 ## Runtime Support
 
-| Runtime | Value    | Interpreter             |
-| ------- | -------- | ----------------------- |
-| Python  | `python` | `python3`               |
-| Node.js | `node`   | `node`                  |
-| Shell   | `shell`  | `bash` / `sh`           |
-| Auto    | `auto`   | Detected from extension |
+| Runtime | Value    | Interpreter                                  |
+| ------- | -------- | -------------------------------------------- |
+| Python  | `python` | `python3`, falling back to `python`          |
+| Node.js | `node`   | `node`                                       |
+| Shell   | `shell`  | `bash`, falling back to `sh`                 |
+| Auto    | `auto`   | Detected from extension, or the tool refuses |
+
+Auto-detection covers `.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.sh`, and `.bash`. **Anything
+else — including a file with no extension — is refused**, with a message naming the
+extension and the fix.
+
+It used to become `shell`. A file the table knew nothing about was handed to `bash` on the
+strength of no evidence at all, announced only at debug level. Note what is and is not
+wrong there: `shell` builds an argv array (`bash script.sh`) and carries the same risk
+posture as `python script.py`, so the problem was never that `shell` exists — it was
+`shell` being the silent default for files nobody had classified. Declaring
+`runtime: shell` is fully supported and is now the way to run one.
+
+```yaml
+# refused: nothing selects a runtime for '.rb' files
+runtime: auto
+script: script.rb
+
+# runs: the author chose
+runtime: shell
+script: script.rb
+```
 
 ---
+
+## What a Tool Author May and May Not Control
+
+A script tool runs code by design — that is the feature. Two of its fields are still
+bounded, because they decide something other than what the tool does:
+
+| Field        | Bound                                                                                                                                                                                                                                 | Why                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env`        | keys that redirect resolution are **refused**: `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `PYTHONHOME`, `PYTHONSTARTUP`, `BASH_ENV`, `ENV`, `IFS`, `SHELLOPTS`, `BASHOPTS`, `PERL5LIB`, `PERL5OPT`, `RUBYLIB`, `RUBYOPT` | the interpreter is looked up on the PATH the tool supplies, so an author-set `PATH` picks which `python3` runs — measured 2026-08-29 against a running server |
+| `workingDir` | resolved, then required to stay inside the tool's own directory                                                                                                                                                                       | `..` resolves silently, so `workingDir: ../../..` ran the tool wherever it liked                                                                              |
+
+Ordinary environment variables — including anything your own script reads — pass through
+untouched. The refusal names the offending key.
 
 ## Configuration Reference
 
@@ -424,7 +458,7 @@ runtime: python # python | node | shell | auto
 script: script.py # Relative to tool directory
 timeout: 30000 # Max execution time (ms)
 enabled: true # Set false to disable
-workingDir: . # Script working directory (relative to tool dir)
+workingDir: . # Script working directory — must stay inside the tool directory
 
 # Environment variables (explicit pass-through)
 env:
