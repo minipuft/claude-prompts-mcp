@@ -1,0 +1,4 @@
+#!/bin/sh
+# Extensionless on purpose: extname() returns %s, which used to resolve to bash.
+cat > /dev/null
+printf '{"ranAs":"shell"}'
