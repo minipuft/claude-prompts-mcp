@@ -297,9 +297,23 @@ Use the [issue templates](https://github.com/minipuft/claude-prompts-mcp/issues/
 
 A [PR template](.github/pull_request_template.md) auto-fills when you open a PR. Fill in each section -- CI will also auto-comment a validation summary.
 
+**Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`, or open
+the PR without a body and edit it, or paste the template in yourself.
+
+**Scope: a PR is one plan or goal; a commit is one concern.**
+
+These are different units and conflating them is what makes a branch unreviewable. A PR that
+executes a plan may legitimately carry a dozen commits -- what makes it reviewable is that each
+one is separately understandable, not that there are few of them.
+
+The operational test for "one concern" is the **revert test**: could this commit be reverted on
+its own, without breaking the others? Its tests and its docs ship inside it, because reverting a
+behavior without its test leaves a suite asserting something untrue. If a commit fails the revert
+test it is two commits; if it can only be reverted together with its neighbour, it was one.
+
 **What reviewers look for:**
 
-1. **Focused scope** -- one concern per PR. Split large changes into reviewable chunks.
+1. **Focused scope** -- one goal per PR, one concern per commit (see above).
 2. **Tests** -- new behavior has tests; changed behavior has updated tests.
    Unit tests live in `server/tests/unit/<domain>/`, integration tests in `server/tests/integration/`.
    Run the suite with `npm test`. To run one file directly, Jest needs the ESM flag:
