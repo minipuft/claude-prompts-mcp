@@ -41,10 +41,12 @@ describe('prompt catalog HTTP API', () => {
 
   async function start(
     prompts: ConvertedPrompt[],
-    catalogReadToken: string | null = null
+    catalogReadToken: string | null = null,
+    extra: { toolsWriteToken?: string | null; allowedOrigins?: readonly string[] } = {}
   ): Promise<string> {
     const router = new ApiRouter(logger, configManager, undefined, undefined, {
       catalogReadToken,
+      ...extra,
     });
     router.updateData([], [], prompts);
     server = router.createApp().listen(0, '127.0.0.1');
@@ -142,5 +144,95 @@ describe('prompt catalog HTTP API', () => {
     expect(JSON.stringify(jest.mocked(logger.debug).mock.calls)).not.toContain(
       'catalog-read-token'
     );
+  });
+
+  it('refuses a mutating tool route with no write token configured', async () => {
+    const origin = await start([prompt()]);
+
+    const deleteResponse = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+      method: 'DELETE',
+    });
+    const reloadResponse = await fetch(`${origin}/api/v1/tools/reload_prompts`, {
+      method: 'POST',
+    });
+
+    expect(deleteResponse.status).toBe(503);
+    expect(reloadResponse.status).toBe(503);
+  });
+
+  it('authenticates mutating tool routes before the handler runs', async () => {
+    const origin = await start([prompt()], null, { toolsWriteToken: 'write-token' });
+
+    const noToken = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+      method: 'DELETE',
+    });
+    const wrongToken = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer nope' },
+    });
+
+    expect(noToken.status).toBe(401);
+    expect(wrongToken.status).toBe(401);
+  });
+
+  it('does not accept the catalog READ token on a write route', async () => {
+    // Least privilege: the read token is held by rendering adapters and must not delete.
+    const origin = await start([prompt()], 'read-token', { toolsWriteToken: 'write-token' });
+
+    const response = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer read-token' },
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('rejects a present-but-unlisted Origin with 403 across every route', async () => {
+    const origin = await start([prompt()]);
+
+    for (const route of ['/health', '/prompts', '/api/v1/catalog/prompts/strategicImplement']) {
+      const response = await fetch(`${origin}${route}`, {
+        headers: { origin: 'https://evil.example.com' },
+      });
+      expect(response.status).toBe(403);
+    }
+  });
+
+  it('allows a loopback Origin and echoes it instead of a wildcard', async () => {
+    const origin = await start([prompt()]);
+
+    const response = await fetch(`${origin}/prompts`, {
+      headers: { origin: 'http://localhost:3000' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(response.headers.get('access-control-allow-origin')).not.toBe('*');
+    expect(response.headers.get('vary')).toBe('Origin');
+  });
+
+  it('passes a request carrying no Origin header, so non-browser clients still work', async () => {
+    const origin = await start([prompt()]);
+
+    const response = await fetch(`${origin}/prompts`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('replaces the loopback defaults when origins are configured explicitly', async () => {
+    const origin = await start([prompt()], null, {
+      allowedOrigins: ['https://app.example.com'],
+    });
+
+    const configured = await fetch(`${origin}/prompts`, {
+      headers: { origin: 'https://app.example.com' },
+    });
+    const nowRejected = await fetch(`${origin}/prompts`, {
+      headers: { origin: 'http://localhost:3000' },
+    });
+
+    expect(configured.status).toBe(200);
+    expect(nowRejected.status).toBe(403);
   });
 });
