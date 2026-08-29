@@ -300,3 +300,43 @@ Main's bundled tree still holds the 84 originals (P1.6 has not run), so the merg
 **120**, not the 119 the settability worktree produced with its 39-prompt bundle. It becomes 119
 once P1.6 removes them. Both exceed the 119 today's live configuration serves, so the cutover loses
 nothing.
+
+### DEV-P15-6 — "1:1 files" is not "1:1 served", and the owner asked the right question
+
+Asked to confirm the transfer was 1:1 before deleting anything, the file-level answer was already
+proven: 230 files, byte-identical, nothing missing. That answer was true and insufficient.
+
+Comparing the served ID SETS — current tree versus the post-deletion shape — showed
+`examples/deep_analysis/initial_scan` present in one and absent in the other. Root cause:
+`mergePromptResults` keyed `convertedPrompts` on `name`, a display label with no uniqueness
+constraint, while keying `promptsData` on `id`. Two prompts labelled "Initial Scan" collided, and
+the overlay evicted the bundled one.
+
+The asymmetry is what made it invisible: `promptsData` kept both, so the startup count read 120 and
+looked healthy, while the served surface had 119 entries and the tool could not resolve the missing
+one. A count-based check would have shown 120 → 119 across the deletion and been explained away as
+the expected duplicate collapsing. Only the set difference named the prompt.
+
+**Generalisable**: when a migration is verified by counting, the check cannot distinguish "one lost"
+from "one duplicate resolved". Compare identities, not cardinality.
+
+Two measurement errors on the way, both self-inflicted:
+
+- `comm` was run against lists sorted under the ambient locale, which is not `comm`'s collation. It
+  reported three losses and printed "input is not in sorted order" — a warning easy to skim past
+  while reading the result as data. Re-run under `LC_ALL=C`.
+- The "post-deletion" configuration was measured using the settability worktree as a stand-in for a
+  tracked-only bundle, which it is. But that worktree is a SEPARATE CHECKOUT and never received the
+  fix, so the second measurement graded fixed code against an unfixed binary and still showed
+  losses. Same class as DEV-P1-8: the config named one binary and I was verifying another.
+
+### P1.6 readiness (2026-08-29)
+
+With P1.5g in, deleting the originals is a no-op for the served surface:
+
+    A  current tree (bundle incl. 84 originals + personal store)   120 ids
+    B  post-deletion shape (tracked bundle + personal store)        120 ids
+    lost 0 · gained 0
+
+Backup `resources-full-2026-08-29-001204.tar.gz` verified at 123/27/8/4, and all 230 personal files
+confirmed byte-identical between the originals and the store immediately before this check.

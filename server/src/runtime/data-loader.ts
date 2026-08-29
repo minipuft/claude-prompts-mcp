@@ -248,7 +248,12 @@ async function directoryExists(candidate: string): Promise<boolean> {
  * Merge overlay prompt results into the primary arrays.
  * Overlay prompts with matching IDs override primary ones (standard overlay semantics).
  */
-function mergePromptResults(
+/**
+ * Exported for direct testing. The merge key is the kind of thing that regresses silently — a
+ * wrong key still produces a plausible catalog, just one missing an entry nobody asked about —
+ * so it gets a unit test rather than only end-to-end coverage.
+ */
+export function mergePromptResults(
   target: {
     promptsData: PromptData[];
     categories: Category[];
@@ -278,9 +283,23 @@ function mergePromptResults(
     }
   }
 
-  // Merge converted prompts (overlay wins on name conflict)
+  // Merge converted prompts, keyed on category + id — the same identity `promptsData` uses above,
+  // not the display name.
+  //
+  // `name` is a human-readable label and nothing enforces its uniqueness. Three collide in this
+  // repo's own catalog once a workspace overlay is present: "Content Analysis", "Deep Analysis",
+  // "Initial Scan". Keyed on `name`, adding an overlay prompt EVICTS an unrelated bundled prompt
+  // that merely shares its label — measured 2026-08-29, where a personal `analysis/initial_scan`
+  // silently removed the bundled `examples/deep_analysis/initial_scan` from the served catalog
+  // while `promptsData` still reported both, so the count looked right and the tool could not
+  // resolve the prompt.
+  //
+  // Category is part of the key because a nested chain step's id is path-qualified relative to its
+  // category root (`deep_analysis/initial_scan`), so id alone is unique only within a category.
+  const identityOf = (prompt: ConvertedPrompt): string => `${prompt.category}/${prompt.id}`;
   for (const overlayConverted of overlay.convertedPrompts) {
-    const existingIdx = target.convertedPrompts.findIndex((c) => c.name === overlayConverted.name);
+    const overlayIdentity = identityOf(overlayConverted);
+    const existingIdx = target.convertedPrompts.findIndex((c) => identityOf(c) === overlayIdentity);
     if (existingIdx !== -1) {
       target.convertedPrompts[existingIdx] = overlayConverted;
     } else {
