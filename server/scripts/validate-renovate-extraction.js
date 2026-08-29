@@ -10,6 +10,9 @@ const ACTION_FILES = [
   // is a FILE count and line 159 asserts this exact set, so the two move together — 8 → 7.
   '.github/workflows/extension-publish.yml',
   '.github/workflows/npm-publish.yml',
+  // `pr-conventions.yml` added 2026-08-29 — 7 → 8. It pins `actions/github-script`, so Renovate
+  // extracts it and both this set and the count below have to move together.
+  '.github/workflows/pr-conventions.yml',
   '.github/workflows/registry-publish.yml',
   '.github/workflows/release-please.yml',
   '.github/workflows/renovate-config-validator.yml',
@@ -20,7 +23,7 @@ const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'
 // reads them and they became installable locally. These are FILE counts, so the four deps arrive
 // as one pip_requirements file — REQUIREMENTS_FILES below asserts which, and the dep identities
 // are asserted in validateExtraction.
-const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, pip_requirements: 1, regex: 1 };
+const EXPECTED_COUNTS = { 'github-actions': 8, nodenv: 1, npm: 3, pip_requirements: 1, regex: 1 };
 const REQUIREMENTS_FILES = ['requirements-dev.txt'];
 const EXPECTED_PIP_IDENTITIES = [
   ['PyYAML', 'requirements-dev.txt'],
