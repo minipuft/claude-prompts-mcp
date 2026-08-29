@@ -25,10 +25,13 @@ describe('Shell Verify E2E', () => {
     // UNSAFE_ALLOW_ALL: this suite exists to drive REAL commands end to end. The operator
     // allowlist is default-deny (Tier 1), so an unconfigured executor refuses every one of
     // them and the suite would assert the refusal instead of the behaviour it was written for.
+    // `allowedDirs` is the same statement for WHERE (row 1.6): these tests run in a fresh
+    // mkdtemp directory, which is outside the executor's default root by construction.
     executor = createShellVerifyExecutor({
       defaultTimeout: 30000, // 30 seconds for E2E tests
       debug: false,
       allowlist: ['UNSAFE_ALLOW_ALL'],
+      allowedDirs: ['UNSAFE_ALLOW_ALL'],
     });
 
     // Create temp directory for test files

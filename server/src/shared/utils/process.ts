@@ -74,9 +74,19 @@ export interface ProcessOptions {
   stdin?: string;
   /** Working directory for the subprocess */
   cwd?: string;
-  /** Additional env vars merged with filtered parent env */
+  /**
+   * Env vars supplied with the UNIT OF WORK — a gate's `shell_env`, a script tool's
+   * `tool.env`. This is the channel content arrives through, so it is screened against
+   * the author denylist (`findUnsafeEnvironmentKeys`).
+   */
   env?: Record<string, string>;
-  /** Base env vars always included (e.g. consumer-specific defaults) */
+  /**
+   * Env vars supplied by whoever CONSTRUCTED the executor — the operator or an
+   * embedder holding its own configuration. Not screened, deliberately: this is the
+   * same trust level as `MCP_SHELL_VERIFY_ALLOWLIST` itself, and screening it would
+   * deny an operator the ability to pin the PATH their own tools resolve on while
+   * gaining nothing, since anyone who can pass this can already spawn directly.
+   */
   baseEnv?: Record<string, string>;
   /** Timeout in milliseconds (default: 30000) */
   timeout?: number;
@@ -161,15 +171,133 @@ export const SAFE_ENV_ALLOWLIST: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Environment variables a RESOURCE AUTHOR may never set on a spawned child.
+ *
+ * WHY THIS EXISTS, AND WHY IT IS A DENYLIST BESIDE AN ALLOWLIST
+ * `SAFE_ENV_ALLOWLIST` above answers "what may a child inherit from the
+ * OPERATOR's environment", and default-deny is right there. This answers a
+ * different question: "what may a child receive from an environment map that
+ * arrived inside content" — a gate's `shell_env`, a script tool's `tool.env`.
+ * That map is merged LAST by `buildSafeEnvironment`, so before this it could
+ * overwrite anything the allowlist had carefully admitted.
+ *
+ * The two lists therefore cannot be merged. A key can be entirely safe to
+ * inherit from the operator and unsafe to accept from an author — `PATH` is
+ * exactly that key, and it appears in both lists for that reason.
+ *
+ * THE PROPERTY: these keys decide what an allowlisted command NAME resolves to,
+ * or what code is loaded before it runs. Without them, `MCP_SHELL_VERIFY_ALLOWLIST`
+ * bounds a string whose meaning the author still picks: an allowlisted `npm test`
+ * with an author-supplied `PATH` runs the author's `npm`. Ordinary variables only
+ * widen what a permitted command sees, which is a different and lesser question
+ * (see the working-directory control, which is containable rather than refusable).
+ *
+ * Prefixes cover the dynamic-loader families whole, because every current and
+ * future `LD_*` / `DYLD_*` member has the same mechanism; the exact set is spelled
+ * out where the family also contains harmless members (`PYTHONUNBUFFERED` is fine,
+ * `PYTHONPATH` is not).
+ *
+ * Compared case-INSENSITIVELY. On Windows the environment already is; on POSIX a
+ * lowercase `path` is a different variable, but a variable whose uppercase spelling
+ * is `PATH` has no legitimate use in a gate and admitting one is the bypass.
+ *
+ * RETIREMENT CONDITION
+ * None. This retires only when no author-supplied environment map reaches a spawn.
+ */
+const AUTHOR_ENV_DENYLIST_PREFIXES: readonly string[] = [
+  'LD_', // LD_PRELOAD, LD_LIBRARY_PATH, LD_AUDIT — ELF dynamic loader
+  'DYLD_', // macOS dynamic loader, same mechanism
+];
+
+const AUTHOR_ENV_DENYLIST_EXACT: ReadonlySet<string> = new Set([
+  // Command name -> binary resolution
+  'PATH',
+  // Read by sh/bash at non-interactive startup and SOURCED as a script
+  'BASH_ENV',
+  'ENV',
+  // Word splitting: changes how `sh -c` parses the command it was handed
+  'IFS',
+  // Shell option sets applied before the command runs
+  'SHELLOPTS',
+  'BASHOPTS',
+  // Interpreter module search paths and pre-execution hooks
+  'NODE_OPTIONS', // --require loads arbitrary modules
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'PYTHONSTARTUP',
+  'PERL5LIB',
+  'PERL5OPT', // -M requires arbitrary modules
+  'RUBYLIB',
+  'RUBYOPT',
+]);
+
+/** Thrown when an author-supplied environment map names a denied key. */
+export class UnsafeEnvironmentKeyError extends Error {
+  constructor(public readonly keys: readonly string[]) {
+    super(
+      `Refusing to spawn: the environment supplied with this resource sets ` +
+        `${keys.join(', ')}, which decide${keys.length === 1 ? 's' : ''} what an ` +
+        `allowed command resolves to or loads. These keys are never accepted from a ` +
+        `resource, and there is no setting that permits them.`
+    );
+    this.name = 'UnsafeEnvironmentKeyError';
+  }
+}
+
+/**
+ * Names the denied keys present in an author-supplied environment map.
+ *
+ * Returned rather than thrown so a caller can refuse ITS OWN unit of work with a
+ * message naming the gate or tool, instead of letting one hostile resource throw
+ * out of the surrounding request.
+ */
+export function findUnsafeEnvironmentKeys(
+  ...envs: (Record<string, string> | undefined)[]
+): string[] {
+  const found = new Set<string>();
+  for (const env of envs) {
+    for (const key of Object.keys(env ?? {})) {
+      const upper = key.toUpperCase();
+      if (
+        AUTHOR_ENV_DENYLIST_EXACT.has(upper) ||
+        AUTHOR_ENV_DENYLIST_PREFIXES.some((prefix) => upper.startsWith(prefix))
+      ) {
+        found.add(key);
+      }
+    }
+  }
+  return [...found];
+}
+
+/**
  * Build a safe environment object from the current process env.
  *
  * Filters parent process env vars through the allowlist, then merges base env
  * and additional env vars.
+ *
+ * Throws `UnsafeEnvironmentKeyError` when `additionalEnv` names a denied key.
+ * Callers are expected to call `findUnsafeEnvironmentKeys` first and refuse with
+ * their own message — this throw is the backstop that closes the class, so a spawn
+ * sink added later cannot silently reopen it by forgetting the check. It is
+ * deliberately a throw and not a filter: silently stripping `PATH` would let a
+ * hostile gate look like it merely failed, which is the shape `refactoring.md`
+ * §A Guard Where the Defect Lives exists to prevent.
+ *
+ * `baseEnv` is NOT screened, and the asymmetry is the whole point: it carries the
+ * constructing operator's own configuration, while `additionalEnv` carries whatever
+ * came with the gate or tool. Screening both would have made this control refuse the
+ * operator as readily as the author — caught by three integration tests that pin an
+ * embedder's right to set the PATH its interpreters resolve on.
  */
 export function buildSafeEnvironment(
   baseEnv?: Record<string, string>,
   additionalEnv?: Record<string, string>
 ): NodeJS.ProcessEnv {
+  const unsafeKeys = findUnsafeEnvironmentKeys(additionalEnv);
+  if (unsafeKeys.length > 0) {
+    throw new UnsafeEnvironmentKeyError(unsafeKeys);
+  }
+
   const safeParentEnv: Record<string, string> = {};
 
   for (const key of SAFE_ENV_ALLOWLIST) {

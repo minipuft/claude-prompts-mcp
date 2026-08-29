@@ -17,11 +17,12 @@
 
 import { SHELL_VERIFY_DEFAULT_TIMEOUT, SHELL_VERIFY_MAX_TIMEOUT } from '../constants.js';
 import { isCommandAllowed, loadShellVerifyAllowlist } from './shell-command-allowlist.js';
+import { isWorkingDirAllowed, loadShellVerifyAllowedDirs } from './shell-working-dir-policy.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
 import type { ShellVerifyGate, ShellVerifyResult, ShellVerifyExecutorConfig } from './types.js';
 
-import { executeProcess } from '#shared/utils/process.js';
+import { executeProcess, findUnsafeEnvironmentKeys } from '#shared/utils/process.js';
 
 /**
  * Shell Verification Executor
@@ -50,6 +51,7 @@ export class ShellVerifyExecutor {
   private readonly defaultWorkingDir: string;
   private readonly debug: boolean;
   private readonly allowlist: readonly string[] | undefined;
+  private readonly allowedDirs: readonly string[] | undefined;
   private readonly gateSystemEnabled: (() => boolean) | undefined;
 
   constructor(config: ShellVerifyExecutorConfig = {}) {
@@ -58,6 +60,7 @@ export class ShellVerifyExecutor {
     this.defaultWorkingDir = config.defaultWorkingDir ?? process.cwd();
     this.debug = config.debug ?? false;
     this.allowlist = config.allowlist;
+    this.allowedDirs = config.allowedDirs;
     this.gateSystemEnabled = config.gateSystemEnabled;
   }
 
@@ -71,6 +74,11 @@ export class ShellVerifyExecutor {
    */
   private resolveAllowlist(): readonly string[] {
     return this.allowlist ?? loadShellVerifyAllowlist();
+  }
+
+  /** Read the operator's additional working-directory roots, per execution, as above. */
+  private resolveAllowedDirs(): readonly string[] {
+    return this.allowedDirs ?? loadShellVerifyAllowedDirs();
   }
 
   /**
@@ -115,6 +123,26 @@ export class ShellVerifyExecutor {
     // passed while having verified nothing is the defect this repository already
     // records fixing; and one hostile gate must not take the server down, so the
     // refusal is scoped to this gate and execution continues.
+    // The allowlist bounds the command STRING; these keys decide what that string
+    // resolves to. An allowlisted `npm test` carrying an author-supplied PATH runs
+    // the author's `npm`, so checking them after the allowlist would be checking
+    // the wrong thing (row 1.6). Refused with no opt-out, per ruling R7.
+    const unsafeEnvKeys = findUnsafeEnvironmentKeys(env);
+    if (unsafeEnvKeys.length > 0) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr:
+          `Shell verification refused: this gate's shell_env sets ` +
+          `${unsafeEnvKeys.join(', ')}, which decide what an allowed command resolves ` +
+          `to or loads. Remove them from the gate definition; no setting permits them.`,
+        durationMs: 0,
+        command,
+      };
+    }
+
     const decision = isCommandAllowed(command, this.resolveAllowlist());
     if (!decision.allowed) {
       return {
@@ -128,9 +156,31 @@ export class ShellVerifyExecutor {
       };
     }
 
+    // Checked after the command, because the message is more useful once the command
+    // itself is known to be permitted. Contained rather than refused: the command is
+    // still the operator's, and blocking a legitimate sibling checkout outright pushes
+    // operators to UNSAFE_ALLOW_ALL, which is worse (ruling R7).
+    const dirDecision = isWorkingDirAllowed(
+      workingDir,
+      this.defaultWorkingDir,
+      this.resolveAllowedDirs()
+    );
+    if (!dirDecision.allowed) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr: `Shell verification refused: ${dirDecision.reason ?? 'working directory not permitted'}`,
+        durationMs: 0,
+        command,
+      };
+    }
+
     const result = await executeProcess({
       command,
-      cwd: workingDir ?? this.defaultWorkingDir,
+      // The value the check approved, not the raw string it approved it from.
+      cwd: dirDecision.resolvedDir ?? this.defaultWorkingDir,
       env,
       stdin,
       timeout: timeout ?? this.defaultTimeout,

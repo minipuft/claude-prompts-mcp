@@ -15,7 +15,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { extname, resolve } from 'node:path';
 
 import type { ScriptExecutorPort } from '#shared/types/index.js';
 import type {
@@ -27,7 +27,13 @@ import type {
   JSONSchemaDefinition,
 } from '../types.js';
 
-import { buildSafeEnvironment, executeProcess, resolveExecutable } from '#shared/utils/process.js';
+import { isPathInside } from '#shared/utils/path-containment.js';
+import {
+  buildSafeEnvironment,
+  executeProcess,
+  findUnsafeEnvironmentKeys,
+  resolveExecutable,
+} from '#shared/utils/process.js';
 
 /**
  * Runtime command mappings for script execution.
@@ -142,6 +148,22 @@ export class ScriptExecutor implements ScriptExecutorPort {
       SCRIPT_TOOL_DIR: tool.toolDir,
     };
 
+    // Checked BEFORE the interpreter lookup, not just before the spawn: the lookup
+    // below resolves against this very map, so an author-supplied PATH would pick
+    // which `python3` runs. `buildSafeEnvironment` throws on these too, but that
+    // throw is a backstop — refusing here keeps one hostile tool from ending the
+    // surrounding request and names the tool that caused it (row 1.6, ruling R7).
+    const unsafeEnvKeys = findUnsafeEnvironmentKeys(env);
+    if (unsafeEnvKeys.length > 0) {
+      return this.createErrorResult(
+        startTime,
+        `Refusing to run script tool '${tool.id}': its environment sets ` +
+          `${unsafeEnvKeys.join(', ')}, which decide what the interpreter resolves to ` +
+          `or loads. Remove them from the tool definition; no setting permits them.`,
+        -1
+      );
+    }
+
     // Resolve runtime and command. Built AFTER `env` because the interpreter has
     // to be looked up on the PATH the child will actually receive.
     const runtime = this.resolveRuntime(tool);
@@ -151,7 +173,21 @@ export class ScriptExecutor implements ScriptExecutorPort {
     }
 
     const timeout = this.resolveTimeout(request, tool);
-    const workingDir = tool.workingDir ? join(tool.toolDir, tool.workingDir) : tool.toolDir;
+    // `join` resolves `..` silently, so a tool declaring `workingDir: '../../..'` runs
+    // wherever it likes. This is the same defect Tier 2.1 closed for resource writes,
+    // reached through a different field, so it uses the same containment helper rather
+    // than a format rule on `workingDir` — the next path-bearing field then starts
+    // contained instead of starting unprotected.
+    const workingDir = tool.workingDir ? resolve(tool.toolDir, tool.workingDir) : tool.toolDir;
+    if (!isPathInside(resolve(tool.toolDir), workingDir)) {
+      return this.createErrorResult(
+        startTime,
+        `Refusing to run script tool '${tool.id}': its workingDir resolves to ` +
+          `${workingDir}, outside the tool's own directory (${tool.toolDir}). A script ` +
+          `tool runs where it is installed.`,
+        -1
+      );
+    }
 
     // Delegate to shared executeProcess utility
     const result = await executeProcess({

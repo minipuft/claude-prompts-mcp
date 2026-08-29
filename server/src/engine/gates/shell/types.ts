@@ -127,6 +127,13 @@ export interface ShellVerifyExecutorConfig {
    */
   allowlist?: readonly string[];
   /**
+   * Directories, beyond `defaultWorkingDir`, that a gate's `shell_working_dir` may
+   * resolve inside. Omit to read `MCP_SHELL_VERIFY_ALLOWED_DIRS` from the environment
+   * at each execution; pass a list to override it (tests, and embedders that hold
+   * their own operator configuration).
+   */
+  allowedDirs?: readonly string[];
+  /**
    * Whether the gate system is currently enabled, read per execution.
    *
    * The master switch used to govern only guidance, validation and the three

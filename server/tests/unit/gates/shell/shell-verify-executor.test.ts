@@ -20,6 +20,7 @@ import {
   SHELL_VERIFY_MAX_TIMEOUT,
 } from '../../../../src/engine/gates/constants.js';
 import { SHELL_VERIFY_ALLOW_ALL } from '../../../../src/engine/gates/shell/shell-command-allowlist.js';
+import { SHELL_VERIFY_ALLOW_ANY_DIR } from '../../../../src/engine/gates/shell/shell-working-dir-policy.js';
 
 describe('ShellVerifyExecutor', () => {
   let executor: ShellVerifyExecutor;
@@ -31,12 +32,18 @@ describe('ShellVerifyExecutor', () => {
   // tests/unit/gates/shell-command-allowlist.test.ts. Leaving these to rely on an
   // implicit default would let the security control silently decide their outcome.
   const ALLOW_ALL: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
+  // Since 2026-08-29 the executor also contains `workingDir` to roots the operator
+  // declared, so a mechanics test that runs somewhere specific must say so for the same
+  // reason it must declare its allowlist: otherwise the security control, not the test,
+  // decides the outcome. Containment itself is covered in the row 1.6 block below.
+  const ALLOW_ANY_DIR: readonly string[] = [SHELL_VERIFY_ALLOW_ANY_DIR];
 
   beforeEach(() => {
     executor = createShellVerifyExecutor({
       debug: false,
       defaultTimeout: 5000,
       allowlist: ALLOW_ALL,
+      allowedDirs: ALLOW_ANY_DIR,
     });
   });
 
@@ -449,5 +456,114 @@ describe('gate master switch (row 1.5)', () => {
     const result = await executor.execute({ command: 'echo reached' });
 
     expect(result.refused).toBeUndefined();
+  });
+});
+
+describe('author-supplied environment and working directory (row 1.6)', () => {
+  const ALLOW_ALL_CMD: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
+
+  it('refuses a gate whose shell_env sets PATH, even when the command is allowlisted', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+
+    const result = await executor.execute({
+      command: 'echo reached',
+      env: { PATH: '/tmp/attacker-bin' },
+    });
+
+    expect(result.refused).toBe(true);
+    expect(result.stderr).toContain('PATH');
+  });
+
+  it('names every offending key so the author can fix the gate in one pass', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+
+    const result = await executor.execute({
+      command: 'echo reached',
+      env: { LD_PRELOAD: '/tmp/x.so', NODE_OPTIONS: '--require /tmp/y' },
+    });
+
+    expect(result.stderr).toContain('LD_PRELOAD');
+    expect(result.stderr).toContain('NODE_OPTIONS');
+  });
+
+  it('checks the environment BEFORE the allowlist, since PATH decides what the command means', async () => {
+    // An empty allowlist would refuse this command anyway. The assertion is on WHICH
+    // refusal fires: reporting "command not in the allowlist" for a PATH override would
+    // send the operator to fix the wrong setting.
+    const executor = createShellVerifyExecutor({ allowlist: [], allowedDirs: [] });
+
+    const result = await executor.execute({ command: 'echo reached', env: { PATH: '/tmp/x' } });
+
+    expect(result.stderr).toContain('shell_env');
+    expect(result.stderr).not.toContain('MCP_SHELL_VERIFY_ALLOWLIST');
+  });
+
+  it('still runs a gate whose shell_env is ordinary — the denylist must not be a blanket refusal', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+
+    const result = await executor.execute({
+      command: 'echo "$MY_GATE_FLAG"',
+      env: { MY_GATE_FLAG: 'reached' },
+    });
+
+    expect(result.refused).toBeUndefined();
+    expect(result.passed).toBe(true);
+    expect(result.stdout.trim()).toBe('reached');
+  });
+
+  it('refuses a working directory outside every permitted root', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp/mcp-wd-root',
+      allowedDirs: [],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '/etc' });
+
+    expect(result.refused).toBe(true);
+    expect(result.stderr).toContain('MCP_SHELL_VERIFY_ALLOWED_DIRS');
+  });
+
+  it('refuses a RELATIVE working directory that resolves out of the root', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp/mcp-wd-root/nested',
+      allowedDirs: [],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '../../..' });
+
+    expect(result.refused).toBe(true);
+  });
+
+  it('permits a directory the operator declared', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp/mcp-wd-root',
+      allowedDirs: ['/tmp'],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '/tmp' });
+
+    expect(result.refused).toBeUndefined();
+    expect(result.stdout.trim()).toBe('/tmp');
+  });
+
+  // POSITIVE CONTROL for the whole block: every assertion above turns on a refusal, so
+  // the block would still pass against an executor that refused everything. This proves
+  // the permissive path runs and that the cwd the check approved is the cwd the child
+  // actually lands in — the two could differ, because a relative path resolves against
+  // the spawning process, not against the root it was checked against.
+  it('spawns in the directory the check approved', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp',
+      allowedDirs: [],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '.' });
+
+    expect(result.passed).toBe(true);
+    expect(result.stdout.trim()).toBe('/tmp');
   });
 });
