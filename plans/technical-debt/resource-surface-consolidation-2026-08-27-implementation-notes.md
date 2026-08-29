@@ -340,3 +340,23 @@ With P1.5g in, deleting the originals is a no-op for the served surface:
 
 Backup `resources-full-2026-08-29-001204.tar.gz` verified at 123/27/8/4, and all 230 personal files
 confirmed byte-identical between the originals and the store immediately before this check.
+
+### P1.6 executed (2026-08-29)
+
+231 files removed from `server/resources/prompts` (84 prompts, plus category metadata, message
+files and script tools), together with `.gitignore` and `.ignore`. Each file was confirmed present
+and byte-identical in `~/.claude/resources/prompts` immediately before deletion — 0 missing, 0
+differing — and the delete set was re-derived from `git ls-files` at execution time rather than read
+from the earlier temp file.
+
+Result: 39 on disk, 39 tracked, no ignore files, `git status --ignored` clean under that path. The
+served ID set is byte-identical to the pre-deletion baseline: 120 both sides, zero lost, zero
+gained.
+
+**The commit contains one removed file.** The other 231 were untracked, so git had nothing to
+record — which is exactly the condition P1.6 existed to end, and worth stating plainly because a
+one-file diff for a 231-file change reads as a mistake otherwise.
+
+The `analysis` category directory disappeared from the bundled tree entirely: every prompt in it was
+personal. The served catalog is unaffected because the personal store supplies that category, and
+the set comparison confirms it rather than assuming it.
