@@ -152,17 +152,17 @@ inspection and obvious to a probe.
 
 ### Tier 1 — Execution capability
 
-| #   | St                  | Work                                                                                                                    | Verify                                                                                                                                                                                                                                                                                                                         |
-| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1.1 | ✓ DONE (2026-08-25) | Enumerate every path from authored content to process execution                                                         | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                                                                                                               |
-| 1.2 | ✓ DONE (2026-08-25) | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                                                                                                              |
-| 1.3 | ✓ DONE (2026-08-25) | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                  | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header                                                                                       |
-| 1.4 | ✓ DONE (2026-08-25) | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                    | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                                                                                                           |
-| 1.5 | ✓ DONE (2026-08-27) | Settle whether the gate master switch stops execution or only hides parameters                                          | **Neither. It was inert.** Probe: gates Disabled, `status` confirming `Disabled`, marker still written. Root cause was NOT in the gate code — see C18. Fixed, re-probed, 3 arms behave                                                                                                                                         |
-| 1.6 | ✓ DONE (2026-08-29) | Constrain `shell_working_dir` / `shell_env` per ruling R7 — and close the CLASS, not the two fields the row named       | **Reproduced live, then closed on 3 arms.** Pre-fix, an operator allowlisting exactly `git status` ran the gate author's `git`. Env keys that redirect resolution are refused with no opt-out; directories are contained to operator-declared roots. New gate `validate:spawn-input-guards`, falsified on both axes. See below |
-| 1.7 | ✓ DONE (2026-08-29) | Refuse an unclassified extension instead of handing it to `bash`, per ruling R8                                         | **Reproduced live on 3 arms.** Pre-fix a `.rb` tool ran as bash through the real pipeline; post-fix it refuses naming the extension and the fix; declaring `runtime: shell` still runs it. Anchor drifted: authored `script-executor.ts:330`, measured `:348` (`resolveRuntime`)                                               |
-| 1.8 | ☐                   | (as of 2026-08-27 · flips when `shell_command` accepts an argv array and the `sh -c` branch is unreachable from a gate) | Ruling R8. Removes the sink instead of fencing it: with argv, the Tier 1 allowlist becomes an exact match rather than a prefix-plus-metacharacter check. Breaking to the gate schema and to `test-suite/gate.yaml`                                                                                                             |
-| 1.9 | ✓ DONE (2026-08-29) | Drive the script-tool half of 1.6 live                                                                                  | **Both halves reproduced.** `tool.env` setting `PATH` ran the author's `bash` pre-fix and refuses now; `tool.workingDir` escaped the tool directory pre-fix and refuses now. The row existed because 1.6 produced two vacuous greens — and this run produced a third, caught the same way                                      |
+| #   | St                  | Work                                                                                                              | Verify                                                                                                                                                                                                                                                                                                                                                               |
+| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1 | ✓ DONE (2026-08-25) | Enumerate every path from authored content to process execution                                                   | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                                                                                                                                                     |
+| 1.2 | ✓ DONE (2026-08-25) | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute          | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                                                                                                                                                    |
+| 1.3 | ✓ DONE (2026-08-25) | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                            | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header                                                                                                                             |
+| 1.4 | ✓ DONE (2026-08-25) | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                              | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                                                                                                                                                 |
+| 1.5 | ✓ DONE (2026-08-27) | Settle whether the gate master switch stops execution or only hides parameters                                    | **Neither. It was inert.** Probe: gates Disabled, `status` confirming `Disabled`, marker still written. Root cause was NOT in the gate code — see C18. Fixed, re-probed, 3 arms behave                                                                                                                                                                               |
+| 1.6 | ✓ DONE (2026-08-29) | Constrain `shell_working_dir` / `shell_env` per ruling R7 — and close the CLASS, not the two fields the row named | **Reproduced live, then closed on 3 arms.** Pre-fix, an operator allowlisting exactly `git status` ran the gate author's `git`. Env keys that redirect resolution are refused with no opt-out; directories are contained to operator-declared roots. New gate `validate:spawn-input-guards`, falsified on both axes. See below                                       |
+| 1.7 | ✓ DONE (2026-08-29) | Refuse an unclassified extension instead of handing it to `bash`, per ruling R8                                   | **Reproduced live on 3 arms.** Pre-fix a `.rb` tool ran as bash through the real pipeline; post-fix it refuses naming the extension and the fix; declaring `runtime: shell` still runs it. Anchor drifted: authored `script-executor.ts:330`, measured `:348` (`resolveRuntime`)                                                                                     |
+| 1.8 | ✓ DONE (2026-08-29) | `shell_command` becomes argv; a bare string fails to load (BREAKING, ruling R8)                                   | **Reproduced live on 3 arms.** With `echo *` allowlisted, `["echo", "ok; touch …"]` printed the semicolon and created nothing; a string `shell_command` fails at LOAD with the migration in the message; `["sh","-c",…]` under `sh *` still runs, which is both the positive control and the documented residual. ⚠ **The row's second claim was wrong** — see below |
+| 1.9 | ✓ DONE (2026-08-29) | Drive the script-tool half of 1.6 live                                                                            | **Both halves reproduced.** `tool.env` setting `PATH` ran the author's `bash` pre-fix and refuses now; `tool.workingDir` escaped the tool directory pre-fix and refuses now. The row existed because 1.6 produced two vacuous greens — and this run produced a third, caught the same way                                                                            |
 
 #### 1.1 — the execution map (measured 2026-08-25)
 
@@ -381,6 +381,56 @@ day the harness for 1.7 made it cheap:
 escape read as "already contained". Third such defect in this tier, each one found only by
 running the pre-fix build. The pattern is stable enough to state plainly: in this codebase a
 probe is not trusted until the arm that SHOULD trip it has been seen to trip.
+
+#### 1.8 — the row's own claim, corrected
+
+The row said argv makes "the `sh -c` branch unreachable from a gate" and that "the Tier 1
+allowlist becomes an exact match rather than a prefix-plus-metacharacter check". **Both are
+overstated, and the correction is the reusable part.**
+
+| The row claimed                         | What is true                                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sh -c` becomes unreachable from a gate | It does not. `shell_command: ["sh", "-c", "…"]` is expressible. What argv removes is **shell PARSING of the author's string**                                 |
+| the allowlist becomes an exact match    | Only for the argv shape. The inline `:: verify:"…"` channel still supplies a string, so `resolveCommand`'s string branch and the metacharacter rule both stay |
+
+**Scope ruled by the owner 2026-08-29 (R13): gate YAML only.** The threat this review actually
+reproduced is a dropped FILE (Tier 1.2), and that is the channel that stops parsing. The inline
+operator is typed into an invocation by whoever is driving the server — a different and weaker
+position — so converting it would have meant writing a tokenizer, breaking documented README and
+framework syntax, for the weaker half of the threat.
+
+What argv genuinely buys is worth stating exactly, because it is the repository's own established
+argument: the allowlist was checking TEXT, and a prefix entry like `npm *` could only be defended
+by ENUMERATING shell metacharacters. Argv is the structural version — the same move Tier 2.1 made
+when it chose `assertPathInside` over more field regexes. `["npm","test"]` cannot become two
+commands, so the prefix entry is sound by construction rather than by the completeness of a
+character list.
+
+| Arm                                                | Result                                                         |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| `["echo", "ok; touch …"]`, allowlist `echo *`      | ran; `;` printed as a literal; **marker absent**               |
+| `shell_command: "echo legacy"` (string)            | **fails to LOAD**, message carries the migration               |
+| `["sh","-c","echo ok; touch …"]`, allowlist `sh *` | marker **written** — the residual, and the probe's own control |
+
+Arm 3 does double duty: it proves the probe can observe a chained `touch` at all (so arm 1's
+absent marker is a real negative), and it demonstrates the residual honestly rather than letting
+the docs imply a guarantee that does not hold.
+
+**Blast radius, measured before starting**: 12 `src/` sites, 31 test sites, 1 shipped gate
+(`test-suite`). The test migration was mechanical — plain commands became argv, and the ones
+genuinely needing shell semantics became explicit `["sh","-c",…]`, which is now visible in the
+test rather than implied by the string form.
+
+Two things the compiler and the suite caught that reading would not have:
+
+- `.nonempty()` in zod 4 infers `string[]`, not `[string, ...string[]]`, so the tuple type the
+  spawn boundary wants is asserted once, at one place, after two prior checks establish it.
+- an automated rewrite turned an empty-command test's `''` into `["sh","-c",""]`, silently
+  changing what it asserted. Caught by the suite, not by review.
+
+**One flake attributed, not relaxed.** A 1000 ms timeout assertion measured 3031 ms against a
+`< 3000` bound. It passed 3/3 in isolation, so it is suite contention under `--runInBand`, not a
+consequence of spawning `sleep` directly instead of through `sh`. The bound was left alone.
 
 ### Tier 2 — Resource ingestion
 
