@@ -131,7 +131,7 @@ a false correction to a correct plan.
 | This plan, as a PR        | #246 (plan only; the review itself is not in it)                                                                       |
 | Related open PRs          | #245 transport hardening (breaking), #247 worktree session guidance                                                    |
 | Rulings + findings ledger | `plans/security-review-2026-08-24-implementation-notes.md` — R1–R4, C1–C6, S1                                          |
-| Tier 0                    | closed. **Tier 1.1 is the next action**: enumerate every content-to-execution path with file:line                      |
+| Tier 0                    | closed. Tiers 0–4 and 6 closed. **Rows 1.7 and 1.8 are the next actions**; 1.6 closed 2026-08-29                       |
 
 Probes run against a server started from this worktree, in an isolated
 `MCP_WORKSPACE`, with benign marker commands only — never a destructive payload. Set a
@@ -152,16 +152,17 @@ inspection and obvious to a probe.
 
 ### Tier 1 — Execution capability
 
-| #   | St                  | Work                                                                                                                               | Verify                                                                                                                                                                                                                                   |
-| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1 | ✓ DONE (2026-08-25) | Enumerate every path from authored content to process execution                                                                    | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                         |
-| 1.2 | ✓ DONE (2026-08-25) | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                           | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                        |
-| 1.3 | ✓ DONE (2026-08-25) | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                             | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header |
-| 1.4 | ✓ DONE (2026-08-25) | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                               | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                     |
-| 1.5 | ✓ DONE (2026-08-27) | Settle whether the gate master switch stops execution or only hides parameters                                                     | **Neither. It was inert.** Probe: gates Disabled, `status` confirming `Disabled`, marker still written. Root cause was NOT in the gate code — see C18. Fixed, re-probed, 3 arms behave                                                   |
-| 1.6 | ☐                   | (as of 2026-08-25 · flips when `shell_working_dir`/`shell_env` are either constrained or explicitly accepted as author-controlled) | The allowlist bounds the command string only. An allowlisted command can still be pointed at any directory and handed any environment by the same author                                                                                 |
-| 1.7 | ☐                   | (as of 2026-08-25 · flips when the unknown-extension branch either refuses or is documented as intended)                           | `EXTENSION_TO_RUNTIME` falls back to the `shell` runtime for any unrecognised extension (`script-executor.ts:330`), so an unknown file type is handed to `bash`                                                                          |
-| 1.8 | ☐                   | (as of 2026-08-27 · flips when `shell_command` accepts an argv array and the `sh -c` branch is unreachable from a gate)            | Ruling R8. Removes the sink instead of fencing it: with argv, the Tier 1 allowlist becomes an exact match rather than a prefix-plus-metacharacter check. Breaking to the gate schema and to `test-suite/gate.yaml`                       |
+| #   | St                                                                                                                                                                               | Work                                                                                                                    | Verify                                                                                                                                                                                                                                                                                                                         |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1.1 | ✓ DONE (2026-08-25)                                                                                                                                                              | Enumerate every path from authored content to process execution                                                         | `spawn` occurs **exactly once** in `src/` (`shared/utils/process.ts:422`). Full map below; every `exec` hit is `RegExp.exec` or `sqlite.exec`, neither of which spawns a process                                                                                                                                               |
+| 1.2 | ✓ DONE (2026-08-25)                                                                                                                                                              | Prove the chain end to end: place a gate with no `activation`, run a prompt, observe the command execute                | Reproduced against a live server, benign marker only. **The gate was never named in the request and no verdict was submitted** — see the reproduction block below                                                                                                                                                              |
+| 1.3 | ✓ DONE (2026-08-25)                                                                                                                                                              | Design the capability dial per the Tier 0 ruling, with its retirement condition stated                                  | Allowlist landed at the single convergence point; 3-arm probe + 25 unit tests. Refusal names `MCP_SHELL_VERIFY_ALLOWLIST`; `UNSAFE_ALLOW_ALL` is the explicit accept-the-risk position. Retirement condition stated in the module header                                                                                       |
+| 1.4 | ✓ DONE (2026-08-25)                                                                                                                                                              | Same treatment for script tools (`RUNTIME_COMMANDS`)                                                                    | **No second gate was needed**: the script path never reaches `sh -c` and is already fail-closed on `confirm`. One latent fail-open fallback removed instead — see the asymmetry note                                                                                                                                           |
+| 1.5 | ✓ DONE (2026-08-27)                                                                                                                                                              | Settle whether the gate master switch stops execution or only hides parameters                                          | **Neither. It was inert.** Probe: gates Disabled, `status` confirming `Disabled`, marker still written. Root cause was NOT in the gate code — see C18. Fixed, re-probed, 3 arms behave                                                                                                                                         |
+| 1.6 | ✓ DONE (2026-08-29)                                                                                                                                                              | Constrain `shell_working_dir` / `shell_env` per ruling R7 — and close the CLASS, not the two fields the row named       | **Reproduced live, then closed on 3 arms.** Pre-fix, an operator allowlisting exactly `git status` ran the gate author's `git`. Env keys that redirect resolution are refused with no opt-out; directories are contained to operator-declared roots. New gate `validate:spawn-input-guards`, falsified on both axes. See below |
+| 1.7 | ☐                                                                                                                                                                                | (as of 2026-08-25 · flips when the unknown-extension branch either refuses or is documented as intended)                | `EXTENSION_TO_RUNTIME` falls back to the `shell` runtime for any unrecognised extension (`script-executor.ts:330`), so an unknown file type is handed to `bash`                                                                                                                                                                |
+| 1.8 | ☐                                                                                                                                                                                | (as of 2026-08-27 · flips when `shell_command` accepts an argv array and the `sh -c` branch is unreachable from a gate) | Ruling R8. Removes the sink instead of fencing it: with argv, the Tier 1 allowlist becomes an exact match rather than a prefix-plus-metacharacter check. Breaking to the gate schema and to `test-suite/gate.yaml`                                                                                                             |
+| 1.9 | ☐ (as of 2026-08-29 · flips when a script tool declaring `tool.env: {PATH: …}` and `tool.workingDir: '../..'` is driven against a running server and both refusals are observed) | Drive the SCRIPT-TOOL half of 1.6 live                                                                                  | 1.6 closed two sinks; only the gate sink was driven end to end. The script-tool refusals are covered by unit tests, by `validate:spawn-input-guards`, and by the `buildSafeEnvironment` throw — but not by a probe, and this row exists because 1.6 itself produced two vacuous greens that only a live drive exposed          |
 
 #### 1.1 — the execution map (measured 2026-08-25)
 
@@ -252,6 +253,86 @@ fail-open: `script-definition-loader.ts:475` read `?? DEFAULT_EXECUTION_CONFIG.c
 and `ExecutionConfig.confirm` is optional, so that final `?? false` contradicted both the
 constant's own "secure by default" comment and the schema's `.default(true)`. It is now `?? true`.
 Dead today (the constant is `true`), one edit from live.
+
+#### 1.6 — the reproduction, and the site the row did not name
+
+**The row named two fields; the defect has a shape, and the shape had a second site.** Phase 1
+enumerated by shape — _an author-supplied value reaching a spawn's env or cwd unfiltered_ — and
+found script tools carry the same two holes, one of them sharper than either gate field:
+
+| Site                | env                                                                                                          | cwd                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| gate `shell_verify` | `shell_env` merged last, unfiltered                                                                          | `shell_working_dir` passed through with no root at all                                                       |
+| gate `shell_verify` | `shell_response_env_var` lets the author name the KEY too — `PATH` mirrors the agent response                | —                                                                                                            |
+| script tool         | `tool.env` + `request.env` unfiltered, **and `findRuntimeCommand` probes that PATH to pick the interpreter** | `join(tool.toolDir, tool.workingDir)` — `join` resolves `..`, the exact defect 2.1 fixed for resource writes |
+
+The reproduction is deliberately built on an operator who did everything right:
+
+```bash
+# isolated workspace, benign markers only
+# MCP_SHELL_VERIFY_ALLOWLIST = 'git status' + 'touch CWD_MARKER'   (exact entries, no wildcard)
+#   attacker-bin/git          -> writes /tmp/mcp-sec-16/MARKER_PATH_HONOURED.txt
+#   gate probe-env-override:  shell_command "git status"
+#                             shell_env PATH=/tmp/…/attacker-bin:/usr/bin:/bin
+#   gate probe-cwd-escape:    shell_command "touch CWD_MARKER"
+#                             shell_working_dir /tmp/…/elsewhere
+# drive: >>deep_analysis, then advance the chain until gate review runs
+```
+
+| Arm                                                       | PATH marker | CWD marker  |
+| --------------------------------------------------------- | ----------- | ----------- |
+| pre-fix                                                   | **written** | **written** |
+| post-fix, no `MCP_SHELL_VERIFY_ALLOWED_DIRS`              | refused     | refused     |
+| post-fix, `MCP_SHELL_VERIFY_ALLOWED_DIRS=/tmp/mcp-sec-16` | refused     | written     |
+
+Arm 3 is what makes arms 1–2 mean anything: the env refusal has no opt-out (R7) while the
+directory refusal is a dial the operator can turn, and both behave as ruled. All five calls
+answered in every arm, so the server keeps serving (R3).
+
+**Two probe defects were found before any conclusion was drawn, and each had already produced a
+clean green.** First, the fixture gates failed schema validation (`description` is required) and
+never loaded — pre-fix and post-fix builds looked identical, which reads as "already safe".
+Second, once that was fixed, `shell_command: "echo ok"` still showed nothing, because `echo` is a
+shell BUILTIN and never consults `PATH`. A probe whose payload cannot observe the property
+answers a different question; only running the pre-fix build as a positive control exposed both.
+
+**What each field gets, and why they differ.** R7 splits by mechanism, not by how dangerous a
+field sounds:
+
+| Field               | Control                                                       | Because                                                       |
+| ------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| `shell_env`         | denied keys **refused, no opt-out**                           | they decide what the allowed command MEANS                    |
+| `shell_working_dir` | contained to `MCP_SHELL_VERIFY_ALLOWED_DIRS` + the server dir | only WIDENS reach; a hard block pushes operators to allow-all |
+
+`buildSafeEnvironment` **throws** on a denied key rather than stripping it, so a sink added later
+cannot reopen the class by forgetting the check. It screens `additionalEnv` (the unit of work)
+and deliberately NOT `baseEnv` (the constructing operator's own configuration) — a first cut
+screened both and was caught by three integration tests pinning an embedder's right to set the
+PATH its own interpreters resolve on. That asymmetry now has a test of its own.
+
+The containment check returns the RESOLVED directory and the executor spawns in exactly that
+value. A first cut checked `resolve(defaultRoot, workingDir)` and passed the raw string to
+`spawn`, which resolves a relative path against the SPAWNING process instead — the check and the
+spawn would have measured different directories.
+
+#### 1.6 — the gate, and a gate that was blind to itself
+
+`validate:spawn-input-guards` requires every `src/` caller of `executeProcess` to guard both
+inputs. Falsified 2026-08-29 on each axis independently.
+
+Its approximation is per FILE, not per call — sound exactly while a file spawns once. Rather than
+document that and hope someone notices the day it stops holding, **the gate fails when a file
+gains a second spawn**, which turns an undetectable blind spot into a reported condition. Also
+falsified: adding a second `executeProcess` call makes it report. `cleanup-standards.md` is the
+reason — a stated limitation with no detector is a permanent one.
+
+Closing this surfaced a **satisfied blind spot in a neighbouring gate**.
+`validate:documented-options` matches `process.env['MCP_*']` literally, so a module reading its
+variable through a named constant was invisible to it — meaning `MCP_SHELL_VERIFY_ALLOWLIST`,
+shipped and enforced since 2026-08-25, had **never been checked by that gate at all**. Found only
+because documenting a sibling variable in `docs/` happened to trip it. The gate now also matches
+an `MCP_*` name held in a source constant, and was falsified by renaming a documented variable to
+one nothing defines.
 
 ### Tier 2 — Resource ingestion
 

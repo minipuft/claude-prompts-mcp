@@ -108,23 +108,23 @@ the gate. Verified at the time: adding it reformatted zero files on either side.
 
 ## Documentation Map
 
-| Topic                                        | Doc                                      |
-| -------------------------------------------- | ---------------------------------------- |
-| Architecture & runtime                       | `docs/architecture/overview.md`          |
+| Topic                                        | Doc                                       |
+| -------------------------------------------- | ----------------------------------------- |
+| Architecture & runtime                       | `docs/architecture/overview.md`           |
 | SQLite persistence                           | `docs/architecture/sqlite-persistence.md` |
-| MCP tools & symbolic commands                | `docs/reference/mcp-tools.md`            |
+| MCP tools & symbolic commands                | `docs/reference/mcp-tools.md`             |
 | MCP contract maintenance                     | `docs/guides/mcp-contract-maintenance.md` |
-| Prompt authoring                             | `docs/tutorials/build-first-prompt.md`   |
-| Chains lifecycle                             | `docs/concepts/chains-lifecycle.md`      |
-| Gates                                        | `docs/guides/gates.md`                   |
-| Injection control                            | `docs/guides/injection-control.md`       |
-| Identity & scope                             | `docs/guides/identity-scope.md`          |
-| Skills Sync                                  | `docs/guides/skills-sync.md`             |
-| Telemetry & observability                    | `docs/guides/telemetry-observability.md` |
-| Troubleshooting                              | `docs/guides/troubleshooting.md`         |
-| Contributing & PR process                    | `CONTRIBUTING.md`                        |
-| README charter (root README authoring rules) | `docs/portfolio/readme-charter.md`       |
-| Release highlights                           | `CHANGELOG.md`                           |
+| Prompt authoring                             | `docs/tutorials/build-first-prompt.md`    |
+| Chains lifecycle                             | `docs/concepts/chains-lifecycle.md`       |
+| Gates                                        | `docs/guides/gates.md`                    |
+| Injection control                            | `docs/guides/injection-control.md`        |
+| Identity & scope                             | `docs/guides/identity-scope.md`           |
+| Skills Sync                                  | `docs/guides/skills-sync.md`              |
+| Telemetry & observability                    | `docs/guides/telemetry-observability.md`  |
+| Troubleshooting                              | `docs/guides/troubleshooting.md`          |
+| Contributing & PR process                    | `CONTRIBUTING.md`                         |
+| README charter (root README authoring rules) | `docs/portfolio/readme-charter.md`        |
+| Release highlights                           | `CHANGELOG.md`                            |
 
 Read the relevant doc before editing. Update docs when behavior changes.
 
@@ -172,7 +172,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 ## Key Constraints
 
 - **MCP Contract Dev**: Verify upstream first (`rg "paramName" src/mcp/tools src/modules src/engine`). Contract, schema, generated metadata, router, manager/types, and service must agree.
-- **Client-work boundary**: Prompt and chain steps guide the client LLM, and resource operations may write only server-owned resource and runtime-state paths. **The server DOES execute shell commands, under one operator-held control.** `shell_verify` gate criteria and the inline `:: verify:"..."` operator both run their command through `sh -c` (`shared/utils/process.ts:381`), and script tools run an author-supplied file through a fixed interpreter. This is not incidental — ground-truth verification by exit code is the feature. What bounds it is `MCP_SHELL_VERIFY_ALLOWLIST` (below), not the absence of the capability. This line previously claimed the opposite; it was false from the first `shell_verify` gate, and it is the sentence a reader consults when deciding how far to trust a third-party gate.
+- **Client-work boundary**: Prompt and chain steps guide the client LLM, and resource operations may write only server-owned resource and runtime-state paths. **The server DOES execute shell commands, under one operator-held control.** `shell_verify` gate criteria and the inline `:: verify:"..."` operator both run their command through `sh -c` (`shared/utils/process.ts:381`), and script tools run an author-supplied file through a fixed interpreter. This is not incidental — ground-truth verification by exit code is the feature. What bounds it is three operator-held controls (below), not the absence of the capability: `MCP_SHELL_VERIFY_ALLOWLIST` over WHICH command, `MCP_SHELL_VERIFY_ALLOWED_DIRS` over WHERE, and a non-negotiable refusal of resource-supplied environment keys that decide what a command resolves to. This line previously claimed the opposite; it was false from the first `shell_verify` gate, and it is the sentence a reader consults when deciding how far to trust a third-party gate.
 - **Instruction surface (accepted, documented)**: A prompt's `systemMessage`, `userMessageTemplate`, `description`, and argument descriptions ARE instruction to the client LLM. That is the product, not a defect — but it means installing a third-party prompt pack is equivalent to letting its author write into your model's context, and two surfaces deliver that text **before anyone invokes anything**: the MCP-standard `prompts/list` (which clients typically fetch at connect) carries every prompt's `description` and every argument description, and `resource_manager list detail:"full"` returns every prompt's `systemMessage` in a single call. Measured 2026-08-25. Treat a prompt pack the way you would treat a dependency, not a config file. The HTTP catalog route serving the same fields is credential-gated (`MCP_CATALOG_READ_TOKEN`); the MCP surface is not, by design, because the operator chose the client.
 
 - **Guidance owner**: `PromptGuidanceService` remains the central framework-guidance service. Do not introduce a parallel coordinator/orchestrator with overlapping responsibility.
@@ -188,7 +188,8 @@ Read the relevant doc before editing. Update docs when behavior changes.
 - **Environment (secrets)**: two **separate** bearer tokens, both fail-closed (unset is a refusal, `503`, not a default), both HTTP-transport only — STDIO reads neither. `MCP_CATALOG_READ_TOKEN` gates `GET /api/v1/catalog/prompts/:promptId`, the only REST route serving executable template content. `MCP_TOOLS_WRITE_TOKEN` gates the four **mutating** routes under `/api/v1/tools/` (create category, update prompt, delete prompt, reload). They are deliberately not one token: the read token is held by rendering adapters, and a single shared value would hand every reader the destructive surface. Both routes authenticate **before** lookup, so a wrong token cannot probe which prompt ids exist.
 - **Environment (HTTP exposure)**: `MCP_HTTP_HOST` defaults to `127.0.0.1`. Binding beyond loopback is opt-in and logs a warning, because the MCP Streamable HTTP transport says a local server SHOULD bind loopback rather than every interface. `MCP_HTTP_ALLOWED_ORIGINS` is a comma-separated allowlist; naming any origin **replaces** the loopback defaults rather than adding to them, so the full policy reads from one place. Origin validation is a spec **MUST**, it wraps the whole app (`/mcp`, `/health`, and REST alike), it runs ahead of every token check, and it answers `403` only when `Origin` is present and unlisted — an absent `Origin` passes, because non-browser MCP clients do not send one. CORS is not a substitute: under DNS rebinding the browser treats the request as same-origin and sends no preflight.
 
-- **Environment (execution capability)**: `MCP_SHELL_VERIFY_ALLOWLIST` declares which commands `shell_verify` may run. **Unset means every shell verification is refused** — the gate fails with a message naming this variable, and the server keeps serving. Entries are newline-separated (not comma: commands contain commas); an entry ending `*` is a prefix, but a command carrying shell control characters (`; & | \` < > $(` or a newline) must match exactly, because a prefix cannot bound what follows a `;`. The single entry `UNSAFE_ALLOW_ALL` permits everything, for an operator who authors all their own gates and accepts the risk. Both transports read it — this is not a listener concern: the sink is reached identically over STDIO and HTTP. The refusal is deliberately not a degrade-to-advisory; a gate reporting as passed while having verified nothing is a defect this repo has already fixed once.
+- **Environment (execution capability)**: `MCP_SHELL_VERIFY_ALLOWLIST` declares which commands `shell_verify` may run. **Unset means every shell verification is refused** — the gate fails with a message naming this variable, and the server keeps serving. Entries are newline-separated (not comma: commands contain commas); an entry ending `*` is a prefix, but a command carrying shell control characters (`; & | \` < > $(`or a newline) must match exactly, because a prefix cannot bound what follows a`;`. The single entry `UNSAFE_ALLOW_ALL` permits everything, for an operator who authors all their own gates and accepts the risk. Both transports read it — this is not a listener concern: the sink is reached identically over STDIO and HTTP. The refusal is deliberately not a degrade-to-advisory; a gate reporting as passed while having verified nothing is a defect this repo has already fixed once.
+- **Environment (execution capability, continued)**: `MCP_SHELL_VERIFY_ALLOWED_DIRS` declares directories, beyond the server's own, that a gate's `shell_working_dir` may resolve inside. **Unset does not mean "anywhere"** — it means the server's own directory, which is where a gate that says nothing already runs. Same newline-separated form and same `UNSAFE_ALLOW_ALL` sentinel as the command allowlist, and deliberately a _separate_ declaration: accepting arbitrary commands is not accepting arbitrary directories. There is no third variable for the environment, and that asymmetry is the point. A resource-supplied `shell_env` / `tool.env` naming a key that decides what a command RESOLVES to — `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `BASH_ENV`, `IFS` and their siblings — is **refused outright, with no opt-out**, because otherwise the allowlist bounds a string whose meaning the author still picks: measured 2026-08-29, an operator allowlisting exactly `git status` ran the gate author's `git`. Ordinary variables pass through untouched. The full list and the mechanism behind each entry are in `shared/utils/process.ts`.
 
 -> `.claude/rules/mcp-contracts.md` for critical contract constraints (path-loaded)
 -> `.claude/rules/sqlite-persistence.md` for critical persistence constraints (path-loaded)

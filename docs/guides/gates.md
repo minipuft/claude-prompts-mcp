@@ -141,6 +141,35 @@ Shell verification uses actual command execution for validation—exit code 0 = 
 
 See [Ralph Loops Guide](./ralph-loops.md) for comprehensive shell verification documentation.
 
+### What a Gate Author May and May Not Control
+
+A `shell_verify` criterion carries three author-supplied values, and the operator holds a
+different kind of control over each. The split is by MECHANISM, not by how dangerous the
+field sounds.
+
+| Field               | Author may set | Operator control                                                         | Why this shape                                                                         |
+| ------------------- | -------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `shell_command`     | yes            | `MCP_SHELL_VERIFY_ALLOWLIST` — unset refuses everything                  | The command is the capability; the operator decides which ones exist                   |
+| `shell_working_dir` | yes            | `MCP_SHELL_VERIFY_ALLOWED_DIRS` — defaults to the server's own directory | A directory only WIDENS reach; the command is still one the operator allowed           |
+| `shell_env`         | mostly         | resolution-affecting keys are **refused outright, no opt-out**           | These decide what the allowed command MEANS, so allowing them would void the allowlist |
+
+Refused environment keys: `PATH`, anything starting `LD_` or `DYLD_`, `NODE_OPTIONS`,
+`PYTHONPATH`, `PYTHONHOME`, `PYTHONSTARTUP`, `BASH_ENV`, `ENV`, `IFS`, `SHELLOPTS`,
+`BASHOPTS`, `PERL5LIB`, `PERL5OPT`, `RUBYLIB`, `RUBYOPT`. Ordinary variables — including
+anything your own scripts read — pass through untouched.
+
+Why the third row has no dial: measured 2026-08-29 against a running server, an operator
+who allowlisted exactly `git status` and a gate that set
+`PATH: /gate-author/bin:/usr/bin:/bin` ran the gate author's `git`. A dial that can be
+turned to "yes" here is a dial that turns the command allowlist off without saying so.
+
+The same rules reach script tools. `tool.env` is screened identically, and `tool.workingDir`
+is contained to the tool's own installed directory — a relative `../..` in either field
+resolves before it is checked, not after.
+
+`shell_response_env_var` names an environment key too, so it is screened by the same rule:
+a gate cannot smuggle `PATH` in by asking for the agent response to be mirrored into it.
+
 ### Response Injection (Agent-Output Verification)
 
 A `shell_verify` gate can pipe the agent's response into the shell command's stdin, enabling ground-truth checks against what the agent actually claimed.
