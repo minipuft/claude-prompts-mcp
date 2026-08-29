@@ -1,16 +1,40 @@
-import { afterEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import path from 'node:path';
 
 import { PathResolver } from '../../../src/runtime/paths.js';
 
-const originalRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-const originalWorkspace = process.env['MCP_WORKSPACE'];
+/**
+ * Every path override `PathResolver` honors, neutralized for the duration of this file.
+ *
+ * All four, not the two the assertions set. `MCP_RESOURCES_PATH` is exported into the shell by
+ * the Claude Code plugin that runs this very server, so on a maintainer's machine
+ * `getResourcesPath()` returned `~/.claude/resources` and the third assertion failed — while CI,
+ * where nothing exports it, stayed green. A test that passes only where the product is NOT
+ * installed is measuring the environment, not the resolver.
+ *
+ * Saved and restored rather than merely deleted: this process is shared with every other test
+ * file in the run.
+ */
+const PATH_ENV_KEYS = [
+  'MCP_RUNTIME_ROOT',
+  'MCP_WORKSPACE',
+  'MCP_RESOURCES_PATH',
+  'MCP_CONFIG_PATH',
+] as const;
+
+const originalPathEnv = new Map<string, string | undefined>(
+  PATH_ENV_KEYS.map((key) => [key, process.env[key]])
+);
+
+beforeEach(() => {
+  for (const key of PATH_ENV_KEYS) delete process.env[key];
+});
 
 afterEach(() => {
-  if (originalRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-  else process.env['MCP_RUNTIME_ROOT'] = originalRuntimeRoot;
-  if (originalWorkspace === undefined) delete process.env['MCP_WORKSPACE'];
-  else process.env['MCP_WORKSPACE'] = originalWorkspace;
+  for (const [key, value] of originalPathEnv) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 describe('PathResolver writable runtime paths', () => {
