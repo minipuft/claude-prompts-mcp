@@ -125,6 +125,10 @@ positional argument — check the run's node `inlineGateIds` before trusting han
 
 ### S5 — Agent export ✗ KILLED (2026-08-18 · R-1 removed its blocking value — under the self-contained brief, general-purpose runs any delegated node, so shipping `agents/chain-executor.md` buys only a restricted-tool safety posture · revives if a delegated node ever needs tool-restriction guarantees the brief cannot express — reopen as its own plan then, not a row here. First application of the do-or-kill rule, cleanup-standards §Do or Kill, replacing this row's earlier 'demoted' limbo)
 
+> Reopened 2026-08-27 as `plans/features/delegation-default-host-agent-2026-08-27.md`, with the opposite
+> conclusion: the shipped agent is deleted, not re-exported — the brief carries the worker's behavior and the
+> default executor is the host's own general agent.
+
 **Goal**: extend the server's export surface (skills-sync precedent) to AGENT definitions, so
 subagents ship alongside prompts/skills to downstream consumers (codex/gemini/opencode ports; the
 plugin already ships `chain-executor`).

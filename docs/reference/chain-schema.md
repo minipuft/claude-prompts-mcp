@@ -53,15 +53,19 @@ an otherwise-plain step delegated.
 ### Agent Type
 
 `subagentModel` picks how capable the sub-agent is; `agentType` picks _which_ agent it is. Set it
-when a step needs a specific specialist rather than the generic chain runner.
+when a step needs a specific specialist rather than the host's general executor.
 
-**Resolution priority**: step-level `agentType` > prompt-level `agentType` > `chain-executor`.
+**Resolution priority**: step-level `agentType` > prompt-level `agentType` > the host's default.
+With neither declared, a Claude Code handoff names `general-purpose` (the `Task` tool requires a
+`subagent_type`); Codex, Gemini, OpenCode and Cursor handoffs carry no `agent_type` parameter, so
+the client's own default agent runs the brief.
 
-Agent names are host-defined — whatever the client exposes (`Explore`, `general-purpose`, a
-plugin-provided type). Bare names are namespaced to this plugin at render time; a name already
-containing `:` is passed through unchanged. The server does not validate the name against the
-host's registry, because it cannot see one: an unknown agent surfaces as an error from the client,
-naming the agent it could not find.
+Agent names are host-defined — whatever the client exposes (`Explore`, `general-purpose`, an
+agent from `~/.claude/agents/`, or a plugin agent written as `plugin:agent`) — and pass through
+exactly as written. The server does not validate the name against the host's registry, because it
+cannot see one: an unknown agent surfaces as an error from the client, naming the agent it could
+not find. The plugin ships no agent of its own: the EXECUTION BRIEF a delegated step renders is
+self-contained, so any executor can run it.
 
 ### Inline Gate Ids
 
@@ -118,7 +122,7 @@ chainSteps:
   - promptId: summarize_data
     stepName: "Summarize (2/2)"
     subagentModel: heavy # heavy model for synthesis
-    agentType: general-purpose # and a specific agent, not the chain runner
+    agentType: code-reviewer # a specific host agent instead of the default
     inputMapping:
       content: steps.Fetch (1/2).result
 ```

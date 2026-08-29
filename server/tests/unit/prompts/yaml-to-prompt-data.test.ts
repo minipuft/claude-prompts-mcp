@@ -42,7 +42,7 @@ describe('yamlToPromptData', () => {
   });
 
   it('carries agentType at both prompt and step level', () => {
-    // Two levels because the resolution is `step ?? prompt ?? 'chain-executor'`. If only one
+    // Two levels because the resolution is `step ?? prompt ?? host default`. If only one
     // level survived the loader, the other would silently fall through to the default and the
     // feature would look half-implemented rather than broken.
     const result = yamlToPromptData(

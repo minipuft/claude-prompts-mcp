@@ -864,7 +864,7 @@ export class ChainOperatorExecutor {
       return '';
     }
     const totalSteps = stepPrompts.length;
-    const agentType = nextStep.agentType ?? nextStep.convertedPrompt?.agentType ?? 'chain-executor';
+    const agentType = nextStep.agentType ?? nextStep.convertedPrompt?.agentType;
     const subagentModel = nextStep.subagentModel ?? nextStep.convertedPrompt?.subagentModel;
     const clientProfile = this.extractClientProfile(chainContext);
 
@@ -872,7 +872,7 @@ export class ChainOperatorExecutor {
       stepNumber: nextStep.stepNumber,
       totalSteps,
       promptName: this.getPromptDisplayName(nextStep),
-      agentType,
+      ...(agentType != null ? { agentType } : {}),
       ...(clientProfile != null ? { clientProfile } : {}),
       ...(subagentModel != null ? { subagentModel } : {}),
       gateCount: 0,

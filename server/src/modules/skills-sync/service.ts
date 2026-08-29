@@ -2338,8 +2338,11 @@ function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean }
   let section = `## Chain Workflow\n\n`;
 
   if (ir.delegation) {
-    const agent = ir.delegationAgent ?? 'chain-executor';
-    section += `> All steps delegate to sub-agents by default (agent: \`${agent}\`).\n\n`;
+    const agent = ir.delegationAgent;
+    section +=
+      agent === undefined
+        ? `> All steps delegate to sub-agents by default (the client's default agent).\n\n`
+        : `> All steps delegate to sub-agents by default (agent: \`${agent}\`).\n\n`;
   }
 
   // Arrow flow
@@ -2361,7 +2364,8 @@ function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean }
     if (!delegated) {
       delegationCol = 'Inline';
     } else if (hasSubagents) {
-      delegationCol = `Sub-agent: \`${agent ?? 'chain-executor'}\``;
+      delegationCol =
+        agent === undefined ? 'Sub-agent (client default)' : `Sub-agent: \`${agent}\``;
     } else {
       delegationCol = `Delegated (agent: ${agent ?? 'default'})`;
     }

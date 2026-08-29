@@ -60,7 +60,7 @@ describe('ChainStepSchema — unknown keys are rejected, not dropped', () => {
       outputMapping: { analysis: 'step2_result' },
       retries: 2,
       subagentModel: 'fast',
-      agentType: 'chain-executor',
+      agentType: 'general-purpose',
       framework: 'ReACT',
       inlineGateIds: ['code-quality'],
     });
