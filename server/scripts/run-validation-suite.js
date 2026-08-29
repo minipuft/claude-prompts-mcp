@@ -336,6 +336,13 @@ export const SUITE = [
       'CHECKED — falsified 2026-08-28 by deleting the assertPathInside call from framework-file-writer.ts, simulating the merge resolution feat/settability-parity will force. The gate reported it; 2786 unit + 739 integration tests did not, because they exercise the containment helper rather than its callers. The scan also fails closed if the surface matches zero files',
   },
   {
+    script: 'validate:spawn-input-guards',
+    io: 'read',
+    reads: ['walk'],
+    converse:
+      'CHECKED both axes — falsified 2026-08-29 by neutralising the env guard in shell-verify-executor.ts and the cwd containment in script-executor.ts; the gate reported each independently. The scan also fails closed if it finds zero executeProcess callers. Blind spot stated in the header: per-file, not per-spawn',
+  },
+  {
     script: 'validate:scope-producers',
     io: 'read',
     reads: ['file'],
