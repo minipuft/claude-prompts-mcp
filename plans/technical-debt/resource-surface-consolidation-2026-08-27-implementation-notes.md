@@ -133,3 +133,31 @@ two reporters for one fact, one of them unreachable under STDIO.
 and the served prompt count read 47 instead of 40 until they were removed. This is the same trap
 that swept 14 conformance fixtures into a commit in Arc 1 (reverted at `d881dad2`). Filed as P5.5;
 removed by hand here.
+
+### DEV-P1-7 — I corrected P1.6's falsifier in the wrong direction, then corrected it again
+
+The 2026-08-28 re-anchor replaced "tracked equals on-disk" with "the main checkout reports 123
+tracked". That reads the migration as moving the 84 personal prompts INTO git. The predecessor's D5
+says the opposite: `resources/prompts/` becomes **bundled-only** and fully tracked, with the
+personal prompts moving to a store outside the repo. Under D5 the end state is 39 on disk and 39
+tracked — not 123.
+
+The original falsifier was therefore closer to right than my replacement, and its only real defect
+was vacuity in a worktree. The corrected check names both halves so neither a worktree nor a
+mis-read direction can satisfy it by accident: nothing ignored remains under
+`server/resources/prompts` in the main checkout, AND the personal store answers from a root outside
+every checkout.
+
+Worth keeping as the shape of the mistake: re-anchoring a falsifier means re-deriving the END STATE
+it is supposed to detect, not just replacing a number that could not be trusted. I substituted a
+measurable quantity for an unmeasurable one and skipped asking which direction the work runs.
+
+### Backup receipt (2026-08-29)
+
+`backups/claude-prompts-mcp/resources-full-2026-08-29-001204.tar.gz`, 254K, taken from the MAIN
+checkout — a worktree carries only the 39 tracked prompts. Verified against the live tree:
+123 `prompt.yaml`, 27 gates, 8 frameworks, 4 styles. `state.db` deliberately excluded: it is
+WAL-mode SQLite and a plain `cp`/`tar` can capture a torn page, and it is regenerable.
+
+The prior backup (`resources-prompts-2026-08-19-235626.tar.gz`) was **not** adequate for P1.6 — ten
+days stale at 121 prompts, and prompts only, with zero gates, frameworks or styles.
