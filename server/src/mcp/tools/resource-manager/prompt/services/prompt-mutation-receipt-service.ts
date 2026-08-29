@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { canonicalPromptSnapshot } from '../utils/validation.js';
 
 import type { PromptResourceContext } from '../core/context.js';
-import type { CategoryShipStatus, OperationResult } from '../core/types.js';
+import type { OperationResult } from '../core/types.js';
 
 export interface PromptMutationReceipt {
   resource_type: 'prompt';
@@ -13,9 +13,17 @@ export interface PromptMutationReceipt {
   id: string;
   config_path: string;
   server_root: string;
+  /**
+   * The prompts directory the write landed in — `affected_files` are all beneath it.
+   *
+   * With a workspace overlaying the bundled tree, "where prompts come from" and "where a write
+   * goes" stopped being one place, so the receipt has to say which. It resolves through the same
+   * `getResolvedPromptsDirectory()` call `FileOperations` writes through, which is what keeps the
+   * two from drifting; a test binds the receipt's value to the actual file paths rather than
+   * trusting that they agree.
+   */
   resource_root: string;
   affected_files: string[];
-  category_ship_status: CategoryShipStatus | null;
   refresh_status: 'loaded' | 'verification_failed' | 'restart_pending';
   loaded_after_refresh: boolean | null;
   current_version: number;
@@ -66,7 +74,6 @@ export class PromptMutationReceiptService {
       server_root: config.getServerRoot(),
       resource_root: config.getResolvedPromptsDirectory(),
       affected_files: input.operation.affectedFiles ?? [],
-      category_ship_status: input.operation.categoryShipStatus ?? null,
       refresh_status: refreshResult.refreshStatus,
       loaded_after_refresh: refreshResult.loadedAfterRefresh,
       current_version: history?.current_version ?? 0,

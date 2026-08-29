@@ -8,7 +8,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { CategoryShipStatus, OperationResult, PromptResourceDependencies } from '../core/types.js';
+import { OperationResult, PromptResourceDependencies } from '../core/types.js';
 
 import type { ResourceMutationTarget } from '#modules/resources/services/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -136,82 +136,6 @@ export const ALL_PROMPT_DATA_KEYS: ReadonlySet<string> = new Set([
   'userMessageTemplate',
   'systemMessage',
 ]);
-
-/** One parsed `.gitignore` line: its pattern segments, negation flag, and anchoring. */
-interface GitignoreRule {
-  negate: boolean;
-  /** Pattern split on `/`, trailing slash and `/**` suffix stripped (`'*'` segments are wildcards). */
-  segments: string[];
-  /**
-   * `true` when the pattern contains a `/` other than a trailing one — anchored to the root of
-   * this `.gitignore` and matched as a path prefix. `false` (e.g. bare `*`, `!.gitignore`) means
-   * the pattern has no `/` at all and git matches it against any single path segment, at any
-   * depth — see `git help gitignore` "PATTERN FORMAT".
-   */
-  anchored: boolean;
-}
-
-function parseGitignoreRules(gitignoreText: string): GitignoreRule[] {
-  return gitignoreText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('#'))
-    .map((line) => {
-      const negate = line.startsWith('!');
-      let pattern = negate ? line.slice(1) : line;
-      if (pattern.endsWith('/')) {
-        pattern = pattern.slice(0, -1);
-      }
-      const anchored = pattern.includes('/');
-      if (pattern.endsWith('/**')) {
-        pattern = pattern.slice(0, -3);
-      }
-      return { negate, segments: pattern.split('/'), anchored };
-    });
-}
-
-function gitignoreRuleMatches(rule: GitignoreRule, pathSegments: string[]): boolean {
-  const segmentMatches = (pattern: string, actual: string): boolean =>
-    pattern === '*' || pattern === actual;
-
-  if (!rule.anchored) {
-    // Unanchored (no non-trailing `/`): git matches a single-segment pattern against any
-    // component of the path, at any depth — not just a prefix.
-    return pathSegments.some((segment) => segmentMatches(rule.segments[0] ?? '', segment));
-  }
-  // Anchored: matched as a prefix from the root of this `.gitignore`. A directory match implies
-  // everything beneath it matches too (git prunes descent into an ignored directory), so a
-  // shorter pattern matching the leading segments is sufficient regardless of a `/**` suffix.
-  if (rule.segments.length > pathSegments.length) {
-    return false;
-  }
-  return rule.segments.every((segment, i) => segmentMatches(segment, pathSegments[i] ?? ''));
-}
-
-/**
- * Does `categorySlug` ship with the repo, per `.gitignore` text alone?
- *
- * Pure by design (no fs): `resources/prompts/.gitignore` ignores everything (`*`) and un-ignores
- * specific categories with `!<category>/` + `!<category>/**` pairs (the pair is required — git
- * cannot re-include a file whose parent directory is still excluded, so the source file always
- * carries both). This walks a synthetic path for a brand-new prompt under the category
- * (`<category>/__new_prompt__/prompt.yaml`) through every rule in file order — last match wins,
- * matching git's own precedence — so it answers the same question `git check-ignore` would for a
- * prompt that does not yet exist on disk.
- *
- * Table-driven tests bind this against `git check-ignore` ground truth for all real categories,
- * so a change here that drifts from git's semantics fails loudly rather than silently.
- */
-export function resolveCategoryShipStatus(gitignoreText: string, categorySlug: string): boolean {
-  const testPath = [categorySlug, '__new_prompt__', 'prompt.yaml'];
-  let ignored = false;
-  for (const rule of parseGitignoreRules(gitignoreText)) {
-    if (gitignoreRuleMatches(rule, testPath)) {
-      ignored = !rule.negate;
-    }
-  }
-  return !ignored;
-}
 
 /**
  * File system operations for prompt management
@@ -364,7 +288,6 @@ export class FileOperations {
     return {
       message: result.messages.join('\n'),
       affectedFiles: result.affectedFiles,
-      categoryShipStatus: await this.readCategoryShipStatus(promptsDir, effectiveCategory),
     };
   }
 
@@ -414,29 +337,6 @@ export class FileOperations {
     await fs.cp(sourceDir, targetDir, { recursive: true });
     await fs.rm(sourceDir, { recursive: true, force: true });
     return [`Moved prompt '${promptId}' from '${path.basename(sourceDir)}' to '${targetCategory}'`];
-  }
-
-  /**
-   * Read `.gitignore` from the resolved prompts directory and resolve category ship status
-   * (P7-D4). A missing `.gitignore` — the common case for a workspace overlay that is not the
-   * bundled repo tree — means nothing restricts what ships, so the category always ships.
-   */
-  private async readCategoryShipStatus(
-    promptsDir: string,
-    categorySlug: string
-  ): Promise<CategoryShipStatus> {
-    const gitignorePath = path.join(promptsDir, '.gitignore');
-    let gitignoreText: string;
-    try {
-      gitignoreText = await fs.readFile(gitignorePath, 'utf-8');
-    } catch {
-      return { category: categorySlug, ships: true, gitignorePath };
-    }
-    return {
-      category: categorySlug,
-      ships: resolveCategoryShipStatus(gitignoreText, categorySlug),
-      gitignorePath,
-    };
   }
 
   /**

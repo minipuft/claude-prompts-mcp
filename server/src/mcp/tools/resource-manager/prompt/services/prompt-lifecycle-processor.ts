@@ -32,7 +32,6 @@ import {
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PromptResourceInput } from '../../core/types.js';
-import type { CategoryShipStatus } from '../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { ToolResponse } from '#shared/types/index.js';
@@ -201,8 +200,6 @@ export class PromptLifecycleProcessor {
         response += `- ${warning}\n`;
       }
     }
-
-    response += this.buildCategoryShipWarning(writeResult.categoryShipStatus);
 
     const verification = await this.receiptService.complete({
       action: 'create',
@@ -565,8 +562,6 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    response += this.buildCategoryShipWarning(result.categoryShipStatus);
-
     const verification = await this.receiptService.complete({
       action: 'update',
       id: String(args.id),
@@ -683,28 +678,6 @@ export class PromptLifecycleProcessor {
       content: [{ type: 'text' as const, text: response }],
       isError: false,
     };
-  }
-
-  /**
-   * P7-D4: `create`/`update` write successfully regardless of whether the target category ships
-   * in the published repo — `server/resources/prompts/.gitignore` allowlists categories, and the
-   * write path never consulted it, so success read identically either way. OQ-P7-4 ruled warn,
-   * not refuse — 103/131 prompts live in untracked categories, so refusing would break the
-   * operator-local workflow. This never fires for a workspace overlay with no `.gitignore` of its
-   * own: `FileOperations` reports `ships: true` when no allowlist file exists to restrict it.
-   */
-  private buildCategoryShipWarning(status: CategoryShipStatus | undefined): string {
-    if (status === undefined || status.ships) {
-      return '';
-    }
-    return (
-      `\n⚠️ **Category not tracked in repo**: '${status.category}' is excluded by ` +
-      '`server/resources/prompts/.gitignore` and will not ship with the repo — it stays local ' +
-      'to this workspace.\n' +
-      'To ship it, add these lines to `server/resources/prompts/.gitignore`:\n' +
-      `    !${status.category}/\n` +
-      `    !${status.category}/**\n`
-    );
   }
 
   /** One shape for every pre-write refusal on the update path: error response, nothing written. */
