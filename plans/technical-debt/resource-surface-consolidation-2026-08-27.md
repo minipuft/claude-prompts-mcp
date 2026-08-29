@@ -79,6 +79,43 @@ below; the reasoning is in the implementation notes.
 **Gate P1**: a prompt authored from a worktree survives that worktree's removal, and
 `server/resources/prompts` has no `.gitignore`.
 
+### Tier P1.5-X — cut over to the personal library
+
+Executes P1.5. Composed 2026-08-29 after establishing how the server is actually launched:
+`claude --plugin-dir <repo>`, which reads `.mcp.json` at the plugin root. That file is **tracked and
+shipped**, so it must not name a personal path — the cutover removes its resources line rather than
+editing it, and the personal root moves to machine-local configuration.
+
+Measured basis: with `MCP_RESOURCES_PATH` absent the server resolves `packageRoot/resources` and
+serves the same 39 bundled prompts, so the line is redundant for dev and installed users alike.
+With it supplied from the environment it serves 119 over the bundled base.
+
+**Two consumers, not one.** The Claude Code plugin server is STDIO and per-conversation; the
+`claude-prompts-catalog` systemd unit is long-lived HTTP on :9090. They cannot be one process — a
+STDIO server has no port to share — so "one server" is unavailable, and the goal is one LIBRARY read
+by both. Each keeps its own machine-local env source.
+
+**Ordering is load-bearing**: every env flip is blocked on P1.5a. Main's `dist/` predates P1.0a, so
+pointing any consumer at the personal store before rebuilding serves 84 prompts and silently drops
+the 39 bundled ones.
+
+| #     | St                                                                                                                                     | Change                                                                                                                                                                                                        | Depends     | Verification                                                               |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------- |
+| P1.5a | ☐ (as of 2026-08-29 · flips when main's rebuilt `dist/` emits `↳ over bundled base` for an external resources root)                    | Land this branch on main locally and rebuild `server/dist/`. **No push** — owner reviews pushes per push                                                                                                      | —           | main's `dist/` run against an external root logs the bundled-base line     |
+| P1.5b | ☐ (as of 2026-08-29 · flips when `.mcp.json` names no resources path and a plugin-launched server still serves the 39 bundled prompts) | Delete the redundant `MCP_RESOURCES_PATH` from `.mcp.json`. Shipped default is unchanged via the packageRoot fallback, and removing it is what lets a machine-local value through                             | P1.5a       | server with no override serves 39 from `<plugin>/server/resources/prompts` |
+| P1.5c | ☐ (as of 2026-08-29 · flips when a server launched BY Claude Code, not by hand, reports the personal root)                             | Establish which machine-local mechanism reaches an MCP subprocess — `~/.claude/settings.json` `env` versus a shell export — then apply it. **Unverified today**; a hand-run probe cannot answer it            | P1.5b       | the plugin server's own log names `~/.claude/resources/prompts`            |
+| P1.5d | ☐ (as of 2026-08-29 · flips when the catalog service log names the personal root and a count ≥119)                                     | Point the systemd catalog at the same library via `~/.config/claude-prompts-catalog.env`, its existing machine-local `EnvironmentFile` — never the unit file, so nothing personal lands in a tracked artifact | P1.5a       | catalog log names the personal root                                        |
+| P1.5e | ☐ (as of 2026-08-29 · flips when both consumers independently report ≥119 with a bundled-base line)                                    | Restart both consumers and verify each. A control run against the bundled-only root must still report 39, or the check cannot tell a merge from a replacement                                                 | P1.5c P1.5d | both logs show the personal root over the bundled base                     |
+| P1.5f | ☐ (as of 2026-08-29 · flips when no tracked file in the repo contains `/home/minipuft`)                                                | Writeback: close P1.5, and confirm the repo names no personal path                                                                                                                                            | P1.5e       | `rg "/home/minipuft" $(git ls-files)` returns nothing                      |
+
+**Gate P1.5-X**: both consumers serve the personal library merged over the bundled base, and no
+tracked file names a personal path.
+
+**Filed, not done** — whether the :9090 catalog has a live consumer at all. No connections were
+observed on it, and t3code's own tests reference a discovered endpoint on a different port
+(`127.0.0.1:41000`) with `promptSourceId: "claude-prompts"`. That is a t3code integration question,
+not a resource-surface one; P1.5d points the service at the right library either way.
+
 **Gate P1 status — BLOCKED (as of 2026-08-28) on P1.5 and P1.6**, both owner actions: they relocate
 the operator's own prompt library and commit 84 previously-untracked files. P1.0/P1.0a landed and
 removed the precondition that made a personal store unusable — a workspace resource directory no
