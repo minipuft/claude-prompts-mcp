@@ -201,3 +201,32 @@ split out as P5.6 because it is an identity problem rather than a counting one:
 | Invalid YAML                     | 3                  | prompt never loads                                 |
 | Ids duplicated across categories | 5 ids              | later load silently wins; the first is unreachable |
 | Dropped inline gate definitions  | 8 across 6 prompts | prompt loads, enforcement silently absent          |
+
+### DEV-P1-8 — the flip was staged against the wrong binary, caught one step before the restart
+
+I recommended flipping `.mcp.json` and restarting. That was wrong, and the check that caught it was
+running the server with EXACTLY the environment `.mcp.json` produces, against the binary it names —
+`${CLAUDE_PLUGIN_ROOT}/server/dist/index.js`, which is MAIN's build.
+
+Main is at `ca39e300` and does not carry P1.0a. Measured: with the resources path pointed at the
+personal store, main's dist served **81 prompts from `~/.claude/resources/prompts` alone**, with the
+39 bundled ones silently gone and no inventory line to say so. A restart would have cut the catalog
+from 119 to 81.
+
+Every earlier probe in this session ran the SETTABILITY worktree's dist, which has the fix. Those
+probes were correct about the code and said nothing about what the client would actually launch.
+The config names one binary and I had been verifying another.
+
+Ordering constraint, now on the P1.5 row: the fix reaches main and main is rebuilt BEFORE the
+`.mcp.json` flip, not after.
+
+Second blocker, raised by the owner and confirmed: `.mcp.json` is tracked and ships with the repo,
+so a literal `/home/minipuft/.claude/resources` would reach everyone who clones it. The flip needs a
+user-scoped override or `${VAR:-default}` expansion. Whether Claude Code supports the latter in
+`.mcp.json` is UNVERIFIED — no instance of that syntax exists in this repo's JSON to copy from.
+
+The edit was made, then reverted. The first revert used `cp` from a backup and landed in a different
+worktree than the edit, leaving main still carrying the personal path while the output read as
+restored. Corrected with `git -C <main> checkout -- .mcp.json` and confirmed across all four
+worktrees. Lesson: in a multi-worktree repo, revert with `git -C <explicit path>`, never a bare
+`cp` that depends on ambient cwd.
