@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
+import { formatCommandForDisplay } from '../../../src/engine/gates/shell/shell-command-allowlist.js';
 import type {
   PendingShellVerification,
   VerifyActiveState,
@@ -52,7 +53,8 @@ describe('Shell Verification Isolation', () => {
       const state: VerifyActiveState = {
         sessionId: 'test-session-123',
         config: {
-          command: pending.shellVerify.command,
+          // Same rendering the store applies: the hook payload contract is a string.
+          command: formatCommandForDisplay(pending.shellVerify.command),
           timeout: pending.shellVerify.timeout ?? 300000,
           maxIterations: pending.shellVerify.maxIterations ?? 10,
           workingDir: pending.shellVerify.workingDir,
@@ -93,7 +95,8 @@ describe('Shell Verification Isolation', () => {
       const state: VerifyActiveState = {
         sessionId: 'test-session-456',
         config: {
-          command: pending.shellVerify.command,
+          // Same rendering the store applies: the hook payload contract is a string.
+          command: formatCommandForDisplay(pending.shellVerify.command),
           timeout: 300000,
           maxIterations: 10,
           originalGoal: pending.originalGoal, // Will be undefined

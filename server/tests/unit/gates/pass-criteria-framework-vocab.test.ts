@@ -62,7 +62,7 @@ describe('pass_criteria type enum', () => {
     const minimal: Array<Record<string, unknown>> = [
       { type: 'inline_guidance' },
       { type: 'llm_self_check' },
-      { type: 'shell_verify', shell_command: 'true' },
+      { type: 'shell_verify', shell_command: ['true'] },
       { type: 'script_tool', script_tool_id: 'some_tool' },
     ];
 

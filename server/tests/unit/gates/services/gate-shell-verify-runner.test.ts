@@ -182,7 +182,7 @@ describe('runGateShellVerifications', () => {
           name: 'Test',
           type: 'validation',
           description: 'test',
-          pass_criteria: [{ type: 'shell_verify', shell_command: '' }],
+          pass_criteria: [{ type: 'shell_verify', shell_command: [] }],
         },
       ]),
     } as any;
@@ -234,7 +234,7 @@ describe('shell_response_env_var cannot smuggle a denied key (row 1.6)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'true',
+              shell_command: ['true'],
               shell_stdin_source: 'agent_response',
               shell_response_env_var: 'PATH',
             },
@@ -274,7 +274,7 @@ describe('shell_response_env_var cannot smuggle a denied key (row 1.6)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'test "$AGENT_RESPONSE" = "hello"',
+              shell_command: ['sh', '-c', 'test "$AGENT_RESPONSE" = "hello"'],
               shell_stdin_source: 'agent_response',
               shell_response_env_var: 'AGENT_RESPONSE',
             },

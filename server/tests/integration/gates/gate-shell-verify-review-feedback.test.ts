@@ -54,7 +54,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "all tests passed"',
+              shell_command: ['echo', 'all tests passed'],
               shell_timeout: 5000,
             },
           ],
@@ -86,7 +86,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "FAIL src/handler.test.ts" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "FAIL src/handler.test.ts" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
@@ -116,7 +116,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'sleep 10',
+              shell_command: ['sleep', '10'],
               shell_timeout: 1000,
             },
           ],
@@ -150,7 +150,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "preset ok"',
+              shell_command: ['echo', 'preset ok'],
               shell_preset: 'fast',
             },
           ],
@@ -166,7 +166,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].passed).toBe(true);
-      expect(results[0].command).toBe('echo "preset ok"');
+      expect(results[0].command).toBe('echo preset ok');
     });
   });
 
@@ -181,7 +181,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "shell check"',
+              shell_command: ['echo', 'shell check'],
               shell_timeout: 5000,
             },
             {
@@ -201,7 +201,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
 
       // Only shell_verify criteria should produce results
       expect(results).toHaveLength(1);
-      expect(results[0].command).toBe('echo "shell check"');
+      expect(results[0].command).toBe('echo shell check');
     });
 
     test('runs multiple shell_verify criteria on one gate', async () => {
@@ -214,12 +214,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "test passed"',
+              shell_command: ['echo', 'test passed'],
               shell_timeout: 5000,
             },
             {
               type: 'shell_verify',
-              shell_command: 'echo "lint passed"',
+              shell_command: ['echo', 'lint passed'],
               shell_timeout: 5000,
             },
           ],
@@ -249,7 +249,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           type: 'validation',
           description: 'Has shell_verify',
           pass_criteria: [
-            { type: 'shell_verify', shell_command: 'echo "ok"', shell_timeout: 5000 },
+            { type: 'shell_verify', shell_command: ['echo', 'ok'], shell_timeout: 5000 },
           ],
         },
         'llm-gate': {
@@ -338,8 +338,11 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command:
-                'echo "FAIL src/auth.test.ts\n  Expected: 200, Received: 401" >&2 && exit 1',
+              shell_command: [
+                'sh',
+                '-c',
+                'echo "FAIL src/auth.test.ts\\n  Expected: 200, Received: 401" >&2 && exit 1',
+              ],
               shell_timeout: 5000,
             },
           ],
@@ -375,7 +378,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "All files clean"',
+              shell_command: ['echo', 'All files clean'],
               shell_timeout: 5000,
             },
           ],
@@ -406,7 +409,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "all 42 tests passed"',
+              shell_command: ['echo', 'all 42 tests passed'],
               shell_timeout: 5000,
             },
           ],
@@ -419,7 +422,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "error: Unused variable" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "error: Unused variable" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
@@ -471,7 +474,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "line1\nline2\nline3" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "line1\\nline2\\nline3" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
@@ -509,7 +512,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "error" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "error" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
@@ -576,7 +579,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'cat',
+              shell_command: ['cat'],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -611,7 +614,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'cat',
+              shell_command: ['cat'],
               shell_timeout: 5000,
             },
           ],
@@ -642,7 +645,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'printf "%s" "$AGENT_RESPONSE"',
+              shell_command: ['sh', '-c', 'printf "%s" "$AGENT_RESPONSE"'],
               shell_stdin_source: 'agent_response',
               shell_response_env_var: 'AGENT_RESPONSE',
               shell_timeout: 5000,
@@ -681,7 +684,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
               // Deliberately no `shell_response_env_var`: a payload this size exceeds the per-var
               // environment limit (~128KB on Linux) and would fail the spawn for an unrelated
               // reason, masking the stdin race this test exists to pin.
-              shell_command: 'printf "done"',
+              shell_command: ['printf', 'done'],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -719,8 +722,11 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command:
+              shell_command: [
+                'sh',
+                '-c',
                 'claim=$(grep "claimed_lines:" | awk \'{print $2}\'); actual=$(wc -l < package.json | tr -d " "); test "$claim" = "$actual"',
+              ],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -764,7 +770,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'wc -c',
+              shell_command: ['wc', '-c'],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },

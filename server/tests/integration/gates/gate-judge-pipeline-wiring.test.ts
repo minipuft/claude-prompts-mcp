@@ -217,7 +217,7 @@ describe('Shell Verify Auto-Pass', () => {
     const shellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'test-suite',
-      pass_criteria: [{ type: 'shell_verify', shell_command: 'echo ok' }],
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['echo', 'ok'] }],
     };
 
     const { stage, context, chainOperatorExecutor, chainSessionStore } = createStageWithGates({
@@ -258,7 +258,7 @@ describe('Shell Verify Auto-Pass', () => {
     const failingGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'failing-test',
-      pass_criteria: [{ type: 'shell_verify', shell_command: 'exit 1' }],
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['exit', '1'] }],
     };
 
     const { stage, context, chainOperatorExecutor } = createStageWithGates({
@@ -279,7 +279,7 @@ describe('Shell Verify Auto-Pass', () => {
     const shellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'test-suite',
-      pass_criteria: [{ type: 'shell_verify', shell_command: 'echo ok' }],
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['echo', 'ok'] }],
     };
     const nonShellGate: LightweightGateDefinition = {
       ...baseGate,

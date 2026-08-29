@@ -277,7 +277,7 @@ describe('script_tool gate criteria', () => {
     });
 
     test('a gate with no script_tool criteria contributes nothing', async () => {
-      const gate = gateWith({ type: 'shell_verify', shell_command: 'true' });
+      const gate = gateWith({ type: 'shell_verify', shell_command: ['true'] });
 
       const results = await runGateScriptToolVerifications(
         [gate.id],
@@ -362,6 +362,38 @@ describe('script_tool gate criteria', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors.join(' ')).toContain('shell_command');
+    });
+
+    // Row 1.8. The string form is not merely discouraged — a gate file carrying one
+    // fails to load, which is the only place the author is looking.
+    test('refuses a shell_command written as a bare string', () => {
+      const result = validateGateSchema(
+        gateYaml({ type: 'shell_verify', shell_command: 'npm test' }),
+        'probe'
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('argv');
+    });
+
+    test('refuses an empty argv array', () => {
+      const result = validateGateSchema(
+        gateYaml({ type: 'shell_verify', shell_command: [] }),
+        'probe'
+      );
+
+      expect(result.valid).toBe(false);
+    });
+
+    // POSITIVE CONTROL: the three refusals above would all hold against a schema that
+    // rejected every shell_verify criterion.
+    test('accepts a well-formed argv shell_command', () => {
+      const result = validateGateSchema(
+        gateYaml({ type: 'shell_verify', shell_command: ['npm', 'test'] }),
+        'probe'
+      );
+
+      expect(result.valid).toBe(true);
     });
 
     test('accepts a well-formed script_tool criterion', () => {
