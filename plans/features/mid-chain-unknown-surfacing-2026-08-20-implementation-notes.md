@@ -86,6 +86,11 @@ loader.
 
 **Row A.2 was NOT executed. Its premise does not hold as written and re-ruling it is not mine.**
 
+> **CLOSED 2026-08-30** by OQ-A2 (the `==>` half) and OQ-A2b (the `::` half); A.2 shipped on the
+> third attempt. Kept unedited: the `subagentModel` / `agentType` row of the table below is the
+> one this record got most nearly right and most usefully wrong — the fallback did have to move,
+> just onto the node at the parse site rather than into the compiler. See DEV-TA3-1.
+
 A.2 says a `-->` command's "per-step args/gates/`==>` mapped onto node fields". Measured at HEAD,
 a symbolic chain step carries four things a compiled IR node cannot express:
 
@@ -528,10 +533,14 @@ not fixed here; promoted as P-3-F1 with its own plan row.
 ### DEV-TA2-1 — OQ-A2's `::` mapping is falsified: the loss is two-way, and it is about TIMING
 
 **Row A.2 was NOT executed, and this is the second time it has stopped — on a different clause.**
-DEV-TA-5 stopped it because `==>` had no node field; OQ-A2 answered that (a declared
-`delegated?: boolean`, implementable as ruled, along with the prompt-fallback and `* N` rows).
-It stops now on the `::` row, which was ruled from the gate union's SHAPE without measuring its
-CONSUMER.
+
+> **CLOSED 2026-08-30** by OQ-A2b, which routes `::` to `inlineGateCriteria` on the node instead
+> of to run-level `gates[]`. The reader this record identified (`InlineGateProcessor` at stage 11)
+> is the one the re-ruling relies on, and it was re-probed before A.2 shipped. See DEV-TA3-4.
+> DEV-TA-5 stopped it because `==>` had no node field; OQ-A2 answered that (a declared
+> `delegated?: boolean`, implementable as ruled, along with the prompt-fallback and `* N` rows).
+> It stops now on the `::` row, which was ruled from the gate union's SHAPE without measuring its
+> CONSUMER.
 
 Today, a per-step `::` token does TWO things, and it can do both only because it is resolved LATE:
 
@@ -617,17 +626,146 @@ takes the transport client from the first and `checkDistFreshness` from the seco
 polarities were probed (green after a build; exit 1 with `dist/ is stale` after
 `touch src/index.ts`).
 
+## Tier A row A.2 (third attempt, under OQ-A2b) — re-measurement before execution
+
+| Asserted (plan / dispatch)                                                         | Measured                                                                                                                                                                                                                                                       | Verdict                                                                               |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| OQ-A2b: `InlineGateProcessor` resolves raw `::` tokens per step at stage 11        | Confirmed at `inline-gate-processor.ts:347` (`partitionGateCriteria`) — each token is asked of `lookupTemporaryGateId` then `gateReferenceResolver.resolve`, splitting into `registeredGateIds` vs free-text `inlineCriteria`. The reader OQ-A2b names is real | ✓ RULING HOLDS — the field it prescribes has a correctly timed reader                 |
+| Row A.2: the change lands in `symbolic-operator-parser.ts` + `04-parsing-stage.ts` | Neither. The parser already mints frozen `n1..nK` and already carries `delegated` / `inlineGateCriteria` on its `ExecutionStep`s; stage 04 only dispatches. The hand-rolled `ChainStepPrompt[]` construction is entirely in `symbolic-command-builder.ts`      | ⚠ corrected — the row named two files it did not need to touch and not the one it did |
+| Row A.2: "per-step args" need mapping onto node fields                             | Already expressible: `WorkflowNode.args` landed at A.1. What needed care is not the FIELD but the TIMING — symbolic args go through the full `ArgumentParser` ladder + prompt defaults, IR args do not (`compiler.ts` refuses to re-derive)                    | ⚠ corrected — args are resolved BEFORE the node is built, not carried raw             |
+| Row A.2 / OQ-A2b: `compileNode` "copies no prompt defaults"                        | It still does not — but the symbolic path's prompt-level `subagentModel`/`agentType` fallback had to move ONTO the node to survive, since `compileNode` reads the node only. Applied at the parse site, where it already lived                                 | ⚠ corrected — see DEV-TA3-1; the constraint is on the compiler, not on the mapping    |
+| A.3's `::`/`==>` refusal "can now be lifted cheaply"                               | It cannot. `projectNodes` (`remainder-processor.ts:214-226`) narrows every node to `{id, promptId, stepName}` for BOTH spellings, so a mapped operator would be dropped before the store write                                                                 | ✗ not lifted — DEV-TA3-3                                                              |
+
+## Deviations (Tier A row A.2)
+
+### DEV-TA3-1 — the prompt-level fallback had to move onto the NODE, and that is not the killed unification
+
+OQ-A2b killed unifying the prompt-level `subagentModel` / `agentType` fallback, requiring "both
+paths keep today's fallback semantics unchanged". Measured: `buildSymbolicChain` set
+`subagentModel: convertedPrompt.subagentModel` unconditionally on every step it built, while
+`compileNode` reads the NODE's declaration only. Routing the symbolic path through the compiler
+therefore DELETES that fallback unless something puts the value on the node first.
+
+Two readings of the ruling were available and they disagree:
+
+- "no prompt default may reach a node" → the fallback disappears from the `-->` path. That is a
+  behaviour change on the path the ruling explicitly protects, in the opposite direction from the
+  one it killed. Rejected.
+- "`compileNode` may not copy prompt defaults; the symbolic parse still may" → the fallback stays
+  exactly where it has always been (the parse site, reading `convertedPrompt`), and the compiler
+  stays free of prompt lookups for defaults. The IR path gains nothing. Taken.
+
+The second is what the ruling means — the killed row was about giving the IR path a fallback it
+never had, and this gives it none. Probed both ways: dropping the fallback from the builder turns
+the new fixture's assertion red (a prompt declaring `subagentModel: 'heavy'` loses it AND loses
+the `delegated` flag stage 06 derives from it), and no IR-path test moves in either direction.
+
+One incidental improvement, recorded because it is a behaviour delta however small: the old site
+wrote `subagentModel: undefined` / `agentType: undefined` as PRESENT keys on every step of every
+symbolic chain. They are now conditionally spread, so an absent hint is an absent key. Invisible
+downstream — the blueprint is JSON-cloned, which erases an `undefined` value either way — which is
+why the parity fixture had to declare a prompt that actually SETS both fields. A fixture with
+neither cannot tell the two spellings apart.
+
+### DEV-TA3-2 — `SymbolicCommandBuilder` takes the compiler as a third constructor argument
+
+`engine/` (Layer 2) may not value-import `modules/workflow-ir/` (`engine-no-modules-or-mcp-value`,
+ERROR severity), so the builder cannot call `compileWorkflowIR` directly. It takes it injected,
+the seam `WorkflowCommandBuilder` already established, narrowed to the compile half: a `-->`
+command's nodes are minted by the parser rather than submitted by a client, so there is no
+untrusted shape for `validateWorkflowIR` to reject and no order for `linearize` to derive.
+
+REQUIRED, not optional. An optional dependency with an `if (this.compileWorkflow)` guard is the
+shape `refactoring.md` names an ordering bug in disguise — it would turn a missing wiring into a
+silent fall-back to the old path, which is the one outcome this row exists to make impossible.
+Cost: six test construction sites updated by name. `validate:arch` stays at 0 errors; the two new
+`engine-cross-layer-type-only` warnings sit beside the four `workflow-command-builder.ts` already
+carries.
+
+### DEV-TA3-3 — A.3's `::` / `==>` refusal is NOT lifted, and its stated reason was wrong
+
+The dispatch asked whether the refusal could be lifted cheaply now that the mapping exists. It
+cannot, and the interesting part is that the blocker MOVED rather than persisted.
+
+The refusal's own text said the operators "have no representation in a remainder node yet (plan
+row A.2)". After this row, the node vocabulary represents both. What still cannot carry them is
+one layer down: `projectNodes` (`capture/remainder-processor.ts:214-226`) narrows every submitted
+node to `{id, promptId, stepName}` before `replaceRemainder` writes it, so a mapped `::` or `==>`
+would be dropped silently on the way to `chain_run_nodes` — for the STRUCTURED spelling too. That
+is precisely why accepting it in the string form would BREAK OQ-A1's "may never diverge": the
+string form would appear to accept an operator that changes nothing about the run, which is worse
+than refusing it.
+
+Lifting it means widening `RemainderNodeSpec`, the store's node write and the row projection for
+both spellings at once — storage surface owned by rows 1.2 / 2.3, not by A.2. Not done here.
+What WAS done, because a stale reason is worse than a refusal: both messages and the module
+docblock now name the layer that actually blocks them, so the refusal is retirable rather than
+folklore. The two tests asserting the refusals key on the operator name, not the reason, and stay
+green.
+
+**Flip condition**: `RemainderNodeSpec` carries a step's gate/delegation declaration end-to-end
+and a remainder-written `chain_run_nodes` row can be shown to hold it.
+
+### DEV-TA3-4 — the row's Verify clause needed a fixture that can OBSERVE a loss
+
+Row A.2 asks for byte-identical `chain_run_nodes` before and after. Measured: `chain_run_nodes`
+has no column for `delegated`, `inlineGateCriteria`, `subagentModel` or `args` — the three fields
+this row moves and the one it re-times. A rewiring that dropped all four would leave those rows
+byte-identical and pass the row's own clause.
+
+The check as written is therefore not vacuous but is far too coarse, so it was WIDENED rather than
+substituted: the new suite compares every stable `chain_run_nodes` column AND the run blueprint's
+whole `parsedCommand.steps`, which is what `buildChainNodes` derives those rows from and carries
+strictly more. Both expectation sets were captured at `3a012bae` against the old builder, then
+frozen as literals — not `toMatchSnapshot()`, which regenerates on `-u` and would launder exactly
+the regression the file exists to catch.
+
+Four mutation probes, each red then restored: `compileNode` dropping `inlineGateCriteria` (3/3
+red), dropping `delegated` (1/3), the builder dropping the prompt-level fallback (1/3), and the
+YAML loader dropping both new fields (1/12 in the loader suite). The differing blast radii are
+themselves the evidence that the three assertions are independent rather than one assertion
+written three times.
+
+### DEV-TA3-5 — both new fields were carried at all three YAML strippers, unasked
+
+The row scopes itself to the `-->` path, but `ChainStepSchema` is DERIVED from `workflowNodeSchema`
+since A.1, so adding a field to the node schema makes YAML accept it whether or not anything
+carries it. `node-schema.ts`'s own header states the rule (P6-F7): a field carried at fewer than
+all three strippers is silently dead — accepted in the file, absent at run time, nothing red.
+
+So `normalizeChainSteps` and the stage-04 projection carry both, and `ChainStepData` declares
+both. This is the additive half OQ-A2 predicted for `delegated` ("YAML gains an explicit
+context-isolation flag it could only express via `subagentModel` before") and the same is now true
+of `inlineGateCriteria`, which YAML previously could not express at all — only pre-resolved
+`inlineGateIds`.
+
 ## Findings promoted to the plan
 
+- **P-A-F4**: a byte-equality check is only as wide as the columns it reads. Row A.2's own Verify
+  clause (`chain_run_nodes` byte-identical) is structurally blind to every field that table has no
+  column for — which was all three fields the row moves. The general form: when a row's evidence is
+  "artifact X is unchanged", enumerate what X CANNOT represent before trusting a green. The fix is
+  cheap when done up front (add the finer-grained artifact the coarse one is derived from) and
+  invisible afterwards. See DEV-TA3-4.
+- **P-A-F5**: a refusal's stated REASON rots independently of the refusal. A.3's `::`/`==>`
+  messages cited row A.2 as their blocker; A.2 shipped and the messages would have kept sending
+  readers to a closed row while the real blocker (`projectNodes`' three-field narrowing) went
+  unnamed. Nothing detects this — the tests key on the operator name, not the reason, which is
+  correct for the tests and is why the reason had no gate. Every refusal that cites a plan row is
+  an unmarked `☐` in code prose (`cleanup-standards.md` §A Status Outlives What It Described).
+  See DEV-TA3-3.
 - **P-A-F3**: a ruling taken from a SCHEMA's shape is not a ruling about behaviour. OQ-A2's `::`
   row was correct that `gate-spec.schema.ts` accepts `{criteria, target_step_id}` and wrong about
   what happens next, because the consumer treats inline content and a canonical reference as
   mutually exclusive. The general form: when a ruling routes something to an existing channel
   "which already accepts exactly this", the probe is the channel's READER, not its schema.
   See DEV-TA2-1.
-- **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling. **Status
-  2026-08-30**: OQ-A2 answered the `==>` half and was itself falsified on the `::` half
-  (DEV-TA2-1), so this is still open and still needs one.
+- **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling. **CLOSED
+  2026-08-30**: two rulings, on two different clauses — OQ-A2 for `==>` (`delegated?: boolean` on
+  the node) and OQ-A2b for `::` (`inlineGateCriteria?: string[]`, resolved at stage 11 where the
+  registry is). A.2 shipped under both. The durable lesson is the shape of the two stops: a row can
+  be blocked on a ruling AND pointing at the wrong files, and the second is only visible once the
+  first clears.
 - **P-A-F2**: A.3 is ordered before its dependencies (0.1, 0.3, 0.4, 1.2); see DEV-TA-6. **Half
   discharged 2026-08-30**: rows 0.1/0.3/0.4 have landed, so `remainder` and its `mode` now exist
   for A.3 to name. A.3 remains blocked on row 1.2 (`replaceRemainder`), which is still the store
