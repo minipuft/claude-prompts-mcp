@@ -514,13 +514,127 @@ deleted by hand — measured twice, and reproduced with this tier's own corpus f
 directory (105 scenarios, same 7 directories), which is the attribution probe. Pre-existing and
 not fixed here; promoted as P-3-F1 with its own plan row.
 
+## Tier A continuation (rows A.2, A.3, 4.5) — re-measurement before execution
+
+| Asserted (plan)                                                                | Measured                                                                                                                                                                                                                                               | Verdict                                                                         |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| OQ-A2: `::` criteria → run-level `gates[]` `{criteria, target_step_id}`        | The gate UNION accepts that shape; the CONSUMER cannot honour it. `resolveCanonicalGateId` returns early on any inline content, and the id-only spelling drops `target_step_id`. Resolution happens at stage 11 with a registry stage 04 does not have | ✗ falsified — row A.2 stopped, OQ-A2 reopened (DEV-TA2-1)                       |
+| A.3: "`mcp/tools/index.ts` allowlist" is where the append parameter is carried | No allowlist change is needed at all. The translation happens one layer up, at `PromptExecutor`, and produces the `remainder` parameter that already crossed both hops at rows 0.4 / 2.3                                                               | ⚠ corrected — the named site was not touched, and that is what makes OQ-A1 hold |
+| A.3: nodes carry per-step args into the run                                    | `RemainderNodeSpec` carries `id`/`promptId`/`stepName` only, so `projectNodes` drops `args` for BOTH spellings. Their one effect is `required-argument-missing` validation                                                                             | ⚠ corrected — args are parsed to keep the two spellings equally admissible      |
+| 4.5: "pattern: `verify-handoff.mjs`" including its stale-`dist/` refusal       | `verify-handoff.mjs` has NO staleness check; `verify-mcp-surface.mjs` does. The row's two clauses come from two different scripts                                                                                                                      | ⚠ corrected — the freshness half is modelled on `verify-mcp-surface.mjs`        |
+
+## Deviations (Tier A continuation)
+
+### DEV-TA2-1 — OQ-A2's `::` mapping is falsified: the loss is two-way, and it is about TIMING
+
+**Row A.2 was NOT executed, and this is the second time it has stopped — on a different clause.**
+DEV-TA-5 stopped it because `==>` had no node field; OQ-A2 answered that (a declared
+`delegated?: boolean`, implementable as ruled, along with the prompt-fallback and `* N` rows).
+It stops now on the `::` row, which was ruled from the gate union's SHAPE without measuring its
+CONSUMER.
+
+Today, a per-step `::` token does TWO things, and it can do both only because it is resolved LATE:
+
+1. `InlineGateProcessor.partitionGateCriteria` (stage 11, holds the gate registry) asks the
+   resolver whether each token names a REGISTERED gate. `>>a :: code-quality --> >>b` therefore
+   binds the real `code-quality` gate, not a temp gate with that string as a criterion.
+2. The result is written onto that STEP's `inlineGateIds`, so the binding is per-node.
+
+`TemporaryGateRegistrar` — the consumer of the run-level `gates[]` channel OQ-A2 routes to —
+can do either, never both:
+
+| What the IR could emit                             | What happens                                                                                                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{criteria:['code-quality'], target_step_id:'n1'}` | `gateInputContainsInlineContent(gate)` is true → `resolveCanonicalGateId` returns `undefined` → a TEMP gate whose `pass_criteria` is `["code-quality"]` |
+| `{id:'code-quality', target_step_id:'n1'}`         | Resolves canonically → `canonicalGateIds.add(...)` → `continue`, which never reads `target_step_id`. Run-wide, not bound to n1                          |
+
+So this is not a spelling problem. The IR for a `-->` command is built at stage 04, which has no
+gate registry, and no shape available there can say "resolve this token, then bind the result to
+node nK". Either the IR gains a criteria-carrying channel (which the ruling forbids: "No node
+field"), or resolution moves earlier, or `::` keeps its current path and A.2's own clause "the
+string path stops building `chainSteps` on its own" stays false.
+
+The cost of shipping it anyway is measured, not estimated:
+`tests/unit/execution/parsers/symbolic-inline-gate-attribution.test.ts` asserts
+`parsedCommand.steps?.[0]?.inlineGateCriteria` equals `['code-quality']` at the builder level, so
+row A.2's own Verify clause ("existing symbolic-chain tests green") fails, and the tier's
+"every change here is additive" constraint fails with it. A protected-surface regression is not an
+implementation choice, so this stopped here rather than being re-ruled inside the tier.
+
+**What is NOT blocked**, and is worth recording so a re-ruling does not re-derive it: `==>` →
+`delegated?: boolean` on the node schema is additive and reaches YAML free through A.1's
+derivation; `markDelegatedStepPrompts` already reads `subagentModel` and would only widen to
+`step.delegated === true || step.subagentModel != null`; the prompt-level `subagentModel` /
+`agentType` fallback moving into stage 06 is a real unification (`buildDirectCommand` already does
+it for YAML, `buildSymbolicChain` for symbolic, and an IR run gets it for the first time — a
+behaviour change on the IR path the re-ruling should price); `* N` needs nothing.
+
+### DEV-TA2-2 — the append is translated at `PromptExecutor`, and the row's named site is untouched
+
+Row A.3 names `mcp/tools/index.ts`'s argument allowlist, which is where four previous parameters
+died. Nothing goes there: the append is not a new parameter. `PromptExecutor.executePromptCommand`
+rewrites a `chain_id` + leading-`-->` call into `remainder: {mode:'append', nodes}` and clears the
+command, so the pipeline receives the STRUCTURED spelling's request — the parameter that already
+crossed both hops at rows 0.4 and 2.3.
+
+That placement is what makes OQ-A1 structural instead of maintained. After that one line there is
+no string spelling left, so admissibility (`resolveAnsweredUnknownId`), `validateWorkflowIR`, the
+narrowed `maxNodes`, `replaceRemainder`, both caps and the recorded `origin`/`origin_unknown_id`
+are not "kept in sync" — they are the same code. The both-spellings test therefore compares whole
+`chain_run_nodes` rows (minus `session_id`) rather than named columns: a column a future change
+sets on one path and not the other fails without anyone remembering to assert it. Probed by
+mutating `mintAppendId` to append `-x`, which turned it red; restored.
+
+Three narrowings the row does not mention, each refused BY NAME rather than dropped:
+
+- **`::` and `==>` inside an append fragment** are refused, pointing at row A.2. Mapping them here
+  would mean choosing the mapping A.2 is stopped on.
+- **Node ids are derived from the prompt id**, not minted `n1..nK`: a counter would collide with
+  the symbolic parser's frozen ids on the run being appended to, and a caller writing the
+  structured spelling of the same append cannot guess a counter's starting point. A slug is
+  reproducible from the command text, which is what lets OQ-A1's test author one id and get one
+  row. `mintInsertionId` still de-duplicates against the live run.
+- **`key="value"` args are parsed by a local regex**, not `ArgumentParser`. Bounded by what they
+  feed: `RemainderNodeSpec` drops them, so their only effect is the `required-argument-missing`
+  check — without them the string form would be refused for arguments the caller did supply, which
+  would be a divergence from the structured form.
+
+### DEV-TA2-3 — `verify-unknown-interrupt.mjs` is a knip entry, not an npm script
+
+Adding `verify:unknown-interrupt` to `package.json` would put it under
+`validate:suite-membership`, which then demands membership in `SUITE` or a declared exception with
+a real consumer in `.github/` or `.husky/`. It cannot join `SUITE` (that runs before the build) and
+wiring it into `ci.yml` costs a build-dependent CI step. `verify-handoff.mjs` faced the same choice
+and is a `knip.json` entry with no npm script; this follows it.
+
+**What would flip that**: a post-build validation suite existing for build-dependent checks to
+join — the same `closedBy` the three existing `ALLOWED_OUTSIDE` entries already name. Until then
+the drive is run by hand after `npm run build`, and the header says so.
+
+Also corrected: the row says "pattern: `verify-handoff.mjs`" AND "refuses on stale `dist/`", but
+`verify-handoff.mjs` has no staleness check at all — that is `verify-mcp-surface.mjs`. The script
+takes the transport client from the first and `checkDistFreshness` from the second, and both
+polarities were probed (green after a build; exit 1 with `dist/ is stale` after
+`touch src/index.ts`).
+
 ## Findings promoted to the plan
 
-- **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling.
+- **P-A-F3**: a ruling taken from a SCHEMA's shape is not a ruling about behaviour. OQ-A2's `::`
+  row was correct that `gate-spec.schema.ts` accepts `{criteria, target_step_id}` and wrong about
+  what happens next, because the consumer treats inline content and a canonical reference as
+  mutually exclusive. The general form: when a ruling routes something to an existing channel
+  "which already accepts exactly this", the probe is the channel's READER, not its schema.
+  See DEV-TA2-1.
+- **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling. **Status
+  2026-08-30**: OQ-A2 answered the `==>` half and was itself falsified on the `::` half
+  (DEV-TA2-1), so this is still open and still needs one.
 - **P-A-F2**: A.3 is ordered before its dependencies (0.1, 0.3, 0.4, 1.2); see DEV-TA-6. **Half
   discharged 2026-08-30**: rows 0.1/0.3/0.4 have landed, so `remainder` and its `mode` now exist
   for A.3 to name. A.3 remains blocked on row 1.2 (`replaceRemainder`), which is still the store
-  method it says it shares.
+  method it says it shares. **CLOSED 2026-08-30**: 1.2 landed and A.3 shipped on top of it
+  (`b0955c6c`). Recorded outcome for the ordering lesson: A.3 was never blocked on A.2 either,
+  which the tier's ordering also implied — the append needed the `remainder` parameter, not the
+  `-->` → IR compile.
 - **P-0-F1**: `pauseOnBlocking` reaches nothing without three more projections; row 1.3 re-scoped
   in place. See DEV-T0-3.
 - **P-0-F2**: contract parameters are gated by `validate:conformance-coverage`, so every future
