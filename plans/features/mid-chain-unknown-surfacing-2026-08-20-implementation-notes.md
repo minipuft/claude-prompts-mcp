@@ -282,6 +282,157 @@ not that anything acts on it. Recorded rather than papered over: the alternative
 row 2.1's call inside Tier 1, which is a re-scoping decision, and the alternative to THAT was to
 leave hop 4 unwritten and let rows 2.1 discover the field is still declaration-dead.
 
+## Tier 2 — re-measurement before execution
+
+| Asserted (plan)                                                    | Measured                                                                                                                                                                                                                                  | Verdict                                                                                   |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Row 2.1: `resolveDeclaredPauseOnBlocking` has no production caller | Confirmed — one reference, the unit test (DEV-T1-4 was accurate)                                                                                                                                                                          | ✓ this tier is its caller                                                                 |
+| Row 2.2: `gate_action` already carries five members                | NOT at the type level. The contract and the Zod tool schema have five; `GateAction` (`gate-enforcement-types.ts:19`), `McpToolRequest.gate_action`, `PromptExecutor`'s arg type and `gateActionSchema` all still had three                | ⚠ corrected — four internal declarations needed widening (DEV-T2-3)                       |
+| Row 2.3: "`PromptExecutor` / stage that reads `mcpRequest`"        | `McpToolRequest` had NO `remainder` field — Tier 0 typed only `PromptExecutor`'s argument bag, so the value stopped one hop above the pipeline. Validation additionally needs `modules/workflow-ir`, which `engine/` may not value-import | ⚠ corrected — one more hop plus an injected port (DEV-T2-4)                               |
+| Row 2.4: the assembler owns `structuredContent`                    | It does not — every assembler method returns a `string`; `ResponseFormattingStage` owns the `ToolResponse`, and it passes `includeStructuredContent: false`                                                                               | ⚠ corrected — payload built in the assembler, attached in the stage (DEV-T2-5)            |
+| Row 2.5: bumping would touch a durable restore path                | `execution_records` is `posture: 'ephemeral'`; `DROPPED_ON_THIS_BUMP` is empty and `DROPPED_AT_VERSION` is 19                                                                                                                             | ✓ no STOP — v25 → v26 touches nothing durable                                             |
+| Row 1.4: "a one-line call-site change"                             | One line in `manager.ts`, plus FIVE test files whose persistence spy sat on the swallowing wrapper                                                                                                                                        | ⚠ corrected — the one-line change was true; the mock surface around it was not (DEV-T2-7) |
+
+## Deviations (Tier 2)
+
+### DEV-T2-1 — the interrupt verbs are handled in stage 16, not stage 13
+
+Row 2.2 names `13-session-stage.ts` + `GateVerdictProcessor`. The processor half is exactly right
+and is where `resolveUnknownInterrupt` lives. The stage half is not: stage 13 is session
+lifecycle and never reads `gate_action`; stage 16 owns that parameter today and is the only stage
+positioned between the observation write and the interrupt decision, which is where the verb has
+to be consumed (DEV-T2-2). The call-through is three lines.
+
+Stage 13 needed no change at all, which is the other half of the finding: D-9 ("claiming a run
+with `__unknown_interrupt__` pending returns the interrupt to the claimer") is already free,
+because stage 13 copies any `pendingGateReview` onto `sessionContext` on every resume without
+caring which gate id it carries. Row 4.2 still owns proving it.
+
+### DEV-T2-2 — the PAUSE cannot follow the interrupt's open-state shape
+
+The row does not say when the pause fires, and the obvious reading — "whenever `paused` is true"
+— livelocks. `decideInterrupt` is a function of what is OPEN, so it re-raises on every step while
+an unknown is unresolved; raising the synthetic review on that same condition means the very next
+call after `resume` is held again, by the same unknown, with no verb able to clear it.
+
+The pause is bound instead to the two states where the run is genuinely stopped: an insertion
+landed on THIS call (OQ-1's "the inserted investigation node IS the pause point", and the
+insertion cap is one per unknown id, so this fires once per unknown), or the synthetic review is
+already pending. Stage 16 computes that and passes it as `pauseOnBlocking`, so `decideInterrupt`
+stays pure and its unit test's "`paused` mirrors the knob" remains true at the module level.
+
+Positive control: forcing the knob straight through turns the `resume` and `accept_alternative`
+integration cases red (probe run 2026-08-30, restored).
+
+### DEV-T2-3 — `GateAction` was NOT widened; the union lives at the request boundary
+
+OQ-4 says "extend `gate_action`", and the contract does carry five members. Widening the INTERNAL
+`GateAction` was rejected: `GateEnforcementAuthority.resolveAction` switches on it to reset a
+retry count, skip a failed gate or abort, and every one of those branches addresses a gate the run
+FAILED. `resume` addresses a hold no gate produced, so widening would have obliged each of those
+sites to answer a question with no answer.
+
+`McpToolRequest.gate_action` is the union of both vocabularies; `InterruptResolutionAction` is the
+new half; `isInterruptResolutionAction` is the single narrowing point, in stage 16. The
+retry-exhaustion branch is explicitly guarded by it — without that guard the authority answers
+`handled: true` to a verb it never acted on, which is the silent-success shape this plan keeps
+finding.
+
+### DEV-T2-4 — `remainder` needed a service, a port and one more request hop
+
+Row 2.3 reads as a call-through. Three things it does not mention:
+
+1. `McpToolRequest` had no `remainder` field. Tier 0 typed `PromptExecutor`'s argument bag (so the
+   allowlist could be written), but the executor builds the pipeline request separately — the
+   value stopped one hop short of anything that could read it. Both hops now carry it.
+2. Validating a remainder needs `validateWorkflowIR` and `DEFAULT_WORKFLOW_CAPS`, which are
+   Layer 3; `engine-no-modules-or-mcp-value` bars stage 16 from importing them. Resolved with the
+   existing precedent rather than a new one: a `RemainderIrPort`, supplied by `PipelineBuilder`,
+   exactly as `WorkflowCommandBuilder` takes `WorkflowIrPort`.
+3. The work is not a stage's. `RemainderProcessor` (`engine/execution/capture/`) sits beside
+   `UnknownObservationProcessor` — same role, same layer, same posture — so stage 16 keeps two
+   symmetric call-throughs instead of growing an entitlement rule and a validator.
+
+Two decisions inside it that the row left open, ruled in code with the reasoning attached:
+`maxNodes` is narrowed by the count already executed (OQ-3's "executed + remainder", which the
+per-remainder cap alone does not bound — three remainders of 32 nodes is 96 through a cap of 32),
+and accepted nodes are written in LINEARIZED order, since projecting in declaration order would
+silently ignore every edge the caller declared.
+
+### DEV-T2-5 — the assembler builds the payload; the stage attaches it
+
+Row 2.4 assigns both halves to `response-assembler.ts`. Its methods all return `string`;
+`ResponseFormattingStage` owns the `ToolResponse` and calls the formatter with
+`includeStructuredContent: false`. Rather than give the assembler a response object, the split
+follows the one already there: `buildInterruptStructuredContent` returns the payload, stage 21
+merges it under `chain_interrupt`. The `false` above is untouched — it governs the lean
+execution/chain bookkeeping block, and the interrupt is not bookkeeping.
+
+### DEV-T2-6 — the footer contradicted the interrupt inside one payload
+
+Not in any row, found by the first snapshot. A paused run holds on a `pendingGateReview`, so
+`buildChainFooter` rendered `Next: … user_response="<your step output>", gate_verdict="GATE_REVIEW:
+PASS|FAIL"` — two false statements in one line (no step was issued, and no verdict clears this
+hold) directly under an interrupt section listing the verbs that do. `buildGateReviewCTA` was
+suppressed for the synthetic id and the footer gained a branch naming the same verbs. One verb
+list, `resolveInterruptVerbs`, feeds the section and `structuredContent`, so the three surfaces
+cannot advertise different exits.
+
+### DEV-T2-7 — the pre-existing persist-failure test was vacuous, and five files shared the cause
+
+`chain-session-store.test.ts` already contained "applyUnknownObservations propagates a persist
+failure rather than reporting success". It passed for four months against a method that
+swallowed. The spy sat on `saveSessions` and mocked it to REJECT — a method production can never
+make reject, since it routes through the log-and-swallow `persistSessions`. The probe measured a
+property of the mock, not of the code.
+
+Every persistence spy in the repo had the same target (5 files: the store unit suite, the
+run-telemetry unit suite, and three integration suites). All now sit on `persistSessionsOrThrow`,
+which is the funnel BOTH paths run through — so the swallowing callers stay covered and the
+throwing ones become observable. Positive control: restoring `saveSessions` in
+`applyUnknownObservations` turns the unit test AND the new integration case red (probe run
+2026-08-30, restored). Before this tier, the same mutation turned nothing red.
+
+### DEV-T2-8 — the live drive found a render gap no test could
+
+Row 4.5's probe, run ad-hoc against a built `dist/` (see the Tier 2 execution record for the
+receipt). It confirmed `remainder` reaching stage 16 — row 0.4's open question — and it failed one
+check nobody had written: `>>strategicImplement` is a GATED SINGLE PROMPT that gets a session, so
+it can declare observations and raise an interrupt, and it reaches `formatSinglePromptResponse`,
+which rendered no interrupt section. `structuredContent.chain_interrupt` was correctly present
+(stage 21 attaches it outside the chain/single branch), so the two halves of one payload
+disagreed — the machine half reported a blocking unknown and the human half did not.
+
+Fixed on both paths and gated by a test. Worth stating plainly: the suite was green, the section
+was rendered in four assertions, and the gap was in the OTHER formatting method. A fix at the
+sites you found is not a fix of the class.
+
+### DEV-T2-9 — two lint ceilings forced a shape, and the shape is better
+
+`max-params` (constructor at 7) and `sonarjs/cognitive-complexity` (`execute` at 16/15) both
+tripped. Rather than regenerate baselines: the two optional collaborators became one
+`collaborators` bag, and the five ordered steps of the unknowns phase moved into
+`runUnknownsPhase`, whose docblock is now the only place the ORDER is written down — and the order
+is the whole design (DEV-T2-2).
+
+### DEV-T2-10 — the paused verb list says "answer the step", and no step was issued
+
+Followed the plan's §Interrupt payload block verbatim, which specifies the base verbs
+`["answer the step", "remainder", "gate_action:abort", "cancel"]` plus the two resolution verbs
+when paused. On a PAUSED run stage 18 issues no step, so "answer the step" is not an available
+exit and the run's own footer no longer offers it. Not changed here — the payload block is
+normative and narrowing it is a ruling, not an implementation choice. New row 2.6 owns it.
+
+### DEV-T2-11 — P-1-F2 recurred, and the baseline was tightened rather than loosened
+
+Third sighting of the knip-types shape: `decisions/index.ts` re-exported `DecideInterruptInput`
+and `InterruptNodeSummary`, which nothing imports from that path (the policy module and its unit
+suite both take them from `mutation/index.js`). Removed the two barrel entries rather than
+inventing a consumer — a barrel entry with no consumer is what the ratchet counts, and adding one
+to look symmetric is how a barrel stops describing its consumers. The baseline was then
+regenerated to lock in an unrelated IMPROVEMENT the tier produced (exports 493 → 492); the types
+count is unchanged at 679, not raised.
+
 ## Findings promoted to the plan
 
 - **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling.
@@ -305,3 +456,15 @@ leave hop 4 unwritten and let rows 2.1 discover the field is still declaration-d
   `validate:knip-ratchet`. Resolved by giving the two types a test consumer (typed assertion
   helpers, the pattern `mutation-policy.test.ts` already uses) rather than by loosening the
   baseline. Worth knowing for Tier 2, which will publish more types ahead of their consumers.
+- **P-2-F1**: a mock can make a method throw that production can never make throw, and the test
+  then measures the mock. `applyUnknownObservations`' persist-failure test passed for four months
+  against a swallowing caller. The general shape: when a spy REPLACES a method whose real body
+  cannot produce the outcome under test, the assertion is vacuous. The detector is cheap — mutate
+  the production call site and confirm the test goes red — and it is what turned this one up.
+  See DEV-T2-7. Every persistence spy in the repo now sits on the throwing funnel.
+- **P-2-F2**: a response surface has TWO formatting methods (`formatChainResponse`,
+  `formatSinglePromptResponse`) and a gated single prompt with a session reaches the second one.
+  Anything added to one and not the other is invisible to the chain suite. Closed for the
+  interrupt section (DEV-T2-8); the class is open for every future section, and no gate owns it.
+- **P-2-F3**: the plan's §Interrupt payload verb list is not true of a paused run — it offers
+  "answer the step" where no step was issued. New row 2.6 owns the ruling. See DEV-T2-10.
