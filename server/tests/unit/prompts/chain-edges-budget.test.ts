@@ -108,6 +108,16 @@ describe('YAML chain budget (row A.1)', () => {
     expect(data.budget).toBeUndefined();
   });
 
+  it('carries pauseOnBlocking onto PromptData, so a TEMPLATE chain can declare it (row 1.3, hop 3 of 4)', () => {
+    // The YAML loader has its own budget projection mirroring `compileBudget`. Without this hop
+    // the knob is IR-only, which is the distinction Tier A exists to remove.
+    const validation = validatePromptYaml(chain({ budget: { pauseOnBlocking: true } }));
+    expect(validation.errors).toEqual([]);
+    const data = yamlToPromptData(validation.data!, 'edge_chain/prompt.yaml');
+
+    expect(data.budget).toEqual({ pauseOnBlocking: true });
+  });
+
   it('refuses a declared cap that WIDENS the server default', () => {
     const result = validatePromptYaml(chain({ budget: { maxInsertions: 99 } }));
 

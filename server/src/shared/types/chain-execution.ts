@@ -409,7 +409,15 @@ export interface ChainNode {
   stepName: string;
   /**
    * Provenance (P4, schema v23). `'inserted'` marks a node the mutation policy added mid-run;
-   * everything else was in the run when it started.
+   * `'remainder'` marks one a caller-authored replacement plan contributed (D-8); everything
+   * else was in the run when it started.
+   *
+   * The three values are DISTINCT accounting classes, not shades of one: `'inserted'` counts
+   * against the adaptive-insertion cap, `'remainder'` against the remainder cap, and neither
+   * count may absorb the other. Widening the union needed no schema bump — the column is
+   * `TEXT NOT NULL` with no CHECK and no DDL default (verified 2026-08-30 against
+   * `sqlite-engine.ts`'s `chain_run_nodes` DDL), so a new member is a new string, not a
+   * migration. `reconstructNodeOrigin` is the one reader that must learn it.
    *
    * OPTIONAL rather than required, and absence means `'planned'`. `ChainNode` is minted at four
    * unrelated sites (`13-session-stage.buildChainNodes`, `ChainSessionStore.resolveCreationNodes`,
@@ -418,11 +426,13 @@ export interface ChainNode {
    * persisted column is NOT NULL: the writer resolves `origin ?? 'planned'`, and reconstruction
    * always sets it explicitly, so a node that has been through storage is never ambiguous.
    */
-  origin?: 'planned' | 'inserted';
+  origin?: 'planned' | 'inserted' | 'remainder';
   /**
-   * The declared unknown id whose blocking discovery caused this node to be inserted. Present
-   * only on `origin: 'inserted'` nodes. Read by the mutation policy's per-unknown-id insertion
-   * cap (OQ-P4-5), which is why it is carried as data instead of parsed back out of `id`.
+   * The declared unknown id whose blocking discovery caused this node to be inserted, or whose
+   * interrupt the accepted remainder answered. Present on `origin: 'inserted'` and
+   * `origin: 'remainder'` nodes. Read by the mutation policy's per-unknown-id insertion cap
+   * (OQ-P4-5) and by `replaceRemainder`'s per-unknown-id remainder cap, which is why it is
+   * carried as data instead of parsed back out of `id`.
    */
   originUnknownId?: string;
 }

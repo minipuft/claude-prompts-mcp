@@ -570,12 +570,18 @@ export function yamlToPromptData(yaml: PromptYaml, filePath?: string): PromptDat
 }
 
 /**
- * Project a chain's declared budget onto the two fields that outlive validation.
+ * Project a chain's declared budget onto the fields that outlive validation.
  *
  * Mirrors `compileWorkflowIR`'s `compileBudget` deliberately: `maxNodes` and `maxFanOut` are
  * answered from the submission itself and have no reader afterwards, so carrying them past
  * validation would create write-only fields on every loaded chain. Returns `undefined` when
  * nothing durable was declared, so an all-structural budget leaves no budget object at all.
+ *
+ * One of the FOUR strippers a budget field must be added to — the list, and what happens when a
+ * field is added to only some of them, is on `DeclaredRunBudget`. This is the hop that makes an
+ * IR-only knob reach a TEMPLATE chain, which is the whole point of Tier A's one-step
+ * representation: `pauseOnBlocking` declared in `prompt.yaml` has to arrive at stage 16 exactly
+ * as it does from a submitted IR.
  */
 function normalizeChainBudget(
   budget: PromptYaml['budget']
@@ -586,6 +592,7 @@ function normalizeChainBudget(
     ...(budget.declaredCostCeiling !== undefined
       ? { declaredCostCeiling: budget.declaredCostCeiling }
       : {}),
+    ...(budget.pauseOnBlocking !== undefined ? { pauseOnBlocking: budget.pauseOnBlocking } : {}),
   };
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }

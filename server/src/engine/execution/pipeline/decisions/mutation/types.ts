@@ -1,5 +1,6 @@
 // @lifecycle canonical - Type definitions for the P4 adaptive chain-mutation decision.
 
+import type { ChainNode } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry, UnknownObservation } from '#shared/types/chain-session.js';
 import type { NodeOrderInput } from '#shared/utils/node-order.js';
 
@@ -98,3 +99,85 @@ export interface DecideMutationInput {
 /** OQ-P4-5: hard ceiling on insertions per run, independent of how many distinct unknowns
  * triggered them. */
 export const MAX_INSERTIONS_PER_RUN = 3;
+
+/**
+ * Reserved synthetic gate id for the hard-pause a blocking unknown raises when
+ * `budget.pauseOnBlocking` is on (D-2).
+ *
+ * Same reservation pattern as `PHASE_GUARD_GATE_ID = '__phase_guard__'`
+ * (`stages/19-phase-guard-verification-stage.ts`) and the `__gate_review__` synthetic step:
+ * a double-underscore id no authored gate may take, so a `pendingGateReview` carrying it is
+ * unambiguously server-minted.
+ *
+ * Declared HERE rather than in the stage that sets the review, because the policy that decides
+ * the interrupt is the thing that owns the id, and every later consumer — stage 16 (sets the
+ * review), stage 13 (surfaces it on resume), `GateVerdictProcessor` (clears it) and
+ * `response-assembler` (renders it) — is inside `engine/`, so all four import it without
+ * crossing a layer boundary. The Python hook side (`session_state.py`) carries the literal, not
+ * an import, exactly as it does for the phase-guard id.
+ */
+export const UNKNOWN_INTERRUPT_GATE_ID = '__unknown_interrupt__';
+
+/**
+ * One remaining node, reduced to the three fields the interrupt payload publishes.
+ *
+ * Deliberately NOT `ChainNode`: `origin`/`originUnknownId` are server-side provenance and the
+ * interrupt is a client-facing proposal surface. A caller authoring a replacement remainder
+ * needs identity, which prompt runs, and what the step is called — nothing else.
+ */
+export interface InterruptNodeSummary {
+  readonly id: string;
+  readonly promptId: string;
+  readonly stepName: string;
+}
+
+/**
+ * The structured account a blocking unknown owes its caller (OQ-1).
+ *
+ * Pure data, camelCase, transport-agnostic. The snake_case wire shape published as
+ * `structuredContent.chain_interrupt` (plan §Interrupt payload) is assembled downstream by
+ * `response-assembler` — it additionally carries `resume.chain_id` and the verb list, neither of
+ * which this module can see: `decideInterrupt` takes no run identity and no contract metadata.
+ */
+export interface ChainInterrupt {
+  /** Only member today. Named rather than boolean so a second cause is additive (F-1). */
+  readonly reason: 'blocking_unknown';
+  /** The open blocking unknown that motivated the interrupt. */
+  readonly unknownId: string;
+  readonly statement: string;
+  /**
+   * Steps the open blocking unknowns DECLARED they affect, via `target_step_id` (OQ-2).
+   *
+   * Declared links only. Textual scanning of step names or statements was rejected as a
+   * heuristic: the server reacts to what an observation declares, never to what it mentions.
+   */
+  readonly affectedStepIds: readonly string[];
+  /** The run's nodes strictly after the current one, in run order, AFTER any insertion applied
+   * on this same call. This is the plan the caller is being invited to replace. */
+  readonly remainingNodes: readonly InterruptNodeSummary[];
+  /** Mirrors `budget.pauseOnBlocking` (D-2). `true` means the run is holding on the synthetic
+   * {@link UNKNOWN_INTERRUPT_GATE_ID} review; `false` means the interrupt is advisory and the
+   * run continues into the inserted investigation step. */
+  readonly paused: boolean;
+}
+
+/**
+ * Inputs to `decideInterrupt`. Plain data in, plain data out — same posture as
+ * {@link DecideMutationInput} and the sibling decision modules.
+ */
+export interface DecideInterruptInput {
+  /** The unknowns ledger AFTER this call's delta has been applied. The interrupt is a function
+   * of what is OPEN, not of what was just declared: a blocking unknown that stays open keeps the
+   * run interrupted on every later step until it is resolved. */
+  readonly ledger: readonly UnknownLedgerEntry[];
+  /** The run's node list in order, after any mutation applied on this call. Full
+   * {@link ChainNode}s rather than a bare id array, because `remainingNodes` publishes
+   * `promptId`/`stepName`. */
+  readonly nodes: readonly ChainNode[];
+  /** The node the run is standing at; `null` once the run has advanced past its terminal node. */
+  readonly currentNodeId: string | null;
+  /** The run's declared `budget.pauseOnBlocking`, read back off the blueprint. Absent means the
+   * default (`false`), which is NOT distinguishable from an explicit `false` and does not need
+   * to be — unlike `maxInsertions`, this knob has no server default to narrow. */
+  readonly pauseOnBlocking?: boolean;
+}

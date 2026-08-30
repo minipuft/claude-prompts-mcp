@@ -46,17 +46,27 @@ export type {
 } from './chain-execution.js';
 
 /**
- * The two run-level budget declarations that outlive the submission that carried them.
+ * The run-level budget declarations that outlive the submission that carried them.
  *
- * A submitted Workflow IR declares four caps (`WorkflowBudget`, `modules/workflow-ir/types.ts`).
- * Two of them — `maxNodes` and `maxFanOut` — are answered entirely at validation time from the
- * submission itself and have no reader afterwards, so persisting them would be two write-only
- * fields. These two DO have post-validation consumers, which is why they are the only two here:
+ * A submitted Workflow IR declares five budget fields (`WorkflowBudget`,
+ * `modules/workflow-ir/types.ts`). Two of them — `maxNodes` and `maxFanOut` — are answered
+ * entirely at validation time from the submission itself and have no reader afterwards, so
+ * persisting them would be two write-only fields. These three DO have post-validation consumers,
+ * which is why they are the only three here:
  *
  * - `maxInsertions` is read by the P4 adaptive-mutation policy on every LATER request of the run
  *   (each chain step is its own MCP call), so the cap has to survive the call that declared it.
  * - `declaredCostCeiling` is RECORD-ONLY (D4/D6, OQ-P6-3): nothing compares it to anything. It is
  *   kept so a run's declared intent is readable back off the run, not so the server can act on it.
+ * - `pauseOnBlocking` is read back per step by the blocking-unknown interrupt (D-2), the same way
+ *   `maxInsertions` is — a knob declared once on the first call has to be answerable on the
+ *   twentieth.
+ *
+ * **This interface is the FIRST of four strippers a budget field must pass.** The others are
+ * `compileBudget` (IR path), `normalizeChainBudget` (YAML path) and the stage-16 readback. Each
+ * projects a named subset, so a field added to `workflowBudgetSchema` alone is silently dropped
+ * three times and the readback reads `undefined` forever while typechecking perfectly (measured
+ * 2026-08-30, DEV-T0-3). Adding one here means adding it in all four places, with a test per hop.
  *
  * Carried on {@link ParsedCommandSnapshot} rather than on {@link ChainSession} directly: the
  * blueprint is already cloned into the run's residual document and restored on resume, so this
@@ -67,6 +77,14 @@ export interface DeclaredRunBudget {
   maxInsertions?: number;
   /** RECORD-ONLY — never enforced, never compared against a server-side estimate. */
   declaredCostCeiling?: number;
+  /**
+   * BEHAVIOURAL DIAL (D-2) — `true` makes a blocking unknown hard-pause the run on the synthetic
+   * `__unknown_interrupt__` review instead of continuing into the inserted investigation step.
+   *
+   * Absent means the default, `false`. Unlike `maxInsertions` there is no server value to narrow,
+   * so absent and explicit-`false` are the same posture and nothing needs to tell them apart.
+   */
+  pauseOnBlocking?: boolean;
 }
 
 /**
@@ -121,6 +139,73 @@ export interface ParsedCommandSnapshot {
 }
 
 export type ChainSessionLifecycle = 'dormant' | 'canonical';
+
+/**
+ * Which half of the one remainder mechanism a submission is asking for (OQ-A1).
+ *
+ * `'replace'` is the answer to a blocking unknown that invalidated the plan's SHAPE — every node
+ * strictly after the current one goes. `'append'` extends the plan without disturbing it, and is
+ * the shape a leading-`-->` command string parses into, so both spellings meet at one store call.
+ */
+export type RemainderMode = 'replace' | 'append';
+
+/**
+ * One node of a caller-authored remainder, reduced to what the STORE needs.
+ *
+ * Deliberately not `WorkflowNode`: the IR node carries mapping, gate, delegation and framework
+ * declarations that belong to the compile path, and `shared/` may not reach into `modules/` for
+ * a value. The caller (row 2.3) validates a submission against the IR schemas and projects the
+ * accepted nodes onto this shape; the store's job is identity, ordering and provenance.
+ */
+export interface RemainderNodeSpec {
+  readonly promptId: string;
+  readonly stepName: string;
+  /**
+   * The id the caller declared, when it declared one. Honoured when free; otherwise a
+   * collision-suffixed id is minted from it, because a remainder may never rename a node the run
+   * already carries — gate targets, execution records and `executionOrder` address nodes by id.
+   */
+  readonly id?: string;
+}
+
+/**
+ * Named refusal causes for {@link ChainSessionStore.replaceRemainder}.
+ *
+ * Same posture as `MutationNoneReason` (`decisions/mutation/types.ts`): every refusal is its own branch so a caller (and a
+ * test) can tell "the run is over" from "the cap is spent" from "that node is already running".
+ * A single boolean would collapse four different client-facing answers into one unobservable
+ * outcome — and this method's refusals ARE client-facing, since row 2.2 requires a refusal to
+ * name its reason back to the submitter.
+ *
+ * - `session-unknown`      — no such run in this process.
+ * - `run-terminal`         — the run has finished, or has advanced past its terminal node, so
+ *                            there is no "after the current node" to write into. One reason
+ *                            rather than two: both mean the same thing to a caller, and neither
+ *                            is recoverable by re-submitting.
+ * - `empty-remainder`      — the submission carried no nodes. Distinguished from a successful
+ *                            no-op because "replace the remainder with nothing" is a request to
+ *                            truncate the run, which this method does not perform.
+ * - `cap-reached`          — this unknown id already spent its one remainder, or the run has
+ *                            spent its per-run ceiling.
+ * - `node-already-started` — a node in the range `'replace'` would remove has already been
+ *                            rendered to the client and cannot be un-shown (the OQ-P4-2
+ *                            boundary `markNodeSkipped` draws, applied to a range).
+ */
+export type RemainderRejectionReason =
+  'session-unknown' | 'run-terminal' | 'empty-remainder' | 'cap-reached' | 'node-already-started';
+
+/** The outcome of a remainder submission: the nodes that landed, or a named refusal. */
+export type RemainderOutcome =
+  | {
+      readonly kind: 'applied';
+      readonly mode: RemainderMode;
+      /** The nodes as they entered the run — minted ids, `origin` and `originUnknownId` set. */
+      readonly nodes: readonly ChainNode[];
+    }
+  | {
+      readonly kind: 'rejected';
+      readonly reason: RemainderRejectionReason;
+    };
 
 /**
  * A single typed observation a chain step declares about a run-scoped unknown.
@@ -438,6 +523,32 @@ export interface ChainSessionService {
       unknownId?: string;
     }
   ): Promise<ChainNode | null>;
+  /**
+   * Apply a caller-authored remainder to the run's plan (OQ-3 / OQ-A1).
+   *
+   * `mode: 'replace'` swaps every node STRICTLY after the current one for `nodes`;
+   * `mode: 'append'` leaves the existing remainder alone and adds `nodes` after it. Both
+   * spellings of an append — the structured `remainder: {mode:'append'}` parameter and a
+   * leading-`-->` command string — take this one method (OQ-A1: one mechanism, two spellings),
+   * so validation, caps and recorded provenance cannot diverge between them.
+   *
+   * Atomic and awaited: the in-memory node list and the persisted rows move together inside one
+   * transaction, and a persistence failure THROWS rather than reporting success (the state
+   * mutation contract in `architecture.md` — validate, mutate, await persist, only then report).
+   * A REFUSAL is not a failure and does not throw: it comes back as
+   * `{kind:'rejected', reason}` with a named {@link RemainderRejectionReason}, the same
+   * observable-rejection vocabulary `MutationNoneReason` uses, because "the cap is spent" and
+   * "the database is down" are different facts and a caller answers them differently.
+   *
+   * Every applied node carries `origin: 'remainder'` and `originUnknownId: unknownId`, which is
+   * what makes both caps recomputable from persisted rows after a cold load.
+   */
+  replaceRemainder(
+    sessionId: string,
+    nodes: readonly RemainderNodeSpec[],
+    unknownId: string,
+    mode: RemainderMode
+  ): Promise<RemainderOutcome>;
   /**
    * Retire a not-yet-executed node ahead of the run (P4 adaptive mutation).
    *

@@ -6,11 +6,15 @@ import {
   UnknownObservationProcessor,
   UnknownObservationValidationError,
 } from '../../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { StepResponseCaptureStage } from '../../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
+import {
+  resolveDeclaredPauseOnBlocking,
+  StepResponseCaptureStage,
+} from '../../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
 
 import type { ChainSessionService } from '../../../../src/modules/chains/types.js';
 import type {
+  SessionBlueprint,
   UnknownLedgerEntry,
   UnknownObservation,
 } from '../../../../src/shared/types/chain-session.js';
@@ -696,5 +700,27 @@ describe('StepResponseCaptureStage — adaptive mutation (P4)', () => {
 
     await expect(stage.execute(context)).resolves.toBeUndefined();
     expect(context.response?.isError).toBeUndefined();
+  });
+});
+
+describe('resolveDeclaredPauseOnBlocking — blueprint readback (row 1.3, hop 4 of 4)', () => {
+  // The readback sits beside `resolveDeclaredInsertionCap` and reads the same place: a chain step
+  // is its own MCP call carrying only a chain_id, so the run's stored blueprint is the only
+  // record of what the FIRST call declared. Each of the three preceding hops has its own
+  // assertion (`compiler.test.ts`, `chain-edges-budget.test.ts`,
+  // `parsing-stage-commandtype.test.ts`) — without them this test would pass against a field
+  // nothing ever writes.
+  const blueprint = (budget?: Record<string, unknown>): SessionBlueprint =>
+    ({ parsedCommand: budget === undefined ? {} : { budget } }) as SessionBlueprint;
+
+  test('a run that declared nothing is not paused', () => {
+    expect(resolveDeclaredPauseOnBlocking(undefined)).toBe(false);
+    expect(resolveDeclaredPauseOnBlocking(blueprint())).toBe(false);
+    expect(resolveDeclaredPauseOnBlocking(blueprint({ maxInsertions: 1 }))).toBe(false);
+  });
+
+  test('a declared true is read back as true, and a declared false as false', () => {
+    expect(resolveDeclaredPauseOnBlocking(blueprint({ pauseOnBlocking: true }))).toBe(true);
+    expect(resolveDeclaredPauseOnBlocking(blueprint({ pauseOnBlocking: false }))).toBe(false);
   });
 });

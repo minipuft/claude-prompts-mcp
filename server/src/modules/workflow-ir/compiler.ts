@@ -158,12 +158,16 @@ function cloneVisibility(
 }
 
 /**
- * Project the submitted budget onto the two fields that outlive validation.
+ * Project the submitted budget onto the fields that outlive validation.
  *
  * `maxNodes` and `maxFanOut` are answered from the submission itself and have no reader
  * afterwards, so they are dropped here rather than persisted as write-only fields — see
  * {@link DeclaredRunBudget}. Returns `undefined` when nothing durable was declared, so a run with
  * an all-structural budget carries no budget object at all rather than an empty one.
+ *
+ * This is one of the FOUR strippers a budget field must be added to (the list is on
+ * {@link DeclaredRunBudget}); `normalizeChainBudget` in the YAML loader deliberately mirrors it,
+ * so the two must move together or an IR run and its YAML twin stop agreeing.
  */
 function compileBudget(ir: WorkflowIR): DeclaredRunBudget | undefined {
   const declared = ir.budget;
@@ -174,6 +178,12 @@ function compileBudget(ir: WorkflowIR): DeclaredRunBudget | undefined {
     ...(declared.maxInsertions !== undefined ? { maxInsertions: declared.maxInsertions } : {}),
     ...(declared.declaredCostCeiling !== undefined
       ? { declaredCostCeiling: declared.declaredCostCeiling }
+      : {}),
+    // Carried even when `false`: the stage-16 readback defaults absence to `false` anyway, but
+    // dropping an explicit declaration would make the run unable to report what it was asked
+    // for, and `declaredCostCeiling` establishes that a recorded declaration is worth carrying.
+    ...(declared.pauseOnBlocking !== undefined
+      ? { pauseOnBlocking: declared.pauseOnBlocking }
       : {}),
   };
   return Object.keys(budget).length > 0 ? budget : undefined;

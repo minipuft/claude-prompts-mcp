@@ -55,7 +55,7 @@ describe('CommandParsingStage - commandType Integration', () => {
       { promptId: 'step', stepName: 'First', args: { depth: 'deep' } },
       { promptId: 'step', stepName: 'Second' },
     ],
-    budget: { maxInsertions: 1 },
+    budget: { maxInsertions: 1, pauseOnBlocking: true },
   };
 
   const chainConverted: ConvertedPrompt = {
@@ -143,7 +143,13 @@ describe('CommandParsingStage - commandType Integration', () => {
 
       await stage.execute(context);
 
-      expect(context.parsedCommand!.budget).toEqual({ maxInsertions: 1 });
+      // Both fields, not just the cap: the converter and this projection hand the whole
+      // DeclaredRunBudget across, so `pauseOnBlocking` arriving here is the hop that carries a
+      // TEMPLATE chain's dial to the stage that reads it (row 1.3).
+      expect(context.parsedCommand!.budget).toEqual({
+        maxInsertions: 1,
+        pauseOnBlocking: true,
+      });
     });
 
     test('leaves budget absent for a chain that declares none (negative control)', async () => {

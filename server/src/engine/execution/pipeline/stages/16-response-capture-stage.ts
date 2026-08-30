@@ -466,6 +466,26 @@ function resolveDeclaredInsertionCap(blueprint: SessionBlueprint | undefined): {
   return declared !== undefined ? { maxInsertions: declared } : {};
 }
 
+/**
+ * The submission-declared `budget.pauseOnBlocking`, read back off the run's blueprint (D-2).
+ *
+ * Same source and same reason as {@link resolveDeclaredInsertionCap}: a Workflow IR or a YAML
+ * chain declares the knob on the run's FIRST call, and every later step is its own MCP call
+ * carrying only a `chain_id` — the blueprint is the one run-scoped record of the submission that
+ * survives that gap, and it survives a cold load with it.
+ *
+ * Returns a plain `boolean`, not the `{}`-or-`{key}` fragment its sibling returns. The cap has to
+ * keep "declared 0" distinguishable from "declared nothing" because 0 and the server default
+ * differ; this knob has no server default to narrow, so absent and explicit-`false` are the same
+ * posture and collapsing them here is the honest projection rather than a lost distinction.
+ *
+ * Exported for the unit test that pins the two directions. Its production consumer is the
+ * interrupt call in row 2.1 — until that lands, this readback is exercised by the test alone.
+ */
+export function resolveDeclaredPauseOnBlocking(blueprint: SessionBlueprint | undefined): boolean {
+  return blueprint?.parsedCommand.budget?.pauseOnBlocking === true;
+}
+
 /** Human-legible step name for an inserted investigation node, statement truncated. */
 function buildInvestigationStepName(statement: string): string {
   const trimmed = statement.trim();

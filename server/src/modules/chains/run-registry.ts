@@ -372,13 +372,23 @@ function parseResidual(raw: string): ResidualRunState {
 /**
  * Narrow the persisted `origin` string to the {@link ChainNode} union.
  *
- * Anything that is not the literal 'inserted' reads as 'planned', including NULL. That is the
- * conservative direction on purpose: mis-reading a planned node as inserted would inflate the
- * run's insertion count and silently exhaust the P4 cap, while the reverse only loses provenance
- * on a row the schema says cannot exist (the column is NOT NULL, and v23 recreates the table).
+ * Anything that is not a recognized non-default member reads as 'planned', including NULL. That
+ * is the conservative direction on purpose: mis-reading a planned node as inserted would inflate
+ * the run's insertion count and silently exhaust the P4 cap, while the reverse only loses
+ * provenance on a row the schema says cannot exist (the column is NOT NULL, and v23 recreates
+ * the table).
+ *
+ * Every non-default member must be listed here. This function is the ONLY place a persisted
+ * origin becomes a typed one, so a member added to the union and not added here round-trips to
+ * 'planned' after a cold load — the run's caps would then recompute against a provenance the
+ * writer never lost, which is exactly the silent-drop shape the NOT NULL column exists to
+ * prevent on the write side.
  */
-function reconstructNodeOrigin(raw: string | null): 'planned' | 'inserted' {
-  return raw === 'inserted' ? 'inserted' : 'planned';
+function reconstructNodeOrigin(raw: string | null): 'planned' | 'inserted' | 'remainder' {
+  if (raw === 'inserted' || raw === 'remainder') {
+    return raw;
+  }
+  return 'planned';
 }
 
 /**
