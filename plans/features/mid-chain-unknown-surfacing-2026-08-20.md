@@ -135,9 +135,11 @@ every change here is additive.
 | A.3 | ☐ (as of 2026-08-30) | `tooling/contracts/prompt-engine.json`, `mcp/tools/index.ts` allowlist          | **Append**: `chain_id` + `command` beginning with `-->` extends the running chain — validated as IR nodes, appended after the current remainder via the same store method `remainder` uses (mode `append` vs `replace`). Lifts the `command`×`chain_id` exclusivity for this one leading-`-->` form only | Integration: `chain_id` + `"--> >>x"` adds a node; `chain_id` + `">>x"` (no leading arrow) still rejected as before; live drive for the allowlist |
 | A.4 | ☐ (as of 2026-08-30) | `docs/reference/workflow-ir.md`, `chain-schema.md`, `mcp-tools.md`              | Document the three inputs → one IR; `budget` in YAML; append syntax                                                                                                                                                                                                                                      | Docs/code lockstep                                                                                                                                |
 
-OQ-A1 — append verb surface: leading-`-->` on `command` (chosen above, keeps the operator language
-primary) vs `remainder: {mode:'append', nodes}` only. ☐ (as of 2026-08-30 · flips when A.3's contract
-row is reviewed). Both may coexist: the string form compiles to the structured form.
+OQ-A1 ✓ RULED 2026-08-30: **one mechanism, two spellings.** The leading-`-->` string and
+`remainder: {mode:'append', nodes}` are the same append — the string form parses to the
+structured form (A.2) and both take the same store path (A.3). They may never diverge in
+validation, caps, or recorded provenance; a test submits both spellings of one append and
+asserts identical `chain_run_nodes`.
 
 ## Tiers
 
@@ -181,3 +183,13 @@ row is reviewed). Both may coexist: the string form compiles to the structured f
 - `plans/features/unknowns-corpus-prompt-evolution-2026-08-30.md` — durable ledger sink keyed
   by prompt/step, sighting aggregation, proposal path through `resource_manager`. Mechanizes the
   hand-kept prompt-evolution backlog and the 3-sightings maturity rule.
+
+## Execution Dispatch (ruled 2026-08-30)
+
+Implementation is delegated to **opus subagents**, each handed `>>strategicImplement` for one
+tier (A first, then 0 → 5); one tier per submission, rows compiled to nodes with their own gates.
+The main thread keeps judgment only: tier re-measurement before dispatch, gate verdicts, plan
+writeback, and the commit boundary. Contract rows (A.1, 0.1–0.4) are still delegated, with the
+main thread reviewing the generated diff before commit. One subagent owns HEAD at a time — no
+`checkout`/`switch`/`stash` inside a subagent; the working tree currently carries another
+session's uncommitted `contained-path` work, so each commit stages its own files by name.
