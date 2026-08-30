@@ -1,0 +1,91 @@
+# Claims-conformance corpus — the mid-chain blocking-unknown interrupt and `remainder`
+#
+# WHY THIS FILE EXISTS
+# `remainder` shipped with a declared PARAMETER COVERAGE EXCEPTION (row 0.5,
+# plans/features/mid-chain-unknown-surfacing-2026-08-20.md): when the contract gained the
+# parameter, nothing consumed it, so a scenario written then would have asserted the ABSENCE of an
+# effect. Tier 2 landed the consumer, which made the exception a statement that had stopped being
+# true — and an exception whose condition no longer holds is a lie the gate reports as coverage.
+# These rows are what replaced it.
+#
+# SCOPE SPLIT vs the integration suite.
+# `tests/integration/chain/unknown-interrupt-flow.integration.test.ts` drives every branch against
+# a fixture prompt set: both interrupt variants, the paused resolution verbs, the store's caps and
+# provenance. It cannot see the WIRE. `remainder` was already dead twice on the way in — once at
+# the argument allowlist and once at `McpToolRequest`, both invisible to `tsc` and to a green
+# suite (Tier 2 execution record). These rows are the client-surface half: a real MCP client, over
+# the real transport, against the bundled resource tree.
+#
+# FIXTURE CHOICE — `quick_decision` for the run, `minimal_prompt` for the replacement.
+# Both are git-tracked (`resources/prompts/.gitignore` whitelists examples/ and workflow/), so
+# they exist in CI and in the npm tarball. `%clean` suppresses gates for the same reason
+# `chain-lifecycle.yaml` uses it: a pending phase-guard gate would park the run at step 1 and the
+# rows below would fail for a reason having nothing to do with their claim. `minimal_prompt`'s
+# body ("acknowledged") is textually disjoint from every quick_decision step, so its appearance is
+# evidence the REPLACEMENT is what got served.
+
+version: 1
+
+scenarios:
+  - id: remainder-replaces-the-rest-of-the-run
+    claim_source: >-
+      prompt_engine `remainder` parameter — "Rewrite the rest of a RUNNING chain when a blocking
+      unknown has invalidated its shape. 'replace' discards every node strictly AFTER the current
+      one and puts these in their place." Accepted "ONLY while a blocking unknown is open on the
+      run's ledger".
+    requests:
+      # Step 1 of 3. Mints the run.
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      # Step 2, carrying the blocking declaration. This is what opens the ledger entry a
+      # remainder is admissible against — without it the next request is refused by name.
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+          observations:
+            - type: unknown_discovered
+              id: conformance-cache-ttl
+              statement: The retention window for the decision is undecided
+              blocking: true
+      # The remainder itself. Everything after the current node is discarded and replaced by one
+      # node the CLIENT authored.
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Tradeoffs noted.'
+          remainder:
+            mode: replace
+            nodes:
+              - id: conformance-remainder-node
+                promptId: minimal_prompt
+    # `minimal_prompt`'s body is not reachable from `quick_decision` by any path — the chain's own
+    # remaining step is `recommend`. Its text appearing is therefore proof the submitted node
+    # REPLACED the plan, not merely that the call was accepted. `ok: true` is provably blind here:
+    # the sibling row below shows a refused remainder still returns a response.
+    expect: { text_contains: 'acknowledged' }
+
+  - id: remainder-without-an-open-blocking-unknown-is-refused-by-name
+    claim_source: >-
+      prompt_engine `remainder` notes — "A remainder on a run with no open blocking unknown is
+      refused by name, never applied."
+    requests:
+      - tool: prompt_engine
+        args: { command: '%clean >>quick_decision topic:"pick a cache"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      # No `observations` anywhere on this run — the ONLY difference from the row above, which is
+      # what makes the refusal attributable to the missing declaration rather than to the shape of
+      # the submission.
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          user_response: 'Options: Redis, Memcached, Dragonfly.'
+          remainder:
+            mode: replace
+            nodes:
+              - id: conformance-unadmitted-node
+                promptId: minimal_prompt
+    expect: { error_contains: 'no blocking unknown is open' }
