@@ -22,6 +22,7 @@ import {
 import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-renderer.js';
 import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 
+import { isAppendCommand } from '#engine/execution/parsers/append-command-parser.js';
 import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
 
 // ---------------------------------------------------------------------------
@@ -464,6 +465,28 @@ export function buildPromptEngineSchema(
 const COMMAND_SOURCE_PARAMETERS = ['command', 'chain_id', 'workflow', 'claim_token'] as const;
 
 /**
+ * The one pair the exclusivity rule admits: `chain_id` + an APPEND command (row A.3).
+ *
+ * Narrow on purpose, and the narrowness is the whole lift. `chain_id` + `">>x"` stays rejected
+ * exactly as before — that call means two different runs and picking one silently is the failure
+ * the rule exists for. `chain_id` + `"--> >>x"` means ONE run, the one `chain_id` names, so it is
+ * not a second command source at all: `PromptExecutor` rewrites it into `remainder:{mode:'append'}`
+ * before the pipeline sees it (OQ-A1, one mechanism, two spellings).
+ *
+ * `isAppendCommand` is imported rather than re-testing the prefix here, so the schema and the
+ * translator cannot disagree about which strings are appends.
+ */
+function isAppendPair(value: {
+  [K in (typeof COMMAND_SOURCE_PARAMETERS)[number]]?: unknown;
+}): boolean {
+  const named = COMMAND_SOURCE_PARAMETERS.filter((name) => value[name] !== undefined);
+  if (named.length !== 2 || !named.includes('command') || !named.includes('chain_id')) {
+    return false;
+  }
+  return typeof value.command === 'string' && isAppendCommand(value.command);
+}
+
+/**
  * Reject a call that carries more than one command source.
  *
  * A REJECTION, not a precedence rule. The three sources mean three different runs — parse this
@@ -483,10 +506,15 @@ function withSourceExclusivity<
   T extends z.ZodType<{ [K in (typeof COMMAND_SOURCE_PARAMETERS)[number]]?: unknown }>,
 >(schema: T): T {
   return schema.refine(
-    (value) => COMMAND_SOURCE_PARAMETERS.filter((name) => value[name] !== undefined).length <= 1,
+    (value) => {
+      if (isAppendPair(value)) {
+        return true;
+      }
+      return COMMAND_SOURCE_PARAMETERS.filter((name) => value[name] !== undefined).length <= 1;
+    },
     {
       message:
-        "Provide exactly one of 'command', 'chain_id', 'workflow' or 'claim_token'. A workflow submission is a complete run description and cannot be combined with a command string or a resume token; a claim token names the run it resumes.",
+        "Provide exactly one of 'command', 'chain_id', 'workflow' or 'claim_token'. A workflow submission is a complete run description and cannot be combined with a command string or a resume token; a claim token names the run it resumes. The ONE exception is an append: 'chain_id' plus a 'command' whose first token is '-->' extends the running chain.",
     }
   );
 }

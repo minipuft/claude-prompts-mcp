@@ -1,6 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/verify-handoff.mjs"],
+  "entry": [
+    "scripts/verify-handoff.mjs",
+    "scripts/verify-unknown-interrupt.mjs"
+  ],
   "ignore": [
     "src/mcp/contracts/schemas/_generated/**",
     "tests/integration/scripts/fixtures/**"

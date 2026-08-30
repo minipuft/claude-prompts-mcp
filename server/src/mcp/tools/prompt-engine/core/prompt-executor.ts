@@ -34,6 +34,10 @@ import type { GateSpecification, McpToolRequest } from '#shared/types/execution.
 import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
+import {
+  isAppendCommand,
+  parseAppendCommand,
+} from '#engine/execution/parsers/append-command-parser.js';
 import { createParsingSystem } from '#engine/execution/parsers/index.js';
 import { createSymbolicCommandParser } from '#engine/execution/parsers/symbolic-operator-parser.js';
 import { ExecutionPlanner } from '#engine/execution/planning/execution-planner.js';
@@ -481,9 +485,40 @@ export class PromptExecutor {
       });
     }
 
-    const commandValue = shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined;
+    let commandValue = shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined;
     const chainIdValue =
       claimedChainId ?? args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined);
+
+    // ONE MECHANISM, TWO SPELLINGS (OQ-A1, row A.3).
+    //
+    // `chain_id` + a command beginning with `-->` IS `remainder: {mode:'append'}`, so it is
+    // rewritten into that parameter HERE and the command is dropped — the call reaches the
+    // pipeline as a plain resume carrying a remainder, which is byte-for-byte the structured
+    // spelling's request. Translating at this hop rather than in a stage is what makes the two
+    // spellings share admissibility, IR validation, caps, the store write and the recorded
+    // provenance: after this line there is only one of them left.
+    //
+    // A `-->` command with NO `chain_id` is untouched — that is a new symbolic chain, and the
+    // exclusivity lift is scoped to the pair, not to the token.
+    let appendRemainder: RemainderSubmission | undefined;
+    if (chainIdValue !== undefined && isAppendCommand(commandValue)) {
+      if (args.remainder !== undefined) {
+        return this.textError(
+          '❌ append refused: this call carries both a "-->" command and a `remainder`. ' +
+            'They are two spellings of one append — send one.'
+        );
+      }
+      const parsed = parseAppendCommand(commandValue ?? '');
+      if (!parsed.ok) {
+        return this.textError(`❌ ${parsed.message}`);
+      }
+      appendRemainder = { mode: 'append', nodes: parsed.nodes };
+      commandValue = undefined;
+      this.logger.debug('[PromptExecutor] Rewrote a leading `-->` command as an append remainder', {
+        chainId: chainIdValue,
+        nodes: parsed.nodes.length,
+      });
+    }
 
     // A workflow's own `gates` ride the SAME request channel as the `gates` parameter, rather
     // than a second IR-specific gate path (OQ-P6-8). That channel is already node-addressed:
@@ -497,6 +532,8 @@ export class PromptExecutor {
     // defect it exists for (`args.gate_configuration ?? args.gates`) came back once already after
     // a guard that pinned literal expressions. Defaulting to `[]` is not that defect, but a guard
     // narrowed to admit it would stop matching the shape it was widened to catch.
+    const remainderValue: RemainderSubmission | undefined = args.remainder ?? appendRemainder;
+
     const mergedGates: GateSpecification[] = [];
     if (args.gates !== undefined) {
       mergedGates.push(...args.gates);
@@ -520,7 +557,9 @@ export class PromptExecutor {
       // Row 2.3. THIS is the hop the allowlist comment upstream warns about, one layer down:
       // `mcp/tools/index.ts` puts the value on `args`, and this puts it on the request the
       // pipeline reads. Omitting either leaves the parameter typechecked and dead.
-      ...(args.remainder != null ? { remainder: args.remainder } : {}),
+      // `appendRemainder` is the STRING spelling of this same parameter (row A.3). The two are
+      // refused together one screen up, so at most one of them is set here.
+      ...(remainderValue != null ? { remainder: remainderValue } : {}),
       ...(sdkExtra != null ? { _extra: sdkExtra as Record<string, unknown> } : {}),
     } as McpToolRequest;
 

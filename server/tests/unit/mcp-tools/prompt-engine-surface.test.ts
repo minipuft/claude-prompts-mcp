@@ -246,4 +246,53 @@ describe('prompt_engine parameter surface', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  /**
+   * The APPEND lift (row A.3).
+   *
+   * `chain_id` + `command` is the one pair the exclusivity rule now admits, and only when the
+   * command's first non-whitespace token is `-->`. Everything else about the rule is unchanged,
+   * which is why the rejected cases below are asserted alongside the accepted one: a lift that
+   * quietly admitted `chain_id` + `>>x` would make two different runs out of one call, which is
+   * the failure the rule exists for.
+   */
+  describe('the `-->` append pair (row A.3)', () => {
+    const schema = () => build({ gateSystemEnabled: true });
+
+    test('accepts chain_id + a command whose first token is "-->"', () => {
+      expect(
+        schema().safeParse({ chain_id: 'chain-demo#1', command: '--> >>write_summary' }).success
+      ).toBe(true);
+    });
+
+    test('accepts it with leading whitespace — the FIRST token decides, not position 0', () => {
+      expect(
+        schema().safeParse({ chain_id: 'chain-demo#1', command: '   --> >>write_summary' }).success
+      ).toBe(true);
+    });
+
+    test.each([
+      ['a plain prompt command', '>>write_summary'],
+      ['a new symbolic chain that merely CONTAINS -->', '>>a --> >>b'],
+      ['an empty command', ''],
+    ])('still rejects chain_id + %s', (_label, command) => {
+      const result = schema().safeParse({ chain_id: 'chain-demo#1', command });
+      // The empty string is rejected by `command`'s own min-length rule rather than by
+      // exclusivity; either way the pair does not become an append.
+      expect(result.success).toBe(false);
+    });
+
+    test('does NOT lift the rule for the other sources', () => {
+      expect(
+        schema().safeParse({
+          chain_id: 'chain-demo#1',
+          command: '--> >>x',
+          workflow: { version: 1, nodes: [{ id: 'gather', promptId: 'p' }] },
+        }).success
+      ).toBe(false);
+      expect(schema().safeParse({ command: '--> >>x', claim_token: 'hnd_abc' }).success).toBe(
+        false
+      );
+    });
+  });
 });

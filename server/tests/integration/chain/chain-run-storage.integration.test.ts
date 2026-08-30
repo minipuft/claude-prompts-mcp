@@ -16,7 +16,11 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
+import { parseAppendCommand } from '../../../src/engine/execution/parsers/append-command-parser.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore, MAX_REMAINDERS_PER_RUN } from '../../../src/modules/chains/manager.js';
 import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
@@ -24,6 +28,7 @@ import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainNode } from '../../../src/shared/types/chain-execution.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
+import type { RemainderSubmission } from '../../../src/modules/workflow-ir/types.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 
 const createLogger = (): Logger =>
@@ -779,5 +784,111 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     ).toEqual(['n1', 'n2', 'n3-2', 'n3-3', 'n1-2']);
 
     await store.cleanup();
+  });
+
+  // --- Tier A row A.3 / OQ-A1: one append, two spellings ------------------------------------
+
+  /**
+   * The ruling's own close condition: submit ONE append in both spellings and assert identical
+   * `chain_run_nodes`.
+   *
+   * Driven from the two CALLER inputs — the command string and the structured `remainder` — and
+   * through `RemainderProcessor`, because that is where the two paths meet. Comparing them at
+   * `replaceRemainder` would compare two copies of the same argument and prove nothing; the whole
+   * question OQ-A1 asks is whether the string arrives there as the same argument.
+   *
+   * The rows are read RAW and compared whole (minus `session_id`, the only column that must
+   * differ), so a future field on `chain_run_nodes` that one spelling sets and the other does not
+   * fails here without anyone remembering to assert it.
+   */
+  describe('OQ-A1 — the string append and the structured append are one mechanism', () => {
+    const APPEND_COMMAND = '--> >>p-extra';
+    const STRUCTURED: RemainderSubmission = {
+      mode: 'append',
+      nodes: [{ id: 'p-extra', promptId: 'p-extra' }],
+    };
+
+    const buildProcessor = (store: ChainSessionStore): RemainderProcessor =>
+      new RemainderProcessor(
+        store,
+        { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+        () => [{ id: 'p-extra', arguments: [] }] as never,
+        logger
+      );
+
+    /** Stand a run on n2 with an OPEN blocking unknown, which is what entitles it to a remainder. */
+    const blockedSession = async (store: ChainSessionStore, sessionId: string): Promise<void> => {
+      await remainderSession(store, sessionId);
+      await store.applyUnknownObservations(sessionId, 'n2', [
+        {
+          type: 'unknown_discovered',
+          id: 'plan-shape',
+          statement: 'the rest of the plan may be wrong',
+          blocking: true,
+        },
+      ]);
+    };
+
+    const rowsFor = (sessionId: string): unknown[] =>
+      engine
+        .query<Record<string, unknown>>(
+          'SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position',
+          [sessionId]
+        )
+        .map(({ session_id: _ignored, ...rest }) => rest);
+
+    test('both spellings write byte-identical chain_run_nodes rows', async () => {
+      const store = newStore();
+      const processor = buildProcessor(store);
+
+      await blockedSession(store, 'sess-append-string');
+      await blockedSession(store, 'sess-append-structured');
+
+      const parsed = parseAppendCommand(APPEND_COMMAND);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+
+      const fromString = await processor.apply(
+        'sess-append-string',
+        store.getSession('sess-append-string') as ChainSession,
+        { mode: 'append', nodes: parsed.nodes }
+      );
+      const fromStructured = await processor.apply(
+        'sess-append-structured',
+        store.getSession('sess-append-structured') as ChainSession,
+        STRUCTURED
+      );
+
+      expect(fromString.kind).toBe('applied');
+      expect(fromStructured.kind).toBe('applied');
+      expect(rowsFor('sess-append-string')).toEqual(rowsFor('sess-append-structured'));
+      // Bounds the comparison: two empty result sets would also be equal.
+      expect(rowsFor('sess-append-string')).toHaveLength(4);
+
+      await store.cleanup();
+    });
+
+    test('and both are refused identically when the run has no open blocking unknown', async () => {
+      // The negative half of one mechanism. A string append that skipped the admissibility check
+      // would be a SECOND mechanism wearing the same name.
+      const store = newStore();
+      const processor = buildProcessor(store);
+      await remainderSession(store, 'sess-append-unentitled');
+
+      const parsed = parseAppendCommand(APPEND_COMMAND);
+      if (!parsed.ok) throw new Error(parsed.message);
+      const session = store.getSession('sess-append-unentitled') as ChainSession;
+
+      const fromString = await processor.apply('sess-append-unentitled', session, {
+        mode: 'append',
+        nodes: parsed.nodes,
+      });
+      const fromStructured = await processor.apply('sess-append-unentitled', session, STRUCTURED);
+
+      expect(fromString).toEqual(fromStructured);
+      expect(fromString.kind).toBe('refused');
+
+      await store.cleanup();
+    });
   });
 });

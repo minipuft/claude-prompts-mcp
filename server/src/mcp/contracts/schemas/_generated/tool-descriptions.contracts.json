@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-08-30T19:55:16.377Z",
+  "lastUpdated": "2026-08-30T21:55:29.002Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -9,7 +9,7 @@
       "category": "execution",
       "parameters": {
         "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
-        "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
+        "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command — with ONE exception: a command whose first token is '-->' appends steps to this run (see `command`).",
         "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
         "gate_verdict": "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
         "gate_action": "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets the attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
