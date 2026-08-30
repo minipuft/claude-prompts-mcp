@@ -36,6 +36,14 @@ run under the wrong framework with no signal.
 Every field mirrors a `chainSteps` field the runtime consumes — see
 [Chain Schema Reference](chain-schema.md) for the semantics each one carries.
 
+The mirroring is not a convention anyone maintains by hand. `workflowNodeSchema`
+(`server/src/modules/workflow-ir/node-schema.ts`) is the ONE Zod source for a step, and
+`ChainStepSchema` is derived from it, so a field added here reaches YAML automatically. The two
+schemas differ only in the optionality of `id` and `stepName`, and
+`tests/unit/workflow-ir/chain-node-parity.test.ts` fails on any other divergence. A YAML chain is
+therefore a **stored** IR: it may also declare chain-level `edges` and `budget` using the shapes
+below, which is what lets an IR-declared knob apply to a template chain.
+
 | Field           | Type     | Required | Description                                                                            |
 | --------------- | -------- | -------- | -------------------------------------------------------------------------------------- |
 | `id`            | `string` | **Yes**  | Stable kebab-case identity, unique in the workflow. Edges and gates address it.        |

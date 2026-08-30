@@ -14,6 +14,16 @@
 
 import { z } from 'zod/v4';
 
+import { linearize } from '#modules/workflow-ir/linearizer.js';
+import {
+  EXPORTER_ONLY_STEP_KEYS,
+  workflowBudgetSchema,
+  workflowEdgeSchema,
+  workflowNodeIdSchema,
+  workflowNodeSchema,
+} from '#modules/workflow-ir/node-schema.js';
+import { mintNodeIds } from '#shared/utils/node-order.js';
+
 // ============================================
 // Argument Validation Schema
 // ============================================
@@ -105,160 +115,82 @@ function validateComposerInputArgument(
 }
 
 // ============================================
-// Visibility Policy Schema (P5)
-// ============================================
-
-/**
- * A named item of chain-run context a step's `visibility` declaration can withhold from or
- * expose to that step's render. Mirrors `VisibilityItem` in `shared/types/chain-execution.ts`
- * (SSOT for the union) — kept as a literal Zod enum here rather than importing the type, since
- * Zod needs runtime values, not just the type, and this is the one place the vocabulary is
- * validated. Ruled item-kind-only for v1 (OQ-P5-1): node-id-addressed exposure was deferred to
- * P6 pending `ParsedCommandSnapshot.steps` carrying a nodeId, which it does as of P6 Tier 2 —
- * the vocabulary stays item-kind-only until a ruling widens it, but no longer for want of an id.
- */
-export const VisibilityItemSchema = z.enum([
-  'previous_step_output',
-  'chain_history',
-  'unknowns_ledger',
-]);
-
-/**
- * Per-step visibility policy, consumed by `decideVisibility` at render time. An item may
- * appear in `withhold` or `expose`; mutual exclusivity is not validated — expose is only
- * meaningful against a PRIOR step's withhold, so the same item in both is a no-op, not an error.
- */
-export const StepVisibilitySchema = z
-  .object({
-    withhold: z.array(VisibilityItemSchema).optional(),
-    expose: z.array(VisibilityItemSchema).optional(),
-  })
-  .strict();
-
-export type StepVisibilityYaml = z.infer<typeof StepVisibilitySchema>;
-
-// ============================================
 // Chain Step Schema
 // ============================================
 
 /**
- * Schema for chain step definitions.
+ * Schema for chain step definitions — DERIVED from the one step vocabulary (Tier A).
  *
- * STRICT, deliberately — the third strictness posture in this file, and previously the unmarked
- * one. `PromptInjectionRuleSchema` and `PromptInjectionConfigSchema` are `.strict()` because every
- * field they accept is read by the hierarchy resolver; `inline_gate_definitions` is
- * `.passthrough()` because a gate definition legitimately carries custom fields. A chain step is
- * the first kind: every field below is consumed downstream, so a key that is not here cannot take
- * effect no matter what the author intended.
+ * `workflowNodeSchema` (`modules/workflow-ir/node-schema.ts`) is the single Zod source for a
+ * step. A YAML chain step is that node with the two identity fields swapped in optionality, and
+ * nothing else:
  *
- * Zod's default (strip) made that failure invisible — `framwork: ReACT` parsed to a normal-looking
- * step and told the author nothing, which is how six `inlineGateIds` declarations sat dead in three
- * shipped chains. `.passthrough()` would be worse than either: `normalizeChainSteps` in
- * yaml-prompt-loader enumerates fields explicitly and drops the rest regardless, so passthrough
- * would advertise an extensibility the very next layer denies.
+ *   - `id` optional here, required on a node — a YAML step has `stepName` for `mintNodeIds` to
+ *     slug from at parse time; a submitted node has nothing, and edges address it by id.
+ *   - `stepName` required here, optional on a node — the mirror of the same fact.
  *
- * BREAKING, and priced as such. An unknown key now fails the whole prompt's load
- * (`yaml-prompt-loader.ts` returns null on `valid: false`), so YAML that loaded before can stop
- * loading. That is a resource-format change and rides a major version.
+ * Deriving rather than restating is the whole of row A.1: before it, the two objects agreed by
+ * hand and no gate noticed when one gained a field. Adding a field to the node schema now reaches
+ * YAML automatically; `tests/unit/workflow-ir/chain-node-parity.test.ts` fails on any other
+ * divergence, in either direction.
  *
- * What that made mandatory: every key with a REAL consumer had to be declared first, including the
- * ones no code in this module reads. `delegation` is the worked example — the schema knew nothing
- * about it, but the skills-sync exporter reads it straight off the YAML. Rejecting it would have
- * broken the server's load path while the exporter kept honouring the field. Before adding
- * `.strict()` to any schema, enumerate readers of the FILE, not readers of the schema.
+ * STILL STRICT, and still breaking in the way the original note priced: an unknown key fails the
+ * whole prompt's load (`yaml-prompt-loader.ts` returns null on `valid: false`). The one YAML key
+ * that used to be declared here and is now absent is `delegation` — an exporter-only marker with
+ * no runtime reader, stripped before validation by {@link stripExporterOnlyStepKeys} rather than
+ * declared, so the skills-sync exporter keeps reading it off raw YAML and the node vocabulary
+ * does not gain a field that `-->` and the IR could never export. See
+ * {@link EXPORTER_ONLY_STEP_KEYS}.
  */
-export const ChainStepSchema = z
-  .object({
-    /** ID of the prompt to execute in this step */
-    promptId: z.string().min(1, 'Step promptId is required'),
-    /** Name/identifier of this step */
-    stepName: z.string().min(1, 'Step name is required'),
+export const ChainStepSchema = workflowNodeSchema
+  .omit({ id: true, stepName: true })
+  .extend({
     /**
      * Stable node identity for this step (kebab-case). Optional — when omitted, a node id is
      * minted at parse time from a slug of `stepName`. Explicit ids must be unique within the
-     * chain (enforced in `validatePromptYaml` / `validatePromptSchema`). Tier 1: additive only —
-     * nothing downstream consumes this field yet.
+     * chain (enforced in `validatePromptYaml` / `validatePromptSchema`).
      */
-    id: z
-      .string()
-      .regex(
-        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-        'Step id must be kebab-case (lowercase alphanumeric, hyphen-separated)'
-      )
-      .optional(),
-    /** Map step results to semantic names */
-    inputMapping: z.record(z.string(), z.string()).optional(),
-    /** Name this step's output for downstream steps */
-    outputMapping: z.record(z.string(), z.string()).optional(),
-    /** Number of retry attempts on failure (default: 0) */
-    retries: z.number().int().nonnegative().optional(),
-    /** Client-agnostic capability hint for delegation model selection */
-    subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
-    /** Host agent to spawn for this step, overriding the prompt-level default */
-    agentType: z.string().min(1).optional(),
-    /**
-     * Framework this step runs under, overriding the run-wide selection.
-     *
-     * Validated as a non-empty string, NOT an enum: frameworks are registry-resolved and
-     * `frameworkManager.getFramework(id)` is the only authority on validity (project CLAUDE.md).
-     * Baking the list into a schema would put a second, staler copy beside the registry — the
-     * exact defect the operator registry gate exists to prevent. An unknown id resolves to the
-     * run-wide framework at `12-framework-stage.ts` rather than failing the load, because a
-     * framework that was renamed should degrade, not make the whole prompt unloadable.
-     */
-    framework: z.string().min(1).optional(),
-    /**
-     * Inline gate ids for this step.
-     *
-     * WIRED as of P6 Tier 4 (OQ-P6-8). The gate pipeline's reader predated the producer:
-     * `GateEnhancementService.enhanceChainSteps` has always read `step.inlineGateIds` and passed
-     * it to `GateSetResolver` at rank `inline-operator`. What stood between the author and that
-     * reader were the two later strippers this docblock's neighbour describes —
-     * `normalizeChainSteps`'s allowlist and the stage-04 projection — both removed in the same
-     * change, because a field carried at fewer than all three is silently dead (P6-F7).
-     *
-     * BEHAVIOUR CHANGE, priced: a step declaring gate ids now has them applied. Measured
-     * 2026-08-13 with `rg --no-ignore`: six declarations across four chains, and every one lives
-     * in the operator's LOCAL, gitignored prompt corpus — **zero tracked/bundled chains declare
-     * the field**, so the shipped package's behaviour is unchanged. Of the six, one names a
-     * registered gate (`code-quality`); the other five name display strings with no registered
-     * gate, which enter the accumulator and render no guidance (P6-F13).
-     *
-     * An id naming no registered gate is NOT filtered here. Every other gate source behaves the
-     * same way — a client-supplied unknown id in `gates` also enters the accumulator — and
-     * special-casing this one source would make gate resolution mean different things depending
-     * on where an id came from.
-     */
-    inlineGateIds: z.array(z.string().min(1)).optional(),
-    /**
-     * Per-step visibility policy: which chain-run context items to withhold from or expose to
-     * this step's render. Consumed by `decideVisibility` (pipeline/decisions/visibility) at the
-     * operator render and delegation-envelope chokepoints. Unknown item strings are rejected
-     * here by `VisibilityItemSchema`'s enum, naming the allowed vocabulary in the error.
-     */
-    visibility: StepVisibilitySchema.optional(),
-    /**
-     * Export this step as a delegated skill step.
-     *
-     * DECLARED BECAUSE IT HAS A CONSUMER, not because the execution runtime reads it — it does
-     * not. The only reader is the skills-sync exporter (`modules/skills-sync/service.ts`), which
-     * loads prompt YAML with `yaml.load(raw)` and never passes it through this schema, so
-     * `s.delegation` there is a real field on a second, unvalidated read path.
-     *
-     * That second path is exactly why `.strict()` had to declare it rather than reject it: a
-     * search of this schema says `delegation` is unknown, while an exported skill provably
-     * carries it. Rejecting would have failed the prompt's load in the server while the exporter
-     * kept honouring the field — divergence between two readers of one file, which is worse than
-     * either behaviour alone.
-     *
-     * Not to be confused with `ChainStepPrompt.delegated`, the runtime's own flag, which is set
-     * by the execution pipeline and never sourced from here.
-     */
-    delegation: z.boolean().optional(),
+    id: workflowNodeIdSchema.optional(),
+    /** Name/identifier of this step. Required in YAML: it is the id-minting fallback. */
+    stepName: z.string().min(1, 'Step name is required'),
   })
   .strict();
 
 export type ChainStepYaml = z.infer<typeof ChainStepSchema>;
+
+/**
+ * Remove exporter-only chain-step keys before validation.
+ *
+ * `ChainStepSchema` is `.strict()`, so a key it does not declare fails the whole prompt's load.
+ * `delegation` has one real reader — the skills-sync exporter, off raw YAML — and no runtime
+ * reader at all, so it may neither be declared (it would enter the node vocabulary, where `-->`
+ * and a submitted IR could never export it) nor rejected (YAML the exporter honours would stop
+ * loading). Stripping is the third option and the only one that leaves both readers correct.
+ *
+ * Returns a SHALLOW COPY down to the affected step objects and never mutates its input: the
+ * exporter reads the file through its own `yaml.load`, but `resource-verification-service` hands
+ * this function objects it also keeps, and a validator that edits its argument is a validator
+ * with a side effect.
+ */
+export function stripExporterOnlyStepKeys(data: unknown): unknown {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return data;
+  const record = data as Record<string, unknown>;
+  const steps = record['chainSteps'];
+  if (!Array.isArray(steps)) return data;
+
+  let stripped = false;
+  const cleaned: unknown[] = (steps as unknown[]).map((step): unknown => {
+    if (typeof step !== 'object' || step === null || Array.isArray(step)) return step;
+    const stepRecord = step as Record<string, unknown>;
+    if (!EXPORTER_ONLY_STEP_KEYS.some((key) => key in stepRecord)) return step;
+    stripped = true;
+    const copy = { ...stepRecord };
+    for (const key of EXPORTER_ONLY_STEP_KEYS) delete copy[key];
+    return copy;
+  });
+
+  return stripped ? { ...record, chainSteps: cleaned } : data;
+}
 
 // ============================================
 // Gate Configuration Schema
@@ -417,6 +349,21 @@ export const PromptDataSchema = z
     injection: PromptInjectionConfigSchema.optional(),
     /** Chain steps for chain-type prompts */
     chainSteps: z.array(ChainStepSchema).optional(),
+    /**
+     * Dependency edges between chain steps, addressed by minted node id (Tier A).
+     *
+     * Same vocabulary a submitted Workflow IR uses, and the same meaning: NOT control flow, but
+     * ordering constraints the loader linearizes into `chainSteps` order. Absent edges leave the
+     * authored order untouched, which is what every bundled chain relies on.
+     */
+    edges: z.array(workflowEdgeSchema).optional(),
+    /**
+     * Run-level budget for this chain, same shape a submitted Workflow IR declares (Tier A).
+     *
+     * A declared structural cap may only NARROW the server default; the schema's `.max()` bounds
+     * enforce that here exactly as they do on the IR path.
+     */
+    budget: workflowBudgetSchema.optional(),
     /** Whether to register this prompt with MCP */
     registerWithMcp: z.boolean().optional(),
     /** Native MCP prompt behavior: 'expand' (plain text) or 'launch' (route through prompt_engine) */
@@ -524,6 +471,21 @@ export const PromptYamlSchema = z
     // Chain steps (for chain-type prompts)
     /** Chain steps for multi-step execution */
     chainSteps: z.array(ChainStepSchema).optional(),
+    /**
+     * Dependency edges between chain steps, addressed by minted node id (Tier A).
+     *
+     * Same vocabulary a submitted Workflow IR uses, and the same meaning: NOT control flow, but
+     * ordering constraints the loader linearizes into `chainSteps` order. Absent edges leave the
+     * authored order untouched, which is what every bundled chain relies on.
+     */
+    edges: z.array(workflowEdgeSchema).optional(),
+    /**
+     * Run-level budget for this chain, same shape a submitted Workflow IR declares (Tier A).
+     *
+     * A declared structural cap may only NARROW the server default; the schema's `.max()` bounds
+     * enforce that here exactly as they do on the IR path.
+     */
+    budget: workflowBudgetSchema.optional(),
 
     // MCP registration
     /** Whether to register this prompt with MCP (default: true) */
@@ -578,6 +540,47 @@ export interface PromptYamlValidationResult {
 }
 
 /**
+ * Validate a chain's declared dependency edges against its steps (Tier A).
+ *
+ * Edge endpoints address the ids `mintNodeIds` derives — an explicit step `id` when declared,
+ * otherwise a slug of `stepName` — which is the same id space `chain_run_nodes.id` and a gate's
+ * `target_step_id` use. Two failures are possible and both are errors, not warnings: an endpoint
+ * naming no step (the author addressed something that does not exist) and a cycle (no total order
+ * exists, so the loader could not order the run at all). Cycle detection IS `linearize`, not a
+ * second traversal — one implementation of the ordering rule, shared with the Workflow IR path.
+ */
+function collectChainEdgeErrors(
+  steps: ReadonlyArray<{ id?: string; stepName: string; promptId: string }>,
+  edges: ReadonlyArray<{ from: string; to: string }> | undefined
+): string[] {
+  if (edges === undefined || edges.length === 0) return [];
+
+  const errors: string[] = [];
+  const ids = mintNodeIds(steps.map((step) => ({ ...step })));
+  const known = new Set(ids);
+
+  for (const edge of edges) {
+    for (const endpoint of [edge.from, edge.to]) {
+      if (!known.has(endpoint)) {
+        errors.push(
+          `Chain edge ${edge.from} -> ${edge.to} names step id '${endpoint}', which no chain step declares or mints (known ids: ${ids.join(', ')})`
+        );
+      }
+    }
+  }
+  if (errors.length > 0) return errors;
+
+  const result = linearize(
+    steps.map((step, index) => ({ id: ids[index] as string, promptId: step.promptId })),
+    edges
+  );
+  if (!result.ok) {
+    for (const rejection of result.rejections) errors.push(`Chain edges: ${rejection.detail}`);
+  }
+  return errors;
+}
+
+/**
  * Validate a prompt.yaml definition against the schema.
  *
  * @param data - Raw YAML data to validate
@@ -597,8 +600,8 @@ export function validatePromptYaml(data: unknown, expectedId?: string): PromptYa
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Schema validation
-  const result = PromptYamlSchema.safeParse(data);
+  // Schema validation. Exporter-only keys are removed first — see stripExporterOnlyStepKeys.
+  const result = PromptYamlSchema.safeParse(stripExporterOnlyStepKeys(data));
   if (!result.success) {
     for (const issue of result.error.issues) {
       const path = issue.path.length > 0 ? `${issue.path.join('.')}: ` : '';
@@ -654,6 +657,7 @@ export function validatePromptYaml(data: unknown, expectedId?: string): PromptYa
         }
       }
     }
+    errors.push(...collectChainEdgeErrors(definition.chainSteps, definition.edges));
   }
 
   const validationResult: PromptYamlValidationResult = {
@@ -676,7 +680,7 @@ export function validatePromptYaml(data: unknown, expectedId?: string): PromptYa
  * @returns true if data is a valid YAML prompt definition
  */
 export function isValidPromptYaml(data: unknown): data is PromptYaml {
-  return PromptYamlSchema.safeParse(data).success;
+  return PromptYamlSchema.safeParse(stripExporterOnlyStepKeys(data)).success;
 }
 
 // ============================================
@@ -722,8 +726,8 @@ export function validatePromptSchema(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Schema validation
-  const result = PromptDataSchema.safeParse(data);
+  // Schema validation. Exporter-only keys are removed first — see stripExporterOnlyStepKeys.
+  const result = PromptDataSchema.safeParse(stripExporterOnlyStepKeys(data));
   if (!result.success) {
     for (const issue of result.error.issues) {
       const path = issue.path.length > 0 ? `${issue.path.join('.')}: ` : '';
@@ -772,6 +776,7 @@ export function validatePromptSchema(
         }
       }
     }
+    errors.push(...collectChainEdgeErrors(definition.chainSteps, definition.edges));
   }
 
   const schemaValidationResult: PromptSchemaValidationResult = {
@@ -797,7 +802,7 @@ export function validatePromptSchema(
  * @returns true if data is a valid prompt definition
  */
 export function isValidPromptData(data: unknown): data is PromptDataYaml {
-  return PromptDataSchema.safeParse(data).success;
+  return PromptDataSchema.safeParse(stripExporterOnlyStepKeys(data)).success;
 }
 
 /**

@@ -644,6 +644,14 @@ export interface ChainStep {
    * defaults to a slug of `stepName` at mint time when omitted. Additive only; not yet consumed.
    */
   id?: string;
+  /**
+   * Static arguments declared for this step (Tier A — the one step vocabulary).
+   *
+   * Mirrors `WorkflowNode.args`. On the YAML path these OVERRIDE the run's invocation arguments
+   * for this step only: a constant declared on the step beats what the caller happened to pass,
+   * which is the point of declaring it. Upstream step results still arrive via `inputMapping`.
+   */
+  args?: Record<string, unknown>;
   /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
   inputMapping?: Record<string, string>;
   /** Name this step's output for downstream steps */
@@ -720,6 +728,20 @@ export interface PromptData {
   injection?: import('./injection.js').PromptInjectionConfig;
   /** Chain steps for multi-step execution (YAML format) */
   chainSteps?: ChainStep[];
+  /**
+   * Dependency edges between chain steps, addressed by minted node id (Tier A).
+   *
+   * Ordering constraints, never control flow — the same meaning a submitted Workflow IR gives
+   * them. The loader linearizes them into `chainSteps` order at load time (`yaml-prompt-loader`),
+   * so nothing downstream of the loader ever sees an edge; this field is kept so a round-tripped
+   * prompt still declares what it was authored with.
+   */
+  edges?: Array<{ from: string; to: string }>;
+  /**
+   * Run-level budget declared by this chain (Tier A), same shape a submitted Workflow IR carries.
+   * Projected onto `ParsedCommand.budget` by the stage-04 chain projection.
+   */
+  budget?: import('./chain-session.js').DeclaredRunBudget;
   /** Whether to register this prompt with MCP. Overrides category default. */
   registerWithMcp?: boolean;
   /**

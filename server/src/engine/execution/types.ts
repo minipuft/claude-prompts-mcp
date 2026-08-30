@@ -6,6 +6,7 @@
  * This includes execution strategies, converted prompts, contexts, and chain execution.
  */
 
+import type { DeclaredRunBudget } from '#shared/types/chain-session.js';
 import type { TemporaryGateInput } from '#shared/types/execution.js';
 import type {
   ChainStep,
@@ -52,6 +53,14 @@ export interface ConvertedPrompt {
   sourceRoot?: string;
   // Chain-related properties (isChain removed - now derived from chainSteps presence)
   chainSteps?: ChainStep[];
+  /**
+   * Run-level budget declared by this chain's YAML (Tier A), same shape a submitted Workflow IR
+   * carries. Projected onto `ParsedCommand.budget` by the stage-04 chain projection, which is
+   * what makes an IR-only knob (`maxInsertions`, and later `pauseOnBlocking`) reach a template
+   * chain. `edges` is deliberately NOT carried: the loader has already linearized them into
+   * `chainSteps` order, so nothing downstream of the loader ever sees an edge.
+   */
+  budget?: DeclaredRunBudget;
   /** Whether to register this prompt with MCP. Resolved from prompt/category/global defaults. */
   registerWithMcp?: boolean;
   /**

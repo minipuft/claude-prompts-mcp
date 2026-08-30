@@ -172,6 +172,14 @@ export class PromptConverter {
         if (promptData.subagentModel != null) {
           convertedPrompt.subagentModel = promptData.subagentModel;
         }
+        // Tier A: a YAML chain may declare the same run-level budget a submitted Workflow IR
+        // does. Carried here as well as through the loader because the stage-04 chain projection
+        // reads the CONVERTED prompt, not `PromptData` — a budget carried at fewer than both is
+        // silently dead. `edges` is not carried: the loader has already linearized them into
+        // `chainSteps` order, so nothing downstream of the loader has an edge to read.
+        if (promptData.budget !== undefined) {
+          convertedPrompt.budget = promptData.budget;
+        }
 
         if (promptFile.gateConfiguration) {
           convertedPrompt.gateConfiguration = promptFile.gateConfiguration;

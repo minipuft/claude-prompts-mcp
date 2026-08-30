@@ -1,5 +1,5 @@
+import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
 import {
-  DEFAULT_WORKFLOW_CAPS,
   type WorkflowIR,
   type WorkflowNode,
   type WorkflowRejectionReason,

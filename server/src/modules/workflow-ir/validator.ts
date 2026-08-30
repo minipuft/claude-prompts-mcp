@@ -19,8 +19,10 @@ import { linearize } from './linearizer.js';
 import {
   DEFAULT_WORKFLOW_CAPS,
   WORKFLOW_NODE_ID_PATTERN,
-  WORKFLOW_VISIBILITY_ITEMS,
   type WorkflowCaps,
+} from './node-schema.js';
+import {
+  WORKFLOW_VISIBILITY_ITEMS,
   type WorkflowIR,
   type WorkflowNode,
   type WorkflowPromptInfo,

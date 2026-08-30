@@ -296,7 +296,15 @@ export class CommandParsingStage extends BasePipelineStage {
           stepNumber: index + 1,
           nodeId: nodeIds[index],
           promptId: step.promptId,
-          args: (argResult as any).processedArgs,
+          // Step-declared `args` OVERRIDE the run's invocation arguments for this step only
+          // (Tier A). This is the third stripper on the YAML step path — its siblings are
+          // `ChainStepSchema` (now derived from the one node schema) and
+          // `yaml-prompt-loader.normalizeChainSteps` — and a field carried at fewer than all
+          // three is silently dead (P6-F7).
+          args:
+            step.args != null
+              ? { ...(argResult as any).processedArgs, ...step.args }
+              : (argResult as any).processedArgs,
           variableName: step.stepName ?? `step_${index + 1}`,
           convertedPrompt: stepConverted,
           inputMapping: step.inputMapping,
@@ -329,6 +337,14 @@ export class CommandParsingStage extends BasePipelineStage {
           ...(step.visibility != null ? { visibility: step.visibility } : {}),
         } as ChainStepPrompt;
       });
+
+      // Tier A: a YAML chain's declared budget reaches the run through the same field a
+      // submitted Workflow IR's does (`WorkflowCommandBuilder` sets it from `compileBudget`), so
+      // every downstream reader of `parsedCommand.budget` — the P4 adaptive-mutation ceiling
+      // today — serves both inputs with one code path.
+      if (convertedPrompt.budget !== undefined) {
+        parsedCommand.budget = convertedPrompt.budget;
+      }
     }
 
     return parsedCommand;

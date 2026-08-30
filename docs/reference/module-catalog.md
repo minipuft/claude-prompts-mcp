@@ -34,13 +34,13 @@ remains in `server/.dependency-cruiser.cjs`.
 | `chains` | `src/modules/chains` | domain | canonical | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
 | `formatting` | `src/modules/formatting` | domain | canonical | Owns response styles and output formatting behavior. | — | `index.ts` | engine-gates<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
 | `hot-reload` | `src/modules/hot-reload` | domain | canonical | Coordinates file observation and registry refresh behavior. | — | — | shared-types | automation<br>prompts<br>runtime |
-| `prompts` | `src/modules/prompts` | domain | canonical | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>hot-reload<br>shared-types<br>shared-utils<br>text-references | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime |
+| `prompts` | `src/modules/prompts` | domain | canonical | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime |
 | `resources` | `src/modules/resources` | domain | canonical | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync |
 | `semantic` | `src/modules/semantic` | domain | canonical | Owns semantic indexing and related retrieval behavior. | — | — | engine-execution<br>shared-types | mcp-tools |
 | `skills-sync` | `src/modules/skills-sync` | domain | canonical | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools |
 | `text-references` | `src/modules/text-refs` | domain | canonical | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
 | `versioning` | `src/modules/versioning` | domain | canonical | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools |
-| `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types | engine-execution<br>mcp-tools<br>shared-types |
+| `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types | engine-execution<br>mcp-tools<br>prompts<br>shared-types |
 | `runtime` | `src/runtime` | runtime | canonical | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-types<br>shared-utils<br>text-references | mcp-tools<br>server-source |
 | `shared` | `src/shared` | layer | canonical | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates |
@@ -176,6 +176,7 @@ flowchart LR
   module_prompts --> module_shared_types
   module_prompts --> module_shared_utils
   module_prompts --> module_text_references
+  module_prompts --> module_workflow_ir
   module_resources --> module_automation
   module_resources --> module_engine_frameworks
   module_resources --> module_engine_gates
