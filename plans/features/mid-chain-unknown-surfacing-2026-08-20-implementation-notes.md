@@ -20,7 +20,7 @@ worktree before any edit.
 | "5 bundled YAML chains"                                                      | 5 — `documentation_change`, `scaffold_project`, `implementation_plan`, `deep_analysis`, `quick_decision`              | ✓ (a 6th `chainSteps` hit, `examples/create_prompt`, is a script tool's JSON schema, not a chain)            |
 | "`chain-schema.md:21-31` vs `workflow-ir/types.ts:38-66`" carry the same set | NOT the same set. `WorkflowNode` declares `args`, `ChainStepSchema` does not; `ChainStepSchema` declares `delegation` | ⚠ corrected — the tier's premise ("merely agree today") was optimistic: they already disagreed in two fields |
 | "`delegation` … stays outside the node schema"                               | Zero `delegation:` occurrences in `server/resources/prompts/**`                                                       | ✓ stripping it is zero-impact on the bundled tree                                                            |
-| `mcp/tools/index.ts` allowlist "~831-842, four recorded instances"           | not re-measured — A.3 not executed this run                                                                           | ☐                                                                                                            |
+| `mcp/tools/index.ts` allowlist "~831-842, four recorded instances"           | re-measured under Tier 0 (2026-08-30): four confirmed, range now ~824-853                                             | ✓ superseded by the Tier 0 table below                                                                       |
 
 ## Deviations
 
@@ -119,7 +119,110 @@ OQ-A1 additionally requires a test that submits BOTH spellings of one append and
 first would mean implementing rows 0.1/0.3/0.4/1.2 inside Tier A under a different gate — a
 re-scoping decision, not an implementation one.
 
+## Tier 0 — re-measurement before execution
+
+| Asserted (plan)                                                    | Measured                                                                                                                                                                                                                                                     | Verdict                                                                              |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `mcp/tools/index.ts` allowlist "~831-842, four recorded instances" | Four confirmed: the comment's "three times" enumerates `version_description` + `dry_run` (gate, framework) + `cancel`, then a separate "Fourth instance (2026-08-21)" names `handoff`/`claim_token`. Line range is now ~824-853                              | ✓ "fifth instance" is the correct label for `remainder`                              |
+| `resolvesPendingGate` sites                                        | 7 non-generated sites, not the 3 the row names: contract JSON ×3 flags, `contracts/schemas/types.ts` (the Zod metadata schema — row 0.2 does not list it), generator ×4, `gate-enforce.py` ×3, `hooks/tests/test_gate_enforce_verdict.py`, `hooks/README.md` | ⚠ corrected — the row named 3 files, the rename touched 6 plus 6 generated artifacts |
+| `gate_action` enum "~line 325"                                     | 325 exactly, in `buildGateFields`                                                                                                                                                                                                                            | ✓                                                                                    |
+| "reuse the IR node schema from `workflow-ir/node-schema.ts`"       | `workflowNodeSchema` + `workflowEdgeSchema` + `DEFAULT_WORKFLOW_CAPS` all reachable through the `workflow-ir.schema.ts` re-export (`DEFAULT_WORKFLOW_CAPS` had to be ADDED to it)                                                                            | ✓ with one addition                                                                  |
+
+## Deviations (Tier 0)
+
+### DEV-T0-1 — row 0.2's flip condition is unsatisfiable as literally written
+
+The row requires `rg "resolvesPendingGate|PENDING_GATE_RESOLUTION"` across the worktree to return
+NOTHING. It cannot: this plan's own row 0.2 and ruling OQ-4 spell the old name, and the retired
+`plans/gate-enforce-resolution-verbs-2026-08-20.md` records its introduction. A rename check that
+a plan describing the rename makes fail is measuring the wrong thing.
+
+Substituted, and recorded here so the substitution is auditable rather than silent:
+
+```
+rg 'resolvesPendingGate|PENDING_GATE_RESOLUTION' --hidden -g '!node_modules' -g '!plans/**' .
+```
+
+→ no hits. `plans/` is exempt for the reason `cleanup-standards.md` exempts CHANGELOG and git
+history: it is a record of what happened, not a description of current state. The `Current State`
+table WAS updated, because that row does describe current state.
+
+The check is non-vacuous — it observes files this tier wrote (the contract, the generator, the
+generated Python constant, `gate-enforce.py`). Positive control on the parity side:
+`test_generated_artifact_matches_contract_flags` reads the contract's `resolvesPendingRun` keys and
+compares them to what the hook imports, so renaming any ONE of the three layers turns it red
+(empty verb set → the generator throws; unrenamed hook import → `load_resolution_params()` returns
+None → `None == flagged` fails).
+
+### DEV-T0-2 — the Zod work landed one layer down from where the row pointed
+
+Row 0.3 names `workflow-ir.schema.ts` for `pauseOnBlocking`. Tier A moved `workflowBudgetSchema`
+to `modules/workflow-ir/node-schema.ts` (DEV-TA-1), so that is where the field went;
+`workflow-ir.schema.ts` re-exports it, and one re-export was added (`DEFAULT_WORKFLOW_CAPS`) so
+`prompt-engine.schema.ts` keeps the single import site that file's header asks for.
+
+Two type declarations the row did not mention were required for contract agreement, not chosen:
+
+- `WorkflowBudget.pauseOnBlocking` (`modules/workflow-ir/types.ts`). `workflow-ir.schema.ts`
+  carries a never-executed drift guard asserting `WorkflowIRInput` is assignable to `WorkflowIR`;
+  a Zod field with no type twin passes that guard silently (structural assignability permits the
+  extra property) and would have left the type SSOT lying.
+- `RemainderSubmission` (same file), with a matching drift guard in `prompt-engine.schema.ts`.
+  Declared at Layer 3 rather than in `mcp/tools/schemas/` for the reason `WorkflowIR` is: the
+  eventual consumers are `engine/` stages and the chain store, and `engine/` may not import
+  `mcp/`. Putting it in the schema file would have forced a move in Tier 2.
+
+`prompt-executor.ts`'s argument type also gained `remainder?: RemainderSubmission` — the allowlist
+in `mcp/tools/index.ts` is typed as `Parameters<PromptExecutor['executePromptCommand']>[0]`, so
+row 0.4 is not writable without it. Nothing reads it; that is row 2.3's work.
+
+### DEV-T0-3 — `pauseOnBlocking` is declaration-dead at FOUR hops, and row 1.3 assumed one
+
+Row 1.3 reads as a single blueprint readback in stage 16. Measured: `compileBudget`
+(`workflow-ir/compiler.ts`) deliberately projects only the budget fields with a post-validation
+reader onto `DeclaredRunBudget`, and the YAML loader has its own budget projection mirroring it.
+A field declared only on `workflowBudgetSchema` therefore never reaches a step at all — it is
+dropped twice before stage 16 looks for it, and the readback would read `undefined` forever while
+typechecking perfectly. Row 1.3 is re-scoped in the plan to name all four hops and to require an
+assertion per hop. Not fixed here: Tier 0's charter is contract + schema, and the strippers are
+runtime plumbing.
+
+### DEV-T0-4 — a new contract parameter needs a conformance exception, and Tier 0 cannot write the scenario
+
+`validate:conformance-coverage` (inside `validate:all`, hence CI) fails any contract parameter
+with neither a corpus scenario nor a declared exception. `remainder` has no consumer until rows
+2.1–2.3, so a scenario written now would assert the ABSENCE of an effect and would pass for the
+wrong reason. An exception was declared with its real close condition instead, and row 0.5 was
+added to the plan to own the retirement — the exception is an unmarked `☐` living inside a gate's
+allowlist, and the gate's own satisfied-exception audit is what will detect it.
+
+### DEV-T0-5 — `plan-row-tracking` was red at HEAD, inherited, fixed anyway
+
+Not caused by this tier: `git diff` showed no plan modification when the gate first failed. Row
+A.2's stamp from commit `3fa6ba11` reads `(as of 2026-08-30 · OQ-A2 ruled, see below · flips when
+…)`, and `OPEN_STAMP` is `/as of (\d{4}-\d{2}-\d{2})\s*[·|-]\s*flips when\s+\S/` — it requires the
+two halves ADJACENT, so the intervening clause broke it. Attributed to Tier A, repaired here
+because a gate nobody can pass blocks every later tier. The clause was moved after the flip
+condition rather than deleted.
+
+### DEV-T0-6 — `remainder` is NOT flagged `resolvesPendingRun`
+
+A judgment call the rows do not cover. The interrupt payload lists `remainder` among the resume
+verbs, which reads like a flag candidate. It is not one: on a PAUSED run the verb that clears the
+review is `gate_action: 'accept_alternative'` (already flagged), with `remainder` as its argument;
+on an unpaused run there is no pending review for the hook to guard. Flagging it would tell
+`gate-enforce.py` that a bare `remainder` resolves a pending GATE review, which it does not. Row
+3.1's matrix (`resume`, `accept_alternative`, `abort`, `cancel`) agrees.
+
 ## Findings promoted to the plan
 
 - **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling.
-- **P-A-F2**: A.3 is ordered before its dependencies (0.1, 0.3, 0.4, 1.2); see DEV-TA-6.
+- **P-A-F2**: A.3 is ordered before its dependencies (0.1, 0.3, 0.4, 1.2); see DEV-TA-6. **Half
+  discharged 2026-08-30**: rows 0.1/0.3/0.4 have landed, so `remainder` and its `mode` now exist
+  for A.3 to name. A.3 remains blocked on row 1.2 (`replaceRemainder`), which is still the store
+  method it says it shares.
+- **P-0-F1**: `pauseOnBlocking` reaches nothing without three more projections; row 1.3 re-scoped
+  in place. See DEV-T0-3.
+- **P-0-F2**: contract parameters are gated by `validate:conformance-coverage`, so every future
+  tier that ADDS one must either write a scenario or declare an exception with a close condition.
+  New row 0.5 owns retiring the one Tier 0 declared. See DEV-T0-4.
