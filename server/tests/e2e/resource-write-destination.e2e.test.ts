@@ -30,23 +30,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildServerEnv } from './helpers/child-env.js';
+
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PACKAGE_RESOURCES = path.join(SERVER_ROOT, 'resources');
-
-/**
- * The child's environment, with jest's own markers removed.
- *
- * `src/index.ts:815` refuses to run `main()` when `NODE_ENV === 'test'` or `JEST_WORKER_ID` is
- * set, so a server spawned with a plain `...process.env` from inside jest starts, does nothing,
- * and exits 0 — no output, no error, no spawn failure. The only symptom is a request that never
- * gets an answer, which reads like a protocol bug rather than a server that declined to boot.
- */
-function buildChildEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
-  const env = { ...process.env, ...overrides };
-  delete env['NODE_ENV'];
-  delete env['JEST_WORKER_ID'];
-  return env;
-}
 
 interface JsonRpcResponse {
   id?: number;
@@ -65,7 +52,7 @@ class ProbeServer {
 
   async start(): Promise<void> {
     this.proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
-      env: buildChildEnv({
+      env: buildServerEnv({
         MCP_RESOURCES_PATH: path.join(this.workspace, 'resources'),
         MCP_WORKSPACE: this.workspace,
       }),

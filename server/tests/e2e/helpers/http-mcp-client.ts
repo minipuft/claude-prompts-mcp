@@ -15,6 +15,8 @@ import * as net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { buildServerEnv } from './child-env.js';
+
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,23 +81,15 @@ export function startServerWithHttp(
     console.log('  ARGS:', args);
   }
 
-  // Build clean environment - remove Jest-specific vars that prevent server from starting
-  // See src/index.ts lines 843-845: server skips main() if JEST_WORKER_ID is set
-  const cleanEnv = { ...process.env };
-  delete cleanEnv.NODE_OPTIONS; // Remove Jest's --experimental-vm-modules
-  delete cleanEnv.NODE_ENV; // Don't pass test mode to server
-  delete cleanEnv.JEST_WORKER_ID; // CRITICAL: Server checks this and skips main() if set
-
   const proc = spawn('node', args, {
     cwd,
-    env: {
-      ...cleanEnv,
+    env: buildServerEnv({
       PORT: String(port), // Server uses PORT env var for port
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-      // Note: NODE_ENV is NOT set - let server run in normal mode
+      // NODE_ENV stays unset — the server runs in normal mode.
       ...(options.env ?? {}),
-    },
+    }),
     // Use 'ignore' for stdin to avoid triggering 'end' event handler
     // which exits the process (see logging/index.ts setupProcessEventHandlers)
     stdio: ['ignore', 'pipe', 'pipe'],

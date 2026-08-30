@@ -19,29 +19,44 @@
 
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readFile, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
+
+import { buildServerEnv } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PACKAGE_RESOURCES = path.join(SERVER_ROOT, 'resources');
-
-/**
- * `src/index.ts` refuses to run `main()` when `NODE_ENV === 'test'` or `JEST_WORKER_ID` is set, so
- * a child spawned with a plain `...process.env` from inside jest starts, does nothing and exits 0.
- */
-function buildChildEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
-  const env = { ...process.env, ...overrides };
-  delete env['NODE_ENV'];
-  delete env['JEST_WORKER_ID'];
-  return env;
-}
 
 interface Startup {
   exitCode: number | null;
   stderr: string;
   inventory: string;
+  /** Every row the server wrote to `resource_index` — what the Python hooks will read. */
+  indexed: { type: string; id: string }[];
+}
+
+/**
+ * Read back the index the booted server produced.
+ *
+ * The log says what was SERVED; this says what was INDEXED. They are two separate derivations and
+ * the whole point of the checks below is that nobody gets to assume they agree.
+ */
+function readIndex(runtimeRoot: string): { type: string; id: string }[] {
+  const dbPath = path.join(runtimeRoot, 'runtime-state', 'state.db');
+  if (!existsSync(dbPath)) return [];
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    return db.prepare('SELECT type, id FROM resource_index').all() as {
+      type: string;
+      id: string;
+    }[];
+  } finally {
+    db.close();
+  }
 }
 
 /** Boot a server against `workspace`, let it settle, then stop it and return what it logged. */
@@ -50,7 +65,7 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
   await mkdir(runtimeRoot, { recursive: true });
 
   const proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
-    env: buildChildEnv({ MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot }),
+    env: buildServerEnv({ MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot }),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -74,7 +89,7 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
 
   const logPath = path.join(runtimeRoot, 'logs', 'mcp-server.log');
   const inventory = await readFile(logPath, 'utf8').catch(() => '');
-  return { exitCode, stderr, inventory };
+  return { exitCode, stderr, inventory, indexed: readIndex(runtimeRoot) };
 }
 
 /** The `📂 <resource>: <count>` figure the server logged, or null when it logged no such line. */
@@ -158,5 +173,51 @@ describe('a workspace resource directory overlays the bundled tree (P1.0a)', () 
     // Without this line the count is unattributable — the exact failure the startup inventory was
     // added to remove, reintroduced one level up by merging two roots into one number.
     expect(startup.inventory).toContain('over bundled base:');
+  });
+
+  /**
+   * Serving a resource and INDEXING it are two separate derivations, and for a day they disagreed
+   * by 41 prompts with nothing failing. `resource_index` is what every Python hook reads, so the
+   * gap was user-visible in the worst way: `>>strategicImplement` answered "Unknown prompt" for a
+   * prompt `prompt_engine` executes.
+   *
+   * The last case here is the one that closes the CLASS rather than the three instances — it
+   * fails on ANY future disagreement, including causes nobody has thought of yet. The four above
+   * it exist so that when it fails, it fails somewhere that names the reason.
+   */
+  describe('the index describes the same catalog the server serves', () => {
+    const idsOf = (type: string): string[] =>
+      startup.indexed.filter((row) => row.type === type).map((row) => row.id);
+
+    it('indexes the workspace prompt and the bundled prompts, not one or the other', () => {
+      const prompts = idsOf('prompt');
+      expect(prompts).toContain('probe_prompt');
+      // A bundled prompt the workspace does not carry. Before the fix the indexer walked only the
+      // primary root, so every one of these was absent while the server served them.
+      expect(prompts).toContain('strategicImplement');
+    });
+
+    it('indexes gates, frameworks and styles rather than only prompts', () => {
+      // These read ZERO against a workspace whose resources directory has no such subdirectory,
+      // which is what made `get_valid_styles_from_db` return an empty list to the hooks.
+      expect(idsOf('gate').length).toBeGreaterThan(0);
+      expect(idsOf('framework').length).toBeGreaterThan(0);
+      expect(idsOf('style').length).toBeGreaterThan(0);
+    });
+
+    it('indexes a chain step under the qualified id the tool answers to', () => {
+      // Two failures in one: the scan stopped before this depth, and it keyed rows on the YAML
+      // `id:` field, which the loader overwrites. A hook reading `initial_scan` hands the caller
+      // an id `prompt_engine` rejects.
+      expect(idsOf('prompt')).toContain('deep_analysis/initial_scan');
+    });
+
+    it('reports no disagreement between the index and the served catalog', () => {
+      // The server compares the two itself at startup. Asserting on its own verdict means this
+      // case covers divergences that have not been invented yet, rather than re-listing the three
+      // that have. The bundled tree carries no unloadable prompt, so silence here is correct.
+      expect(startup.inventory).not.toContain('missing from resource_index');
+      expect(startup.inventory).not.toContain('are not served');
+    });
   });
 });

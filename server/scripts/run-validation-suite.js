@@ -356,6 +356,13 @@ export const SUITE = [
       'CHECKED both ways — UNWIRED (a check in no SUITE) and FALSE REASON (an exception whose consumers vanished); the header records that only the first was guarded originally',
   },
   {
+    script: 'validate:hermetic-child-env',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
+  },
+  {
     script: 'validate:agent-plugins',
     io: 'read',
     reads: ['file', 'spawn'],
