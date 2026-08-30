@@ -138,3 +138,40 @@ describe('YAML chain step args (row A.1)', () => {
     expect(data.chainSteps?.[0]?.args).toEqual({ depth: 'deep' });
   });
 });
+
+describe('YAML chain step `inlineGateCriteria` / `delegated` (row A.2)', () => {
+  // Both fields reach YAML for free through A.1's derivation of `ChainStepSchema` from
+  // `workflowNodeSchema` — which is exactly why they need this. A field that VALIDATES but is
+  // dropped by a stripper is the P6-F7 shape: accepted in the file, absent at run time, and
+  // nothing red. This asserts the loader hop; the stage-04 hop is asserted by
+  // `symbolic-chain-ir-parity.integration.test.ts` driving the same fields to `chain_run_nodes`.
+  it('carries both step-declared fields through the loader', () => {
+    const validation = validatePromptYaml(
+      chain({
+        chainSteps: [
+          {
+            promptId: 'a',
+            stepName: 'Alpha',
+            inlineGateCriteria: ['code-quality', 'cite sources'],
+            delegated: true,
+          },
+        ],
+      })
+    );
+    expect(validation.errors).toEqual([]);
+    const data = yamlToPromptData(validation.data!, 'edge_chain/prompt.yaml');
+
+    expect(data.chainSteps?.[0]?.inlineGateCriteria).toEqual(['code-quality', 'cite sources']);
+    expect(data.chainSteps?.[0]?.delegated).toBe(true);
+  });
+
+  it('rejects a non-string criterion rather than dropping it', () => {
+    // `.strict()` plus `z.array(z.string().min(1))` — an empty token would resolve to no gate at
+    // stage 11 and read as "the gate passed", so it fails the load instead.
+    expect(
+      validatePromptYaml(
+        chain({ chainSteps: [{ promptId: 'a', stepName: 'Alpha', inlineGateCriteria: [''] }] })
+      ).valid
+    ).toBe(false);
+  });
+});

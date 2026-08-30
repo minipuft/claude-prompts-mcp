@@ -677,6 +677,22 @@ export interface ChainStep {
    */
   inlineGateIds?: string[];
   /**
+   * Raw `::`-style gate tokens applied to this step (row A.2, OQ-A2b — WIRED).
+   *
+   * A sibling of `inlineGateIds`, not a spelling of it: these are UNRESOLVED tokens, split into
+   * registered ids and free-text criteria by `InlineGateProcessor.partitionGateCriteria` at stage
+   * 11, which is the first place that holds the gate registry. Carried through
+   * `normalizeChainSteps` and the stage-04 projection onto `ChainStepPrompt.inlineGateCriteria`.
+   */
+  inlineGateCriteria?: string[];
+  /**
+   * Declared context isolation for this step (row A.2) — the `==>` operator's landing field, and
+   * the one way YAML can ask for isolation without naming a `subagentModel` it does not care
+   * about. A DECLARATION: `markDelegatedStepPrompts` (stage 06) is the single producer of the
+   * runtime flag and reads this alongside `subagentModel`.
+   */
+  delegated?: boolean;
+  /**
    * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
    * expose to this step's render. Mirrors `ChainStepSchema.visibility`. Additive only — threaded
    * through parsing and persistence, nothing downstream consumes it yet (Tier 2-3).

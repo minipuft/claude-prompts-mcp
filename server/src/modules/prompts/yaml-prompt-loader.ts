@@ -68,6 +68,10 @@ export interface LoadedPromptFile {
     framework?: string;
     /** Inline gate ids for this step — mirrors `ChainStepSchema.inlineGateIds`. Wired (P6 T4). */
     inlineGateIds?: string[];
+    /** Raw `::`-style gate tokens, resolved at stage 11 — mirrors `ChainStepSchema.inlineGateCriteria` (A.2). */
+    inlineGateCriteria?: string[];
+    /** Declared context isolation — mirrors `ChainStepSchema.delegated` (A.2). */
+    delegated?: boolean;
     /**
      * Per-step visibility policy (P5 Tier 1) — mirrors `ChainStepSchema.visibility`. Threaded and
      * consumed at the render chokepoints (P5 Tiers 2-3); carried here since P5 Tier 1, ahead of
@@ -414,6 +418,13 @@ function normalizeChainSteps(
     // `step.inlineGateIds` and feeds it to `GateSetResolver` at rank `inline-operator`. Wiring is
     // therefore removal of two strippers, not addition of a reader.
     if (step.inlineGateIds != null) normalized.inlineGateIds = step.inlineGateIds;
+    // `inlineGateCriteria` and `delegated` join the node vocabulary at row A.2 (OQ-A2b). They are
+    // carried here and at the stage-04 projection in the same change for the standing reason: a
+    // field carried at fewer than all three strippers is silently dead (P6-F7). Their readers
+    // already exist — `InlineGateProcessor` partitions the criteria per step at stage 11, and
+    // `markDelegatedStepPrompts` reads the declaration at stage 06.
+    if (step.inlineGateCriteria != null) normalized.inlineGateCriteria = step.inlineGateCriteria;
+    if (step.delegated != null) normalized.delegated = step.delegated;
     // `visibility` declares which context items a step's render may see. It was carried ahead of
     // `inlineGateIds` because a preserved-but-unread declaration carried no risk of newly
     // changing what a chain does (P5 Tier 1: additive/threading only); both are live now.

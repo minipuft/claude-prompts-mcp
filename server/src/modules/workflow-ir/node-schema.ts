@@ -158,6 +158,42 @@ export const workflowNodeSchema = z
      * same way.
      */
     inlineGateIds: z.array(z.string().min(1)).optional(),
+    /**
+     * RAW `::` gate tokens for this step — ids and free text mixed, unresolved (row A.2, OQ-A2b).
+     *
+     * A SIBLING of `inlineGateIds`, not a spelling of it. `inlineGateIds` is already-resolved ids;
+     * this is the token list a `>>a :: code-quality --> >>b` command writes, which nothing can
+     * partition until the gate registry is in hand. `InlineGateProcessor.partitionGateCriteria`
+     * does that at stage 11, per step, splitting each token into a registered id or a temp-gate
+     * criterion — so this field's whole contract is "carry these verbatim to stage 11".
+     *
+     * WHY THIS IS A NODE FIELD AND NOT A RUN-LEVEL `gates[]` ENTRY. OQ-A2 originally routed `::`
+     * to `{criteria, target_step_id}` on the gate union, reading the union's SHAPE rather than its
+     * reader. Measured (DEV-TA2-1): `TemporaryGateRegistrar` either literalizes a canonical gate
+     * id into a temp-gate criterion (`resolveCanonicalGateId` returns early on any inline content)
+     * or resolves it canonically and then `continue`s, dropping `target_step_id` — never both.
+     * The loss is about TIMING, not spelling: stage 04, where the IR is built, has no registry.
+     * A declared node field is what survives to the stage that does.
+     */
+    inlineGateCriteria: z.array(z.string().min(1)).optional(),
+    /**
+     * DECLARED context isolation for this step — the `==>` operator's landing field (row A.2).
+     *
+     * A declaration, not the runtime flag. `OperatorValidationStage.markDelegatedStepPrompts`
+     * (stage 06) remains the ONLY producer of `ChainStepPrompt.delegated` as the runtime reads it;
+     * it now reads `step.delegated === true || step.subagentModel != null` rather than
+     * `subagentModel` alone. `compileNode` passes this through exactly as it passes
+     * `inlineGateIds` — one flag, one producer, on every path.
+     *
+     * Deliberately NOT mapped onto `subagentModel`: that conflates a context-isolation choice with
+     * a model-tier hint, which the retired delegation contract separated on purpose. YAML gains it
+     * through A.1's derivation, where it is additive — a chain step could previously only ask for
+     * isolation by naming a model tier it did not care about.
+     *
+     * Do not confuse it with the YAML-only `delegation` key ({@link EXPORTER_ONLY_STEP_KEYS}),
+     * which is an exporter marker with no runtime reader at all.
+     */
+    delegated: z.boolean().optional(),
   })
   .strict();
 

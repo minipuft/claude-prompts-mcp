@@ -154,11 +154,22 @@ export class OperatorValidationStage extends BasePipelineStage {
     this.markDelegatedStepPrompts(parsedCommand);
   }
 
-  /** Mark ChainStepPrompt[] entries as delegated based on per-step subagentModel. */
+  /**
+   * Mark `ChainStepPrompt[]` entries as delegated — the ONLY producer of the runtime flag.
+   *
+   * Two declaration sources, one flag. `subagentModel` is a model-tier hint that implies
+   * isolation; `step.delegated` is the explicit declaration a `==>` operator, an IR node and (via
+   * A.1's derivation) a YAML chain step can all carry since row A.2. Reading only the first left
+   * the second's producers writing the flag themselves, which is how one flag ends up with three
+   * producers and two of them drift.
+   *
+   * Idempotent by construction: an already-declared `true` is re-asserted, never cleared. This
+   * does not turn a declared `false` into `true`, and never demotes.
+   */
   private markDelegatedStepPrompts(parsedCommand: ExecutionContext['parsedCommand']): void {
     if (parsedCommand?.steps == null) return;
     for (const step of parsedCommand.steps) {
-      if (step.subagentModel != null) {
+      if (step.delegated === true || step.subagentModel != null) {
         step.delegated = true;
       }
     }

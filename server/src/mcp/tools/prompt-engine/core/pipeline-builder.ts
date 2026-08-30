@@ -137,9 +137,14 @@ export class PipelineBuilder {
 
     // ── Stages 04-09: Parsing, Planning, Scripts ──
 
+    // `compileWorkflowIR` is passed to BOTH command builders (row A.2): a `-->` chain and a
+    // submitted IR are the same representation, so they compile through the same function rather
+    // than through two projections that agree by hand. Same layer reason as the port below — the
+    // composition root is the only place allowed to name both sides.
     const symbolicCommandBuilder = new SymbolicCommandBuilder(
       deps.parsingSystem.argumentParser,
-      deps.logger
+      deps.logger,
+      compileWorkflowIR
     );
     const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
     // The composition root is the only layer that may name both sides: `engine/` cannot

@@ -65,6 +65,17 @@ export interface WorkflowNode {
    * (OQ-P6-8) — the same channel `ChainStepSchema.inlineGateIds` now feeds.
    */
   readonly inlineGateIds?: readonly string[];
+  /**
+   * Raw `::` gate tokens for this node, resolved per step at stage 11 by `InlineGateProcessor`
+   * (row A.2, OQ-A2b). A sibling of `inlineGateIds`, not a spelling of it — see
+   * `node-schema.ts` for why the run-level `gates[]` channel provably cannot carry them.
+   */
+  readonly inlineGateCriteria?: readonly string[];
+  /**
+   * Declared context isolation — the `==>` operator's landing field. A DECLARATION;
+   * `markDelegatedStepPrompts` (stage 06) stays the single producer of the runtime flag.
+   */
+  readonly delegated?: boolean;
 }
 
 /**

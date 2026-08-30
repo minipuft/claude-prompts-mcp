@@ -11,11 +11,21 @@
  * function there is only one of them left.
  *
  * WHY THE STRING FORM IS NARROWER THAN THE STRUCTURED ONE. A `-->` command can carry two operators
- * this parser refuses rather than maps: `::` step criteria and `==>` delegation. Row A.2's ruling
- * (OQ-A2) assigns each of those an IR target, and that ruling is BLOCKED — see the plan's Tier A
- * execution record and DEV-TA2-1. Refusing them by name is the only option that keeps the two
- * spellings identical: mapping them here without the A.2 half would make the string form mean
- * something the structured form cannot say.
+ * this parser refuses rather than maps: `::` step criteria and `==>` delegation.
+ *
+ * The blocker MOVED at row A.2 and the refusal is kept for a different reason than it was written
+ * for. A.2 shipped `inlineGateCriteria` and `delegated` on the IR node schema, so the node
+ * vocabulary can now say both — that half is done. What still cannot carry them is the REMAINDER,
+ * one layer down: `projectNodes` (`capture/remainder-processor.ts`) narrows every submitted node
+ * to `{id, promptId, stepName}` before the store write, so a mapped `::` or `==>` would be dropped
+ * silently on its way to `chain_run_nodes`. It would be dropped for the STRUCTURED spelling too —
+ * which is exactly why accepting it here would break OQ-A1's "may never diverge": the string form
+ * would appear to accept an operator that changes nothing about the run.
+ *
+ * Lifting it therefore means widening `RemainderNodeSpec`, the store's node write and the row
+ * projection for both spellings at once — storage surface owned by rows 1.2 / 2.3, not by A.2.
+ * Until then the refusal names the operator and points at the layer, so it is retirable rather
+ * than folklore.
  *
  * Pure: no I/O, no logger, no registry. Prompt existence and required arguments are NOT checked
  * here — `validateWorkflowIR`, reached through `RemainderProcessor`, owns both, and checking them
@@ -89,16 +99,18 @@ export function parseAppendCommand(command: string): AppendCommandParse {
     return {
       ok: false,
       message:
-        'append refused: the "==>" delegation operator has no representation in a remainder node ' +
-        'yet (plan row A.2). Append the step with "-->" and set delegation on the prompt.',
+        'append refused: the "==>" delegation operator is declarable on an IR node but a remainder ' +
+        'node still carries only {id, promptId, stepName}, so it would be dropped before the run ' +
+        'sees it. Append the step with "-->" and set delegation on the prompt.',
     };
   }
   if (/(^|\s)::/.test(fragment)) {
     return {
       ok: false,
       message:
-        'append refused: the "::" gate operator has no representation in a remainder node yet ' +
-        '(plan row A.2). Bind the gate with the `gates` parameter and its target_step_id instead.',
+        'append refused: the "::" gate operator is declarable on an IR node but a remainder node ' +
+        'still carries only {id, promptId, stepName}, so it would be dropped before the run sees ' +
+        'it. Bind the gate with the `gates` parameter and its target_step_id instead.',
     };
   }
 

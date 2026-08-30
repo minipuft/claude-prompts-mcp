@@ -1,17 +1,35 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
 
 import type { Logger } from '#infra/logging/index.js';
+import type { WorkflowCompilation, WorkflowCompilerDeps } from '#modules/workflow-ir/compiler.js';
+import type { WorkflowEdge, WorkflowIR, WorkflowNode } from '#modules/workflow-ir/types.js';
 import type {
   ExecutionContext as ArgumentExecutionContext,
   ArgumentParser,
 } from './argument-parser.js';
 import type { ShellVerifyGate } from '../../gates/shell/types.js';
 import type { ParsedCommand } from '../context/index.js';
-import type { ChainStepPrompt } from '../operators/types.js';
 import type { ConvertedPrompt } from '../types.js';
 import type { SymbolicCommandParseResult } from './types/operator-types.js';
 
 import { PromptError } from '#shared/utils/index.js';
+
+/**
+ * `compileWorkflowIR`, injected.
+ *
+ * Same seam and the same reason as `WorkflowIrPort` in `workflow-command-builder.ts`: the
+ * compiler lives in `modules/workflow-ir/` (Layer 3) and dependency-cruiser's
+ * `engine-no-modules-or-mcp-value` bars `engine/` from value-importing it. The composition root
+ * (`PipelineBuilder`) is the one layer that may name both sides. Narrower than `WorkflowIrPort`
+ * because a `-->` command needs no validator: its nodes are minted by the parser, not submitted
+ * by a client, so there is no untrusted shape to reject and no order to derive — the chain is
+ * linear by construction.
+ */
+export type WorkflowCompileFn = (
+  ir: WorkflowIR,
+  order: readonly string[],
+  deps: WorkflowCompilerDeps
+) => WorkflowCompilation;
 
 type ParsedArgumentsResult = {
   processedArgs: Record<string, any>;
@@ -51,7 +69,8 @@ export type PromptLookup = (idOrName: string) => ConvertedPrompt | undefined;
 export class SymbolicCommandBuilder {
   constructor(
     private readonly argumentParser: ArgumentParser,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly compileWorkflow: WorkflowCompileFn
   ) {}
 
   /**
@@ -181,12 +200,41 @@ export class SymbolicCommandBuilder {
     return parsedCommand;
   }
 
+  /**
+   * A `-->` command → Workflow IR nodes → `compileWorkflowIR` (row A.2).
+   *
+   * The string path no longer builds `ChainStepPrompt[]` itself. It builds the same IR a client
+   * could have submitted — frozen `n1..nN` ids straight off the parser, linear edges, per-step
+   * resolved args, `==>` on `delegated`, per-step `::` tokens on `inlineGateCriteria` — and hands
+   * it to the one compiler YAML (through A.1's derivation) and a submitted IR already reach. One
+   * projection rule, three inputs; before this there were two copies of it and nothing failed
+   * when they diverged.
+   *
+   * WHAT STAYS HERE AND WHY. Two things happen before compilation rather than inside it, and both
+   * are deliberate:
+   *
+   *   - ARGUMENT RESOLUTION. A symbolic step's args are a fragment of a command STRING, routinely
+   *     partial, and `resolveArgumentPayload` runs them through the full `ArgumentParser` ladder
+   *     plus the prompt's declared defaults. An IR node's `args` is a declared object the
+   *     validator has already checked, which is why `compileNode` does not re-derive defaults.
+   *     Resolving first and putting the RESULT on the node keeps both true.
+   *   - THE PROMPT-LEVEL `subagentModel` / `agentType` FALLBACK. It has always been read off the
+   *     resolved prompt on this path and has never existed on the IR path. Unifying the two was
+   *     priced and KILLED (OQ-A2b): an IR run would gain a fallback it never had. So it is applied
+   *     here, onto the node, and `compileNode` still copies no prompt defaults.
+   *
+   * `findPrompt` is still resolved BEFORE compiling, and still throws `PromptError` for a step
+   * whose prompt is unregistered. `compileWorkflowIR` would throw `WorkflowCompileError` for the
+   * same miss, but that error means "an unvalidated IR reached the compiler" — a server fault —
+   * and a mistyped prompt id in a user's `-->` command is not one.
+   */
   private async buildSymbolicChain(
     parseResult: SymbolicCommandParseResult,
     findPrompt: PromptLookup
   ): Promise<ParsedCommand> {
-    const stepPrompts: ChainStepPrompt[] = [];
-    let commandArgs: Record<string, any> = {};
+    const nodes: WorkflowNode[] = [];
+    const order: string[] = [];
+    const promptsById = new Map<string, ConvertedPrompt>();
 
     const argumentInputs = parseResult.executionPlan.argumentInputs ?? [];
 
@@ -226,30 +274,51 @@ export class SymbolicCommandBuilder {
         fallbackArgs?.processedArgs
       );
 
-      if (stepPrompts.length === 0) {
-        commandArgs = resolvedArgs.processedArgs;
-      }
-
-      stepPrompts.push({
-        stepNumber: step.stepNumber ?? stepPrompts.length + 1,
-        // Propagated from the ExecutionStep minted upstream in symbolic-operator-parser.ts —
-        // never re-minted here (would diverge from the frozen n1..nK if this site's fallback
-        // stepNumber path is ever taken for a step the parser didn't number).
-        ...(step.nodeId != null ? { nodeId: step.nodeId } : {}),
+      // Frozen at mint by `symbolic-operator-parser.generateExecutionPlan`, never re-minted here:
+      // a locally derived id would diverge from the `n1..nK` the rest of the run addresses. The
+      // fallback covers only a step the parser did not number, which its own chain path cannot
+      // produce — it exists so an unnumbered step fails as a duplicate id rather than silently
+      // losing its identity.
+      const nodeId = step.nodeId ?? `n${nodes.length + 1}`;
+      promptsById.set(convertedPrompt.id, convertedPrompt);
+      order.push(nodeId);
+      nodes.push({
+        id: nodeId,
         promptId: convertedPrompt.id,
-        convertedPrompt,
         args: resolvedArgs.processedArgs,
+        // Written even when empty: this path has always put an `inlineGateCriteria` array on
+        // every step, and `compileNode` spreads what it is given. An absent key and an empty
+        // array are the same to `InlineGateProcessor` but not to a reader doing `.length`.
         inlineGateCriteria: resolvedArgs.inlineCriteria,
         ...(step.delegated === true ? { delegated: true } : {}),
-        subagentModel: convertedPrompt.subagentModel,
-        agentType: convertedPrompt.agentType,
+        // The prompt-level fallback OQ-A2b kept path-local. See the method docblock.
+        ...(convertedPrompt.subagentModel !== undefined
+          ? { subagentModel: convertedPrompt.subagentModel }
+          : {}),
+        ...(convertedPrompt.agentType !== undefined
+          ? { agentType: convertedPrompt.agentType }
+          : {}),
       });
     }
 
+    // Linear by construction — a `-->` command declares a sequence, not a dependency graph. The
+    // edges are carried on the IR because they are part of the representation this command now
+    // HAS; `compileWorkflowIR` consumes `order`, which for a hand-written linear IR is the same
+    // list the linearizer would return.
+    const edges: WorkflowEdge[] = order
+      .slice(1)
+      .map((to, index) => ({ from: order[index] as string, to }));
+
+    const compilation = this.compileWorkflow(
+      { version: 1, nodes, ...(edges.length > 0 ? { edges } : {}) },
+      order,
+      { lookupPrompt: (promptId) => promptsById.get(promptId) ?? findPrompt(promptId) }
+    );
+
     const parsedCommand: ParsedCommand = {
       ...parseResult,
-      steps: stepPrompts,
-      promptArgs: commandArgs,
+      steps: compilation.steps,
+      promptArgs: compilation.promptArgs,
       inlineGateCriteria:
         !stepsCarryInlineGates && globalGateCriteria.length > 0 ? globalGateCriteria : undefined,
     };
