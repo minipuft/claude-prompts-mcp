@@ -93,6 +93,12 @@ export interface WorkflowBudget {
   readonly maxInsertions?: number;
   /** RECORDED ONLY — never enforced, never compared against a server-side estimate. */
   readonly declaredCostCeiling?: number;
+  /**
+   * BEHAVIOURAL DIAL — not a cap, so there is nothing to narrow. `true` makes a blocking unknown
+   * HARD-PAUSE the run on the reserved `__unknown_interrupt__` review instead of continuing into
+   * the inserted investigation step (D-2). Default `false`.
+   */
+  readonly pauseOnBlocking?: boolean;
 }
 
 /** A submitted workflow. `version` is a literal so a future shape change is a typed discriminant. */
@@ -107,6 +113,36 @@ export interface WorkflowIR {
    */
   readonly gates?: readonly GateSpecification[];
   readonly budget?: WorkflowBudget;
+}
+
+/**
+ * How a submitted remainder meets the nodes already on the run.
+ *
+ * ONE MECHANISM, TWO SPELLINGS (OQ-A1): `append` is also what a `chain_id` call whose command
+ * begins with `-->` compiles to, so the two spellings share this vocabulary rather than each
+ * carrying a private notion of "add to the end".
+ */
+type RemainderMode = 'replace' | 'append';
+
+/**
+ * A model-authored rewrite of the rest of a RUNNING chain, submitted when a blocking unknown has
+ * invalidated the plan's shape.
+ *
+ * Declared HERE, beside {@link WorkflowIR}, and not in `mcp/tools/schemas/`, for the reason
+ * `WorkflowIR` is: the consumers are `engine/` stages and the chain store, and `engine/` may not
+ * import `mcp/`. The Zod schema (`prompt-engine.schema.ts`) validates against this shape and a
+ * compile-time drift guard there fails `tsc` if the two diverge.
+ *
+ * The server never authors one — it validates and applies. That is the advisory posture the whole
+ * unknowns mechanism keeps: the model declares, the server decides whether the declaration is
+ * admissible.
+ */
+export interface RemainderSubmission {
+  readonly mode: RemainderMode;
+  /** The replacement (or appended) steps, in declaration order — same vocabulary as {@link WorkflowNode}. */
+  readonly nodes: readonly WorkflowNode[];
+  /** Dependency assertions among the submitted nodes. Linearized exactly as {@link WorkflowIR.edges} are. */
+  readonly edges?: readonly WorkflowEdge[];
 }
 
 /**

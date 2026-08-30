@@ -826,7 +826,8 @@ export class McpToolRouter {
               // every layer while being structurally dead on the wire. That has now happened
               // three times in this area (`version_description`, `dry_run` on the gate and
               // framework routes, and this). Verified live, not by unit test: only a real
-              // tools/call can show whether the value arrives.
+              // tools/call can show whether the value arrives. Re-measured 2026-08-30: four
+              // recorded instances precede `remainder` below, which makes it the fifth.
               ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
               // Fourth instance (2026-08-21): `handoff`/`claim_token` typechecked end-to-end and
               // were dead on the wire until the two-server live drive showed `handoff:true`
@@ -836,6 +837,14 @@ export class McpToolRouter {
               ...(args.options != null ? { options: args.options } : {}),
               ...(args.inputs != null ? { inputs: args.inputs } : {}),
               ...(args.observations != null ? { observations: args.observations } : {}),
+              // Fifth instance (2026-08-30): `remainder`. Entered here in the SAME tier that
+              // declared the parameter, before any consumer exists, precisely because the four
+              // above were each forgotten until something downstream mysteriously did nothing.
+              // UNPROVEN as of this commit: nothing reads it yet, so no live drive can show it
+              // arriving. The proof is row 4.5's `verify-unknown-interrupt.mjs`, not this line
+              // and not the green suite — a unit test calls the executor directly and therefore
+              // cannot observe this object at all.
+              ...(args.remainder != null ? { remainder: args.remainder } : {}),
               // Passed through unchanged. Unlike `gates` below there is nothing to normalize:
               // `workflowIRSchema` is `.strict()` at every level, so a parsed workflow carries
               // exactly the declared keys and no unknown ones survived to be filtered here.

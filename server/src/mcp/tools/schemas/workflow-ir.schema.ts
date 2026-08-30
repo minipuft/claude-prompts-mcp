@@ -39,7 +39,7 @@ import {
   workflowNodeSchema,
 } from '#modules/workflow-ir/node-schema.js';
 
-export { workflowBudgetSchema, workflowEdgeSchema, workflowNodeSchema };
+export { DEFAULT_WORKFLOW_CAPS, workflowBudgetSchema, workflowEdgeSchema, workflowNodeSchema };
 
 /** A submitted workflow. */
 export const workflowIRSchema = z

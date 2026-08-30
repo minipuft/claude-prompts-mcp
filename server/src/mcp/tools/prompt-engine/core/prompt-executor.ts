@@ -28,7 +28,7 @@ import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ScriptToolRuntime } from '#engine/gates/services/script-tool-criterion-runner.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
-import type { WorkflowIR } from '#modules/workflow-ir/types.js';
+import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
 import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
@@ -426,6 +426,14 @@ export class PromptExecutor {
       inputs?: Record<string, unknown>;
       /** Typed unknowns discovered/resolved by the current step. Threaded through unchanged (Tier 3 consumes it). */
       observations?: UnknownObservation[];
+      /**
+       * A model-authored replacement for the rest of the running chain, admissible only while a
+       * blocking unknown is open. DECLARED AHEAD OF ITS CONSUMER: the argument allowlist in
+       * `mcp/tools/index.ts` cannot carry a field this type does not have, and that allowlist is
+       * the one thing in this path that has been forgotten four times. Nothing reads it yet —
+       * the reader lands with the interrupt stages.
+       */
+      remainder?: RemainderSubmission;
       /**
        * A planner-submitted Workflow IR (P6 Tier 5). Mutually exclusive with `command` and
        * `chain_id`; the conflict is rejected by the tool schema's refinement and, for callers

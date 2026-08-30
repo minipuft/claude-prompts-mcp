@@ -12,9 +12,15 @@
 import { z } from 'zod/v4';
 
 import { gateSpecUnionSchema } from './gate-spec.schema.js';
-import { workflowIRSchema } from './workflow-ir.schema.js';
+import {
+  DEFAULT_WORKFLOW_CAPS,
+  workflowEdgeSchema,
+  workflowIRSchema,
+  workflowNodeSchema,
+} from './workflow-ir.schema.js';
 
 import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-renderer.js';
+import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 
 import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
 
@@ -75,6 +81,52 @@ export const unknownObservationSchema = z.discriminatedUnion('type', [
   unknownDiscoveredSchema,
   unknownResolvedSchema,
 ]);
+
+// ---------------------------------------------------------------------------
+// Remainder submission (Tier 0 — contract + validation only; stage handling is Tier 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * A model-authored replacement for the rest of a running chain.
+ *
+ * REUSES the IR node and edge schemas rather than declaring a second step vocabulary. Tier A made
+ * `modules/workflow-ir/node-schema.ts` the ONE source for a step, and a remainder is a list of
+ * steps — declaring its own would recreate exactly the drift that tier removed. `.strict()` here
+ * and at every level below (both imported schemas are `.strict()`), so a misspelled key is
+ * rejected instead of silently stripped.
+ *
+ * `mode` is required and has no default: 'replace' discards the nodes strictly after the current
+ * one, 'append' keeps them. Defaulting either way would make the destructive reading the one a
+ * caller gets by omission. OQ-A1 fixes the append spelling as the same mechanism the leading-`-->`
+ * string form takes (Tier A.3), so the two may never diverge in validation, caps, or provenance.
+ *
+ * The ADMISSIBILITY rules — chain_id present, a blocking unknown open on the ledger or
+ * `__unknown_interrupt__` pending, per-unknown and per-run caps — are NOT expressible here: they
+ * are functions of run state, and this schema is a pure function of the payload. They are enforced
+ * where the run is legible (Tier 1/2) and refused by name.
+ */
+export const remainderSubmissionSchema = z
+  .object({
+    mode: z.enum(['replace', 'append']),
+    nodes: z
+      .array(workflowNodeSchema)
+      .min(1, 'A remainder must declare at least one node')
+      .max(DEFAULT_WORKFLOW_CAPS.maxNodes),
+    edges: z.array(workflowEdgeSchema).optional(),
+  })
+  .strict();
+
+/** The validated payload shape. Local: consumers name the module type {@link RemainderSubmission}. */
+type RemainderSubmissionInput = z.infer<typeof remainderSubmissionSchema>;
+
+/**
+ * Drift guard between the Zod shape and the module's TypeScript shape — the same never-executed
+ * device `workflow-ir.schema.ts` uses for `WorkflowIR`. `tsc` fails on divergence rather than a
+ * test catching it later.
+ */
+const _remainderSchemaMatchesModuleType: RemainderSubmission =
+  undefined as unknown as RemainderSubmissionInput;
+void _remainderSchemaMatchesModuleType;
 
 // ---------------------------------------------------------------------------
 // Gate verdict submission (structured alternative to the formatted string)
@@ -202,7 +254,7 @@ const PARAM_DEFAULTS = {
   gate_verdict:
     'Gate review result when resuming. PREFERRED (structured, cannot be malformed): {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}]}. Also accepts the legacy string "GATE_REVIEW: PASS - rationale". Rationales are single-line. Keep user_response for actual step output.',
   gate_action:
-    'User choice after gate retry limit exhaustion. "retry" resets attempt count, "skip" bypasses the gate, "abort" stops execution.',
+    'Your move on a run that is waiting for one. AFTER A FAILED GATE exhausts its retry limit: "retry" resets the attempt count, "skip" bypasses the gate, "abort" stops execution. ON A RUN PAUSED BY A BLOCKING UNKNOWN (only when budget.pauseOnBlocking was declared): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the rest of the run with the nodes supplied in `remainder` on the SAME call (refused by name without one). "abort" and cancel:true exit either state.',
   user_response:
     'Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.',
   gates:
@@ -211,7 +263,9 @@ const PARAM_DEFAULTS = {
   inputs:
     'Typed prompt arguments. Use for arrays/objects or values that must bypass command-string quoting. Inline command arguments win on duplicate keys.',
   workflow:
-    'Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with `command` and `chain_id` — sending more than one is rejected. SHAPE: {version:1, nodes:[{id:"kebab-case", promptId:"...", args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:["chain_history"|"previous_step_output"|"unknowns_ledger"], expose?:[...]}, subagentModel?:"heavy"|"standard"|"fast", agentType?:"...", framework?:"...", retries?:0, inlineGateIds?:["gate-id"]}], edges?:[{from:"node-a", to:"node-b"}], gates?:[...same as `gates`, target_step_id addresses a node id...], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>}}. EDGES ARE DEPENDENCIES, NOT BRANCHES: they are linearized (Kahn, ties broken by declaration order) into one run order; with no edges the order is `nodes[]` as written. Structural caps are enforced and may only be narrowed; `declaredCostCeiling` is recorded, never enforced. An invalid workflow is rejected with one addressed line per problem and NOTHING is created — no run, no session. Example: {version:1, nodes:[{id:"research", promptId:"research_docs"},{id:"draft", promptId:"write_summary"}], edges:[{from:"research", to:"draft"}]}',
+    'Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with `command` and `chain_id` — sending more than one is rejected. SHAPE: {version:1, nodes:[{id:"kebab-case", promptId:"...", args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:["chain_history"|"previous_step_output"|"unknowns_ledger"], expose?:[...]}, subagentModel?:"heavy"|"standard"|"fast", agentType?:"...", framework?:"...", retries?:0, inlineGateIds?:["gate-id"]}], edges?:[{from:"node-a", to:"node-b"}], gates?:[...same as `gates`, target_step_id addresses a node id...], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>, pauseOnBlocking?:<boolean, default false>}}. EDGES ARE DEPENDENCIES, NOT BRANCHES: they are linearized (Kahn, ties broken by declaration order) into one run order; with no edges the order is `nodes[]` as written. Structural caps are enforced and may only be narrowed; `declaredCostCeiling` is recorded, never enforced. An invalid workflow is rejected with one addressed line per problem and NOTHING is created — no run, no session. Example: {version:1, nodes:[{id:"research", promptId:"research_docs"},{id:"draft", promptId:"write_summary"}], edges:[{from:"research", to:"draft"}]}',
+  remainder:
+    'Rewrite the rest of a RUNNING chain when a blocking unknown has invalidated its shape. SHAPE: {mode:"replace"|"append", nodes:[<same node shape as `workflow`.nodes>], edges?:[{from,to}]}. "replace" discards every node strictly AFTER the current one and puts these in their place; "append" adds these after the current remainder and keeps it. The current node is never touched. Requires `chain_id`, and is accepted ONLY while a blocking unknown is open on the run\'s ledger or the "__unknown_interrupt__" review is pending — otherwise refused by name. On a PAUSED run, pair it with gate_action:"accept_alternative" in the same call. You author it; the server validates it against the same node/edge schemas and structural caps as a `workflow` submission, all-or-nothing. Example: {mode:"replace", nodes:[{id:"confirm-ttl", promptId:"investigate_unknown"},{id:"redraft", promptId:"write_summary"}]}',
   observations:
     'Declare typed unknowns discovered/resolved this step. Each entry: {type:"unknown_discovered"|"unknown_resolved", id:"kebab-case-slug", statement:"...", blocking?:true|false, target_step_id?:"...", resolution?:"answered"|"irrelevant"} (resolution required when type is unknown_resolved; target_step_id is discovered-only and names the downstream step the adaptive mutation policy skips if this unknown resolves irrelevant). Example: [{type:"unknown_discovered", id:"cache-ttl-unknown", statement:"TTL for the new cache layer is undecided", blocking:false, target_step_id:"draft-outline"}]',
 } as const;
@@ -283,6 +337,17 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .describe(resolve('observations', PARAM_DEFAULTS.observations)),
 
     /**
+     * A CORE field, not a gate field, even though its acceptance on a PAUSED run is paired with
+     * `gate_action: 'accept_alternative'`. The default posture raises a soft interrupt with no
+     * gate involved at all, so gating this parameter on `gateSystemEnabled` would withdraw it
+     * from the exact state that needs it most — and withdrawal STRIPS rather than rejects
+     * (P6-F6), so the caller would get a run that ignored its alternative and said nothing.
+     */
+    remainder: remainderSubmissionSchema
+      .optional()
+      .describe(resolve('remainder', PARAM_DEFAULTS.remainder)),
+
+    /**
      * The third command source (P6 Tier 5, OQ-P6-1). A CORE field, never gate-dependent:
      * the IR shape depends on no runtime state, so it is never narrowed and therefore can never
      * be silently stripped from a client's call the way a withdrawn parameter is (P6-F6 —
@@ -323,7 +388,13 @@ function buildGateFields(
       .describe(resolve('gate_verdict', PARAM_DEFAULTS.gate_verdict)),
 
     gate_action: z
-      .enum(['retry', 'skip', 'abort'])
+      // Five members, two states. `retry`/`skip` answer a FAILED GATE; `resume`/
+      // `accept_alternative` answer a run paused on the reserved `__unknown_interrupt__`
+      // review; `abort` exits either. A member used against the wrong pending state is refused
+      // BY NAME at the verdict processor rather than being narrowed out of the enum here —
+      // narrowing is what silently strips a value (P6-F6), and a caller who sent `resume` to a
+      // gate review deserves to be told so.
+      .enum(['retry', 'skip', 'abort', 'resume', 'accept_alternative'])
       .optional()
       .describe(resolve('gate_action', PARAM_DEFAULTS.gate_action)),
   };

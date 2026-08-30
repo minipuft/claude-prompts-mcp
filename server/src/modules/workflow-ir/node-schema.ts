@@ -237,6 +237,13 @@ export interface WorkflowRejection {
  * `declaredCostCeiling` carries no upper bound at all — it is RECORDED onto the existing
  * `execution_records` telemetry object and never enforced (OQ-P6-3), so a bound on it would be a
  * limit on a number nothing acts upon.
+ *
+ * `pauseOnBlocking` is neither: it is a BEHAVIOURAL DIAL, a boolean with no server default to
+ * narrow. It selects between the two legitimate postures for a blocking unknown — autonomous
+ * (default `false`: the interrupt rides on the inserted investigation step and the run continues)
+ * and supervised (`true`: the run holds on a synthetic `__unknown_interrupt__` review until the
+ * caller answers). Declared on the budget rather than beside it because it is read back off the
+ * run's blueprint per step exactly the way `maxInsertions` is (D-2).
  */
 export const workflowBudgetSchema = z
   .object({
@@ -249,6 +256,7 @@ export const workflowBudgetSchema = z
       .max(DEFAULT_WORKFLOW_CAPS.maxInsertions)
       .optional(),
     declaredCostCeiling: z.number().positive().optional(),
+    pauseOnBlocking: z.boolean().optional(),
   })
   .strict();
 
