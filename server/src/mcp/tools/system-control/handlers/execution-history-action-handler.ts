@@ -163,11 +163,18 @@ function formatTelemetryLine(
       ? ` · nodes inserted ${newest.nodesInserted ?? 0} / skipped ${newest.nodesSkipped ?? 0}`
       : '';
 
+  // Same conditional shape as the line above, and for the same reason: an uninterrupted run's
+  // summary stays byte-identical to its pre-D-8 form rather than gaining two zeroes.
+  const interrupts =
+    (newest.interruptsRaised ?? 0) > 0 || (newest.remaindersAccepted ?? 0) > 0
+      ? ` · interrupts ${newest.interruptsRaised ?? 0} / remainders ${newest.remaindersAccepted ?? 0}`
+      : '';
+
   return (
     `_planned ${stepsPlanned ?? 0} / executed ${stepsExecuted}` +
     ` · gates fired ${gatesFired ?? 0} (retries ${gateRetries ?? 0})` +
     ` · unknowns opened ${unknownsOpened ?? 0} / closed ${unknownsClosed ?? 0}` +
-    `${mutations}_`
+    `${mutations}${interrupts}_`
   );
 }
 

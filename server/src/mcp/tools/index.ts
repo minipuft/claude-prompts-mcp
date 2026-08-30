@@ -818,7 +818,11 @@ export class McpToolRouter {
               ...(trimmedUserResponse ? { user_response: trimmedUserResponse } : {}),
               ...(trimmedGateVerdict ? { gate_verdict: trimmedGateVerdict } : {}),
               ...(trimmedGateAction
-                ? { gate_action: trimmedGateAction as 'retry' | 'skip' | 'abort' }
+                ? {
+                    gate_action: trimmedGateAction as NonNullable<
+                      Parameters<PromptExecutor['executePromptCommand']>[0]['gate_action']
+                    >,
+                  }
                 : {}),
               ...(args.force_restart !== undefined ? { force_restart: args.force_restart } : {}),
               // This object is an explicit ALLOWLIST, not a spread — a parameter absent here is

@@ -119,6 +119,18 @@ export const MAX_INSERTIONS_PER_RUN = 3;
 export const UNKNOWN_INTERRUPT_GATE_ID = '__unknown_interrupt__';
 
 /**
+ * The two `gate_action` verbs that resolve a mid-chain interrupt (OQ-4).
+ *
+ * A type of its own rather than two more members on `GateAction`, because `GateAction` is the
+ * retry-EXHAUSTION vocabulary: `GateEnforcementAuthority.resolveAction` switches on it to reset a
+ * retry count, skip a failed gate or abort. Widening that type would oblige every one of those
+ * sites to answer "what does resume mean for an exhausted gate", and the answer is nothing —
+ * these verbs address a hold no gate produced. `McpToolRequest.gate_action` is the union of both
+ * vocabularies; the narrowing lives at the one stage that reads it.
+ */
+export type InterruptResolutionAction = 'resume' | 'accept_alternative';
+
+/**
  * One remaining node, reduced to the three fields the interrupt payload publishes.
  *
  * Deliberately NOT `ChainNode`: `origin`/`originUnknownId` are server-side provenance and the

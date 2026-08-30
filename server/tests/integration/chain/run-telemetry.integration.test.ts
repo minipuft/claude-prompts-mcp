@@ -89,6 +89,8 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       unknowns_closed INTEGER,
       nodes_inserted INTEGER,
       nodes_skipped INTEGER,
+      interrupts_raised INTEGER,
+      remainders_accepted INTEGER,
       delegation_skipped INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
@@ -135,7 +137,7 @@ const readTelemetryRow = (
   db
     .prepare(
       `SELECT status, steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed,
-              nodes_inserted, nodes_skipped
+              nodes_inserted, nodes_skipped, interrupts_raised, remainders_accepted
        FROM execution_records
        WHERE session_id = ? AND completed_at IS NOT NULL
        ORDER BY execution_id DESC LIMIT 1`
@@ -187,7 +189,7 @@ describe('run telemetry, session counters through the ledger', () => {
     recordStore = new ExecutionRecordStore(created.port, createLogger());
 
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
@@ -249,6 +251,49 @@ describe('run telemetry, session counters through the ledger', () => {
     expect(await sessionStore.markNodeSkipped(sessionId, 'n2', 'cache-ttl')).toBe(true);
   };
 
+  test('an INTERRUPTED run stamps the D-8 counters non-zero on its terminal record', async () => {
+    // The positive control for the two `interrupts_raised: 0` expectations elsewhere in this
+    // suite: without a run that produces non-zero values, a column bound to a hardcoded 0 — or
+    // dropped from the INSERT and defaulted — would satisfy every other assertion here.
+    await sessionStore.createSession('sess-interrupted', 'chain-tel', 3);
+    await sessionStore.applyUnknownObservations('sess-interrupted', 'n1', [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided', blocking: true },
+    ]);
+    const outcome = await sessionStore.replaceRemainder(
+      'sess-interrupted',
+      [{ promptId: 'investigate_unknown', stepName: 'Confirm the TTL' }],
+      'cache-ttl',
+      'replace'
+    );
+    expect(outcome.kind).toBe('applied');
+
+    const stage = new ResponseFormattingStage(
+      new ResponseFormatter(createLogger()),
+      new ResponseAssembler(),
+      createLogger(),
+      recordStore,
+      sessionStore
+    );
+    const context = new ExecutionContext({ command: '>>chain' });
+    context.executionPlan = { strategy: 'chain', gates: [] } as any;
+    context.sessionContext = {
+      sessionId: 'sess-interrupted',
+      chainId: 'chain-tel',
+      isChainExecution: true,
+      currentStep: 2,
+      totalSteps: 2,
+    };
+    context.executionResults = { content: 'final output' };
+    context.state.session.chainComplete = true;
+    await stage.execute(context);
+
+    expect(readTelemetryRow(db, 'sess-interrupted')).toMatchObject({
+      status: 'completed',
+      interrupts_raised: 1,
+      remainders_accepted: 1,
+    });
+  });
+
   test('a mutated run stamps the P4 counters, values not NULLs, on BOTH terminal writers', async () => {
     // Completed path (21-formatting-stage).
     await sessionStore.createSession('sess-mutated', 'chain-tel', 3);
@@ -285,6 +330,8 @@ describe('run telemetry, session counters through the ledger', () => {
       unknowns_closed: 1,
       nodes_inserted: 1,
       nodes_skipped: 1,
+      interrupts_raised: 0,
+      remainders_accepted: 0,
     });
 
     // Failure path (prompt-execution-pipeline) — the same numbers, on a `failed` row. Wiring
@@ -336,6 +383,8 @@ describe('run telemetry, session counters through the ledger', () => {
       unknowns_closed: 1,
       nodes_inserted: 1,
       nodes_skipped: 1,
+      interrupts_raised: 0,
+      remainders_accepted: 0,
     });
   });
 
@@ -381,6 +430,8 @@ describe('run telemetry, session counters through the ledger', () => {
       unknowns_closed: 1,
       nodes_inserted: 0,
       nodes_skipped: 0,
+      interrupts_raised: 0,
+      remainders_accepted: 0,
     });
   });
 
@@ -418,6 +469,8 @@ describe('run telemetry, session counters through the ledger', () => {
       unknownsClosed: row?.['unknowns_closed'],
       nodesInserted: row?.['nodes_inserted'],
       nodesSkipped: row?.['nodes_skipped'],
+      interruptsRaised: row?.['interrupts_raised'],
+      remaindersAccepted: row?.['remainders_accepted'],
     });
   });
 
@@ -470,6 +523,8 @@ describe('run telemetry, session counters through the ledger', () => {
       unknowns_closed: 1,
       nodes_inserted: 0,
       nodes_skipped: 0,
+      interrupts_raised: 0,
+      remainders_accepted: 0,
     });
   });
 

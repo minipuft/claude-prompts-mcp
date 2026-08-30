@@ -101,3 +101,16 @@ export type {
 // Adaptive chain-mutation decision (P4 Tier 1 — pure; wired into stage 16 at Tier 3)
 export { decideMutation, MAX_INSERTIONS_PER_RUN } from './mutation/index.js';
 export type { ChainMutation, DecideMutationInput, MutationNoneReason } from './mutation/index.js';
+
+// Mid-chain blocking-unknown interrupt (row 1.1 — pure; wired into stage 16 at row 2.1)
+export {
+  decideInterrupt,
+  isInterruptResolutionAction,
+  isUnknownInterruptPending,
+  UNKNOWN_INTERRUPT_GATE_ID,
+} from './mutation/index.js';
+// `DecideInterruptInput` and `InterruptNodeSummary` are deliberately NOT re-exported here: the
+// policy module and its unit suite are their only consumers and both import them from
+// `./mutation/index.js` directly. A barrel entry with no consumer is what `validate:knip-ratchet`
+// counts, and adding one to look symmetric is how a barrel stops describing its consumers.
+export type { ChainInterrupt, InterruptResolutionAction } from './mutation/index.js';

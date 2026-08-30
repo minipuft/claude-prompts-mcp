@@ -439,8 +439,16 @@ describe('ChainSessionStore — unknowns ledger', () => {
     });
 
   beforeEach(() => {
+    // The spy sits on `persistSessionsOrThrow`, not on `saveSessions`, and the difference is
+    // load-bearing for the persist-failure case below. `saveSessions` routes through
+    // `persistSessions`, which log-and-SWALLOWS: mocking it to reject makes a method throw that
+    // production could never make throw, so the test that "proves" the failure propagates would
+    // pass against a caller that swallows it — and did, from the day this method landed until
+    // row 1.4. `persistSessionsOrThrow` is the method whose contract IS to throw, so mocking it
+    // measures the property the test names. It is also the single funnel both persist paths run
+    // through, so the call-count assertions below are unchanged.
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')

@@ -417,7 +417,7 @@ export class PromptExecutor {
       /** Claim a run minted elsewhere and resume it here (2A). See `handleClaim`. */
       claim_token?: string;
       gate_verdict?: string;
-      gate_action?: 'retry' | 'skip' | 'abort';
+      gate_action?: McpToolRequest['gate_action'];
       user_response?: string;
       /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
       gates?: import('#shared/types/execution.js').GateSpecification[];
@@ -428,10 +428,10 @@ export class PromptExecutor {
       observations?: UnknownObservation[];
       /**
        * A model-authored replacement for the rest of the running chain, admissible only while a
-       * blocking unknown is open. DECLARED AHEAD OF ITS CONSUMER: the argument allowlist in
-       * `mcp/tools/index.ts` cannot carry a field this type does not have, and that allowlist is
-       * the one thing in this path that has been forgotten four times. Nothing reads it yet —
-       * the reader lands with the interrupt stages.
+       * blocking unknown is open. The argument allowlist in `mcp/tools/index.ts` cannot carry a
+       * field this type does not have, and that allowlist is the one thing in this path that has
+       * been forgotten four times. Its reader landed at row 2.3: `RemainderProcessor`, reached
+       * from stage 16 via `McpToolRequest.remainder` below.
        */
       remainder?: RemainderSubmission;
       /**
@@ -517,6 +517,10 @@ export class PromptExecutor {
       ...(args.options && { options: args.options }),
       ...(args.inputs && { inputs: args.inputs }),
       ...(args.observations != null ? { observations: args.observations } : {}),
+      // Row 2.3. THIS is the hop the allowlist comment upstream warns about, one layer down:
+      // `mcp/tools/index.ts` puts the value on `args`, and this puts it on the request the
+      // pipeline reads. Omitting either leaves the parameter typechecked and dead.
+      ...(args.remainder != null ? { remainder: args.remainder } : {}),
       ...(sdkExtra != null ? { _extra: sdkExtra as Record<string, unknown> } : {}),
     } as McpToolRequest;
 

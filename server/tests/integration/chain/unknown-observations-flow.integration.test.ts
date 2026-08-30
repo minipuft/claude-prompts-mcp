@@ -80,7 +80,7 @@ describe('unknown observations, schema through ledger', () => {
 
   beforeEach(async () => {
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
@@ -200,7 +200,7 @@ describe('inserted-node review scope: the run-step view join (P5-F4)', () => {
 
   beforeEach(async () => {
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')

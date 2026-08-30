@@ -149,6 +149,21 @@ export interface EvidencePayload {
  * counter alongside a list that already holds the fact is a second source that can drift.
  * `stepsPlanned` is the node count AFTER any insertions, so `stepsPlanned - nodesInserted` is
  * what the run started with.
+ *
+ * `interruptsRaised`/`remaindersAccepted` (D-8) are the surviving record of the mid-chain
+ * interrupt once the run's ledger and node rows are gone — both are `ephemeral` and PID-deleted,
+ * so `execution_records` is the only place this signal outlives the process. Derived at read
+ * time from the same two lists, for the reason the four counters above are:
+ *
+ * - `interruptsRaised` counts BLOCKING LEDGER ENTRIES, not raise events. `decideInterrupt` is a
+ *   function of what is OPEN rather than of a delta, so it re-raises on every step while an
+ *   unknown stays open; counting events would report "how many steps ran while blocked", which
+ *   is a different fact and one `stepsPlanned` already bounds. One blocking unknown = one
+ *   interrupt, whether the run saw it once or six times. Resolved entries still count: the
+ *   interrupt WAS raised, and the run's history is what this column records.
+ * - `remaindersAccepted` counts DISTINCT unknown ids that spent a remainder, which is exactly
+ *   the unit `replaceRemainder`'s per-unknown-id cap counts, so the number and the cap can never
+ *   disagree about what "a remainder" is.
  */
 export interface RunTelemetry {
   stepsPlanned: number;
@@ -158,6 +173,8 @@ export interface RunTelemetry {
   unknownsClosed: number;
   nodesInserted: number;
   nodesSkipped: number;
+  interruptsRaised: number;
+  remaindersAccepted: number;
 }
 
 /**
@@ -202,6 +219,8 @@ export interface ExecutionRecord {
   unknownsClosed?: number;
   nodesInserted?: number;
   nodesSkipped?: number;
+  interruptsRaised?: number;
+  remaindersAccepted?: number;
   /**
    * S8 delegation-acknowledgment audit, populated ONLY on capture-time `completed` step rows
    * for a step that was BOTH delegated and gated — the one row type where the fact exists

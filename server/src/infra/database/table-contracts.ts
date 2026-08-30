@@ -376,7 +376,16 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'steps, delegated steps with no gate text, and every render/terminal row. Same partial- ' +
       'population-BY-ROW-TYPE reading as the v21/v23 groups; record-only (R-4 — enforcement ' +
       'stays advisory, the server records what it cannot prevent), read back by the ' +
-      'execution_history action.',
+      'execution_history action. ' +
+      'D-8 (v26) added interrupts_raised and remainders_accepted on the v21/v23 terms exactly: ' +
+      'terminal rows only, riding the same getRunTelemetry object both terminal writers spread. ' +
+      'They are the surviving audit of the mid-chain blocking-unknown interrupt once the ' +
+      'unknowns ledger (chain_runs residual document) and origin=remainder (chain_run_nodes) are ' +
+      'gone — both tables are ephemeral and PID-deleted, so nothing else outlives the process. ' +
+      'UNITS, which the names do not carry: interrupts_raised counts blocking LEDGER ENTRIES ' +
+      'rather than raise events (decideInterrupt is a function of open state and re-raises every ' +
+      'step while an unknown is open), and remainders_accepted counts DISTINCT unknown ids — the ' +
+      "same unit replaceRemainder's per-unknown-id cap counts, sharing one expression with it.",
   },
 ];
 

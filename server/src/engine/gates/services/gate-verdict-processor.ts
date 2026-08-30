@@ -1,5 +1,8 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
-import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
+import {
+  isUnknownInterruptPending,
+  resolveEnforcementMode,
+} from '../../execution/pipeline/decisions/index.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -11,10 +14,23 @@ import type {
   PipelineHookContext,
 } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
-import type { GateAction } from '../../execution/pipeline/decisions/index.js';
+import type {
+  GateAction,
+  InterruptResolutionAction,
+} from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
 import { nodeIdAt } from '#shared/utils/node-order.js';
+
+/**
+ * Outcome of a mid-chain interrupt resolution attempt (row 2.2).
+ *
+ * A named refusal carrying its own message, never a boolean: the plan requires every refusal to
+ * tell the submitter WHY, and three different refusals collapsed into `false` is how a caller
+ * ends up retrying the one thing that cannot work.
+ */
+export type InterruptResolution =
+  { readonly kind: 'resolved' } | { readonly kind: 'refused'; readonly message: string };
 
 /**
  * Result of processing gate verdicts for a request.
@@ -52,6 +68,94 @@ export class GateVerdictProcessor {
     private readonly hookRegistry?: HookRegistryPort,
     private readonly notificationEmitter?: McpNotificationEmitterPort
   ) {}
+
+  /**
+   * Resolve a mid-chain blocking-unknown interrupt with `resume` or `accept_alternative`
+   * (OQ-4, row 2.2).
+   *
+   * Separate entry point from {@link handleGateAction}, not a fifth case inside it: that method
+   * answers "the retry budget is spent, what now", and every branch of it addresses a gate the
+   * run failed. This one addresses a hold NO gate produced — the run's steps all passed, and what
+   * stopped it is a caller-declared unknown. Sharing an entry point would put a `resetRetryCount`
+   * and a `cancelChain` in reach of a verb that means neither.
+   *
+   * BOTH verbs are refused, by name, in the two states where they could otherwise acquire an
+   * unintended meaning:
+   *
+   * - **nothing pending** — the run is not holding, so there is nothing to resume. Answering
+   *   silently would let a client "resume" a run that was already advancing and read the next
+   *   step as confirmation the verb worked.
+   * - **an ORDINARY pending review** — a real gate review is outstanding, and `resume` is not a
+   *   verdict. Accepting it here would be a second, undocumented way to clear a gate hold
+   *   without answering it, which is exactly what `gate_action: 'skip'` is for and is deliberately
+   *   gated behind retry exhaustion.
+   *
+   * `accept_alternative` additionally requires that a `remainder` was accepted on this same call
+   * (plan §Interrupt payload). `remainderAccepted` is passed in rather than re-read, because the
+   * caller already applied it and the two facts must be the same fact — a check that re-derived
+   * "was there a remainder" could say yes for a submission the store refused.
+   *
+   * @returns `resolved` when the review was cleared and the run may continue into its step;
+   *   `refused` carrying the sentence the submitter reads. Never throws: an inadmissible verb is
+   *   a client error with an explanation, the posture `WorkflowCommandBuilder` and
+   *   `RemainderProcessor` both take.
+   */
+  async resolveUnknownInterrupt(
+    context: ExecutionContext,
+    sessionId: string,
+    action: InterruptResolutionAction,
+    sessionContext: SessionContext,
+    remainderAccepted: boolean
+  ): Promise<InterruptResolution> {
+    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
+
+    if (pending === undefined) {
+      return {
+        kind: 'refused',
+        message:
+          `gate_action:"${action}" refused: this run is not holding on a blocking-unknown ` +
+          'interrupt. It is only meaningful while the response reports ' +
+          '`chain_interrupt.paused: true`.',
+      };
+    }
+
+    if (!isUnknownInterruptPending(pending)) {
+      return {
+        kind: 'refused',
+        message:
+          `gate_action:"${action}" refused: this run is holding on a gate review ` +
+          `(${(pending.gateIds ?? []).join(', ')}), not on a blocking-unknown interrupt. ` +
+          'Answer it with `gate_verdict`.',
+      };
+    }
+
+    if (action === 'accept_alternative' && !remainderAccepted) {
+      return {
+        kind: 'refused',
+        message:
+          'gate_action:"accept_alternative" refused: it accepts a plan, so it requires a ' +
+          '`remainder` in the SAME call. Send `remainder:{mode:"replace", nodes:[…]}` alongside ' +
+          'it, or use gate_action:"resume" to continue with the current plan.',
+      };
+    }
+
+    await this.chainSessionStore.clearPendingGateReview(sessionId);
+
+    // Stage 18 skips step execution while `sessionContext.pendingReview` is set, and it reads
+    // context rather than the store — so clearing one without the other leaves the run resumed
+    // in storage and still silent on the wire.
+    const clearedContext = { ...sessionContext };
+    delete clearedContext.pendingReview;
+    context.sessionContext = clearedContext;
+
+    context.diagnostics.info('GateVerdictProcessor', 'Blocking-unknown interrupt resolved', {
+      sessionId,
+      action,
+      remainderAccepted,
+    });
+
+    return { kind: 'resolved' };
+  }
 
   /**
    * Handle gate_action parameter (retry/skip/abort) when retry limit exceeded.

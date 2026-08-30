@@ -46,6 +46,28 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v26: adds `interrupts_raised` and `remainders_accepted` to `execution_records` (D-8, mid-chain
+ * unknown surfacing). Nullable INTEGER, no DDL DEFAULT, bound only on terminal rows — the same
+ * three properties, for the same three reasons, as the v21/v23 telemetry groups they extend.
+ *
+ * They exist because the two live records of an interrupt do not survive the process. The
+ * unknowns ledger lives in the `chain_runs` residual document and `origin='remainder'` lives in
+ * `chain_run_nodes`; both tables are `ephemeral` and DELETEd per-PID at cleanup, so a run's whole
+ * account of "a blocking unknown stopped this plan and the caller rewrote it" is gone by the next
+ * boot. These two columns are what the corpus follow-on
+ * (`plans/features/unknowns-corpus-prompt-evolution-2026-08-30.md`) can still read.
+ *
+ * Note the counting UNIT, which the column names do not carry: `interrupts_raised` counts
+ * BLOCKING LEDGER ENTRIES rather than raise events, because `decideInterrupt` is a function of
+ * open state and re-raises on every step while an unknown is open; `remainders_accepted` counts
+ * DISTINCT unknown ids, the same unit `replaceRemainder`'s per-unknown-id cap counts. Both are
+ * derived at read time in `getRunTelemetry`, never from a parallel counter — see `RunTelemetry`.
+ *
+ * `execution_records` is `ephemeral`, so this bump drops its rows and nothing durable is touched:
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move. `v_execution_history`
+ * is deliberately NOT widened for the reason v21 recorded — it has zero code readers, and adding
+ * columns to a reader-less view is how this table produced value-dead columns twice.
+ *
  * v24: adds `declared_sections_json` to `chain_run_nodes` (phase-guard declaration contract)
  * and `delegation_skipped` to `execution_records` (S8 delegation acknowledgment, R-4). Both are
  * nullable with no DDL DEFAULT — rationale at each column's DDL comment. Both tables are
@@ -195,7 +217,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 25;
+const SCHEMA_VERSION = 26;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -803,6 +825,15 @@ export class SqliteEngine implements DatabasePort {
         -- getRunTelemetry object, so no writer can bind one group and miss the other.
         nodes_inserted INTEGER,
         nodes_skipped INTEGER,
+        -- D-8 (v26): what the mid-chain blocking-unknown interrupt did to this run.
+        -- interrupts_raised counts BLOCKING LEDGER ENTRIES, not raise events, and
+        -- remainders_accepted counts DISTINCT unknown ids that spent a remainder — the same
+        -- unit replaceRemainder's per-unknown-id cap counts. Terminal-rows-only, riding the same
+        -- getRunTelemetry object as the two groups above. These are the surviving record once
+        -- chain_runs/chain_run_nodes (ephemeral, PID-deleted) are gone: the ledger holding the
+        -- statements never outlives the process at all.
+        interrupts_raised INTEGER,
+        remainders_accepted INTEGER,
         -- S8 (v24): delegation acknowledgment audit (R-4 — enforcement stays advisory; the
         -- server records what it cannot prevent). Bound at capture time by StepCaptureService:
         -- 1 when a delegated+gated step's captured output lacks the contracted

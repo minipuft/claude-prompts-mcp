@@ -116,6 +116,24 @@ function hasStepStarted(state: StepLifecycle | undefined): boolean {
 export const MAX_REMAINDERS_PER_RUN = 3;
 
 /**
+ * How many remainders a run has accepted: DISTINCT unknown ids among its `origin: 'remainder'`
+ * nodes.
+ *
+ * One expression with two callers, deliberately. `refuseRemainder` measures the per-run cap with
+ * it and `getRunTelemetry` reports `remaindersAccepted` with it (D-8), so the recorded number and
+ * the ceiling it is measured against cannot come to mean different things — a remainder of four
+ * nodes is ONE remainder to both.
+ */
+function countRemainderUnknownIds(nodes: readonly ChainNode[]): number {
+  return new Set(
+    nodes
+      .filter((node) => node.origin === 'remainder')
+      .map((node) => node.originUnknownId)
+      .filter((id): id is string => id !== undefined)
+  ).size;
+}
+
+/**
  * Turn a caller's remainder specs into run nodes with unique ids and remainder provenance.
  *
  * Ids are reserved against EVERY id the run currently carries — including the tail a
@@ -1548,12 +1566,7 @@ export class ChainSessionStore implements ChainSessionService {
     if (remainderNodes.some((node) => node.originUnknownId === unknownId)) {
       return 'cap-reached';
     }
-    const spentUnknownIds = new Set(
-      remainderNodes
-        .map((node) => node.originUnknownId)
-        .filter((id): id is string => id !== undefined)
-    );
-    if (spentUnknownIds.size >= MAX_REMAINDERS_PER_RUN) {
+    if (countRemainderUnknownIds(existing) >= MAX_REMAINDERS_PER_RUN) {
       return 'cap-reached';
     }
 
@@ -1761,6 +1774,11 @@ export class ChainSessionStore implements ChainSessionService {
       nodesSkipped: session.state.nodes.filter(
         (node) => stepStates?.get(node.id)?.state === 'skipped'
       ).length,
+      // D-8. Derived from the same two lists as everything above, never from a counter — see
+      // `RunTelemetry`'s docblock for what UNIT each one counts, which is the part a reader
+      // cannot recover from the column name alone.
+      interruptsRaised: ledger.filter((entry) => entry.blocking === true).length,
+      remaindersAccepted: countRemainderUnknownIds(session.state.nodes),
     };
   }
 
@@ -2516,6 +2534,20 @@ export class ChainSessionStore implements ChainSessionService {
    * owner. This method owns only lookup, in-memory mutation and persistence, in that
    * order: an invalid batch throws before `session.unknownsLedger` is touched, and a
    * persist failure throws rather than reporting a success the disk does not back.
+   *
+   * That last clause was FALSE from the day this method landed until row 1.4 (2026-08-30). It
+   * called `saveSessions`, which routes to the log-and-swallow `persistSessions`, so a failed
+   * write returned the new ledger and the caller reported the batch applied. It now calls
+   * {@link persistSessionsOrThrow} — the same write with the failure left to the caller —
+   * because a declared unknown is the one thing in this subsystem the CLIENT is told about: the
+   * ledger it just wrote is rendered back into this same call's chain context and, from row 2.1,
+   * into a `chain_interrupt`. Reporting either against rows that were never committed hands the
+   * client a plan the server cannot resume, and the divergence surfaces only on a cold load.
+   *
+   * A failed persist therefore fails the CALL. It propagates as a non-validation error out of
+   * `StepResponseCaptureStage.applyObservations` (which converts only
+   * `UnknownObservationValidationError`) to the pipeline error boundary, which is where
+   * `architecture.md` puts the response decision — the same posture `replaceRemainder` takes.
    */
   async applyUnknownObservations(
     sessionId: string,
@@ -2547,7 +2579,7 @@ export class ChainSessionStore implements ChainSessionService {
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
-    await this.saveSessions();
+    await this.persistSessionsOrThrow();
 
     return nextLedger.map((entry) => ({ ...entry }));
   }

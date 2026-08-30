@@ -1,10 +1,47 @@
 // @lifecycle canonical - Sole owner of the mid-chain blocking-unknown interrupt decision.
 
-import type { ChainNode } from '#shared/types/chain-execution.js';
+import type { ChainNode, PendingGateReview } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
-import type { ChainInterrupt, DecideInterruptInput, InterruptNodeSummary } from './types.js';
+import type {
+  ChainInterrupt,
+  DecideInterruptInput,
+  InterruptNodeSummary,
+  InterruptResolutionAction,
+} from './types.js';
 
 import { currentOrdinal, ordinalOf } from '#shared/utils/node-order.js';
+
+import { UNKNOWN_INTERRUPT_GATE_ID } from './types.js';
+
+/**
+ * Whether a pending review is the synthetic one a hard-paused blocking unknown raises (D-2).
+ *
+ * The single reader of {@link UNKNOWN_INTERRUPT_GATE_ID} for every consumer that has to tell a
+ * server-minted interrupt hold apart from an ordinary authored gate review: stage 16 (does this
+ * run already hold?), `GateVerdictProcessor` (may `resume`/`accept_alternative` mean anything on
+ * THIS review?), and `ResponseAssembler` (render verbs, not a `gate_verdict` template).
+ *
+ * A function rather than three inline `gateIds.includes(...)` checks, because the three answers
+ * must never disagree: a run the assembler renders as resumable that the verdict processor
+ * refuses to resume is an unanswerable pause, and that is exactly what three copies of one
+ * membership test drift into.
+ */
+export function isUnknownInterruptPending(review: PendingGateReview | undefined): boolean {
+  return review?.gateIds?.includes(UNKNOWN_INTERRUPT_GATE_ID) === true;
+}
+
+/**
+ * Narrow `McpToolRequest.gate_action`'s five-member union to the interrupt half (OQ-4).
+ *
+ * The one place the two vocabularies are told apart. Everything downstream of it takes either
+ * an {@link InterruptResolutionAction} or a `GateAction`, never the union — so no handler can be
+ * reached with a verb it has no branch for and silently do nothing.
+ */
+export function isInterruptResolutionAction(
+  action: string | undefined
+): action is InterruptResolutionAction {
+  return action === 'resume' || action === 'accept_alternative';
+}
 
 /**
  * Decide whether the run owes its caller a structured interrupt, and what that interrupt says.

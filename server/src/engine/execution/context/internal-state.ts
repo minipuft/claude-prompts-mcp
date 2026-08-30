@@ -9,6 +9,7 @@ import type { RequestIdentitySource } from '#shared/types/request-identity.js';
 import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';
+import type { ChainInterrupt } from '../pipeline/decisions/mutation/index.js';
 
 /**
  * Cleanup handler function type for lifecycle management.
@@ -99,6 +100,19 @@ export interface PipelineInternalState {
     chainComplete?: boolean;
     /** Chain variables for template rendering (from ChainSessionStore) */
     chainContext?: Record<string, unknown>;
+    /**
+     * The structured account a blocking unknown owes this call's caller (OQ-1).
+     *
+     * Written by `StepResponseCaptureStage` (row 2.1) from `decideInterrupt`, read by
+     * `ResponseAssembler` (row 2.4) to render the text section and the
+     * `structuredContent.chain_interrupt` payload. Request-scoped like every other field here:
+     * the run's durable record of the interrupt is its ledger plus, at terminal, the
+     * `interrupts_raised` column — never this.
+     *
+     * Assigned whole rather than mutated, per the pipeline-state rule: a later stage that
+     * re-decides replaces the object, so no reader can observe a half-updated interrupt.
+     */
+    chainInterrupt?: ChainInterrupt;
   };
 
   /**

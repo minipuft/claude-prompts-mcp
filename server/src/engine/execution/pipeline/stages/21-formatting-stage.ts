@@ -123,6 +123,19 @@ export class ResponseFormattingStage extends BasePipelineStage {
         gateValidationInfo
       );
 
+      // Row 2.4. `includeStructuredContent: false` above is the DEFAULT-lean posture (the
+      // formatter omits execution/chain bookkeeping unless a caller asks). The interrupt is not
+      // bookkeeping: it is the payload the caller was told to read, and the plan's §Adapter
+      // boundary makes `structuredContent.chain_interrupt` its only machine-readable form. Merged
+      // rather than assigned, so a future opt-in to the bookkeeping block keeps both.
+      const chainInterrupt = this.responseAssembler.buildInterruptStructuredContent(context);
+      if (chainInterrupt !== undefined) {
+        response.structuredContent = {
+          ...(response.structuredContent ?? {}),
+          chain_interrupt: chainInterrupt,
+        };
+      }
+
       context.setResponse(response);
 
       this.emitChainTerminalRecord(context);
