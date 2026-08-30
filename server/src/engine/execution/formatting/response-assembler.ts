@@ -22,26 +22,47 @@ import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 const MAX_GATE_VERDICT_ENTRIES = 10;
 
 /**
- * The verbs that answer a soft interrupt, verbatim from the plan's §Interrupt payload block.
+ * The verbs that answer a SOFT (unpaused) interrupt, verbatim from the plan's §Interrupt payload
+ * block.
  *
  * `gate_action` spellings match the contract enum (`tooling/contracts/prompt-engine.json`)
  * exactly, because a client reads this list and puts the string back on the wire.
  */
-const INTERRUPT_VERBS = ['answer the step', 'remainder', 'gate_action:abort', 'cancel'] as const;
+const SOFT_INTERRUPT_VERBS = [
+  'answer the step',
+  'remainder',
+  'gate_action:abort',
+  'cancel',
+] as const;
 
 /**
- * The two verbs a HARD-paused run adds. Only meaningful while the synthetic review is pending —
- * `GateVerdictProcessor` refuses both by name on an ordinary review and on an unpaused run, so
- * this list and that refusal are the two halves of one contract.
+ * The verbs a HARD-paused run offers — the RESOLUTION verbs only, and this list is not a
+ * superset of the soft one (row 2.6).
+ *
+ * `answer the step` is deliberately absent: stage 18 issues no step while a review is pending, so
+ * a paused run has no step to answer, and the paused footer never offered one either. Shipping it
+ * here advertised an exit the run does not accept — the machine half of the payload and the run's
+ * own behaviour disagreed. `remainder` is absent for the same reason in a different direction: on
+ * a paused run a bare `remainder` does not clear the synthetic review, so the caller must spell it
+ * `gate_action:accept_alternative` and carry the remainder with it. That pairing is stated inline
+ * rather than left to the reader; `GateVerdictProcessor` refuses `accept_alternative` by name when
+ * the remainder is missing, so this string and that refusal are the two halves of one contract.
  */
-const PAUSED_INTERRUPT_VERBS = ['gate_action:resume', 'gate_action:accept_alternative'] as const;
+const PAUSED_INTERRUPT_VERBS = [
+  'gate_action:resume',
+  'gate_action:accept_alternative (with remainder)',
+  'gate_action:abort',
+  'cancel',
+] as const;
 
 /**
- * One verb list, built once, rendered twice — the text section and `structuredContent` must not
- * be able to advertise different exits from the same hold.
+ * One verb list per state, built once, rendered twice — the text section and `structuredContent`
+ * must not be able to advertise different exits from the same hold.
+ *
+ * STATE-DEPENDENT, not additive: see {@link PAUSED_INTERRUPT_VERBS}.
  */
 function resolveInterruptVerbs(paused: boolean): string[] {
-  return paused ? [...INTERRUPT_VERBS, ...PAUSED_INTERRUPT_VERBS] : [...INTERRUPT_VERBS];
+  return paused ? [...PAUSED_INTERRUPT_VERBS] : [...SOFT_INTERRUPT_VERBS];
 }
 
 /**

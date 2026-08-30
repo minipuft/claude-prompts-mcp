@@ -491,7 +491,7 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
     `);
   });
 
-  test('the PAUSED variant additionally lists the two resolution verbs', async () => {
+  test('the PAUSED variant lists the resolution verbs ONLY — no step to answer', async () => {
     const { text } = await render(true);
 
     expect(text).toMatchInlineSnapshot(`
@@ -512,12 +512,10 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
 
       Resolve with \`chain_id="chain-demo#1"\` plus one of:
 
-      - answer the step
-      - remainder
+      - gate_action:resume
+      - gate_action:accept_alternative (with remainder)
       - gate_action:abort
       - cancel
-      - gate_action:resume
-      - gate_action:accept_alternative
 
       Chain: chain-demo#1
       → Progress 1/3
@@ -548,22 +546,30 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
     });
   });
 
-  test('the paused payload carries the two extra verbs and paused:true', async () => {
+  test('the paused payload carries the resolution verbs only and paused:true', async () => {
     const { structured } = await render(true);
 
-    expect(JSON.parse(JSON.stringify(structured))).toMatchObject({
+    const payload = JSON.parse(JSON.stringify(structured)) as {
+      paused: boolean;
+      resume: { verbs: string[] };
+    };
+
+    expect(payload).toMatchObject({
       paused: true,
       resume: {
         verbs: [
-          'answer the step',
-          'remainder',
+          'gate_action:resume',
+          'gate_action:accept_alternative (with remainder)',
           'gate_action:abort',
           'cancel',
-          'gate_action:resume',
-          'gate_action:accept_alternative',
         ],
       },
     });
+    // The row's own flip condition (2.6): a paused run issues no step, so advertising a verb that
+    // answers one is advertising an exit the run refuses. Asserted as an absence rather than left
+    // implicit in the list above, because a later append would satisfy `toMatchObject` on order
+    // alone and this is the property the row exists for.
+    expect(payload.resume.verbs).not.toContain('answer the step');
   });
 
   test('a GATED SINGLE PROMPT with a session renders the interrupt too', async () => {
