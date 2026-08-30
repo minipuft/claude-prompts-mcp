@@ -79,7 +79,10 @@ import {
 } from '#shared/types/index.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import {
+  buildIdentityScope,
+  resolveContinuityScopeId,
+} from '#shared/utils/request-identity-scope.js';
 
 export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -731,8 +734,11 @@ export class PromptExecutor {
       return undefined;
     }
     const identity = resolveRequestIdentity(sdkExtra as Record<string, unknown>);
-    const scopeId = resolveContinuityScopeId(identity);
-    return scopeId !== 'default' ? { continuityScopeId: scopeId } : undefined;
+    return buildIdentityScope({
+      continuityScopeId: resolveContinuityScopeId(identity),
+      workspaceId: identity.workspaceId,
+      organizationId: identity.organizationId,
+    });
   }
 
   private async routeToTool(

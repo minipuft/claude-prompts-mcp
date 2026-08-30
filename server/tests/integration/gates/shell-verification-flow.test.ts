@@ -215,9 +215,13 @@ describe('Shell Verification Flow Integration', () => {
     let executor: ShellVerifyExecutor;
 
     beforeEach(() => {
+      // UNSAFE_ALLOW_ALL because this suite exercises REAL shell execution on purpose.
+      // The operator allowlist is default-deny (Tier 1), so without it every command here
+      // is refused and the suite proves the refusal rather than the behaviour it tests.
       executor = createShellVerifyExecutor({
         defaultTimeout: 5000,
         debug: false,
+        allowlist: ['UNSAFE_ALLOW_ALL'],
       });
     });
 

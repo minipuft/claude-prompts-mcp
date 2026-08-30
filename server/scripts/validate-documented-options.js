@@ -15,7 +15,12 @@
  * its own copy of the flag set would drift exactly like the docs did:
  *   - flags: the `options: { ... }` tables in server/src/runtime/cli.ts and cli/src/cli.ts, plus
  *     the argv tests in scripts/ and server/scripts/ (`--apply`, `--self-test`, `--output-dir`)
- *   - env vars: every `process.env['MCP_*']` read anywhere in server/src or cli/src
+ *   - env vars: every `process.env['MCP_*']` read anywhere in server/src or cli/src, PLUS every
+ *     `MCP_*` name held in a source constant (`const X_ENV = 'MCP_…'`). A module that reads its
+ *     variable through a named constant is naming it just as literally; matching only the direct
+ *     `process.env[...]` form meant `MCP_SHELL_VERIFY_ALLOWLIST` — shipped, enforced and
+ *     documented since 2026-08-25 — had never been checked by this gate at all. Found 2026-08-29
+ *     when documenting a sibling variable in docs/ first tripped it
  *
  * Exit 0 when every documented option is backed by source; exit 1 with the offending lines.
  */
@@ -119,15 +124,36 @@ function scriptDeclaredFlags() {
 
 /** Every `MCP_*` env var actually read by the shipped code. */
 function readEnvVars() {
-  const output = runRg([
+  const roots = trackedScope(['server/src', 'cli/src']);
+  const names = new Set();
+
+  // Direct reads: process.env.MCP_X / process.env['MCP_X'].
+  for (const name of runRg([
     '-o',
     '--no-filename',
     'process\\.env\\[?[\'"]?(MCP_[A-Z_]+)',
     '-r',
     '$1',
-    ...trackedScope(['server/src', 'cli/src']),
-  ]);
-  return new Set(output.split('\n').filter(Boolean));
+    ...roots,
+  ]).split('\n')) {
+    if (name) names.add(name);
+  }
+
+  // Indirect reads: a constant HOLDING the name, then indexed with that constant. Anchored on
+  // the assignment so an arbitrary mention in a comment or an error string does not count —
+  // the gate must still fail for a variable the docs invented.
+  for (const name of runRg([
+    '-o',
+    '--no-filename',
+    '=\\s*[\'"](MCP_[A-Z_]+)[\'"]',
+    '-r',
+    '$1',
+    ...roots,
+  ]).split('\n')) {
+    if (name) names.add(name);
+  }
+
+  return names;
 }
 
 /** Tracked files under the given roots, memoised — every scan runs from the repo root. */

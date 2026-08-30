@@ -9,6 +9,9 @@
  * gate review feedback (runGateShellVerifications + formatGateShellVerifySection).
  */
 
+// UNSAFE_ALLOW_ALL below: this suite drives REAL commands, and the operator allowlist
+// is default-deny, so an unconfigured executor would refuse every one of them.
+import { createShellVerifyExecutor } from '../../../src/engine/gates/shell/shell-verify-executor.js';
 import { describe, test, expect, jest } from '@jest/globals';
 
 import { runGateShellVerifications } from '../../../src/engine/gates/services/gate-shell-verify-runner.js';
@@ -51,14 +54,19 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "all tests passed"',
+              shell_command: ['echo', 'all tests passed'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['echo-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['echo-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0].gateId).toBe('echo-gate');
@@ -78,14 +86,19 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "FAIL src/handler.test.ts" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "FAIL src/handler.test.ts" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['fail-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['fail-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0].passed).toBe(false);
@@ -103,7 +116,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'sleep 10',
+              shell_command: ['sleep', '10'],
               shell_timeout: 1000,
             },
           ],
@@ -111,7 +124,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       });
 
       const start = Date.now();
-      const results = await runGateShellVerifications(['timeout-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['timeout-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const elapsed = Date.now() - start;
 
       expect(results).toHaveLength(1);
@@ -132,18 +150,23 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "preset ok"',
+              shell_command: ['echo', 'preset ok'],
               shell_preset: 'fast',
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['preset-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['preset-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0].passed).toBe(true);
-      expect(results[0].command).toBe('echo "preset ok"');
+      expect(results[0].command).toBe('echo preset ok');
     });
   });
 
@@ -158,7 +181,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "shell check"',
+              shell_command: ['echo', 'shell check'],
               shell_timeout: 5000,
             },
             {
@@ -169,11 +192,16 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         },
       });
 
-      const results = await runGateShellVerifications(['mixed-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['mixed-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       // Only shell_verify criteria should produce results
       expect(results).toHaveLength(1);
-      expect(results[0].command).toBe('echo "shell check"');
+      expect(results[0].command).toBe('echo shell check');
     });
 
     test('runs multiple shell_verify criteria on one gate', async () => {
@@ -186,19 +214,24 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "test passed"',
+              shell_command: ['echo', 'test passed'],
               shell_timeout: 5000,
             },
             {
               type: 'shell_verify',
-              shell_command: 'echo "lint passed"',
+              shell_command: ['echo', 'lint passed'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['multi-shell'], provider);
+      const results = await runGateShellVerifications(
+        ['multi-shell'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(2);
       expect(results[0].stdout).toContain('test passed');
@@ -216,7 +249,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           type: 'validation',
           description: 'Has shell_verify',
           pass_criteria: [
-            { type: 'shell_verify', shell_command: 'echo "ok"', shell_timeout: 5000 },
+            { type: 'shell_verify', shell_command: ['echo', 'ok'], shell_timeout: 5000 },
           ],
         },
         'llm-gate': {
@@ -228,7 +261,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         },
       });
 
-      const results = await runGateShellVerifications(['shell-gate', 'llm-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['shell-gate', 'llm-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0].gateId).toBe('shell-gate');
@@ -245,7 +283,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         },
       });
 
-      const results = await runGateShellVerifications(['empty-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['empty-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(0);
     });
@@ -260,7 +303,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         },
       });
 
-      const results = await runGateShellVerifications(['no-criteria'], provider);
+      const results = await runGateShellVerifications(
+        ['no-criteria'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(0);
     });
@@ -268,7 +316,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
     test('gracefully handles nonexistent gate ID', async () => {
       const provider = createProvider({});
 
-      const results = await runGateShellVerifications(['nonexistent'], provider);
+      const results = await runGateShellVerifications(
+        ['nonexistent'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(0);
     });
@@ -285,15 +338,23 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command:
-                'echo "FAIL src/auth.test.ts\n  Expected: 200, Received: 401" >&2 && exit 1',
+              shell_command: [
+                'sh',
+                '-c',
+                'echo "FAIL src/auth.test.ts\\n  Expected: 200, Received: 401" >&2 && exit 1',
+              ],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['test-suite'], provider);
+      const results = await runGateShellVerifications(
+        ['test-suite'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       // Structural checks
@@ -317,14 +378,19 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "All files clean"',
+              shell_command: ['echo', 'All files clean'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['lint-check'], provider);
+      const results = await runGateShellVerifications(
+        ['lint-check'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       expect(section).toContain('### Lint Check — PASSED');
@@ -343,7 +409,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "all 42 tests passed"',
+              shell_command: ['echo', 'all 42 tests passed'],
               shell_timeout: 5000,
             },
           ],
@@ -356,14 +422,19 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "error: Unused variable" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "error: Unused variable" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['test-suite', 'lint'], provider);
+      const results = await runGateShellVerifications(
+        ['test-suite', 'lint'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       expect(section).toContain('Test Suite — PASSED');
@@ -382,7 +453,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         },
       });
 
-      const results = await runGateShellVerifications(['llm-only'], provider);
+      const results = await runGateShellVerifications(
+        ['llm-only'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       expect(section).toBe('');
@@ -398,14 +474,19 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "line1\nline2\nline3" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "line1\\nline2\\nline3" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['md-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['md-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       // Count code fences — should be balanced (open + close)
@@ -431,7 +512,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'echo "error" >&2 && exit 1',
+              shell_command: ['sh', '-c', 'echo "error" >&2 && exit 1'],
               shell_timeout: 5000,
             },
           ],
@@ -439,7 +520,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       });
 
       const reviewContent = '# Gate Review\n\nPlease evaluate against criteria.';
-      const results = await runGateShellVerifications(['test-gate'], provider);
+      const results = await runGateShellVerifications(
+        ['test-gate'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       // Simulate what GateReviewStage does
@@ -468,7 +554,12 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       });
 
       const reviewContent = '# Gate Review\n\nOriginal content.';
-      const results = await runGateShellVerifications(['llm-only'], provider);
+      const results = await runGateShellVerifications(
+        ['llm-only'],
+        provider,
+        undefined,
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       const section = formatGateShellVerifySection(results);
 
       const combined = section !== '' ? `${reviewContent}\n\n${section}` : reviewContent;
@@ -488,7 +579,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'cat',
+              shell_command: ['cat'],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -498,9 +589,14 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
 
       const agentResponse = 'verified_paths:\n  - file: foo.ts\n    line_count: 42';
 
-      const results = await runGateShellVerifications(['stdin-echo'], provider, {
-        agentResponse,
-      });
+      const results = await runGateShellVerifications(
+        ['stdin-echo'],
+        provider,
+        {
+          agentResponse,
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0]?.passed).toBe(true);
@@ -518,16 +614,21 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'cat',
+              shell_command: ['cat'],
               shell_timeout: 5000,
             },
           ],
         },
       });
 
-      const results = await runGateShellVerifications(['no-stdin'], provider, {
-        agentResponse: 'should-not-appear',
-      });
+      const results = await runGateShellVerifications(
+        ['no-stdin'],
+        provider,
+        {
+          agentResponse: 'should-not-appear',
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0]?.stdout).toBe('');
@@ -544,7 +645,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'printf "%s" "$AGENT_RESPONSE"',
+              shell_command: ['sh', '-c', 'printf "%s" "$AGENT_RESPONSE"'],
               shell_stdin_source: 'agent_response',
               shell_response_env_var: 'AGENT_RESPONSE',
               shell_timeout: 5000,
@@ -555,9 +656,14 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
 
       const agentResponse = 'AGENT_RESPONSE_VIA_ENV';
 
-      const results = await runGateShellVerifications(['env-echo'], provider, {
-        agentResponse,
-      });
+      const results = await runGateShellVerifications(
+        ['env-echo'],
+        provider,
+        {
+          agentResponse,
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0]?.passed).toBe(true);
@@ -578,7 +684,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
               // Deliberately no `shell_response_env_var`: a payload this size exceeds the per-var
               // environment limit (~128KB on Linux) and would fail the spawn for an unrelated
               // reason, masking the stdin race this test exists to pin.
-              shell_command: 'printf "done"',
+              shell_command: ['printf', 'done'],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -592,9 +698,14 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       // reported as `write EPIPE` from a command that had run correctly.
       const agentResponse = 'x'.repeat(1_000_000);
 
-      const results = await runGateShellVerifications(['ignores-stdin'], provider, {
-        agentResponse,
-      });
+      const results = await runGateShellVerifications(
+        ['ignores-stdin'],
+        provider,
+        {
+          agentResponse,
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       expect(results).toHaveLength(1);
       expect(results[0]?.passed).toBe(true);
@@ -611,8 +722,11 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command:
+              shell_command: [
+                'sh',
+                '-c',
                 'claim=$(grep "claimed_lines:" | awk \'{print $2}\'); actual=$(wc -l < package.json | tr -d " "); test "$claim" = "$actual"',
+              ],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -624,15 +738,25 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       const actualLines = execSync('wc -l < package.json', { encoding: 'utf8' }).trim();
 
       const truthful = `verified_paths:\n  - file: package.json\n    claimed_lines: ${actualLines}`;
-      const truthfulResults = await runGateShellVerifications(['claim-verifier'], provider, {
-        agentResponse: truthful,
-      });
+      const truthfulResults = await runGateShellVerifications(
+        ['claim-verifier'],
+        provider,
+        {
+          agentResponse: truthful,
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       expect(truthfulResults[0]?.passed).toBe(true);
 
       const fabricated = `verified_paths:\n  - file: package.json\n    claimed_lines: 99999`;
-      const fabricatedResults = await runGateShellVerifications(['claim-verifier'], provider, {
-        agentResponse: fabricated,
-      });
+      const fabricatedResults = await runGateShellVerifications(
+        ['claim-verifier'],
+        provider,
+        {
+          agentResponse: fabricated,
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
       expect(fabricatedResults[0]?.passed).toBe(false);
     });
 
@@ -646,7 +770,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           pass_criteria: [
             {
               type: 'shell_verify',
-              shell_command: 'wc -c',
+              shell_command: ['wc', '-c'],
               shell_stdin_source: 'agent_response',
               shell_timeout: 5000,
             },
@@ -656,9 +780,14 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
 
       const largeResponse = 'x'.repeat(1024 * 1024); // 1 MB
 
-      const results = await runGateShellVerifications(['size-check'], provider, {
-        agentResponse: largeResponse,
-      });
+      const results = await runGateShellVerifications(
+        ['size-check'],
+        provider,
+        {
+          agentResponse: largeResponse,
+        },
+        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+      );
 
       const pipedBytes = parseInt((results[0]?.stdout ?? '0').trim(), 10);
       expect(pipedBytes).toBeGreaterThan(0);

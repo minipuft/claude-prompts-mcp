@@ -1,3 +1,6 @@
+import { createShellVerifyExecutor } from '../../../../src/engine/gates/shell/shell-verify-executor.js';
+import { SHELL_VERIFY_ALLOW_ALL } from '../../../../src/engine/gates/shell/shell-command-allowlist.js';
+import { SHELL_VERIFY_ALLOW_ANY_DIR } from '../../../../src/engine/gates/shell/shell-working-dir-policy.js';
 import { describe, expect, jest, test, beforeEach } from '@jest/globals';
 
 import {
@@ -159,7 +162,12 @@ describe('runGateShellVerifications', () => {
       ]),
     } as any;
 
-    const results = await runGateShellVerifications(['code-quality'], gateProvider);
+    const results = await runGateShellVerifications(
+      ['code-quality'],
+      gateProvider,
+      undefined,
+      createShellVerifyExecutor({})
+    );
     expect(results).toHaveLength(0);
   });
 
@@ -174,12 +182,17 @@ describe('runGateShellVerifications', () => {
           name: 'Test',
           type: 'validation',
           description: 'test',
-          pass_criteria: [{ type: 'shell_verify', shell_command: '' }],
+          pass_criteria: [{ type: 'shell_verify', shell_command: [] }],
         },
       ]),
     } as any;
 
-    const results = await runGateShellVerifications(['test'], gateProvider);
+    const results = await runGateShellVerifications(
+      ['test'],
+      gateProvider,
+      undefined,
+      createShellVerifyExecutor({})
+    );
     expect(results).toHaveLength(0);
   });
 
@@ -191,7 +204,96 @@ describe('runGateShellVerifications', () => {
       loadGates: jest.fn().mockResolvedValue([]),
     } as any;
 
-    const results = await runGateShellVerifications(['nonexistent'], gateProvider);
+    const results = await runGateShellVerifications(
+      ['nonexistent'],
+      gateProvider,
+      undefined,
+      createShellVerifyExecutor({})
+    );
     expect(results).toHaveLength(0);
+  });
+});
+
+describe('shell_response_env_var cannot smuggle a denied key (row 1.6)', () => {
+  // `resolveResponseInjection` merges the agent response into the env under a key the
+  // GATE AUTHOR names. Documented in docs/guides/gates.md as screened by the same rule
+  // as shell_env — pinned here rather than left as a claim, because the mirror is built
+  // in the runner while the screening happens in the executor, and nothing structural
+  // ties the two together.
+  test('refuses a gate that mirrors the response into PATH', async () => {
+    const { runGateShellVerifications } =
+      await import('../../../../src/engine/gates/services/gate-shell-verify-runner.js');
+
+    const gateProvider = {
+      loadGates: jest.fn().mockResolvedValue([
+        {
+          id: 'smuggle',
+          name: 'Smuggle',
+          type: 'validation',
+          description: 'mirrors the response into PATH',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: ['true'],
+              shell_stdin_source: 'agent_response',
+              shell_response_env_var: 'PATH',
+            },
+          ],
+        },
+      ] as never),
+    } as any;
+
+    const results = await runGateShellVerifications(
+      ['smuggle'],
+      gateProvider,
+      { agentResponse: '/attacker/bin' },
+      createShellVerifyExecutor({
+        allowlist: [SHELL_VERIFY_ALLOW_ALL],
+        allowedDirs: [SHELL_VERIFY_ALLOW_ANY_DIR],
+      })
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.passed).toBe(false);
+    expect(results[0]!.stderr).toContain('PATH');
+  });
+
+  // POSITIVE CONTROL: the same shape with an ordinary key must still run, or the
+  // assertion above would hold against a runner that refused every mirrored response.
+  test('still mirrors the response into an ordinary key', async () => {
+    const { runGateShellVerifications } =
+      await import('../../../../src/engine/gates/services/gate-shell-verify-runner.js');
+
+    const gateProvider = {
+      loadGates: jest.fn().mockResolvedValue([
+        {
+          id: 'mirror',
+          name: 'Mirror',
+          type: 'validation',
+          description: 'mirrors the response into an ordinary key',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: ['sh', '-c', 'test "$AGENT_RESPONSE" = "hello"'],
+              shell_stdin_source: 'agent_response',
+              shell_response_env_var: 'AGENT_RESPONSE',
+            },
+          ],
+        },
+      ] as never),
+    } as any;
+
+    const results = await runGateShellVerifications(
+      ['mirror'],
+      gateProvider,
+      { agentResponse: 'hello' },
+      createShellVerifyExecutor({
+        allowlist: [SHELL_VERIFY_ALLOW_ALL],
+        allowedDirs: [SHELL_VERIFY_ALLOW_ANY_DIR],
+      })
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.passed).toBe(true);
   });
 });

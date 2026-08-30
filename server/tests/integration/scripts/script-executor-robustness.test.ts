@@ -217,3 +217,65 @@ describe('4.2 — script output is capped and truncation is loud', () => {
     expect(reported).toBeGreaterThan(15000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 1.7 — an unclassified extension no longer becomes bash by default
+// ---------------------------------------------------------------------------
+
+describe('1.7 — a file nobody classified does not silently become a shell script', () => {
+  test('refuses a tool whose extension maps to no runtime', async () => {
+    const executor = createScriptExecutor({});
+    const result = await executor.execute(
+      requestFor(),
+      toolFor('unclassified-extension.rb', { runtime: 'auto' })
+    );
+
+    expect(result.success).toBe(false);
+    // The message has to carry the fix, not just the refusal: this is the only
+    // place an author learns that declaring `runtime:` is what unblocks them.
+    expect(result.error).toContain('.rb');
+    expect(result.error).toContain('runtime:');
+  });
+
+  test('refuses a file with no extension at all', async () => {
+    const executor = createScriptExecutor({});
+    const result = await executor.execute(
+      requestFor(),
+      toolFor('unclassified-extension.rb', {
+        runtime: 'auto',
+        absoluteScriptPath: path.join(FIXTURE_DIR, 'no-extension-fixture'),
+      })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('no extension');
+  });
+
+  // POSITIVE CONTROL, and the point of ruling R8: the `shell` runtime is not the
+  // problem and stays fully available. Without this arm the two refusals above
+  // would hold just as well against an executor that had dropped `shell` entirely.
+  test('still runs the same file when the author declares runtime: shell', async () => {
+    const executor = createScriptExecutor({});
+    const result = await executor.execute(
+      requestFor(),
+      toolFor('unclassified-extension.rb', { runtime: 'shell' })
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ ranAs: 'shell' });
+  });
+
+  // The second half of the same message split: an unknown runtime NAME is an
+  // author error, not a missing interpreter, and used to report as the latter.
+  test('names the valid runtimes when a tool declares one that does not exist', async () => {
+    const executor = createScriptExecutor({});
+    const result = await executor.execute(
+      requestFor(),
+      toolFor('unclassified-extension.rb', { runtime: 'ruby' as never })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('unknown runtime');
+    expect(result.error).toContain('python, node, shell');
+  });
+});

@@ -17,6 +17,8 @@
 
 import { z } from 'zod/v4';
 
+import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
+
 // ============================================================================
 // Trigger Type Schema (Deterministic - Modern Standards)
 // ============================================================================
@@ -165,8 +167,11 @@ export type ExecutionConfigYaml = {
 
 /**
  * Runtime environment for script execution.
+ *
+ * Enum members derive from `SUPPORTED_RUNTIMES` (`#shared/types/automation.js`), so
+ * this schema and the create-path validator cannot disagree about what is valid.
  */
-export const ScriptRuntimeSchema = z.enum(['python', 'node', 'shell', 'auto']).default('auto');
+export const ScriptRuntimeSchema = z.enum(SUPPORTED_RUNTIMES).default('auto');
 
 export type ScriptRuntimeYaml = z.infer<typeof ScriptRuntimeSchema>;
 

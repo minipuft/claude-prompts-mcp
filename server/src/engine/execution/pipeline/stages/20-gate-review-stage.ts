@@ -16,6 +16,7 @@ import type { GatesConfig } from '#shared/types/core-config.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ScriptToolRuntimeProvider } from '../../../gates/services/script-tool-criterion-runner.js';
+import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-executor.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 
@@ -35,6 +36,14 @@ export interface GateReviewCollaborators {
    * this whole criteria type inert.
    */
   scriptToolRuntime?: ScriptToolRuntimeProvider;
+  /**
+   * Executor for `shell_verify` criteria. The SAME instance the inline
+   * `:: verify:` path uses, so the gate master switch and the operator allowlist
+   * it carries govern both. Absent, criteria FAIL CLOSED and say so — never
+   * silently skip, which is the defect that left `script_tool` inert and which a
+   * first cut of this wiring reintroduced here.
+   */
+  shellVerifyExecutor?: ShellVerifyExecutor;
 }
 
 /**
@@ -168,7 +177,8 @@ export class GateReviewStage extends BasePipelineStage {
         const shellResults = await runGateShellVerifications(
           pendingReview.gateIds,
           this.gateDefinitionProvider,
-          agentResponse !== undefined ? { agentResponse } : undefined
+          agentResponse !== undefined ? { agentResponse } : undefined,
+          this.collaborators.shellVerifyExecutor
         );
         // `script_tool` criteria run beside `shell_verify` rather than instead of it: a gate
         // may declare both, and the two answer different questions — an exit code versus a

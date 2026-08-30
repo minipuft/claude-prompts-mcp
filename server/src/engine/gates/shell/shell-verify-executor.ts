@@ -16,11 +16,17 @@
  */
 
 import { SHELL_VERIFY_DEFAULT_TIMEOUT, SHELL_VERIFY_MAX_TIMEOUT } from '../constants.js';
+import {
+  formatCommandForDisplay,
+  isCommandAllowed,
+  loadShellVerifyAllowlist,
+} from './shell-command-allowlist.js';
+import { isWorkingDirAllowed, loadShellVerifyAllowedDirs } from './shell-working-dir-policy.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
 import type { ShellVerifyGate, ShellVerifyResult, ShellVerifyExecutorConfig } from './types.js';
 
-import { executeProcess } from '#shared/utils/process.js';
+import { executeProcess, findUnsafeEnvironmentKeys } from '#shared/utils/process.js';
 
 /**
  * Shell Verification Executor
@@ -48,12 +54,35 @@ export class ShellVerifyExecutor {
   private readonly maxTimeout: number;
   private readonly defaultWorkingDir: string;
   private readonly debug: boolean;
+  private readonly allowlist: readonly string[] | undefined;
+  private readonly allowedDirs: readonly string[] | undefined;
+  private readonly gateSystemEnabled: (() => boolean) | undefined;
 
   constructor(config: ShellVerifyExecutorConfig = {}) {
     this.defaultTimeout = config.defaultTimeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT;
     this.maxTimeout = config.maxTimeout ?? SHELL_VERIFY_MAX_TIMEOUT;
     this.defaultWorkingDir = config.defaultWorkingDir ?? process.cwd();
     this.debug = config.debug ?? false;
+    this.allowlist = config.allowlist;
+    this.allowedDirs = config.allowedDirs;
+    this.gateSystemEnabled = config.gateSystemEnabled;
+  }
+
+  /**
+   * Resolve the allowlist for this call.
+   *
+   * Read per execution rather than cached at construction because the default
+   * executor is a process-lifetime singleton, and a value captured once would
+   * make the control untestable and unable to follow a re-read of the operator's
+   * environment. An injected list (tests, embedders) always wins.
+   */
+  private resolveAllowlist(): readonly string[] {
+    return this.allowlist ?? loadShellVerifyAllowlist();
+  }
+
+  /** Read the operator's additional working-directory roots, per execution, as above. */
+  private resolveAllowedDirs(): readonly string[] {
+    return this.allowedDirs ?? loadShellVerifyAllowedDirs();
   }
 
   /**
@@ -65,20 +94,107 @@ export class ShellVerifyExecutor {
   async execute(gate: ShellVerifyGate): Promise<ShellVerifyResult> {
     const { command, workingDir, timeout, env, stdin } = gate;
 
-    if (!command || command.trim() === '') {
+    // One rendered form for every message and every result, so a refusal names the
+    // command the same way whichever shape produced it.
+    const display = formatCommandForDisplay(command ?? '');
+
+    if (!command || display.trim() === '') {
       return {
         passed: false,
         exitCode: -1,
         stdout: '',
         stderr: 'Empty command provided',
         durationMs: 0,
-        command: command ?? '',
+        command: display,
       };
     }
 
+    // The master switch is checked before the allowlist because the two answer
+    // different questions: whether the gate subsystem runs at all, versus what a
+    // running gate may execute. They compose with AND, and an operator who
+    // disabled the system is entitled to have that mean it.
+    if (this.gateSystemEnabled?.() === false) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr:
+          'Shell verification refused: the gate system is disabled. ' +
+          'Re-enable it with system_control action="gates", operation="enable".',
+        durationMs: 0,
+        command: display,
+      };
+    }
+
+    // The gate is refused, not downgraded to advisory. A gate that reports as
+    // passed while having verified nothing is the defect this repository already
+    // records fixing; and one hostile gate must not take the server down, so the
+    // refusal is scoped to this gate and execution continues.
+    // The allowlist bounds the command STRING; these keys decide what that string
+    // resolves to. An allowlisted `npm test` carrying an author-supplied PATH runs
+    // the author's `npm`, so checking them after the allowlist would be checking
+    // the wrong thing (row 1.6). Refused with no opt-out, per ruling R7.
+    const unsafeEnvKeys = findUnsafeEnvironmentKeys(env);
+    if (unsafeEnvKeys.length > 0) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr:
+          `Shell verification refused: this gate's shell_env sets ` +
+          `${unsafeEnvKeys.join(', ')}, which decide what an allowed command resolves ` +
+          `to or loads. Remove them from the gate definition; no setting permits them.`,
+        durationMs: 0,
+        command: display,
+      };
+    }
+
+    const decision = isCommandAllowed(command, this.resolveAllowlist());
+    if (!decision.allowed) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr: `Shell verification refused: ${decision.reason ?? 'command not permitted'}`,
+        durationMs: 0,
+        command: display,
+      };
+    }
+
+    // Checked after the command, because the message is more useful once the command
+    // itself is known to be permitted. Contained rather than refused: the command is
+    // still the operator's, and blocking a legitimate sibling checkout outright pushes
+    // operators to UNSAFE_ALLOW_ALL, which is worse (ruling R7).
+    const dirDecision = isWorkingDirAllowed(
+      workingDir,
+      this.defaultWorkingDir,
+      this.resolveAllowedDirs()
+    );
+    if (!dirDecision.allowed) {
+      return {
+        passed: false,
+        refused: true,
+        exitCode: -1,
+        stdout: '',
+        stderr: `Shell verification refused: ${dirDecision.reason ?? 'working directory not permitted'}`,
+        durationMs: 0,
+        command: display,
+      };
+    }
+
+    // The one place the union narrows to what `spawn` needs. `executeProcess` wants a
+    // non-empty tuple; emptiness was already rejected above, and the schema rejects it at
+    // load, so this asserts a property two earlier checks established rather than assuming one.
+    const spawnCommand: string | [string, ...string[]] =
+      typeof command === 'string' ? command : (command as [string, ...string[]]);
+
     const result = await executeProcess({
-      command,
-      cwd: workingDir ?? this.defaultWorkingDir,
+      command: spawnCommand,
+      // The value the check approved, not the raw string it approved it from.
+      cwd: dirDecision.resolvedDir ?? this.defaultWorkingDir,
       env,
       stdin,
       timeout: timeout ?? this.defaultTimeout,
@@ -96,7 +212,7 @@ export class ShellVerifyExecutor {
       stdout: result.stdout,
       stderr: result.stderr,
       durationMs: result.durationMs,
-      command,
+      command: display,
     };
 
     if (result.timedOut === true) {
@@ -112,28 +228,4 @@ export class ShellVerifyExecutor {
  */
 export function createShellVerifyExecutor(config?: ShellVerifyExecutorConfig): ShellVerifyExecutor {
   return new ShellVerifyExecutor(config);
-}
-
-// ============================================================================
-// Default Instance Management (singleton pattern)
-// ============================================================================
-
-let defaultExecutor: ShellVerifyExecutor | null = null;
-
-/**
- * Get the default ShellVerifyExecutor instance.
- * Creates one if it doesn't exist.
- */
-export function getDefaultShellVerifyExecutor(): ShellVerifyExecutor {
-  if (!defaultExecutor) {
-    defaultExecutor = new ShellVerifyExecutor();
-  }
-  return defaultExecutor;
-}
-
-/**
- * Reset the default executor (useful for testing).
- */
-export function resetDefaultShellVerifyExecutor(): void {
-  defaultExecutor = null;
 }

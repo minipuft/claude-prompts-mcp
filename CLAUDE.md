@@ -8,7 +8,7 @@
 2. **Contract ownership** -- Hand-written schemas under `src/mcp/tools/schemas/` own runtime validation; `tooling/contracts/*.json` own descriptions and parameter metadata generated into `src/mcp/contracts/schemas/_generated/`. Run `npm run generate:contracts`, never edit `_generated/`.
 3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
-5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran.
+5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:all` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran. **`test:all`, not `test:ci`**: `test:ci` is an alias for `test:unit` and runs neither `tests/integration` nor `tests/e2e`, while CI runs both as separate jobs -- so its name promises the opposite of what it does. Measured 2026-08-27: a default-deny control landed with the unit suite green, and 20 integration plus 17 e2e failures went unseen for five commits because every local check stopped at `test:ci`. `pre-push` runs integration and is what finally caught it; `test:all` is how you find out before then.
 
 ## Node.js Support Boundaries
 
@@ -71,6 +71,28 @@ Formatting is covered by `validate:format` in the full route. `pre-push` checks 
 repo-level JSON/MD/YAML files in the push range. Anything a generator owns belongs in
 `.prettierignore` with a reason -- otherwise the generator and Prettier disagree.
 
+**Every formatting gate CHECKS; none of them writes** (since 2026-08-25). `pre-commit` and
+`lint-staged` used to `prettier --write` the staged paths and re-`git add` them, so the bytes
+committed were not the bytes any gate had validated -- each check ran against one version of
+the file and the commit captured another. Formatting-only, so the blast radius was small, but
+it is the same shape as a step that silently changes an artifact after the check that blessed
+it. It also broke anchored editing: a rewrite between a read and the next fixed-string edit
+makes that edit miss **silently**, which cost real work here on 2026-08-25. `--check` is also
+a strict subset of CI, which only ever checks -- the old `--write` was a local step CI does
+not run, which this section otherwise forbids. Fix with `npm --prefix server run format`
+(repo-level, same file set `validate:format` reads) or `format:server` (server sources).
+
+**Format at authoring time; the gate is a backstop, not the boundary.** A gate you routinely
+fail is a gate in the wrong place -- so format on save (editors) or as part of the edit itself
+(agents: run `format` on what you touched BEFORE you validate, not after a hook rejects it).
+This only works if your editor and the gate agree, which needs one contract per file: prettier
+resolves the NEAREST config, so `server/**` takes `server/.prettierrc.json` (printWidth 100)
+and everything else takes the root `.prettierrc.json` (printWidth 80). The root file was added
+2026-08-25 and pins what was already happening -- root paths previously resolved NO config and
+ran on prettier's built-in defaults, so the contract was whatever the installed major version
+happened to do, and an editor plugin resolving its own settings would silently disagree with
+the gate. Verified at the time: adding it reformatted zero files on either side.
+
 ## Fleet Standards Upstream (`minipuft/repository-standards`)
 
 **Look there before writing any check that reads another repository, or any plan-status or dependency-policy rule.**
@@ -89,23 +111,23 @@ mistake was made and reverted on 2026-08-15. Two gates keep the relationship hon
 
 ## Documentation Map
 
-| Topic                                        | Doc                                      |
-| -------------------------------------------- | ---------------------------------------- |
-| Architecture & runtime                       | `docs/architecture/overview.md`          |
+| Topic                                        | Doc                                       |
+| -------------------------------------------- | ----------------------------------------- |
+| Architecture & runtime                       | `docs/architecture/overview.md`           |
 | SQLite persistence                           | `docs/architecture/sqlite-persistence.md` |
-| MCP tools & symbolic commands                | `docs/reference/mcp-tools.md`            |
+| MCP tools & symbolic commands                | `docs/reference/mcp-tools.md`             |
 | MCP contract maintenance                     | `docs/guides/mcp-contract-maintenance.md` |
-| Prompt authoring                             | `docs/tutorials/build-first-prompt.md`   |
-| Chains lifecycle                             | `docs/concepts/chains-lifecycle.md`      |
-| Gates                                        | `docs/guides/gates.md`                   |
-| Injection control                            | `docs/guides/injection-control.md`       |
-| Identity & scope                             | `docs/guides/identity-scope.md`          |
-| Skills Sync                                  | `docs/guides/skills-sync.md`             |
-| Telemetry & observability                    | `docs/guides/telemetry-observability.md` |
-| Troubleshooting                              | `docs/guides/troubleshooting.md`         |
-| Contributing & PR process                    | `CONTRIBUTING.md`                        |
-| README charter (root README authoring rules) | `docs/portfolio/readme-charter.md`       |
-| Release highlights                           | `CHANGELOG.md`                           |
+| Prompt authoring                             | `docs/tutorials/build-first-prompt.md`    |
+| Chains lifecycle                             | `docs/concepts/chains-lifecycle.md`       |
+| Gates                                        | `docs/guides/gates.md`                    |
+| Injection control                            | `docs/guides/injection-control.md`        |
+| Identity & scope                             | `docs/guides/identity-scope.md`           |
+| Skills Sync                                  | `docs/guides/skills-sync.md`              |
+| Telemetry & observability                    | `docs/guides/telemetry-observability.md`  |
+| Troubleshooting                              | `docs/guides/troubleshooting.md`          |
+| Contributing & PR process                    | `CONTRIBUTING.md`                         |
+| README charter (root README authoring rules) | `docs/portfolio/readme-charter.md`        |
+| Release highlights                           | `CHANGELOG.md`                            |
 
 Read the relevant doc before editing. Update docs when behavior changes.
 
@@ -157,16 +179,16 @@ Read the relevant doc before editing. Update docs when behavior changes.
 ```
 prompt_engine  → PromptExecutor → PipelineBuilder → Pipeline (22 stages)
 resource_manager → Router → Handler (≤125 lines) → Processors (lifecycle/discovery/versioning)
-system_control → SystemControl Router → 11 action handlers
+system_control → SystemControl Router → 12 action handlers
 ```
 
-| Tool                           | Handler                     | Processors                                                                                                                                                                               |
-| ------------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `resource_manager` (prompt)    | `PromptResourceHandler`     | `PromptLifecycleProcessor`, `PromptDiscoveryProcessor`, `PromptVersioningProcessor`                                                                                                      |
-| `resource_manager` (gate)      | `GateToolHandler`           | `GateLifecycleProcessor`, `GateDiscoveryProcessor`, `GateVersioningProcessor`                                                                                                            |
-| `resource_manager` (framework) | `FrameworkToolHandler`      | `FrameworkLifecycleProcessor`, `FrameworkDiscoveryProcessor`, `FrameworkVersioningProcessor`, `FrameworkValidator`                                                                       |
-| `prompt_engine`                | `PromptExecutor`            | `PipelineBuilder` (factory), `ChainSessionRouter`                                                                                                                                        |
-| `system_control`               | `ConsolidatedSystemControl` | 11 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `status`) |
+| Tool                           | Handler                     | Processors                                                                                                                                                                                                                                                                                    |
+| ------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resource_manager` (prompt)    | `PromptResourceHandler`     | `PromptLifecycleProcessor`, `PromptDiscoveryProcessor`, `PromptVersioningProcessor`                                                                                                                                                                                                           |
+| `resource_manager` (gate)      | `GateToolHandler`           | `GateLifecycleProcessor`, `GateDiscoveryProcessor`, `GateVersioningProcessor`                                                                                                                                                                                                                 |
+| `resource_manager` (framework) | `FrameworkToolHandler`      | `FrameworkLifecycleProcessor`, `FrameworkDiscoveryProcessor`, `FrameworkVersioningProcessor`, `FrameworkValidator`                                                                                                                                                                            |
+| `prompt_engine`                | `PromptExecutor`            | `PipelineBuilder` (factory), `ChainSessionRouter`                                                                                                                                                                                                                                             |
+| `system_control`               | `ConsolidatedSystemControl` | 12 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `skills_sync`, `status`) -- `skills_sync` was absent from this list while present on disk, measured 2026-08-25 |
 
 ## Runtime State (SQLite -- never commit `state.db`)
 
@@ -181,7 +203,9 @@ system_control → SystemControl Router → 11 action handlers
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates, but `version_history` and `skills_sync_manifests` are durable: `ensureSchema()` snapshots their rows, recreates, and restores by column intersection. Adding a `NOT NULL` column with no default to either makes the restore throw by design -- that change needs a real migration. Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 
-**`state.db` is shared across projects, but workspace isolation is delivered by `kv_state` alone.** One file serves every project, so isolation would have to come from `workspace_id` -- and `kv_state` is the only table that writes it. Four others declare **and index** scope columns no writer populates, so their rows are global; for `version_history` that means rollback history is shared across every project on the machine. Which four, and what closes each: `.claude/rules/sqlite-persistence.md`. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
+**`state.db` is shared across projects, and TWO columns compete to isolate it.** One file serves every project. `workspace_id` has four readers, not zero as this handbook claimed on 2026-08-25 (re-measured 2026-08-27): `SqliteStateStore` filters on it in three queries, `run-registry` compares it to refuse a cross-workspace handoff claim -- a security decision -- `execution-record-store` projects it, and `v_execution_status` selects it. What is true is narrower and more awkward: for `version_history`, `execution_records` and `resource_changes` the column that actually isolates is `tenant_id` (9, 3 and 2 filter sites), so `workspace_id` there is a redundant second scope channel, indexed and written and never the thing that scopes. `tenant_id` meanwhile carries three incompatible meanings across the schema (server PID, workspace id, literal `'default'`). Choosing one scope column per table is open work, not a defect to patch. **Isolation tightened on 2026-08-27** and state written before then under the `'default'` key is not reachable from a workspace-scoped read: gate enablement, active framework and argument history re-derive from config on first read, which costs a re-toggle. No backfill was written on purpose -- it would have run against producers that were still truncating, which hides the defect rather than fixing it, and nothing stated what would ever retire it.
+
+What actually isolates `version_history` is `tenant_id`, which `resolveContinuityScopeId` resolves to `workspaceId ?? organizationId ?? 'default'` -- so rollback history IS workspace-scoped, and every read filters on it. **This paragraph previously claimed the opposite** ("`kv_state` is the only table that writes it… rollback history is shared across every project on the machine"); both halves were false, and the error is kept visible here because a security claim that overstates exposure gets discounted wholesale once someone checks it. The residual limit is real but narrower: a process that resolves no workspace shares the `'default'` bucket with every other such process. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
 
 ## Public API Contract (what a major version protects)
 
@@ -244,7 +268,9 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 ## Key Constraints
 
 - **MCP Contract Dev**: Verify upstream first (`rg "paramName" src/mcp/tools src/modules src/engine`). Contract, schema, generated metadata, router, manager/types, and service must agree.
-- **Client-work boundary**: Prompt and chain steps guide the client LLM; the server does not execute shell commands or mutate the client's workspace. Resource operations may write only server-owned resource and runtime-state paths.
+- **Client-work boundary**: Prompt and chain steps guide the client LLM, and resource operations may write only server-owned resource and runtime-state paths. **The server DOES execute shell commands, under one operator-held control.** `shell_verify` gate criteria and the inline `:: verify:"..."` operator both run their command through `sh -c` (`shared/utils/process.ts:381`), and script tools run an author-supplied file through a fixed interpreter. This is not incidental — ground-truth verification by exit code is the feature. What bounds it is three operator-held controls (below), not the absence of the capability: `MCP_SHELL_VERIFY_ALLOWLIST` over WHICH command, `MCP_SHELL_VERIFY_ALLOWED_DIRS` over WHERE, and a non-negotiable refusal of resource-supplied environment keys that decide what a command resolves to. This line previously claimed the opposite; it was false from the first `shell_verify` gate, and it is the sentence a reader consults when deciding how far to trust a third-party gate.
+- **Instruction surface (accepted, documented)**: A prompt's `systemMessage`, `userMessageTemplate`, `description`, and argument descriptions ARE instruction to the client LLM. That is the product, not a defect — but it means installing a third-party prompt pack is equivalent to letting its author write into your model's context, and two surfaces deliver that text **before anyone invokes anything**: the MCP-standard `prompts/list` (which clients typically fetch at connect) carries every prompt's `description` and every argument description, and `resource_manager list detail:"full"` returns every prompt's `systemMessage` in a single call. Measured 2026-08-25. Treat a prompt pack the way you would treat a dependency, not a config file. The HTTP catalog route serving the same fields is credential-gated (`MCP_CATALOG_READ_TOKEN`); the MCP surface is not, by design, because the operator chose the client.
+
 - **Guidance owner**: `PromptGuidanceService` remains the central framework-guidance service. Do not introduce a parallel coordinator/orchestrator with overlapping responsibility.
 - **Framework validity**: Always `frameworkManager.getFramework(id)` -- never hardcode framework lists.
 - **Consolidation over addition**: Enhance existing systems vs creating new ones.
@@ -252,9 +278,14 @@ import it. Adding a library surface is a deliberate act -- restore `types`, `exp
 - **Module organization**: import the defining module directly. **Banned is the compat re-export shim** -- a file whose whole body is `export ... from` AND which carries a back-compat marker, giving a symbol a second import path so `rg` for the canonical one misses consumers (`validate:no-crosslayer-reexport` enforces exactly this). A markerless barrel is NOT banned and `src/` has ~60 of them; prefer direct imports anyway, because `validate:arch` expresses layer + cycle boundaries as **paths**, and a barrel spanning layers launders the real edge. Intra-layer barrels launder nothing -- judge by whether consumers cross a layer. A file that re-exports _and_ defines something is not a barrel (`infra/logging/index.ts`). Dead-barrel detection is `npx knip`; `validate:arch` cannot see it (`no-orphans` needs no incoming AND no outgoing edges, and a re-export always has outgoing). Use `internal/` for a genuinely private region.
 - **Concurrent sessions**: work in a linked worktree, never a second session in this checkout — worktrees share `.git/config` but not HEAD, and a shared HEAD moves under whoever is mid-edit. Create with `npm run worktree:create -- <path> <branch> --from origin/main` (the path resolves from the repo root). **Do not use Claude Code's `--worktree`/`EnterWorktree` here**: anthropics/claude-code#72714 writes an absolutized `core.hooksPath` into the shared `.git/config`, disabling hooks in every worktree including this one — plain `git worktree add` is equally unsafe, for the reason `CONTRIBUTING.md` §Working in a second worktree records. A new worktree's `node_modules` and `server/node_modules` are symlinks pointing back at this checkout, so `npm ci` or an install from a branch that changed `package-lock.json` writes **through** them and mutates every worktree's dependency tree at once. Set a distinct `PORT` if two trees run servers.
 - **Commit convention**: Conventional Commits enforced. Scopes (`commitlint.config.mjs` is the enforced list; keep this and `CONTRIBUTING.md` in lockstep with it): `server`, `cli`, `runtime`, `pipeline`, `gates`, `frameworks`, `prompts`, `chains`, `styles`, `scripts`, `hooks`, `resources`, `mcp-tools`, `contracts`, `parsers`, `ci`, `deps`, `config`, `logging`, `metrics`, `docs`, `tests`, `semantic`, `execution`.
+- **Resource tracking is partial by design**: `server/resources/prompts/**` doubles as the operator's personal collection. Measured 2026-08-25: **122 prompt definitions on disk, 39 tracked**. `resource_manager create` writes there and stages nothing, so prompts authored through the sanctioned MCP path start untracked and stay that way on purpose. Consequence worth internalising: a worktree, a fresh clone, and CI see only the tracked set, so a prompt that resolves on this machine may not exist there -- and **a catalog probe run from a worktree is not evidence about this server** (that mistake was made on 2026-08-25 and reported as a missing prompt). Do not "fix" this by committing them.
+
 - **Environment (paths)**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 - **Environment (secrets)**: two **separate** bearer tokens, both fail-closed (unset is a refusal, `503`, not a default), both HTTP-transport only — STDIO reads neither. `MCP_CATALOG_READ_TOKEN` gates `GET /api/v1/catalog/prompts/:promptId`, the only REST route serving executable template content. `MCP_TOOLS_WRITE_TOKEN` gates the four **mutating** routes under `/api/v1/tools/` (create category, update prompt, delete prompt, reload). They are deliberately not one token: the read token is held by rendering adapters, and a single shared value would hand every reader the destructive surface. Both routes authenticate **before** lookup, so a wrong token cannot probe which prompt ids exist.
 - **Environment (HTTP exposure)**: `MCP_HTTP_HOST` defaults to `127.0.0.1`. Binding beyond loopback is opt-in and logs a warning, because the MCP Streamable HTTP transport says a local server SHOULD bind loopback rather than every interface. `MCP_HTTP_ALLOWED_ORIGINS` is a comma-separated allowlist; naming any origin **replaces** the loopback defaults rather than adding to them, so the full policy reads from one place. Origin validation is a spec **MUST**, it wraps the whole app (`/mcp`, `/health`, and REST alike), it runs ahead of every token check, and it answers `403` only when `Origin` is present and unlisted — an absent `Origin` passes, because non-browser MCP clients do not send one. CORS is not a substitute: under DNS rebinding the browser treats the request as same-origin and sends no preflight.
+
+- **Environment (execution capability)**: `MCP_SHELL_VERIFY_ALLOWLIST` declares which commands `shell_verify` may run. **Unset means every shell verification is refused** — the gate fails with a message naming this variable, and the server keeps serving. Entries are newline-separated (not comma: commands contain commas); an entry ending `*` is a prefix, but a command carrying shell control characters (`; & | \` < > $(`or a newline) must match exactly, because a prefix cannot bound what follows a`;`. The single entry `UNSAFE_ALLOW_ALL` permits everything, for an operator who authors all their own gates and accepts the risk. Both transports read it — this is not a listener concern: the sink is reached identically over STDIO and HTTP. The refusal is deliberately not a degrade-to-advisory; a gate reporting as passed while having verified nothing is a defect this repo has already fixed once.
+- **Environment (execution capability, continued)**: `MCP_SHELL_VERIFY_ALLOWED_DIRS` declares directories, beyond the server's own, that a gate's `shell_working_dir` may resolve inside. **Unset does not mean "anywhere"** — it means the server's own directory, which is where a gate that says nothing already runs. Same newline-separated form and same `UNSAFE_ALLOW_ALL` sentinel as the command allowlist, and deliberately a _separate_ declaration: accepting arbitrary commands is not accepting arbitrary directories. There is no third variable for the environment, and that asymmetry is the point. A resource-supplied `shell_env` / `tool.env` naming a key that decides what a command RESOLVES to — `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `BASH_ENV`, `IFS` and their siblings — is **refused outright, with no opt-out**, because otherwise the allowlist bounds a string whose meaning the author still picks: measured 2026-08-29, an operator allowlisting exactly `git status` ran the gate author's `git`. Ordinary variables pass through untouched. The full list and the mechanism behind each entry are in `shared/utils/process.ts`.
 
 -> `.claude/rules/mcp-contracts.md` for critical contract constraints (path-loaded)
 -> `.claude/rules/sqlite-persistence.md` for critical persistence constraints (path-loaded)

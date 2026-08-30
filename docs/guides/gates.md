@@ -141,6 +141,64 @@ Shell verification uses actual command execution for validation—exit code 0 = 
 
 See [Ralph Loops Guide](./ralph-loops.md) for comprehensive shell verification documentation.
 
+### What a Gate Author May and May Not Control
+
+A `shell_verify` criterion carries three author-supplied values, and the operator holds a
+different kind of control over each. The split is by MECHANISM, not by how dangerous the
+field sounds.
+
+| Field               | Author may set | Operator control                                                         | Why this shape                                                                         |
+| ------------------- | -------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `shell_command`     | argv only      | `MCP_SHELL_VERIFY_ALLOWLIST` — unset refuses everything                  | The command is the capability; the operator decides which ones exist                   |
+| `shell_working_dir` | yes            | `MCP_SHELL_VERIFY_ALLOWED_DIRS` — defaults to the server's own directory | A directory only WIDENS reach; the command is still one the operator allowed           |
+| `shell_env`         | mostly         | resolution-affecting keys are **refused outright, no opt-out**           | These decide what the allowed command MEANS, so allowing them would void the allowlist |
+
+### `shell_command` is argv, not a string
+
+```yaml
+pass_criteria:
+  - type: shell_verify
+    shell_command: ["npm", "test"] # argv
+```
+
+A bare string **fails to load**, with a message naming the fix. It used to be joined into
+`sh -c '<string>'`, so the shell parsed whatever the gate author wrote — and a gate file is
+exactly what an attacker drops into a workspace.
+
+What that cost: the operator's allowlist was checking TEXT rather than a command. A prefix
+entry like `npm *` had to be defended by enumerating shell metacharacters, and an
+enumeration is only ever as good as its last review. Argv is the structural version of the
+same guarantee, and it is the move this codebase already made for resource writes — assert
+the property rather than enumerate the vectors. `["npm", "test"]` cannot become two commands,
+so a prefix entry is sound and the metacharacter rule no longer applies to this shape.
+
+**It does not put a shell out of reach**, and pretending otherwise would be the more
+dangerous claim. `["sh", "-c", "..."]` is still expressible — it simply has to appear in
+`MCP_SHELL_VERIFY_ALLOWLIST`, where the operator can read it and has to have chosen it.
+Measured 2026-08-29 against a running server: with `echo *` allowlisted,
+`["echo", "ok; touch /tmp/marker"]` printed the semicolon and created nothing.
+
+The inline `:: verify:"npm test"` operator is unchanged and still takes a string. That
+channel is typed into the invocation by whoever is driving the server, not carried in a
+file, so it keeps the metacharacter rule instead.
+
+Refused environment keys: `PATH`, anything starting `LD_` or `DYLD_`, `NODE_OPTIONS`,
+`PYTHONPATH`, `PYTHONHOME`, `PYTHONSTARTUP`, `BASH_ENV`, `ENV`, `IFS`, `SHELLOPTS`,
+`BASHOPTS`, `PERL5LIB`, `PERL5OPT`, `RUBYLIB`, `RUBYOPT`. Ordinary variables — including
+anything your own scripts read — pass through untouched.
+
+Why the third row has no dial: measured 2026-08-29 against a running server, an operator
+who allowlisted exactly `git status` and a gate that set
+`PATH: /gate-author/bin:/usr/bin:/bin` ran the gate author's `git`. A dial that can be
+turned to "yes" here is a dial that turns the command allowlist off without saying so.
+
+The same rules reach script tools. `tool.env` is screened identically, and `tool.workingDir`
+is contained to the tool's own installed directory — a relative `../..` in either field
+resolves before it is checked, not after.
+
+`shell_response_env_var` names an environment key too, so it is screened by the same rule:
+a gate cannot smuggle `PATH` in by asking for the agent response to be mirrored into it.
+
 ### Response Injection (Agent-Output Verification)
 
 A `shell_verify` gate can pipe the agent's response into the shell command's stdin, enabling ground-truth checks against what the agent actually claimed.
@@ -148,7 +206,7 @@ A `shell_verify` gate can pipe the agent's response into the shell command's std
 ```yaml
 pass_criteria:
   - type: shell_verify
-    shell_command: "node scripts/verify-path-claims.mjs"
+    shell_command: ["node", "scripts/verify-path-claims.mjs"]
     shell_stdin_source: agent_response # pipe response to stdin
     shell_response_env_var: AGENT_RESPONSE # optional mirror via env var
     shell_timeout: 10000
@@ -181,7 +239,7 @@ verified_paths:
 # resources/gates/path-verification/gate.yaml
 pass_criteria:
   - type: shell_verify
-    shell_command: "node scripts/verify-path-claims.mjs"
+    shell_command: ["node", "scripts/verify-path-claims.mjs"]
     shell_stdin_source: agent_response
     shell_timeout: 10000
 activation:

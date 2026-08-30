@@ -83,7 +83,7 @@ export interface GatePassCriteria {
 
   // Shell verification options (ground-truth validation via exit code)
   /** Shell command to execute for verification (exit 0 = pass) */
-  shell_command?: string;
+  shell_command?: string[];
   /** Timeout in milliseconds for shell command (default: 300000) */
   shell_timeout?: number;
   /** Working directory for shell command execution */

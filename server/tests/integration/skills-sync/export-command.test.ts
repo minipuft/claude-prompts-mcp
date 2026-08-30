@@ -909,7 +909,7 @@ describe('Export Command Integration', () => {
       // regress unnoticed if the renderer only ever handles inline_guidance.
       const section = passCriteriaSection(
         await gateSkillWithCriteria('shell-gate', [
-          { type: 'shell_verify', shell_command: 'npm test', shell_timeout: 300000 },
+          { type: 'shell_verify', shell_command: ['npm', 'test'], shell_timeout: 300000 },
         ])
       );
 

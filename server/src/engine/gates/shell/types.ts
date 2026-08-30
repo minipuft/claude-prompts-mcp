@@ -29,8 +29,19 @@
  * never constructed, and exposing stash operations to a client is unsafe in a shared worktree.
  */
 export interface ShellVerifyGate {
-  /** The shell command to execute for verification */
-  command: string;
+  /**
+   * The command to execute for verification.
+   *
+   * Two shapes, because the two authoring channels differ in who writes them. A gate
+   * YAML file is authored elsewhere and merely placed, so it supplies ARGV and no shell
+   * parses it. The inline `:: verify:"..."` operator is typed into the invocation by
+   * whoever is driving the server, so it stays a STRING and reaches `sh -c` — where the
+   * allowlist's metacharacter rule is what bounds it.
+   *
+   * Keeping the string form here is not an oversight: the threat this review reproduced
+   * is a dropped FILE, and that channel is the one that no longer parses.
+   */
+  command: string | string[];
   /** Working directory for command execution (defaults to project root) */
   workingDir?: string;
   /** Timeout in milliseconds (defaults to SHELL_VERIFY_DEFAULT_TIMEOUT) */
@@ -76,6 +87,13 @@ export interface ShellVerifyResult {
   command: string;
   /** Whether the command timed out */
   timedOut?: boolean;
+  /**
+   * Set when the command was refused by the operator allowlist and therefore
+   * never ran. Distinct from a failure: `passed: false` with `refused` unset
+   * means the command ran and returned non-zero, which is a verified negative.
+   * A consumer reporting results must not present a refusal as a verification.
+   */
+  refused?: boolean;
 }
 
 /**
@@ -113,6 +131,35 @@ export interface ShellVerifyExecutorConfig {
   defaultWorkingDir?: string;
   /** Enable debug logging */
   debug?: boolean;
+  /**
+   * Commands this executor may run. Omit to read `MCP_SHELL_VERIFY_ALLOWLIST`
+   * from the environment at each execution; pass a list to override it
+   * (tests, and embedders that hold their own operator configuration).
+   */
+  allowlist?: readonly string[];
+  /**
+   * Directories, beyond `defaultWorkingDir`, that a gate's `shell_working_dir` may
+   * resolve inside. Omit to read `MCP_SHELL_VERIFY_ALLOWED_DIRS` from the environment
+   * at each execution; pass a list to override it (tests, and embedders that hold
+   * their own operator configuration).
+   */
+  allowedDirs?: readonly string[];
+  /**
+   * Whether the gate system is currently enabled, read per execution.
+   *
+   * The master switch used to govern only guidance, validation and the three
+   * advertised gate parameters, so a server reporting "Gate validation and
+   * guidance will be skipped" still executed authored `shell_verify` commands
+   * (measured 2026-08-27, row 1.5: marker written with the system Disabled).
+   * A resolver rather than a boolean because the switch is toggled at runtime
+   * by `system_control`, and it must be read for the workspace this instance
+   * serves — an unscoped read resolves to the process default while a client's
+   * toggle wrote to its own row.
+   *
+   * Omit to leave execution ungoverned by the switch (tests, embedders that
+   * have no gate system).
+   */
+  gateSystemEnabled?: () => boolean;
 }
 
 /**

@@ -25,6 +25,7 @@ import type { StateStoreOptions } from '#shared/types/index.js';
 
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
 import {
+  buildIdentityScope,
   resolveContinuityScopeId,
   DEFAULT_IDENTITY_SCOPE_ID,
 } from '#shared/utils/request-identity-scope.js';
@@ -76,13 +77,22 @@ function toHeaderRecord(headers: unknown): Record<string, unknown> | undefined {
  * passing it explicitly would be a different thing than omitting it.
  *
  * STDIO always lands here — it sets neither `authInfo` nor `requestInfo`, and
- * serves one workspace per process, so the default scope is correct for it.
+ * serves one workspace per process.
+ *
+ * `launchDefaultWorkspaceId` is what "the process default" actually IS, and passing it is
+ * what makes the STDIO case correct rather than merely quiet. Returning bare `undefined`
+ * resolves to the literal `'default'` key, while every WRITER — `system_control`,
+ * `PromptExecutor` — uses `identity.launchDefaults.workspaceId`, derived from cwd whenever
+ * nothing explicit is given. The two never coincided, so the gate parameters stayed
+ * advertised with the system disabled: measured 2026-08-27, execution correctly refused
+ * while `tools/list` still offered `gates`, `gate_verdict` and `gate_action`.
  */
 export function resolveServingUnitScope(
-  ctx?: ServingUnitContext | undefined
+  ctx?: ServingUnitContext | undefined,
+  launchDefaultWorkspaceId?: string
 ): StateStoreOptions | undefined {
   if (ctx == null) {
-    return undefined;
+    return buildIdentityScope({ workspaceId: launchDefaultWorkspaceId });
   }
 
   const headers = toHeaderRecord(ctx.requestInfo?.headers);
@@ -91,6 +101,17 @@ export function resolveServingUnitScope(
     ...(headers != null ? { headers } : {}),
   });
 
-  const scopeId = resolveContinuityScopeId(identity);
-  return scopeId !== DEFAULT_IDENTITY_SCOPE_ID ? { continuityScopeId: scopeId } : undefined;
+  // Emits all three keys, not just the resolved one. This function fed
+  // `servingUnitScope`, which decides whether the three gate parameters are advertised —
+  // and because it truncated, that read resolved to `'default'` and the surface never
+  // narrowed however the switch was set (measured 2026-08-27, row 1.5).
+  const requestScopeId = resolveContinuityScopeId(identity);
+  return buildIdentityScope({
+    continuityScopeId: requestScopeId,
+    workspaceId:
+      requestScopeId === DEFAULT_IDENTITY_SCOPE_ID
+        ? launchDefaultWorkspaceId
+        : identity.workspaceId,
+    organizationId: identity.organizationId,
+  });
 }

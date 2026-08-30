@@ -3,15 +3,36 @@
 /**
  * Flags optional fields on pipeline state interfaces that have readers and no writers.
  *
- * THE DECLARED-BUT-NEVER-CONSUMED FAMILY. This gate is one of three covering the same failure
- * shape at different layers. A declaration exists, its consumers are reachable, and nothing ever
- * supplies it — so the feature looks implemented, is measured as covered, and silently does
- * nothing. Keep them cross-referenced; a new instance of the shape belongs in whichever member
- * owns that layer rather than in a fourth script:
- *   - `validate:no-phantom-columns`   — a DB column declared and indexed, with no writer
- *   - `validate:state-field-writers`  — THIS: an optional TS field with readers and no writer,
- *                                       including optional dependency seams that default to no-op
- *   - `validate:knip-ratchet`         — an export declared and never imported
+ * THE DECLARED-BUT-NEVER-CONSUMED FAMILY. This gate is one of FOUR covering the same failure
+ * shape at different layers: a value and its consumer both exist and never meet, so the feature
+ * looks implemented, is measured as covered, and silently does nothing.
+ *
+ * THE LAYERS, ordered from declaration to delivery. Each member owns exactly one, and the
+ * ordering is the useful part — a defect belongs to the FIRST layer at which the chain breaks:
+ *
+ *   1. EXPORT     `validate:knip-ratchet`        — declared, never imported
+ *   2. COLUMN     `validate:no-phantom-columns`  — declared and indexed, no writer names it
+ *   3. FIELD      `validate:state-field-writers` — an optional TS field with readers and no
+ *                                                  writer, including dependency seams that
+ *                                                  default to no-op
+ *   4. PRODUCER   `validate:scope-producers`     — a value IS written, to a key its consumer
+ *                                                  does not read
+ *
+ * WHEN A NEW INSTANCE ARRIVES: prefer extending the member that owns its layer. **If no member
+ * owns that layer, add one — do not force the instance into the nearest member.** The original
+ * wording of this charter said only "prefer an existing member rather than a fourth script", and
+ * that instruction has a hole exactly where this family got hurt: nothing owned the producer
+ * layer, so `sqlite-layer-remediation-2026-08-03` Tier 4.1 fixed one producer BY HAND, marked the
+ * row done, and three siblings carrying the identical expression survived four months until an
+ * unrelated security probe tripped over them (2026-08-27: the gate master switch could not
+ * disable anything, `framework switch` never persisted, the advertised `inputSchema` never
+ * narrowed). A hand-fix at one site is not a fix of a class. Adding the fourth member is what
+ * this rule now requires, and naming the layers is what makes "does a member own this?"
+ * answerable instead of a judgement call.
+ *
+ * A NEW MEMBER MUST catch its own motivating instances — demonstrated by reintroducing them and
+ * observing the failure — and, if it accepts exceptions, audit them through
+ * `lib/exception-hygiene.js` so a green run is never a run that reached nothing.
  *
  * NONE of them catches runtime unreachability: code that is wired, imported and written, but sits
  * on a branch the live path never takes. That class is what the `reached` pre-flight probe in

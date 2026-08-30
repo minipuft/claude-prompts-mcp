@@ -24,6 +24,7 @@ import {
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
+import { assertPathInside } from '#shared/utils/path-containment.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface FileOperationsDependencies extends Pick<
@@ -248,6 +249,9 @@ export class FileOperations {
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
     const effectiveCategory = promptData.category.toLowerCase().replace(/\s+/g, '-');
     const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
+    // `category` reaches this join straight from the caller. Confirmed 2026-08-25:
+    // a `../`-bearing category wrote a prompt outside the root and still reported success.
+    assertPathInside(promptsDir, promptDir, 'category or id');
     const yamlPath = path.join(promptDir, 'prompt.yaml');
     // Nested chain steps carry a path-qualified id ("implementation_plan/verification"): the
     // directory needs the full path, but the YAML `id` field and its validation take the
@@ -561,6 +565,9 @@ export class FileOperations {
     suppliedKeys: ReadonlySet<string> = ALL_PROMPT_DATA_KEYS
   ): Promise<{ exists: boolean; paths: string[] }> {
     const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
+    // `category` reaches this join straight from the caller. Confirmed 2026-08-25:
+    // a `../`-bearing category wrote a prompt outside the root and still reported success.
+    assertPathInside(promptsDir, promptDir, 'category or id');
     const paths: string[] = [];
 
     // Check if prompt directory already exists

@@ -1,4 +1,7 @@
 # Dependencies and Package Management
+# No trailing slash: a worktree may SYMLINK node_modules to a sibling checkout to share
+# deps, and `dir/` matches a directory but not a symlink of that name. Measured 2026-08-27
+# by two sessions independently — `git add -A -- server` committed the symlink as mode 120000.
 server/node_modules
 .npm/
 .yarn/

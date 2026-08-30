@@ -15,7 +15,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { extname, resolve } from 'node:path';
 
 import type { ScriptExecutorPort } from '#shared/types/index.js';
 import type {
@@ -27,7 +27,14 @@ import type {
   JSONSchemaDefinition,
 } from '../types.js';
 
-import { buildSafeEnvironment, executeProcess, resolveExecutable } from '#shared/utils/process.js';
+import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
+import { isPathInside } from '#shared/utils/path-containment.js';
+import {
+  buildSafeEnvironment,
+  executeProcess,
+  findUnsafeEnvironmentKeys,
+  resolveExecutable,
+} from '#shared/utils/process.js';
 
 /**
  * Runtime command mappings for script execution.
@@ -142,16 +149,69 @@ export class ScriptExecutor implements ScriptExecutorPort {
       SCRIPT_TOOL_DIR: tool.toolDir,
     };
 
+    // Checked BEFORE the interpreter lookup, not just before the spawn: the lookup
+    // below resolves against this very map, so an author-supplied PATH would pick
+    // which `python3` runs. `buildSafeEnvironment` throws on these too, but that
+    // throw is a backstop — refusing here keeps one hostile tool from ending the
+    // surrounding request and names the tool that caused it (row 1.6, ruling R7).
+    const unsafeEnvKeys = findUnsafeEnvironmentKeys(env);
+    if (unsafeEnvKeys.length > 0) {
+      return this.createErrorResult(
+        startTime,
+        `Refusing to run script tool '${tool.id}': its environment sets ` +
+          `${unsafeEnvKeys.join(', ')}, which decide what the interpreter resolves to ` +
+          `or loads. Remove them from the tool definition; no setting permits them.`,
+        -1
+      );
+    }
+
     // Resolve runtime and command. Built AFTER `env` because the interpreter has
     // to be looked up on the PATH the child will actually receive.
     const runtime = this.resolveRuntime(tool);
+    if (runtime === undefined) {
+      const ext = extname(tool.absoluteScriptPath).toLowerCase();
+      return this.createErrorResult(
+        startTime,
+        `Refusing to run script tool '${tool.id}': nothing selects a runtime for ` +
+          `${ext === '' ? 'a file with no extension' : `'${ext}' files`}. ` +
+          `Auto-detection covers ${Object.keys(EXTENSION_TO_RUNTIME).join(', ')}. ` +
+          `Declare 'runtime:' in the tool definition (${SUPPORTED_RUNTIMES.join(', ')}) to run it.`,
+        -1
+      );
+    }
+
     const command = this.findRuntimeCommand(runtime, env);
     if (!command) {
-      return this.createErrorResult(startTime, `No interpreter found for runtime '${runtime}'`, -1);
+      // Two different failures reached this message. An unknown runtime NAME is a
+      // definition error the author can fix by reading the list; a known runtime
+      // whose interpreter is missing is an operator's host problem. Reporting both
+      // as "no interpreter found" sent the first one looking at their PATH.
+      const known = SUPPORTED_RUNTIMES.includes(runtime as (typeof SUPPORTED_RUNTIMES)[number]);
+      return this.createErrorResult(
+        startTime,
+        known
+          ? `No interpreter found for runtime '${runtime}' — tried ${(RUNTIME_COMMANDS[runtime] ?? []).join(', ')}`
+          : `Script tool '${tool.id}' declares an unknown runtime '${runtime}'. Valid: ${SUPPORTED_RUNTIMES.join(', ')}`,
+        -1
+      );
     }
 
     const timeout = this.resolveTimeout(request, tool);
-    const workingDir = tool.workingDir ? join(tool.toolDir, tool.workingDir) : tool.toolDir;
+    // `join` resolves `..` silently, so a tool declaring `workingDir: '../../..'` runs
+    // wherever it likes. This is the same defect Tier 2.1 closed for resource writes,
+    // reached through a different field, so it uses the same containment helper rather
+    // than a format rule on `workingDir` — the next path-bearing field then starts
+    // contained instead of starting unprotected.
+    const workingDir = tool.workingDir ? resolve(tool.toolDir, tool.workingDir) : tool.toolDir;
+    if (!isPathInside(resolve(tool.toolDir), workingDir)) {
+      return this.createErrorResult(
+        startTime,
+        `Refusing to run script tool '${tool.id}': its workingDir resolves to ` +
+          `${workingDir}, outside the tool's own directory (${tool.toolDir}). A script ` +
+          `tool runs where it is installed.`,
+        -1
+      );
+    }
 
     // Delegate to shared executeProcess utility
     const result = await executeProcess({
@@ -309,7 +369,24 @@ export class ScriptExecutor implements ScriptExecutorPort {
     return normalized;
   }
 
-  private resolveRuntime(tool: LoadedScriptTool): string {
+  /**
+   * Pick the runtime for a tool, or `undefined` when nothing has chosen one.
+   *
+   * An unrecognised extension used to resolve to `shell`, so a file this table
+   * knows nothing about was handed to `bash` on the strength of no evidence at
+   * all — announced only at debug level, which no operator is reading. Ruling R8
+   * is precise about what is wrong there: the `shell` RUNTIME builds an argv
+   * array (`bash script.sh`) and carries the same risk posture as
+   * `python script.py`, so the defect is `shell` being the SILENT DEFAULT for
+   * files nobody classified, not `shell` existing. Declaring `runtime: shell`
+   * remains entirely supported, and is now the only way to reach it for a file
+   * this table does not recognise.
+   *
+   * Undefined rather than a throw: `execute` already owns one refusal shape for
+   * "this tool cannot be run", and one hostile or malformed tool must not end
+   * the surrounding request.
+   */
+  private resolveRuntime(tool: LoadedScriptTool): string | undefined {
     if (tool.runtime && tool.runtime !== 'auto') {
       return tool.runtime;
     }
@@ -326,10 +403,7 @@ export class ScriptExecutor implements ScriptExecutorPort {
       return detected;
     }
 
-    if (this.debug) {
-      console.error(`[ScriptExecutor] Unknown extension '${ext}', defaulting to shell`);
-    }
-    return 'shell';
+    return undefined;
   }
 
   /**

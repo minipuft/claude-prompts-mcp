@@ -14,9 +14,10 @@ import {
   SHELL_STDIN_SOURCE_AGENT_RESPONSE,
   SHELL_VERIFY_MAX_RESPONSE_BYTES,
 } from '../constants.js';
-import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
+import { formatCommandForDisplay } from '../shell/shell-command-allowlist.js';
 
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
+import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../shell/shell-verify-message-formatter.js';
 import type { ShellVerifyGate } from '../shell/types.js';
 
@@ -41,7 +42,7 @@ function truncateResponse(text: string, maxBytes: number): string {
 
 /** Pass criterion type for shell_verify criteria — narrowed from the broader union. */
 type ShellVerifyCriteria = {
-  shell_command?: string;
+  shell_command?: string[];
   shell_timeout?: number;
   shell_working_dir?: string;
   shell_env?: Record<string, string>;
@@ -57,7 +58,7 @@ function buildGateConfig(
   runContext: GateShellVerifyRunContext | undefined
 ): ShellVerifyGate | null {
   const command = criteria.shell_command;
-  if (command == null || command.trim() === '') {
+  if (command == null || command.length === 0 || (command[0] ?? '').trim() === '') {
     return null;
   }
 
@@ -111,15 +112,22 @@ function resolveResponseInjection(
  * @param gateIds - Gate IDs from the pending review
  * @param gateDefinitionProvider - Provider to load gate definitions
  * @param runContext - Optional context (e.g., agent response for stdin injection)
+ * @param executor - The shell verification executor to run criteria through.
+ *   Passed in rather than resolved from a module singleton: the executor now
+ *   carries the gate master switch and the operator allowlist, and a
+ *   process-lifetime instance cannot hold the per-workspace scope those are read
+ *   for. Passing it also converges this path and the inline `:: verify:` path on
+ *   ONE instance, so a control added to the executor cannot cover one and miss
+ *   the other — which is exactly what row 1.5 measured.
  * @returns Results for each gate that had shell_verify criteria (may be empty)
  */
 export async function runGateShellVerifications(
   gateIds: string[],
   gateDefinitionProvider: GateDefinitionProvider,
-  runContext?: GateShellVerifyRunContext
+  runContext: GateShellVerifyRunContext | undefined,
+  executor: ShellVerifyExecutor | undefined
 ): Promise<GateShellVerifyResult[]> {
   const results: GateShellVerifyResult[] = [];
-  const executor = getDefaultShellVerifyExecutor();
 
   const gates = await gateDefinitionProvider.loadGates(gateIds);
 
@@ -135,12 +143,28 @@ export async function runGateShellVerifications(
         continue;
       }
 
-      const result = await executor.execute(gateConfig);
+      // Fail closed when no executor is wired, matching the `script_tool` sibling. A gate
+      // declaring ground-truth verification that silently contributes nothing is the defect
+      // this criteria type already suffered once; an unmistakable failure is recoverable,
+      // a silent pass is not.
+      const result =
+        executor !== undefined
+          ? await executor.execute(gateConfig)
+          : {
+              passed: false,
+              exitCode: -1,
+              stdout: '',
+              stderr:
+                'shell_verify could not run: no ShellVerifyExecutor is wired into GateReviewStage.',
+              durationMs: 0,
+              command: formatCommandForDisplay(gateConfig.command),
+              timedOut: undefined,
+            };
 
       results.push({
         gateId: gate.id,
         gateName: gate.name,
-        command: gateConfig.command,
+        command: formatCommandForDisplay(gateConfig.command),
         passed: result.passed,
         exitCode: result.exitCode,
         stdout: result.stdout,

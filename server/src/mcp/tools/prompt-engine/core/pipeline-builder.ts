@@ -319,7 +319,14 @@ export class PipelineBuilder {
     );
 
     // Shell verification stage
-    const shellVerifyExecutor = createShellVerifyExecutor({ debug: false });
+    // One executor for BOTH shell paths — the inline `:: verify:` stage below and the
+    // gate-YAML `shell_verify` criteria in stage 20. They used to hold different
+    // instances (this one, and a module singleton), which is how row 1.5's control
+    // could have covered one and silently missed the other.
+    const shellVerifyExecutor = createShellVerifyExecutor({
+      debug: false,
+      gateSystemEnabled: () => deps.lightweightGateSystem.isGateSystemEnabled(),
+    });
     const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {
       runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),
     });
@@ -364,6 +371,7 @@ export class PipelineBuilder {
       {
         executionRecordStore: deps.executionRecordStore,
         scriptToolRuntime: deps.scriptToolRuntime,
+        shellVerifyExecutor,
       }
     );
     // Third consumer of the same run read model (P6 Tier 2): the handoff CTA and its P5

@@ -2292,7 +2292,14 @@ function describePassCriterion(criterion: Record<string, unknown>): string[] {
   if (typeof maxLength === 'number') lines.push(`Stays under ${maxLength} characters`);
 
   const shellCommand = criterion['shell_command'];
-  if (typeof shellCommand === 'string') lines.push(`Passes \`${shellCommand}\``);
+  if (Array.isArray(shellCommand) && shellCommand.length > 0) {
+    lines.push(`Passes \`${shellCommand.join(' ')}\``);
+  } else if (typeof shellCommand === 'string') {
+    // Pre-2026-08-29 gate files, still readable for export even though the loader
+    // now refuses them. Rendering a skill description must not be the thing that
+    // fails on a stale file the operator has not migrated yet.
+    lines.push(`Passes \`${shellCommand}\``);
+  }
 
   const framework = criterion['framework'];
   if (typeof framework === 'string') lines.push(`Complies with the ${framework} framework`);

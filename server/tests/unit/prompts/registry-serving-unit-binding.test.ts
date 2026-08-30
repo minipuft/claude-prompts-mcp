@@ -102,6 +102,45 @@ describe('PromptRegistry serving-unit binding', () => {
     expect(second.handlers.has('test_default')).toBe(true);
   });
 
+  test('registers the human-readable name as title, not the id again', async () => {
+    // `title` is the display label, distinct from the registered name -- the SDK's own
+    // example registers `'review-code'` with `title: 'Code Review'`. This passed the id,
+    // making title byte-identical to name for 34/34 registered prompts and putting ~775
+    // bytes of zero-information duplication in every `prompts/list`, which clients
+    // typically fetch at connect.
+    const registry = makeRegistry(makeShell());
+    const serving = makeShell();
+
+    await registry.registerAllPrompts([makePrompt()], asShell(serving));
+
+    // The mock is typed with a 3-arity signature; only the first two are read here.
+    const call = serving.registerPrompt.mock.calls[0] as unknown as [
+      string,
+      { title?: string; description?: string },
+    ];
+    const [registeredName, config] = call;
+    expect(registeredName).toBe('test_default');
+    expect(config.title).toBe('Test Default');
+    expect(config.title).not.toBe(registeredName);
+  });
+
+  test('falls back to the id when a prompt carries no name', async () => {
+    // A nameless prompt must still register; the title just stops being informative.
+    const registry = makeRegistry(makeShell());
+    const serving = makeShell();
+
+    await registry.registerAllPrompts(
+      [makePrompt({ name: undefined as unknown as string })],
+      asShell(serving)
+    );
+
+    const [, config] = serving.registerPrompt.mock.calls[0] as unknown as [
+      string,
+      { title?: string },
+    ];
+    expect(config.title).toBe('test_default');
+  });
+
   test('does not re-register the same prompt on one shell', async () => {
     const registry = makeRegistry(makeShell());
     const serving = makeShell();

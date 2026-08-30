@@ -13,35 +13,52 @@
 import {
   ShellVerifyExecutor,
   createShellVerifyExecutor,
-  resetDefaultShellVerifyExecutor,
 } from '../../../../src/engine/gates/shell/shell-verify-executor.js';
 import { SHELL_OUTPUT_MAX_CHARS } from '../../../../src/engine/gates/shell/types.js';
 import {
   SHELL_VERIFY_DEFAULT_TIMEOUT,
   SHELL_VERIFY_MAX_TIMEOUT,
 } from '../../../../src/engine/gates/constants.js';
+import { SHELL_VERIFY_ALLOW_ALL } from '../../../../src/engine/gates/shell/shell-command-allowlist.js';
+import { SHELL_VERIFY_ALLOW_ANY_DIR } from '../../../../src/engine/gates/shell/shell-working-dir-policy.js';
 
 describe('ShellVerifyExecutor', () => {
   let executor: ShellVerifyExecutor;
 
+  // This suite exercises PROCESS MECHANICS -- exit codes, timeouts, output capture,
+  // environment filtering -- not authorization. Since 2026-08-25 the executor refuses
+  // any command the operator has not allowlisted, so every executor built here declares
+  // that it accepts any command. Authorization is covered by
+  // tests/unit/gates/shell-command-allowlist.test.ts. Leaving these to rely on an
+  // implicit default would let the security control silently decide their outcome.
+  const ALLOW_ALL: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
+  // Since 2026-08-29 the executor also contains `workingDir` to roots the operator
+  // declared, so a mechanics test that runs somewhere specific must say so for the same
+  // reason it must declare its allowlist: otherwise the security control, not the test,
+  // decides the outcome. Containment itself is covered in the row 1.6 block below.
+  const ALLOW_ANY_DIR: readonly string[] = [SHELL_VERIFY_ALLOW_ANY_DIR];
+
   beforeEach(() => {
-    resetDefaultShellVerifyExecutor();
-    executor = createShellVerifyExecutor({ debug: false, defaultTimeout: 5000 });
+    executor = createShellVerifyExecutor({
+      debug: false,
+      defaultTimeout: 5000,
+      allowlist: ALLOW_ALL,
+      allowedDirs: ALLOW_ANY_DIR,
+    });
   });
 
-  afterEach(() => {
-    resetDefaultShellVerifyExecutor();
-  });
+  afterEach(() => {});
 
   describe('constructor and configuration', () => {
     it('should use default timeout when not specified', () => {
-      const defaultExecutor = createShellVerifyExecutor();
+      const defaultExecutor = createShellVerifyExecutor({ allowlist: ALLOW_ALL });
       // Verify by running a command and checking it doesn't use 0 timeout
       expect(defaultExecutor).toBeDefined();
     });
 
     it('should accept custom configuration', () => {
       const customExecutor = createShellVerifyExecutor({
+        allowlist: ALLOW_ALL,
         defaultTimeout: 10000,
         maxTimeout: 30000,
         defaultWorkingDir: '/tmp',
@@ -135,6 +152,7 @@ describe('ShellVerifyExecutor', () => {
     it('should set timedOut flag when command exceeds timeout', async () => {
       const shortTimeoutExecutor = createShellVerifyExecutor({
         defaultTimeout: 100, // Very short timeout
+        allowlist: ALLOW_ALL,
       });
 
       const result = await shortTimeoutExecutor.execute({
@@ -157,7 +175,7 @@ describe('ShellVerifyExecutor', () => {
     });
 
     it('should clamp timeout to maximum allowed', async () => {
-      const executor = createShellVerifyExecutor({ maxTimeout: 1000 });
+      const executor = createShellVerifyExecutor({ maxTimeout: 1000, allowlist: ALLOW_ALL });
 
       // Even with very long timeout, should be clamped
       const result = await executor.execute({
@@ -170,6 +188,7 @@ describe('ShellVerifyExecutor', () => {
 
     it('should use default timeout from config when not specified', async () => {
       const customExecutor = createShellVerifyExecutor({
+        allowlist: ALLOW_ALL,
         defaultTimeout: 2000,
       });
 
@@ -223,6 +242,36 @@ describe('ShellVerifyExecutor', () => {
       }
     });
 
+    it("should NOT pass this server's OWN credentials to a child", async () => {
+      // Security review 2026-08-25, Tier 4.1. `SAFE_ENV_ALLOWLIST` is default-deny, so
+      // these are excluded by construction rather than by an explicit rule -- which is
+      // exactly why they need a test. Adding an `MCP_*` entry later would look harmless
+      // and would hand the catalog credential to every shell_verify command, including
+      // one authored in a third-party gate.
+      const vars = {
+        MCP_CATALOG_READ_TOKEN: 'catalog-secret-probe',
+        MCP_SHELL_VERIFY_ALLOWLIST: 'allowlist-value-probe',
+      };
+      const originals = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+      Object.assign(process.env, vars);
+
+      try {
+        const result = await executor.execute({
+          command: 'echo "$MCP_CATALOG_READ_TOKEN|$MCP_SHELL_VERIFY_ALLOWLIST"',
+        });
+
+        expect(result.stdout).not.toContain('catalog-secret-probe');
+        expect(result.stdout).not.toContain('allowlist-value-probe');
+        // The command itself ran -- otherwise the assertions above prove nothing.
+        expect(result.stdout.trim()).toBe('|');
+      } finally {
+        for (const [k, v] of Object.entries(originals)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
+    });
+
     it('should NOT pass GITHUB_TOKEN variable', async () => {
       const originalToken = process.env.GITHUB_TOKEN;
       process.env.GITHUB_TOKEN = 'ghp_test_token_12345';
@@ -267,6 +316,7 @@ describe('ShellVerifyExecutor', () => {
 
     it('should use default working directory when not specified', async () => {
       const executor = createShellVerifyExecutor({
+        allowlist: ALLOW_ALL,
         defaultWorkingDir: '/tmp',
       });
 
@@ -342,5 +392,178 @@ describe('ShellVerifyExecutor', () => {
       expect(result.stdout).toContain('PASS');
       expect(result.stdout).toContain('Tests:');
     });
+  });
+});
+
+/**
+ * Row 1.5. Measured 2026-08-27 against a live server: with the gate system
+ * explicitly Disabled — the tool reporting "Gate validation and guidance will be
+ * skipped" — an authored `:: verify:"touch <marker>"` still wrote the marker.
+ * The switch governed guidance, validation and the advertised parameters, and
+ * governed execution not at all.
+ *
+ * The control arm matters as much as the assertion: without it a refusal here is
+ * indistinguishable from an executor that refuses everything.
+ */
+describe('gate master switch (row 1.5)', () => {
+  const ALLOW_ALL = ['UNSAFE_ALLOW_ALL'];
+
+  it('refuses execution while the gate system is disabled, and names the switch', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL,
+      gateSystemEnabled: () => false,
+    });
+
+    const result = await executor.execute({ command: 'echo reached' });
+
+    expect(result.passed).toBe(false);
+    expect(result.refused).toBe(true);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('gate system is disabled');
+    expect(result.stderr).toContain('system_control');
+  });
+
+  it('POSITIVE CONTROL: the same command runs when the switch is on', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL,
+      gateSystemEnabled: () => true,
+    });
+
+    const result = await executor.execute({ command: 'echo reached' });
+
+    expect(result.refused).toBeUndefined();
+    expect(result.stdout).toContain('reached');
+  });
+
+  it('reads the switch per execution, not once at construction', async () => {
+    let enabled = true;
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL,
+      gateSystemEnabled: () => enabled,
+    });
+
+    const before = await executor.execute({ command: 'echo reached' });
+    enabled = false;
+    const after = await executor.execute({ command: 'echo reached' });
+
+    expect(before.refused).toBeUndefined();
+    expect(after.refused).toBe(true);
+  });
+
+  it('leaves execution ungoverned when no resolver is supplied', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL });
+
+    const result = await executor.execute({ command: 'echo reached' });
+
+    expect(result.refused).toBeUndefined();
+  });
+});
+
+describe('author-supplied environment and working directory (row 1.6)', () => {
+  const ALLOW_ALL_CMD: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
+
+  it('refuses a gate whose shell_env sets PATH, even when the command is allowlisted', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+
+    const result = await executor.execute({
+      command: 'echo reached',
+      env: { PATH: '/tmp/attacker-bin' },
+    });
+
+    expect(result.refused).toBe(true);
+    expect(result.stderr).toContain('PATH');
+  });
+
+  it('names every offending key so the author can fix the gate in one pass', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+
+    const result = await executor.execute({
+      command: 'echo reached',
+      env: { LD_PRELOAD: '/tmp/x.so', NODE_OPTIONS: '--require /tmp/y' },
+    });
+
+    expect(result.stderr).toContain('LD_PRELOAD');
+    expect(result.stderr).toContain('NODE_OPTIONS');
+  });
+
+  it('checks the environment BEFORE the allowlist, since PATH decides what the command means', async () => {
+    // An empty allowlist would refuse this command anyway. The assertion is on WHICH
+    // refusal fires: reporting "command not in the allowlist" for a PATH override would
+    // send the operator to fix the wrong setting.
+    const executor = createShellVerifyExecutor({ allowlist: [], allowedDirs: [] });
+
+    const result = await executor.execute({ command: 'echo reached', env: { PATH: '/tmp/x' } });
+
+    expect(result.stderr).toContain('shell_env');
+    expect(result.stderr).not.toContain('MCP_SHELL_VERIFY_ALLOWLIST');
+  });
+
+  it('still runs a gate whose shell_env is ordinary — the denylist must not be a blanket refusal', async () => {
+    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+
+    const result = await executor.execute({
+      command: 'echo "$MY_GATE_FLAG"',
+      env: { MY_GATE_FLAG: 'reached' },
+    });
+
+    expect(result.refused).toBeUndefined();
+    expect(result.passed).toBe(true);
+    expect(result.stdout.trim()).toBe('reached');
+  });
+
+  it('refuses a working directory outside every permitted root', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp/mcp-wd-root',
+      allowedDirs: [],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '/etc' });
+
+    expect(result.refused).toBe(true);
+    expect(result.stderr).toContain('MCP_SHELL_VERIFY_ALLOWED_DIRS');
+  });
+
+  it('refuses a RELATIVE working directory that resolves out of the root', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp/mcp-wd-root/nested',
+      allowedDirs: [],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '../../..' });
+
+    expect(result.refused).toBe(true);
+  });
+
+  it('permits a directory the operator declared', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp/mcp-wd-root',
+      allowedDirs: ['/tmp'],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '/tmp' });
+
+    expect(result.refused).toBeUndefined();
+    expect(result.stdout.trim()).toBe('/tmp');
+  });
+
+  // POSITIVE CONTROL for the whole block: every assertion above turns on a refusal, so
+  // the block would still pass against an executor that refused everything. This proves
+  // the permissive path runs and that the cwd the check approved is the cwd the child
+  // actually lands in — the two could differ, because a relative path resolves against
+  // the spawning process, not against the root it was checked against.
+  it('spawns in the directory the check approved', async () => {
+    const executor = createShellVerifyExecutor({
+      allowlist: ALLOW_ALL_CMD,
+      defaultWorkingDir: '/tmp',
+      allowedDirs: [],
+    });
+
+    const result = await executor.execute({ command: 'pwd', workingDir: '.' });
+
+    expect(result.passed).toBe(true);
+    expect(result.stdout.trim()).toBe('/tmp');
   });
 });

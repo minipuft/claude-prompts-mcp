@@ -1,3 +1,4 @@
+import { createShellVerifyExecutor } from '../../../src/engine/gates/shell/shell-verify-executor.js';
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
@@ -104,7 +105,11 @@ function createStageWithGates(
     chainSessionStore,
     loader,
     mockLogger,
-    () => ({ evaluation: configEvaluation })
+    () => ({ evaluation: configEvaluation }),
+    // Production wires this from PipelineBuilder. Absent, shell_verify criteria now fail
+    // closed and say so rather than silently contributing nothing, so a test that means to
+    // exercise them has to supply one. UNSAFE_ALLOW_ALL: these run real commands.
+    { shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }) }
   );
 
   const context = new ExecutionContext({ command: '>>chain' });
@@ -212,7 +217,7 @@ describe('Shell Verify Auto-Pass', () => {
     const shellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'test-suite',
-      pass_criteria: [{ type: 'shell_verify', shell_command: 'echo ok' }],
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['echo', 'ok'] }],
     };
 
     const { stage, context, chainOperatorExecutor, chainSessionStore } = createStageWithGates({
@@ -253,7 +258,7 @@ describe('Shell Verify Auto-Pass', () => {
     const failingGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'failing-test',
-      pass_criteria: [{ type: 'shell_verify', shell_command: 'exit 1' }],
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['exit', '1'] }],
     };
 
     const { stage, context, chainOperatorExecutor } = createStageWithGates({
@@ -274,7 +279,7 @@ describe('Shell Verify Auto-Pass', () => {
     const shellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'test-suite',
-      pass_criteria: [{ type: 'shell_verify', shell_command: 'echo ok' }],
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['echo', 'ok'] }],
     };
     const nonShellGate: LightweightGateDefinition = {
       ...baseGate,

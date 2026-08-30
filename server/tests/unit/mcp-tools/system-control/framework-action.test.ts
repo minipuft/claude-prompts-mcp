@@ -39,10 +39,18 @@ describe('System Control framework action scope propagation', () => {
 
     // The scope argument is the point: without it every workspace's switch landed on
     // one shared row. Asserted explicitly so a regression cannot pass silently.
+    //
+    // `workspaceId` was added 2026-08-27 and is the half that actually works.
+    // `FrameworkStateStore.resolveStateKey` keys on `resolveContinuityScopeId`, which reads
+    // `workspaceId`/`organizationId` and has never read `continuityScopeId` — so the shape
+    // this test previously pinned resolved to the literal `'default'` bucket, and
+    // `framework-state-store.ts:356` SKIPS PERSISTENCE ENTIRELY on that key. The switch was
+    // therefore not merely pooled across workspaces, it was never written. The test passed
+    // throughout, pinning the defect its own comment describes preventing.
     expect(frameworkManager.switchFramework).toHaveBeenCalledWith(
       'react',
       expect.stringContaining('react'),
-      { continuityScopeId: 'workspace-a' }
+      { continuityScopeId: 'workspace-a', workspaceId: 'workspace-a' }
     );
   });
 

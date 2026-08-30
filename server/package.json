@@ -58,6 +58,8 @@
     "validate:lockfile-sync": "node scripts/validate-lockfile-sync.js",
     "validate:lockfile-sync:self-test": "node scripts/validate-lockfile-sync.js --self-test",
     "validate:format": "cd .. && git ls-files -- '*.json' '*.md' '*.yml' '*.yaml' ':!server/**' | xargs npx --prefix server prettier --check",
+    "format": "cd .. && git ls-files -- '*.json' '*.md' '*.yml' '*.yaml' ':!server/**' | xargs npx --prefix server prettier --write",
+    "format:server": "prettier --write \"src/**/*.{ts,js}\" \"tests/**/*.{ts,js}\" \"*.{json,md,yaml,yml}\"",
     "start": "node dist/index.js",
     "dev": "node esbuild.config.mjs --watch",
     "dev:tsc": "tsc --project tsconfig.json --watch & node --watch dist/index.js",
@@ -169,6 +171,9 @@
     "validate:table-contracts": "tsx scripts/validate-table-contracts.ts",
     "validate:table-contracts:self-test": "tsx scripts/validate-table-contracts.ts --self-test",
     "validate:no-phantom-columns": "tsx scripts/validate-no-phantom-columns.ts",
+    "validate:scope-producers": "node scripts/validate-scope-producers.js",
+    "validate:resource-path-containment": "node scripts/validate-resource-path-containment.js",
+    "validate:spawn-input-guards": "node scripts/validate-spawn-input-guards.js",
     "validate:no-phantom-columns:self-test": "tsx scripts/validate-no-phantom-columns.ts --self-test",
     "worktree:create": "node ../scripts/create-worktree.js",
     "validate:git-hooks-active": "node scripts/validate-git-hooks-active.js",
@@ -194,10 +199,10 @@
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,cjs,mjs}": [
-      "prettier --write"
+      "prettier --check"
     ],
     "*.{json,md,yaml,yml}": [
-      "prettier --write"
+      "prettier --check"
     ]
   },
   "repository": {
