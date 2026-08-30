@@ -169,7 +169,8 @@ export class FileOperations {
   async updatePromptImplementation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
     promptData: any,
-    suppliedKeys?: ReadonlySet<string>
+    suppliedKeys?: ReadonlySet<string>,
+    sourceRoot?: string
   ): Promise<OperationResult> {
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
     const effectiveCategory = promptData.category.toLowerCase().replace(/\s+/g, '-');
@@ -210,6 +211,30 @@ export class FileOperations {
     const suppliedKeysForWrite =
       moveSource !== null ? ALL_PROMPT_DATA_KEYS : (suppliedKeys ?? ALL_PROMPT_DATA_KEYS);
 
+    // P1.2 — copy-on-write from the root the prompt was LOADED from.
+    //
+    // A prompt served from the bundled fallback has no directory under the writable root, so an
+    // update landed on a fresh directory and re-materialised the prompt from the in-memory model.
+    // That model holds the prompt's own fields and nothing about its subtree, so everything on
+    // disk that is not a field was LOST — silently, under `✅ Prompt Updated`. Measured
+    // 2026-08-30 on `planning/implementation_plan`: editing `description` alone replaced all five
+    // chain steps with 42–55 byte scaffold stubs (`discovery/user-message.md`, 3852B → 50B) and
+    // the served catalog then returned the stub. On `examples/create_framework` the four files
+    // under `tools/framework_builder/` simply vanished.
+    //
+    // Copying the source subtree FIRST turns the fresh-directory case back into the ordinary one:
+    // `createOrUpdateYamlPrompt` then sees an existing prompt and honours `suppliedKeys`, and
+    // `scaffoldChainStepDirectories` skips step directories that already exist. The fix is
+    // therefore a copy, not new preservation logic — the preservation logic was already correct
+    // and was being handed an empty directory.
+    //
+    // Whole-subtree rather than a list of known file kinds: a list can only preserve what someone
+    // remembered to enumerate, and the two losses above were exactly the kinds nobody had.
+    const copyOnWriteSource =
+      moveSource === null && !existsSync(promptDir) && sourceRoot !== undefined
+        ? this.resolveCopyOnWriteSource(sourceRoot, promptsDir, promptId, promptDir)
+        : null;
+
     const targets: ResourceMutationTarget[] = [{ path: promptDir, kind: 'directory' }];
     if (moveSource !== null) {
       // Both dirs snapshotted BEFORE the mutation runs: a failure partway through the move (the
@@ -241,6 +266,18 @@ export class FileOperations {
               promptId,
               effectiveCategory
             ))
+          );
+        }
+
+        if (copyOnWriteSource !== null) {
+          // Before the content write, so everything below operates on the full prior state.
+          await fs.cp(copyOnWriteSource, promptDir, { recursive: true });
+          // Said out loud, and said as a FORK rather than as a copy: the caller now owns a
+          // detached copy, and updates to the bundled original will no longer reach it. That
+          // consequence is the part a caller cannot see from the file list.
+          messages.push(
+            `Copied '${promptId}' into this resources root before editing, from ${copyOnWriteSource}`,
+            `⚠️ This is now your own copy — updates to the bundled '${promptId}' will no longer reach it`
           );
         }
 
@@ -308,6 +345,27 @@ export class FileOperations {
    * single file into a directory tree is a different operation this method does not attempt; a
    * category change against a flat-file prompt falls through to an ordinary create at the target.
    */
+  /**
+   * The directory to copy from when a prompt is being edited into a root it does not yet live in.
+   *
+   * Returns null — meaning "ordinary create, copy nothing" — whenever copy-on-write has no
+   * referent: the prompt already lives in the writable root, there is no distinct source root, or
+   * no directory for this id exists under the source root at all.
+   *
+   * Located by scanning the SOURCE root's categories rather than by joining the caller's category
+   * onto it, so a call that changes category while copying up still finds the original.
+   */
+  private resolveCopyOnWriteSource(
+    sourceRoot: string,
+    promptsDir: string,
+    promptId: string,
+    targetDir: string
+  ): string | null {
+    if (path.resolve(sourceRoot) === path.resolve(promptsDir)) return null;
+    if (!existsSync(sourceRoot)) return null;
+    return this.findExistingPromptDirectory(sourceRoot, promptId, targetDir);
+  }
+
   private findExistingPromptDirectory(
     promptsDir: string,
     promptId: string,
@@ -371,6 +429,28 @@ export class FileOperations {
     }
 
     if (targetDir === null) {
+      // P1.3 — say why, truthfully.
+      //
+      // `Prompt not found` was FALSE for the case that actually reaches here most often: a prompt
+      // resident only in the bundled tree is served, inspectable and executable, and this search
+      // covers only the writable root. Measured 2026-08-30 — `delete quick_decision` answered
+      // "not found" for a prompt the same server had just inspected successfully. The refusal was
+      // correct; the reason was not, and a reason nobody can act on is the part that costs.
+      const bundledRoot = this.configManager.getBundledResourceDirectory('prompts');
+      if (bundledRoot !== undefined && path.resolve(bundledRoot) !== path.resolve(promptsDir)) {
+        const bundledDir = this.findExistingPromptDirectory(bundledRoot, id, '');
+        if (bundledDir !== null) {
+          throw new Error(
+            `'${id}' ships with the server and is served from the bundled resources tree ` +
+              `(${bundledDir}), which is read-only — deleting it is not possible. ` +
+              `Your resources root is ${promptsDir}. ` +
+              `To change how '${id}' behaves for you, update it: the update copies it into your ` +
+              `root first and your copy takes precedence. There is no way to make '${id}' stop ` +
+              `resolving, because a higher-precedence root can shadow a prompt but cannot express ` +
+              `its absence.`
+          );
+        }
+      }
       throw new Error(`Prompt not found: ${id}`);
     }
 
@@ -410,6 +490,27 @@ export class FileOperations {
               messages.push(`Cleaned up empty category directory: ${deletedFromCategoryId}`);
             }
           }
+        }
+
+        // P1.3 — a delete that leaves the id still resolving must say so.
+        //
+        // Deleting your own copy of a prompt that also ships with the server re-exposes the
+        // bundled one, because the bundled tree is always read as the lowest-precedence root.
+        // That is the intended behaviour — delete removes the copy you own — but silently it
+        // looks like a failed deletion: the caller deletes, re-inspects, and the prompt is still
+        // there.
+        const bundledRoot = this.configManager.getBundledResourceDirectory('prompts');
+        if (
+          deletedFromCategoryDir !== null &&
+          bundledRoot !== undefined &&
+          path.resolve(bundledRoot) !== path.resolve(promptsDir) &&
+          this.findExistingPromptDirectory(bundledRoot, id, '') !== null
+        ) {
+          messages.push(
+            `ℹ️ '${id}' still resolves — your copy is gone, and the bundled version is now being ` +
+              `served again. This prompt ships with the server, so deleting your copy reverts it ` +
+              `rather than removing it.`
+          );
         }
 
         return { messages, affectedFiles };

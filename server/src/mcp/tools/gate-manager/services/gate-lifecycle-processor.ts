@@ -212,7 +212,22 @@ export class GateLifecycleProcessor {
     }
 
     if (!existsSync(gateDir)) {
-      return this.error(`Gate directory not found: ${gateDir}`);
+      // P1.3 — the same false refusal prompts carried. A gate resident only in the bundled tree
+      // is loaded, selectable and enforced, and this path checks the writable root alone, so the
+      // message named a directory that was never supposed to exist and implied the gate did not.
+      const bundledRoot = this.ctx.configManager.getBundledResourceDirectory('gates');
+      if (bundledRoot !== undefined && path.resolve(bundledRoot) !== path.resolve(gatesDir)) {
+        const bundledGateDir = path.join(bundledRoot, id);
+        if (existsSync(bundledGateDir)) {
+          return this.error(
+            `'${id}' ships with the server and is served from the bundled resources tree ` +
+              `(${bundledGateDir}), which is read-only — deleting it is not possible. ` +
+              `Your resources root is ${gatesDir}. Update it instead: your copy is written to ` +
+              `your own root and takes precedence over the bundled one.`
+          );
+        }
+      }
+      return this.error(`Gate not found: '${id}'. Nothing was removed.`);
     }
 
     // `dry_run` reports what would be removed and returns before anything is. Deletion is the one

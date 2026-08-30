@@ -372,6 +372,17 @@ export class PromptDiscoveryProcessor {
         config_path: this.context.dependencies.configManager.getConfigPath(),
         server_root: this.context.dependencies.configManager.getServerRoot(),
         resource_root: this.context.dependencies.configManager.getResolvedPromptsDirectory(),
+        // Where this prompt was LOADED from, which is not always where a write to it would GO
+        // (P1.1). `resource_root` is the write destination — the highest-precedence writable root
+        // — while `source_root` is the root the served copy actually came from. When they differ,
+        // the prompt is resident in the bundled fallback and editing it will copy it up.
+        source_root: prompt.sourceRoot,
+        // Stated rather than left for the caller to derive by comparing two absolute paths, since
+        // the whole point is that the difference is easy to miss.
+        edit_copies_on_write:
+          prompt.sourceRoot !== undefined &&
+          prompt.sourceRoot !==
+            this.context.dependencies.configManager.getResolvedPromptsDirectory(),
       },
       isError: false,
     };

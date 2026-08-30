@@ -515,7 +515,14 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    const result = await this.fileOperations.updatePromptImplementation(promptData, suppliedKeys);
+    // `currentPrompt.sourceRoot`, not `promptData` — provenance is deliberately absent from
+    // `canonicalPromptSnapshot`, which is what `promptData` is built from, so that it never
+    // reaches a version snapshot or a diff. It has to arrive as its own argument (P1.2).
+    const result = await this.fileOperations.updatePromptImplementation(
+      promptData,
+      suppliedKeys,
+      currentPrompt?.sourceRoot
+    );
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
     const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 

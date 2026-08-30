@@ -690,6 +690,18 @@ export interface PromptData {
   description: string;
   /** Path to the prompt file */
   file: string;
+  /**
+   * Absolute path of the resources root this prompt was loaded FROM.
+   *
+   * `file` is relative to a base and names no root, so a loaded prompt could not say whether it
+   * came from the personal library or the bundled fallback — which is the one fact a write needs
+   * before it can decide between rewriting in place and copying up. Stamped once per load pass in
+   * `loadAndConvertPrompts`, where the root is the argument.
+   *
+   * Provenance, not content: deliberately absent from `canonicalPromptSnapshot`, so it never
+   * reaches a version snapshot or a diff.
+   */
+  sourceRoot?: string;
   /** Arguments accepted by this prompt */
   arguments: PromptArgument[];
   /** Interactive composer mapping authored by this prompt, when declared. */

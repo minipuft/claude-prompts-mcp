@@ -25,6 +25,8 @@ describe('FrameworkFileWriter canonical writes', () => {
       // The writer asks for the frameworks directory directly now (T1.10) rather than composing
       // it from the server root, so the stub has to answer that question. Same on-disk layout.
       getFrameworksDirectory: () => join(workspaceDir, 'resources', 'frameworks'),
+      // No bundled tree in this fixture: the stub answers "no distinct bundled source".
+      getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
   });
 

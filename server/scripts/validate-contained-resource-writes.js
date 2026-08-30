@@ -31,9 +31,17 @@ import { fileURLToPath } from 'node:url';
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_DIR = path.join(SERVER_ROOT, 'src');
 
-/** The accessors that hand back a resources root. A file calling one is handling resource paths. */
+/**
+ * The accessors that hand back a resources root. A file calling one is handling resource paths.
+ *
+ * `getServerRoot()` is in the list because of a site this check MISSED on its first run: framework
+ * `delete` built `join(getServerRoot(), 'resources', 'frameworks', id)`, hardcoding the package
+ * tree instead of asking for the frameworks root, so it resolved a different root than framework
+ * `write` did. It handled a resources path without ever naming a resources accessor. Rolling one's
+ * own root from `getServerRoot()` is itself the defect, so the rule now selects it too.
+ */
 const ROOT_ACCESSOR =
-  /get(?:Resolved)?(?:Prompts|Gates|Frameworks|Styles)Directory\s*\(|getBundledResourceDir\s*\(|getOverlayResourceDirs\s*\(/;
+  /get(?:Resolved)?(?:Prompts|Gates|Frameworks|Styles)Directory\s*\(|getBundledResourceDir(?:ectory)?\s*\(|getOverlayResourceDirs\s*\(|getServerRoot\s*\(\)[\s\S]{0,120}?['"`]resources['"`]/;
 
 /** Filesystem mutation. A file that resolves a root and does one of these is a resource writer. */
 const WRITES = /\b(?:safeWriteFile|writeFile|mkdir|rmdir|unlink|cp|rename)\s*\(|\.\s*rm\s*\(/;

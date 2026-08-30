@@ -360,3 +360,92 @@ one-file diff for a 231-file change reads as a mistake otherwise.
 The `analysis` category directory disappeared from the bundled tree entirely: every prompt in it was
 personal. The served catalog is unaffected because the personal store supplies that category, and
 the set comparison confirms it rather than assuming it.
+
+---
+
+## P1 Arc 2 executed — P1.1, P1.2, P1.3 (2026-08-30)
+
+### Owner rulings taken before compiling the tier
+
+| #   | Question                                                            | Ruling                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | What happens when you edit a resource resident in the bundled tree? | **Copy-on-write, said out loud.** The receipt names the source, the destination, and that the copy is now detached from bundled updates. Rejected: refuse-and-require-explicit-fork (two calls for every first edit) |
+| R2  | Delete your own copy that shadows a bundled resource                | **Deletes your copy; the bundled one is served again, and the response says so.** Rejected: refuse-when-anything-underneath (leaves no way to undo a fork), and delete-from-every-library (blast radius)             |
+| R3  | Scope                                                               | **Fix the whole class across prompt / gate / framework**, not the literal rows                                                                                                                                       |
+| R4  | The path traversal found while measuring                            | **Fix it first, inside this arc**                                                                                                                                                                                    |
+
+### Re-measurement: two of the three rows had false premises
+
+**P1.2 was understated, not wrong.** The row reads as though "update writes to the source root"
+were work to be added. Measured first: an update ALREADY resolves the highest-precedence writable
+root and already copies the top-level files up. What it did not do was carry the on-disk SUBTREE,
+and the loss was silent and large:
+
+| Case                                               | Before                                                                                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `planning/implementation_plan`, `description` only | 5 chain steps replaced by 42–55 byte scaffold stubs; `discovery/user-message.md` 3852B → 50B; the served step then returned the stub |
+| `examples/create_framework`, `description` only    | all 4 files under `tools/framework_builder/` absent at the destination                                                               |
+| `frameworks/cageerf`                               | refused outright: `Failed to load framework files … may be corrupted`                                                                |
+
+Root cause is narrower than "copy-on-write is missing": the preservation logic was already correct
+and was being handed an EMPTY directory. `createOrUpdateYamlPrompt` honours `suppliedKeys` only
+for an existing prompt, and `scaffoldChainStepDirectories` skips step directories that already
+exist — so copying the subtree first turns the fresh-directory case back into the ordinary one.
+The fix is a copy, not new preservation logic. Whole-subtree rather than a list of known file
+kinds, because a list preserves only what someone remembered to enumerate and both losses above
+were exactly the kinds nobody had.
+
+**P1.3's falsifier already passed — a stale `☐`.** "Deleting a bundled prompt under a distinct
+workspace refuses and removes no file" was TRUE before any work: the search covers the writable
+root only, so the prompt is not found and nothing is touched. The row would have been marked ✓ by
+anyone who ran its own check. The real defect was that all three refusals stated a reason that was
+false:
+
+    prompt    -> "Prompt not found: quick_decision"                  (the same server had just inspected it)
+    gate      -> "Gate directory not found: <workspace path>"        (named a path never meant to exist)
+    framework -> "Framework directory not found: <package path>"     (and resolved the WRONG ROOT — see below)
+
+This is the `cleanup-standards.md` asymmetry in the wild: the `☐` disclaimed work that was done,
+and the reason nobody caught it is that the falsifier tested the refusal and not its content.
+
+### Findings that were not rows
+
+**F-A — path traversal (fixed first, per R4, commit `233b2bf2`).** A caller-supplied segment could
+steer a resource write outside the resources root. Measured against `dist/`, each with a passing
+benign control: prompt `category:'../../ESCAPED'`, gate `id:'../../ESCAPED_GATE'`, framework
+`id:'../../ESCAPED_FW'` all wrote outside the root and reported success. Only the prompt `id` was
+guarded, by a validator reached from the draft service and never from `category`;
+`validateCategoryName` existed with **zero call sites**. A validator named for the job made the
+surface read as covered.
+
+Fixing the three types was not fixing the class. Enumerating every file that resolves a resources
+root and writes found a fourth — the HTTP `create_category` handler, joining a request body field
+into `mkdir`. Widening that enumeration to include roots rolled by hand from `getServerRoot()`
+found two more: framework `delete` and `skills-sync`. Six sites, three of which no per-type pass
+would have reached. `validate:contained-resource-writes` now runs the enumeration every build.
+
+**F-B — framework `delete` resolved a different root than framework `write`.** It built
+`join(getServerRoot(), 'resources', 'frameworks', id)`, hardcoding the package tree — the exact
+defect D8 Arc 1 fixed for framework creates (`9e229e1e`) and missed here. With a personal library
+configured, deleting a framework you had just created there looked in the package tree and
+reported it missing. Found by the widened enumeration, not by looking.
+
+**F-C — P5.4 is verified, and its answer is "yes, but".** Reproduced while probing: a create
+returns `isError: true` under a `✅ **Prompt Created**` headline. The full untruncated body DOES
+carry `❌ **Post-write verification failed**` — at line 14, under the success headline. So
+`isError` is correct and the ORDERING is the defect. P5.4 may now be executed; its "verify before
+fixing" condition is met.
+
+**F-D — a create with a spaced category always reports failure.** Same capture: `category: 'My
+Category'` slugs to `my-category` on disk, and post-write verification compares against the
+authored value, so it reports `mismatched: category` for a write that succeeded. Filed as a row
+(P5.9), not fixed here.
+
+### Deviations
+
+| id       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEV-P1-1 | `validate:all` cannot reach 50/50: `validate:plan-row-tracking` fails on 19 unstamped rows in `plans/features/mid-chain-unknown-surfacing-2026-08-20.md`. Pre-existing at HEAD, confirmed by stashing. NOT fixed here — that plan was committed 15 minutes earlier by a concurrent session working in this same checkout, and stamping its rows under an active session is the shared-HEAD hazard `CLAUDE.md` describes. Recorded rather than fixed |
+| DEV-P1-2 | `ConfigManager` gained `getBundledResourceDirectory`, which broke six partial test stubs at RUNTIME while typechecking cleanly — they use `as unknown as ConfigManager`. Caught by the suites, not by `typecheck:tests:ratchet`, which is the mock-integrity hole `testing.md` names                                                                                                                                                                |
+| DEV-P1-3 | The new e2e suite failed at SUITE level with `ENOTEMPTY` while every test passed: `kill()` only signals, and teardown raced the server's log flush. Now awaits exit. A teardown failure that reads as a product failure is worth the four extra lines                                                                                                                                                                                               |
+| DEV-P1-4 | P5.5 recurred twice more this session — `npm run test:e2e` leaves 7 `examples/conformance_*` dirs in the package tree. The second time it broke `validate:readme`, which counted 46 prompts against the README's 39. P5.5 is now a gate-breaking bug, not only litter                                                                                                                                                                               |

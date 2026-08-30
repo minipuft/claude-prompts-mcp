@@ -239,6 +239,16 @@ export interface ResourcePathSource {
   getPromptsPath(): string;
   getGatesPath(): string;
   getFrameworksPath(): string;
+  /**
+   * The bundled (package-shipped) directory for a resource type — the lowest-precedence root,
+   * always read, never written.
+   *
+   * Writers need it to answer "where does this resource live TODAY", which is a different
+   * question from "where would a write go" and has a different answer whenever a personal library
+   * is configured. Without it a framework served from the bundle read as absent to its own
+   * updater, which reported `Files may be corrupted` (P1.2).
+   */
+  getBundledResourceDir(resourceType: string): string;
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
@@ -635,6 +645,18 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
     const configDir = path.dirname(this.configPath);
     return path.join(configDir, 'resources', 'frameworks');
+  }
+
+  /**
+   * The bundled directory for a resource type, or undefined when no path source is injected.
+   *
+   * Undefined rather than a guessed fallback: the only honest answer without a `PathResolver` is
+   * "unknown", and a guess here would send a copy-on-write reading files from the wrong tree.
+   * Every caller treats undefined as "no distinct bundled source", which degrades to the
+   * pre-existing behaviour rather than to a wrong one.
+   */
+  getBundledResourceDirectory(resourceType: string): string | undefined {
+    return this.resourcePaths?.getBundledResourceDir(resourceType);
   }
 
   /**

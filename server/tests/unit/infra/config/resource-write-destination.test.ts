@@ -29,6 +29,8 @@ function resolverAt(root: string): ResourcePathSource {
     getPromptsPath: () => path.join(root, 'prompts'),
     getGatesPath: () => path.join(root, 'gates'),
     getFrameworksPath: () => path.join(root, 'frameworks'),
+    // A bundled root distinct from the writable one, so a test that confuses the two fails.
+    getBundledResourceDir: (resourceType: string) => path.join(root, 'bundled', resourceType),
   };
 }
 

@@ -13,6 +13,7 @@ import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
+import { resolveContainedPath } from '#shared/utils/contained-path.js';
 
 /**
  * Optional framework fields that can be copied directly from input to framework data.
@@ -248,12 +249,35 @@ export class FrameworkLifecycleProcessor {
       );
     }
 
-    // Get framework directory path
-    const serverRoot = this.ctx.configManager.getServerRoot();
-    const frameworkDir = path.join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
+    // Resolve through the SAME root a framework write resolves through.
+    //
+    // This built `join(getServerRoot(), 'resources', 'frameworks', id)` — hardcoding the package
+    // tree and consulting neither the config nor the environment, which is the defect D8 Arc 1
+    // fixed for framework creates (`9e229e1e`) and missed here. With a personal library
+    // configured, deleting a framework you had just created there looked in the package tree and
+    // reported it missing.
+    const frameworksDir = this.ctx.configManager.getFrameworksDirectory();
+    const frameworkDir = resolveContainedPath(frameworksDir, id.toLowerCase());
 
     if (!existsSync(frameworkDir)) {
-      return this.error(`Framework directory not found: ${frameworkDir}`);
+      // P1.3 — a framework served from the bundled tree is loaded and selectable; refusing it as
+      // "directory not found" described a path that was never meant to exist. This also covers
+      // `focus`, `liquescent`, `radiant` and `verify`, which ship but are absent from the
+      // hardcoded built-in list above (P4.3) — they now refuse for the reason that is true of
+      // them rather than falling through to a missing-directory message.
+      const bundledRoot = this.ctx.configManager.getBundledResourceDirectory('frameworks');
+      if (bundledRoot !== undefined && path.resolve(bundledRoot) !== path.resolve(frameworksDir)) {
+        const bundledDir = resolveContainedPath(bundledRoot, id.toLowerCase());
+        if (existsSync(bundledDir)) {
+          return this.error(
+            `'${id}' ships with the server and is served from the bundled resources tree ` +
+              `(${bundledDir}), which is read-only — deleting it is not possible. ` +
+              `Your resources root is ${frameworksDir}. Update it instead: the update copies it ` +
+              `into your own root first and your copy takes precedence.`
+          );
+        }
+      }
+      return this.error(`Framework '${id}' not found. Nothing was removed.`);
     }
 
     // `dry_run` reports what would be removed and returns before anything is. Deletion is the one
