@@ -203,6 +203,18 @@ Rejected: compile-then-post-decorate (makes A.2's own clause false); mapping `==
 `subagentModel` (conflates a context-isolation choice with a model-tier hint — the retired
 delegation contract separated those deliberately).
 
+OQ-A2b ✓ RE-RULED 2026-08-30 (main thread, after DEV-TA2-1 falsified the `::` row by probing the
+reader — P-A-F3): **`::` criteria do NOT route through run-level `gates[]`.** `TemporaryGateRegistrar`
+either literalizes a canonical id into a temp-gate criterion or drops `target_step_id` on resolve —
+measured, both halves. Instead the IR node schema declares the channel that already has a correctly
+timed reader: `inlineGateCriteria?: string[]` (raw tokens; `InlineGateProcessor` resolves them at
+stage 11 with the registry in hand, per step — `inline-gate-processor.ts:164`). It flows into YAML
+via A.1's derivation, additive. `compileNode` passes it through exactly like `inlineGateIds`.
+The prompt-level `subagentModel`/`agentType` fallback unification is ✗ KILLED (2026-08-30 · it
+would change IR-path behaviour — IR runs would gain a fallback they never had · revives if a real
+run needs the fallback on an IR node): both paths keep today's fallback semantics unchanged.
+The `==>` → `delegated` half of OQ-A2 stands as ruled.
+
 ### Tier A continuation record — rows A.3 and 4.5 (2026-08-30)
 
 **A.3 and 4.5 shipped (`b0955c6c`); A.2 stopped at its ruling.** Receipts: `validate:all` — 50
