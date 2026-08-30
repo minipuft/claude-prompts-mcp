@@ -214,6 +214,74 @@ on an unpaused run there is no pending review for the hook to guard. Flagging it
 `gate-enforce.py` that a bare `remainder` resolves a pending GATE review, which it does not. Row
 3.1's matrix (`resume`, `accept_alternative`, `abort`, `cancel`) agrees.
 
+## Tier 1 — re-measurement before execution
+
+| Asserted (plan)                                                        | Measured                                                                                                                                                                            | Verdict                                                                                                                                                                              |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Row 1.3: "four hops, four independent strippers"                       | Four confirmed — `DeclaredRunBudget` (`chain-session.ts:65`), `compileBudget` (`compiler.ts:168`), `normalizeChainBudget` (`yaml-prompt-loader.ts:580`), stage-16 readback (`:459`) | ✓. A FIFTH observable hop exists but is not a stripper: `converter.ts` and stage-04 pass the whole `DeclaredRunBudget` object through, so they cannot drop a field — asserted anyway |
+| Row 1.2: `origin='remainder'` needs no schema bump                     | `chain_run_nodes.origin` is `TEXT NOT NULL`, no CHECK, no DDL default (`sqlite-engine.ts:751`)                                                                                      | ✓ no bump. One reader (`reconstructNodeOrigin`) had to widen or the value silently reads back as `'planned'`                                                                         |
+| Row 1.1: "`UNKNOWN_INTERRUPT_GATE_ID` beside the phase-guard constant" | `PHASE_GUARD_GATE_ID` lives in its STAGE file and is consumed by `response-assembler` + `pipeline/index.ts` — all `engine/`                                                         | ⚠ adapted — placed in `decisions/mutation/types.ts` instead (DEV-T1-1); the pattern is honoured, the location is not                                                                 |
+| Row 1.2: "atomic, awaited, throws on failure"                          | `persistSessions` log-and-swallows; NO throwing persist path existed                                                                                                                | ⚠ corrected — the row assumed a capability the store did not have (DEV-T1-2)                                                                                                         |
+| Row 1.2: `replaceRemainder(sessionId, nodes, unknownId)`               | Cannot express OQ-A1's one-mechanism-two-spellings rule, ruled after the row was authored                                                                                           | ⚠ corrected in the plan — `mode` added as a fourth parameter                                                                                                                         |
+
+## Deviations (Tier 1)
+
+### DEV-T1-1 — the reserved gate id sits with the POLICY, not with the stage
+
+Row 1.1 says "beside the phase-guard constant", and `PHASE_GUARD_GATE_ID` is declared in
+`stages/19-phase-guard-verification-stage.ts` — the stage that sets the review. Copying that
+placement would have put `UNKNOWN_INTERRUPT_GATE_ID` in stage 16, which the pure decision module
+would then have to import FROM a stage: a decision depending on an orchestration file, the
+inversion `decisions/` exists to avoid.
+
+It is declared in `decisions/mutation/types.ts` instead, next to `MAX_INSERTIONS_PER_RUN`. Every
+consumer the plan names for it — stage 16 (row 2.1), stage 13 (D-9), `GateVerdictProcessor`
+(row 2.2) and `response-assembler` (row 2.4) — is inside `engine/`, so all four import it without
+crossing a layer. The Python side (`session_state.py`, row 3.1) carries the literal rather than an
+import, exactly as it already does for `__phase_guard__`.
+
+### DEV-T1-2 — "throws on persist failure" was a capability the store did not have
+
+Row 1.2 requires an awaited persist that throws. `ChainSessionStore.persistSessions` catches
+everything and logs, so no caller can distinguish a committed write from a failed one — and
+`applyUnknownObservations` has been DOCUMENTED as throwing on persist failure while calling that
+same swallowing method since it landed.
+
+Conservative fix: `persistSessions` now wraps a new `persistSessionsOrThrow` containing the
+identical body without the outer catch. Existing callers keep byte-identical behaviour (the
+advisory mutations and the cleanup pass all prefer a logged failure they cannot act on);
+`replaceRemainder` calls the strict one. Rejected: changing `persistSessions`' posture globally,
+which would turn a logged failure into a thrown one for every step capture in the pipeline — a
+behaviour change no row asked for.
+
+The pre-existing false docblock was NOT fixed here. It is a different method with a different
+posture question (should an observation batch fail the whole call?), so it is plan row 1.4 rather
+than a silent drive-by — a fix at the site you found is not a fix of the class, and the class here
+is "a docblock promising a throw over a swallowing persist".
+
+### DEV-T1-3 — two derivation choices row 1.1 left open, ruled and documented in code
+
+Neither is a deviation from a ruling; both are gaps the row did not specify, decided in the module
+rather than left implicit:
+
+- **Which unknown the interrupt is ABOUT** when several blocking ones are open: the most recently
+  discovered (`discoveredAtStep`). Ledger order would let an older still-open unknown outrank the
+  discovery that just stopped this step, so the payload would keep naming the stale one.
+- **`affectedStepIds` is filtered to nodes strictly AHEAD** of the current node, and collected
+  across every open blocking entry rather than only the triggering one. A step already executed or
+  currently rendered cannot be re-planned — the same boundary OQ-P4-2 draws for skips — and a
+  caller authoring a replacement needs every declared link, not just one. Both are unit-tested, so
+  a later tier that disagrees will find the assertion rather than the behaviour.
+
+### DEV-T1-4 — the stage-16 readback is reachable, not reached
+
+`resolveDeclaredPauseOnBlocking` has no production caller until row 2.1 wires `decideInterrupt`
+into the stage. Row 1.3's Verify asks for "absent → false; declared true → true" plus one
+assertion per hop, which is exactly what shipped — but a green suite here proves the value ARRIVES,
+not that anything acts on it. Recorded rather than papered over: the alternative was to implement
+row 2.1's call inside Tier 1, which is a re-scoping decision, and the alternative to THAT was to
+leave hop 4 unwritten and let rows 2.1 discover the field is still declaration-dead.
+
 ## Findings promoted to the plan
 
 - **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling.
@@ -226,3 +294,14 @@ on an unpaused run there is no pending review for the hook to guard. Flagging it
 - **P-0-F2**: contract parameters are gated by `validate:conformance-coverage`, so every future
   tier that ADDS one must either write a scenario or declare an exception with a close condition.
   New row 0.5 owns retiring the one Tier 0 declared. See DEV-T0-4.
+- **P-1-F1**: `applyUnknownObservations` documents a throwing persist it does not perform. New row
+  1.4 owns it; the throwing path now exists (DEV-T1-2), so the remaining question is posture, not
+  plumbing.
+- **P-A-F2 fully discharged 2026-08-30**: row 1.2 landed `replaceRemainder` with `mode`, which is
+  the store method A.3 says it shares. A.3's stamp is updated — its only remaining blocker is row
+  0.4's unproven allowlist reachability, which row 4.5's live drive settles.
+- **P-1-F2**: the knip ratchet counts types exported from a barrel with no consumer, so a decision
+  module that publishes its return type before the consuming tier lands fails
+  `validate:knip-ratchet`. Resolved by giving the two types a test consumer (typed assertion
+  helpers, the pattern `mutation-policy.test.ts` already uses) rather than by loosening the
+  baseline. Worth knowing for Tier 2, which will publish more types ahead of their consumers.
