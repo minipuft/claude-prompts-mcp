@@ -79,7 +79,7 @@ Blocks `prompt_engine` calls that violate gate discipline:
 
 The pending-gate check accepts every **resolution verb** the server accepts — `gate_verdict`,
 `gate_action` (retry/skip/abort), `cancel` — read from `lib/_generated/resolution_verbs.py`,
-which `server npm run generate:contracts` emits from parameters flagged `resolvesPendingGate`
+which `server npm run generate:contracts` emits from parameters flagged `resolvesPendingRun`
 in `tooling/contracts/prompt-engine.json`. Never hardcode the verb list in the hook: the
 hardcoded model denied `gate_action: "abort"` and `cancel: true` (both server-supported exits),
 so a pending gate trapped its own abort (fixed 2026-08-20). If the generated module is missing

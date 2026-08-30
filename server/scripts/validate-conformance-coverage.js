@@ -191,6 +191,18 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario that declares an observation and asserts it in the unknowns ledger ' +
       'readback (system_control action:status or execution_history).'
   ),
+  ...exceptionGroup(
+    'prompt_engine',
+    ['remainder'],
+    'Admissible only mid-run, and only while a blocking unknown is open on the ledger — so a ' +
+      'scenario has to declare a blocking observation, read the resulting interrupt, and resume ' +
+      'the SAME run with an authored node list. Nothing consumes the parameter yet either: the ' +
+      'stage that applies a remainder is unimplemented, so a scenario written today would assert ' +
+      'the absence of an effect.',
+    'A conformance scenario that declares a blocking unknown on a chain fixture and submits a ' +
+      '`remainder` on the resume, asserting the replaced node list — writable once the interrupt ' +
+      'stages land (mid-chain-unknown-surfacing rows 2.1-2.3).'
+  ),
 
   // ── system_control ──────────────────────────────────────────────────────
   ...exceptionGroup(

@@ -11,7 +11,7 @@ export interface ToolParameter {
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
   includeInDescription?: boolean; // If false, param is in schema but not tool description
-  resolvesPendingGate?: boolean; // True when supplying this param resolves a pending gate review
+  resolvesPendingRun?: boolean; // True when supplying this param resolves a run pending a review (failed gate or unknown interrupt)
 }
 
 export interface ToolCommand {
@@ -71,13 +71,15 @@ export const workflow_irParameters: ToolParameter[] = [
     name: 'budget',
     type: 'object',
     description:
-      '[Workflow IR] Declared budget, split by enforcement posture. ENFORCED (structural, counted server-side): maxNodes, maxFanOut, maxInsertions — each may only NARROW the server cap, never widen it; a wider value is rejected, not silently clamped. RECORDED ONLY: declaredCostCeiling, written to the existing execution_records telemetry object and never enforced, because the server never observes client token usage.',
+      '[Workflow IR] Declared budget, split by enforcement posture. ENFORCED (structural, counted server-side): maxNodes, maxFanOut, maxInsertions — each may only NARROW the server cap, never widen it; a wider value is rejected, not silently clamped. RECORDED ONLY: declaredCostCeiling, written to the existing execution_records telemetry object and never enforced, because the server never observes client token usage. BEHAVIOURAL: pauseOnBlocking (boolean, default false) — when true, a blocking unknown HARD-PAUSES the run instead of continuing into the inserted investigation step.',
     required: false,
     status: 'working',
     compatibility: 'canonical',
     notes: [
       'Server defaults live in DEFAULT_WORKFLOW_CAPS (modules/workflow-ir/types.ts).',
       'maxInsertions narrows the P4 adaptive-insertion ceiling MAX_INSERTIONS_PER_RUN.',
+      "pauseOnBlocking is a DIAL, not a cap: it is a boolean and has no server default to narrow. Default false keeps the run advisory — the interrupt rides on the inserted investigation step and the run continues. True suits a supervised run: the response is the interrupt alone and the run waits on a synthetic '__unknown_interrupt__' review, resolved with gate_action resume/accept_alternative/abort or cancel. It is read back off the run's blueprint per step, the same way maxInsertions is.",
+      "Declarable from a YAML chain's chain-level `budget:` as well as an IR submission — one step vocabulary, three inputs.",
     ],
   },
 ];

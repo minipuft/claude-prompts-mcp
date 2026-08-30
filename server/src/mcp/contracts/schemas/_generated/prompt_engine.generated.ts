@@ -11,7 +11,7 @@ export interface ToolParameter {
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
   includeInDescription?: boolean; // If false, param is in schema but not tool description
-  resolvesPendingGate?: boolean; // True when supplying this param resolves a pending gate review
+  resolvesPendingRun?: boolean; // True when supplying this param resolves a run pending a review (failed gate or unknown interrupt)
 }
 
 export interface ToolCommand {
@@ -36,7 +36,8 @@ export type prompt_engineParamName =
   | 'options'
   | 'inputs'
   | 'observations'
-  | 'workflow';
+  | 'workflow'
+  | 'remainder';
 export const prompt_engineParameters: ToolParameter[] = [
   {
     name: 'command',
@@ -90,20 +91,22 @@ export const prompt_engineParameters: ToolParameter[] = [
       'Rationales are single-line and trimmed. Multi-line is rejected rather than collapsed: only the first non-empty line is parsed, so the remainder would be lost silently.',
       'The legacy string branch and the four non-primary verdict patterns are retired once no client has submitted a string verdict for one release cycle, measured via the `source` field on ParsedGateVerdict.',
     ],
-    resolvesPendingGate: true,
+    resolvesPendingRun: true,
   },
   {
     name: 'gate_action',
     type: 'enum',
     description:
-      "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
+      "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets the attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
     status: 'working',
     compatibility: 'canonical',
     notes: [
       'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
+      "'accept_alternative' without a 'remainder' in the same call is refused by name — it is the acceptance of an alternative, not a request for one.",
+      "'resume' and 'accept_alternative' are meaningful only while '__unknown_interrupt__' is the pending review; against a failed-gate review they are refused the same way 'retry' is against an interrupt.",
     ],
-    enum: ['retry', 'skip', 'abort'],
-    resolvesPendingGate: true,
+    enum: ['retry', 'skip', 'abort', 'resume', 'accept_alternative'],
+    resolvesPendingRun: true,
   },
   {
     name: 'gates',
@@ -139,7 +142,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; no other parameter is read. Moved here from system_control session cancel because a chain id is held BECAUSE you are running the chain, so ending that run is part of running it — system_control keeps list/inspect/clear, which are keyed on a session_id read from a listing. Cancel retains the session's state and artifacts; remove them with system_control(action:\"session\", operation:\"clear\").",
     status: 'working',
     compatibility: 'canonical',
-    resolvesPendingGate: true,
+    resolvesPendingRun: true,
   },
   {
     name: 'handoff',
@@ -189,13 +192,15 @@ export const prompt_engineParameters: ToolParameter[] = [
       '`id` must be kebab-case and stable within the run so re-discovery of the same id updates rather than duplicates.',
       "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
       "A blocking `unknown_discovered` (with or without `target_step_id`) inserts one `investigate_unknown` step immediately after the current node; `target_step_id` instead governs the skip side — a later `unknown_resolved` with resolution 'irrelevant' skips that ledger entry's target once it is strictly ahead of the current step. Capped at 1 insertion per unknown id and 3 per run. The server never infers a target and only ever mutates in reaction to an observation — enforcement stays advisory.",
+      "A blocking `unknown_discovered` also raises a CHAIN INTERRUPT: the response carries `structuredContent.chain_interrupt` — `{kind:'chain_interrupt', reason:'blocking_unknown', unknown:{id,statement}, affected_step_ids:[…], remaining_nodes:[…], paused:<bool>, resume:{chain_id, verbs:[…]}}`. `affected_step_ids` is derived from DECLARED `target_step_id` links only; the server never scans text for affected steps.",
+      "By default the interrupt rides on the inserted investigation step and the run continues — answer that step to resume. When the run declared `budget.pauseOnBlocking: true` the run instead PAUSES on a synthetic review with the reserved id '__unknown_interrupt__', the response is the interrupt alone, and it is resolved with `gate_action: 'resume' | 'accept_alternative'` (or `abort` / `cancel`). Either way a `remainder` may be submitted to replace the rest of the run.",
     ],
   },
   {
     name: 'workflow',
     type: '{version,nodes[],edges?,gates?,budget?}',
     description:
-      "Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with 'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by precedence. SHAPE: `{version:1, nodes:[{id:'kebab-case', promptId:'...', stepName?:'...', args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:[...], expose?:[...]}, subagentModel?:'heavy'|'standard'|'fast', agentType?:'...', framework?:'...', retries?:0, inlineGateIds?:['gate-id']}], edges?:[{from:'node-a', to:'node-b'}], gates?:[<same shapes as the 'gates' parameter>], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>}}`. Full field reference: docs/reference/workflow-ir.md.",
+      "Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with 'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by precedence. SHAPE: `{version:1, nodes:[{id:'kebab-case', promptId:'...', stepName?:'...', args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:[...], expose?:[...]}, subagentModel?:'heavy'|'standard'|'fast', agentType?:'...', framework?:'...', retries?:0, inlineGateIds?:['gate-id']}], edges?:[{from:'node-a', to:'node-b'}], gates?:[<same shapes as the 'gates' parameter>], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>, pauseOnBlocking?:<boolean, default false>}}`. Full field reference: docs/reference/workflow-ir.md.",
     status: 'working',
     compatibility: 'canonical',
     examples: [
@@ -210,13 +215,40 @@ export const prompt_engineParameters: ToolParameter[] = [
       'Never state-narrowed. Unlike the three gate parameters, this one is advertised in every reachable shape, so it can never be silently dropped from a call.',
     ],
   },
+  {
+    name: 'remainder',
+    type: '{mode,nodes[],edges?}',
+    description:
+      "Rewrite the rest of a RUNNING chain when a blocking unknown has invalidated its shape. SHAPE: `{mode:'replace'|'append', nodes:[<Workflow IR nodes — same shape as workflow.nodes>], edges?:[{from,to}]}`. 'replace' discards every node strictly AFTER the current one and puts these in their place; 'append' adds them strictly after the current remainder and keeps it. The current node is never touched by either mode. Requires 'chain_id'. You author the alternative; the server only validates it — same node/edge schemas, same structural caps as a `workflow` submission, and rejection is all-or-nothing.",
+    status: 'working',
+    compatibility: 'canonical',
+    examples: [
+      '{"mode": "replace", "nodes": [{"id": "confirm-ttl", "promptId": "investigate_unknown"}, {"id": "redraft", "promptId": "write_summary"}], "edges": [{"from": "confirm-ttl", "to": "redraft"}]}',
+      '{"mode": "append", "nodes": [{"id": "verify-fix", "promptId": "code_review"}]}',
+    ],
+    notes: [
+      "Accepted ONLY while a blocking unknown is open on the run's ledger, or while the reserved '__unknown_interrupt__' review is pending. A remainder on a run with no open blocking unknown is refused by name, never applied.",
+      "Node ids are the same id space as `workflow.nodes[].id`, a gate's `target_step_id` and an observation's `target_step_id`.",
+      'Caps: `maxNodes` counts nodes already executed PLUS the submitted remainder, so a replacement cannot buy back budget the run has already spent. One accepted remainder per unknown id, and a per-run ceiling in the shape of `budget.maxInsertions`.',
+      "On a PAUSED run (budget.pauseOnBlocking) a remainder must be accompanied by `gate_action: 'accept_alternative'` in the same call. On an unpaused run the remainder alone is the acceptance.",
+      "ONE MECHANISM, TWO SPELLINGS: `remainder: {mode:'append', nodes:[…]}` and a `chain_id` call whose `command` begins with `-->` are the same append — the string form parses to this structured form. They share validation, caps and recorded provenance and may not diverge.",
+      "Accepted nodes are recorded on the run with `origin: 'remainder'` and the id of the unknown that motivated them.",
+    ],
+  },
 ];
 
 export const prompt_engineCommands: ToolCommand[] = [
   {
     id: 'chain-resume',
-    summary: 'Resume chain via chain_id + user_response/gate_verdict/gate_action',
-    parameters: ['chain_id', 'user_response', 'gate_verdict', 'gate_action', 'observations'],
+    summary: 'Resume chain via chain_id + user_response/gate_verdict/gate_action/remainder',
+    parameters: [
+      'chain_id',
+      'user_response',
+      'gate_verdict',
+      'gate_action',
+      'observations',
+      'remainder',
+    ],
     status: 'working',
   },
 ];

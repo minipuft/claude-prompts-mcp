@@ -32,10 +32,10 @@ def parse_hook_input() -> dict:
 
 
 def load_resolution_params() -> frozenset[str] | None:
-    """Load the pending-gate resolution verbs generated from the server contract.
+    """Load the pending-run resolution verbs generated from the server contract.
 
     The set is emitted by server/scripts/generate-contracts.ts from parameters flagged
-    `resolvesPendingGate` in tooling/contracts/prompt-engine.json, so this hook accepts
+    `resolvesPendingRun` in tooling/contracts/prompt-engine.json, so this hook accepts
     exactly the moves the server accepts. A hardcoded model here rotted twice — it denied
     `gate_action: "abort"` and `cancel: true`, trapping sessions behind their own pending
     gate (2026-08-20).
@@ -45,9 +45,9 @@ def load_resolution_params() -> frozenset[str] | None:
     re-create the trap.
     """
     try:
-        from _generated.resolution_verbs import PENDING_GATE_RESOLUTION_PARAMS
+        from _generated.resolution_verbs import PENDING_RUN_RESOLUTION_PARAMS
 
-        return PENDING_GATE_RESOLUTION_PARAMS
+        return PENDING_RUN_RESOLUTION_PARAMS
     except Exception:
         return None
 
