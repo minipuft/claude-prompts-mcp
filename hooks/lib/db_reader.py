@@ -10,6 +10,7 @@ import json
 import os
 import sqlite3
 
+from session_state import label_gate_ids
 from workspace import get_state_db_path
 
 
@@ -403,7 +404,7 @@ def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
     if isinstance(pending_gate_review, dict):
         gate_ids = pending_gate_review.get("gateIds", [])
         if gate_ids:
-            result["pending_gate"] = ", ".join(gate_ids)
+            result["pending_gate"] = label_gate_ids(gate_ids)
         result["shell_verify_attempts"] = pending_gate_review.get("attemptCount", 0)
 
     if isinstance(pending_shell_verification, dict):
@@ -511,7 +512,7 @@ def _session_to_hook_state(session: dict) -> dict | None:
     if gate_review and isinstance(gate_review, dict):
         gate_ids = gate_review.get("gateIds", [])
         if gate_ids:
-            result["pending_gate"] = ", ".join(gate_ids)
+            result["pending_gate"] = label_gate_ids(gate_ids)
         result["shell_verify_attempts"] = gate_review.get("attemptCount", 0)
 
     shell_verify = session.get("pendingShellVerification")

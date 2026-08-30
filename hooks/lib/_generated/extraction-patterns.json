@@ -3,5 +3,7 @@
   "chainId": "(chain-[a-zA-Z0-9_#-]+)",
   "gateHeader": "\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*",
   "gatesList": "\\*\\*Gates\\*\\*:\\s*(.+?)(?:\n|$)",
-  "structuredVerdict": "\"overall\"\\s*:\\s*\"(PASS|FAIL)\""
+  "structuredVerdict": "\"overall\"\\s*:\\s*\"(PASS|FAIL)\"",
+  "interruptHeader": "\\*\\*Chain Paused[^\\n*]*\\*\\*",
+  "interruptVerbs": "Resolve with `chain_id=[^\\n]*plus one of:\\n\\n((?:-\\s*.+\\n?)+)"
 }

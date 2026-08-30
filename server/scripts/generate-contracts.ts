@@ -287,6 +287,14 @@ async function generateResolutionVerbs(
     gateHeader: '\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*',
     gatesList: '\\*\\*Gates\\*\\*:\\s*(.+?)(?:\n|$)',
     structuredVerdict: '"overall"\\s*:\\s*"(PASS|FAIL)"',
+    // A HARD-PAUSED blocking-unknown interrupt (`response-assembler.ts::buildInterruptSection`,
+    // paused header). Matches only the paused variant: the SOFT interrupt issues the step, so a
+    // consumer treating it as a hold would block a resume the server accepts.
+    interruptHeader: '\\*\\*Chain Paused[^\\n*]*\\*\\*',
+    // The exits that section printed. Read back rather than modelled client-side, because the
+    // paused verb list is state-dependent (§PAUSED_INTERRUPT_VERBS) and a client-side copy of it
+    // is what rotted twice in 2026-08.
+    interruptVerbs: 'Resolve with `chain_id=[^\\n]*plus one of:\\n\\n((?:-\\s*.+\\n?)+)',
   };
   const patternsJsonContent = `${JSON.stringify(extractionPatterns, null, 2)}\n`;
 

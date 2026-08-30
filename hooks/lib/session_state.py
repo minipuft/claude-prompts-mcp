@@ -27,7 +27,33 @@ _DEFAULT_PATTERNS = {
     "gateHeader": r"\*\*(?:Structural \+ Gate |Structural |Gate )?Review Required\*\*",
     "gatesList": r"\*\*Gates\*\*:\s*(.+?)(?:\n|$)",
     "structuredVerdict": r'"overall"\s*:\s*"(PASS|FAIL)"',
+    # A HARD-PAUSED blocking-unknown interrupt. Deliberately does not match the SOFT variant's
+    # `**Blocking Unknown**`: a soft interrupt issues the step and a bare chain_id resume is a
+    # legitimate answer to it, so treating it as a hold would deny a call the server accepts.
+    "interruptHeader": r"\*\*Chain Paused[^\n*]*\*\*",
+    # The exits the server itself printed for this hold. Read back rather than modelled here:
+    # the paused verb list is state-dependent (`response-assembler.ts` §PAUSED_INTERRUPT_VERBS)
+    # and a hardcoded copy in a hook is exactly what rotted twice in 2026-08.
+    "interruptVerbs": r"Resolve with `chain_id=[^\n]*plus one of:\n\n((?:-\s*.+\n?)+)",
 }
+
+# The reserved synthetic review id stage 16 raises for a blocking-unknown interrupt
+# (`UNKNOWN_INTERRUPT_GATE_ID`, `decisions/mutation/types.ts`). It is a run-state marker, not a
+# gate anyone authored, so every human-facing surface renders the label instead of the dunder.
+UNKNOWN_INTERRUPT_GATE_ID = "__unknown_interrupt__"
+UNKNOWN_INTERRUPT_LABEL = "blocking unknown interrupt"
+
+
+def label_gate_ids(gate_ids: list[str]) -> str:
+    """Render pending-review ids for a human: synthetic ids become their label.
+
+    One function for both producers of `pending_gate` — the response-text parser below and
+    `db_reader`'s two `pendingGateReview.gateIds` readbacks — so a hook's reminder and a hook's
+    denial cannot name the same hold differently.
+    """
+    return ", ".join(
+        UNKNOWN_INTERRUPT_LABEL if gate_id == UNKNOWN_INTERRUPT_GATE_ID else gate_id for gate_id in gate_ids
+    )
 
 
 def _load_patterns() -> dict[str, str]:
@@ -57,10 +83,39 @@ class ChainState(TypedDict, total=False):
     # Shell verification (Ralph mode)
     pending_shell_verify: str | None
     shell_verify_attempts: int
+    # Blocking-unknown interrupt (hard pause). The verbs are the ones the SERVER printed for
+    # this hold, so a hook repeating them cannot offer an exit the run refuses.
+    interrupt_verbs: list[str]
     # Delegation state (set by post-prompt-engine hook)
     pending_delegation: bool
     delegation_agent_type: str
     delegation_model_hint: str
+
+
+def _fallback_interrupt_exits() -> list[str]:
+    """Parameter-level exits for an interrupt whose verb list was not captured.
+
+    Reached on the db_reader path (compact recovery reconstructs a hold from
+    `chain_sessions.pendingGateReview`, where no response text exists) and on a response whose
+    interrupt section moved. Derived from the same generated artifact `gate-enforce.py` reads,
+    minus `gate_verdict`: a verdict answers a GATE, and no verdict clears this hold.
+    """
+    try:
+        from _generated.resolution_verbs import PENDING_RUN_RESOLUTION_PARAMS
+
+        return sorted(PENDING_RUN_RESOLUTION_PARAMS - {"gate_verdict"})
+    except Exception:
+        return ["cancel", "gate_action"]
+
+
+def interrupt_exits(state: ChainState) -> list[str]:
+    """The exits a paused run accepts — the server's own list when it printed one."""
+    verbs = [verb for verb in state.get("interrupt_verbs", []) if verb]
+    return verbs if verbs else _fallback_interrupt_exits()
+
+
+def _interrupt_exits(state: ChainState) -> str:
+    return " | ".join(interrupt_exits(state))
 
 
 def load_session_state(session_id: str) -> ChainState | None:
@@ -188,6 +243,18 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
         criteria = re.findall(r"[-•]\s*(.+?)(?:\n|$)", content)
         state["gate_criteria"] = [c.strip() for c in criteria[:5] if c.strip()]
 
+    # Detect a HARD-PAUSED blocking-unknown interrupt (plan row 3.1). The server holds the run on
+    # the reserved `__unknown_interrupt__` review and issues NO step, and its response carries no
+    # "Review Required" header — so without this branch the parse above leaves pending_gate None
+    # and every downstream consumer reads a held run as a free one.
+    if re.search(_PATTERNS["interruptHeader"], content):
+        state["pending_gate"] = UNKNOWN_INTERRUPT_LABEL
+        verbs_match = re.search(_PATTERNS["interruptVerbs"], content)
+        if verbs_match:
+            state["interrupt_verbs"] = [
+                line.lstrip("- ").strip() for line in verbs_match.group(1).splitlines() if line.strip()
+            ]
+
     # Detect shell verification: "Shell verification: npm test"
     verify_match = re.search(r"Shell verification:\s*(.+?)(?:\n|$)", content)
     if verify_match:
@@ -234,6 +301,8 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         # Line 2: Clear continuation instruction
         if verify_cmd:
             line2 = f"→ Shell verify: `{verify_cmd}` will validate"
+        elif gate == UNKNOWN_INTERRUPT_LABEL:
+            line2 = f"→ {_interrupt_exits(state)}"
         elif gate:
             line2 = '→ gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"'
         elif step > 0 and step < total:
@@ -251,7 +320,9 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         else:
             lines.append(f"[Chain] Step {step}/{total}")
 
-    if gate:
+    if gate == UNKNOWN_INTERRUPT_LABEL:
+        lines.append(f"[Interrupt] {gate} - Resolve with: {_interrupt_exits(state)}")
+    elif gate:
         lines.append(f'[Gate] {gate} - Submit: gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"')
 
     if verify_cmd:

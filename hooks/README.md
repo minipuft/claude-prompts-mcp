@@ -72,18 +72,33 @@ Triggers after `prompt_engine` calls. Tracks chain state and pending gates.
 
 Blocks `prompt_engine` calls that violate gate discipline:
 
-| Check        | Trigger                                                     | Denial Message                                                                                                               |
-| ------------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| FAIL verdict | `gate_verdict` with overall FAIL (object or legacy string)  | "Gate FAIL: {reason}. Review the failing criteria ... resubmit."                                                             |
-| Pending gate | `chain_id` carrying NO resolution parameter while gate open | "Gate review required: ... submit gate_verdict. If the gate cannot be satisfied, these parameters also resolve it: {exits}." |
+| Check             | Trigger                                                                                        | Denial Message                                                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| FAIL verdict      | `gate_verdict` with overall FAIL (object or legacy string)                                     | "Gate FAIL: {reason}. Review the failing criteria ... resubmit."                                                                          |
+| Pending gate      | `chain_id` carrying NO resolution parameter while a gate is open                               | "Gate review required: ... submit gate_verdict. If the gate cannot be satisfied, these parameters also resolve it: {exits}."              |
+| Paused on unknown | `chain_id` carrying NO resolution parameter while the run is hard-paused on a blocking unknown | "Chain paused: blocking unknown interrupt. The run issued no step and no gate_verdict clears this hold. Resolve it with one of: {verbs}." |
 
-The pending-gate check accepts every **resolution verb** the server accepts — `gate_verdict`,
-`gate_action` (retry/skip/abort), `cancel` — read from `lib/_generated/resolution_verbs.py`,
-which `server npm run generate:contracts` emits from parameters flagged `resolvesPendingRun`
-in `tooling/contracts/prompt-engine.json`. Never hardcode the verb list in the hook: the
-hardcoded model denied `gate_action: "abort"` and `cancel: true` (both server-supported exits),
-so a pending gate trapped its own abort (fixed 2026-08-20). If the generated module is missing
-or unreadable the check fails open — the server enforces gates authoritatively.
+The pending-run check accepts every **resolution parameter** the server accepts — `gate_verdict`,
+`gate_action` (retry/skip/abort/resume/accept_alternative), `cancel` — read from
+`lib/_generated/resolution_verbs.py`, which `server npm run generate:contracts` emits from
+parameters flagged `resolvesPendingRun` in `tooling/contracts/prompt-engine.json`. Never hardcode
+the verb list in the hook: the hardcoded model denied `gate_action: "abort"` and `cancel: true`
+(both server-supported exits), so a pending gate trapped its own abort (fixed 2026-08-20). If the
+generated module is missing or unreadable the check fails open — the server enforces gates
+authoritatively.
+
+**Two holds, one rule.** A run can also be held by the reserved synthetic review
+`__unknown_interrupt__`, raised when a blocking unknown lands on a run that declared
+`budget.pauseOnBlocking`. It reaches the same check by the same route (one pending review, one
+`pending_gate` field) but is denied with different prose, because it accepts different exits: a
+paused run issues **no step**, so no `gate_verdict` clears it and there is nothing to answer. The
+verbs the denial names are the ones the SERVER printed in its own interrupt section —
+`lib/session_state.py` captures them off the response (`interruptVerbs` extraction pattern) and
+falls back to the generated parameter names when it has none, which is the path compact recovery
+takes. Every human-facing surface renders the synthetic id as `blocking unknown interrupt`
+(`session_state.label_gate_ids`, used by `db_reader` too); the raw dunder never reaches a caller.
+Covered by `tests/test_unknown_interrupt_hold.py`, including a mutation probe that drops
+`gate_action` from the generated set and asserts `resume` is then denied.
 
 **Test manually:**
 
