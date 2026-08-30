@@ -171,6 +171,30 @@ export class ApiRouter {
       return res.json(buildPromptCatalogSummary(prompt));
     });
 
+    /**
+     * The catalog COLLECTION the agent-workbench prompt authority lists from.
+     *
+     * `GET /api/v1/catalog/prompts` with `{ prompts: [...] }` is what
+     * `promptAuthorityHttp.listPrompts` requires: anything else — including a 404 — becomes
+     * `PromptAuthorityUnavailableError('catalog_unavailable')`, which the workbench projects as an
+     * empty catalog with `state: 'unavailable'`. Downstream, t3code's workflow catalog then shows
+     * no prompts at all.
+     *
+     * Only the item route below existed, so every per-prompt call worked while the listing did not
+     * — the shape that makes this read as "the client broke" rather than "one route is missing".
+     * `api-security.ts` already guards this prefix with the read token, and `app.use` on a path
+     * covers the collection as well as its children, so this inherits that gate.
+     *
+     * Summaries, not details: a listing names no prompt, so it must not hand back every prompt's
+     * instruction body (`33da6227`). `buildPromptCatalogSummary` already carries every field the
+     * workbench projects — id, name, category, description, arguments, composerInputArgument,
+     * executionType, revision.
+     */
+    app.get('/api/v1/catalog/prompts', (_req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ prompts: this.convertedPrompts.map(buildPromptCatalogSummary) });
+    });
+
     // Executable prompt content is reserved for authenticated server-side catalog adapters.
     app.get('/api/v1/catalog/prompts/:promptId', (req: Request, res: Response) => {
       res.setHeader('Cache-Control', 'no-store');

@@ -102,6 +102,72 @@ describe('prompt catalog HTTP API', () => {
     await expect(missingResponse.json()).resolves.toEqual({ error: 'Prompt not found: missing' });
   });
 
+  /**
+   * `GET /api/v1/catalog/prompts` is the COLLECTION the agent-workbench prompt authority lists
+   * from. Only the `:promptId` item route existed, so every per-prompt call succeeded while the
+   * listing 404'd — which the workbench turns into `catalog_unavailable` and an empty catalog, and
+   * t3code then shows no prompts at all. Measured 2026-08-30 against the running service.
+   */
+  describe('the catalog collection the workbench lists from', () => {
+    it('returns summaries under a `prompts` key, without instruction bodies', async () => {
+      const origin = await start(
+        [
+          prompt({ systemMessage: 'Use the approved plan.' }),
+          prompt({
+            id: 'reviewChain',
+            name: 'Review Chain',
+            chainSteps: [{ promptId: 'review', stepName: 'Review' }],
+          }),
+        ],
+        'catalog-read-token'
+      );
+
+      const response = await fetch(`${origin}/api/v1/catalog/prompts`, {
+        headers: { authorization: 'Bearer catalog-read-token' },
+      });
+      const body = (await response.json()) as { prompts: Array<Record<string, unknown>> };
+
+      expect(response.status).toBe(200);
+      // The shape `promptAuthorityHttp.listPrompts` requires: anything but an array under
+      // `prompts` — a bare array included — is read as the catalog being unavailable.
+      expect(Array.isArray(body.prompts)).toBe(true);
+      expect(body.prompts).toHaveLength(2);
+      expect(body.prompts[0]).toMatchObject({
+        id: 'strategicImplement',
+        name: 'Strategic Implementation',
+        category: 'development',
+        composerInputArgument: 'task',
+        executionType: 'single',
+      });
+      expect(body.prompts[1]).toMatchObject({ executionType: 'chain' });
+      // A listing names no prompt, so it must not hand back every prompt's instructions.
+      expect(body.prompts[0]).not.toHaveProperty('userMessageTemplate');
+      expect(body.prompts[0]).not.toHaveProperty('systemMessage');
+    });
+
+    it('authenticates the collection, not only the item beneath it', async () => {
+      const origin = await start([prompt()], 'catalog-read-token');
+
+      const unauthorized = await fetch(`${origin}/api/v1/catalog/prompts`);
+      const badToken = await fetch(`${origin}/api/v1/catalog/prompts`, {
+        headers: { authorization: 'Bearer wrong-token' },
+      });
+
+      expect(unauthorized.status).toBe(401);
+      expect(badToken.status).toBe(401);
+    });
+
+    it('fails closed when no read credential is configured', async () => {
+      const origin = await start([prompt()]);
+
+      const response = await fetch(`${origin}/api/v1/catalog/prompts`);
+
+      // Same posture as the item route: an unconfigured credential refuses rather than serving
+      // the catalog openly.
+      expect(response.status).toBe(503);
+    });
+  });
+
   it('fails closed when authenticated catalog detail is not configured', async () => {
     const origin = await start([prompt()]);
 
