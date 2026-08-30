@@ -112,6 +112,33 @@ the gate-pending prose; `structuredContent.chain_interrupt` is the machine-reada
 `remainder` in the same call (rejected with a named reason otherwise). Caps carry over: one
 accepted remainder per unknown id, `maxInsertions`-style ceiling per run.
 
+## Tier A (alpha) — one step representation, three inputs
+
+Ruled 2026-08-30 after the tiers below were written: YAML `chainSteps`, IR `nodes`, and
+`-->` symbolic chains carry the same step vocabulary (`promptId, stepName, id, inputMapping,
+outputMapping, retries, subagentModel, agentType, framework, inlineGateIds, visibility` —
+`chain-schema.md:21-31` vs `workflow-ir/types.ts:38-66`) and compile to identical runs, but
+they are validated by separate schemas that merely agree today. Tier A makes the IR the single
+representation: YAML is a **stored** IR, `-->` is a **hand-written linear** IR, `workflow` is a
+**submitted** IR. Everything below then reasons about one shape, and `budget.pauseOnBlocking`
+reaches YAML chains instead of being IR-only (the distinction the 2026-08-30 review flagged).
+
+Measured: 5 bundled YAML chains, 0 in downstream repos; YAML-only `delegation` is an exporter
+marker, not runtime delegation (runtime = `subagentModel`/`agentType`/`==>`, stage 06 marks both
+paths), so it stays outside the node schema. The `>>`/`-->`/YAML surfaces are protected contract;
+every change here is additive.
+
+| Row | Status               | Where                                                                           | Change                                                                                                                                                                                                                                                                                                   | Verify                                                                                                                                            |
+| --- | -------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A.1 | ☐ (as of 2026-08-30) | `workflow-ir.schema.ts`, prompt loader, `chain-schema.md`                       | `chainSteps[]` validates against the IR node schema (one Zod source imported by the loader); YAML additionally accepts `edges:` and `budget:` at chain level. `delegation` stays a YAML-only exporter key stripped before validation                                                                     | A gate that fails when the two field lists diverge (`validate:chain-node-parity` or a type-level `satisfies`); 5 bundled chains load unchanged    |
+| A.2 | ☐ (as of 2026-08-30) | `04-parsing-stage.ts`, `symbolic-operator-parser.ts`, `workflow-ir/compiler.ts` | A `-->` command parses to an IR (`n1…nN`, linear edges, per-step args/gates/`==>` mapped onto node fields) and enters `compileWorkflowIR` — the string path stops building `chainSteps` on its own                                                                                                       | Byte-identical `chain_run_nodes` for `>>a --> >>b` before/after (snapshot); existing symbolic-chain tests green                                   |
+| A.3 | ☐ (as of 2026-08-30) | `tooling/contracts/prompt-engine.json`, `mcp/tools/index.ts` allowlist          | **Append**: `chain_id` + `command` beginning with `-->` extends the running chain — validated as IR nodes, appended after the current remainder via the same store method `remainder` uses (mode `append` vs `replace`). Lifts the `command`×`chain_id` exclusivity for this one leading-`-->` form only | Integration: `chain_id` + `"--> >>x"` adds a node; `chain_id` + `">>x"` (no leading arrow) still rejected as before; live drive for the allowlist |
+| A.4 | ☐ (as of 2026-08-30) | `docs/reference/workflow-ir.md`, `chain-schema.md`, `mcp-tools.md`              | Document the three inputs → one IR; `budget` in YAML; append syntax                                                                                                                                                                                                                                      | Docs/code lockstep                                                                                                                                |
+
+OQ-A1 — append verb surface: leading-`-->` on `command` (chosen above, keeps the operator language
+primary) vs `remainder: {mode:'append', nodes}` only. ☐ (as of 2026-08-30 · flips when A.3's contract
+row is reviewed). Both may coexist: the string form compiles to the structured form.
+
 ## Tiers
 
 | Row | Status                                                                                     | Where                                                                                                               | Change                                                                                                                                                                                                                                                                                                           | Verify                                                                                                                                                         |
