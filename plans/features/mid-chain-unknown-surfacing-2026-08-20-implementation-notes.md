@@ -433,6 +433,87 @@ to look symmetric is how a barrel stops describing its consumers. The baseline w
 regenerated to lock in an unrelated IMPROVEMENT the tier produced (exports 493 → 492); the types
 count is unchanged at 679, not raised.
 
+## Tier 3 (+ rows 2.6, 0.5) — re-measurement before execution
+
+| Asserted (plan)                                                                      | Measured                                                                                                                                                                                                                           | Verdict                                                                         |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Row 3.1: "`session_state.py` currently names gates from `pendingGateReview.gateIds`" | It does not. `session_state.parse_prompt_engine_response` derives `pending_gate` from the RESPONSE TEXT (`**Gates**:`); `db_reader.py` is the module that joins `pendingGateReview.gateIds`, at TWO sites (lines 404-406, 510-514) | ⚠ corrected — the label lives in both modules, for different reasons (DEV-T3-1) |
+| Row 3.1: the allow half "may already work" after the Tier 0 rename                   | It does — `gate_action` is one parameter whatever its value, so all four exits pass Check 2 unchanged. Proven, not assumed: the mutation probe drops `gate_action` from the generated set and turns `resume` red                   | ✓ confirmed by probe                                                            |
+| Row 3.1: a bare `chain_id` resume while paused "must be DENIED"                      | It was NOT denied, and could not be. The paused response carries no `**Review Required**` header (`buildGateReviewCTA` returns null on the synthetic id), so nothing set `pending_gate` and Check 2 saw an unheld run              | ⚠ corrected — the deny half needed a detector, not a message (DEV-T3-2)         |
+| Row 0.5: retiring the `remainder` exception is the whole job                         | The same scenario also covers `observations`, whose exception the gate then flagged SATISFIED. Two entries retired, not one                                                                                                        | ⚠ corrected (DEV-T3-3)                                                          |
+| Row 2.6: `INTERRUPT_VERBS` becomes two lists                                         | Two lists, and the paused one is NOT a superset — it drops `remainder` as well as `answer the step`, because a bare `remainder` does not clear the synthetic review                                                                | ✓ implemented as ruled, with one spelling consequence (DEV-T3-4)                |
+
+## Deviations (Tier 3)
+
+### DEV-T3-1 — the synthetic-id label has two producers, and the row named neither correctly
+
+`pending_gate` is written by two independent modules. `session_state.parse_prompt_engine_response`
+reads the response TEXT (live calls, via the PostToolUse hook); `db_reader` reads
+`chain_sessions.pendingGateReview.gateIds` (compact recovery and `prompt-suggest`, where no
+response text exists). Row 3.1 named `session_state.py` and attributed `db_reader`'s mechanism to
+it, so a fix at the named site alone would have left the dunder rendering on every recovery path.
+
+`label_gate_ids` lives in `session_state.py` — which is where the row pointed, and is the module
+`db_reader` may import without a cycle — and both `db_reader` sites call it. One function, so a
+hook's reminder and a hook's denial cannot name the same hold differently.
+
+### DEV-T3-2 — the deny half did not exist, and no message change could have created it
+
+The row reads as prose work ("deny message names the verbs"). Measured, the denial was not
+happening at all: `buildGateReviewCTA` returns `null` for the synthetic review (Tier 2, correctly
+— no `gate_verdict` clears it), so a paused response carries no `**Review Required**` header and
+no `**Gates**:` line. `parse_prompt_engine_response` therefore left `pending_gate` as `None`, and
+`gate-enforce.py` Check 2 read a HELD run as a free one. A bare `chain_id` resume was allowed
+through to a server that would refuse it.
+
+Fixed with a detector rather than a message: a new `interruptHeader` extraction pattern matching
+the PAUSED header only. The soft variant is deliberately excluded — it issues a step, so a bare
+resume is a legitimate answer to it, and matching it would deny a call the server accepts. That
+distinction has its own positive-control test (`test_the_soft_variant_is_not_a_hold`).
+
+The verbs the denial names are read back from the server's own interrupt section
+(`interruptVerbs` pattern) rather than modelled in the hook. Both patterns were added to
+`generate-contracts.ts`, which is the SSOT the Python defaults and the opencode plugin share —
+the hook's previously hardcoded verb model is recorded in `hooks/README.md` as having rotted
+twice, and a second hardcoded copy is the same defect one layer along. The db_reader path has no
+text to read, so `interrupt_exits` falls back to the generated PARAMETER names minus
+`gate_verdict`.
+
+### DEV-T3-3 — row 0.5 retired TWO exceptions, and the gate is what found the second
+
+The row names the `remainder` entry. Deleting it left `validate:conformance-coverage` red on
+`prompt_engine.observations`: the new scenario declares a blocking observation to open the ledger,
+so `observations` became covered in the same commit. Its `closedBy` had proposed a different
+route (a `system_control action:status` ledger readback); what shipped asserts an effect reachable
+ONLY if the ledger opened, which is the stronger reading, so the entry was deleted rather than
+re-worded.
+
+Worth recording as a mechanism, not just an outcome: this is the satisfied-exception audit doing
+exactly what row 0.5's own text predicted, on an entry nobody was looking at.
+
+### DEV-T3-4 — the paused verb list is state-dependent, and one member is not copy-pasteable
+
+Implemented as ruled: `PAUSED_INTERRUPT_VERBS` replaces the soft list rather than extending it.
+Two members are absent for two different reasons, and the code says which — `answer the step`
+because a paused run issues no step, `remainder` because a bare `remainder` does not clear the
+synthetic review (the caller must spell it `gate_action:accept_alternative` and carry the
+remainder along).
+
+The ruled spelling `gate_action:accept_alternative (with remainder)` carries a parenthetical, so
+that one entry is not a verbatim wire value the way the other three are. Kept as ruled — it
+matches the paused footer, which has said exactly this since Tier 2 — and noted here because the
+list's docblock says a client "puts the string back on the wire". A client parsing by prefix is
+unaffected; one splitting on whitespace is not.
+
+### DEV-T3-5 — running `test:e2e` writes seven prompts into the repo tree (NOT this tier)
+
+`tests/e2e/conformance/workspace-and-mutations.yaml` declares `workspace: isolated`, and after any
+conformance run `server/resources/prompts/examples/` holds seven untracked `conformance_*`
+directories. `validate:readme` then fails claim-coverage (39 claimed vs 46 shipped) until they are
+deleted by hand — measured twice, and reproduced with this tier's own corpus file MOVED OUT of the
+directory (105 scenarios, same 7 directories), which is the attribution probe. Pre-existing and
+not fixed here; promoted as P-3-F1 with its own plan row.
+
 ## Findings promoted to the plan
 
 - **P-A-F1**: the `-->` → IR premise (A.2) is falsified; see DEV-TA-5. Needs a ruling.
@@ -468,3 +549,12 @@ count is unchanged at 679, not raised.
   interrupt section (DEV-T2-8); the class is open for every future section, and no gate owns it.
 - **P-2-F3**: the plan's §Interrupt payload verb list is not true of a paused run — it offers
   "answer the step" where no step was issued. New row 2.6 owns the ruling. See DEV-T2-10.
+- **P-3-F1**: a conformance run declaring `workspace: isolated` still writes seven prompts into
+  `server/resources/prompts/examples/`, which turns `validate:readme` red for anyone who runs
+  `test:e2e` locally. Attributed away from this tier by probe (DEV-T3-5). New row 6.1 owns it.
+- **P-3-F2**: a hook that reads run state from RESPONSE TEXT is blind to any hold whose response
+  the server deliberately formats differently. The interrupt was invisible to `gate-enforce.py`
+  for exactly this reason, and the same shape will recur for the next hold that suppresses the
+  gate-review prose. The general form: `session_state`'s parser is a second, text-shaped model of
+  server state, and nothing fails when the server stops emitting the marker it keys on. No gate
+  owns this; `db_reader` (which reads the DB) has no equivalent blind spot.
