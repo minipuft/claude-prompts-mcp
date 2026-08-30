@@ -267,6 +267,26 @@ export function validateCategoryName(category: string): void {
   if (category.length > 50) {
     throw new ValidationError('Category name must be 50 characters or less');
   }
+
+  // A category is ONE directory name, not a path.
+  //
+  // This function had zero call sites until 2026-08-30, which is the root of the traversal found
+  // that day: `category` went from the tool payload into `path.join` unchecked, and the existence
+  // of a validator named for the job made the surface read as guarded. Wiring it is the fix;
+  // `resolveContainedPath` behind it is defence in depth, not the primary control.
+  //
+  // Single-segment rather than merely "no `..`": a category of `/tmp/x` cannot escape the root
+  // (path.join neutralises the leading slash) but still silently creates nested directories the
+  // loader then reads as a different layout. Measured against all 20 categories in the bundled
+  // tree and the personal library — every one is already a plain segment, so this rejects nothing
+  // that exists.
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(category)) {
+    throw new ValidationError(
+      `Category '${category}' must be a single directory name — letters, digits, hyphens and ` +
+        'underscores only, starting with a letter or digit. Path separators and relative segments ' +
+        'are not allowed.'
+    );
+  }
 }
 
 /**

@@ -11,6 +11,7 @@ import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { resolveContainedPath } from '#shared/utils/contained-path.js';
 
 export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -200,7 +201,15 @@ export class GateLifecycleProcessor {
     // be removed by hand. The unregister call further down already tolerates a gate the registry
     // does not know, and logs when that happens.
     const gatesDir = this.ctx.configManager.getGatesDirectory();
-    const gateDir = path.join(gatesDir, id);
+    // Contained before `existsSync`, and well before the `fs.rm(..., { recursive: true })` below.
+    // This join takes the same unvalidated caller id the writer does, and its consequence is
+    // strictly worse: a traversing id would have aimed a recursive delete outside the root.
+    let gateDir: string;
+    try {
+      gateDir = resolveContainedPath(gatesDir, id);
+    } catch (error) {
+      return this.error(error instanceof Error ? error.message : String(error));
+    }
 
     if (!existsSync(gateDir)) {
       return this.error(`Gate directory not found: ${gateDir}`);

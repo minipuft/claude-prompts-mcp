@@ -9,6 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { OperationResult, PromptResourceDependencies } from '../core/types.js';
+import { validateCategoryName } from '../utils/validation.js';
 
 import type { ResourceMutationTarget } from '#modules/resources/services/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -23,6 +24,7 @@ import {
   ResourceMutationTransaction,
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
+import { resolveContainedPath } from '#shared/utils/contained-path.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
@@ -171,7 +173,12 @@ export class FileOperations {
   ): Promise<OperationResult> {
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
     const effectiveCategory = promptData.category.toLowerCase().replace(/\s+/g, '-');
-    const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
+    // `category` reaches this line straight from the tool payload. Validated here because
+    // `validateCategoryName` had no call site at all — a category of `../../x` walked out of the
+    // resources root and wrote there, measured 2026-08-30 and reported as `✅ Prompt Created`.
+    // Both checks run before any directory is created, so a refusal writes nothing.
+    validateCategoryName(effectiveCategory);
+    const promptDir = resolveContainedPath(promptsDir, effectiveCategory, promptData.id);
     const yamlPath = path.join(promptDir, 'prompt.yaml');
     // Nested chain steps carry a path-qualified id ("implementation_plan/verification"): the
     // directory needs the full path, but the YAML `id` field and its validation take the
@@ -460,7 +467,9 @@ export class FileOperations {
     promptsDir: string,
     suppliedKeys: ReadonlySet<string> = ALL_PROMPT_DATA_KEYS
   ): Promise<{ exists: boolean; paths: string[] }> {
-    const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
+    // Same containment as the caller's join — this method is also reached directly (create,
+    // rollback), so it cannot rely on `updatePromptImplementation` having checked first.
+    const promptDir = resolveContainedPath(promptsDir, effectiveCategory, promptData.id);
     const paths: string[] = [];
 
     // Check if prompt directory already exists

@@ -17,6 +17,7 @@ import {
   ResourceMutationTransaction,
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
+import { resolveContainedPath } from '#shared/utils/contained-path.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
 import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
@@ -131,7 +132,10 @@ export class FrameworkFileWriter {
       let phasesPath: string | null = null;
       const phasesFileRef = framework['phasesFile'];
       if (phasesFileRef !== undefined && phasesFileRef !== null) {
-        phasesPath = join(frameworkDir, String(phasesFileRef));
+        // A file REFERENCE is caller-authorable too, and this is a read that returns its content
+        // to the client — an uncontained join here discloses an arbitrary file rather than
+        // writing one. Same guard, because it is the same class.
+        phasesPath = resolveContainedPath(frameworkDir, String(phasesFileRef));
         if (existsSync(phasesPath)) {
           const loadedPhases = await loadYamlFile<Record<string, unknown>>(phasesPath);
           phases = loadedPhases ?? null;
@@ -150,7 +154,7 @@ export class FrameworkFileWriter {
       let judgePromptPath: string | null = null;
       const judgePromptFileRef = framework['judgePromptFile'];
       if (judgePromptFileRef !== undefined && judgePromptFileRef !== null) {
-        judgePromptPath = join(frameworkDir, String(judgePromptFileRef));
+        judgePromptPath = resolveContainedPath(frameworkDir, String(judgePromptFileRef));
         if (existsSync(judgePromptPath)) {
           judgePrompt = await readFile(judgePromptPath, 'utf8');
         }
@@ -502,7 +506,11 @@ export class FrameworkFileWriter {
    * Used by versioning service to locate history files.
    */
   public getFrameworkDir(id: string): string {
-    return join(this.configManager.getFrameworksDirectory(), id.toLowerCase());
+    // Single choke point for every framework path, so containment holds for write, delete and
+    // versioning alike. Measured 2026-08-30: `id: '../../ESCAPED_FW'` wrote framework.yaml,
+    // phases.yaml and system-prompt.md outside the resources root, reported as created, with a
+    // benign-id control succeeding beside it.
+    return resolveContainedPath(this.configManager.getFrameworksDirectory(), id.toLowerCase());
   }
 
   private needsPhasesFile(data: Partial<FrameworkCreationData>): boolean {

@@ -6,13 +6,13 @@
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import path from 'path';
 
 import express, { Request, Response } from 'express';
 
 import { ApiSecurityBoundary } from './api-security.js';
 import { PromptAuthorityApi } from './prompt-authority-api.js';
 import { McpToolRouter } from '../tools/index.js';
+import { validateCategoryName } from '../tools/resource-manager/prompt/utils/validation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
@@ -25,6 +25,7 @@ import {
   buildPromptCatalogSummary,
 } from '#modules/prompts/prompt-catalog.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '#modules/prompts/prompt-refresh-service.js';
+import { resolveContainedPath } from '#shared/utils/contained-path.js';
 
 /**
  * API Manager class
@@ -269,9 +270,25 @@ export class ApiRouter {
 
       const { id, name } = req.body;
 
-      // Categories are directory-based — create the category directory
+      // Categories are directory-based — create the category directory.
+      //
+      // `id` arrives straight off the HTTP body. This is the same unvalidated-segment defect the
+      // three MCP writers carried, on a surface the type-by-type fix did not reach — found by
+      // enumerating every file that resolves a resource root and writes, which is what
+      // `validate:contained-resource-writes` now does on every run.
       const promptsDir = this.configManager.getPromptsDirectory();
-      const categoryDirPath = path.join(promptsDir, id);
+      let categoryDirPath: string;
+      try {
+        validateCategoryName(id);
+        categoryDirPath = resolveContainedPath(promptsDir, id);
+      } catch (error) {
+        // Generic to the client, specific to the log — the message names absolute server paths.
+        this.logger.warn(
+          `Rejected create_category with an unusable id: ${error instanceof Error ? error.message : String(error)}`
+        );
+        res.status(400).json({ error: 'Invalid category id.' });
+        return;
+      }
 
       if (existsSync(categoryDirPath)) {
         res.status(400).json({ error: `Category '${id}' already exists.` });
