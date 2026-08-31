@@ -298,19 +298,20 @@ prompt_engine(command:"%judge analysis_report")
 <details>
 <summary><strong>Parameters</strong></summary>
 
-| Parameter       | Type    | Purpose                                                                                                                                                                                                                           |
-| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                            |
-| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                |
-| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                 |
-| `gate_verdict`  | string  | Gate review verdict. Preferred: `GATE_REVIEW: PASS/FAIL - reason`. Also accepts `GATE PASS/FAIL - reason` or minimal `PASS/FAIL - reason` (minimal only via `gate_verdict`, not parsed from `user_response`). Rationale required. |
-| `gate_action`   | enum    | `retry`, `skip`, or `abort` after gate failure                                                                                                                                                                                    |
-| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                            |
-| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                         |
-| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                |
-| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                    |
-| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                       |
-| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                             |
+| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                          |
+| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                           |
+| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                               |
+| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                |
+| `gate_verdict`  | string  | Gate review verdict. Preferred: `GATE_REVIEW: PASS/FAIL - reason`. Also accepts `GATE PASS/FAIL - reason` or minimal `PASS/FAIL - reason` (minimal only via `gate_verdict`, not parsed from `user_response`). Rationale required.                                |
+| `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
+| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                           |
+| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                        |
+| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                               |
+| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                   |
+| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                      |
+| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                            |
+| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                     |
 
 </details>
 
@@ -1237,6 +1238,95 @@ prompt_engine(
   facts). They are persisted and returned by `ExecutionRecordStore.queryRecent`; the
   `execution_history` action's rendered telemetry line does not include them yet — query the store
   directly to read them today.
+
+### Blocking-unknown interrupt
+
+A `blocking:true` discovery does more than insert an investigation step: the response carries a
+structured account of what the unknown affects and what you may do about it. Two variants, chosen
+by the run's `budget.pauseOnBlocking` (Workflow IR budget, or a YAML chain's chain-level
+`budget:` — default `false`).
+
+**Soft (default).** The interrupt rides on the inserted investigation step. The run is not held:
+answer that step and it continues.
+
+**Paused (`pauseOnBlocking: true`).** The run holds on a synthetic gate review with the reserved
+id `__unknown_interrupt__`, issues no step at all, and the response is the interrupt alone. Only a
+`gate_action` verb clears it — no `gate_verdict` does, because no gate produced this hold.
+
+Either variant carries `structuredContent.chain_interrupt`:
+
+```jsonc
+{
+  "kind": "chain_interrupt",
+  "reason": "blocking_unknown",
+  "unknown": {
+    "id": "cache-ttl",
+    "statement": "TTL for the new cache layer is undecided",
+  },
+  "affected_step_ids": ["review"], // declared target_step_id links only
+  "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // post-insert
+  "paused": false,
+  "resume": {
+    "chain_id": "chain-draft#4",
+    "verbs": ["answer the step", "remainder", "gate_action:abort", "cancel"],
+  },
+}
+```
+
+**`resume.verbs` is state-dependent, not additive.** A PAUSED run lists a different set, and the
+two are not subsets of one another in either direction:
+
+| Run state | Verbs                                                                                                    |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| Soft      | `answer the step`, `remainder`, `gate_action:abort`, `cancel`                                            |
+| Paused    | `gate_action:resume`, `gate_action:accept_alternative` (with `remainder`), `gate_action:abort`, `cancel` |
+
+A paused run never offers "answer the step" — it issued no step. It never offers a bare
+`remainder` either: a remainder alone does not clear the hold, so the caller must spell it
+`gate_action:"accept_alternative"` and carry the remainder in the same call. On a soft interrupt
+the remainder alone IS the acceptance.
+
+**`affected_step_ids` is derived from declared links only.** It lists the steps a ledger entry
+named with `target_step_id`, and nothing else — the server never scans step text for mentions of
+the unknown. A heuristic here would be a server-authored claim about your plan, and the whole
+policy is advisory by construction: you declare, the server reacts.
+
+**Rewriting the rest of the plan.** `remainder` replaces (`mode:"replace"`) or extends
+(`mode:"append"`) every node strictly after the current one; the current node is never touched.
+The nodes are Workflow IR nodes and are held to the same schema, the same validator and the same
+caps as a `workflow` submission — including `maxNodes` counted as executed PLUS submitted, so
+rewriting the tail repeatedly cannot buy back spent budget. One accepted remainder per unknown id,
+and a per-run ceiling.
+
+```bash
+# soft interrupt: the remainder alone is the acceptance
+prompt_engine(chain_id:"chain-draft#4", remainder:{
+  mode:"replace",
+  nodes:[{ id:"confirm-ttl", promptId:"investigate_unknown" }]
+})
+
+# paused run: the verb and the remainder travel together
+prompt_engine(chain_id:"chain-draft#4", gate_action:"accept_alternative", remainder:{
+  mode:"replace",
+  nodes:[{ id:"confirm-ttl", promptId:"investigate_unknown" }]
+})
+
+# the string spelling of an append — the only command form allowed beside chain_id
+prompt_engine(chain_id:"chain-draft#4", command:"--> >>write_summary")
+```
+
+Refusals are named, never silent: a remainder on a run with no open blocking unknown, an
+`accept_alternative` with no remainder, an exhausted cap, a node whose prompt is not registered,
+and a node declaring a field a contributed node cannot carry (see
+[Extending or replacing a running plan](workflow-ir.md#extending-or-replacing-a-running-plan)) each
+come back with the reason.
+
+**Audit trail.** A run's terminal `execution_records` row carries `interrupts_raised` and
+`remainders_accepted`. The units are not what the names suggest: `interrupts_raised` counts
+BLOCKING LEDGER ENTRIES (the interrupt re-raises on every call while an unknown stays open, so
+counting raise events would count calls), and `remainders_accepted` counts DISTINCT unknown ids —
+one accepted remainder of four nodes is one remainder. Both are the only surviving record once the
+run's ephemeral rows are gone.
 
 ---
 

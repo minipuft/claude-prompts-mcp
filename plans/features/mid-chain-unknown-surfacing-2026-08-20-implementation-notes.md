@@ -928,3 +928,21 @@ review AND the open blocking ledger entry both survive the ownership transfer. B
 and they are separate facts — the review is what holds the run, the ledger entry is what
 `decideInterrupt` re-reads to rebuild the payload. Probed by dropping `pendingGateReview` from
 `toResidual`: red, then restored.
+
+### DEV-T5-7 — the docs pass found one row already satisfied and one claim not worth making
+
+Two findings from writing rows A.4 and 5.1 rather than from executing them:
+
+- **`hooks/README.md` needed no edit.** Row 5.1 lists the hook's new deny behaviour as a docs
+  obligation; Tier 3 had already written it, including the two-holds-one-rule paragraph, the
+  generated-verb-list rule and the mutation probe. Re-read rather than assumed — a doc row is the
+  easiest place to write a second, subtly different description of something already described.
+- **The global skills (`~/.claude/skills/unknowns`, `mcp-prompt-router`) are NOT edited from
+  here.** Row 5.1 asks to note that their promise ("a blocking unknown pauses the chain and
+  proposes a revised path") is now true rather than aspirational. It is — but those files live
+  outside this repository, and editing another repo's guidance from inside this worktree is the
+  cross-repo write this initiative's own constraints refuse. Noted here so the main thread can
+  make that edit where it belongs.
+
+The docs are written as CURRENT STATE with no before/after narration; the only place the change
+is described as a change is the CHANGELOG, which is the one document whose subject is change.

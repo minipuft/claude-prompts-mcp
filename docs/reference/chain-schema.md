@@ -23,30 +23,32 @@ one input reaches all three. See [Workflow IR](workflow-ir.md).
 
 A chain is a list of steps defined in `chainSteps`.
 
-| Field           | Type      | Required | Description                                                                                                                                                                                                                                                                                   |
-| --------------- | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `promptId`      | `string`  | **Yes**  | The ID of the prompt to execute.                                                                                                                                                                                                                                                              |
-| `stepName`      | `string`  | **Yes**  | Display name for logs and mapping references. Optional on an IR node, which has an explicit `id` instead.                                                                                                                                                                                     |
-| `id`            | `string`  | No       | Stable kebab-case node identity. Auto-minted from `stepName` when omitted; explicit ids must be unique within the chain. Required on an IR node.                                                                                                                                              |
-| `args`          | `object`  | No       | Static arguments for this step. OVERRIDE the run's invocation arguments for this step only. See [Step args](#step-args).                                                                                                                                                                      |
-| `inputMapping`  | `object`  | No       | Maps previous outputs to this step's arguments.                                                                                                                                                                                                                                               |
-| `outputMapping` | `object`  | No       | Publishes this step's output to later steps under each declared KEY, as `{{outputs.<key>}}`. See [Named outputs](#named-outputs).                                                                                                                                                             |
-| `retries`       | `number`  | No       | Retry attempts on failure (default 0).                                                                                                                                                                                                                                                        |
-| `subagentModel` | `enum`    | No       | Model tier for delegation: `heavy`, `standard`, `fast`. Overrides prompt-level hint.                                                                                                                                                                                                          |
-| `agentType`     | `string`  | No       | Which agent to spawn for this step. Overrides the prompt-level default.                                                                                                                                                                                                                       |
-| `framework`     | `string`  | No       | Framework this step runs under, overriding the run-wide selection. An unrecognized id falls back to the run-wide framework rather than failing the load.                                                                                                                                      |
-| `inlineGateIds` | `array`   | No       | Gate ids applied to this step. See [Inline gate ids](#inline-gate-ids).                                                                                                                                                                                                                       |
-| `visibility`    | `object`  | No       | Per-step policy (`withhold`/`expose`) for which chain-run context items this step's render sees. See [Visibility](#visibility).                                                                                                                                                               |
-| `delegation`    | `boolean` | No       | Marks this step for skills-sync export as a delegated skill. Read ONLY by the skills-sync exporter, never by the execution pipeline — so it is not part of the step vocabulary above. It is accepted in YAML and stripped before validation; it does not exist on an IR node or a `-->` step. |
+| Field                | Type      | Required | Description                                                                                                                                                                                                                                                                                   |
+| -------------------- | --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `promptId`           | `string`  | **Yes**  | The ID of the prompt to execute.                                                                                                                                                                                                                                                              |
+| `stepName`           | `string`  | **Yes**  | Display name for logs and mapping references. Optional on an IR node, which has an explicit `id` instead.                                                                                                                                                                                     |
+| `id`                 | `string`  | No       | Stable kebab-case node identity. Auto-minted from `stepName` when omitted; explicit ids must be unique within the chain. Required on an IR node.                                                                                                                                              |
+| `args`               | `object`  | No       | Static arguments for this step. OVERRIDE the run's invocation arguments for this step only. See [Step args](#step-args).                                                                                                                                                                      |
+| `inputMapping`       | `object`  | No       | Maps previous outputs to this step's arguments.                                                                                                                                                                                                                                               |
+| `outputMapping`      | `object`  | No       | Publishes this step's output to later steps under each declared KEY, as `{{outputs.<key>}}`. See [Named outputs](#named-outputs).                                                                                                                                                             |
+| `retries`            | `number`  | No       | Retry attempts on failure (default 0).                                                                                                                                                                                                                                                        |
+| `subagentModel`      | `enum`    | No       | Model tier for delegation: `heavy`, `standard`, `fast`. Overrides prompt-level hint.                                                                                                                                                                                                          |
+| `agentType`          | `string`  | No       | Which agent to spawn for this step. Overrides the prompt-level default.                                                                                                                                                                                                                       |
+| `framework`          | `string`  | No       | Framework this step runs under, overriding the run-wide selection. An unrecognized id falls back to the run-wide framework rather than failing the load.                                                                                                                                      |
+| `inlineGateCriteria` | `array`   | No       | RAW `::` gate tokens for this step — ids and free text mixed, resolved per step at review time. A sibling of `inlineGateIds`, not a spelling of it: `inlineGateIds` is already-resolved ids.                                                                                                  |
+| `delegated`          | `boolean` | No       | Declared context isolation: this step runs in a sub-agent. What the `==>` operator sets on a symbolic chain, and the only way to ask for isolation in YAML without also naming a model tier.                                                                                                  |
+| `inlineGateIds`      | `array`   | No       | Gate ids applied to this step. See [Inline gate ids](#inline-gate-ids).                                                                                                                                                                                                                       |
+| `visibility`         | `object`  | No       | Per-step policy (`withhold`/`expose`) for which chain-run context items this step's render sees. See [Visibility](#visibility).                                                                                                                                                               |
+| `delegation`         | `boolean` | No       | Marks this step for skills-sync export as a delegated skill. Read ONLY by the skills-sync exporter, never by the execution pipeline — so it is not part of the step vocabulary above. It is accepted in YAML and stripped before validation; it does not exist on an IR node or a `-->` step. |
 
 ## Chain-Level Fields
 
 Declared beside `chainSteps`, not inside it. Both use the same shape a submitted Workflow IR uses.
 
-| Field    | Type     | Required | Description                                                                                               |
-| -------- | -------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `edges`  | `array`  | No       | `{ from, to }` dependency constraints between steps, addressed by node id. See [Edges](#edges).           |
-| `budget` | `object` | No       | Run-level budget: `maxNodes`, `maxFanOut`, `maxInsertions`, `declaredCostCeiling`. See [Budget](#budget). |
+| Field    | Type     | Required | Description                                                                                                                  |
+| -------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `edges`  | `array`  | No       | `{ from, to }` dependency constraints between steps, addressed by node id. See [Edges](#edges).                              |
+| `budget` | `object` | No       | Run-level budget: `maxNodes`, `maxFanOut`, `maxInsertions`, `declaredCostCeiling`, `pauseOnBlocking`. See [Budget](#budget). |
 
 ### Edges
 
@@ -77,9 +79,16 @@ edges:
 write-only fields. A declared cap may only NARROW the server default — a chain asking for a wider
 one fails to load rather than being silently clamped.
 
+`pauseOnBlocking` (default `false`) decides what a blocking unknown does to the run: `false` raises
+a soft interrupt beside the inserted investigation step and keeps going, `true` HOLDS the run until
+a `gate_action` verb clears it. Declaring it in YAML is what lets a template chain opt into
+supervised behaviour — see
+[Blocking-unknown interrupt](mcp-tools.md#blocking-unknown-interrupt).
+
 ```yaml
 budget:
   maxInsertions: 1
+  pauseOnBlocking: true
 ```
 
 ### Step args

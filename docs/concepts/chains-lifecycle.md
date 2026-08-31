@@ -211,6 +211,54 @@ inserting one.
 
 ---
 
+## Blocking-Unknown Interrupt
+
+Insertion and skip change the plan quietly. A **blocking** unknown also says so: the run reports
+what is blocked, what the unknown affects, and what remains — and, if the run asked for it, stops
+until you answer.
+
+| Run declared             | What a blocking discovery does                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| nothing (default)        | **Soft interrupt.** The investigation node is inserted and the interrupt rides on its response. The run keeps going.          |
+| `budget.pauseOnBlocking` | **Pause.** The insertion still happens, and the run then HOLDS on a synthetic review, issuing no step until a verb clears it. |
+
+The inserted investigation node IS the pause point in both variants — the model that declared
+`blocking:true` already knows it is blocked, so the default costs no extra round trip. The knob is
+a legitimate dial rather than a defect toggle: an autonomous run wants to keep moving, a supervised
+one wants to stop. Template chains get the default.
+
+**Resolving a pause** uses `gate_action`, not `gate_verdict`: no gate produced this hold, so no
+verdict clears it. `resume` clears the hold and issues the investigation step as written;
+`accept_alternative` (carrying a `remainder` in the same call) replaces the rest of the plan;
+`abort` and `cancel:true` exit. The verb list a run prints is the list that run accepts — a paused
+run never offers "answer the step", because it issued no step.
+
+**Replacing the remainder.** The insert/skip policy makes two local edits and cannot express "this
+discovery invalidated the shape of the plan". `remainder` can: the caller authors the alternative
+as Workflow IR nodes and the server validates it against the same schema, validator and caps a
+`workflow` submission meets. The server never authors step content — the posture is unchanged, the
+model declares and the server validates. Accepted nodes are recorded with `origin:'remainder'` and
+the id of the unknown that motivated them. See
+[MCP Tools](../reference/mcp-tools.md#blocking-unknown-interrupt).
+
+**`affected_step_ids` is derived from DECLARED LINKS ONLY.** It lists exactly the steps some
+ledger entry named through `target_step_id`. The server does not scan step text for references to
+the unknown: a textual match is a guess about your plan, and every other part of this policy reacts
+only to what was declared. A step that is genuinely affected but was never linked will not appear —
+declare the link.
+
+**Scope is blocking-only, deliberately.** Whether a NON-blocking unknown should ever raise an
+interrupt was considered and killed: the evidence that would settle it does not exist today (only a
+`diagnostics.info` line records the near-miss). It revives if a recorded mutation field shows a
+non-blocking resolution would have saved two or more steps.
+
+**Audit trail**: `interrupts_raised` and `remainders_accepted` on the run's terminal
+`execution_records` row. `interrupts_raised` counts blocking LEDGER ENTRIES rather than raise
+events — the interrupt re-raises on every call while the unknown stays open — and
+`remainders_accepted` counts distinct unknown ids.
+
+---
+
 ## Run Telemetry (record-only)
 
 When a run reaches a terminal state, the server stamps complexity facts onto that run's terminal
