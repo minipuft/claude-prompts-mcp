@@ -27,7 +27,7 @@
       },
       "gate_action": {
         "description": "<present>",
-        "enum": ["retry", "skip", "abort"],
+        "enum": ["retry", "skip", "abort", "resume", "accept_alternative"],
         "type": "string"
       },
       "gate_verdict": {
@@ -254,6 +254,150 @@
         },
         "type": "object"
       },
+      "remainder": {
+        "additionalProperties": false,
+        "description": "<present>",
+        "properties": {
+          "edges": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "to": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              },
+              "required": ["from", "to"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "enum": ["replace", "append"],
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "agentType": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "args": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "delegated": {
+                  "type": "boolean"
+                },
+                "framework": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "id": {
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "inlineGateCriteria": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "inlineGateIds": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "inputMapping": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "outputMapping": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "promptId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "retries": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "stepName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "subagentModel": {
+                  "enum": ["heavy", "standard", "fast"],
+                  "type": "string"
+                },
+                "visibility": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "expose": {
+                      "items": {
+                        "enum": [
+                          "previous_step_output",
+                          "chain_history",
+                          "unknowns_ledger"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "withhold": {
+                      "items": {
+                        "enum": [
+                          "previous_step_output",
+                          "chain_history",
+                          "unknowns_ledger"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": ["id", "promptId"],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": ["mode", "nodes"],
+        "type": "object"
+      },
       "user_response": {
         "description": "<present>",
         "minLength": 1,
@@ -284,6 +428,9 @@
                 "exclusiveMinimum": 0,
                 "maximum": 32,
                 "type": "integer"
+              },
+              "pauseOnBlocking": {
+                "type": "boolean"
               }
             },
             "type": "object"
@@ -424,6 +571,9 @@
                   },
                   "type": "object"
                 },
+                "delegated": {
+                  "type": "boolean"
+                },
                 "framework": {
                   "minLength": 1,
                   "type": "string"
@@ -432,6 +582,13 @@
                   "minLength": 1,
                   "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
                   "type": "string"
+                },
+                "inlineGateCriteria": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
                 },
                 "inlineGateIds": {
                   "items": {
@@ -680,7 +837,14 @@
             "minLength": 1,
             "type": "string"
           },
-          "delegation": {
+          "args": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "delegated": {
             "type": "boolean"
           },
           "framework": {
@@ -688,8 +852,16 @@
             "type": "string"
           },
           "id": {
+            "minLength": 1,
             "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
             "type": "string"
+          },
+          "inlineGateCriteria": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
           },
           "inlineGateIds": {
             "items": {
@@ -790,7 +962,14 @@
               "minLength": 1,
               "type": "string"
             },
-            "delegation": {
+            "args": {
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "delegated": {
               "type": "boolean"
             },
             "framework": {
@@ -798,8 +977,16 @@
               "type": "string"
             },
             "id": {
+              "minLength": 1,
               "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
               "type": "string"
+            },
+            "inlineGateCriteria": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
             },
             "inlineGateIds": {
               "items": {
