@@ -888,3 +888,43 @@ The rule ("never checkout/switch/stash/rebase") is written about branch state an
 inapplicable to a single path, which is exactly why it did not fire. A mutation probe's correct
 undo is a file copy taken immediately before the mutation, and the remaining three probes used
 one.
+
+### DEV-T5-5 — row 4.1 is INTEGRATION, and the row's own alternative names why
+
+The row permits `tests/e2e/` or `tests/integration/chain/`. Two measurements decided it:
+
+- the branch evidence D-8 asks for lives in `execution_records`, and an e2e drive over
+  Streamable HTTP has no way to read the server's own SQLite except by opening the file from
+  outside the transport — which is not an end-to-end assertion, it is an integration assertion
+  wearing a spawned server;
+- every conformance-style e2e run currently writes seven prompt directories into
+  `server/resources/prompts/` (row 6.1, still open), so an e2e placement would add a test that
+  cannot be run twice locally without a manual `rm`.
+
+The wire half is not skipped, it is elsewhere: `scripts/verify-unknown-interrupt.mjs` drives a
+built `dist/` over HTTP and now runs ten checks. The split is deliberate — the drive proves the
+parameters are alive on the wire, the integration file proves the counters are stamped.
+
+The counters are asserted PER BRANCH with three different expected pairs and a fourth zero
+control, not as `> 0`. A writer binding a constant to both columns passes every `> 0` assertion,
+and `execution_records` has produced exactly that defect twice (its own v21/v23 DDL notes say so).
+
+### DEV-T5-6 — D-9 is proven across processes, because that is what the ruling claims
+
+Row 4.2's Verify offers the handoff plan's two-server jest scenario "if it has landed". Measured
+2026-08-31: that plan's row 2.2 is still ☐. So the drive was extended instead —
+`verify-handoff.mjs` already spawns two servers over one shared `state.db`, which is the exact
+shape D-9 describes, and a single-process store test cannot distinguish "the claimer receives the
+hold" from "the hold was never serialized in the first place".
+
+D-9 predicted the behaviour would be free (the synthetic review is an ordinary
+`pendingGateReview`, and stage 13 surfaces one on resume). It was — 11/11 first run, with the
+claimer receiving the four PAUSED verbs and no "answer the step", and then clearing the hold
+itself. "Expected free" is still a prediction about a path nobody drove, which is why the ruling
+asked for the test rather than the argument.
+
+CI owns a narrower half: a registry case in `handoff-claim.test.ts` asserting that the pending
+review AND the open blocking ledger entry both survive the ownership transfer. Both are needed
+and they are separate facts — the review is what holds the run, the ledger entry is what
+`decideInterrupt` re-reads to rebuild the payload. Probed by dropping `pendingGateReview` from
+`toResidual`: red, then restored.

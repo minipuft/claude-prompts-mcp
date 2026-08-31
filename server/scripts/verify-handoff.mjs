@@ -10,6 +10,12 @@
  *
  *   node scripts/verify-handoff.mjs
  *
+ * Extended by plan row 4.2 (D-9): a run HOLDING on the `__unknown_interrupt__` synthetic review
+ * is minted and claimed, and the claimer must receive the interrupt rather than the next step.
+ * It lives here rather than in jest because that plan's own row 2.2 (a two-server jest scenario)
+ * has not landed, and D-9 is a claim ACROSS PROCESSES — a single-process test would answer a
+ * different question from the one the ruling asks.
+ *
  * Servers start SEQUENTIALLY on purpose: two fresh processes initializing the same empty
  * state.db at the same instant fail with "database is locked" (measured 2026-08-21; separate
  * finding, plan 2A notes). Exit 1 when any step fails, so it can gate.
@@ -111,6 +117,7 @@ function client(base) {
     });
     return {
       text: r?.result?.content?.[0]?.text ?? JSON.stringify(r),
+      structured: r?.result?.structuredContent ?? null,
       isError: r?.result?.isError === true,
     };
   }
@@ -165,6 +172,66 @@ try {
   check(
     'handoff without chain_id is refused',
     noId.isError && /requires `chain_id`/.test(noId.text)
+  );
+
+  // ---- D-9: handoff × the blocking-unknown PAUSE -------------------------------------------
+  // The claimer of a run that is HOLDING must receive the hold, not the next step. Expected free
+  // (the synthetic review is an ordinary `pendingGateReview`, and stage 13 surfaces one on
+  // resume) — which is exactly why the plan says "proven by a test, not assumed": "expected free"
+  // is a prediction about a code path nobody has driven.
+  const paused = await a.call({
+    workflow: {
+      version: 1,
+      nodes: [
+        { id: 'first', promptId: 'investigate_unknown' },
+        { id: 'second', promptId: 'investigate_unknown' },
+      ],
+      budget: { pauseOnBlocking: true },
+    },
+  });
+  const pausedChainId = (paused.text.match(/chain_id="(chain-[^"]+)"/) || [])[1];
+  check(
+    'A starts a run that declared budget.pauseOnBlocking',
+    Boolean(pausedChainId) && !paused.isError,
+    pausedChainId ?? paused.text.slice(0, 120)
+  );
+
+  const held = await a.call({
+    chain_id: pausedChainId,
+    observations: [
+      {
+        type: 'unknown_discovered',
+        id: 'handoff-pause',
+        statement: 'the plan may be the wrong shape',
+        blocking: true,
+      },
+    ],
+  });
+  check(
+    'the run PAUSES on the blocking unknown rather than issuing a step',
+    held.structured?.chain_interrupt?.paused === true,
+    JSON.stringify(held.structured?.chain_interrupt?.resume?.verbs ?? held.text.slice(0, 100))
+  );
+
+  const pausedMint = await a.call({ chain_id: pausedChainId, handoff: true });
+  const pausedToken = (pausedMint.text.match(/hnd_[A-Za-z0-9_-]+/) || [])[0];
+  check('A mints a token on the PAUSED run', Boolean(pausedToken) && !pausedMint.isError);
+
+  const pausedClaim = await b.call({ claim_token: pausedToken });
+  const claimedInterrupt = pausedClaim.structured?.chain_interrupt;
+  check(
+    'B claims the paused run and receives the INTERRUPT, not a step (D-9)',
+    claimedInterrupt?.paused === true &&
+      claimedInterrupt?.unknown?.id === 'handoff-pause' &&
+      !claimedInterrupt?.resume?.verbs?.includes('answer the step'),
+    JSON.stringify(claimedInterrupt?.resume?.verbs ?? pausedClaim.text.slice(0, 120))
+  );
+
+  const claimerResumes = await b.call({ chain_id: pausedChainId, gate_action: 'resume' });
+  check(
+    'and the claimer can clear the hold it received',
+    !claimerResumes.isError,
+    claimerResumes.text.slice(0, 100).replace(/\n/g, ' ')
   );
 } finally {
   serverA.kill();
