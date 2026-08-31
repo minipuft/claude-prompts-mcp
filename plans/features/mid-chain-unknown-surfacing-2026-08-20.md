@@ -160,6 +160,8 @@ Two authored counts were falsified and are corrected here rather than in passing
   files: `examples/create_prompt` matches inside a script tool's JSON schema, not a chain. A count
   taken from that grep would have been 6.
 
+_(Superseded 2026-08-31: A.2 later shipped ✓ under OQ-A2b — see row A.2 and the Tier A continuation record. Preserved as the first attempt's stop record.)_
+
 **A.2 is ⚠, not ☐: its premise is falsified.** "per-step args/gates/`==>` mapped onto node fields"
 has no node field for two of the three. A symbolic step carries `inlineGateCriteria` (free-text
 `::` criteria — `inlineGateIds` is ids, a different channel) and `delegated` (set from `==>`),
@@ -167,6 +169,8 @@ and the IR node schema expresses neither. Adding `delegated` would give one runt
 producers, which `compiler.ts` documents as the thing it exists not to do, and — now that
 `ChainStepSchema` is derived — would also put a runtime-only flag into YAML. Resolving this is a
 ruling, so it stopped here: see the implementation notes, DEV-TA-5.
+
+_(Superseded 2026-08-31: A.3 shipped ✓ at `b0955c6c` once rows 0.1/0.3/0.4/1.2 landed.)_
 
 **A.3 is blocked, not deferred.** It names "the same store method `remainder` uses" and the
 `command`×`chain_id` lift for a `remainder`-shaped append, but `remainder` does not exist yet
@@ -410,7 +414,7 @@ Three corrections rather than asides:
 
 ### Tier 0 execution record (2026-08-30)
 
-**0.1, 0.2, 0.3 shipped; 0.4 landed but stays ☐ by design.** Receipts: `generate:contracts` +
+**0.1, 0.2, 0.3 shipped; 0.4 landed but stayed ☐ until the Tier 2 live drive flipped it ✓ (see row 0.4).** Receipts: `generate:contracts` +
 `validate:contracts` green; `validate:python` 254/254; `typecheck` clean; 218 unit suites /
 2765 tests; `validate:all` 50/50.
 
