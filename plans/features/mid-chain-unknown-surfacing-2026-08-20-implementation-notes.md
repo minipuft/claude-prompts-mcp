@@ -810,3 +810,81 @@ of `inlineGateCriteria`, which YAML previously could not express at all — only
   gate-review prose. The general form: `session_state`'s parser is a second, text-shaped model of
   server state, and nothing fails when the server stops emitting the marker it keys on. No gate
   owns this; `db_reader` (which reads the DB) has no equivalent blind spot.
+
+## Tier 5 (rows A.5, 4.1, 4.2, A.4, 5.1) — re-measurement before execution
+
+| Asserted (plan / dispatch)                                                                         | Measured                                                                                                                                                                                                                                                    | Verdict                                                                  |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| A.5: widening `RemainderNodeSpec` + the store write + `projectNodes` carries the fields end-to-end | Three of four layers. `synthesizeStep` (`operators/node-step-projection.ts`) builds a contributed node's step from the NODE, because it has no entry in `parsedCommand.steps` — a field on the row that it does not read back is still invisible to the run | ⚠ corrected — one more layer, plus a `chain_run_nodes` schema bump (v27) |
+| A.5: `projectNodes` drops the two operators A.3 refuses                                            | It drops NINE IR node fields plus `args`. The two named are the two anyone had looked at                                                                                                                                                                    | ⚠ corrected — scope is the class, not the pair (DEV-T5-1)                |
+| A.5: lift the refusal once the path carries the fields                                             | Half. `==>` → `delegated` survives end-to-end; a raw `::` token cannot, because the resolution that gives it meaning runs at parse time and an appended node joins a RESUMING run where `05-inline-gate-stage` skips                                        | ⚠ corrected — `==>` lifted, `::` refused on BOTH spellings (DEV-T5-2)    |
+
+## Deviations (Tier 5)
+
+### DEV-T5-1 — the silent drop was nine fields wide, and only two had a refusal
+
+Row A.5 is written as "lift A.3's `::`/`==>` refusal". Measured at HEAD, `projectNodes` narrowed
+every submitted node to `{id, promptId, stepName}`, so the remainder path also accepted and
+dropped `args`, `inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentType`,
+`framework`, `retries` and `inlineGateIds`. The two operators in the row are not the defect; they
+are the part of the defect that had a name, because A.3 happened to need them.
+
+Fixing the pair would have left the class standing with no gate over it — the exact shape
+`dev-workflow.md` names ("a fix at the sites you found is not a fix of the class"). So each field
+is now either CARRIED (`args`, `delegated`) or REFUSED with a stated alternative, and
+`tests/unit/execution/capture/remainder-node-fields.test.ts` asserts the two lists partition
+`WORKFLOW_NODE_FIELDS` exactly. A field added to the IR node schema fails there until someone
+decides which side it is on; the third option — dropping it silently — no longer type-checks its
+way through.
+
+Refusing rather than dropping is the load-bearing half. A dropped field looks accepted, which is
+what let `::`, `==>` and every submitted argument read as supported for four months.
+
+### DEV-T5-2 — `==>` is carried; `::` is refused, and the difference is timing, not vocabulary
+
+The dispatch made the lift conditional on the fields surviving end-to-end in both spellings.
+
+`==>` does: `delegated` rides `RemainderNodeSpec` → `ChainNode` → `chain_run_nodes.delegated`
+(v27) → `synthesizeStep` → `ChainStepPrompt.delegated`, which is the flag
+`ChainOperatorExecutor` already reads. Probed by dropping it at the projection (1 red) and at the
+registry bind (2 red).
+
+`::` does not, and the reason is one the plan has already met twice. A raw token means nothing
+until `InlineGateProcessor.partitionGateCriteria` splits it against the gate registry — OQ-A2b's
+finding. That resolution runs on a FRESH parse (stage 05/11); an appended node joins a run that is
+RESUMING, where `05-inline-gate-stage` returns early on `isBlueprintRestored`. So the token would
+be recorded on the row and fire nothing: "accepted and inert", which OQ-A1 names as worse than
+refused. It is therefore refused on the STRUCTURED spelling too, from
+`REMAINDER_REFUSED_NODE_FIELDS`, so the two spellings still say one thing — and the string form's
+message now states the timing reason rather than citing a plan row (the P-A-F5 failure, avoided
+by writing the reason as a mechanism instead of a reference).
+
+**Flip condition for the remaining half**: `::` becomes carryable when a contributed node's
+criteria are resolved at the point the node JOINS the run (stage 16, where the registry is
+reachable) rather than at parse time. That is a real design, not a widening, and it has no
+demand yet — no row asks for it.
+
+### DEV-T5-3 — a remainder node was inheriting the investigation's rebuilt arguments
+
+`synthesizeStep` keyed its `unknown_id` / `statement` rebuild on `node.originUnknownId`, which
+inserted AND remainder nodes both carry — so every caller-authored node rendered with two
+arguments its prompt never declared, silently, since row 1.2. The rebuild is now keyed on
+provenance (`origin !== 'remainder'`), which is the fact that actually distinguishes the two kinds.
+
+Found by writing the test for the new field, not by the suite: no existing assertion looked at a
+remainder node's rendered step at all, because until this row a remainder node had nothing on it
+worth rendering. Recorded because it is the second time in this initiative that a shared field
+(`originUnknownId`, and before it `pendingGateReview`) made two different kinds of thing look
+alike to a reader that keyed on presence rather than on kind.
+
+### DEV-T5-4 — a `git checkout <file>` during a mutation probe reverted the row's whole edit
+
+Process, not code. The first mutation probe was reverted with `git checkout <path>`, which
+restores from HEAD rather than undoing the probe — wiping every uncommitted edit to
+`remainder-processor.ts` and not only the mutation. Re-applied from the transcript and re-verified
+green before continuing; no other file was touched and nothing was committed in between.
+
+The rule ("never checkout/switch/stash/rebase") is written about branch state and reads as
+inapplicable to a single path, which is exactly why it did not fire. A mutation probe's correct
+undo is a file copy taken immediately before the mutation, and the remaining three probes used
+one.

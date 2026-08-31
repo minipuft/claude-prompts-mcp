@@ -250,13 +250,16 @@ describe('PromptEngine Validation', () => {
     test('an unparseable append is refused before the pipeline is reached', async () => {
       const execute = stubPipeline();
 
+      // `::` rather than `==>`: row A.5 maps the delegation operator onto the node's `delegated`
+      // declaration, so it is no longer a parse refusal. A raw gate token still is — its meaning
+      // comes from a registry resolution that an appended node has already passed.
       const result = await engine.executePromptCommand(
-        { chain_id: 'chain-demo#1', command: '--> >>a ==> >>b' },
+        { chain_id: 'chain-demo#1', command: '--> >>a :: "cite sources"' },
         {}
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('"==>" delegation operator');
+      expect(result.content[0].text).toContain('raw "::" gate token');
       expect(execute).not.toHaveBeenCalled();
     });
   });

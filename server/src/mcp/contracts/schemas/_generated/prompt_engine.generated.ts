@@ -61,7 +61,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       'Shell verification: :: verify:"cmd" with :fast/:full/:extended presets, loop:true for autonomous.',
       'REPETITION (* N): Repeats with SAME arguments. For different args per step, use explicit --> chain syntax.',
       "CONTEXT: Each chain step receives previous step's output automatically. Arguments are optional per step.",
-      "APPEND (--> as the FIRST token, with chain_id): '--> >>next_step' extends the RUNNING chain named by chain_id instead of starting a new one. This is the only form that may be sent together with chain_id; 'chain_id' + '>>x' is still rejected. It is the string spelling of remainder:{mode:'append'} and takes the same path — same admissibility (a blocking unknown must be open), same validation, same caps, same recorded provenance. The '::' and '==>' operators are refused inside an append fragment: they have no remainder-node representation yet.",
+      "APPEND (--> as the FIRST token, with chain_id): '--> >>next_step' extends the RUNNING chain named by chain_id instead of starting a new one. This is the only form that may be sent together with chain_id; 'chain_id' + '>>x' is still rejected. It is the string spelling of remainder:{mode:'append'} and takes the same path — same admissibility (a blocking unknown must be open), same validation, same caps, same recorded provenance. '==>' inside an append fragment delegates the step that FOLLOWS it, exactly as in a full chain. '::' is refused there: a raw gate token is resolved against the gate registry at parse time, which an appended node has already passed, so bind the gate with the 'gates' parameter and its target_step_id instead.",
     ],
   },
   {
@@ -232,8 +232,9 @@ export const prompt_engineParameters: ToolParameter[] = [
       "Node ids are the same id space as `workflow.nodes[].id`, a gate's `target_step_id` and an observation's `target_step_id`.",
       'Caps: `maxNodes` counts nodes already executed PLUS the submitted remainder, so a replacement cannot buy back budget the run has already spent. One accepted remainder per unknown id, and a per-run ceiling in the shape of `budget.maxInsertions`.',
       "On a PAUSED run (budget.pauseOnBlocking) a remainder must be accompanied by `gate_action: 'accept_alternative'` in the same call. On an unpaused run the remainder alone is the acceptance.",
-      "ONE MECHANISM, TWO SPELLINGS: `remainder: {mode:'append', nodes:[…]}` and a `chain_id` call whose `command` begins with `-->` are the same append — the string form parses to this structured form. They share validation, caps and recorded provenance and may not diverge. The string form is NARROWER, not different: it derives each node id from the prompt id, carries no edges, and refuses the `::` and `==>` operators.",
+      "ONE MECHANISM, TWO SPELLINGS: `remainder: {mode:'append', nodes:[…]}` and a `chain_id` call whose `command` begins with `-->` are the same append — the string form parses to this structured form. They share validation, caps and recorded provenance and may not diverge. The string form is NARROWER, not different: it derives each node id from the prompt id and carries no edges.",
       "Accepted nodes are recorded on the run with `origin: 'remainder'` and the id of the unknown that motivated them.",
+      'A contributed node has no parse-time step for its authoring data to live on, so it carries {id, promptId, stepName, args, delegated} and nothing else. Declaring any other IR node field — inputMapping, outputMapping, visibility, subagentModel, agentType, framework, retries, inlineGateIds, inlineGateCriteria — is REFUSED by name rather than accepted and dropped: the run would never see it. Ask for context isolation with `delegated: true`, and bind a gate with the `gates` parameter and its target_step_id.',
     ],
   },
 ];

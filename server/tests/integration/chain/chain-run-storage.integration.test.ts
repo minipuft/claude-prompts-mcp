@@ -86,7 +86,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   });
 
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
-    expect(engine.getSchemaVersion()).toBe(26);
+    expect(engine.getSchemaVersion()).toBe(27);
 
     const tables = engine
       .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
@@ -864,6 +864,114 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       expect(rowsFor('sess-append-string')).toEqual(rowsFor('sess-append-structured'));
       // Bounds the comparison: two empty result sets would also be equal.
       expect(rowsFor('sess-append-string')).toHaveLength(4);
+
+      await store.cleanup();
+    });
+
+    test('both spellings of a DELEGATED append write the declaration onto the row (row A.5)', async () => {
+      // The flip condition of row A.5, read at the row rather than at the type: a `==>` in the
+      // string spelling and `delegated: true` in the structured one are one declaration, and it
+      // survives `projectNodes`, `mintRemainderNodes` and the INSERT.
+      const store = newStore();
+      const processor = buildProcessor(store);
+
+      await blockedSession(store, 'sess-append-string-d');
+      await blockedSession(store, 'sess-append-structured-d');
+
+      const parsed = parseAppendCommand('--> ==> >>p-extra note="check"');
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+
+      const fromString = await processor.apply(
+        'sess-append-string-d',
+        store.getSession('sess-append-string-d') as ChainSession,
+        { mode: 'append', nodes: parsed.nodes }
+      );
+      const fromStructured = await processor.apply(
+        'sess-append-structured-d',
+        store.getSession('sess-append-structured-d') as ChainSession,
+        {
+          mode: 'append',
+          nodes: [{ id: 'p-extra', promptId: 'p-extra', delegated: true, args: { note: 'check' } }],
+        }
+      );
+
+      expect(fromString.kind).toBe('applied');
+      expect(fromStructured.kind).toBe('applied');
+      expect(rowsFor('sess-append-string-d')).toEqual(rowsFor('sess-append-structured-d'));
+
+      // Raw columns, not the session mapper: the whole failure this row closes was a value that
+      // existed at every level above the row and nowhere on it.
+      const appended = engine.queryOne<{ delegated: number | null; args_json: string | null }>(
+        `SELECT delegated, args_json FROM chain_run_nodes
+          WHERE session_id = ? ORDER BY position DESC LIMIT 1`,
+        ['sess-append-string-d']
+      );
+      expect(appended?.delegated).toBe(1);
+      expect(JSON.parse(appended?.args_json ?? 'null')).toEqual({ note: 'check' });
+
+      // The negative control: a planned node declares nothing, and NULL is how that reads.
+      const planned = engine.queryOne<{ delegated: number | null; args_json: string | null }>(
+        'SELECT delegated, args_json FROM chain_run_nodes WHERE session_id = ? AND node_id = ?',
+        ['sess-append-string-d', 'n1']
+      );
+      expect(planned?.delegated).toBeNull();
+      expect(planned?.args_json).toBeNull();
+
+      await store.cleanup();
+    });
+
+    test('a cold load recovers the declaration, which has no other source', async () => {
+      // A remainder node has no entry in `parsedCommand.steps`, so after a restart the row is
+      // the only statement of what the caller declared. A reader that dropped these two would
+      // resume the run with an undelegated, argument-less step and nothing would be red.
+      const store = newStore();
+      const processor = buildProcessor(store);
+      await blockedSession(store, 'sess-append-cold');
+      await processor.apply(
+        'sess-append-cold',
+        store.getSession('sess-append-cold') as ChainSession,
+        {
+          mode: 'append',
+          nodes: [{ id: 'p-extra', promptId: 'p-extra', delegated: true, args: { note: 'x' } }],
+        }
+      );
+
+      await store.cleanup();
+      const reader = newStore();
+      await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+      const reloaded = (reader.getSession('sess-append-cold') as ChainSession).state.nodes.at(-1);
+
+      expect(reloaded).toMatchObject({
+        promptId: 'p-extra',
+        origin: 'remainder',
+        delegated: true,
+        args: { note: 'x' },
+      });
+
+      await reader.cleanup();
+    });
+
+    test('a node declaring a field the run could never see is refused, not silently narrowed', async () => {
+      // The class, not the two operators: `subagentModel` has no reader on a synthesized step
+      // either, and before row A.5 it was accepted and dropped exactly as `==>` was.
+      const store = newStore();
+      const processor = buildProcessor(store);
+      await blockedSession(store, 'sess-append-refused');
+
+      const outcome = await processor.apply(
+        'sess-append-refused',
+        store.getSession('sess-append-refused') as ChainSession,
+        {
+          mode: 'append',
+          nodes: [{ id: 'p-extra', promptId: 'p-extra', subagentModel: 'heavy' }],
+        }
+      );
+
+      expect(outcome.kind).toBe('refused');
+      if (outcome.kind !== 'refused') return;
+      expect(outcome.message).toContain('subagentModel');
+      expect(outcome.message).toContain('delegated:true');
 
       await store.cleanup();
     });

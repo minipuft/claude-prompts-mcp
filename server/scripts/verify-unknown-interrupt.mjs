@@ -19,7 +19,10 @@
  *   4. negative control: a remainder naming an unregistered prompt must come back as the NAMED
  *      IR refusal — an answer only stage 16 can produce (a dropped argument resumes silently)
  *   5. the row A.3 STRING spelling: `chain_id` + `--> >>investigate_unknown` must append too
- *   6. negative control: `chain_id` + `>>investigate_unknown` (no leading arrow) must still be
+ *   6. row A.5: `chain_id` + `--> ==> >>investigate_unknown` must APPEND (the `==>` operator is
+ *      mapped onto the node's `delegated` declaration, where it used to be a parse refusal), and
+ *      a node declaring `subagentModel` must be refused BY NAME rather than accepted and dropped
+ *   7. negative control: `chain_id` + `>>investigate_unknown` (no leading arrow) must still be
  *      rejected as two command sources
  *
  * Exits 0 when every check passes, 1 otherwise, and refuses to run at all against a `dist/`
@@ -173,6 +176,7 @@ function check(label, ok, detail = '') {
 
 const UNKNOWN_ONE = 'live-drive-ttl';
 const UNKNOWN_TWO = 'live-drive-shape';
+const UNKNOWN_THREE = 'live-drive-isolation';
 
 refuseStaleDist();
 
@@ -269,6 +273,48 @@ try {
     !stringAppend.isError &&
       (afterStringAppend?.remaining_nodes?.length ?? 0) === beforeStringAppend + 1,
     `remaining ${beforeStringAppend} → ${afterStringAppend?.remaining_nodes?.length}`
+  );
+
+  // ---- row A.5: `==>` maps instead of being refused, and an undeliverable field is named ----
+  // Both answers can only come from the widened remainder path: before A.5 the first was a parse
+  // refusal naming `==>`, and the second was an accepted-and-dropped field with no answer at all.
+  const blockedThird = await mcp.call({
+    chain_id: chainId,
+    observations: [
+      {
+        type: 'unknown_discovered',
+        id: UNKNOWN_THREE,
+        statement: 'the write-up may need its own context',
+        blocking: true,
+      },
+    ],
+  });
+  const beforeDelegatedAppend =
+    blockedThird.structured?.chain_interrupt?.remaining_nodes?.length ?? 0;
+
+  const delegatedAppend = await mcp.call({
+    chain_id: chainId,
+    command: '--> ==> >>investigate_unknown',
+  });
+  const afterDelegatedAppend = delegatedAppend.structured?.chain_interrupt;
+  check(
+    'a `==>` inside an append fragment is MAPPED, not refused (row A.5)',
+    !delegatedAppend.isError &&
+      (afterDelegatedAppend?.remaining_nodes?.length ?? 0) === beforeDelegatedAppend + 1,
+    `remaining ${beforeDelegatedAppend} → ${afterDelegatedAppend?.remaining_nodes?.length}`
+  );
+
+  const undeliverable = await mcp.call({
+    chain_id: chainId,
+    remainder: {
+      mode: 'append',
+      nodes: [{ id: 'iso', promptId: 'investigate_unknown', subagentModel: 'heavy' }],
+    },
+  });
+  check(
+    'a node declaring a field the run could never see is refused BY NAME (row A.5)',
+    undeliverable.isError && /subagentModel/.test(undeliverable.text),
+    (undeliverable.rpcError ?? undeliverable.text).slice(0, 120).replace(/\n/g, ' ')
   );
 
   // ---- negative control: the exclusivity lift is scoped to the leading arrow -----------------

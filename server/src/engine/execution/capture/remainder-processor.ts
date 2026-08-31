@@ -101,6 +101,11 @@ export class RemainderProcessor {
       };
     }
 
+    const undeliverable = findUndeliverableFields(submission);
+    if (undeliverable.length > 0) {
+      return { kind: 'refused', message: describeUndeliverableFields(undeliverable) };
+    }
+
     const validation = this.validate(submission, session);
     if (!validation.ok) {
       return { kind: 'refused', message: describeRejections(validation.rejections) };
@@ -221,8 +226,83 @@ function projectNodes(
     if (node === undefined) {
       return [];
     }
-    return [{ id: node.id, promptId: node.promptId, stepName: node.stepName ?? node.promptId }];
+    return [
+      {
+        id: node.id,
+        promptId: node.promptId,
+        stepName: node.stepName ?? node.promptId,
+        // Conditional spreads, not `?? undefined`: `exactOptionalPropertyTypes` rejects an
+        // explicit undefined, and an absent key is what "declared nothing" has to look like all
+        // the way down to the column.
+        ...(node.args !== undefined ? { args: { ...node.args } } : {}),
+        ...(node.delegated !== undefined ? { delegated: node.delegated } : {}),
+      },
+    ];
   });
+}
+
+/**
+ * The IR node fields a remainder node CARRIES into the run (row A.5).
+ *
+ * Exported for `remainder-node-fields.test.ts`, which asserts this list plus
+ * {@link REMAINDER_REFUSED_NODE_FIELDS} covers `workflowNodeSchema`'s key set exactly. That gate
+ * is the point of both constants: a field added to the IR node is otherwise accepted here by the
+ * shared schema and dropped by {@link projectNodes} with nothing red — the silent-drop shape
+ * P-A-F5 named, which cost `::`, `==>` and every submitted argument four months of looking
+ * accepted.
+ */
+export const REMAINDER_CARRIED_NODE_FIELDS = [
+  'id',
+  'promptId',
+  'stepName',
+  'args',
+  'delegated',
+] as const;
+
+/**
+ * The IR node fields a remainder REFUSES, each with what the caller should do instead.
+ *
+ * Refused rather than dropped, because a remainder node has no entry in `parsedCommand.steps`:
+ * its step is synthesized from the node (`operators/node-step-projection.ts`), so a field the
+ * node cannot carry is a field the run provably never sees. "Accepted and inert" is the one
+ * outcome OQ-A1 forbids, and it is what these fields did before A.5.
+ */
+export const REMAINDER_REFUSED_NODE_FIELDS: Readonly<Record<string, string>> = {
+  inputMapping: 'reference upstream results in the step arguments instead',
+  outputMapping: 'reference upstream results in the step arguments instead',
+  visibility: 'no synthesized step reads a visibility policy',
+  subagentModel: 'declare delegated:true; a model tier is a parse-time prompt-level hint',
+  agentType: 'declare delegated:true; the host agent is a parse-time prompt-level hint',
+  framework: 'the run-wide framework applies to a contributed node',
+  retries: 'no synthesized step reads a retry count',
+  inlineGateIds: 'bind the gate with the `gates` parameter and its target_step_id',
+  inlineGateCriteria:
+    'raw `::` tokens are resolved at parse time, which a contributed node has already passed; ' +
+    'bind the gate with the `gates` parameter and its target_step_id',
+};
+
+/** Field names present on a submitted node that the remainder path refuses to accept. */
+function findUndeliverableFields(submission: RemainderSubmission): string[] {
+  const found = new Set<string>();
+  for (const node of submission.nodes) {
+    for (const field of Object.keys(REMAINDER_REFUSED_NODE_FIELDS)) {
+      if ((node as unknown as Record<string, unknown>)[field] !== undefined) {
+        found.add(field);
+      }
+    }
+  }
+  return [...found];
+}
+
+/** The sentence a caller reads when a submitted node declares something the run cannot see. */
+function describeUndeliverableFields(fields: readonly string[]): string {
+  const lines = fields.map((field) => `- ${field}: ${REMAINDER_REFUSED_NODE_FIELDS[field] ?? ''}`);
+  return (
+    'remainder refused: a contributed node carries only ' +
+    `{${REMAINDER_CARRIED_NODE_FIELDS.join(', ')}}, because it has no parse-time step for the ` +
+    'rest to live on — the run would never see these fields.\n' +
+    lines.join('\n')
+  );
 }
 
 /** One message naming every rejection, so a caller fixes the whole submission in one round trip. */

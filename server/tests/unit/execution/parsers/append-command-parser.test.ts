@@ -74,13 +74,59 @@ describe('parseAppendCommand', () => {
     ['an arrow naming nothing', '-->', 'names no steps'],
     ['an empty segment', '--> >>a --> ', 'empty step'],
     ['a segment that is not a prompt reference', '--> summarise it', 'not a prompt reference'],
-    ['the delegation operator', '--> >>a ==> >>b', '"==>" delegation operator'],
-    ['the gate operator', '--> >>a :: "cite sources"', '"::" gate operator'],
+    ['the gate operator', '--> >>a :: "cite sources"', 'raw "::" gate token'],
   ])('refuses %s by name', (_label, command, fragment) => {
     const parsed = parseAppendCommand(command);
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.message).toContain(fragment);
+  });
+
+  // --- row A.5: `==>` is mapped, not refused --------------------------------------------------
+
+  describe('the "==>" delegation operator maps onto the node declaration (row A.5)', () => {
+    test('it delegates the step that FOLLOWS it, and only that step', () => {
+      // The delimiter semantics are `SymbolicOperatorParser.splitChainSteps`'. A different
+      // reading here would make one operator mean two things depending on where it is written.
+      const parsed = parseAppendCommand('--> >>draft ==> >>review');
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.nodes).toHaveLength(2);
+      expect(parsed.nodes[0]).not.toHaveProperty('delegated');
+      expect(parsed.nodes[1]).toMatchObject({ promptId: 'review', delegated: true });
+    });
+
+    test('a fragment opening with "==>" delegates its first step rather than reading as empty', () => {
+      const parsed = parseAppendCommand('--> ==> >>review');
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.nodes).toEqual([{ id: 'review', promptId: 'review', delegated: true }]);
+    });
+
+    test('a step with no "==>" carries no `delegated` key at all', () => {
+      // Same byte-identity requirement as `args`: the structured spelling omits the key, and
+      // OQ-A1 requires the two spellings to be indistinguishable at the row.
+      const parsed = parseAppendCommand('--> >>review');
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.nodes[0]).not.toHaveProperty('delegated');
+    });
+
+    test('delegation and arguments survive together on one step', () => {
+      const parsed = parseAppendCommand('--> ==> >>review depth="2"');
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.nodes[0]).toMatchObject({ delegated: true, args: { depth: '2' } });
+    });
+
+    test('an empty segment between two "-->" arrows is still refused', () => {
+      // The positive control for the leading-`==>` allowance: consuming a leading delimiter must
+      // not turn the `--> --> >>a` typo into a silent accept.
+      const parsed = parseAppendCommand('-->  --> >>a');
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) return;
+      expect(parsed.message).toContain('empty step');
+    });
   });
 
   test('a "::" inside a quoted argument value is not read as a gate operator', () => {

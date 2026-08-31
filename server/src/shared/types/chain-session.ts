@@ -152,10 +152,18 @@ export type RemainderMode = 'replace' | 'append';
 /**
  * One node of a caller-authored remainder, reduced to what the STORE needs.
  *
- * Deliberately not `WorkflowNode`: the IR node carries mapping, gate, delegation and framework
+ * Deliberately not `WorkflowNode`: the IR node carries mapping, gate, framework and visibility
  * declarations that belong to the compile path, and `shared/` may not reach into `modules/` for
  * a value. The caller (row 2.3) validates a submission against the IR schemas and projects the
  * accepted nodes onto this shape; the store's job is identity, ordering and provenance.
+ *
+ * WHAT THIS SHAPE CARRIES IS A CLOSED DECISION, not an accident of what was needed first
+ * (row A.5). A remainder node has NO parse-time counterpart in `parsedCommand.steps`, so the
+ * renderer synthesizes its step from the NODE alone (`operators/node-step-projection.ts`
+ * `synthesizeStep`). Every field the node does not carry is therefore a field the run can never
+ * see, however well-formed the submission was — which is why `RemainderProcessor` REFUSES the
+ * IR-node fields absent here instead of accepting and dropping them, and why
+ * `remainder-node-fields.test.ts` fails when a new IR node field is neither carried nor refused.
  */
 export interface RemainderNodeSpec {
   readonly promptId: string;
@@ -166,6 +174,22 @@ export interface RemainderNodeSpec {
    * already carries — gate targets, execution records and `executionOrder` address nodes by id.
    */
   readonly id?: string;
+  /**
+   * Resolved arguments for the step (row A.5).
+   *
+   * Carried rather than refused because the append spelling already parses `key="value"` pairs
+   * to satisfy `validateWorkflowIR`'s required-argument check — refusing them would refuse
+   * appends of every prompt with a required argument. Before A.5 they satisfied that check and
+   * were then dropped, so an appended step rendered with no arguments at all.
+   */
+  readonly args?: Record<string, unknown>;
+  /**
+   * Declared context isolation — the `==>` operator's declaration (row A.5).
+   *
+   * The DECLARATION, exactly as `WorkflowNode.delegated` is: the runtime flag on a rendered step
+   * still has its own producer (stage 06 for parse-time steps, `synthesizeStep` for these).
+   */
+  readonly delegated?: boolean;
 }
 
 /**

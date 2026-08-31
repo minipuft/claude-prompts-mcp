@@ -46,6 +46,22 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v27: adds `delegated` and `args_json` to `chain_run_nodes` (row A.5, remainder node fields).
+ *
+ * A node the caller CONTRIBUTED mid-run has no entry in `parsedCommand.steps`, so the renderer
+ * synthesizes its step from the node alone. Before this bump the node carried identity and
+ * provenance only, which meant an appended step's declared arguments and its `==>` delegation
+ * were validated, accepted, and then dropped one layer above the row. These two columns are the
+ * place the declaration survives a cold load, and `node-step-projection.synthesizeStep` is what
+ * reads them back onto the rendered step.
+ *
+ * Both are nullable with NO DDL DEFAULT, for the reason `origin` has none: a default makes a
+ * column invisible to `validate:no-phantom-columns`, which is the gate that would otherwise
+ * catch a writer dropping it. NULL is a real value on both — it means the node declared nothing,
+ * which is every planned and every inserted node. Partial population BY ROW TYPE, the v21/v23
+ * pattern, not a value-dead column. `chain_run_nodes` is `ephemeral`, so this bump touches no
+ * durable table: `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ *
  * v26: adds `interrupts_raised` and `remainders_accepted` to `execution_records` (D-8, mid-chain
  * unknown surfacing). Nullable INTEGER, no DDL DEFAULT, bound only on terminal rows — the same
  * three properties, for the same three reasons, as the v21/v23 telemetry groups they extend.
@@ -217,7 +233,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 26;
+const SCHEMA_VERSION = 27;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -783,6 +799,16 @@ export class SqliteEngine implements DatabasePort {
         -- being declared, and therefore blocks on nothing. Partial population BY ROW TYPE, the
         -- same reading as the v21 and v23 telemetry columns.
         declared_sections_json TEXT,
+        -- A.5 (v27): what a caller-contributed node declared about ITSELF. A remainder node has
+        -- no row in parsedCommand.steps, so these two are the only surviving statement of its
+        -- arguments and its delegation operator once the process restarts.
+        --
+        -- delegated is 0/1/NULL rather than NOT NULL DEFAULT 0: NULL means "declared nothing",
+        -- which is not the same claim as "declared not delegated", and a DDL default would hide
+        -- a dropped writer from validate:no-phantom-columns.
+        delegated INTEGER,
+        -- Resolved argument bag, JSON object. NULL when the node declared no arguments.
+        args_json TEXT,
         updated_at INTEGER,
         PRIMARY KEY (session_id, node_id)
       );

@@ -130,26 +130,39 @@ function resolveStepForNode(
 }
 
 /**
- * A step for a node with no parse-time counterpart — an insertion.
+ * A step for a node with no parse-time counterpart — an INSERTION or a caller-contributed
+ * remainder node.
  *
- * Arguments are rebuilt rather than stored on the node: `ChainNode` deliberately carries only
- * identity and provenance (`origin`, `originUnknownId`), and the statement the investigation
- * needs already lives on the ledger entry that motivated the insertion. Rebuilding keeps one
- * copy of the statement; storing it on the node would make two that nothing keeps in step.
+ * The two kinds get their step from different places, and that difference is the design:
  *
- * The argument NAMES are the `investigate_unknown` resource's (`unknown_id`, `statement`), which
- * is the only insertion kind v1 mints. A future insertion kind with different arguments gets its
- * own branch here, keyed on something the node carries — not a silent widening of these two.
+ *  - an INSERTED investigation node's arguments are REBUILT from the ledger entry that motivated
+ *    it. The statement already lives there, and storing a second copy on the node would make two
+ *    that nothing keeps in step. The argument NAMES are the `investigate_unknown` resource's
+ *    (`unknown_id`, `statement`), the only insertion kind v1 mints; a future insertion kind gets
+ *    its own branch keyed on something the node carries, not a silent widening of these two;
+ *  - a REMAINDER node's arguments and `==>` delegation were AUTHORED by the caller and exist
+ *    nowhere else, so the node carries them (row A.5) and this is where they land on the step.
+ *    Before A.5 they were validated, accepted and dropped here, and an appended step rendered
+ *    with no arguments and no isolation however it was spelled.
+ *
+ * The insertion's rebuilt arguments win on the merge. They can only collide when a contributed
+ * node also declares `unknown_id`/`statement`, and on an inserted node the ledger is the source
+ * of record for both.
+ *
+ * `delegated` is set from the node's DECLARATION alone. `subagentModel` is deliberately not
+ * consulted: stage 06's `markDelegatedStepPrompts` is the producer of the runtime flag for every
+ * parse-time step, and a second producer reading a second field is how one flag comes to mean two
+ * things. `RemainderProcessor` refuses `subagentModel` on a contributed node for the same reason.
  */
 function synthesizeStep(
   node: ChainNode,
   ordinal: number,
   ledger: readonly UnknownLedgerEntry[] | undefined
 ): ChainStepPrompt {
-  const args: Record<string, unknown> = {};
+  const args: Record<string, unknown> = { ...(node.args ?? {}) };
   const unknownId = node.originUnknownId;
 
-  if (unknownId !== undefined) {
+  if (unknownId !== undefined && node.origin !== 'remainder') {
     args['unknown_id'] = unknownId;
     const entry = ledger?.find((candidate) => candidate.id === unknownId);
     const statement = entry?.statement ?? stripInvestigationPrefix(node.stepName);
@@ -163,6 +176,7 @@ function synthesizeStep(
     nodeId: node.id,
     promptId: node.promptId,
     args,
+    ...(node.delegated === true ? { delegated: true } : {}),
   };
 }
 

@@ -97,6 +97,67 @@ describe('planNodeDrivenRender', () => {
     ]);
   });
 
+  test('a remainder node renders the arguments and delegation it declared (row A.5)', () => {
+    // The end of the path row A.5 widened: `RemainderNodeSpec` → `ChainNode` → `chain_run_nodes`
+    // → here. A contributed node has NO entry in `parseSteps` by construction, so this function
+    // is the only thing that can put its declaration on the rendered step — which is why
+    // accepting a field the node does not carry is accepting a field the run never sees.
+    const nodes = [
+      PLANNED_NODES[0]!,
+      node('write-up', 'prompt-alt', {
+        origin: 'remainder',
+        originUnknownId: 'plan-shape',
+        stepName: 'Write up',
+        args: { topic: 'cache TTL' },
+        delegated: true,
+      }),
+    ];
+
+    const plan = planNodeDrivenRender({
+      nodes,
+      parseSteps: PARSED,
+      currentNodeId: 'write-up',
+      fallbackOrdinal: 2,
+      ledger: [
+        { id: 'plan-shape', statement: 'the plan is wrong', state: 'active', blocking: true },
+      ] as unknown as UnknownLedgerEntry[],
+    });
+
+    expect(plan.steps[1]).toEqual({
+      stepNumber: 2,
+      nodeId: 'write-up',
+      promptId: 'prompt-alt',
+      args: { topic: 'cache TTL' },
+      delegated: true,
+    });
+  });
+
+  test('a remainder node does NOT inherit the investigation arguments an insertion rebuilds', () => {
+    // Both node kinds carry `originUnknownId`, and before row A.5 that alone drove the rebuild —
+    // so a caller-authored step was rendered with `unknown_id`/`statement` arguments its prompt
+    // never declared. The provenance, not the presence of an id, decides which kind this is.
+    const nodes = [
+      PLANNED_NODES[0]!,
+      node('write-up', 'prompt-alt', {
+        origin: 'remainder',
+        originUnknownId: 'plan-shape',
+        stepName: 'Write up',
+      }),
+    ];
+
+    const plan = planNodeDrivenRender({
+      nodes,
+      parseSteps: PARSED,
+      currentNodeId: 'write-up',
+      fallbackOrdinal: 2,
+      ledger: [
+        { id: 'plan-shape', statement: 'the plan is wrong', state: 'active', blocking: true },
+      ] as unknown as UnknownLedgerEntry[],
+    });
+
+    expect(plan.steps[1]?.args).toEqual({});
+  });
+
   test('an inserted node with no ledger entry recovers its statement from the step name', () => {
     const nodes = [
       PLANNED_NODES[0]!,

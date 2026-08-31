@@ -161,6 +161,11 @@ function mintRemainderNodes(
       stepName: spec.stepName,
       origin: 'remainder' as const,
       originUnknownId: unknownId,
+      // A.5: the node's own declaration travels with it. Spread conditionally rather than bound
+      // to `undefined`, because `exactOptionalPropertyTypes` rejects an explicit undefined and
+      // the hook projection pins the resulting key set.
+      ...(spec.args !== undefined ? { args: spec.args } : {}),
+      ...(spec.delegated !== undefined ? { delegated: spec.delegated } : {}),
     };
   });
 }

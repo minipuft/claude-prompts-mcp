@@ -454,6 +454,24 @@ export interface ChainNode {
    * carried as data instead of parsed back out of `id`.
    */
   originUnknownId?: string;
+  /**
+   * Resolved arguments for a node with no parse-time step (row A.5).
+   *
+   * `parsedCommand.steps` is where a planned step's authoring data lives, and a remainder node
+   * has no entry there — `synthesizeStep` builds its step from this node alone. Present on
+   * `origin: 'remainder'` nodes whose submission declared arguments, absent everywhere else: a
+   * planned node's args are already on its parse step, and a second copy is a fact nothing keeps
+   * in step.
+   */
+  args?: Record<string, unknown>;
+  /**
+   * Declared context isolation for a node with no parse-time step (row A.5).
+   *
+   * The same reading as `WorkflowNode.delegated`: a DECLARATION. `synthesizeStep` is what turns
+   * it into `ChainStepPrompt.delegated`, the flag the renderer actually reads — stage 06 never
+   * sees a synthesized step, because it runs at parse time and is skipped on a blueprint resume.
+   */
+  delegated?: boolean;
 }
 
 /**

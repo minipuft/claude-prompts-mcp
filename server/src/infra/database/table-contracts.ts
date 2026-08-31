@@ -330,6 +330,17 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                       meaningful: no declaration was recorded, so the verification stage
     //                       blocks on nothing — the change can only relax enforcement, never
     //                       tighten it. Partial population BY ROW TYPE, like origin_unknown_id.
+    //
+    // v27 (row A.5) added two more, also in the owner's INSERT list:
+    //   delegated       — the `==>` declaration of a node the CALLER contributed mid-run
+    //                     (`origin='remainder'`). 0/1/NULL, where NULL means the node declared
+    //                     nothing at all and is not the same claim as a declared `false`.
+    //   args_json       — that node's resolved argument bag, JSON object or NULL.
+    //                     Both exist because a remainder node has no row in
+    //                     `parsedCommand.steps`: the renderer synthesizes its step from the node
+    //                     alone, so a declaration the node does not carry is a declaration the
+    //                     run can never see. Partial population BY ROW TYPE again — every
+    //                     planned and inserted node leaves both NULL.
     // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {

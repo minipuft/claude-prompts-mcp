@@ -10,22 +10,19 @@
  * unchanged. The two spellings may therefore never diverge in any of those, because after this
  * function there is only one of them left.
  *
- * WHY THE STRING FORM IS NARROWER THAN THE STRUCTURED ONE. A `-->` command can carry two operators
- * this parser refuses rather than maps: `::` step criteria and `==>` delegation.
+ * `==>` DELEGATION IS MAPPED (row A.5). The operator marks the step that FOLLOWS it, exactly as
+ * `SymbolicOperatorParser.splitChainSteps` reads it in a full chain, and it lands on the node's
+ * `delegated` declaration — which `RemainderNodeSpec`, `ChainNode`, the `chain_run_nodes` row and
+ * `synthesizeStep` now each carry, so the appended step renders delegated. Both spellings map it
+ * through the same `RemainderProcessor`, which is what keeps OQ-A1 structural.
  *
- * The blocker MOVED at row A.2 and the refusal is kept for a different reason than it was written
- * for. A.2 shipped `inlineGateCriteria` and `delegated` on the IR node schema, so the node
- * vocabulary can now say both — that half is done. What still cannot carry them is the REMAINDER,
- * one layer down: `projectNodes` (`capture/remainder-processor.ts`) narrows every submitted node
- * to `{id, promptId, stepName}` before the store write, so a mapped `::` or `==>` would be dropped
- * silently on its way to `chain_run_nodes`. It would be dropped for the STRUCTURED spelling too —
- * which is exactly why accepting it here would break OQ-A1's "may never diverge": the string form
- * would appear to accept an operator that changes nothing about the run.
- *
- * Lifting it therefore means widening `RemainderNodeSpec`, the store's node write and the row
- * projection for both spellings at once — storage surface owned by rows 1.2 / 2.3, not by A.2.
- * Until then the refusal names the operator and points at the layer, so it is retirable rather
- * than folklore.
+ * `::` CRITERIA ARE STILL REFUSED, and the reason is timing rather than vocabulary. A raw `::`
+ * token means nothing until `InlineGateProcessor.partitionGateCriteria` splits it against the gate
+ * registry (stage 11 in a fresh parse) — and an appended node joins a run that is RESUMING, where
+ * `05-inline-gate-stage` skips on `isBlueprintRestored` and no per-node criteria resolution runs
+ * at all. Accepting the token would record it and fire nothing. The structured spelling refuses
+ * the same field, from `REMAINDER_REFUSED_NODE_FIELDS`, so the two spellings still say one thing.
+ * Bind the gate with the `gates` parameter and its `target_step_id` instead.
  *
  * Pure: no I/O, no logger, no registry. Prompt existence and required arguments are NOT checked
  * here — `validateWorkflowIR`, reached through `RemainderProcessor`, owns both, and checking them
@@ -58,6 +55,8 @@ interface AppendNode {
   readonly id: string;
   readonly promptId: string;
   readonly args?: Record<string, unknown>;
+  /** Set by a `==>` delimiter preceding this step (row A.5). */
+  readonly delegated?: boolean;
 }
 
 /**
@@ -95,30 +94,22 @@ export function parseAppendCommand(command: string): AppendCommandParse {
     };
   }
 
-  if (fragment.includes('==>')) {
-    return {
-      ok: false,
-      message:
-        'append refused: the "==>" delegation operator is declarable on an IR node but a remainder ' +
-        'node still carries only {id, promptId, stepName}, so it would be dropped before the run ' +
-        'sees it. Append the step with "-->" and set delegation on the prompt.',
-    };
-  }
   if (/(^|\s)::/.test(fragment)) {
     return {
       ok: false,
       message:
-        'append refused: the "::" gate operator is declarable on an IR node but a remainder node ' +
-        'still carries only {id, promptId, stepName}, so it would be dropped before the run sees ' +
-        'it. Bind the gate with the `gates` parameter and its target_step_id instead.',
+        'append refused: a raw "::" gate token is resolved against the gate registry at parse ' +
+        'time, and an appended step joins a run that is resuming — no per-step criteria ' +
+        'resolution runs there, so the token would be recorded and fire nothing. Bind the gate ' +
+        'with the `gates` parameter and its target_step_id instead.',
     };
   }
 
-  const segments = fragment.split('-->').map((segment) => segment.trim());
+  const segments = splitAppendSegments(fragment);
   const nodes: AppendNode[] = [];
   const taken = new Set<string>();
 
-  for (const segment of segments) {
+  for (const { text: segment, delegated } of segments) {
     if (segment.length === 0) {
       return {
         ok: false,
@@ -139,11 +130,56 @@ export function parseAppendCommand(command: string): AppendCommandParse {
       id: mintAppendId(promptId, taken),
       promptId,
       ...(parseInlineArgs(match[2] ?? '') ?? {}),
+      ...(delegated ? { delegated: true } : {}),
     };
     nodes.push(node);
   }
 
   return { ok: true, nodes };
+}
+
+/**
+ * Split an append fragment on its two step delimiters, recording which steps `==>` delegated.
+ *
+ * The delimiter semantics are `SymbolicOperatorParser.splitChainSteps`': `==>` marks the step
+ * that FOLLOWS it, so `>>a ==> >>b` delegates b and leaves a alone, and a fragment that opens
+ * with `==>` delegates its first step. Reimplemented here rather than shared, for the reason the
+ * module header gives for `parseInlineArgs`: the symbolic splitter also tracks quote state for
+ * positional argument strings this grammar does not accept, and importing the parser would give
+ * this module a reason to know a class it otherwise does not touch.
+ *
+ * The `--> a --> b` arrows inside a QUOTED argument value are not defended against here for the
+ * same reason the symbolic form defends them: it is `parseInlineArgs` that reads quotes, and a
+ * split arrow inside one produces a segment that fails the `>>prompt_id` match with a named
+ * refusal rather than a silently wrong plan.
+ */
+function splitAppendSegments(fragment: string): { text: string; delegated: boolean }[] {
+  const segments: { text: string; delegated: boolean }[] = [];
+  let current = '';
+  // A fragment opening with `==>` delegates its first step and is not an empty leading segment:
+  // `--> ==> >>a` is "append a, delegated". Consumed here rather than dropped after the split, so
+  // that every OTHER empty segment still reaches the caller's `--> >>a --> --> >>b` refusal.
+  let delegated = fragment.startsWith('==>');
+  let index = delegated ? 3 : 0;
+
+  while (index < fragment.length) {
+    const delimiter = fragment.startsWith('==>', index)
+      ? 'delegation'
+      : fragment.startsWith('-->', index)
+        ? 'chain'
+        : undefined;
+    if (delimiter !== undefined) {
+      segments.push({ text: current.trim(), delegated });
+      delegated = delimiter === 'delegation';
+      current = '';
+      index += 3;
+      continue;
+    }
+    current += fragment[index];
+    index += 1;
+  }
+  segments.push({ text: current.trim(), delegated });
+  return segments;
 }
 
 /**
@@ -177,10 +213,10 @@ function mintAppendId(promptId: string, taken: Set<string>): string {
  * `key="value"` pairs off a step segment, or `undefined` when the segment declares none.
  *
  * DELIBERATELY NARROWER than `ArgumentParser`, and the narrowness is bounded by what it feeds:
- * `RemainderNodeSpec` carries id / promptId / stepName only, so these values never reach the run.
- * Their ONE effect is `validateWorkflowIR`'s `required-argument-missing` check — without them a
- * caller appending a prompt with a required argument would be refused for an argument they did
- * supply. Positional arguments are not accepted, because a remainder node has no positional form
+ * `RemainderNodeSpec` carries id / promptId / stepName / args / delegated, so a `key="value"`
+ * pair both satisfies `validateWorkflowIR`'s `required-argument-missing` check AND reaches the
+ * rendered step (row A.5 widened the path; before it, these values were validated and dropped).
+ * Positional arguments are still not accepted, because a contributed node has no positional form
  * to carry them into.
  */
 function parseInlineArgs(raw: string): { args: Record<string, unknown> } | undefined {
