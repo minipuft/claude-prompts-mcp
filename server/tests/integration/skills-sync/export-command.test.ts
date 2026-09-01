@@ -17,7 +17,7 @@
  * Only the I/O location is redirected, via MCP_SERVER_ROOT + an outputDir override.
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { mkdir, readFile, writeFile, rm, access } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, access, symlink } from 'node:fs/promises';
 import { mkdtempSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -147,6 +147,43 @@ describe('Export Command Integration', () => {
     );
     return out;
   }
+
+  // ── Foreign-alias guard ────────────────────────────────────────
+
+  describe('a skill directory that is a symlink out of the base dir', () => {
+    // Measured 2026-08-27: ~/.codex/skills/dev-workflow was a symlink into ~/.claude/skills.
+    // The base-dir collision guard did not fire (different bases), so the codex pass wrote its
+    // render through the link and replaced the claude-code render. The guard under test refuses
+    // to write a resource whose output directory resolves outside the client's base directory.
+    it('refuses to write through the link, records a failure, and still exports the rest', async () => {
+      await writePrompt('general', 'aliased');
+      await writePrompt('general', 'plain');
+      await writeConfig('claude-code');
+
+      // Another client's export, reachable from this client's base only via a symlink.
+      const foreignDir = path.join(tmpDir, 'other-client', 'aliased');
+      await mkdir(foreignDir, { recursive: true });
+      const sentinel = '---\nmanaged-client: other\n---\nFOREIGN RENDER — must survive\n';
+      await writeFile(path.join(foreignDir, 'SKILL.md'), sentinel);
+      await symlink(foreignDir, path.join(outputDir, 'aliased'), 'dir');
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+        out
+      );
+
+      // The foreign render is untouched — the whole point.
+      expect(await readFile(path.join(foreignDir, 'SKILL.md'), 'utf-8')).toBe(sentinel);
+      // The refusal is reported, not silent, and names where the link really goes.
+      expect(report.failures.map((f) => f.id)).toContain('aliased');
+      expect(out.warns.some((w) => w.includes('aliased') && w.includes('resolves outside'))).toBe(
+        true
+      );
+      // The rest of the client's export proceeds normally.
+      expect(await exists(path.join(outputDir, 'plain', 'SKILL.md'))).toBe(true);
+    });
+  });
 
   // ── M2: chain-step gates ───────────────────────────────────────────────────
 

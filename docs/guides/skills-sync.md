@@ -256,6 +256,13 @@ Each export records a manifest in the `skills_sync_manifests` table of `server/r
 - Missing exports (resource in manifest but not on disk)
 - New resources (in exports list but not yet exported)
 
+**Symlinked skill directories are refused, not written through.** `export` and `sync` compare each
+resource's output directory against the client's base directory after resolving links. A directory
+that resolves elsewhere — `~/.codex/skills/dev-workflow -> ~/.claude/skills/dev-workflow` is the
+measured case — is skipped and reported as a failure naming the real target, because writing would
+replace another client's render with this client's. Each client gets its own directory; if two
+clients should share one, register the resource for only one of them.
+
 ## Commands
 
 | Command  | NPM Script              | Purpose                                                                        |
