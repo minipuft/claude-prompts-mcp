@@ -180,6 +180,7 @@
     "validate:spawn-input-guards": "node scripts/validate-spawn-input-guards.js",
     "validate:no-phantom-columns:self-test": "tsx scripts/validate-no-phantom-columns.ts --self-test",
     "worktree:create": "node ../scripts/create-worktree.js",
+    "pr:body": "node ../scripts/pr-body.mjs",
     "validate:git-hooks-active": "node scripts/validate-git-hooks-active.js",
     "validate:git-hooks-active:self-test": "node scripts/validate-git-hooks-active.js --self-test",
     "validate:hooks-registered": "node ../scripts/validate-hook-registration.js",
