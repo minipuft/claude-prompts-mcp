@@ -224,6 +224,33 @@ const DEFAULT_CONFIG: Config = {
 /**
  * Configuration manager class
  */
+/**
+ * The path-resolution surface `ConfigLoader` needs, expressed structurally.
+ *
+ * `PathResolver` lives in `runtime/` and `infra/` (Layer 1) may import only `shared/`, so this is
+ * a port rather than an import — the shape the arch rules prescribe ("shared/types interfaces +
+ * constructor injection"). `runtime/context.ts` satisfies it by passing the live PathResolver.
+ *
+ * One member per resource type this loader resolves a directory for. Reads already go through
+ * `PathResolver` for prompts, gates, frameworks and styles alike; these members exist so writes
+ * agree with them (D8 Arc 1).
+ */
+export interface ResourcePathSource {
+  getPromptsPath(): string;
+  getGatesPath(): string;
+  getFrameworksPath(): string;
+  /**
+   * The bundled (package-shipped) directory for a resource type — the lowest-precedence root,
+   * always read, never written.
+   *
+   * Writers need it to answer "where does this resource live TODAY", which is a different
+   * question from "where would a write go" and has a different answer whenever a personal library
+   * is configured. Without it a framework served from the bundle read as absent to its own
+   * updater, which reported `Files may be corrupted` (P1.2).
+   */
+  getBundledResourceDir(resourceType: string): string;
+}
+
 export class ConfigLoader extends EventEmitter implements ConfigManager {
   private config: Config;
   private configPath: string;
@@ -235,7 +262,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
   private warnedAnalysisDeprecated = false;
 
-  constructor(configPath: string) {
+  constructor(
+    configPath: string,
+    private readonly resourcePaths?: ResourcePathSource
+  ) {
     super();
     this.configPath = configPath;
     this.config = DEFAULT_CONFIG;
@@ -559,26 +589,36 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Resolve prompts directory path with environment overrides and absolute fallback.
+   * Resolve prompts directory path — the destination every prompt WRITE resolves through.
    *
    * Priority:
    *   1. overridePath parameter
-   *   2. config.prompts.directory setting
+   *   2. the injected `PromptsPathSource` (PathResolver), i.e. the same chain reads use
+   *   3. config.prompts.directory, resolved against the config file's directory
    *
-   * Note: PathResolver is the preferred source of truth for path resolution.
-   * This method exists for backward compatibility and simple use cases.
+   * Step 2 is the whole point. This method used to stop at step 3, which meant reads resolved
+   * through PathResolver (`MCP_RESOURCES_PATH` -> `MCP_WORKSPACE` -> package default) while writes
+   * resolved against the config file alone. Setting `MCP_RESOURCES_PATH` therefore moved every
+   * read and no write: prompts were served from the override and edits landed back in the
+   * package's own `resources/prompts`. The two only ever agreed because the shipped
+   * `config.prompts.directory` happens to name the same path the default resolution produces.
+   *
+   * Step 3 remains as the fallback for callers constructed without a resolver (tests, the CLI's
+   * throwaway loader), so behaviour there is unchanged.
    */
   getResolvedPromptsDirectory(overridePath?: string): string {
     const baseDir = path.dirname(this.configPath);
 
-    // Priority: overridePath > config
-    let resolvedPath = overridePath ?? this.getPromptsDirectory();
-
-    if (!path.isAbsolute(resolvedPath)) {
-      resolvedPath = path.resolve(baseDir, resolvedPath);
+    if (overridePath !== undefined) {
+      return path.isAbsolute(overridePath) ? overridePath : path.resolve(baseDir, overridePath);
     }
 
-    return resolvedPath;
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getPromptsPath();
+    }
+
+    const configured = this.getPromptsDirectory();
+    return path.isAbsolute(configured) ? configured : path.resolve(baseDir, configured);
   }
 
   /**
@@ -589,10 +629,50 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Get gates directory path (for gate definitions)
-   * Resolves to resources/gates relative to config directory
+   * Get frameworks directory path — the destination every framework WRITE and DELETE resolves
+   * through (`framework-file-writer.ts:504`, via `getFrameworkDir`).
+   *
+   * Third instance of the same defect as prompts and gates: `getFrameworkDir` composed
+   * `join(getServerRoot(), 'resources', 'frameworks', id)`, so it ignored `PathResolver` while
+   * framework reads were overlay-merged through it (`module-initializer.ts:218`). The delete path
+   * makes this sharper than the other two — `rm(frameworkDir, {recursive: true})` against a
+   * mis-resolved root removes a directory in the package tree.
+   */
+  getFrameworksDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getFrameworksPath();
+    }
+
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'frameworks');
+  }
+
+  /**
+   * The bundled directory for a resource type, or undefined when no path source is injected.
+   *
+   * Undefined rather than a guessed fallback: the only honest answer without a `PathResolver` is
+   * "unknown", and a guess here would send a copy-on-write reading files from the wrong tree.
+   * Every caller treats undefined as "no distinct bundled source", which degrades to the
+   * pre-existing behaviour rather than to a wrong one.
+   */
+  getBundledResourceDirectory(resourceType: string): string | undefined {
+    return this.resourcePaths?.getBundledResourceDir(resourceType);
+  }
+
+  /**
+   * Get gates directory path (for gate definitions) — the destination every gate WRITE resolves
+   * through (`gate-file-writer.ts:135`, `gate-lifecycle-processor.ts:202,280`).
+   *
+   * Same defect prompts had (see `getResolvedPromptsDirectory`), one degree worse: this did not
+   * merely stop short of `PathResolver`, it hardcoded `resources/gates` and consulted neither the
+   * config file nor the environment. Gate reads DO go through `PathResolver` and are overlay-merged
+   * (`module-initializer.ts:199`), so `MCP_RESOURCES_PATH` moved every gate read and no gate write.
    */
   getGatesDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getGatesPath();
+    }
+
     const configDir = path.dirname(this.configPath);
     return path.join(configDir, 'resources', 'gates');
   }

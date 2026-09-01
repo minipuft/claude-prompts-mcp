@@ -29,6 +29,7 @@ import type {
 
 import { Logger } from '#infra/logging/index.js';
 import { PromptError, ValidationError, safeJsonParse } from '#shared/utils/index.js';
+import { normalizePromptId } from '#shared/utils/resource-ids.js';
 
 export type CommandParseResult = CommandParseResultBase<
   OperatorDetectionResult,
@@ -368,14 +369,12 @@ export class UnifiedCommandParser {
           return null;
         }
 
-        // Clean up prompt ID: convert spaces and hyphens to underscores, normalize
-        const promptId = rawPromptId
-          .trim()
-          .toLowerCase()
-          .replace(/[\s-]+/g, '_') // Spaces and hyphens to underscores
-          .replace(/[^a-z0-9_]/g, '') // Remove invalid characters (except underscores)
-          .replace(/_+/g, '_') // Collapse multiple underscores
-          .replace(/^_|_$/g, ''); // Trim leading/trailing underscores
+        // One owner for the canonical form — see shared/utils/resource-ids.ts. This site used to
+        // inline its own copy carrying an extra `.replace(/[^a-z0-9_]/g, '')`, which the capture
+        // group above (`[a-zA-Z][a-zA-Z0-9_-]*`) already made unreachable: it could never remove a
+        // character. Its only effect was to make the two implementations disagree on inputs
+        // neither could receive.
+        const promptId = normalizePromptId(rawPromptId);
 
         const warnings: string[] = [];
         if (rawPromptId.trim() !== promptId) {

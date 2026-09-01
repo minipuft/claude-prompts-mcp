@@ -451,6 +451,7 @@ interface SyncManifestEntry {
 
 import type { ToolIndexEntry } from '#shared/types/persistence.js';
 import { frameworkLabel } from '#shared/utils/framework-label.js';
+import { resolveContainedPath } from '#shared/utils/path-containment.js';
 
 export interface SkillsSyncOptions {
   command: string;
@@ -3011,7 +3012,11 @@ async function exportCommand(
         const outputHash = hashOutputFiles(outputFiles);
 
         for (const file of outputFiles) {
-          const fullPath = path.join(baseDir, file.relativePath);
+          // Contained against the OUTPUT dir, not the resources root: this writer's destination is
+          // the client's skills directory. `relativePath` is built from resource ids, so a
+          // traversing id would place a skill file outside the directory the operator pointed the
+          // export at.
+          const fullPath = resolveContainedPath(baseDir, file.relativePath);
           if (opts.dryRun) {
             output.log(`  [dry-run] ${file.relativePath}`);
           } else {
@@ -3360,7 +3365,11 @@ async function syncCommand(
         const outputHash = hashOutputFiles(outputFiles);
 
         for (const file of outputFiles) {
-          const fullPath = path.join(baseDir, file.relativePath);
+          // Contained against the OUTPUT dir, not the resources root: this writer's destination is
+          // the client's skills directory. `relativePath` is built from resource ids, so a
+          // traversing id would place a skill file outside the directory the operator pointed the
+          // export at.
+          const fullPath = resolveContainedPath(baseDir, file.relativePath);
           if (opts.dryRun) {
             output.log(`  [dry-run] ${file.relativePath}`);
           } else {
@@ -3573,7 +3582,11 @@ async function diffCommand(
         const outputPatches: string[] = [];
         const changedOutputFiles: string[] = [];
         for (const file of outputFiles) {
-          const fullPath = path.join(baseDir, file.relativePath);
+          // Contained against the OUTPUT dir, not the resources root: this writer's destination is
+          // the client's skills directory. `relativePath` is built from resource ids, so a
+          // traversing id would place a skill file outside the directory the operator pointed the
+          // export at.
+          const fullPath = resolveContainedPath(baseDir, file.relativePath);
           const existing = await readOptionalFile(fullPath);
           if (!existing) continue;
           if (existing !== file.content) {

@@ -148,6 +148,9 @@ export class PromptLoader {
     // Phase 2: Build category metadata and load prompts
     const categories: Category[] = [];
     const allPrompts: PromptData[] = [];
+    // `loadErrors` is a lifetime counter and this method runs once per root, so the difference —
+    // not the total — is what this load contributed.
+    const errorsBefore = this.stats.loadErrors;
 
     for (const categoryEntry of categoryDirs) {
       const categoryId = categoryEntry.name;
@@ -211,11 +214,13 @@ export class PromptLoader {
     // Load categories into CategoryManager
     await this.categoryManager.loadCategories(categories);
 
+    const invalid = this.stats.loadErrors - errorsBefore;
     this.logger.info(
-      `✅ [PromptLoader] Loaded ${allPrompts.length} prompts from ${categories.length} categories`
+      `✅ [PromptLoader] Loaded ${allPrompts.length} prompts from ${categories.length} categories` +
+        (invalid > 0 ? ` (${invalid} could not be loaded)` : '')
     );
 
-    return { promptsData: allPrompts, categories };
+    return { promptsData: allPrompts, categories, invalid };
   }
 
   /**

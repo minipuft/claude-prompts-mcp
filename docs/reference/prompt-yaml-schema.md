@@ -12,6 +12,32 @@ The definitive reference for `prompt.yaml` configuration fields.
 
 ---
 
+## Id Conventions
+
+**Ids that appear in the `>>` / `-->` command grammar are `snake_case`. Every other id is
+`kebab-case`.**
+
+| Id                          | Convention                                                             | Example                      |
+| --------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| prompt `id`                 | `snake_case`                                                           | `code_review`                |
+| nested chain-step directory | `snake_case` — it is a prompt-id segment, addressed as `>>parent/step` | `deep_analysis/initial_scan` |
+| category directory          | `kebab-case`                                                           | `knowledge-capture`          |
+| gate id                     | `kebab-case`                                                           | `information-placement`      |
+| `chainSteps[].id` (node id) | `kebab-case` — a node id, not a prompt id                              | `jd-analysis`                |
+
+The split is not stylistic. Chains are tokenized by splitting on `-->`, `==>`, `+` and `?`, so a
+hyphen inside a prompt id makes `>>a-->b` ambiguous between the prompt `a-->b` and the prompt `a`
+chained to `b`. Prompt ids therefore avoid hyphens; a kebab spelling is accepted as an **alias**
+and folded to the canonical underscore form, which is why `my-prompt` and `my_prompt` cannot both
+exist. No other id enters that grammar, so kebab is free everywhere else.
+
+The two things most easily confused sit inside one chain step: the **directory** is snake because
+it names a prompt, while the step's `id:` field is kebab because it names a graph node.
+
+`npm run validate:prompts` enforces this and takes `--root`, so it can check a personal library
+outside the repository. `server/src/shared/utils/resource-ids.ts` owns the patterns and the
+rationale; the validator reads them rather than restating them.
+
 ## Root Fields
 
 Top-level properties for `prompt.yaml`.

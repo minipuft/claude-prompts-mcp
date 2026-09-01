@@ -69,6 +69,15 @@ export interface PromptFileContent {
 export interface CategoryPromptsResult {
   promptsData: PromptData[];
   categories: Category[];
+  /**
+   * Prompt directories discovered but not loaded — malformed YAML, or a definition the prompt
+   * schema rejects.
+   *
+   * Reported so the startup inventory can account for every file on disk. A count of successes
+   * alone cannot: 123 `prompt.yaml` files became 119 served prompts with nothing naming the
+   * difference, and a reader had no way to tell a healthy catalog from one quietly missing four.
+   */
+  invalid: number;
 }
 
 // ChainStep definition moved to shared/types/index.ts (re-exported above).

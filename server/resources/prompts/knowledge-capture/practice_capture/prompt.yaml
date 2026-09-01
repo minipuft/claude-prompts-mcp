@@ -49,6 +49,12 @@ gateConfiguration:
       description: >-
         Capture preserves provenance and semantic distinctions, reuses the
         canonical writer, and passes deterministic validation.
+      guidance: >-
+        Check each captured record against its source before claiming the
+        capture is complete: quote the locator you actually read, keep the
+        claim kind you were given rather than the one that reads best, and
+        run the deterministic build. An unverifiable attribution is omitted,
+        never approximated.
       pass_criteria:
         - >-
           Exact source locators and canonical identities are retained without
@@ -67,6 +73,12 @@ gateConfiguration:
       description: >-
         Framework promotion is absent by default and remains evidence-backed and
         approval-gated when evaluated.
+      guidance: >-
+        Treat promotion as off unless it was asked for. When it is evaluated,
+        name the independent sightings behind it and the existing owner you
+        searched before proposing anywhere new, and stop for explicit
+        confirmation before changing any skill, rule, profile, or published
+        artifact.
       pass_criteria:
         - Capture-only mode reports no framework mutation
         - >-

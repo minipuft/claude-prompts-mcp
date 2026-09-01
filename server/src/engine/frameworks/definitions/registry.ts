@@ -10,6 +10,7 @@
 import { createGenericGuide } from './generic-framework-guide.js';
 import {
   RuntimeFrameworkLoader,
+  getDefaultRuntimeLoader,
   type RuntimeFrameworkLoaderConfig,
 } from './runtime-framework-loader.js';
 import { FrameworkGuide } from '../types/index.js';
@@ -77,8 +78,23 @@ export class FrameworkRegistry {
       ...(config.runtimeLoaderConfig ? { runtimeLoaderConfig: config.runtimeLoaderConfig } : {}),
     };
 
-    // RuntimeFrameworkLoader is mandatory - YAML loading is required
-    this.runtimeLoader = new RuntimeFrameworkLoader(this.config.runtimeLoaderConfig);
+    // RuntimeFrameworkLoader is mandatory - YAML loading is required.
+    //
+    // Share the configured default singleton unless a caller explicitly supplied its own config.
+    // Constructing a private loader unconditionally made this a FOURTH resolver for the framework
+    // directory: `framework-manager.ts:128` calls `createFrameworkRegistry(logger)` with no
+    // config, so this loader fell back to `resolveFrameworksDir()` and read the package tree while
+    // `module-initializer.ts:219` configured the singleton with the PathResolver-resolved dir.
+    //
+    // Framework reads therefore ignored `MCP_RESOURCES_PATH` in exactly the way writes did, and
+    // the two agreed only because both were wrong. Fixing the write path alone (T1.10) turned that
+    // silent agreement into "Framework 'x' not found on disk" plus a rollback.
+    //
+    // The explicit-config branch stays so a caller (tests) can still pin its own directories.
+    this.runtimeLoader =
+      this.config.runtimeLoaderConfig !== undefined
+        ? new RuntimeFrameworkLoader(this.config.runtimeLoaderConfig)
+        : getDefaultRuntimeLoader();
   }
 
   /**

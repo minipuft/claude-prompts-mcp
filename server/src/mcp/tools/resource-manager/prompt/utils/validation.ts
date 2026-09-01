@@ -12,7 +12,6 @@ import type { PromptResourceActionId } from '../../../../metadata/definitions/pr
 import type { ToolDefinitionInput } from '../../core/types.js';
 
 import { ResourceVerificationService } from '#modules/resources/services/index.js';
-import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
 import { ValidationError } from '#shared/utils/index.js';
 
 /**
@@ -224,21 +223,6 @@ export function validateOperationArgs(
 }
 
 /**
- * Normalize a prompt ID to canonical form: lowercase, hyphens/spaces → underscores.
- * All prompt IDs are stored in this form. Users may type hyphens (e.g., "my-prompt")
- * but the canonical ID uses underscores ("my_prompt"). This means "my-prompt" and
- * "my_prompt" refer to the same prompt — duplicates are not allowed.
- */
-export function normalizePromptId(id: string): string {
-  return id
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '');
-}
-
-/**
  * Validate prompt ID format (operates on raw input, before normalization)
  */
 export function validatePromptId(id: string): void {
@@ -269,19 +253,23 @@ export function validateCategoryName(category: string): void {
     throw new ValidationError('Category name must be 50 characters or less');
   }
 
-  // A category is a single directory name under the prompts root, and it reaches
-  // `path.join(promptsDir, category, id)` directly. Until 2026-08-25 this function checked
-  // only emptiness and length, so a `../`-bearing category wrote a prompt outside the root
-  // and the tool still reported success -- while `validatePromptId` right above had carried
-  // an equivalent allowlist since it was written. The asymmetry is the whole defect.
+  // A category is ONE directory name, not a path.
   //
-  // The write is ALSO guarded by `assertPathInside` at the join itself, which is what makes
-  // the invariant hold for fields nobody thought to validate. This rule exists so the caller
-  // gets a message naming the parameter rather than a containment failure.
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9 _-]*$/.test(category)) {
+  // This function had zero call sites until 2026-08-30, which is the root of the traversal found
+  // that day: `category` went from the tool payload into `path.join` unchecked, and the existence
+  // of a validator named for the job made the surface read as guarded. Wiring it is the fix;
+  // `resolveContainedPath` behind it is defence in depth, not the primary control.
+  //
+  // Single-segment rather than merely "no `..`": a category of `/tmp/x` cannot escape the root
+  // (path.join neutralises the leading slash) but still silently creates nested directories the
+  // loader then reads as a different layout. Measured against all 20 categories in the bundled
+  // tree and the personal library — every one is already a plain segment, so this rejects nothing
+  // that exists.
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(category)) {
     throw new ValidationError(
-      'Category must start with a letter or digit and contain only alphanumeric characters, ' +
-        'spaces, underscores, and hyphens — it names one directory, so separators and ".." are rejected'
+      `Category '${category}' must be a single directory name — letters, digits, hyphens and ` +
+        'underscores only, starting with a letter or digit. Path separators and relative segments ' +
+        'are not allowed.'
     );
   }
 }
@@ -370,11 +358,10 @@ export function validateToolDefinitions(tools: ToolDefinitionInput[]): string[] 
     }
 
     // Valid runtime values
-    // Derived, not restated: this list and the executor's must agree, or a tool
-    // accepted here fails at run time with a different vocabulary.
-    if (tool.runtime && !SUPPORTED_RUNTIMES.includes(tool.runtime)) {
+    const validRuntimes = ['python', 'node', 'shell', 'auto'];
+    if (tool.runtime && !validRuntimes.includes(tool.runtime)) {
       errors.push(
-        `Tool '${tool.id}' has invalid runtime: '${tool.runtime}'. Valid: ${SUPPORTED_RUNTIMES.join(', ')}`
+        `Tool '${tool.id}' has invalid runtime: '${tool.runtime}'. Valid: ${validRuntimes.join(', ')}`
       );
     }
 

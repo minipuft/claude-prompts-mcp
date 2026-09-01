@@ -24,6 +24,8 @@ describe('GateFileWriter', () => {
     } as unknown as Logger;
     configManager = {
       getGatesDirectory: () => gatesDir,
+      // No bundled tree in this fixture: the stub answers "no distinct bundled source".
+      getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
   });
 

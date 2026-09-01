@@ -110,7 +110,9 @@ export async function createRuntimeFoundation(
   // Use PathResolver for config path (supports workspace override)
   const configPath = pathResolver.getConfigPath();
 
-  const configManager = dependencies.configManager ?? new ConfigLoader(configPath);
+  // PathResolver is passed in so prompt WRITES resolve through the same chain reads do. Without
+  // it, `MCP_RESOURCES_PATH` moved reads only and edits landed back in the package (T1.1/D7).
+  const configManager = dependencies.configManager ?? new ConfigLoader(configPath, pathResolver);
   await configManager.loadConfig();
   const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 

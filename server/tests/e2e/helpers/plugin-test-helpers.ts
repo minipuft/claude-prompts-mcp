@@ -8,6 +8,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 
+import { buildServerEnv } from './child-env.js';
+
 /**
  * Check if a file exists
  */
@@ -72,11 +74,10 @@ export async function spawnMcpServer(
 
     const serverProcess = spawn('node', [serverPath, '--transport=stdio'], {
       cwd: path.join(projectRoot, 'server'),
-      env: {
-        ...process.env,
+      env: buildServerEnv({
         MCP_WORKSPACE: projectRoot,
         MCP_RESOURCES_PATH: path.join(projectRoot, 'server', 'resources'),
-      },
+      }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

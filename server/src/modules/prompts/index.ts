@@ -153,12 +153,13 @@ export class PromptAssetManager {
     promptsData: PromptData[];
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
+    invalid: number;
   }> {
     // Always treat input as a directory (JSON prompts.json format removed)
     const promptsDir = configPathOrDir;
 
     this.logger.info(`Loading prompts from: ${promptsDir}`);
-    const { promptsData, categories } = await this.loadFromDirectories(promptsDir);
+    const { promptsData, categories, invalid } = await this.loadFromDirectories(promptsDir);
     this.logger.info(`Loaded ${promptsData.length} prompts from ${categories.length} categories`);
     this.logCategoryBreakdown(categories, promptsData);
 
@@ -169,7 +170,20 @@ export class PromptAssetManager {
     );
     this.logConversionSummary(promptsData, convertedPrompts);
 
-    return { promptsData, categories, convertedPrompts };
+    // Stamp provenance HERE, where the root is the argument (P1.1).
+    //
+    // One pass loads exactly one root, and this function is the only entry point every root goes
+    // through — bundled base, primary, and each overlay all arrive as `promptsDir` on their own
+    // call. Threading the root down through `loadFromDirectories` → `loadYamlPrompt` →
+    // `yamlToPromptData` would touch three signatures to carry a value that is constant for the
+    // whole pass, and would leave the converted array unstamped anyway.
+    //
+    // Both arrays, because they are consumed by different layers: the pipeline reads
+    // `convertedPrompts`, `resource_manager` reads whichever its processor holds.
+    for (const prompt of promptsData) prompt.sourceRoot = promptsDir;
+    for (const prompt of convertedPrompts) prompt.sourceRoot = promptsDir;
+
+    return { promptsData, categories, convertedPrompts, invalid };
   }
 
   /**

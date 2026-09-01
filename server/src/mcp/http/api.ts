@@ -4,14 +4,15 @@
  * Handles Express app setup, middleware, and REST API endpoints
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import path from 'path';
 
 import express, { Request, Response } from 'express';
 
+import { ApiSecurityBoundary } from './api-security.js';
+import { PromptAuthorityApi } from './prompt-authority-api.js';
 import { McpToolRouter } from '../tools/index.js';
+import { validateCategoryName } from '../tools/resource-manager/prompt/utils/validation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
@@ -24,20 +25,7 @@ import {
   buildPromptCatalogSummary,
 } from '#modules/prompts/prompt-catalog.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '#modules/prompts/prompt-refresh-service.js';
-
-/*
- * Loopback origins only. A browser page served from anywhere else has no business
- * driving a local MCP server, and every non-browser client (which is most MCP
- * clients) sends no Origin header at all and is unaffected by this list.
- */
-const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
-  'http://localhost',
-  'https://localhost',
-  'http://127.0.0.1',
-  'https://127.0.0.1',
-  'http://[::1]',
-  'https://[::1]',
-];
+import { resolveContainedPath } from '#shared/utils/path-containment.js';
 
 /**
  * API Manager class
@@ -50,9 +38,8 @@ export class ApiRouter {
   private promptsData: PromptData[] = [];
   private categories: Category[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
-  private catalogReadToken: string | null;
-  private toolsWriteToken: string | null;
-  private allowedOrigins: Set<string>;
+  private readonly security: ApiSecurityBoundary;
+  private readonly promptAuthority: PromptAuthorityApi;
 
   constructor(
     logger: Logger,
@@ -61,7 +48,7 @@ export class ApiRouter {
     mcpToolsManager?: McpToolRouter,
     options: {
       catalogReadToken?: string | null;
-      toolsWriteToken?: string | null;
+      catalogWriteToken?: string | null;
       allowedOrigins?: readonly string[];
     } = {}
   ) {
@@ -69,25 +56,16 @@ export class ApiRouter {
     this.configManager = configManager;
     this.promptManager = promptManager;
     this.mcpToolsManager = mcpToolsManager;
-    const catalogReadToken = options.catalogReadToken?.trim();
-    this.catalogReadToken =
-      catalogReadToken === undefined || catalogReadToken.length === 0 ? null : catalogReadToken;
-
-    /*
-     * A SEPARATE token from the read token, deliberately. The catalog token is held by
-     * read-only adapters that render prompt content; letting that same string delete a
-     * prompt would hand every reader the destructive surface too. Least privilege costs
-     * one env var here.
-     */
-    const toolsWriteToken = options.toolsWriteToken?.trim();
-    this.toolsWriteToken =
-      toolsWriteToken === undefined || toolsWriteToken.length === 0 ? null : toolsWriteToken;
-
-    this.allowedOrigins = new Set(
-      (options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS).map((origin) =>
-        origin.trim().toLowerCase().replace(/\/$/, '')
-      )
-    );
+    this.security = new ApiSecurityBoundary({
+      readToken: options.catalogReadToken,
+      writeToken: options.catalogWriteToken,
+      allowedOrigins: options.allowedOrigins,
+    });
+    this.promptAuthority = new PromptAuthorityApi({
+      logger,
+      getPrompts: () => this.convertedPrompts,
+      runAction: (input) => this.runResourceManagerAction(input),
+    });
   }
 
   /**
@@ -109,6 +87,9 @@ export class ApiRouter {
   createApp(): express.Application {
     const app = express();
 
+    // Security runs before JSON parsing so unauthorized writes never consume request bodies.
+    this.security.register(app);
+
     // Setup middleware
     this.setupMiddleware(app);
 
@@ -122,54 +103,8 @@ export class ApiRouter {
    * Setup Express middleware
    */
   private setupMiddleware(app: express.Application): void {
-    /*
-     * Origin validation runs FIRST, ahead of CORS and ahead of any token check, and it
-     * wraps the whole app — so `/mcp`, `/health` and the REST routes are all covered and
-     * a hostile page is refused before a credential is read.
-     *
-     * This is the DNS rebinding control, and CORS is not a substitute for it: under
-     * rebinding the attacker repoints their own domain at 127.0.0.1, so the browser
-     * treats the request as SAME-ORIGIN, sends no preflight, and any CORS policy is
-     * never consulted. That is why the MCP Streamable HTTP transport makes Origin
-     * validation a MUST rather than a recommendation.
-     *
-     * Comparing Origin against Host would not work either — the attacker owns the
-     * hostname the browser resolved, so both headers carry their domain and the check
-     * would admit exactly the request it exists to stop. Only an expected-origin list
-     * separates the cases.
-     *
-     * A request with NO Origin passes. Browsers always set it; most MCP clients are not
-     * browsers. Rejecting its absence would break every CLI client while stopping
-     * nothing, since an attacker who can set arbitrary headers is not in a browser and
-     * is not subject to this control at all.
-     */
-    app.use((req, res, next) => {
-      const origin = req.header('origin');
-      if (origin !== undefined && !this.isAllowedOrigin(origin)) {
-        this.logger.warn(`[api] rejected cross-origin request from ${origin} to ${req.url}`);
-        return res.status(403).json({ error: 'Origin not allowed' });
-      }
-
-      if (origin !== undefined) {
-        // Echo the specific allowed origin rather than `*`; a wildcard cannot carry
-        // credentials and tells every caller it is welcome.
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Vary', 'Origin');
-        res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
-        res.header(
-          'Access-Control-Allow-Headers',
-          'Origin, X-Requested-With, Content-Type, Accept, Authorization'
-        );
-      }
-
-      if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-      }
-      return next();
-    });
-
     // Add JSON body parser middleware
-    app.use(express.json());
+    app.use(express.json({ limit: '1mb' }));
 
     // Add request logging middleware
     app.use((req, _res, next) => {
@@ -237,16 +172,33 @@ export class ApiRouter {
       return res.json(buildPromptCatalogSummary(prompt));
     });
 
+    /**
+     * The catalog COLLECTION the agent-workbench prompt authority lists from.
+     *
+     * `GET /api/v1/catalog/prompts` with `{ prompts: [...] }` is what
+     * `promptAuthorityHttp.listPrompts` requires: anything else — including a 404 — becomes
+     * `PromptAuthorityUnavailableError('catalog_unavailable')`, which the workbench projects as an
+     * empty catalog with `state: 'unavailable'`. Downstream, t3code's workflow catalog then shows
+     * no prompts at all.
+     *
+     * Only the item route below existed, so every per-prompt call worked while the listing did not
+     * — the shape that makes this read as "the client broke" rather than "one route is missing".
+     * `api-security.ts` already guards this prefix with the read token, and `app.use` on a path
+     * covers the collection as well as its children, so this inherits that gate.
+     *
+     * Summaries, not details: a listing names no prompt, so it must not hand back every prompt's
+     * instruction body (`33da6227`). `buildPromptCatalogSummary` already carries every field the
+     * workbench projects — id, name, category, description, arguments, composerInputArgument,
+     * executionType, revision.
+     */
+    app.get('/api/v1/catalog/prompts', (_req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ prompts: this.convertedPrompts.map(buildPromptCatalogSummary) });
+    });
+
     // Executable prompt content is reserved for authenticated server-side catalog adapters.
     app.get('/api/v1/catalog/prompts/:promptId', (req: Request, res: Response) => {
       res.setHeader('Cache-Control', 'no-store');
-
-      if (this.catalogReadToken === null) {
-        return res.status(503).json({ error: 'Catalog detail endpoint is unavailable' });
-      }
-      if (!this.hasValidCatalogReadToken(req)) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
 
       const promptIdParam = req.params['promptId'];
       const promptId = Array.isArray(promptIdParam) ? promptIdParam[0] : promptIdParam;
@@ -258,6 +210,8 @@ export class ApiRouter {
 
       return res.json(buildPromptCatalogDetail(prompt));
     });
+
+    this.promptAuthority.register(app);
 
     // Get prompts by category
     app.get('/categories/:categoryId/prompts', (req: Request, res: Response) => {
@@ -275,97 +229,27 @@ export class ApiRouter {
     });
   }
 
-  /** Origin matches on scheme+host+port; the port-less defaults admit any port on loopback. */
-  private isAllowedOrigin(origin: string): boolean {
-    const normalized = origin.trim().toLowerCase().replace(/\/$/, '');
-    if (this.allowedOrigins.has(normalized)) return true;
-
-    // `http://localhost:3000` matches the `http://localhost` default.
-    try {
-      const url = new URL(normalized);
-      return this.allowedOrigins.has(`${url.protocol}//${url.hostname}`);
-    } catch {
-      return false;
-    }
-  }
-
-  /** Constant-time bearer comparison against a configured token. */
-  private hasValidBearer(req: Request, expected: string | null): boolean {
-    if (expected === null) return false;
-
-    const authorization = req.header('authorization');
-    if (authorization?.startsWith('Bearer ') !== true) return false;
-
-    const candidate = authorization.slice('Bearer '.length).trim();
-    if (candidate.length === 0) return false;
-
-    const expectedDigest = createHash('sha256').update(expected).digest();
-    const candidateDigest = createHash('sha256').update(candidate).digest();
-    return timingSafeEqual(expectedDigest, candidateDigest);
-  }
-
-  /**
-   * Gate for the four mutating tool routes. Fails closed exactly like the catalog
-   * route: an unconfigured token is a refusal, not an open door.
-   */
-  private requireToolsWriteToken(req: Request, res: Response): boolean {
-    res.setHeader('Cache-Control', 'no-store');
-
-    if (this.toolsWriteToken === null) {
-      res.status(503).json({ error: 'Tool write endpoints are unavailable' });
-      return false;
-    }
-    if (!this.hasValidBearer(req, this.toolsWriteToken)) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return false;
-    }
-    return true;
-  }
-
-  private hasValidCatalogReadToken(req: Request): boolean {
-    const authorization = req.header('authorization');
-    if (authorization?.startsWith('Bearer ') !== true) return false;
-
-    const candidate = authorization.slice('Bearer '.length).trim();
-    if (candidate.length === 0 || this.catalogReadToken === null) return false;
-
-    const expectedDigest = createHash('sha256').update(this.catalogReadToken).digest();
-    const candidateDigest = createHash('sha256').update(candidate).digest();
-    return timingSafeEqual(expectedDigest, candidateDigest);
-  }
-
   /**
    * Setup tool API routes
    */
   private setupToolRoutes(app: express.Application): void {
-    /*
-     * Every route below MUTATES server-owned resources — create, update, delete, reload.
-     * They were previously reachable with no credential at all, while the read-only
-     * catalog route required a bearer token: a posture where reading a template was
-     * harder than deleting one. Authentication runs before the handler, so a refused
-     * request never reaches `resource_manager`.
-     */
     // Create category endpoint
     app.post('/api/v1/tools/create_category', async (req: Request, res: Response) => {
-      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleCreateCategory(req, res);
     });
 
     // Update prompt endpoint
     app.post('/api/v1/tools/update_prompt', async (req: Request, res: Response) => {
-      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleUpdatePrompt(req, res);
     });
 
     // Delete prompt endpoint
     app.delete('/api/v1/tools/prompts/:id', async (req: Request, res: Response) => {
-      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleDeletePrompt(req, res);
     });
 
     // Reload prompts endpoint
     app.post('/api/v1/tools/reload_prompts', async (req: Request, res: Response) => {
-      if (!this.requireToolsWriteToken(req, res)) return;
       await this.handleReloadPrompts(req, res);
     });
   }
@@ -386,9 +270,25 @@ export class ApiRouter {
 
       const { id, name } = req.body;
 
-      // Categories are directory-based — create the category directory
+      // Categories are directory-based — create the category directory.
+      //
+      // `id` arrives straight off the HTTP body. This is the same unvalidated-segment defect the
+      // three MCP writers carried, on a surface the type-by-type fix did not reach — found by
+      // enumerating every file that resolves a resource root and writes, which is what
+      // `validate:contained-resource-writes` now does on every run.
       const promptsDir = this.configManager.getPromptsDirectory();
-      const categoryDirPath = path.join(promptsDir, id);
+      let categoryDirPath: string;
+      try {
+        validateCategoryName(id);
+        categoryDirPath = resolveContainedPath(promptsDir, id);
+      } catch (error) {
+        // Generic to the client, specific to the log — the message names absolute server paths.
+        this.logger.warn(
+          `Rejected create_category with an unusable id: ${error instanceof Error ? error.message : String(error)}`
+        );
+        res.status(400).json({ error: 'Invalid category id.' });
+        return;
+      }
 
       if (existsSync(categoryDirPath)) {
         res.status(400).json({ error: `Category '${id}' already exists.` });
@@ -629,18 +529,12 @@ export function createApiRouter(
   promptManager?: PromptAssetManager,
   mcpToolsManager?: McpToolRouter
 ): ApiRouter {
-  const configuredOrigins = process.env['MCP_HTTP_ALLOWED_ORIGINS']
-    ?.split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-
   return new ApiRouter(logger, configManager, promptManager, mcpToolsManager, {
     catalogReadToken: process.env['MCP_CATALOG_READ_TOKEN'],
-    toolsWriteToken: process.env['MCP_TOOLS_WRITE_TOKEN'],
-    // Naming any origin REPLACES the loopback defaults rather than adding to them, so an
-    // operator publishing under a real hostname states the full policy in one place.
-    ...(configuredOrigins !== undefined && configuredOrigins.length > 0
-      ? { allowedOrigins: configuredOrigins }
-      : {}),
+    catalogWriteToken: process.env['MCP_CATALOG_WRITE_TOKEN'],
+    allowedOrigins: (process.env['MCP_HTTP_ALLOWED_ORIGINS'] ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
   });
 }

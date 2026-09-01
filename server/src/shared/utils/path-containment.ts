@@ -39,7 +39,7 @@
  * writes stop deriving their path from caller-supplied strings.
  */
 
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /**
  * True when `candidate` resolves to `root` itself or something beneath it.
@@ -60,7 +60,15 @@ export function isPathInside(root: string, candidate: string): boolean {
   }
 
   const rel = relative(resolvedRoot, resolvedCandidate);
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  if (rel === '' || isAbsolute(rel)) {
+    return rel === '';
+  }
+  // `!rel.startsWith('..')` would be wrong for a legitimate directory whose NAME begins with
+  // dots: `<root>/..foo` is inside the root, and yields the relative path `..foo`. Comparing
+  // against the traversal segment exactly — `..` alone, or `..` followed by a separator — admits
+  // it while still rejecting every real escape. Latent today (the id and category patterns reject
+  // such a name first) and corrected here so the predicate does not depend on them to be right.
+  return rel !== '..' && !rel.startsWith(`..${sep}`);
 }
 
 /**
@@ -81,4 +89,30 @@ export function assertPathInside(root: string, candidate: string, label: string)
       `location outside ${resolve(root)}. Resource ids and categories name a directory ` +
       `beneath the root; they cannot contain path separators or '..'.`
   );
+}
+
+/**
+ * Join caller-supplied segments onto `root` and return the path only if it is contained.
+ *
+ * The join IS the check, which is the point. `assertPathInside` above requires the caller to
+ * build the path and then remember a second call — and a guard the caller must remember is the
+ * shape this repository has already been bitten by twice: `validateCategoryName` shipped with
+ * ZERO call sites while reading as coverage, and `validatePromptId` was reached from the draft
+ * service and from nowhere else. A function that cannot hand back an unchecked path removes the
+ * remembering.
+ *
+ * Both are exported deliberately. `assertPathInside` remains correct where the caller already
+ * holds a fully-built path from somewhere else; this is the one to reach for when the path is
+ * being composed here, which is every resource write.
+ */
+export function resolveContainedPath(root: string, ...segments: string[]): string {
+  const candidate = join(root, ...segments);
+  if (!isPathInside(root, candidate)) {
+    throw new Error(
+      `Refusing to write outside the resource root: the supplied path segments resolve to a ` +
+        `location outside ${resolve(root)}. Resource ids and categories name a directory ` +
+        `beneath the root; they cannot contain path separators or '..'. Nothing was written.`
+    );
+  }
+  return candidate;
 }

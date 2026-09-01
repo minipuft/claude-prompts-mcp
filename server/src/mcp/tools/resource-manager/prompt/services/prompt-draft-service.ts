@@ -4,7 +4,6 @@ import { PRESERVED_PROMPT_YAML_KEYS } from '../operations/file-operations.js';
 import {
   UPDATE_FIELDS,
   diagnosePromptWrite,
-  normalizePromptId,
   validateChainStepReferences,
   validatePromptId,
   validateToolDefinitions,
@@ -14,6 +13,7 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
+import { normalizePromptId } from '#shared/utils/resource-ids.js';
 
 interface PreparedPromptDraft {
   canonicalId: string;

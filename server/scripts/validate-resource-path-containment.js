@@ -41,7 +41,15 @@ import { VERDICT, auditExceptions, reportExceptionAudit } from './lib/exception-
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATE = 'validate:resource-path-containment';
-const GUARD = 'assertPathInside';
+/**
+ * Either containment call satisfies the gate.
+ *
+ * `resolveContainedPath` is the parse-don't-validate form: it performs the join AND the check, so
+ * a caller cannot obtain an unchecked path. `assertPathInside` remains correct where the path was
+ * built elsewhere. Accepting only the assert form would have failed every writer that adopted the
+ * stronger one — a gate rejecting the better guard because it recognises only the weaker.
+ */
+const GUARDS = ['assertPathInside', 'resolveContainedPath'];
 
 /**
  * The resource-WRITE surface: modules that turn a caller-supplied id or category into a
@@ -49,7 +57,21 @@ const GUARD = 'assertPathInside';
  * individually, so a new writer is covered the day it is added rather than the day someone
  * remembers to append it here.
  */
-const SURFACE = [/file-writer\.ts$/, /lifecycle-processor\.ts$/, /file-operations\.ts$/];
+const SURFACE = [
+  /file-writer\.ts$/,
+  /lifecycle-processor\.ts$/,
+  /file-operations\.ts$/,
+  // Added 2026-08-31. The three patterns above name a filename ROLE, which covers a new writer
+  // that adopts the naming and is structurally blind to one that does not. Two real sites sat
+  // outside it and were unguarded on main: the HTTP `create_category` handler (`api.ts`), which
+  // joins a request-body field straight into `mkdir`, and `skills-sync/service.ts`, which writes
+  // three export paths. Neither filename could ever match a `*-writer`/`*-processor` pattern, so
+  // they were not "missed" — they were unreachable by the selector. Naming them keeps the role
+  // patterns working while closing the two holes; the durable fix is the behavioural check below,
+  // which flags ANY file in this set that builds a path without a guard.
+  /mcp\/http\/api\.ts$/,
+  /modules\/skills-sync\/service\.ts$/,
+];
 
 /** Files matching the surface that legitimately construct no resource path. */
 const ACCEPTED = [];
@@ -72,7 +94,7 @@ function collect() {
 
     const guarded = sourceFile
       .getDescendantsOfKind(SyntaxKind.CallExpression)
-      .some((call) => call.getExpression().getText() === GUARD);
+      .some((call) => GUARDS.includes(call.getExpression().getText()));
 
     // A file that builds no FILESYSTEM path has nothing to contain.
     //
@@ -84,9 +106,21 @@ function collect() {
     const importsPathJoin = sourceFile.getImportDeclarations().some((decl) => {
       const from = decl.getModuleSpecifierValue();
       if (from !== 'node:path' && from !== 'path') return false;
-      return decl
+      const named = decl
         .getNamedImports()
-        .some((named) => (named.getAliasNode() ?? named.getNameNode()).getText() === 'join');
+        .some((entry) => (entry.getAliasNode() ?? entry.getNameNode()).getText() === 'join');
+      if (named) return true;
+      // A DEFAULT or NAMESPACE import counts too — `import path from 'node:path'` followed by
+      // `path.join(...)` builds a filesystem path just as surely as a named `join`. Checking only
+      // named imports measured "imports a symbol called join" rather than "builds a path", and the
+      // two disagree: `skills-sync/service.ts` writes three export paths through a default-imported
+      // `path` and was skipped by this check entirely, so its lack of a guard read as compliance.
+      const binding =
+        decl.getDefaultImport()?.getText() ?? decl.getNamespaceImport()?.getText() ?? null;
+      if (binding === null) return false;
+      return sourceFile
+        .getDescendantsOfKind(SyntaxKind.CallExpression)
+        .some((call) => call.getExpression().getText() === `${binding}.join`);
     });
     const buildsPath = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
       const text = call.getExpression().getText();
@@ -118,7 +152,7 @@ const audit = auditExceptions({
 });
 
 for (const file of unguarded.filter((f) => !ACCEPTED.some((e) => e.subject === f))) {
-  console.error(`❌ ${file} — builds paths but never calls ${GUARD}()`);
+  console.error(`❌ ${file} — builds paths but never calls ${GUARDS.join('() or ')}()`);
   console.error(`     Resource writes must be contained: import assertPathInside from`);
   console.error(`     #shared/utils/path-containment.js and assert the joined directory.`);
 }
