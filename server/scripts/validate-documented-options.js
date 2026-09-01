@@ -60,6 +60,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--write', // prettier --write
   '--access', // npm publish --access public
   '--tags', // git push --tags
+  '--oneline', // git log --oneline (CONTRIBUTING §Titles name the outcome)
   '--title', // gh release create
   '--notes', // gh release create
   '--plugin-dir', // claude --plugin-dir

@@ -358,6 +358,28 @@ contract or output-shape change; a `vhs` GIF only when there is a terminal sessi
 the mutation that makes it fail. `2823 tests` with no baseline tells the reader nothing;
 `unit 2782 -> 2823 (+41)` does. A null result needs its positive control in the same row.
 
+#### Titles name the outcome
+
+The PR title becomes the squash-merge subject and the line release-please writes into the
+changelog. It is the one sentence most readers ever see, so it names what is TRUE AFTER MERGE, not
+what the session did. `commitlint` warns (never blocks) on the two most common misses.
+
+| Strategy                           | Test                                                                                                                     | Before -> after                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Outcome over activity              | Complete "After this merges, ___" with the subject                                                                       | `execute the security review` -> `refuse gate commands outside the operator's allowlist`          |
+| Release-notes test                 | Would it read correctly under **Fixed** / **Added** in a release?                                                        | `resource-surface consolidation` -> `resource writes land only inside the resource root`          |
+| State verbs over session verbs     | refuse · interrupt · require · carry · stop · bound -- not implement · execute · consolidate · update · improve · harden | `harden the HTTP transport` -> `reject requests the MCP spec forbids`                             |
+| One outcome                        | `and` or `-- a, b, and c` is two PRs, or one umbrella that has not been named                                            | `mid-chain unknown surfacing and adaptive consolidation` -> `blocking unknowns interrupt the run` |
+| No plan names                      | A plan name says what you were doing; the body links the plan                                                            | `execute plan 2A` -> `a paused run can be claimed by another client`                              |
+| Scope is where a reader would grep | The narrowest scope in `commitlint.config.mjs` the diff lives in                                                         | `fix(server)` -> `fix(gates)`                                                                     |
+| `!` names the consumer's move      | A breaking title says what the consumer must change                                                                      | `fix(gates)!: shell_command is an argv array; a string fails to load`                             |
+| Fits `git log --oneline`           | <=72 characters preferred; 100 enforced                                                                                  |                                                                                                   |
+
+Commit subjects follow the same rules one level down: the revert test (below) decides the
+boundary, and the subject names what is true after that one commit. A commit body past ~1,500
+characters is a plan note wearing a commit -- `commitlint` warns; move the reasoning to the
+implementation-notes and link it.
+
 **Scope: a PR is one plan or goal; a commit is one concern.**
 
 These are different units and conflating them is what makes a branch unreviewable. A PR that
