@@ -798,3 +798,38 @@ was blind to this defect and still is; the covering suites (181 unit, 9 e2e) pas
 without the fix, because none of them reloads under a workspace and reads served content. Marking
 P6.1 ✓ on those is honest only because the row claims the code change, not the behaviour — the
 behaviour claim is P6.2 and it is open.
+
+### P6.2 / P6.3 execution (2026-09-01)
+
+**DEV-P6-4 — the row's own falsifier named the wrong instrument, and it was rejected on
+measurement.** P6.2 was written as "observed by `prompts/get` within one debounce window", which
+implies an e2e driving a live server through its 500ms watcher. Building it that way would have
+added transport and timing without adding evidence about the property in question — WHICH ROOTS the
+reload composes — and would have traded a deterministic assertion for a flaky one. The test reaches
+`reloadPromptData` directly against real temp directories and a real `PromptAssetManager`, mocking
+only the four config accessors that name the roots. The falsifier was rewritten in place rather than
+satisfied literally; the authored version is preserved in the row so the substitution is visible.
+
+**The finding that explains the whole defect: zero tests exercised `reloadPromptData`.** Not few —
+none. That is why a defect this large sat behind a green suite for as long as it did, and it is why
+P6.1's ✓ was honest only about the code change. The suite now covers the reload path at all.
+
+**Mutation result, and why the split matters.** Restoring the single-directory load fails **5 of 6**
+cases. The sixth — an edit to a PRIMARY-tree prompt — passes under both versions, by design: it is
+the positive control, and it passed throughout the defect's lifetime. A suite where all six went red
+would have been the weaker result, because it could not distinguish "the fix works" from "the reload
+returns nothing at all".
+
+**DEV-P6-5 — extending the port broke a test stub, for the second time.** Adding
+`getOverlayResourceDirs` to `ResourcePathSource` made `resource-write-destination.test.ts` fail
+`typecheck:tests:ratchet` — the identical failure P1.2 produced when it added
+`getBundledResourceDir`. Twice now, the same interface, the same stub, the same gate catching it.
+Worth noting that the gate DID catch it both times and `typecheck` alone did not: `tsconfig.json`
+excludes `tests/`, so the tests-ratchet is the only thing that sees a port change's call sites.
+
+**P6.3 — both worktrees retired.** `claude-prompts-mcp-issues` needed `--force` for its uncommitted
+`.staging/i229-plan-notes-append.md`; that file is the analysis this whole tier was built from, and
+it is absorbed into P6's rows and these notes, with a copy at `/tmp/p6-retired/` as cheap insurance.
+`feat/settability-parity`'s worktree was clean. Both branches took `-D`, not `-d`, because
+squash-merge leaves a fully-landed branch looking unmerged — the same trap that made PR #255 read as
+needing a rebase.
