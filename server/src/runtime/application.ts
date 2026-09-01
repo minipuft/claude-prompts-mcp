@@ -26,6 +26,7 @@ import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
+import { indexerResourceRoots } from './resource-roots.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
@@ -806,7 +807,7 @@ export class Application {
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
         const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-        const { createResourceIndexer, reportResourceSyncFailures } =
+        const { createResourceIndexer, reportResourceSyncFailures, reportShadowedResources } =
           await import('#infra/database/resource-indexer.js');
         const { ScriptToolDefinitionLoader } =
           await import('#modules/automation/core/script-definition-loader.js');
@@ -817,10 +818,12 @@ export class Application {
         const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
         const indexer = createResourceIndexer(dbManager, this.logger, {
           resourcesDir,
+          resourceRoots: indexerResourceRoots(this.pathResolver),
           toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
         });
         const syncResult = await indexer.syncAll();
         reportResourceSyncFailures(syncResult, this.logger);
+        reportShadowedResources(syncResult, this.logger);
         this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 

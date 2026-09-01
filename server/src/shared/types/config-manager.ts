@@ -60,6 +60,12 @@ export interface ConfigManager {
   getResolvedPromptsDirectory(overridePath?: string): string;
   getServerRoot(): string;
   getGatesDirectory(): string;
+  getFrameworksDirectory(): string;
+  /**
+   * The bundled (package-shipped) directory for a resource type — always read, never written.
+   * Undefined when no path source is injected, meaning "no distinct bundled source".
+   */
+  getBundledResourceDirectory(resourceType: string): string | undefined;
 
   // ── Config reload ────────────────────────────────────────────────────
 

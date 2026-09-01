@@ -41,7 +41,7 @@ function warnIfPubliclyBound(logger: Logger, host: string): void {
   logger.warn(
     `[http] bound to ${host}, which is reachable beyond this machine. Ensure ` +
       `MCP_HTTP_ALLOWED_ORIGINS names the origins you expect and that the tool write ` +
-      `endpoints have MCP_TOOLS_WRITE_TOKEN set.`
+      `endpoints have MCP_CATALOG_WRITE_TOKEN set.`
   );
 }
 

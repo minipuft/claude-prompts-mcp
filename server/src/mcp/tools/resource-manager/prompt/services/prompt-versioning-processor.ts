@@ -188,6 +188,12 @@ export class PromptVersioningProcessor {
               `Version history is created automatically when updates are made.`,
           },
         ],
+        structuredContent: {
+          action: 'history',
+          id,
+          current_version: history?.current_version ?? 0,
+          versions: [],
+        },
         isError: false,
       };
     }
@@ -198,6 +204,17 @@ export class PromptVersioningProcessor {
     );
     return {
       content: [{ type: 'text' as const, text: formatted }],
+      structuredContent: {
+        action: 'history',
+        id,
+        current_version: history.current_version,
+        versions: history.versions.slice(0, limit ?? 10).map((entry) => ({
+          version: entry.version,
+          date: entry.date,
+          diff_summary: entry.diff_summary,
+          description: entry.description,
+        })),
+      },
       isError: false,
     };
   }
@@ -257,18 +274,29 @@ export class PromptVersioningProcessor {
     // same way the real call does, and BEFORE the version row is recorded, so neither the file nor
     // the table moves.
     if (args.dry_run === true) {
+      const diff = this.textDiffService.generateObjectDiff(
+        currentState,
+        snapshot,
+        `${id}/prompt.yaml`
+      );
       return {
         content: [
           {
             type: 'text' as const,
-            text: describeRollbackPreview(
-              'prompt',
-              id,
-              version,
-              this.textDiffService.generateObjectDiff(currentState, snapshot, `${id}/prompt.yaml`)
-            ),
+            text: describeRollbackPreview('prompt', id, version, diff),
           },
         ],
+        structuredContent: {
+          action: 'rollback',
+          id,
+          target_version: version,
+          dry_run: true,
+          valid: true,
+          mutated: false,
+          has_changes: diff.hasChanges,
+          diff: diff.diff,
+          stats: diff.stats,
+        },
         isError: false,
       };
     }
@@ -325,6 +353,14 @@ export class PromptVersioningProcessor {
             `🔄 Prompts reloaded`,
         },
       ],
+      structuredContent: {
+        action: 'rollback',
+        id,
+        restored_version: version,
+        current_version: saveResult.version,
+        mutated: true,
+        refreshed: true,
+      },
       isError: false,
     };
   }
@@ -356,9 +392,18 @@ export class PromptVersioningProcessor {
       };
     }
 
+    const from = result.from;
+    const to = result.to;
+    if (from === undefined || to === undefined) {
+      return {
+        content: [{ type: 'text' as const, text: '❌ Compare failed: version data unavailable' }],
+        isError: true,
+      };
+    }
+
     const diffResult = this.textDiffService.generateObjectDiff(
-      result.from!.snapshot,
-      result.to!.snapshot,
+      from.snapshot,
+      to.snapshot,
       `${id}/prompt.yaml`
     );
 
@@ -366,8 +411,8 @@ export class PromptVersioningProcessor {
       `📊 **Version Comparison**: ${id}\n\n` +
       `| Property | Version ${from_version} | Version ${to_version} |\n` +
       `|----------|-----------|------------|\n` +
-      `| Date | ${new Date(result.from!.date).toLocaleString()} | ${new Date(result.to!.date).toLocaleString()} |\n` +
-      `| Description | ${result.from!.description} | ${result.to!.description} |\n\n`;
+      `| Date | ${new Date(from.date).toLocaleString()} | ${new Date(to.date).toLocaleString()} |\n` +
+      `| Description | ${from.description} | ${to.description} |\n\n`;
 
     if (diffResult.hasChanges) {
       response += `${diffResult.formatted}\n`;
@@ -377,6 +422,23 @@ export class PromptVersioningProcessor {
 
     return {
       content: [{ type: 'text' as const, text: response }],
+      structuredContent: {
+        action: 'compare',
+        id,
+        from: {
+          version: from_version,
+          date: from.date,
+          description: from.description,
+        },
+        to: {
+          version: to_version,
+          date: to.date,
+          description: to.description,
+        },
+        has_changes: diffResult.hasChanges,
+        diff: diffResult.diff,
+        stats: diffResult.stats,
+      },
       isError: false,
     };
   }

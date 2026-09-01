@@ -25,6 +25,8 @@ import {
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
 
+import { buildServerEnv } from './helpers/child-env.js';
+
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,12 +47,11 @@ let streamableHttpServerPort: number | null = null;
 function spawnServer(runtimeRoot?: string): ChildProcess {
   return spawn('node', [SERVER_PATH, '--transport=stdio', '--quiet'], {
     cwd: path.join(PROJECT_ROOT, 'server'),
-    env: {
-      ...process.env,
+    env: buildServerEnv({
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
       ...(runtimeRoot !== undefined ? { MCP_RUNTIME_ROOT: runtimeRoot } : {}),
-    },
+    }),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
@@ -172,17 +173,14 @@ describe('MCP Server Smoke Tests', () => {
       const runtimeRoot = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-runtime-'));
       const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
         cwd: path.join(PROJECT_ROOT, 'server'),
-        env: {
-          ...process.env,
+        env: buildServerEnv({
           NODE_ENV: 'production',
-          NODE_OPTIONS: '',
-          JEST_WORKER_ID: undefined,
           CI: 'false',
           GITHUB_ACTIONS: 'false',
           MCP_RUNTIME_ROOT: runtimeRoot,
           MCP_WORKSPACE: PROJECT_ROOT,
           MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-        },
+        }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stderr = '';
@@ -213,17 +211,15 @@ describe('MCP Server Smoke Tests', () => {
       const workspace = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-workspace-'));
       const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
         cwd: path.join(PROJECT_ROOT, 'server'),
-        env: {
-          ...process.env,
+        // No MCP_RUNTIME_ROOT: this case is about the fallback to MCP_WORKSPACE, and the helper
+        // scrubs an inherited one rather than each caller remembering to blank it.
+        env: buildServerEnv({
           NODE_ENV: 'production',
-          NODE_OPTIONS: '',
-          JEST_WORKER_ID: undefined,
           CI: 'false',
           GITHUB_ACTIONS: 'false',
-          MCP_RUNTIME_ROOT: undefined,
           MCP_WORKSPACE: workspace,
           MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-        },
+        }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stderr = '';

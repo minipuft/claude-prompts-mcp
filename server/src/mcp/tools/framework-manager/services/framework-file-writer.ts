@@ -7,7 +7,7 @@
  */
 
 import { existsSync } from 'fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { cp, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'path';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -18,7 +18,7 @@ import {
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
-import { assertPathInside } from '#shared/utils/path-containment.js';
+import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
 import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
@@ -113,12 +113,16 @@ export class FrameworkFileWriter {
    * Load existing framework files from disk
    */
   async loadExistingFramework(id: string): Promise<ExistingFrameworkData | null> {
-    const frameworkDir = this.getFrameworkDir(id);
-    const frameworkPath = join(frameworkDir, 'framework.yaml');
-
-    if (!existsSync(frameworkPath)) {
+    // Read from wherever the framework ACTUALLY lives, which is not always where a write would go
+    // (P1.2). A framework served from the bundled tree has no directory under the writable root,
+    // so this returned null and `handleUpdate` reported `Files may be corrupted` — a false
+    // statement about a framework that loads and serves correctly. Measured 2026-08-30: updating
+    // bundled `cageerf` under a distinct resources root failed outright.
+    const frameworkDir = this.resolveExistingFrameworkDir(id);
+    if (frameworkDir === null) {
       return null;
     }
+    const frameworkPath = join(frameworkDir, 'framework.yaml');
 
     try {
       const framework = await loadYamlFile<Record<string, unknown>>(frameworkPath);
@@ -132,7 +136,10 @@ export class FrameworkFileWriter {
       let phasesPath: string | null = null;
       const phasesFileRef = framework['phasesFile'];
       if (phasesFileRef !== undefined && phasesFileRef !== null) {
-        phasesPath = join(frameworkDir, String(phasesFileRef));
+        // A file REFERENCE is caller-authorable too, and this is a read that returns its content
+        // to the client — an uncontained join here discloses an arbitrary file rather than
+        // writing one. Same guard, because it is the same class.
+        phasesPath = resolveContainedPath(frameworkDir, String(phasesFileRef));
         if (existsSync(phasesPath)) {
           const loadedPhases = await loadYamlFile<Record<string, unknown>>(phasesPath);
           phases = loadedPhases ?? null;
@@ -151,7 +158,7 @@ export class FrameworkFileWriter {
       let judgePromptPath: string | null = null;
       const judgePromptFileRef = framework['judgePromptFile'];
       if (judgePromptFileRef !== undefined && judgePromptFileRef !== null) {
-        judgePromptPath = join(frameworkDir, String(judgePromptFileRef));
+        judgePromptPath = resolveContainedPath(frameworkDir, String(judgePromptFileRef));
         if (existsSync(judgePromptPath)) {
           judgePrompt = await readFile(judgePromptPath, 'utf8');
         }
@@ -307,10 +314,29 @@ export class FrameworkFileWriter {
     const frameworkDir = this.getFrameworkDir(data.id);
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
 
+    // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
+    // bundled tree and the write goes elsewhere. Same reasoning as prompts: the merge below
+    // reconstructs `framework.yaml` and `phases.yaml` from data, so anything else in the
+    // directory — `judge-prompt.md`, `system-prompt.md`, any file a future framework carries —
+    // would simply not exist at the destination.
+    const existingDir = this.resolveExistingFrameworkDir(data.id);
+    const copyOnWriteSource =
+      existingDir !== null && existingDir !== frameworkDir && !existsSync(frameworkDir)
+        ? existingDir
+        : null;
+
     const txResult = await this.mutationTransaction.run({
       targets: [{ path: frameworkDir, kind: 'directory' }],
       mutate: async () => {
         const paths: string[] = [];
+
+        if (copyOnWriteSource !== null) {
+          await cp(copyOnWriteSource, frameworkDir, { recursive: true });
+          this.logger.info(
+            `Copied framework '${data.id}' from ${copyOnWriteSource} into ${frameworkDir} before editing — ` +
+              'this is now a separate copy, and updates to the bundled framework will not reach it'
+          );
+        }
 
         await mkdir(frameworkDir, { recursive: true });
         paths.push(frameworkDir);
@@ -502,16 +528,30 @@ export class FrameworkFileWriter {
    * Get the directory path for a framework.
    * Used by versioning service to locate history files.
    */
+  /**
+   * The directory a framework currently lives in: the writable root when it is resident there,
+   * otherwise the bundled root, otherwise null (no such framework anywhere).
+   *
+   * Distinct from `getFrameworkDir`, which answers where a write GOES. Keeping the two questions
+   * separate is the whole of P1.2 — collapsing them is what made a bundled framework unreadable
+   * to its own updater.
+   */
+  public resolveExistingFrameworkDir(id: string): string | null {
+    const writable = this.getFrameworkDir(id);
+    if (existsSync(join(writable, 'framework.yaml'))) return writable;
+
+    const bundledRoot = this.configManager.getBundledResourceDirectory('frameworks');
+    if (bundledRoot === undefined) return null;
+    const bundled = resolveContainedPath(bundledRoot, id.toLowerCase());
+    return existsSync(join(bundled, 'framework.yaml')) ? bundled : null;
+  }
+
   public getFrameworkDir(id: string): string {
-    const serverRoot = this.configManager.getServerRoot();
-    const frameworksRoot = join(serverRoot, 'resources', 'frameworks');
-    const frameworkDir = join(frameworksRoot, id.toLowerCase());
-    // Every framework read, write, and delete resolves its directory here, so this is the
-    // one place the containment invariant has to hold. `toLowerCase()` does not remove a
-    // `..`, and framework ids carry no format rule -- the same shape that let a gate id
-    // write outside the resource root (reproduced 2026-08-25).
-    assertPathInside(frameworksRoot, frameworkDir, 'framework id');
-    return frameworkDir;
+    // Single choke point for every framework path, so containment holds for write, delete and
+    // versioning alike. Measured 2026-08-30: `id: '../../ESCAPED_FW'` wrote framework.yaml,
+    // phases.yaml and system-prompt.md outside the resources root, reported as created, with a
+    // benign-id control succeeding beside it.
+    return resolveContainedPath(this.configManager.getFrameworksDirectory(), id.toLowerCase());
   }
 
   private needsPhasesFile(data: Partial<FrameworkCreationData>): boolean {

@@ -15,6 +15,8 @@ import * as net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { buildServerEnv } from './child-env.js';
+
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,23 +81,37 @@ export function startServerWithHttp(
     console.log('  ARGS:', args);
   }
 
-  // Build clean environment - remove Jest-specific vars that prevent server from starting
-  // See src/index.ts lines 843-845: server skips main() if JEST_WORKER_ID is set
-  const cleanEnv = { ...process.env };
-  delete cleanEnv.NODE_OPTIONS; // Remove Jest's --experimental-vm-modules
-  delete cleanEnv.NODE_ENV; // Don't pass test mode to server
-  delete cleanEnv.JEST_WORKER_ID; // CRITICAL: Server checks this and skips main() if set
+  // A caller that redirects the workspace redirects the RESOURCES too.
+  //
+  // `MCP_RESOURCES_PATH` outranks `MCP_WORKSPACE` in `PathResolver.getResourcesPath()` (priority 1
+  // vs 2), so defaulting it here silently defeated any caller that set only `MCP_WORKSPACE` to get
+  // an isolated tree. claims-conformance did exactly that: its "isolated workspace" server copied
+  // `server/resources` to a temp dir, set `MCP_WORKSPACE`, and then read AND WROTE the package tree
+  // anyway — leaving 7 `examples/conformance_*` directories in `server/resources/prompts` on a
+  // fully PASSING run (measured 2026-08-30, 105/105 green). `examples/` is tracked, so they surface
+  // as untracked and a later `git add -A` commits them, which happened once already (reverted at
+  // `d881dad2`). The scenarios still passed because the workspace OVERLAY is resolved separately,
+  // so the one fixture they assert on was found while every mutation landed in the wrong tree.
+  //
+  // The defaults exist to pin a server that has no caller intent at the package tree. Once a caller
+  // states where the tree is, a default that outranks that statement is not a default.
+  const callerEnv = options.env ?? {};
+  const callerRedirectsResources =
+    callerEnv['MCP_WORKSPACE'] !== undefined || callerEnv['MCP_RESOURCES_PATH'] !== undefined;
 
   const proc = spawn('node', args, {
     cwd,
-    env: {
-      ...cleanEnv,
+    env: buildServerEnv({
       PORT: String(port), // Server uses PORT env var for port
-      MCP_WORKSPACE: PROJECT_ROOT,
-      MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-      // Note: NODE_ENV is NOT set - let server run in normal mode
-      ...(options.env ?? {}),
-    },
+      ...(callerRedirectsResources
+        ? {}
+        : {
+            MCP_WORKSPACE: PROJECT_ROOT,
+            MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+          }),
+      // NODE_ENV stays unset — the server runs in normal mode.
+      ...callerEnv,
+    }),
     // Use 'ignore' for stdin to avoid triggering 'end' event handler
     // which exits the process (see logging/index.ts setupProcessEventHandlers)
     stdio: ['ignore', 'pipe', 'pipe'],

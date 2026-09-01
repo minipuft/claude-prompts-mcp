@@ -69,6 +69,12 @@ class TestVersioningConfigProvider implements VersioningConfigProvider {
   getServerRoot(): string {
     return process.cwd();
   }
+  getFrameworksDirectory(): string {
+    return path.join(process.cwd(), 'resources', 'frameworks');
+  }
+  getBundledResourceDirectory(): string | undefined {
+    return undefined;
+  }
 }
 
 /**
@@ -188,6 +194,7 @@ describe('Gate versioning through the real write path', () => {
 
     const configManager = {
       getGatesDirectory: () => gatesDir,
+      getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
 
     const ctx: GateResourceContext = {
@@ -680,6 +687,8 @@ describe('Framework versioning through the real write path', () => {
     // `getFrameworkDir` resolves to <serverRoot>/resources/frameworks/<id>.
     const configManager = {
       getServerRoot: () => tempDir,
+      getFrameworksDirectory: () => path.join(tempDir, 'resources', 'frameworks'),
+      getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
 
     fileService = new FrameworkFileWriter({
@@ -832,6 +841,7 @@ describe('Prompt rollback refusal writes no version rows', () => {
       logger: mockLogger as unknown as Logger,
       configManager: {
         getResolvedPromptsDirectory: () => promptsDir,
+        getBundledResourceDirectory: () => undefined,
       } as unknown as ConfigManager,
     });
 
@@ -991,7 +1001,10 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
 
     registry = new DriftableGateRegistry(gatesDir);
 
-    const configManager = { getGatesDirectory: () => gatesDir } as unknown as ConfigManager;
+    const configManager = {
+      getGatesDirectory: () => gatesDir,
+      getBundledResourceDirectory: () => undefined,
+    } as unknown as ConfigManager;
 
     const ctx: GateResourceContext = {
       logger: mockLogger as unknown as Logger,
@@ -1187,7 +1200,11 @@ describe('framework create — pre-write and post-write validation must agree (G
     registeredGuides = new Set<string>();
     registeredFrameworks = new Set<string>();
 
-    const configManager = { getServerRoot: () => tempDir } as unknown as ConfigManager;
+    const configManager = {
+      getServerRoot: () => tempDir,
+      getFrameworksDirectory: () => path.join(tempDir, 'resources', 'frameworks'),
+      getBundledResourceDirectory: () => undefined,
+    } as unknown as ConfigManager;
 
     // Real writer, real ResourceMutationTransaction, real ResourceVerificationService.
     fileService = new FrameworkFileWriter({
@@ -1458,7 +1475,11 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     frameworksDir = path.join(tempDir, 'resources', 'frameworks');
     await fs.mkdir(frameworksDir, { recursive: true });
 
-    const configManager = { getServerRoot: () => tempDir } as unknown as ConfigManager;
+    const configManager = {
+      getServerRoot: () => tempDir,
+      getFrameworksDirectory: () => path.join(tempDir, 'resources', 'frameworks'),
+      getBundledResourceDirectory: () => undefined,
+    } as unknown as ConfigManager;
     fileService = new FrameworkFileWriter({
       logger: mockLogger as unknown as Logger,
       configManager,

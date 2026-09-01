@@ -108,6 +108,8 @@ describe('GateToolHandler', () => {
 
     const configManager = {
       getGatesDirectory: () => gatesDir,
+      // No bundled tree in this fixture: the stub answers "no distinct bundled source".
+      getBundledResourceDirectory: () => undefined,
       getVersioningConfig: () => ({ mode: 'off', maxVersions: 50 }),
     } as unknown as ConfigManager;
 
@@ -208,8 +210,14 @@ describe('GateToolHandler', () => {
 
     expect(result.isError).toBe(true);
     const text = (result.content[0] as { text: string }).text;
-    expect(text).toContain('Gate directory not found');
+    // Names the GATE, not a directory. The message used to be `Gate directory not found: <path>`,
+    // which was wrong twice: it described a path that was never meant to exist, and it was also
+    // returned for a gate that DOES exist in the bundled tree (P1.3) — so "not found" was false
+    // in the case that reached it most often. It also put an absolute server path in a
+    // client-facing error. This case is the genuinely-absent one, which still fails.
+    expect(text).toContain('Gate not found');
     expect(text).toContain('missing-gate');
+    expect(text).toContain('Nothing was removed');
   });
 
   test('delete removes a gate that is on disk but was never registered', async () => {

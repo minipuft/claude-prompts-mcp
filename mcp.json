@@ -7,7 +7,6 @@
       "args": ["${PLUGIN_ROOT}/server/dist/index.js", "--transport=stdio"],
       "env": {
         "MCP_WORKSPACE": "${PLUGIN_ROOT}",
-        "MCP_RESOURCES_PATH": "${PLUGIN_ROOT}/server/resources",
         "MCP_RUNTIME_ROOT": "${PLUGIN_DATA}"
       }
     }

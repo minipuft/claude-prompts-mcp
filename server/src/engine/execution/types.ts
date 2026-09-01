@@ -43,6 +43,13 @@ export interface ConvertedPrompt {
   arguments: PromptArgument[];
   /** Interactive composer mapping copied from the prompt's authored metadata. */
   composer?: { inputArgument: string };
+  /**
+   * Absolute path of the resources root this prompt was loaded FROM — see `PromptData.sourceRoot`.
+   *
+   * Carried here as well as on `PromptData` because the write path reads the CONVERTED prompt
+   * (`context.getData().convertedPrompts`) when it resolves what a caller is editing.
+   */
+  sourceRoot?: string;
   // Chain-related properties (isChain removed - now derived from chainSteps presence)
   chainSteps?: ChainStep[];
   /** Whether to register this prompt with MCP. Resolved from prompt/category/global defaults. */

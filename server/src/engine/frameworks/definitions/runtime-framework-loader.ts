@@ -570,7 +570,18 @@ let defaultLoader: RuntimeFrameworkLoader | null = null;
 export function getDefaultRuntimeLoader(
   config?: RuntimeFrameworkLoaderConfig
 ): RuntimeFrameworkLoader {
-  if (!defaultLoader) {
+  // A caller that SUPPLIES config is the composition root asserting the resolved directories;
+  // a caller that omits it is a consumer asking for whatever was established. The old form
+  // (`if (!defaultLoader)`) discarded config whenever anything had already touched the singleton,
+  // so framework directory resolution silently depended on call order — and the losing branch
+  // falls back to `resolveFrameworksDir()`, which finds the package tree.
+  //
+  // That made reads ignore `MCP_RESOURCES_PATH` exactly as writes did. The two agreed only
+  // because both were wrong, which is why it stayed invisible until the write path was fixed
+  // (T1.10): correcting one side alone turned a silent mismatch into a failed registration.
+  //
+  // `module-initializer.ts:219` is the only caller that passes config.
+  if (!defaultLoader || config !== undefined) {
     defaultLoader = new RuntimeFrameworkLoader(config);
   }
   return defaultLoader;

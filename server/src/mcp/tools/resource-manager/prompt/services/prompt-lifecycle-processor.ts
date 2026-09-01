@@ -18,6 +18,7 @@ import {
   type PatchTargetField,
   type TemplatePatchOperation,
 } from '../operations/template-patch.js';
+import { mutationHeadline } from '../utils/mutation-headline.js';
 import {
   UPDATE_FIELDS,
   type PromptWriteDefect,
@@ -32,7 +33,6 @@ import {
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PromptResourceInput } from '../../core/types.js';
-import type { CategoryShipStatus } from '../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { ToolResponse } from '#shared/types/index.js';
@@ -141,8 +141,8 @@ export class PromptLifecycleProcessor {
     );
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
-    let response = `✅ **Prompt Created**: ${displayName} (${canonicalId})\n`;
-    response += `📝 ${description}\n`;
+    // The headline is composed at the END, once verification has run — see `mutationHeadline`.
+    let response = `📝 ${description}\n`;
     response += `${analysis.feedback}`;
 
     if (analysis.suggestions.length > 0) {
@@ -202,8 +202,6 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    response += this.buildCategoryShipWarning(writeResult.categoryShipStatus);
-
     const verification = await this.receiptService.complete({
       action: 'create',
       id: canonicalId,
@@ -214,12 +212,14 @@ export class PromptLifecycleProcessor {
       reason: `Prompt created: ${canonicalId}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
-    if (!verification.verified) {
-      response += `\n❌ **Post-write verification failed**: ${verification.error}\n`;
-    }
 
     return {
-      content: [{ type: 'text' as const, text: response }],
+      content: [
+        {
+          type: 'text' as const,
+          text: mutationHeadline('Created', displayName, canonicalId, verification) + response,
+        },
+      ],
       structuredContent: {
         action: 'create',
         valid: true,
@@ -518,12 +518,19 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    const result = await this.fileOperations.updatePromptImplementation(promptData, suppliedKeys);
+    // `currentPrompt.sourceRoot`, not `promptData` — provenance is deliberately absent from
+    // `canonicalPromptSnapshot`, which is what `promptData` is built from, so that it never
+    // reaches a version snapshot or a diff. It has to arrive as its own argument (P1.2).
+    const result = await this.fileOperations.updatePromptImplementation(
+      promptData,
+      suppliedKeys,
+      currentPrompt?.sourceRoot
+    );
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
     const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 
-    let response = `✅ **Prompt Updated**: ${promptData.name} (${args.id})\n\n`;
-    response += `${result.message}\n\n`;
+    // The headline is composed at the END, once verification has run — see `mutationHeadline`.
+    let response = `${result.message}\n\n`;
 
     if (patchedFields.length > 0) {
       response += `🩹 **Patched**: ${patchedFields.map((field) => `\`${field}\``).join(', ')} (${patchOperations.length} operation(s))\n\n`;
@@ -565,8 +572,6 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    response += this.buildCategoryShipWarning(result.categoryShipStatus);
-
     const verification = await this.receiptService.complete({
       action: 'update',
       id: String(args.id),
@@ -577,12 +582,16 @@ export class PromptLifecycleProcessor {
       reason: `Prompt updated: ${String(args.id)}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
-    if (!verification.verified) {
-      response += `\n❌ **Post-write verification failed**: ${verification.error}\n`;
-    }
 
     return {
-      content: [{ type: 'text' as const, text: response }],
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            mutationHeadline('Updated', String(promptData.name), String(args.id), verification) +
+            response,
+        },
+      ],
       structuredContent: {
         action: 'update',
         receipt: verification.receipt,
@@ -685,28 +694,6 @@ export class PromptLifecycleProcessor {
     };
   }
 
-  /**
-   * P7-D4: `create`/`update` write successfully regardless of whether the target category ships
-   * in the published repo — `server/resources/prompts/.gitignore` allowlists categories, and the
-   * write path never consulted it, so success read identically either way. OQ-P7-4 ruled warn,
-   * not refuse — 103/131 prompts live in untracked categories, so refusing would break the
-   * operator-local workflow. This never fires for a workspace overlay with no `.gitignore` of its
-   * own: `FileOperations` reports `ships: true` when no allowlist file exists to restrict it.
-   */
-  private buildCategoryShipWarning(status: CategoryShipStatus | undefined): string {
-    if (status === undefined || status.ships) {
-      return '';
-    }
-    return (
-      `\n⚠️ **Category not tracked in repo**: '${status.category}' is excluded by ` +
-      '`server/resources/prompts/.gitignore` and will not ship with the repo — it stays local ' +
-      'to this workspace.\n' +
-      'To ship it, add these lines to `server/resources/prompts/.gitignore`:\n' +
-      `    !${status.category}/\n` +
-      `    !${status.category}/**\n`
-    );
-  }
-
   /** One shape for every pre-write refusal on the update path: error response, nothing written. */
   private blockedUpdate(text: string): ToolResponse {
     return {
@@ -752,6 +739,18 @@ export class PromptLifecycleProcessor {
 
     return {
       content: [{ type: 'text' as const, text }],
+      structuredContent: {
+        action: 'update',
+        id: String(promptData['id']),
+        dry_run: true,
+        valid: true,
+        mutated: false,
+        has_changes: diff.hasChanges,
+        diff: diff.diff,
+        stats: diff.stats,
+        resulting_prompt: promptData,
+        warnings: preExisting.map((defect) => defect.message),
+      },
       isError: false,
     };
   }

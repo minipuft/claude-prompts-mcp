@@ -12,7 +12,7 @@ import {
   ResourceVerificationService,
   type ResourceVerificationFailurePayload,
 } from '#modules/resources/services/index.js';
-import { assertPathInside } from '#shared/utils/path-containment.js';
+import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 /**
@@ -133,11 +133,10 @@ export class GateFileWriter {
   }
 
   async writeGateFiles(data: GateCreationData): Promise<GateFileWriteResult> {
-    const gatesDir = this.configManager.getGatesDirectory();
-    const gateDir = path.join(gatesDir, data.id);
-    // Gate ids carry no format rule at all (prompt ids do). Confirmed 2026-08-25:
-    // a `../`-bearing gate id wrote outside the root AND registered in the registry.
-    assertPathInside(gatesDir, gateDir, 'gate id');
+    // `data.id` is caller-supplied and unvalidated for path segments. Measured 2026-08-30:
+    // `id: '../../ESCAPED_GATE'` wrote gate.yaml and guidance.md outside the resources root, and
+    // the tool reported the write. Contained before the directory is created.
+    const gateDir = resolveContainedPath(this.configManager.getGatesDirectory(), data.id);
     const yamlPath = path.join(gateDir, 'gate.yaml');
     const guidancePath = path.join(gateDir, 'guidance.md');
 

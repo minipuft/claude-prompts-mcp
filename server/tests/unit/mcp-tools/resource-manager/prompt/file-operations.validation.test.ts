@@ -20,14 +20,13 @@ import {
 
 import {
   FileOperations,
-  resolveCategoryShipStatus,
   toYamlPromptId,
 } from '../../../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import {
   diagnosePromptWrite,
-  normalizePromptId,
   validatePromptId,
 } from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { normalizePromptId } from '../../../../../src/shared/utils/resource-ids.js';
 
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
 
@@ -53,6 +52,35 @@ describe('FileOperations canonical prompt writes', () => {
 
   afterEach(() => {
     rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  describe('the receipt root is where the write lands (P1.4)', () => {
+    it('reports every affected file beneath getResolvedPromptsDirectory()', async () => {
+      const operations = new FileOperations({ logger, configManager });
+
+      const result = await operations.updatePromptImplementation({
+        id: 'receipt_root_probe',
+        name: 'Receipt Root Probe',
+        category: 'some-category',
+        description: 'd',
+        userMessageTemplate: 'hi',
+        arguments: [],
+        tools: [],
+      });
+
+      // `PromptMutationReceipt.resource_root` is this same call. Asserting the written paths
+      // against it is what makes the receipt's claim checkable — with a workspace overlaying the
+      // bundled tree, "where prompts are read from" and "where a write goes" are two questions,
+      // and a receipt naming the wrong one sends the caller to a file that does not exist.
+      const writeRoot = configManager.getResolvedPromptsDirectory();
+      expect(result.affectedFiles?.length).toBeGreaterThan(0);
+      for (const file of result.affectedFiles ?? []) {
+        expect(path.resolve(file).startsWith(path.resolve(writeRoot))).toBe(true);
+      }
+      expect(
+        existsSync(join(writeRoot, 'some-category', 'receipt_root_probe', 'prompt.yaml'))
+      ).toBe(true);
+    });
   });
 
   /** Parsed rather than string-matched: the assertions below are about values, not formatting. */
@@ -739,59 +767,6 @@ describe('FileOperations canonical prompt writes', () => {
       ).toBe(true);
     });
   });
-
-  describe('categoryShipStatus surfacing (P7-D4)', () => {
-    it('reports ships:true when no .gitignore exists at the resolved prompts directory', async () => {
-      const operations = new FileOperations({ logger, configManager });
-      const result = await operations.updatePromptImplementation({
-        id: 'no_gitignore_prompt',
-        name: 'No Gitignore',
-        category: 'anything',
-        description: 'd',
-        userMessageTemplate: 'hi',
-        arguments: [],
-        tools: [],
-      });
-
-      expect(result.categoryShipStatus).toEqual({
-        category: 'anything',
-        ships: true,
-        gitignorePath: join(promptsDir, '.gitignore'),
-      });
-    });
-
-    it('reports ships:false for a category a local .gitignore excludes, true for one it allows', async () => {
-      mkdirSync(promptsDir, { recursive: true });
-      writeFileSync(join(promptsDir, '.gitignore'), '*\n!examples/\n!examples/**\n', 'utf8');
-      const operations = new FileOperations({ logger, configManager });
-
-      const blocked = await operations.updatePromptImplementation({
-        id: 'p1',
-        name: 'P1',
-        category: 'blocked-cat',
-        description: 'd',
-        userMessageTemplate: 'hi',
-        arguments: [],
-        tools: [],
-      });
-      expect(blocked.categoryShipStatus).toEqual({
-        category: 'blocked-cat',
-        ships: false,
-        gitignorePath: join(promptsDir, '.gitignore'),
-      });
-
-      const shipped = await operations.updatePromptImplementation({
-        id: 'p2',
-        name: 'P2',
-        category: 'examples',
-        description: 'd',
-        userMessageTemplate: 'hi',
-        arguments: [],
-        tools: [],
-      });
-      expect(shipped.categoryShipStatus?.ships).toBe(true);
-    });
-  });
 });
 
 describe('normalizePromptId', () => {
@@ -860,116 +835,4 @@ describe('validatePromptId', () => {
   it('rejects IDs over 100 characters', () => {
     expect(() => validatePromptId('a'.repeat(101))).toThrow(/100 characters/);
   });
-});
-
-// P7 Tier 4.1 / P7-D4: `resolveCategoryShipStatus` is the pure parser the write path consults to
-// answer "will this category ship with the repo?" — table-driven, hand-crafted edge cases first,
-// then bound against `git check-ignore` ground truth for every real category so the parser cannot
-// drift from git's own semantics silently.
-describe('resolveCategoryShipStatus pure parsing (P7-D4)', () => {
-  it('ships when there is no restriction at all (empty .gitignore text)', () => {
-    expect(resolveCategoryShipStatus('', 'anything')).toBe(true);
-  });
-
-  it('blocks every category under a bare `*` with no negation', () => {
-    expect(resolveCategoryShipStatus('*\n', 'anything')).toBe(false);
-  });
-
-  it('un-ignores a category via `!name/` alone, without the `/**` pair', () => {
-    expect(resolveCategoryShipStatus('*\n!examples/\n', 'examples')).toBe(true);
-  });
-
-  it('ignores comment and blank lines', () => {
-    const text = [
-      '# header comment',
-      '',
-      '*',
-      '',
-      '# allow examples',
-      '!examples/',
-      '!examples/**',
-      '',
-    ].join('\n');
-
-    expect(resolveCategoryShipStatus(text, 'examples')).toBe(true);
-    expect(resolveCategoryShipStatus(text, 'other')).toBe(false);
-  });
-
-  it('re-ignores generic children of an un-ignored directory (documentation/* pattern)', () => {
-    const text = [
-      '*',
-      '!documentation/',
-      'documentation/*',
-      '!documentation/readme_improver/',
-      '!documentation/readme_improver/**',
-    ].join('\n');
-
-    // A brand-new prompt under `documentation/` is NOT one of the specifically re-allowed
-    // sub-prompts, so the category does not ship for it — even though `documentation/` itself
-    // was un-ignored as a directory.
-    expect(resolveCategoryShipStatus(text, 'documentation')).toBe(false);
-  });
-
-  it('a nested re-ignore below the category does not affect category-level ship status', () => {
-    const text = ['*', '!workflow/', '!workflow/**', 'workflow/sync_indexes/'].join('\n');
-
-    // `workflow/sync_indexes/` re-excludes one specific subdirectory; a fresh prompt id under
-    // `workflow/` is unaffected, matching real git behaviour for this exact file shape.
-    expect(resolveCategoryShipStatus(text, 'workflow')).toBe(true);
-  });
-
-  it('last match wins when rules conflict', () => {
-    expect(resolveCategoryShipStatus('*\n!only/\nonly/\n', 'only')).toBe(false);
-  });
-});
-
-describe('resolveCategoryShipStatus vs `git check-ignore` ground truth (P7-D4)', () => {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const serverRoot = path.resolve(__dirname, '../../../../..');
-  const bundledPromptsDir = path.join(serverRoot, 'resources', 'prompts');
-  const bundledGitignoreText = readFileSync(path.join(bundledPromptsDir, '.gitignore'), 'utf8');
-
-  function realCategories(): string[] {
-    return readdirSync(bundledPromptsDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-      .map((entry) => entry.name);
-  }
-
-  /** Ground truth for a brand-new prompt id under `category`, straight from git itself. */
-  function gitShips(category: string): boolean {
-    try {
-      execFileSync('git', ['check-ignore', '-q', `${category}/__new_prompt__/prompt.yaml`], {
-        cwd: bundledPromptsDir,
-      });
-      return false; // exit 0 => git matched an ignore rule => does not ship
-    } catch (error) {
-      // `check-ignore -q` exits 1 when nothing matched (ships) — any other exit is a real failure.
-      if ((error as { status?: number }).status === 1) {
-        return true;
-      }
-      throw error;
-    }
-  }
-
-  const categories = realCategories();
-
-  it('discovers every bundled top-level category', () => {
-    expect(categories).toEqual(
-      expect.arrayContaining([
-        'codebase-setup',
-        'development',
-        'documentation',
-        'examples',
-        'guidance',
-        'planning',
-        'workflow',
-      ])
-    );
-  });
-
-  for (const category of categories) {
-    it(`matches git for category '${category}'`, () => {
-      expect(resolveCategoryShipStatus(bundledGitignoreText, category)).toBe(gitShips(category));
-    });
-  }
 });

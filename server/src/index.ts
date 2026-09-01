@@ -338,13 +338,19 @@ RUNTIME OPTIONS:
 ENVIRONMENT VARIABLES:
   MCP_WORKSPACE            Base workspace directory (same as --workspace)
   MCP_RESOURCES_PATH       Custom resources base directory (replaces package default)
+  MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
+                           (defaults to the workspace)
   MCP_CONFIG_PATH          Direct path to config.json (same as --config)
   LOG_LEVEL                Override log level (debug, info, warn, error)
 
 PRIORITY ORDER:
   --workspace > MCP_WORKSPACE > Package defaults
   MCP_RESOURCES_PATH overrides the resources base within the workspace.
-  Custom workspace resources overlay bundled ones (same ID = custom wins).
+  Custom workspace resources overlay bundled ones (same ID = custom wins);
+  the bundled definitions stay loaded underneath, so a workspace holding one
+  prompt serves that prompt PLUS the shipped catalog.
+  Point MCP_WORKSPACE at a personal library and MCP_RUNTIME_ROOT elsewhere to
+  keep state.db and logs where they were.
 
 WORKSPACE STRUCTURE:
   Your workspace can contain:
