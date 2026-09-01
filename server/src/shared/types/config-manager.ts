@@ -66,6 +66,7 @@ export interface ConfigManager {
    * Undefined when no path source is injected, meaning "no distinct bundled source".
    */
   getBundledResourceDirectory(resourceType: string): string | undefined;
+  getOverlayResourceDirectories(resourceType: string, primaryDir?: string): string[];
 
   // ── Config reload ────────────────────────────────────────────────────
 

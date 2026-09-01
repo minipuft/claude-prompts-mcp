@@ -249,6 +249,14 @@ export interface ResourcePathSource {
    * updater, which reported `Files may be corrupted` (P1.2).
    */
   getBundledResourceDir(resourceType: string): string;
+  /**
+   * Workspace overlay directories for a resource type, highest precedence, read in order.
+   *
+   * On the port for the same reason `getBundledResourceDir` is: the RELOAD path needs the same
+   * root SET startup uses, and it lives in `modules/` where `runtime/PathResolver` cannot be
+   * imported. Without it, reload could only ever see one directory.
+   */
+  getOverlayResourceDirs(resourceType: string, primaryDir?: string): string[];
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
@@ -657,6 +665,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getBundledResourceDirectory(resourceType: string): string | undefined {
     return this.resourcePaths?.getBundledResourceDir(resourceType);
+  }
+
+  /**
+   * The workspace overlay directories for a resource type, or `[]` when no path source is injected.
+   *
+   * Empty rather than undefined: "no overlays" and "cannot resolve overlays" produce the same
+   * correct behaviour here — load nothing extra — and a caller that had to distinguish them would
+   * be deciding something this method does not know.
+   */
+  getOverlayResourceDirectories(resourceType: string, primaryDir?: string): string[] {
+    return this.resourcePaths?.getOverlayResourceDirs(resourceType, primaryDir) ?? [];
   }
 
   /**

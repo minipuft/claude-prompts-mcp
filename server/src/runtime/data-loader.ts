@@ -19,6 +19,8 @@ import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 
+import { loadPromptsAcrossRoots, mergePromptResults } from '#modules/prompts/prompt-root-loader.js';
+
 export interface PromptDataLoadParams {
   logger: Logger;
   configManager: ConfigLoader;
@@ -119,43 +121,35 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   //
   // Order is the precedence: `mergePromptResults` lets a later result win on a duplicate id, so
   // bundle → primary → overlays gives the documented "same ID = custom wins".
-  const {
-    result,
-    base: bundledBase,
-    invalid,
-    overridden: bundledOverridden,
-  } = await loadWithBundledBase(
-    promptManager,
-    promptsPath,
-    isDirectory ? promptsPath : path.dirname(promptsPath),
-    pathResolver?.getBundledResourceDir('prompts')
-  );
-  let overridden = bundledOverridden;
-  let unloadable = invalid;
-
-  const promptsData = result.promptsData;
-  const categories = result.categories;
-  const convertedPrompts = result.convertedPrompts;
-
-  // Load overlay prompts from workspace resource directories
   const overlayPromptsDirs = pathResolver?.getOverlayResourceDirs('prompts', promptsPath) ?? [];
-  for (const overlayDir of overlayPromptsDirs) {
-    try {
-      const overlayResult = await promptManager.loadAndConvertPrompts(overlayDir, overlayDir);
-      overridden += mergePromptResults(
-        { promptsData, categories, convertedPrompts },
-        overlayResult
-      );
-      unloadable += overlayResult.invalid;
-      if (isVerbose) {
-        logger.info(
-          `  📂 Overlay prompts from ${overlayDir}: +${overlayResult.promptsData.length} prompts`
-        );
-      }
-    } catch (err) {
-      logger.warn(
-        `Failed to load overlay prompts from ${overlayDir}: ${err instanceof Error ? err.message : String(err)}`
-      );
+
+  const loaded = await loadPromptsAcrossRoots(
+    promptManager,
+    {
+      primary: promptsPath,
+      basePath: isDirectory ? promptsPath : path.dirname(promptsPath),
+      bundled: pathResolver?.getBundledResourceDir('prompts'),
+      overlays: overlayPromptsDirs,
+    },
+    mergePromptResults,
+    logger
+  );
+
+  // Startup and reload call the SAME loader. They were two derivations of one question and they
+  // disagreed — reload loaded the primary root alone, so the first hot reload under a configured
+  // workspace silently dropped the bundled tree and every overlay. Unifying is the fix; keeping
+  // two call sites in step by care is what failed.
+  const bundledBase = loaded.base;
+  let overridden = loaded.overridden;
+  let unloadable = loaded.invalid;
+
+  const promptsData = loaded.promptsData;
+  const categories = loaded.categories;
+  const convertedPrompts = loaded.convertedPrompts;
+
+  if (isVerbose) {
+    for (const overlayDir of overlayPromptsDirs) {
+      logger.info(`  📂 Overlay prompts root: ${overlayDir}`);
     }
   }
 
@@ -217,132 +211,6 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
 }
 
 /** One load pass: the prompts, their categories, and the MCP-converted forms. */
-type PromptLoadResult = Awaited<ReturnType<PromptAssetManager['loadAndConvertPrompts']>>;
-
-/**
- * Load the primary prompts root with the bundled tree merged UNDERNEATH it.
- *
- * Order is the precedence: `mergePromptResults` lets the later result win a duplicate id, so
- * loading the bundle first and merging the primary over it gives the documented "same ID = custom
- * wins" while keeping the shipped catalog present.
- *
- * `base` comes back only when the bundle was a distinct contributing source, so the caller can say
- * so in the inventory rather than reporting one root for a count drawn from two.
- */
-async function loadWithBundledBase(
-  promptManager: PromptAssetManager,
-  promptsPath: string,
-  basePath: string,
-  bundledDir: string | undefined
-): Promise<{ result: PromptLoadResult; base?: string; invalid: number; overridden: number }> {
-  const primary = await promptManager.loadAndConvertPrompts(promptsPath, basePath);
-
-  if (
-    bundledDir === undefined ||
-    bundledDir === promptsPath ||
-    !(await directoryExists(bundledDir))
-  ) {
-    return { result: primary, invalid: primary.invalid, overridden: 0 };
-  }
-
-  const merged = await promptManager.loadAndConvertPrompts(bundledDir, bundledDir);
-  const overridden = mergePromptResults(merged, primary);
-  return {
-    result: merged,
-    base: bundledDir,
-    invalid: merged.invalid + primary.invalid,
-    overridden,
-  };
-}
-
-/** Whether a path exists and is a directory. Absent and not-a-directory are the same answer here. */
-async function directoryExists(candidate: string): Promise<boolean> {
-  try {
-    return (await stat(candidate)).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Merge overlay prompt results into the primary arrays.
- * Overlay prompts with matching IDs override primary ones (standard overlay semantics).
- *
- * Returns how many primary prompts the overlay replaced. That number is a subtraction the startup
- * inventory has to name: without it, `119 served` against `123 on disk` looks like loss, when four
- * of the four are accounted for (three unloadable, one deliberately overridden).
- *
- * Exported for direct testing. The merge key is the kind of thing that regresses silently — a
- * wrong key still produces a plausible catalog, just one missing an entry nobody asked about —
- * so it gets a unit test rather than only end-to-end coverage.
- */
-export function mergePromptResults(
-  target: {
-    promptsData: PromptData[];
-    categories: Category[];
-    convertedPrompts: ConvertedPrompt[];
-  },
-  overlay: {
-    promptsData: PromptData[];
-    categories: Category[];
-    convertedPrompts: ConvertedPrompt[];
-  }
-): number {
-  // Merge categories (ensure overlay categories exist, don't replace existing metadata)
-  for (const overlayCat of overlay.categories) {
-    const exists = target.categories.some((c) => c.name === overlayCat.name);
-    if (!exists) {
-      target.categories.push(overlayCat);
-    }
-  }
-
-  // Merge prompts (overlay wins on identity conflict).
-  //
-  // Keyed on `category/id`, the same identity `convertedPrompts` uses below. Keyed on bare `id`
-  // these two arrays disagreed about what the catalog contains: measured 2026-08-29, 120 converted
-  // prompts against 119 `promptsData` entries, because `general/resume_variant_build` and
-  // `resume/resume_variant_build` are one prompt to one array and two to the other. Every consumer
-  // then depends on which array it happened to read.
-  const promptIdentityOf = (prompt: PromptData): string => `${prompt.category}/${prompt.id}`;
-  for (const overlayPrompt of overlay.promptsData) {
-    const overlayIdentity = promptIdentityOf(overlayPrompt);
-    const existingIdx = target.promptsData.findIndex(
-      (p) => promptIdentityOf(p) === overlayIdentity
-    );
-    if (existingIdx !== -1) {
-      target.promptsData[existingIdx] = overlayPrompt;
-    } else {
-      target.promptsData.push(overlayPrompt);
-    }
-  }
-
-  // Merge converted prompts, keyed on category + id — the same identity `promptsData` uses above,
-  // not the display name.
-  //
-  // `name` is a human-readable label and nothing enforces its uniqueness. Three collide in this
-  // repo's own catalog once a workspace overlay is present: "Content Analysis", "Deep Analysis",
-  // "Initial Scan". Keyed on `name`, adding an overlay prompt EVICTS an unrelated bundled prompt
-  // that merely shares its label — measured 2026-08-29, where a personal `analysis/initial_scan`
-  // silently removed the bundled `examples/deep_analysis/initial_scan` from the served catalog
-  // while `promptsData` still reported both, so the count looked right and the tool could not
-  // resolve the prompt.
-  //
-  // Category is part of the key because a nested chain step's id is path-qualified relative to its
-  // category root (`deep_analysis/initial_scan`), so id alone is unique only within a category.
-  const identityOf = (prompt: ConvertedPrompt): string => `${prompt.category}/${prompt.id}`;
-  let overridden = 0;
-  for (const overlayConverted of overlay.convertedPrompts) {
-    const overlayIdentity = identityOf(overlayConverted);
-    const existingIdx = target.convertedPrompts.findIndex((c) => identityOf(c) === overlayIdentity);
-    if (existingIdx !== -1) {
-      target.convertedPrompts[existingIdx] = overlayConverted;
-      overridden++;
-    } else {
-      target.convertedPrompts.push(overlayConverted);
-    }
-  }
-  return overridden;
-}
 
 /** Subset of skills-sync.yaml this module reads. Full schema: modules/skills-sync/service.ts */
 /**
