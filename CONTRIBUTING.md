@@ -295,10 +295,90 @@ Use the [issue templates](https://github.com/minipuft/claude-prompts-mcp/issues/
 
 ### Pull Request Process
 
-A [PR template](.github/pull_request_template.md) auto-fills when you open a PR. Fill in each section -- CI will also auto-comment a validation summary.
+A [PR template](.github/pull_request_template.md) auto-fills when you open a PR. Generate it
+pre-filled from your branch instead of typing into it -- the session that did the work should
+**edit** the reader's artifact, not author it from inside its own reasoning:
 
-**Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`, or open
-the PR without a body and edit it, or paste the template in yourself.
+```bash
+cd server
+npm run pr:body -- --out /tmp/pr-body.md           # skeleton: commit subjects, plan link, open rows, largest diffs
+$EDITOR /tmp/pr-body.md                              # fill every ___ and empty table cell
+node ../scripts/validate-pr-body.mjs --body-file /tmp/pr-body.md --title "feat(scope): outcome"
+gh pr create --title "feat(scope): outcome" --body-file /tmp/pr-body.md
+```
+
+**Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`.
+
+The `PR Conventions` workflow runs the same validator on every PR and lints the title with the
+repo's own `commitlint.config.mjs`. It is advisory until it has run clean on five consecutive PRs
+(the workflow header records the flip condition). CI also auto-comments a validation summary and
+the changed-file list -- never maintain those by hand.
+
+**The squash-merge commit carries the PR title and body, verbatim.** That is a repository setting
+(`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`, set 2026-09-01).
+Before it, GitHub concatenated every commit body: #254 landed on `main` as a 4,615-word commit
+message. If the setting drifts, reapply it:
+
+```bash
+gh api -X PATCH repos/minipuft/claude-prompts-mcp \
+  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+```
+
+#### Write for the reader, not the session
+
+Measured 2026-09-01 on #254 and #255: both PRs satisfied the template and were still unreadable at
+a glance -- 651 and 866 words, Summary bullets packing four facts each in plan-internal vocabulary
+(`OQ-A2b`, `stage 06 remains the single producer`), a verification section that was a wall of test
+counts with no baseline, and no demonstration of a feature that shipped a state machine. The
+CHANGELOG entry and every commit body were written at the same register. The defect was not the
+template; it was that one session wrote every artifact in its own voice.
+
+Each reader question has ONE owning artifact. The PR body **links** to the others; it never re-tells them.
+
+| The reader asks                                              | Owner                              | Voice                                                 |
+| ------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------- |
+| What can I now do / what no longer happens?                  | `CHANGELOG.md` `[Unreleased]`      | consumer; one behavior per bullet, two sentences max  |
+| Show me                                                      | PR body `## Demonstration`         | transcript, `mermaid`, before/after table, screenshot |
+| Where do I look, what do I distrust?                         | PR body `## Notes for Reviewers`   | reviewer; three pointers at most                      |
+| Why this diff?                                               | commit body                        | one concern; the why, not a restated diff             |
+| Why did the session decide X? Falsified rulings, deviations? | plan + `*-implementation-notes.md` | session voice -- this is where it belongs             |
+| Did CI run, which files changed?                             | bot comment                        | derived                                               |
+
+**Boundary test**: if a sentence only makes sense to someone who was in the session, it goes in the
+implementation-notes and the PR links it. Nothing is lost -- the notes are committed -- it is just not
+duplicated into an artifact built for a different reader.
+
+**Demonstrations for a headless server.** Images rarely apply here. What does: a tool-response
+transcript before and after (this server's screenshot -- the `verify-*.mjs` drives already emit
+them, capture rather than paraphrase); a ` ```mermaid ` `stateDiagram-v2` or `sequenceDiagram`
+for a lifecycle or pipeline change (GitHub renders it natively); a before/after table for a
+contract or output-shape change; a `vhs` GIF only when there is a terminal session worth watching.
+
+**Verification is a table.** One row per property: claim · probe command · baseline -> measured ·
+the mutation that makes it fail. `2823 tests` with no baseline tells the reader nothing;
+`unit 2782 -> 2823 (+41)` does. A null result needs its positive control in the same row.
+
+#### Titles name the outcome
+
+The PR title becomes the squash-merge subject and the line release-please writes into the
+changelog. It is the one sentence most readers ever see, so it names what is TRUE AFTER MERGE, not
+what the session did. `commitlint` warns (never blocks) on the two most common misses.
+
+| Strategy                           | Test                                                                                                                     | Before -> after                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Outcome over activity              | Complete "After this merges, ___" with the subject                                                                       | `execute the security review` -> `refuse gate commands outside the operator's allowlist`          |
+| Release-notes test                 | Would it read correctly under **Fixed** / **Added** in a release?                                                        | `resource-surface consolidation` -> `resource writes land only inside the resource root`          |
+| State verbs over session verbs     | refuse · interrupt · require · carry · stop · bound -- not implement · execute · consolidate · update · improve · harden | `harden the HTTP transport` -> `reject requests the MCP spec forbids`                             |
+| One outcome                        | `and` or `-- a, b, and c` is two PRs, or one umbrella that has not been named                                            | `mid-chain unknown surfacing and adaptive consolidation` -> `blocking unknowns interrupt the run` |
+| No plan names                      | A plan name says what you were doing; the body links the plan                                                            | `execute plan 2A` -> `a paused run can be claimed by another client`                              |
+| Scope is where a reader would grep | The narrowest scope in `commitlint.config.mjs` the diff lives in                                                         | `fix(server)` -> `fix(gates)`                                                                     |
+| `!` names the consumer's move      | A breaking title says what the consumer must change                                                                      | `fix(gates)!: shell_command is an argv array; a string fails to load`                             |
+| Fits `git log --oneline`           | <=72 characters preferred; 100 enforced                                                                                  |                                                                                                   |
+
+Commit subjects follow the same rules one level down: the revert test (below) decides the
+boundary, and the subject names what is true after that one commit. A commit body past ~1,500
+characters is a plan note wearing a commit -- `commitlint` warns; move the reasoning to the
+implementation-notes and link it.
 
 **Scope: a PR is one plan or goal; a commit is one concern.**
 
@@ -319,8 +399,9 @@ test it is two commits; if it can only be reverted together with its neighbour, 
    Run the suite with `npm test`. To run one file directly, Jest needs the ESM flag:
    `NODE_OPTIONS="--experimental-vm-modules" npx jest tests/unit/<path>`.
 3. **Docs updated** -- code and docs ship together.
-4. **Conventional commit** -- PR title follows commit conventions (squash-merge uses it).
-5. **Validation proof** -- link test output, screenshots, or describe manual verification steps.
+4. **Conventional commit** -- PR title follows commit conventions and names the outcome (squash-merge uses it).
+5. **Demonstration and measured verification** -- a transcript, diagram, or before/after table; a
+   verification table with baselines, not a count wall.
 6. **No regressions** -- hooks pass, CI green, no new lint violations.
 
 ## Git Hooks

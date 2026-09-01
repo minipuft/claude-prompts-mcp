@@ -1,24 +1,32 @@
 name: PR Conventions
 
-# Checks that a pull request body was actually written, and supplies the parts a machine can
-# derive. Companion to CONTRIBUTING.md §Pull Request Process and .github/pull_request_template.md.
+# Checks that a pull request body was written FOR A READER, that its title is a conventional commit
+# the repo's own commitlint accepts, and supplies the parts a machine can derive. Companion to
+# CONTRIBUTING.md §Pull Request Process, .github/pull_request_template.md, and
+# scripts/validate-pr-body.mjs (which owns the body rules — this file only calls it).
 #
 # WHY IT EXISTS. Measured 2026-08-28: `gh pr create --body "..."` bypasses the template silently,
 # and PR #249 opened with invented headings, no verification section, and none of the 18 available
-# labels. That was not one careless PR — no PR in this repository had ever carried a label, and the
-# three most recent used two different body conventions, because the template was unenforced and
-# the better style was unwritten.
+# labels. Measured again 2026-09-01: #254 and #255 satisfied that check and were still unreadable —
+# 651 and 866 words of session-voice prose, no demonstration of a shipped state machine, a
+# verification section that was a count wall — and the squash-merge commit GitHub wrote for #254
+# concatenated 27 commit bodies into 4,615 words. Presence was never the property.
 #
-# WHAT IT MEASURES, stated exactly: that the three load-bearing sections exist and are NON-EMPTY
-# once HTML comments are stripped. Presence alone is gameable — an empty `## Summary` passes a
-# presence check and asserts nothing, which is the same defect `cleanup-standards.md` describes for
-# an unmarked checkbox. It does NOT judge prose quality, and it deliberately does not gate labels:
-# the type label is derived here automatically, and a gate you satisfy automatically is theatre.
+# WHAT IT MEASURES, stated exactly:
+#   · the three load-bearing sections exist and are NON-EMPTY once HTML comments are stripped;
+#   · `## Demonstration` is non-empty when the title's type is feat/fix/perf/refactor (`n/a: <why>`
+#     counts — the author must DECIDE, not decorate);
+#   · the title passes `commitlint` with commitlint.config.mjs — the same config every commit
+#     meets, so the squash-merge title (release-please's changelog line) cannot drift from it.
+#   Advisory warnings: body over 400 words; a verification section with no table or fenced block.
+#   It does NOT judge prose quality, and it deliberately does not gate labels: the type label is
+#   derived here automatically, and a gate you satisfy automatically is theatre.
 #
 # ADVISORY ON PURPOSE. Not listed in `.github/required-contexts.json`, so a red run is visible
 # without blocking a merge.
-#   FLIPS TO REQUIRED WHEN: it has run on 5 consecutive PRs with zero false positives. Add
-#   "PR Conventions" to required-contexts.json at that point and delete this paragraph. An
+#   FLIPS TO REQUIRED WHEN: it has run on 5 consecutive PRs with zero false positives, counted
+#   from the first PR opened after 2026-09-01 (the Demonstration and title checks reset the count).
+#   Add "PR Conventions" to required-contexts.json at that point and delete this paragraph. An
 #   advisory gate with no promotion condition is permanently advisory, which is the state this
 #   repository's own rules forbid.
 
@@ -74,39 +82,28 @@ jobs:
             });
             core.info(`Applied "${label}".`);
 
-      - name: Require the three load-bearing sections, non-empty
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          script: |
-            const REQUIRED = ['Summary', 'How it was verified', 'Notes for Reviewers'];
-            const body = context.payload.pull_request.body || '';
-            // Strip HTML comments first: the template ships its guidance inside them, so a body
-            // that is nothing but the untouched template must read as empty, not as filled in.
-            const stripped = body.replace(/<!--[\s\S]*?-->/g, '');
-            const sections = {};
-            let current = null;
-            for (const line of stripped.split('\n')) {
-              const heading = line.match(/^#{2,3}\s+(.*?)\s*$/);
-              if (heading) {
-                current = heading[1];
-                sections[current] = '';
-              } else if (current) {
-                sections[current] += line;
-              }
-            }
-            const problems = [];
-            for (const name of REQUIRED) {
-              if (!(name in sections)) problems.push(`missing section \`## ${name}\``);
-              else if (sections[name].trim().length === 0)
-                problems.push(`section \`## ${name}\` is present but empty`);
-            }
-            if (problems.length === 0) {
-              core.info(`All ${REQUIRED.length} required sections present and non-empty.`);
-              return;
-            }
-            for (const p of problems) core.error(p);
-            core.setFailed(
-              `PR body does not follow .github/pull_request_template.md:\n` +
-                problems.map((p) => `  - ${p}`).join('\n') +
-                `\n\nNote: \`gh pr create --body\` bypasses the template. Use --body-file.`
-            );
+          node-version-file: .node-version
+
+      - name: Prove the body check can fail (positive control)
+        run: node scripts/validate-pr-body.mjs --self-test
+
+      - name: Check the body against the template (scripts/validate-pr-body.mjs)
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/validate-pr-body.mjs
+
+      - name: Lint the title with the repo's commitlint config
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        # Root package.json holds only commitlint + husky; `--ignore-scripts` skips the husky
+        # `prepare` step, which has nothing to wire on a CI checkout.
+        run: |
+          npm ci --ignore-scripts
+          printf '%s\n' "$PR_TITLE" | npx --no -- commitlint --verbose

@@ -98,6 +98,8 @@ Both tool-surface changes alter the reachable-shape union of the MCP tool surfac
 
 ### Documentation
 
+- **PR bodies now show the change and squash merges carry the PR body, not every commit message.** The template gains a `## Demonstration` section (required for `feat`/`fix`/`perf`/`refactor`), verification is a claim-by-claim table, and `npm run pr:body` pre-fills the skeleton from the branch. `commitlint` warns on titles that name the session's activity instead of the merged outcome. -> `CONTRIBUTING.md` §Pull Request Process.
+
 - **`MCP_RUNTIME_ROOT` is documented where an operator reads.** It has always pinned `runtime-state/` and relative `logs/` independently of `MCP_WORKSPACE`, but appeared only in a source comment — absent from `--help` and from the handbook, whose "`MCP_WORKSPACE` (primary — SSOT for all paths)" was inaccurate. Setting `MCP_WORKSPACE` to a personal resource library and `MCP_RUNTIME_ROOT` elsewhere keeps `state.db` and logs where they were. `--help` also notes that overlay detection compares the workspace to the package root, so `MCP_RESOURCES_PATH` alone does not enable overlays.
 
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
