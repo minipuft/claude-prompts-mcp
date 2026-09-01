@@ -24,9 +24,9 @@ import {
 } from '../../../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import {
   diagnosePromptWrite,
-  normalizePromptId,
   validatePromptId,
 } from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { normalizePromptId } from '../../../../../src/shared/utils/resource-ids.js';
 
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
 

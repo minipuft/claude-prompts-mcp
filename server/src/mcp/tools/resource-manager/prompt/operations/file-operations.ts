@@ -26,6 +26,7 @@ import {
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/contained-path.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
+import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface FileOperationsDependencies extends Pick<
@@ -173,7 +174,7 @@ export class FileOperations {
     sourceRoot?: string
   ): Promise<OperationResult> {
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
-    const effectiveCategory = promptData.category.toLowerCase().replace(/\s+/g, '-');
+    const effectiveCategory = slugifyCategoryDirectory(promptData.category);
     // `category` reaches this line straight from the tool payload. Validated here because
     // `validateCategoryName` had no call site at all — a category of `../../x` walked out of the
     // resources root and wrote there, measured 2026-08-30 and reported as `✅ Prompt Created`.

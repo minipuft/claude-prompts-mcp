@@ -18,6 +18,7 @@ import {
   type PatchTargetField,
   type TemplatePatchOperation,
 } from '../operations/template-patch.js';
+import { mutationHeadline } from '../utils/mutation-headline.js';
 import {
   UPDATE_FIELDS,
   type PromptWriteDefect,
@@ -140,8 +141,8 @@ export class PromptLifecycleProcessor {
     );
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
-    let response = `✅ **Prompt Created**: ${displayName} (${canonicalId})\n`;
-    response += `📝 ${description}\n`;
+    // The headline is composed at the END, once verification has run — see `mutationHeadline`.
+    let response = `📝 ${description}\n`;
     response += `${analysis.feedback}`;
 
     if (analysis.suggestions.length > 0) {
@@ -211,12 +212,14 @@ export class PromptLifecycleProcessor {
       reason: `Prompt created: ${canonicalId}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
-    if (!verification.verified) {
-      response += `\n❌ **Post-write verification failed**: ${verification.error}\n`;
-    }
 
     return {
-      content: [{ type: 'text' as const, text: response }],
+      content: [
+        {
+          type: 'text' as const,
+          text: mutationHeadline('Created', displayName, canonicalId, verification) + response,
+        },
+      ],
       structuredContent: {
         action: 'create',
         valid: true,
@@ -526,8 +529,8 @@ export class PromptLifecycleProcessor {
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
     const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 
-    let response = `✅ **Prompt Updated**: ${promptData.name} (${args.id})\n\n`;
-    response += `${result.message}\n\n`;
+    // The headline is composed at the END, once verification has run — see `mutationHeadline`.
+    let response = `${result.message}\n\n`;
 
     if (patchedFields.length > 0) {
       response += `🩹 **Patched**: ${patchedFields.map((field) => `\`${field}\``).join(', ')} (${patchOperations.length} operation(s))\n\n`;
@@ -579,12 +582,16 @@ export class PromptLifecycleProcessor {
       reason: `Prompt updated: ${String(args.id)}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
-    if (!verification.verified) {
-      response += `\n❌ **Post-write verification failed**: ${verification.error}\n`;
-    }
 
     return {
-      content: [{ type: 'text' as const, text: response }],
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            mutationHeadline('Updated', String(promptData.name), String(args.id), verification) +
+            response,
+        },
+      ],
       structuredContent: {
         action: 'update',
         receipt: verification.receipt,

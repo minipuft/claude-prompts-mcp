@@ -217,10 +217,17 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
       expect(created.sort()).toEqual(['prompt.yaml', 'user-message.md']);
     });
 
-    it('still slugs a spaced category rather than rejecting it', async () => {
+    it('still slugs a spaced category rather than rejecting it, and reports SUCCESS', async () => {
       // Validation runs AFTER slugging, so `My Category` -> `my-category` remains legal. Checking
       // the order matters: validating first would reject a case that has always worked.
-      await server.call({
+      //
+      // The `isError` half is P5.9, found 2026-08-30 while capturing P5.4's response body. The
+      // write was always correct; post-write verification compared the reloaded prompt against the
+      // AUTHORED category, and the loader had already replaced it with the directory-derived slug.
+      // So a create with any spaced category ALWAYS answered
+      // `❌ Post-write verification failed (mismatched: category)` for a flawless write. This case
+      // originally asserted only the directory, which is exactly why it passed throughout.
+      const result = await server.call({
         resource_type: 'prompt',
         action: 'create',
         id: 'spaced_prompt',
@@ -230,8 +237,17 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
         user_message_template: 'x',
       });
 
+      expect(result.isError).toBe(false);
+      expect(result.text).not.toContain('mismatched: category');
+      // P5.4 — a response that is not an error must not lead with a failure either.
+      expect(result.text.split('\n')[0]).toContain('✅');
+
       const categories = await readdir(path.join(workspace, 'resources', 'prompts'));
       expect(categories).toContain('my-category');
+      const created = await readdir(
+        path.join(workspace, 'resources', 'prompts', 'my-category', 'spaced_prompt')
+      );
+      expect(created.sort()).toEqual(['prompt.yaml', 'user-message.md']);
     });
   });
 

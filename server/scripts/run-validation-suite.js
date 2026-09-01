@@ -370,6 +370,13 @@ export const SUITE = [
       'CHECKED both ways — UNGUARDED (a file resolving a resources root and writing without resolveContainedPath) and STALE EXEMPTION (an entry the rule no longer selects, which fired on its own first exemption and removed it); the self-test runs the rule over a writer, a guarded writer and a read-only file, and a positive control stripping the guard from gate-file-writer.ts exits 1',
   },
   {
+    script: 'validate:prompts',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops",
+  },
+  {
     script: 'validate:agent-plugins',
     io: 'read',
     reads: ['file', 'spawn'],

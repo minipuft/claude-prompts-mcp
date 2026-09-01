@@ -127,6 +127,8 @@
     "validate:hermetic-child-env": "node scripts/validate-hermetic-child-env.js",
     "validate:hermetic-child-env:self-test": "node scripts/validate-hermetic-child-env.js --self-test",
     "validate:contained-resource-writes": "node scripts/validate-contained-resource-writes.js",
+    "validate:prompts": "tsx scripts/validate-prompts.ts",
+    "validate:prompts:self-test": "tsx scripts/validate-prompts.ts --self-test",
     "validate:contained-resource-writes:self-test": "node scripts/validate-contained-resource-writes.js --self-test",
     "validate:no-methodology-vocab": "node scripts/validate-no-methodology-vocab.js",
     "validate:no-llm-client": "node scripts/validate-no-llm-client.js",

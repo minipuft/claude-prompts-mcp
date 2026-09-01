@@ -28,6 +28,7 @@ import { VersionHistoryService } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
 import { ValidationError, handleError as utilsHandleError } from '#shared/utils/index.js';
+import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
 
 const PROMPT_RESOURCE_ACTIONS = promptResourceMetadata.data.actions;
 const PROMPT_RESOURCE_ACTION_MAP = new Map<PromptResourceActionId, ActionDescriptor>(
@@ -199,7 +200,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
           action === 'create' ? 'added' : action === 'delete' ? 'removed' : 'modified';
         const promptsDir = this.dependencies.configManager.getResolvedPromptsDirectory();
         const category = (args['category'] as string | undefined) ?? 'general';
-        const filePath = `${promptsDir}/${category.toLowerCase().replace(/\s+/g, '-')}/${resourceId}/prompt.yaml`;
+        const filePath = `${promptsDir}/${slugifyCategoryDirectory(category)}/${resourceId}/prompt.yaml`;
         void logMcpToolChange(this.logger, {
           operation,
           resourceType: 'prompt',

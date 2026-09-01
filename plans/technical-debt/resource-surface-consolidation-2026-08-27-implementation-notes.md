@@ -449,3 +449,290 @@ authored value, so it reports `mismatched: category` for a write that succeeded.
 | DEV-P1-2 | `ConfigManager` gained `getBundledResourceDirectory`, which broke six partial test stubs at RUNTIME while typechecking cleanly — they use `as unknown as ConfigManager`. Caught by the suites, not by `typecheck:tests:ratchet`, which is the mock-integrity hole `testing.md` names                                                                                                                                                                |
 | DEV-P1-3 | The new e2e suite failed at SUITE level with `ENOTEMPTY` while every test passed: `kill()` only signals, and teardown raced the server's log flush. Now awaits exit. A teardown failure that reads as a product failure is worth the four extra lines                                                                                                                                                                                               |
 | DEV-P1-4 | P5.5 recurred twice more this session — `npm run test:e2e` leaves 7 `examples/conformance_*` dirs in the package tree. The second time it broke `validate:readme`, which counted 46 prompts against the README's 39. P5.5 is now a gate-breaking bug, not only litter                                                                                                                                                                               |
+
+### Closing receipt — P1 Arc 2 (2026-08-30)
+
+Two commits: `233b2bf2` (containment, landed first per ruling R4) and `b6e66d6f` (P1.1–P1.3).
+
+| Check                     | Result                                                               |
+| ------------------------- | -------------------------------------------------------------------- |
+| `validate:all`            | 49/50 — the one failure is DEV-P1-1, another workstream's plan       |
+| unit                      | 2746 passed, 1 skipped                                               |
+| integration               | 745 passed                                                           |
+| e2e                       | 182 passed, 2 skipped (8 suites)                                     |
+| `verify:mcp`              | 18/18, including `no resource mutation — server/resources untouched` |
+| `lint:ratchet`            | 3092 errors / 969 warnings, no regressions                           |
+| `typecheck:tests:ratchet` | 367, no regressions                                                  |
+
+**DEV-P1-1 is now evidenced, not just argued.** While this arc ran, the concurrent session
+committed `3fce6c75` (04:07), then `cbcf1734` (04:28) — the latter landing BETWEEN this arc's two
+commits (04:25 and 05:20). Its plan is under active edit by another actor in this same checkout,
+which is the concrete reason its 19 unstamped rows were left alone rather than a cautious guess.
+The reasoning generalises: in a shared checkout, "ownerless housekeeping" (`dev-workflow.md` Gate
+Skip Policy) stops applying to a file another live session is mid-arc on — the rule assumes the
+owning session has ENDED, and here it demonstrably had not.
+
+**Follow-ups this arc created, all as rows rather than prose:** P5.9 (spaced category always
+reports failure) is new; P5.4's verify-before-fixing precondition is now MET and it is ready to
+execute; P5.5 escalated from litter to gate-breaking, having failed `validate:readme` by inflating
+the served prompt count from 39 to 46.
+
+---
+
+## Tier P5 — corrections and hygiene (2026-08-30)
+
+### Owner rulings
+
+| #   | Question                                                                                                                | Ruling                                                                                                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R3  | P5.1's defects left the repo with P1.6 — is it still work?                                                              | **Both**: repair the library AND add a repo-side gate so a silent drop becomes detectable                                                                                                      |
+| R4  | The 3 invalid prompts cannot be reached by `resource_manager` — its registry has no id for a prompt that failed to load | **Direct YAML edit, and file the tooling gap.** A resource whose defect prevents it loading is unreachable by the only tool allowed to author it — a genuine hole in the MCP-Tooling-Only rule |
+
+### Re-measurement before execution — three of four rows had false premises
+
+| Row  | Authored                                                           | Measured 2026-08-30                                                                                                                                                                                                                                 |
+| ---- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P5.1 | 3 invalid + **5** dropped gates; "two sit in untracked categories" | 3 invalid + **8** dropped gates across 6 prompts. 10 of 11 are no longer repo files at all (P1.5/P1.6 moved them to `~/.claude/resources`) — but the 11th, `knowledge-capture/practice_capture`, is **tracked**, and its two gates had never loaded |
+| P5.4 | precondition MET, ready to execute                                 | Confirmed exactly; the only row whose premise survived                                                                                                                                                                                              |
+| P5.5 | "the suite cleans up unconditionally, **including on failure**"    | The suite leaks on a **passing** run (105/105 green, 7 directories). Cleanup was never the defect — isolation was                                                                                                                                   |
+| P5.9 | comparison is against the wrong side                               | Confirmed, and the cause is `loader.ts:186` overwriting `category` from the directory                                                                                                                                                               |
+
+### Deviations
+
+**DEV-P5-1 — P5.5's prescription would have hidden its own defect.** The row asked for
+unconditional cleanup. Implementing that literally would have deleted the evidence and left the
+suite still writing to the packaged tree, still believing it was isolated. Root cause:
+`startServerWithHttp` defaulted `MCP_RESOURCES_PATH` to the package tree, and that **outranks**
+`MCP_WORKSPACE` in `PathResolver.getResourcesPath()` (priority 1 vs 2), so a caller asking for
+isolation with `MCP_WORKSPACE` alone was silently overruled by the helper's own default. The
+scenarios stayed green because the workspace OVERLAY resolves separately — the single fixture they
+assert on was found while every mutation landed in the wrong tree. **A default that outranks the
+caller's stated intent is not a default.**
+
+**DEV-P5-2 — the guard is a diff, not an emptiness check.** Asserting `server/resources` is clean
+would fail on any pre-existing untracked file a developer legitimately has, so it would be turned
+off within a week. `package-resources-guard` snapshots the tree at `globalSetup` and fails at
+`globalTeardown` on what THIS run added. It watches the path rather than the suites, so a leak from
+a suite nobody has written yet is caught by the same check.
+
+**DEV-P5-3 — a positive control that failed for the wrong reason, twice.** First attempt planted a
+stray file BEFORE the run, so the diff correctly ignored it and reported exit 0 — the guard working
+as designed, read as the guard not working. Second attempt used `__dirname` in an ESM test and
+exited 1 from a `ReferenceError`, which looks identical to the guard firing. Only the third
+(`import.meta.url`, file written during the run) produced the actual property: **1 test passed,
+exit 1**. Recorded because both wrong answers were plausible, and one of them was a false green.
+
+**DEV-P5-4 — the headline was extracted, not patched in place.** Appending the failure ahead of the
+success line would have left two claims in one response. Choosing which claim a response leads with
+is a decision and is testable without the orchestrator's context (`architecture.md` private-method
+diagnostic), so it moved to `utils/mutation-headline.ts` with 7 unit cases covering both branches.
+
+**DEV-P5-5 — `validate:prompts` reports more than the runtime log does, and that is correct.** After
+the kebab-case repair, `general/test_gate_chain` still carried three `Unrecognized key` errors the
+startup log never printed: Zod surfaces a subset, and the log prints one line. The gate reports the
+full set, which is why P5.10 could be scoped precisely instead of iteratively.
+
+**DEV-P5-6 — DEV-P1-1's hold point expired, so the housekeeping was done.** The 19 unstamped rows in
+`plans/features/mid-chain-unknown-surfacing-2026-08-20.md` were left alone last arc because a
+concurrent session was mid-arc in this checkout. Re-measured: no commits for 10 hours, file clean,
+and this plan's own note said the next session should stamp them if that one did not. Each stamp is
+its row's OWN `Verify` column restated — the falsifiers already existed, they just were not in the
+status cell, which is what makes this housekeeping rather than authorship. `validate:all` reached
+**51/51** for the first time this initiative.
+
+### Verification ledger
+
+| Check                     | Result                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `validate:all`            | **51/51** — all green, including the new `validate:prompts`                        |
+| unit                      | 2754 passed, 1 skipped (217 suites)                                                |
+| integration               | 745 passed (58 suites)                                                             |
+| e2e                       | 182 passed, 2 skipped (8 suites); package tree gained 0 files                      |
+| `verify:mcp`              | 18/18                                                                              |
+| `lint:ratchet`            | 3092 errors / 965 warnings, no regressions                                         |
+| `typecheck:tests:ratchet` | 367, no regressions                                                                |
+| P5.9 mutation             | remove category normalization → the e2e case fails; restored green                 |
+| P5.5 mutation             | restore the unconditional helper defaults → 14 files leak, guard exits 1           |
+| P5.11 self-test           | accepts a valid prompt, catches an empty description AND a gate missing `guidance` |
+
+### Left open, deliberately
+
+**P5.10** — the three invalid prompts in the personal library. Each authors chain steps in a
+vocabulary `ChainStepSchema` rejects, and `general/resume_variant_build` is a content-free stub
+duplicating a real id. Inventing step semantics in the owner's content is authoring, and deleting
+the stub is destructive; both need a ruling, so the row stays open rather than being closed by a
+guess. `validate:prompts --root ~/.claude/resources/prompts` is its falsifier and reports the exact
+error set.
+
+**The tooling gap R4 names is not yet a row anywhere.** `resource_manager` cannot repair a resource
+whose defect prevents it loading — the registry has no id to address. It belongs to the settability
+surface (P2/P4), not to P5, and is recorded here so it is not lost between them.
+
+## Issue #229 — hot reload under a non-default resources root (2026-08-30)
+
+Recorded here because the defect and its fix both live on the resources-root surface this plan
+owns. Investigated in a separate worktree (`fix/hot-reload-resources-root`); no source change from
+that branch is proposed for this plan — see the closing note.
+
+### What was measured
+
+Issue #229 was filed as "prompt hot reload does not fire under STDIO; same edit is picked up over
+HTTP". Transport turned out not to be the variable. One variable held apart from the other, against
+`78262981`:
+
+| Transport       | Resources root                  | Reload observed |
+| --------------- | ------------------------------- | --------------- |
+| STDIO           | bundled (`server/resources`)    | yes, t+5s       |
+| STDIO           | external (`MCP_RESOURCES_PATH`) | no, held 200s   |
+| Streamable HTTP | bundled                         | yes, t+5s       |
+| Streamable HTTP | external                        | no, held 120s   |
+
+The negatives are negatives, not refusals: every failing arm returned `prompts/get` OK reading
+stale content, and the bundled arm is the positive control proving the probe observes a reload when
+one occurs.
+
+### Root cause — already closed by P-arc work on this plan
+
+Startup resolved the prompts root through `PathResolver`; `reloadPromptData` re-derived it through
+`ConfigManager.getResolvedPromptsDirectory()`, which resolved `config.json`'s relative
+`prompts.directory` against the config file and therefore always answered with the bundled tree.
+Two derivations of one question, and the file watcher held the wrong one.
+
+Nothing failed loudly. The reload succeeded, rebound the bundled catalog, and `setLivePrompts`
+published content that no longer contained the edited prompt — so `resolveLivePrompt` fell back to
+each prompt's registration-time snapshot and served stale text with no error.
+
+`233b2bf2` (contain resource writes to the resources root) fixes exactly this, at the shared
+method, for all seven of its callers. Verified against a build of local `main` with no other
+change applied: an external-root edit is observed at t+5s. **No further work is needed for the
+reported defect.**
+
+This is the same read/write divergence `233b2bf2`'s own message names — worth noting that it also
+silently governed the reload path, which was not part of that row's stated scope.
+
+### Still open — an overlaid prompt never reloads
+
+☐ **R-HR1** (as of 2026-08-30 · flips when an edit to a bundled-only prompt under an external
+`MCP_RESOURCES_PATH` is observed by `prompts/get` within one debounce window)
+
+With an external root configured the bundled tree is still served underneath as an overlay
+(`prompts/list` = 113: 80 external + 33 bundled). An edit to a prompt existing _only_ in the
+bundled tree is never picked up:
+
+```
+bundled-only target: triage
+before_ok = true                                      <- prompts/get succeeds; not a refusal
+edit to a BUNDLED prompt under an external root: observed = false (60s)
+```
+
+Positive control: same build, same run, an external-tree edit observed at t+5s.
+
+Cause: `reloadPromptData` loads the base directory only, while startup merges base + overlays
+(`runtime/data-loader.ts`, `getOverlayResourceDirs` + `mergePromptResults`). The live map is
+rebuilt from the base tree alone and overlaid prompts fall back to their registration-time
+definition.
+
+**Why a count-based check cannot see it.** `prompts/list` reports 113 before _and_ after the
+reload — binding is deduped per shell, so the entries survive while their content stops tracking
+the file. Any gate for this asserts on served content, not on catalog size.
+
+**Shape of the fix.** One base+overlay load owned by the prompts module and called by both
+`runtime/data-loader` and `prompt-refresh-service`, with `mergePromptResults` moved there rather
+than duplicated — the same consolidation this plan applies elsewhere. An implementation exists on
+`fix/hot-reload-resources-root` (local branch, unpushed) together with five falsified regression
+tests; it was written against `origin/main` and predates `233b2bf2`, so roughly 70% of it is
+superseded and only the overlay half is worth carrying forward.
+
+### Deviations
+
+**DEV-HR-1 — the issue's own evidence was structurally blind, and re-measurement was the only way
+to see it.** #229's `prompts/get` column read `-32602 "Prompt reasoning not found"` before _and_
+after the edit: `guidance/reasoning` is not in the served catalog, so that witness could never have
+read true. A refusal was recorded as a negative. The STDIO result also does not reproduce on the
+commit the issue was filed against. Both the original title and its evidence table were corrected
+in place, with the original preserved.
+
+**DEV-HR-2 — the first probe run was invalid because it inherited the operator's environment.**
+`MCP_RESOURCES_PATH` was set in the invoking shell, so the server served the personal library while
+the probe edited the worktree tree. The run was discarded and every later arm set the resources
+root explicitly. The contamination is also what pointed at the real variable, and is the most
+likely explanation for the original report's HTTP arm disagreeing with its STDIO arm.
+
+### Follow-up corrections (same day, owner-flagged)
+
+**DEV-P5-7 — the P1.7/P1.8 commit mapping was crossed, in both directions.** Owner flagged that
+`233b2bf2` "fixed more than its row claimed". Re-measured with `git show --stat`: that commit
+carries P1.7 **and** the first half of P1.8 (the validator, its suite registration, and the HTTP
+`create_category` site), while P1.8's last two findings — framework `delete` and `skills-sync` —
+landed in `b6e66d6f`, a commit whose subject is copy-on-write. P1.8 named no commit at all. No work
+was missing; the ledger simply could not lead a reader from either row to the code. The reusable
+shape: **an enumeration gate and the per-site fixes it finds tend to land in one commit**, so a row
+owning the gate and a row owning the sites compete for it and one goes unattributed — unless the
+receipt is written from `git show --stat` rather than from memory.
+
+**DEV-P5-8 — P5.10 needed a measurement before it needed a decision.** It was filed as "owner
+decisions, not repairs" on the strength of the errors alone. Once the owner ruled "align to modern
+standards", the first move was measuring what modern IS: all 5 bundled chains put one sub-prompt per
+step in its own nested directory and carry **no** inline step content. That made two of the three
+mechanical after all — the blocker was never the semantics, it was not having read the convention.
+`dependsOn` was dropped rather than translated, because on a strictly linear chain the sequence
+already is the dependency.
+
+### Tier P5.12–P5.15 — the id convention (2026-08-31)
+
+**Owner rulings**: codify the convention as MEASURED (not change it) · full sweep + rename for the
+two camelCase ids, **deferred to this plan** · normalizer + gate + Zod tightening · and a question
+back: should there be an auto-fix?
+
+**DEV-P5-9 — the answer to the auto-fix question was "not yet", and the evidence said so.** The
+line for auto-repair is that the correct output must be fully DETERMINED by the input. Sorted
+against the eleven defects this arc actually measured, that set is **empty**: eight dropped gates
+needed a `guidance` string written, three invalid prompts needed steps re-authored, the stub needs
+a deletion decision, and the convention violations need renames — which a fixer must refuse by
+construction, since a rename is safe only if every reference moves with it. Killed as P5.14 with a
+revive condition rather than built, because a feature with no cases is a parallel system with a
+nicer name.
+
+**DEV-P5-10 — the divergence was not latent, and the resolution was the opposite of what it looked
+like.** `normalizePromptId` and the parser's inline copy differ by one `.replace(/[^a-z0-9_]/g,
+'')`, and they DO disagree in practice — on nested chain-step ids, which ship
+(`deep_analysis/initial_scan` → `deep_analysisinitial_scan`). The instinct was to adopt the
+stronger version. Reading the call site inverted that: the capture group feeding it is
+`([a-zA-Z][a-zA-Z0-9_-]*)`, which already excludes every character the strip removes, so the strip
+**cannot delete anything**. It was a second guard standing where the first already held, and its
+only effect was to make two copies of one rule disagree on inputs neither could receive. Dropping
+it was the fix; adopting it would have broken qualified-id matching in the draft service.
+
+**DEV-P5-11 — the new gate's first act was to catch a mistake in the change that shipped it.**
+Converting the two personal chains (P5.10) I named the nested step directories in kebab
+(`jd-analysis`). `validate:prompts` immediately flagged nine of them. It was right: a step
+directory is a **prompt-id segment**, addressed as `>>deep_analysis/initial_scan`, so it is snake —
+the bundled tree proves it (`initial_scan`, `deep_dive`, `plan_table`). The kebab id belongs to the
+`chainSteps[].id` **node** id, a different namespace inside the same step. Both were renamed to
+snake and re-verified on a live load. The two spellings sitting one line apart in the same YAML
+block is the sharpest form of this confusion, and it is now the doc's worked example.
+
+**DEV-P5-12 — two gates caught the change through the state it was in, not its content.**
+`validate:documented-options` failed on a documented `--root` flag that WAS implemented: the
+validator scans **tracked** files and the new script was untracked. `knip-ratchet` then failed on
+`+2 exports` — `PROMPT_ID_PATTERN`/`KEBAB_ID_PATTERN`, exported but only used by their own
+predicates. Both were correct: the first is the committed-state-vs-worktree-green class, closed by
+staging; the second improved the design, since handing out the raw regex invites the direct testing
+that produced the duplication in the first place. Third gate, `typecheck:tests:ratchet`, caught the
+test still importing `normalizePromptId` from its old home — the Test Surface Audit case, found by
+sweeping `tests/` for both moved symbols rather than fixing only the file that errored.
+
+### Verification ledger (P5.12–P5.15)
+
+| Check                         | Result                                                                        |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `validate:all`                | **51/51**                                                                     |
+| unit                          | 2766 passed, 1 skipped (218 suites)                                           |
+| integration                   | 745 passed (58 suites)                                                        |
+| e2e                           | 182 passed, 2 skipped; package tree gained 0 files                            |
+| `verify:mcp`                  | 18/18                                                                         |
+| `lint:ratchet`                | 3092 / 965, no regressions                                                    |
+| `typecheck:tests:ratchet`     | 367, no regressions                                                           |
+| `validate:prompts` (bundled)  | OK, 39 prompts, 2 deferred exemptions                                         |
+| `validate:prompts` (personal) | 1 schema error + 4 convention violations — all owner content, all now visible |
+| live load                     | all 9 renamed nested steps resolve under snake ids                            |
