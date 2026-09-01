@@ -12,6 +12,11 @@ tags:
 # Mid-chain Unknown Surfacing and Adaptive Consolidation
 
 Promoted `backlog → active` 2026-08-30 after an interview ruled every open question (§Rulings).
+
+**Landing (2026-08-31):** implementation complete on `feat/mid-chain-unknown-surfacing` — PR #254
+(https://github.com/minipuft/claude-prompts-mcp/pull/254), 25 commits, all gates green. The plan stays
+`active` only for rows F-1 (dated kill) and 6.1 (pre-existing, attributed by probe); it retires when
+both are terminal. The two follow-on plans below promote from `backlog` once this PR merges.
 Two ideas raised in that interview were split into their own backlog plans rather than rows here:
 `plans/features/unknowns-corpus-prompt-evolution-2026-08-30.md` and
 `plans/features/external-observation-source-2026-08-30.md`.
