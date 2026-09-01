@@ -36,20 +36,43 @@ run under the wrong framework with no signal.
 Every field mirrors a `chainSteps` field the runtime consumes — see
 [Chain Schema Reference](chain-schema.md) for the semantics each one carries.
 
-| Field           | Type     | Required | Description                                                                            |
-| --------------- | -------- | -------- | -------------------------------------------------------------------------------------- |
-| `id`            | `string` | **Yes**  | Stable kebab-case identity, unique in the workflow. Edges and gates address it.        |
-| `promptId`      | `string` | **Yes**  | Prompt this node executes. Must be registered.                                         |
-| `stepName`      | `string` | No       | Display name. Defaults to `promptId`.                                                  |
-| `args`          | `object` | No       | Arguments for the prompt. Every argument the prompt declares required must appear.     |
-| `inputMapping`  | `object` | No       | Maps upstream outputs into this node's arguments.                                      |
-| `outputMapping` | `object` | No       | Publishes this node's output as `{{outputs.<key>}}`.                                   |
-| `visibility`    | `object` | No       | `withhold` / `expose` over `previous_step_output`, `chain_history`, `unknowns_ledger`. |
-| `subagentModel` | `enum`   | No       | `heavy`, `standard`, `fast`.                                                           |
-| `agentType`     | `string` | No       | Which agent to spawn for this node.                                                    |
-| `framework`     | `string` | No       | Framework for this node, overriding the run-wide selection.                            |
-| `retries`       | `number` | No       | Retry attempts on failure.                                                             |
-| `inlineGateIds` | `array`  | No       | Gate ids applied to this node, at the `inline-operator` rank.                          |
+The mirroring is not a convention anyone maintains by hand. `workflowNodeSchema`
+(`server/src/modules/workflow-ir/node-schema.ts`) is the ONE Zod source for a step, and
+`ChainStepSchema` is derived from it, so a field added here reaches YAML automatically. The two
+schemas differ only in the optionality of `id` and `stepName`, and
+`tests/unit/workflow-ir/chain-node-parity.test.ts` fails on any other divergence. A YAML chain is
+therefore a **stored** IR: it may also declare chain-level `edges` and `budget` using the shapes
+below, which is what lets an IR-declared knob apply to a template chain.
+
+| Field                | Type      | Required | Description                                                                                 |
+| -------------------- | --------- | -------- | ------------------------------------------------------------------------------------------- |
+| `id`                 | `string`  | **Yes**  | Stable kebab-case identity, unique in the workflow. Edges and gates address it.             |
+| `promptId`           | `string`  | **Yes**  | Prompt this node executes. Must be registered.                                              |
+| `stepName`           | `string`  | No       | Display name. Defaults to `promptId`.                                                       |
+| `args`               | `object`  | No       | Arguments for the prompt. Every argument the prompt declares required must appear.          |
+| `inputMapping`       | `object`  | No       | Maps upstream outputs into this node's arguments.                                           |
+| `outputMapping`      | `object`  | No       | Publishes this node's output as `{{outputs.<key>}}`.                                        |
+| `visibility`         | `object`  | No       | `withhold` / `expose` over `previous_step_output`, `chain_history`, `unknowns_ledger`.      |
+| `subagentModel`      | `enum`    | No       | `heavy`, `standard`, `fast`.                                                                |
+| `agentType`          | `string`  | No       | Which agent to spawn for this node.                                                         |
+| `framework`          | `string`  | No       | Framework for this node, overriding the run-wide selection.                                 |
+| `retries`            | `number`  | No       | Retry attempts on failure.                                                                  |
+| `inlineGateIds`      | `array`   | No       | Gate ids applied to this node, at the `inline-operator` rank.                               |
+| `inlineGateCriteria` | `array`   | No       | RAW `::` gate tokens for this node, ids and free text mixed, resolved per step at stage 11. |
+| `delegated`          | `boolean` | No       | Declared context isolation — this node runs in a sub-agent. The `==>` operator's field.     |
+
+`inlineGateCriteria` and `inlineGateIds` are **siblings, not spellings of one another**.
+`inlineGateIds` carries already-resolved gate ids; `inlineGateCriteria` carries the unresolved
+tokens a `>>a :: code-quality` command writes, which nothing can partition into "registered id"
+and "free-text criterion" until the gate registry is in hand. `InlineGateProcessor` does that per
+step, which is why the tokens are a node field rather than a run-level `gates[]` entry: the
+run-level channel resolves at a point where a per-step binding cannot survive.
+
+`delegated` is a DECLARATION, and `subagentModel` is a different question. `delegated: true` asks
+for context isolation; `subagentModel` names a model tier. A step may want either without the
+other, so the operator that means isolation (`==>`) lands here rather than being spelled as a
+model hint. Declaring `subagentModel` still marks a step delegated — see
+[Chain Schema](chain-schema.md#subagent-model) — but the reverse is not true.
 
 `delegation` is deliberately absent. Its only reader is the skills-sync exporter, which reads
 prompt YAML directly, so an IR node carrying it would be a field with no reader on this path.
@@ -136,6 +159,17 @@ Split by enforcement posture, and the split is the contract.
 | `maxFanOut`           | **Enforced** | 8       | Outgoing edges from one node above the effective cap is rejected. |
 | `maxInsertions`       | **Enforced** | 3       | Narrows the adaptive-mutation insertion ceiling for the run.      |
 | `declaredCostCeiling` | Recorded     | —       | Recorded on the run. Never enforced, never compared.              |
+| `pauseOnBlocking`     | **Enforced** | `false` | Hard-pauses the run when a blocking unknown lands. See below.     |
+
+`pauseOnBlocking` is the supervised-run dial. With it `false` (the default), a blocking unknown
+raises a **soft interrupt**: the investigation step is inserted, the response carries the
+interrupt beside it, and the run continues when you answer that step. With it `true` the run
+**holds** on a synthetic gate review and issues no step at all until you clear it with a
+`gate_action` verb. Template chains get the default, and a YAML chain may declare it in its own
+chain-level `budget:` — see [Blocking-unknown interrupt](mcp-tools.md#blocking-unknown-interrupt).
+
+It is read back off the run's stored blueprint on every later step, like `maxInsertions`: each
+step is its own call, so a knob declared once has to outlive the call that declared it.
 
 A declared cap may only **narrow** the server default. Asking for a wider one is rejected, not
 silently clamped — a clamped run is a run you did not author. The rejection happens at the `workflow`
@@ -181,10 +215,52 @@ prompt_engine(workflow:{
 The run then resumes exactly like any other chain — `prompt_engine(chain_id:"…", user_response:"…")`.
 The workflow is submitted once, on the first call.
 
+### Extending or replacing a running plan
+
+A run's remaining nodes are not frozen. When a blocking unknown invalidates the plan's shape, the
+`remainder` parameter replaces or extends everything strictly after the current node, in the same
+node vocabulary:
+
+```bash
+prompt_engine(chain_id:"chain-draft#4", remainder:{
+  mode: "replace",
+  nodes: [
+    { id: "confirm-ttl", promptId: "investigate_unknown" },
+    { id: "redraft",     promptId: "write_summary", args: { brief: "…" } }
+  ]
+})
+```
+
+`mode:"append"` keeps the existing remainder and adds after it; `mode:"replace"` discards every
+node strictly after the current one. The current node is never touched by either — it has already
+been shown to you and cannot be un-shown.
+
+**The string spelling of an append is a leading `-->` command.**
+`prompt_engine(chain_id:"…", command:"--> >>write_summary")` is the same append, parsed to the
+same structure and taking the same path — same admissibility, same validation, same caps, same
+recorded provenance. It is the only command form that may be sent together with `chain_id`;
+`chain_id` + `>>x` is still two command sources and still rejected. `==>` inside the fragment
+delegates the step that follows it, exactly as in a full chain.
+
+The string form is **narrower, not different**: it derives each node id from the prompt id, carries
+no edges, and refuses a raw `::` token (see below).
+
+**A contributed node carries `{id, promptId, stepName, args, delegated}` and nothing else.** It has
+no parse-time step for the rest of the vocabulary to live on — the renderer builds its step from
+the node — so every other node field is **refused by name** rather than accepted and dropped:
+`inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentType`, `framework`,
+`retries`, `inlineGateIds`, `inlineGateCriteria`. Ask for isolation with `delegated: true`, and
+bind a gate with the `gates` parameter and its `target_step_id`.
+
+Caps carry over: one accepted remainder per unknown id, a per-run ceiling in the shape of
+`maxInsertions`, and `maxNodes` counted as executed nodes PLUS the submission, so rewriting the
+tail repeatedly cannot buy back budget the run has already spent.
+
 ### Mutual exclusivity
 
 `command`, `chain_id` and `workflow` are three different command sources and exactly one may be
-present. A call carrying two is **rejected**, not resolved by precedence: the three mean three
+present. The single exception is the leading-`-->` append above, which is a `chain_id` call whose
+command extends the run it names rather than starting a new one. A call carrying two is **rejected**, not resolved by precedence: the three mean three
 different runs — parse this string, resume that run, execute this graph — and picking one silently
 would execute something you did not ask for.
 

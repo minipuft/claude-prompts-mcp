@@ -157,6 +157,8 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       unknowns_closed INTEGER,
       nodes_inserted INTEGER,
       nodes_skipped INTEGER,
+      interrupts_raised INTEGER,
+      remainders_accepted INTEGER,
       delegation_skipped INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
@@ -335,8 +337,12 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     const logger = createLogger();
     recordStore = new ExecutionRecordStore(created.port, logger);
 
+    // `persistSessionsOrThrow`, not `saveSessions`: it is the funnel BOTH persist paths run
+    // through, so stubbing it covers the swallowing callers and the throwing ones alike. Since
+    // row 1.4 `applyUnknownObservations` takes the throwing path, and stubbing only the
+    // swallowing wrapper left the real strict persist reaching an unwired run registry.
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
@@ -674,7 +680,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 /**
  * P4 row 4.2 (F10) — a MUTATED run survives a cold load.
  *
- * The other describe in this file mocks `saveSessions`/`loadSessions`, which is right for
+ * The other describe in this file mocks `persistSessionsOrThrow`/`loadSessions`, which is right for
  * lifecycle-from-the-client's-side but structurally blind to persistence: an insertion that never
  * reached a row, and a skip that never reached a `milestone` column, both pass there. So this
  * block runs against the REAL `SqliteEngine` schema and hands the reload to a SECOND

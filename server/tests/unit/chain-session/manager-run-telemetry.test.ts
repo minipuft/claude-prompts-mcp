@@ -54,7 +54,7 @@ describe('run telemetry counters', () => {
 
   beforeEach(async () => {
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
@@ -144,7 +144,7 @@ describe('getRunTelemetry derivation', () => {
 
   beforeEach(async () => {
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
       .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
@@ -176,7 +176,56 @@ describe('getRunTelemetry derivation', () => {
       unknownsClosed: 0,
       nodesInserted: 0,
       nodesSkipped: 0,
+      interruptsRaised: 0,
+      remaindersAccepted: 0,
     });
+  });
+
+  test('a blocking unknown raises the interrupt count; a non-blocking one does not', async () => {
+    await manager.applyUnknownObservations('sess-derive', 'n1', [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided', blocking: true },
+      { type: 'unknown_discovered', id: 'copy-tone', statement: 'Tone unclear' },
+    ]);
+
+    expect(manager.getRunTelemetry('sess-derive')).toMatchObject({
+      unknownsOpened: 2,
+      interruptsRaised: 1,
+    });
+  });
+
+  test('resolving a blocking unknown does not un-raise its interrupt', async () => {
+    // The run WAS interrupted; that it later got an answer is what `unknownsClosed` records.
+    // Decrementing here would make a run that resolved everything indistinguishable from one
+    // that was never blocked, which is the single fact D-8 exists to preserve.
+    await manager.applyUnknownObservations('sess-derive', 'n1', [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided', blocking: true },
+    ]);
+    await manager.applyUnknownObservations('sess-derive', 'n2', [
+      { type: 'unknown_resolved', id: 'cache-ttl', statement: '30s', resolution: 'answered' },
+    ]);
+
+    expect(manager.getRunTelemetry('sess-derive')).toMatchObject({
+      unknownsClosed: 1,
+      interruptsRaised: 1,
+    });
+  });
+
+  test('remaindersAccepted counts unknown ids, not nodes', async () => {
+    await manager.applyUnknownObservations('sess-derive', 'n1', [
+      { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided', blocking: true },
+    ]);
+    const outcome = await manager.replaceRemainder(
+      'sess-derive',
+      [
+        { promptId: 'investigate_unknown', stepName: 'Confirm TTL' },
+        { promptId: 'investigate_unknown', stepName: 'Redraft' },
+      ],
+      'cache-ttl',
+      'replace'
+    );
+
+    expect(outcome.kind).toBe('applied');
+    expect(manager.getRunTelemetry('sess-derive')).toMatchObject({ remaindersAccepted: 1 });
   });
 
   test('two unknowns with one resolved report opened 2 / closed 1', async () => {

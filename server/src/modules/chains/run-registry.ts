@@ -105,6 +105,14 @@ interface ChainRunNodeRow {
    */
   origin: string | null;
   origin_unknown_id: string | null;
+  /**
+   * A.5 (v27). What a caller-contributed node declared about itself: `delegated` is 0/1/NULL
+   * (NULL = declared nothing), `args_json` a JSON object or NULL. Typed loosely for the same
+   * reason `origin` is — this is what a SELECT hands back, and {@link reconstructNode} is the
+   * single place that narrows it.
+   */
+  delegated: number | null;
+  args_json: string | null;
 }
 
 /**
@@ -134,7 +142,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       `SELECT n.session_id, n.node_id, n.position, n.prompt_id, n.step_name, n.milestone,
               n.is_placeholder, n.rendered_at, n.responded_at, n.completed_at,
               n.declared_sections_json,
-              n.origin, n.origin_unknown_id
+              n.origin, n.origin_unknown_id, n.delegated, n.args_json
          FROM chain_run_nodes n
          JOIN chain_runs r ON r.session_id = n.session_id
         WHERE r.run_owner_pid = ?
@@ -217,8 +225,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           `INSERT INTO chain_run_nodes (
              session_id, node_id, position, prompt_id, step_name, milestone,
              is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, declared_sections_json, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             origin, origin_unknown_id, declared_sections_json, delegated, args_json, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             session.sessionId,
             node.id,
@@ -241,6 +249,10 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
             metadata?.declaredSections === undefined
               ? null
               : JSON.stringify(metadata.declaredSections),
+            // A.5: the node's own declaration. NULL rather than 0/'{}' when absent, so "declared
+            // nothing" and "declared not delegated" stay distinguishable on the row.
+            node.delegated === undefined ? null : node.delegated ? 1 : 0,
+            node.args === undefined ? null : JSON.stringify(node.args),
             updatedAt,
           ]
         );
@@ -372,13 +384,36 @@ function parseResidual(raw: string): ResidualRunState {
 /**
  * Narrow the persisted `origin` string to the {@link ChainNode} union.
  *
- * Anything that is not the literal 'inserted' reads as 'planned', including NULL. That is the
- * conservative direction on purpose: mis-reading a planned node as inserted would inflate the
- * run's insertion count and silently exhaust the P4 cap, while the reverse only loses provenance
- * on a row the schema says cannot exist (the column is NOT NULL, and v23 recreates the table).
+ * Anything that is not a recognized non-default member reads as 'planned', including NULL. That
+ * is the conservative direction on purpose: mis-reading a planned node as inserted would inflate
+ * the run's insertion count and silently exhaust the P4 cap, while the reverse only loses
+ * provenance on a row the schema says cannot exist (the column is NOT NULL, and v23 recreates
+ * the table).
+ *
+ * Every non-default member must be listed here. This function is the ONLY place a persisted
+ * origin becomes a typed one, so a member added to the union and not added here round-trips to
+ * 'planned' after a cold load — the run's caps would then recompute against a provenance the
+ * writer never lost, which is exactly the silent-drop shape the NOT NULL column exists to
+ * prevent on the write side.
  */
-function reconstructNodeOrigin(raw: string | null): 'planned' | 'inserted' {
-  return raw === 'inserted' ? 'inserted' : 'planned';
+function reconstructNodeOrigin(raw: string | null): 'planned' | 'inserted' | 'remainder' {
+  if (raw === 'inserted' || raw === 'remainder') {
+    return raw;
+  }
+  return 'planned';
+}
+
+/** A node's declared argument bag, or `undefined` when the column is NULL or undecodable. */
+function parseNodeArgs(raw: string | null): Record<string, unknown> | undefined {
+  if (raw === null) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -398,6 +433,17 @@ function reconstructNode(node: ChainRunNodeRow): ChainNode {
   // and the hook-projection tests pin the resulting key set.
   if (node.origin_unknown_id !== null) {
     reconstructed.originUnknownId = node.origin_unknown_id;
+  }
+  // A.5: `delegated` and `args` are what a caller-contributed node declared about itself, and a
+  // cold-loaded run has nowhere else to recover them from — `parsedCommand.steps` never had an
+  // entry for this node. A malformed `args_json` is dropped rather than thrown on: the run is
+  // resumable without it, and a throw here would take the whole owner's session load with it.
+  if (node.delegated !== null) {
+    reconstructed.delegated = node.delegated !== 0;
+  }
+  const args = parseNodeArgs(node.args_json);
+  if (args !== undefined) {
+    reconstructed.args = args;
   }
   return reconstructed;
 }

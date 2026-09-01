@@ -296,7 +296,15 @@ export class CommandParsingStage extends BasePipelineStage {
           stepNumber: index + 1,
           nodeId: nodeIds[index],
           promptId: step.promptId,
-          args: (argResult as any).processedArgs,
+          // Step-declared `args` OVERRIDE the run's invocation arguments for this step only
+          // (Tier A). This is the third stripper on the YAML step path — its siblings are
+          // `ChainStepSchema` (now derived from the one node schema) and
+          // `yaml-prompt-loader.normalizeChainSteps` — and a field carried at fewer than all
+          // three is silently dead (P6-F7).
+          args:
+            step.args != null
+              ? { ...(argResult as any).processedArgs, ...step.args }
+              : (argResult as any).processedArgs,
           variableName: step.stepName ?? `step_${index + 1}`,
           convertedPrompt: stepConverted,
           inputMapping: step.inputMapping,
@@ -324,11 +332,27 @@ export class CommandParsingStage extends BasePipelineStage {
           // is the whole binding. Reader: `GateEnhancementService.enhanceChainSteps`, which
           // feeds these to `GateSetResolver` at rank `inline-operator`.
           ...(step.inlineGateIds != null ? { inlineGateIds: [...step.inlineGateIds] } : {}),
+          // Row A.2 (OQ-A2b): the two fields the `-->` surface always carried and the node
+          // vocabulary did not declare. Same three-stripper rule as `inlineGateIds` above, and
+          // the same no-`stepConverted`-fallback posture — `inlineGateCriteria` has no
+          // prompt-level equivalent, and `delegated` is a declaration stage 06 normalizes.
+          ...(step.inlineGateCriteria != null
+            ? { inlineGateCriteria: [...step.inlineGateCriteria] }
+            : {}),
+          ...(step.delegated != null ? { delegated: step.delegated } : {}),
           // Threaded, not consumed (P5 Tier 1): step-declared visibility policy, carried through
           // to the parse-time step list so it survives blueprint clone / cold-load round-trips.
           ...(step.visibility != null ? { visibility: step.visibility } : {}),
         } as ChainStepPrompt;
       });
+
+      // Tier A: a YAML chain's declared budget reaches the run through the same field a
+      // submitted Workflow IR's does (`WorkflowCommandBuilder` sets it from `compileBudget`), so
+      // every downstream reader of `parsedCommand.budget` — the P4 adaptive-mutation ceiling
+      // today — serves both inputs with one code path.
+      if (convertedPrompt.budget !== undefined) {
+        parsedCommand.budget = convertedPrompt.budget;
+      }
     }
 
     return parsedCommand;

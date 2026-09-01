@@ -155,6 +155,116 @@ describe('PromptEngine Validation', () => {
   });
 
   /**
+   * The APPEND hop (row A.3, OQ-A1).
+   *
+   * This is the hop the plan's own record says gets forgotten: `remainder` was typechecked at
+   * every layer and dead twice — once at the argument allowlist, once at THIS request build
+   * (DEV-T2-4). A string append that never reaches `request.remainder` would look exactly like a
+   * silent resume, so the assertions below read the forwarded request rather than the response.
+   */
+  describe('a leading `-->` command with chain_id becomes an append remainder', () => {
+    function stubPipeline(): jest.Mock<(request?: unknown) => Promise<unknown>> {
+      const execute = jest.fn(async (_request?: unknown) => ({
+        content: [{ type: 'text' as const, text: 'ok' }],
+        isError: false,
+      }));
+      jest
+        .spyOn(
+          engine as unknown as { getPromptExecutionPipeline: () => unknown },
+          'getPromptExecutionPipeline'
+        )
+        .mockReturnValue({ execute });
+      return execute as never;
+    }
+
+    test('reaches request.remainder, and the command is dropped so the call is a plain resume', async () => {
+      const execute = stubPipeline();
+
+      await engine.executePromptCommand(
+        { chain_id: 'chain-demo#1', command: '--> >>write_summary' },
+        {}
+      );
+
+      const request = execute.mock.calls[0]?.[0] as {
+        command?: string;
+        chain_id?: string;
+        remainder?: unknown;
+      };
+      expect(request.chain_id).toBe('chain-demo#1');
+      expect(request.command).toBeUndefined();
+      expect(request.remainder).toEqual({
+        mode: 'append',
+        nodes: [{ id: 'write-summary', promptId: 'write_summary' }],
+      });
+    });
+
+    test('OQ-A1: both spellings of one append forward an IDENTICAL remainder', async () => {
+      const execute = stubPipeline();
+
+      await engine.executePromptCommand(
+        { chain_id: 'chain-demo#1', command: '--> >>write_summary' },
+        {}
+      );
+      await engine.executePromptCommand(
+        {
+          chain_id: 'chain-demo#1',
+          remainder: {
+            mode: 'append',
+            nodes: [{ id: 'write-summary', promptId: 'write_summary' }],
+          },
+        },
+        {}
+      );
+
+      const stringForm = (execute.mock.calls[0]?.[0] as { remainder?: unknown }).remainder;
+      const structuredForm = (execute.mock.calls[1]?.[0] as { remainder?: unknown }).remainder;
+      expect(stringForm).toEqual(structuredForm);
+    });
+
+    test('a `-->` command WITHOUT chain_id is left alone — that is a new symbolic chain', async () => {
+      const execute = stubPipeline();
+
+      await engine.executePromptCommand({ command: '>>a --> >>b' }, {});
+
+      const request = execute.mock.calls[0]?.[0] as { command?: string; remainder?: unknown };
+      expect(request.command).toBe('>>a --> >>b');
+      expect(request.remainder).toBeUndefined();
+    });
+
+    test('sending both spellings in one call is refused rather than silently preferring one', async () => {
+      stubPipeline();
+
+      const result = await engine.executePromptCommand(
+        {
+          chain_id: 'chain-demo#1',
+          command: '--> >>write_summary',
+          remainder: { mode: 'append', nodes: [{ id: 'other', promptId: 'review' }] },
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('two spellings of one append');
+    });
+
+    test('an unparseable append is refused before the pipeline is reached', async () => {
+      const execute = stubPipeline();
+
+      // `::` rather than `==>`: row A.5 maps the delegation operator onto the node's `delegated`
+      // declaration, so it is no longer a parse refusal. A raw gate token still is — its meaning
+      // comes from a registry resolution that an appended node has already passed.
+      const result = await engine.executePromptCommand(
+        { chain_id: 'chain-demo#1', command: '--> >>a :: "cite sources"' },
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('raw "::" gate token');
+      expect(execute).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
    * `cancel` relocated here from `system_control session cancel` (Tier 7).
    *
    * It belongs on this tool because of which id the caller holds: a `chain_id` is held BECAUSE

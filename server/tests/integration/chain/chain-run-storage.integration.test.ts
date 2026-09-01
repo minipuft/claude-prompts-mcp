@@ -16,14 +16,19 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
+import { parseAppendCommand } from '../../../src/engine/execution/parsers/append-command-parser.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
-import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { ChainSessionStore, MAX_REMAINDERS_PER_RUN } from '../../../src/modules/chains/manager.js';
 import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainNode } from '../../../src/shared/types/chain-execution.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
+import type { RemainderSubmission } from '../../../src/modules/workflow-ir/types.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 
 const createLogger = (): Logger =>
@@ -81,7 +86,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   });
 
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
-    expect(engine.getSchemaVersion()).toBe(25);
+    expect(engine.getSchemaVersion()).toBe(27);
 
     const tables = engine
       .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
@@ -489,5 +494,509 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     expect(row?.node_id).toBe('n2');
     // The ordinal is still stamped alongside it — identity did not replace the ordinal-at-write.
     expect(row?.step_number).toBe(2);
+  });
+
+  // --- Tier 1 row 1.2: ChainSessionStore.replaceRemainder -----------------------------------
+  //
+  // The one path both spellings of an append take (OQ-A1) and the path a replacement takes.
+  // Every assertion reads either the RAW chain_run_nodes columns or a cold-loaded session, for
+  // the reason the v23 block above states: a mapper round-trips `undefined` at both ends and
+  // looks consistent while carrying nothing.
+
+  const remainderSession = async (
+    store: ChainSessionStore,
+    sessionId: string
+  ): Promise<ChainSession> => {
+    await store.createSession(sessionId, `${sessionId}#1`, 3, {}, {
+      nodes: nodes(['n1', 'p1', 'One'], ['n2', 'p2', 'Two'], ['n3', 'p3', 'Three']),
+    } as never);
+    // Stand the run on n2 so there is a real "before" (n1, executed), a real "current" (n2) and
+    // a real remainder (n3) — a run parked on its first node cannot tell the three apart.
+    await store.advanceStep(sessionId, 'n1');
+    return store.getSession(sessionId) as ChainSession;
+  };
+
+  test("mode 'replace' swaps every node strictly after the current one and leaves the rest alone", async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-replace');
+
+    const outcome = await store.replaceRemainder(
+      'sess-rem-replace',
+      [
+        { promptId: 'p-alt', stepName: 'Reconsider' },
+        { promptId: 'p-alt2', stepName: 'Rewrite' },
+      ],
+      'plan-shape',
+      'replace'
+    );
+
+    expect(outcome.kind).toBe('applied');
+    const session = store.getSession('sess-rem-replace') as ChainSession;
+    // n1 (executed) and n2 (current) survive untouched; n3 is gone.
+    expect(session.state.nodes.map((node) => node.id)).toEqual([
+      'n1',
+      'n2',
+      'reconsider',
+      'rewrite',
+    ]);
+    expect(session.state.nodes.slice(0, 2).map((node) => node.origin)).toEqual([
+      'planned',
+      'planned',
+    ]);
+    expect(session.state.currentNodeId).toBe('n2');
+
+    await store.cleanup();
+  });
+
+  test("mode 'append' adds after the existing remainder rather than replacing it", async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-append');
+
+    const outcome = await store.replaceRemainder(
+      'sess-rem-append',
+      [{ promptId: 'p-extra', stepName: 'Follow up' }],
+      'needs-more',
+      'append'
+    );
+
+    expect(outcome).toMatchObject({ kind: 'applied', mode: 'append' });
+    const session = store.getSession('sess-rem-append') as ChainSession;
+    // n3 — the pre-existing remainder — is still there, and the new node lands after it.
+    expect(session.state.nodes.map((node) => node.id)).toEqual(['n1', 'n2', 'n3', 'follow-up']);
+
+    await store.cleanup();
+  });
+
+  test('remainder nodes persist origin and their originating unknown, and survive a cold load', async () => {
+    const writer = newStore();
+    await remainderSession(writer, 'sess-rem-roundtrip');
+
+    await writer.replaceRemainder(
+      'sess-rem-roundtrip',
+      [{ promptId: 'p-alt', stepName: 'Reconsider' }],
+      'plan-shape',
+      'replace'
+    );
+
+    // replaceRemainder awaits its own persist — no manual persistSessions() here, which is what
+    // makes this also a check that the write happened inside the call rather than later.
+    const row = engine.queryOne<{ position: number; origin: string; origin_unknown_id: string }>(
+      `SELECT position, origin, origin_unknown_id FROM chain_run_nodes
+        WHERE session_id = ? AND node_id = ?`,
+      ['sess-rem-roundtrip', 'reconsider']
+    );
+    expect(row?.origin).toBe('remainder');
+    expect(row?.origin_unknown_id).toBe('plan-shape');
+    expect(row?.position).toBe(3);
+    // The replaced node's row went with it: a stale row would resurrect the old plan on load.
+    expect(
+      engine.query('SELECT node_id FROM chain_run_nodes WHERE session_id = ? AND node_id = ?', [
+        'sess-rem-roundtrip',
+        'n3',
+      ])
+    ).toHaveLength(0);
+
+    await writer.cleanup();
+
+    const reader = newStore();
+    await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+    const after = reader.getSession('sess-rem-roundtrip') as ChainSession;
+
+    expect(after.state.nodes.map((node) => node.id)).toEqual(['n1', 'n2', 'reconsider']);
+    // 'remainder' has to survive reconstructNodeOrigin, or both caps recompute against a
+    // provenance the writer never lost.
+    expect(after.state.nodes[2]?.origin).toBe('remainder');
+    expect(after.state.nodes[2]?.originUnknownId).toBe('plan-shape');
+
+    await reader.cleanup();
+  });
+
+  test('the per-unknown-id cap refuses a second remainder for the same unknown', async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-cap');
+
+    expect(
+      (
+        await store.replaceRemainder(
+          'sess-rem-cap',
+          [{ promptId: 'p-alt', stepName: 'First alternative' }],
+          'plan-shape',
+          'replace'
+        )
+      ).kind
+    ).toBe('applied');
+
+    const second = await store.replaceRemainder(
+      'sess-rem-cap',
+      [{ promptId: 'p-alt', stepName: 'Second alternative' }],
+      'plan-shape',
+      'replace'
+    );
+
+    expect(second).toEqual({ kind: 'rejected', reason: 'cap-reached' });
+    // A refusal mutates nothing — the first alternative is still the plan.
+    expect(
+      (store.getSession('sess-rem-cap') as ChainSession).state.nodes.map((node) => node.id)
+    ).toEqual(['n1', 'n2', 'first-alternative']);
+
+    await store.cleanup();
+  });
+
+  test('the per-run ceiling refuses a remainder once distinct unknowns have spent it', async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-run-cap');
+
+    for (const unknownId of ['first', 'second', 'third']) {
+      expect(
+        (
+          await store.replaceRemainder(
+            'sess-rem-run-cap',
+            [{ promptId: 'p-alt', stepName: `Plan ${unknownId}` }],
+            unknownId,
+            'append'
+          )
+        ).kind
+      ).toBe('applied');
+    }
+
+    const fourth = await store.replaceRemainder(
+      'sess-rem-run-cap',
+      [{ promptId: 'p-alt', stepName: 'Plan fourth' }],
+      'fourth',
+      'append'
+    );
+
+    expect(fourth).toEqual({ kind: 'rejected', reason: 'cap-reached' });
+    expect(MAX_REMAINDERS_PER_RUN).toBe(3);
+
+    await store.cleanup();
+  });
+
+  test('the caps are recomputed from persisted rows, so a cold-loaded run enforces them too', async () => {
+    const writer = newStore();
+    await remainderSession(writer, 'sess-rem-cold-cap');
+    await writer.replaceRemainder(
+      'sess-rem-cold-cap',
+      [{ promptId: 'p-alt', stepName: 'Alternative' }],
+      'plan-shape',
+      'replace'
+    );
+    await writer.cleanup();
+
+    const reader = newStore();
+    await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+
+    // Nothing in memory remembers the first acceptance; the refusal has to come off the rows.
+    expect(
+      await reader.replaceRemainder(
+        'sess-rem-cold-cap',
+        [{ promptId: 'p-alt', stepName: 'Another' }],
+        'plan-shape',
+        'replace'
+      )
+    ).toEqual({ kind: 'rejected', reason: 'cap-reached' });
+
+    await reader.cleanup();
+  });
+
+  test('an empty submission is refused rather than silently truncating the run', async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-empty');
+
+    expect(await store.replaceRemainder('sess-rem-empty', [], 'plan-shape', 'replace')).toEqual({
+      kind: 'rejected',
+      reason: 'empty-remainder',
+    });
+    expect(
+      (store.getSession('sess-rem-empty') as ChainSession).state.nodes.map((node) => node.id)
+    ).toEqual(['n1', 'n2', 'n3']);
+
+    await store.cleanup();
+  });
+
+  test('an unknown session and a terminal run are refused with their own reasons', async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-terminal');
+
+    expect(
+      await store.replaceRemainder(
+        'sess-does-not-exist',
+        [{ promptId: 'p', stepName: 'X' }],
+        'u',
+        'replace'
+      )
+    ).toEqual({ kind: 'rejected', reason: 'session-unknown' });
+
+    // Advance past the terminal node: the run now stands on nothing, so "strictly after the
+    // current node" names nothing and an append would add steps nothing reaches.
+    await store.advanceStep('sess-rem-terminal', 'n2');
+    await store.advanceStep('sess-rem-terminal', 'n3');
+
+    expect(
+      await store.replaceRemainder(
+        'sess-rem-terminal',
+        [{ promptId: 'p', stepName: 'X' }],
+        'u',
+        'append'
+      )
+    ).toEqual({ kind: 'rejected', reason: 'run-terminal' });
+
+    await store.cleanup();
+  });
+
+  test('a replacement that would delete an already-rendered node is refused whole', async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-started');
+    // n3 is in the doomed range and has already been shown to the client.
+    store.setStepState('sess-rem-started', 'n3', 'rendered');
+
+    expect(
+      await store.replaceRemainder(
+        'sess-rem-started',
+        [{ promptId: 'p-alt', stepName: 'Reconsider' }],
+        'plan-shape',
+        'replace'
+      )
+    ).toEqual({ kind: 'rejected', reason: 'node-already-started' });
+
+    await store.cleanup();
+  });
+
+  test('a remainder never reuses an id the run already carries, including one it replaces', async () => {
+    const store = newStore();
+    await remainderSession(store, 'sess-rem-ids');
+
+    const outcome = await store.replaceRemainder(
+      'sess-rem-ids',
+      [
+        // Declares the id of the node this very call deletes, and then asks for it twice.
+        { id: 'n3', promptId: 'p-alt', stepName: 'Reuse attempt' },
+        { id: 'n3', promptId: 'p-alt', stepName: 'Second reuse attempt' },
+        { id: 'n1', promptId: 'p-alt', stepName: 'Executed-node id' },
+      ],
+      'plan-shape',
+      'replace'
+    );
+
+    expect(outcome.kind).toBe('applied');
+    expect(
+      (store.getSession('sess-rem-ids') as ChainSession).state.nodes.map((node) => node.id)
+    ).toEqual(['n1', 'n2', 'n3-2', 'n3-3', 'n1-2']);
+
+    await store.cleanup();
+  });
+
+  // --- Tier A row A.3 / OQ-A1: one append, two spellings ------------------------------------
+
+  /**
+   * The ruling's own close condition: submit ONE append in both spellings and assert identical
+   * `chain_run_nodes`.
+   *
+   * Driven from the two CALLER inputs — the command string and the structured `remainder` — and
+   * through `RemainderProcessor`, because that is where the two paths meet. Comparing them at
+   * `replaceRemainder` would compare two copies of the same argument and prove nothing; the whole
+   * question OQ-A1 asks is whether the string arrives there as the same argument.
+   *
+   * The rows are read RAW and compared whole (minus `session_id`, the only column that must
+   * differ), so a future field on `chain_run_nodes` that one spelling sets and the other does not
+   * fails here without anyone remembering to assert it.
+   */
+  describe('OQ-A1 — the string append and the structured append are one mechanism', () => {
+    const APPEND_COMMAND = '--> >>p-extra';
+    const STRUCTURED: RemainderSubmission = {
+      mode: 'append',
+      nodes: [{ id: 'p-extra', promptId: 'p-extra' }],
+    };
+
+    const buildProcessor = (store: ChainSessionStore): RemainderProcessor =>
+      new RemainderProcessor(
+        store,
+        { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+        () => [{ id: 'p-extra', arguments: [] }] as never,
+        logger
+      );
+
+    /** Stand a run on n2 with an OPEN blocking unknown, which is what entitles it to a remainder. */
+    const blockedSession = async (store: ChainSessionStore, sessionId: string): Promise<void> => {
+      await remainderSession(store, sessionId);
+      await store.applyUnknownObservations(sessionId, 'n2', [
+        {
+          type: 'unknown_discovered',
+          id: 'plan-shape',
+          statement: 'the rest of the plan may be wrong',
+          blocking: true,
+        },
+      ]);
+    };
+
+    const rowsFor = (sessionId: string): unknown[] =>
+      engine
+        .query<Record<string, unknown>>(
+          'SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position',
+          [sessionId]
+        )
+        .map(({ session_id: _ignored, ...rest }) => rest);
+
+    test('both spellings write byte-identical chain_run_nodes rows', async () => {
+      const store = newStore();
+      const processor = buildProcessor(store);
+
+      await blockedSession(store, 'sess-append-string');
+      await blockedSession(store, 'sess-append-structured');
+
+      const parsed = parseAppendCommand(APPEND_COMMAND);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+
+      const fromString = await processor.apply(
+        'sess-append-string',
+        store.getSession('sess-append-string') as ChainSession,
+        { mode: 'append', nodes: parsed.nodes }
+      );
+      const fromStructured = await processor.apply(
+        'sess-append-structured',
+        store.getSession('sess-append-structured') as ChainSession,
+        STRUCTURED
+      );
+
+      expect(fromString.kind).toBe('applied');
+      expect(fromStructured.kind).toBe('applied');
+      expect(rowsFor('sess-append-string')).toEqual(rowsFor('sess-append-structured'));
+      // Bounds the comparison: two empty result sets would also be equal.
+      expect(rowsFor('sess-append-string')).toHaveLength(4);
+
+      await store.cleanup();
+    });
+
+    test('both spellings of a DELEGATED append write the declaration onto the row (row A.5)', async () => {
+      // The flip condition of row A.5, read at the row rather than at the type: a `==>` in the
+      // string spelling and `delegated: true` in the structured one are one declaration, and it
+      // survives `projectNodes`, `mintRemainderNodes` and the INSERT.
+      const store = newStore();
+      const processor = buildProcessor(store);
+
+      await blockedSession(store, 'sess-append-string-d');
+      await blockedSession(store, 'sess-append-structured-d');
+
+      const parsed = parseAppendCommand('--> ==> >>p-extra note="check"');
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+
+      const fromString = await processor.apply(
+        'sess-append-string-d',
+        store.getSession('sess-append-string-d') as ChainSession,
+        { mode: 'append', nodes: parsed.nodes }
+      );
+      const fromStructured = await processor.apply(
+        'sess-append-structured-d',
+        store.getSession('sess-append-structured-d') as ChainSession,
+        {
+          mode: 'append',
+          nodes: [{ id: 'p-extra', promptId: 'p-extra', delegated: true, args: { note: 'check' } }],
+        }
+      );
+
+      expect(fromString.kind).toBe('applied');
+      expect(fromStructured.kind).toBe('applied');
+      expect(rowsFor('sess-append-string-d')).toEqual(rowsFor('sess-append-structured-d'));
+
+      // Raw columns, not the session mapper: the whole failure this row closes was a value that
+      // existed at every level above the row and nowhere on it.
+      const appended = engine.queryOne<{ delegated: number | null; args_json: string | null }>(
+        `SELECT delegated, args_json FROM chain_run_nodes
+          WHERE session_id = ? ORDER BY position DESC LIMIT 1`,
+        ['sess-append-string-d']
+      );
+      expect(appended?.delegated).toBe(1);
+      expect(JSON.parse(appended?.args_json ?? 'null')).toEqual({ note: 'check' });
+
+      // The negative control: a planned node declares nothing, and NULL is how that reads.
+      const planned = engine.queryOne<{ delegated: number | null; args_json: string | null }>(
+        'SELECT delegated, args_json FROM chain_run_nodes WHERE session_id = ? AND node_id = ?',
+        ['sess-append-string-d', 'n1']
+      );
+      expect(planned?.delegated).toBeNull();
+      expect(planned?.args_json).toBeNull();
+
+      await store.cleanup();
+    });
+
+    test('a cold load recovers the declaration, which has no other source', async () => {
+      // A remainder node has no entry in `parsedCommand.steps`, so after a restart the row is
+      // the only statement of what the caller declared. A reader that dropped these two would
+      // resume the run with an undelegated, argument-less step and nothing would be red.
+      const store = newStore();
+      const processor = buildProcessor(store);
+      await blockedSession(store, 'sess-append-cold');
+      await processor.apply(
+        'sess-append-cold',
+        store.getSession('sess-append-cold') as ChainSession,
+        {
+          mode: 'append',
+          nodes: [{ id: 'p-extra', promptId: 'p-extra', delegated: true, args: { note: 'x' } }],
+        }
+      );
+
+      await store.cleanup();
+      const reader = newStore();
+      await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+      const reloaded = (reader.getSession('sess-append-cold') as ChainSession).state.nodes.at(-1);
+
+      expect(reloaded).toMatchObject({
+        promptId: 'p-extra',
+        origin: 'remainder',
+        delegated: true,
+        args: { note: 'x' },
+      });
+
+      await reader.cleanup();
+    });
+
+    test('a node declaring a field the run could never see is refused, not silently narrowed', async () => {
+      // The class, not the two operators: `subagentModel` has no reader on a synthesized step
+      // either, and before row A.5 it was accepted and dropped exactly as `==>` was.
+      const store = newStore();
+      const processor = buildProcessor(store);
+      await blockedSession(store, 'sess-append-refused');
+
+      const outcome = await processor.apply(
+        'sess-append-refused',
+        store.getSession('sess-append-refused') as ChainSession,
+        {
+          mode: 'append',
+          nodes: [{ id: 'p-extra', promptId: 'p-extra', subagentModel: 'heavy' }],
+        }
+      );
+
+      expect(outcome.kind).toBe('refused');
+      if (outcome.kind !== 'refused') return;
+      expect(outcome.message).toContain('subagentModel');
+      expect(outcome.message).toContain('delegated:true');
+
+      await store.cleanup();
+    });
+
+    test('and both are refused identically when the run has no open blocking unknown', async () => {
+      // The negative half of one mechanism. A string append that skipped the admissibility check
+      // would be a SECOND mechanism wearing the same name.
+      const store = newStore();
+      const processor = buildProcessor(store);
+      await remainderSession(store, 'sess-append-unentitled');
+
+      const parsed = parseAppendCommand(APPEND_COMMAND);
+      if (!parsed.ok) throw new Error(parsed.message);
+      const session = store.getSession('sess-append-unentitled') as ChainSession;
+
+      const fromString = await processor.apply('sess-append-unentitled', session, {
+        mode: 'append',
+        nodes: parsed.nodes,
+      });
+      const fromStructured = await processor.apply('sess-append-unentitled', session, STRUCTURED);
+
+      expect(fromString).toEqual(fromStructured);
+      expect(fromString.kind).toBe('refused');
+
+      await store.cleanup();
+    });
   });
 });

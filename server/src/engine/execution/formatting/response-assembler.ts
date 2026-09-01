@@ -2,6 +2,7 @@
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
+import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
@@ -19,6 +20,50 @@ import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
 /** Max gates to list in the GATE_VERDICTS template */
 const MAX_GATE_VERDICT_ENTRIES = 10;
+
+/**
+ * The verbs that answer a SOFT (unpaused) interrupt, verbatim from the plan's §Interrupt payload
+ * block.
+ *
+ * `gate_action` spellings match the contract enum (`tooling/contracts/prompt-engine.json`)
+ * exactly, because a client reads this list and puts the string back on the wire.
+ */
+const SOFT_INTERRUPT_VERBS = [
+  'answer the step',
+  'remainder',
+  'gate_action:abort',
+  'cancel',
+] as const;
+
+/**
+ * The verbs a HARD-paused run offers — the RESOLUTION verbs only, and this list is not a
+ * superset of the soft one (row 2.6).
+ *
+ * `answer the step` is deliberately absent: stage 18 issues no step while a review is pending, so
+ * a paused run has no step to answer, and the paused footer never offered one either. Shipping it
+ * here advertised an exit the run does not accept — the machine half of the payload and the run's
+ * own behaviour disagreed. `remainder` is absent for the same reason in a different direction: on
+ * a paused run a bare `remainder` does not clear the synthetic review, so the caller must spell it
+ * `gate_action:accept_alternative` and carry the remainder with it. That pairing is stated inline
+ * rather than left to the reader; `GateVerdictProcessor` refuses `accept_alternative` by name when
+ * the remainder is missing, so this string and that refusal are the two halves of one contract.
+ */
+const PAUSED_INTERRUPT_VERBS = [
+  'gate_action:resume',
+  'gate_action:accept_alternative (with remainder)',
+  'gate_action:abort',
+  'cancel',
+] as const;
+
+/**
+ * One verb list per state, built once, rendered twice — the text section and `structuredContent`
+ * must not be able to advertise different exits from the same hold.
+ *
+ * STATE-DEPENDENT, not additive: see {@link PAUSED_INTERRUPT_VERBS}.
+ */
+function resolveInterruptVerbs(paused: boolean): string[] {
+  return paused ? [...PAUSED_INTERRUPT_VERBS] : [...SOFT_INTERRUPT_VERBS];
+}
 
 /**
  * Assembles response content sections for different execution types.
@@ -92,6 +137,15 @@ export class ResponseAssembler {
       }
     }
 
+    // Row 2.4. After the gate CTA and before the footer: the interrupt is what the caller must
+    // act on, and the footer is bookkeeping. On a PAUSED run this is the only call to action in
+    // the payload — `buildGateReviewCTA` returns null for the synthetic review precisely so the
+    // client is not shown a `gate_verdict` template for a hold that no verdict resolves.
+    const interruptSection = this.buildInterruptSection(context);
+    if (interruptSection != null) {
+      sections.push(interruptSection);
+    }
+
     // Operator layer: inject handoff CTA when next step is delegated.
     // Detects from StepExecutionStage metadata OR parsed steps (when pendingReview blocked StepExecutionStage).
     if (this.isNextStepDelegated(context)) {
@@ -151,6 +205,17 @@ export class ResponseAssembler {
     const declaredSectionsBlock = this.buildDeclaredSectionsBlock(context);
     if (declaredSectionsBlock) {
       sections.push(declaredSectionsBlock);
+    }
+
+    // Row 2.4, on THIS path too. Found by the live drive, not by the suite: `>>strategicImplement`
+    // is a gated single prompt that gets a session, so it can declare observations, raise an
+    // interrupt and reach here — and rendered nothing, while `structuredContent.chain_interrupt`
+    // (attached in stage 21, outside the chain/single branch) was correctly present. A payload
+    // whose machine half reports a blocking unknown and whose human half does not is worse than
+    // either alone.
+    const interruptSection = this.buildInterruptSection(context);
+    if (interruptSection != null) {
+      sections.push(interruptSection);
     }
 
     const nextAction = this.buildNextActionCTA(context, gateActive);
@@ -307,6 +372,15 @@ export class ResponseAssembler {
     if (currentStepDelegated) {
       // Handoff takes priority — gate enforcement passes to sub-agent
       lines.push(this.buildHandoffFooterLine(context, chainIdentifier));
+    } else if (isUnknownInterruptPending(sessionContext.pendingReview)) {
+      // A hard-paused blocking unknown holds the run WITHOUT issuing a step, so the gate-review
+      // line below would be wrong twice in one sentence: there is no step output to report, and
+      // no `gate_verdict` clears this hold. The footer and the interrupt section must not
+      // advertise different exits from the same hold — the contradiction-inside-one-payload this
+      // footer's completion latch already had to fix once.
+      lines.push(
+        `Next: chain_id="${chainIdentifier}", gate_action="resume" | gate_action="accept_alternative" (with remainder) | gate_action="abort"`
+      );
     } else if (hasPendingReview) {
       // Gate review (only when not delegating)
       lines.push(
@@ -626,6 +700,14 @@ export class ResponseAssembler {
       return null;
     }
 
+    // The synthetic unknown-interrupt hold is not a gate review and no `gate_verdict` resolves
+    // it. `buildInterruptSection` renders its call to action, with the verbs that DO resolve it.
+    // Checked before the phase-guard branches below because a run cannot hold on both: stage 16
+    // raises this one only when nothing is already pending.
+    if (isUnknownInterruptPending(pendingReview)) {
+      return null;
+    }
+
     const chainId = context.sessionContext?.chainId ?? '';
     const attemptInfo =
       pendingReview.maxAttempts > 1
@@ -655,6 +737,81 @@ export class ResponseAssembler {
     );
 
     return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+  }
+
+  /**
+   * The human-readable half of the mid-chain interrupt (row 2.4, plan §Interrupt payload).
+   *
+   * Mirrors the gate-pending prose deliberately — same `---` rule, same bold header, same
+   * fenced resume block — because a client that already knows how to read a gate hold should not
+   * need a second parser to read this one. What differs is the vocabulary in the fence:
+   * `gate_verdict` resolves a gate review, and none of these verbs is a verdict.
+   *
+   * Returns null when this call raised no interrupt, which is every call on a run with no open
+   * blocking unknown.
+   */
+  private buildInterruptSection(context: ExecutionContext): string | null {
+    const interrupt = context.state.session.chainInterrupt;
+    if (interrupt === undefined) {
+      return null;
+    }
+
+    const chainId = context.sessionContext?.chainId ?? '';
+    const header = interrupt.paused ? 'Chain Paused — Blocking Unknown' : 'Blocking Unknown';
+    const affected =
+      interrupt.affectedStepIds.length > 0
+        ? `\n\nAffected steps (declared): ${interrupt.affectedStepIds.join(', ')}`
+        : '';
+    const remaining =
+      interrupt.remainingNodes.length > 0
+        ? `\n\nRemaining plan:\n${interrupt.remainingNodes
+            .map((node) => `- \`${node.id}\` — ${node.stepName} (${node.promptId})`)
+            .join('\n')}`
+        : '\n\nRemaining plan: none — this is the last step.';
+    const verbs = resolveInterruptVerbs(interrupt.paused)
+      .map((verb) => `- ${verb}`)
+      .join('\n');
+
+    return `\n---\n\n**${header}**\n\n${interrupt.statement}${affected}${remaining}\n\nResolve with \`chain_id="${chainId}"\` plus one of:\n\n${verbs}`;
+  }
+
+  /**
+   * The machine-readable half: `structuredContent.chain_interrupt`, verbatim per the plan's
+   * §Interrupt payload block.
+   *
+   * snake_case at the wire boundary while {@link ChainInterrupt} stays camelCase inside the
+   * engine — this method IS that translation, and it is the only one, which is why the wire
+   * shape cannot drift by a stage renaming an internal field.
+   *
+   * Returned rather than assigned: `ToolResponse` is assembled by `ResponseFormattingStage`, so
+   * the assembler builds payloads and the stage owns the response object, the same split the
+   * string sections already follow. Undefined means "no interrupt", not "empty interrupt".
+   */
+  buildInterruptStructuredContent(context: ExecutionContext): Record<string, unknown> | undefined {
+    const interrupt = context.state.session.chainInterrupt;
+    if (interrupt === undefined) {
+      return undefined;
+    }
+
+    return {
+      kind: 'chain_interrupt',
+      reason: interrupt.reason,
+      unknown: { id: interrupt.unknownId, statement: interrupt.statement },
+      affected_step_ids: [...interrupt.affectedStepIds],
+      // camelCase `promptId`/`stepName` inside these entries is the plan's declared shape, not
+      // an oversight: they name IR node fields a caller would author back verbatim in a
+      // `remainder`, so converting them would hand the client a vocabulary it cannot resubmit.
+      remaining_nodes: interrupt.remainingNodes.map((node) => ({
+        id: node.id,
+        promptId: node.promptId,
+        stepName: node.stepName,
+      })),
+      paused: interrupt.paused,
+      resume: {
+        chain_id: context.sessionContext?.chainId ?? '',
+        verbs: resolveInterruptVerbs(interrupt.paused),
+      },
+    };
   }
 
   /**

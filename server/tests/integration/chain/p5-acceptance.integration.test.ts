@@ -326,7 +326,7 @@ const buildPipeline = (options: {
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
       logger,
-      gateEnhancementService
+      { gateEnhancementService }
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,

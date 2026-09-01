@@ -183,14 +183,14 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'documented in the contract to assert against.',
     'A conformance scenario once `options` gains a documented, corpus-assertable effect.'
   ),
-  ...exceptionGroup(
-    'prompt_engine',
-    ['observations'],
-    'Requires composing a typed `{type, id, statement, ...}` payload against a chain fixture and ' +
-      'reading back the per-run unknowns ledger — a multi-turn setup no existing scenario builds.',
-    'A conformance scenario that declares an observation and asserts it in the unknowns ledger ' +
-      'readback (system_control action:status or execution_history).'
-  ),
+  // `observations` and `remainder` each had an exception here until 2026-08-30, both retired by
+  // `conformance/unknown-interrupt.yaml` (plan row 0.5) rather than edited. `remainder`'s own
+  // `closedBy` named that scenario; `observations`' was carried out with it, because the same
+  // rows declare a blocking observation and then assert an effect that is reachable ONLY if the
+  // ledger opened — a stronger reading than the status readback its `closedBy` proposed.
+  // Neither is left behind as a satisfied entry: this gate audits its own exceptions and flags a
+  // SATISFIED one, which is the detection row 0.5 was written to supply — and which is what
+  // caught the `observations` entry here.
 
   // ── system_control ──────────────────────────────────────────────────────
   ...exceptionGroup(

@@ -149,6 +149,21 @@ export interface EvidencePayload {
  * counter alongside a list that already holds the fact is a second source that can drift.
  * `stepsPlanned` is the node count AFTER any insertions, so `stepsPlanned - nodesInserted` is
  * what the run started with.
+ *
+ * `interruptsRaised`/`remaindersAccepted` (D-8) are the surviving record of the mid-chain
+ * interrupt once the run's ledger and node rows are gone — both are `ephemeral` and PID-deleted,
+ * so `execution_records` is the only place this signal outlives the process. Derived at read
+ * time from the same two lists, for the reason the four counters above are:
+ *
+ * - `interruptsRaised` counts BLOCKING LEDGER ENTRIES, not raise events. `decideInterrupt` is a
+ *   function of what is OPEN rather than of a delta, so it re-raises on every step while an
+ *   unknown stays open; counting events would report "how many steps ran while blocked", which
+ *   is a different fact and one `stepsPlanned` already bounds. One blocking unknown = one
+ *   interrupt, whether the run saw it once or six times. Resolved entries still count: the
+ *   interrupt WAS raised, and the run's history is what this column records.
+ * - `remaindersAccepted` counts DISTINCT unknown ids that spent a remainder, which is exactly
+ *   the unit `replaceRemainder`'s per-unknown-id cap counts, so the number and the cap can never
+ *   disagree about what "a remainder" is.
  */
 export interface RunTelemetry {
   stepsPlanned: number;
@@ -158,6 +173,8 @@ export interface RunTelemetry {
   unknownsClosed: number;
   nodesInserted: number;
   nodesSkipped: number;
+  interruptsRaised: number;
+  remaindersAccepted: number;
 }
 
 /**
@@ -202,6 +219,8 @@ export interface ExecutionRecord {
   unknownsClosed?: number;
   nodesInserted?: number;
   nodesSkipped?: number;
+  interruptsRaised?: number;
+  remaindersAccepted?: number;
   /**
    * S8 delegation-acknowledgment audit, populated ONLY on capture-time `completed` step rows
    * for a step that was BOTH delegated and gated — the one row type where the fact exists
@@ -409,7 +428,15 @@ export interface ChainNode {
   stepName: string;
   /**
    * Provenance (P4, schema v23). `'inserted'` marks a node the mutation policy added mid-run;
-   * everything else was in the run when it started.
+   * `'remainder'` marks one a caller-authored replacement plan contributed (D-8); everything
+   * else was in the run when it started.
+   *
+   * The three values are DISTINCT accounting classes, not shades of one: `'inserted'` counts
+   * against the adaptive-insertion cap, `'remainder'` against the remainder cap, and neither
+   * count may absorb the other. Widening the union needed no schema bump — the column is
+   * `TEXT NOT NULL` with no CHECK and no DDL default (verified 2026-08-30 against
+   * `sqlite-engine.ts`'s `chain_run_nodes` DDL), so a new member is a new string, not a
+   * migration. `reconstructNodeOrigin` is the one reader that must learn it.
    *
    * OPTIONAL rather than required, and absence means `'planned'`. `ChainNode` is minted at four
    * unrelated sites (`13-session-stage.buildChainNodes`, `ChainSessionStore.resolveCreationNodes`,
@@ -418,13 +445,33 @@ export interface ChainNode {
    * persisted column is NOT NULL: the writer resolves `origin ?? 'planned'`, and reconstruction
    * always sets it explicitly, so a node that has been through storage is never ambiguous.
    */
-  origin?: 'planned' | 'inserted';
+  origin?: 'planned' | 'inserted' | 'remainder';
   /**
-   * The declared unknown id whose blocking discovery caused this node to be inserted. Present
-   * only on `origin: 'inserted'` nodes. Read by the mutation policy's per-unknown-id insertion
-   * cap (OQ-P4-5), which is why it is carried as data instead of parsed back out of `id`.
+   * The declared unknown id whose blocking discovery caused this node to be inserted, or whose
+   * interrupt the accepted remainder answered. Present on `origin: 'inserted'` and
+   * `origin: 'remainder'` nodes. Read by the mutation policy's per-unknown-id insertion cap
+   * (OQ-P4-5) and by `replaceRemainder`'s per-unknown-id remainder cap, which is why it is
+   * carried as data instead of parsed back out of `id`.
    */
   originUnknownId?: string;
+  /**
+   * Resolved arguments for a node with no parse-time step (row A.5).
+   *
+   * `parsedCommand.steps` is where a planned step's authoring data lives, and a remainder node
+   * has no entry there — `synthesizeStep` builds its step from this node alone. Present on
+   * `origin: 'remainder'` nodes whose submission declared arguments, absent everywhere else: a
+   * planned node's args are already on its parse step, and a second copy is a fact nothing keeps
+   * in step.
+   */
+  args?: Record<string, unknown>;
+  /**
+   * Declared context isolation for a node with no parse-time step (row A.5).
+   *
+   * The same reading as `WorkflowNode.delegated`: a DECLARATION. `synthesizeStep` is what turns
+   * it into `ChainStepPrompt.delegated`, the flag the renderer actually reads — stage 06 never
+   * sees a synthesized step, because it runs at parse time and is skipped on a blueprint resume.
+   */
+  delegated?: boolean;
 }
 
 /**

@@ -4,36 +4,38 @@ import {
   ChainStepSchema,
   PromptDataSchema,
   PromptYamlSchema,
+  stripExporterOnlyStepKeys,
 } from '../../../src/modules/prompts/prompt-schema.js';
 
 describe('Delegation field in prompt schemas', () => {
   describe('ChainStepSchema', () => {
     const baseStep = { promptId: 'test-step', stepName: 'Test Step' };
 
-    // ChainStepSchema is now `.strict()`, and `delegation` is now DECLARED. Both halves matter:
-    // it used to be accepted-and-stripped, so `result.data.delegation` came back undefined even
-    // though the skills-sync exporter reads the field straight off the YAML. It now survives.
-    test('accepts delegation and preserves the value', () => {
-      const result = ChainStepSchema.safeParse({ ...baseStep, delegation: true });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.delegation).toBe(true);
-      }
+    // Tier A: step-level `delegation` is an EXPORTER-only key. It has no runtime reader on any of
+    // the three step inputs, so it is not part of the vocabulary `ChainStepSchema` now derives
+    // from `workflowNodeSchema` — the schema rejects it, and every ingress function strips it
+    // first so YAML the skills-sync exporter honours still loads. Prompt-LEVEL `delegation` is
+    // unaffected (both prompt schemas are `.passthrough()`), which the blocks below still assert.
+    test('does not declare step-level delegation — the schema rejects it', () => {
+      const withKey = { ...baseStep } as Record<string, unknown>;
+      withKey['delegation'] = true;
+      expect(ChainStepSchema.safeParse(withKey).success).toBe(false);
+      withKey['delegation'] = false;
+      expect(ChainStepSchema.safeParse(withKey).success).toBe(false);
     });
 
-    test('preserves delegation: false rather than collapsing it to absent', () => {
-      const result = ChainStepSchema.safeParse({ ...baseStep, delegation: false });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.delegation).toBe(false);
-      }
+    test('strips step-level delegation at ingress so the prompt still loads', () => {
+      const stripped = stripExporterOnlyStepKeys({
+        chainSteps: [{ ...baseStep, delegation: true }],
+      }) as { chainSteps: Array<Record<string, unknown>> };
+      expect(ChainStepSchema.safeParse(stripped.chainSteps[0]).success).toBe(true);
     });
 
-    test('accepts missing delegation (optional)', () => {
+    test('parses a step that never carried the key', () => {
       const result = ChainStepSchema.safeParse(baseStep);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.delegation).toBeUndefined();
+        expect(result.data).not.toHaveProperty('delegation');
       }
     });
 
@@ -55,15 +57,13 @@ describe('Delegation field in prompt schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    test('accepts delegation with agentType together, keeping both', () => {
-      const result = ChainStepSchema.safeParse({
-        ...baseStep,
-        delegation: true,
-        agentType: 'Explore',
-      });
+    test('keeps agentType when the exporter-only key is stripped beside it', () => {
+      const stripped = stripExporterOnlyStepKeys({
+        chainSteps: [{ ...baseStep, delegation: true, agentType: 'Explore' }],
+      }) as { chainSteps: Array<Record<string, unknown>> };
+      const result = ChainStepSchema.safeParse(stripped.chainSteps[0]);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.delegation).toBe(true);
         expect(result.data.agentType).toBe('Explore');
       }
     });
@@ -168,21 +168,25 @@ describe('Delegation field in prompt schemas', () => {
       }
     });
 
-    test('accepts delegation with chain steps', () => {
-      const result = PromptYamlSchema.safeParse({
-        id: 'chain-test',
-        name: 'Chain Test',
-        description: 'A chain prompt with delegation',
-        delegation: true,
-        chainSteps: [
-          { promptId: 'step1', stepName: 'Step 1' },
-          { promptId: 'step2', stepName: 'Step 2', delegation: false },
-        ],
-      });
+    test('accepts prompt-level delegation with chain steps carrying the exporter-only key', () => {
+      // Through the ingress helper, as every real caller does: the step key is stripped, the
+      // prompt-level key rides the schema's `.passthrough()` and survives.
+      const result = PromptYamlSchema.safeParse(
+        stripExporterOnlyStepKeys({
+          id: 'chain-test',
+          name: 'Chain Test',
+          description: 'A chain prompt with delegation',
+          delegation: true,
+          chainSteps: [
+            { promptId: 'step1', stepName: 'Step 1' },
+            { promptId: 'step2', stepName: 'Step 2', delegation: false },
+          ],
+        })
+      );
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.delegation).toBe(true);
-        expect(result.data.chainSteps?.[1].delegation).toBe(false);
+        expect(result.data.chainSteps?.[1]).not.toHaveProperty('delegation');
       }
     });
 
@@ -198,24 +202,26 @@ describe('Delegation field in prompt schemas', () => {
     });
 
     test('accepts delegation + delegationAgent + step-level agentType', () => {
-      const result = PromptYamlSchema.safeParse({
-        id: 'chain-agents',
-        name: 'Chain with Agents',
-        description: 'Chain with custom delegation agents',
-        delegation: true,
-        delegationAgent: 'general-purpose',
-        chainSteps: [
-          { promptId: 'step1', stepName: 'Step 1' },
-          { promptId: 'step2', stepName: 'Step 2', agentType: 'code-reviewer' },
-          { promptId: 'step3', stepName: 'Step 3', delegation: false },
-        ],
-      });
+      const result = PromptYamlSchema.safeParse(
+        stripExporterOnlyStepKeys({
+          id: 'chain-agents',
+          name: 'Chain with Agents',
+          description: 'Chain with custom delegation agents',
+          delegation: true,
+          delegationAgent: 'general-purpose',
+          chainSteps: [
+            { promptId: 'step1', stepName: 'Step 1' },
+            { promptId: 'step2', stepName: 'Step 2', agentType: 'code-reviewer' },
+            { promptId: 'step3', stepName: 'Step 3', delegation: false },
+          ],
+        })
+      );
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.delegation).toBe(true);
         expect(result.data.delegationAgent).toBe('general-purpose');
         expect(result.data.chainSteps?.[1].agentType).toBe('code-reviewer');
-        expect(result.data.chainSteps?.[2].delegation).toBe(false);
+        expect(result.data.chainSteps?.[2]).not.toHaveProperty('delegation');
       }
     });
   });

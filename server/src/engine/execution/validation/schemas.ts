@@ -114,13 +114,18 @@ export const gateSpecificationSchema = z.union(
 );
 
 /**
- * Zod schema for gate_action parameter validation
- * Used when retry limit is exceeded to let user choose: retry, skip, or abort
+ * Zod schema for gate_action parameter validation.
+ *
+ * Two vocabularies in one parameter (see `McpToolRequest.gate_action`): retry/skip/abort answer a
+ * retry-limit exhaustion, resume/accept_alternative answer a mid-chain blocking-unknown interrupt
+ * (OQ-4). This schema admits the union and nothing narrows it further here — WHICH verb is
+ * admissible depends on what the run is holding on, which is run state this validator cannot see,
+ * and both handlers refuse an inapplicable verb by name (`GateVerdictProcessor`).
  */
-export const gateActionSchema = z.enum(['retry', 'skip', 'abort'], {
+export const gateActionSchema = z.enum(['retry', 'skip', 'abort', 'resume', 'accept_alternative'], {
   error: (issue) => {
     if (issue.code === 'invalid_value') {
-      return 'Gate action must be one of: retry, skip, abort';
+      return 'Gate action must be one of: retry, skip, abort, resume, accept_alternative';
     }
     return undefined;
   },

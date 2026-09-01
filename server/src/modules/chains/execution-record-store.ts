@@ -60,6 +60,8 @@ interface ExecutionRecordRow {
   unknowns_closed: number | null;
   nodes_inserted: number | null;
   nodes_skipped: number | null;
+  interrupts_raised: number | null;
+  remainders_accepted: number | null;
   delegation_skipped: number | null;
 }
 
@@ -100,6 +102,14 @@ export interface ExecutionRecordAppendInput {
    */
   nodesInserted?: number;
   nodesSkipped?: number;
+  /**
+   * D-8 mid-chain interrupt counters. Same terminal-rows-only posture and the same delivery
+   * route as the P4 pair above — they ride the one `getRunTelemetry` object both terminal
+   * writers spread, so a writer cannot bind one group and miss this one. See `RunTelemetry`
+   * for what unit each counts.
+   */
+  interruptsRaised?: number;
+  remaindersAccepted?: number;
   /**
    * S8 delegation-acknowledgment audit. Bound ONLY by the capture-time step writer
    * (StepCaptureService), and only when the captured step was delegated AND gated — the one
@@ -145,8 +155,9 @@ export class ExecutionRecordStore {
           substate_json, input_required_json, evidence_json, gate_verdicts_json,
           error_message, started_at, completed_at,
           steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed,
-          nodes_inserted, nodes_skipped, delegation_skipped
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          nodes_inserted, nodes_skipped, interrupts_raised, remainders_accepted,
+          delegation_skipped
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     } catch (error) {
@@ -241,6 +252,8 @@ export class ExecutionRecordStore {
       unknownsClosed: row.unknowns_closed ?? undefined,
       nodesInserted: row.nodes_inserted ?? undefined,
       nodesSkipped: row.nodes_skipped ?? undefined,
+      interruptsRaised: row.interrupts_raised ?? undefined,
+      remaindersAccepted: row.remainders_accepted ?? undefined,
       ...(row.delegation_skipped !== null
         ? { delegationSkipped: row.delegation_skipped === 1 }
         : {}),
@@ -280,6 +293,8 @@ function buildAppendParams(
     input.unknownsClosed ?? null,
     input.nodesInserted ?? null,
     input.nodesSkipped ?? null,
+    input.interruptsRaised ?? null,
+    input.remaindersAccepted ?? null,
     input.delegationSkipped === undefined ? null : input.delegationSkipped ? 1 : 0,
   ];
 }

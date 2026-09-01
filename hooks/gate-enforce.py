@@ -4,8 +4,12 @@ PreToolUse hook: Enforce gate verdicts on prompt_engine calls.
 
 Blocks:
 1. GATE_REVIEW: FAIL without retry attempt
-2. Chain resumes carrying NO pending-gate resolution parameter while a gate is pending.
-   The accepted resolution verbs (gate_verdict, gate_action, cancel, ...) are generated
+2. Chain resumes carrying NO pending-run resolution parameter while the run is HOLDING.
+   Two holds reach this check: an ordinary gate review, and the reserved
+   `__unknown_interrupt__` synthetic review a blocking unknown raises under
+   `budget.pauseOnBlocking`. They are denied with different prose because they accept
+   different exits — no gate_verdict clears an interrupt — but by ONE rule.
+   The accepted resolution parameters (gate_verdict, gate_action, cancel, ...) are generated
    from the server contract into lib/_generated/resolution_verbs.py — never hardcoded
    here, so the hook cannot deny an exit the server supports.
 
@@ -20,7 +24,11 @@ from pathlib import Path
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
-from session_state import load_session_state
+from session_state import (
+    UNKNOWN_INTERRUPT_LABEL,
+    interrupt_exits,
+    load_session_state,
+)
 
 
 def parse_hook_input() -> dict:
@@ -32,10 +40,10 @@ def parse_hook_input() -> dict:
 
 
 def load_resolution_params() -> frozenset[str] | None:
-    """Load the pending-gate resolution verbs generated from the server contract.
+    """Load the pending-run resolution verbs generated from the server contract.
 
     The set is emitted by server/scripts/generate-contracts.ts from parameters flagged
-    `resolvesPendingGate` in tooling/contracts/prompt-engine.json, so this hook accepts
+    `resolvesPendingRun` in tooling/contracts/prompt-engine.json, so this hook accepts
     exactly the moves the server accepts. A hardcoded model here rotted twice — it denied
     `gate_action: "abort"` and `cancel: true`, trapping sessions behind their own pending
     gate (2026-08-20).
@@ -45,9 +53,9 @@ def load_resolution_params() -> frozenset[str] | None:
     re-create the trap.
     """
     try:
-        from _generated.resolution_verbs import PENDING_GATE_RESOLUTION_PARAMS
+        from _generated.resolution_verbs import PENDING_RUN_RESOLUTION_PARAMS
 
-        return PENDING_GATE_RESOLUTION_PARAMS
+        return PENDING_RUN_RESOLUTION_PARAMS
     except Exception:
         return None
 
@@ -126,16 +134,28 @@ def main():
 
             if state and state.get("pending_gate"):
                 gate = state["pending_gate"]
-                exits = ", ".join(sorted(resolution_params - {"gate_verdict"}))
+                if gate == UNKNOWN_INTERRUPT_LABEL:
+                    # A blocking-unknown interrupt is NOT a gate review: the run issued no step
+                    # and no gate_verdict clears it, so a message telling the caller to submit
+                    # one would name an exit the server refuses. The verbs come from the run's
+                    # own interrupt section (session_state captures what the server printed).
+                    reason = (
+                        f"Chain paused: {gate}. The run issued no step and no gate_verdict "
+                        "clears this hold. Resolve it with one of: "
+                        f"{', '.join(interrupt_exits(state))}."
+                    )
+                else:
+                    exits = ", ".join(sorted(resolution_params - {"gate_verdict"}))
+                    reason = (
+                        f"Gate review required: {gate}. Review your output against the "
+                        "gate criteria and submit gate_verdict. If the gate cannot be "
+                        f"satisfied, these parameters also resolve it: {exits}."
+                    )
                 hook_response = {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
                         "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"Gate review required: {gate}. Review your output against the "
-                            "gate criteria and submit gate_verdict. If the gate cannot be "
-                            f"satisfied, these parameters also resolve it: {exits}."
-                        ),
+                        "permissionDecisionReason": reason,
                     }
                 }
                 print(json.dumps(hook_response))

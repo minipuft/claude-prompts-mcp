@@ -222,12 +222,15 @@ function generateToolDescriptions(
 // metadata (.generated.ts), tool descriptions (.json), and docs (.md).
 
 /**
- * Emit the pending-gate resolution verbs for the Python gate hook.
+ * Emit the pending-run resolution verbs for the Python gate hook.
  *
  * `hooks/gate-enforce.py` (PreToolUse) must accept exactly the moves the server accepts while a
- * gate review is pending. Its previous hardcoded model rotted twice — it denied
+ * run is waiting for one. Named for the RUN, not the gate: a failed gate review is no longer the
+ * only thing a run can be pending on — a blocking-unknown interrupt holds a run on the reserved
+ * `__unknown_interrupt__` review, and the verbs that clear it (`gate_action: resume |
+ * accept_alternative`) travel the same channel. Its previous hardcoded model rotted twice — it denied
  * `gate_action: "abort"` and `cancel: true`, both server-supported exits, trapping sessions
- * behind their own pending gate (2026-08-20). Parameters flagged `resolvesPendingGate: true`
+ * behind their own pending gate (2026-08-20). Parameters flagged `resolvesPendingRun: true`
  * in the prompt-engine contract are the single source; this artifact is how the hook reads it.
  *
  * Throws when the contract exists but flags nothing: an empty set would make the hook deny
@@ -243,13 +246,13 @@ async function generateResolutionVerbs(
   }
 
   const verbs = promptEngine.contract.parameters
-    .filter((p) => p.resolvesPendingGate === true)
+    .filter((p) => p.resolvesPendingRun === true)
     .map((p) => p.name)
     .sort((a, b) => a.localeCompare(b));
 
   if (verbs.length === 0) {
     throw new Error(
-      '[generate-contracts] prompt-engine.json flags no parameter with resolvesPendingGate. ' +
+      '[generate-contracts] prompt-engine.json flags no parameter with resolvesPendingRun. ' +
         'An empty set would make hooks/gate-enforce.py deny every pending-gate call, including ' +
         'cancel and gate_action. Flag the resolution parameters or remove the hook consumer.'
     );
@@ -257,12 +260,12 @@ async function generateResolutionVerbs(
 
   const initContent = '"""Generated package marker. Do not edit."""\n';
   const moduleContent = [
-    '"""Pending-gate resolution verbs. Generated from tooling/contracts/prompt-engine.json.',
+    '"""Pending-run resolution verbs. Generated from tooling/contracts/prompt-engine.json.',
     '',
     'Regenerate with `npm run generate:contracts` (server/). Do not edit.',
     '"""',
     '',
-    'PENDING_GATE_RESOLUTION_PARAMS: frozenset[str] = frozenset(',
+    'PENDING_RUN_RESOLUTION_PARAMS: frozenset[str] = frozenset(',
     '    {',
     ...verbs.map((name) => `        "${name}",`),
     '    }',
@@ -284,6 +287,14 @@ async function generateResolutionVerbs(
     gateHeader: '\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*',
     gatesList: '\\*\\*Gates\\*\\*:\\s*(.+?)(?:\n|$)',
     structuredVerdict: '"overall"\\s*:\\s*"(PASS|FAIL)"',
+    // A HARD-PAUSED blocking-unknown interrupt (`response-assembler.ts::buildInterruptSection`,
+    // paused header). Matches only the paused variant: the SOFT interrupt issues the step, so a
+    // consumer treating it as a hold would block a resume the server accepts.
+    interruptHeader: '\\*\\*Chain Paused[^\\n*]*\\*\\*',
+    // The exits that section printed. Read back rather than modelled client-side, because the
+    // paused verb list is state-dependent (§PAUSED_INTERRUPT_VERBS) and a client-side copy of it
+    // is what rotted twice in 2026-08.
+    interruptVerbs: 'Resolve with `chain_id=[^\\n]*plus one of:\\n\\n((?:-\\s*.+\\n?)+)',
   };
   const patternsJsonContent = `${JSON.stringify(extractionPatterns, null, 2)}\n`;
 
@@ -483,7 +494,7 @@ async function main(): Promise<void> {
       '  notes?: string[];',
       '  enum?: string[]; // For enum types with explicit values',
       '  includeInDescription?: boolean; // If false, param is in schema but not tool description',
-      '  resolvesPendingGate?: boolean; // True when supplying this param resolves a pending gate review',
+      '  resolvesPendingRun?: boolean; // True when supplying this param resolves a run pending a review (failed gate or unknown interrupt)',
       '}',
       '',
       'export interface ToolCommand {',

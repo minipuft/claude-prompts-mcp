@@ -1,7 +1,7 @@
 import { workflow_irParameters } from '../../../src/mcp/contracts/schemas/_generated/workflow_ir.generated.js';
 import { workflowIRSchema } from '../../../src/mcp/tools/schemas/workflow-ir.schema.js';
 import { MAX_INSERTIONS_PER_RUN } from '../../../src/engine/execution/pipeline/decisions/mutation/types.js';
-import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/types.js';
+import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
 
 const minimalIR = {
   version: 1,

@@ -6,7 +6,7 @@
  * MCP tool requests, validation, and execution context types.
  */
 
-import type { WorkflowIR } from '#modules/workflow-ir/types.js';
+import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from './chain-session.js';
 
 /** Scope for gate validation application */
@@ -118,13 +118,23 @@ export interface McpToolRequest {
   readonly gate_verdict?: string;
 
   /**
-   * User action when retry limit is exceeded.
-   * - 'retry': Reset attempt count and try again
-   * - 'skip': Skip the gate check and continue chain
-   * - 'abort': Stop chain execution entirely
+   * The verb a caller uses to resolve a run that is holding. Two disjoint vocabularies share one
+   * parameter, and which one applies is decided by WHAT the run is holding on:
+   *
+   * - retry-limit exhaustion (`GateAction`): 'retry' resets the attempt count, 'skip' passes the
+   *   failed gate, 'abort' stops the run.
+   * - a mid-chain blocking-unknown interrupt ({@link InterruptResolutionAction}): 'resume'
+   *   acknowledges the unknown and issues the investigation step, 'accept_alternative' takes the
+   *   `remainder` submitted in the SAME call. Both are refused by name anywhere else — on an
+   *   ordinary gate review and on a run with nothing pending — so the union never becomes a
+   *   grab-bag whose members mean whatever the current state allows.
+   *
+   * 'abort' belongs to both, deliberately: stopping the run means the same thing either way, and
+   * a second spelling of it would be a synonym a client has to choose between.
+   *
    * @since 2.1.0
    */
-  readonly gate_action?: 'retry' | 'skip' | 'abort';
+  readonly gate_action?: 'retry' | 'skip' | 'abort' | 'resume' | 'accept_alternative';
 
   /** User response to previous chain step for advancing execution */
   readonly user_response?: string;
@@ -173,6 +183,17 @@ export interface McpToolRequest {
    * `shared-cross-layer-type-only` (warn, tracked) and not the value-import error.
    */
   readonly workflow?: WorkflowIR;
+
+  /**
+   * A model-authored rewrite of the rest of a RUNNING chain (OQ-3), accepted only alongside
+   * `chain_id` and only while a blocking unknown is open on the run's ledger (or the synthetic
+   * `__unknown_interrupt__` review is pending). Applied by `RemainderProcessor` in stage 16.
+   *
+   * Typed by direct reference for the reason `workflow` above is, and it is the SAME vocabulary:
+   * a remainder's nodes are IR nodes, so a caller can copy `chain_interrupt.remaining_nodes`
+   * straight back into one. Type-only import, `shared-cross-layer-type-only` (warn, tracked).
+   */
+  readonly remainder?: RemainderSubmission;
 
   /** Raw MCP SDK extra payload (authInfo, headers, sessionId) captured at tool boundary */
   readonly _extra?: Record<string, unknown>;

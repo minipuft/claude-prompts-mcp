@@ -257,7 +257,7 @@ const buildPipeline = (options: {
       parsingSystem.argumentParser,
       () => PROMPTS,
       logger,
-      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger),
+      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, compileWorkflowIR),
       {
         workflowCommandBuilder,
         blueprintResolver: new ChainBlueprintResolver(sessionStore, logger),

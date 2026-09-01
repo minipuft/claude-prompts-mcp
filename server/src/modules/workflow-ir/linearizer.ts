@@ -27,7 +27,17 @@
  * Pure: no I/O, no logging, no injected collaborators.
  */
 
-import type { WorkflowEdge, WorkflowNode, WorkflowRejection } from './types.js';
+import type { WorkflowEdge, WorkflowRejection } from './node-schema.js';
+
+/**
+ * What linearization needs of a node: an identity, and nothing else.
+ *
+ * Narrower than `WorkflowNode` on purpose. `modules/prompts/prompt-schema.ts` calls this to order
+ * a YAML chain, whose steps are `ChainStep`s rather than IR nodes, and importing `types.js` here
+ * would pull that file's tracked type-only cycle with `shared/types/execution.ts` into
+ * `cli-shared`'s import graph — where the isolation gate requires zero violations.
+ */
+export type LinearizableNode = { readonly id: string };
 
 /** Discriminated linearization result. Cycles are the only failure this function can produce. */
 export type LinearizationResult =
@@ -45,7 +55,7 @@ export type LinearizationResult =
  * @returns the total order, or a `cycle` rejection naming every node that could not be placed.
  */
 export function linearize(
-  nodes: readonly WorkflowNode[],
+  nodes: readonly LinearizableNode[],
   edges: readonly WorkflowEdge[] = []
 ): LinearizationResult {
   const declarationIndex = new Map<string, number>();

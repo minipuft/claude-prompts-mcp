@@ -330,6 +330,17 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                       meaningful: no declaration was recorded, so the verification stage
     //                       blocks on nothing — the change can only relax enforcement, never
     //                       tighten it. Partial population BY ROW TYPE, like origin_unknown_id.
+    //
+    // v27 (row A.5) added two more, also in the owner's INSERT list:
+    //   delegated       — the `==>` declaration of a node the CALLER contributed mid-run
+    //                     (`origin='remainder'`). 0/1/NULL, where NULL means the node declared
+    //                     nothing at all and is not the same claim as a declared `false`.
+    //   args_json       — that node's resolved argument bag, JSON object or NULL.
+    //                     Both exist because a remainder node has no row in
+    //                     `parsedCommand.steps`: the renderer synthesizes its step from the node
+    //                     alone, so a declaration the node does not carry is a declaration the
+    //                     run can never see. Partial population BY ROW TYPE again — every
+    //                     planned and inserted node leaves both NULL.
     // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {
@@ -376,7 +387,16 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'steps, delegated steps with no gate text, and every render/terminal row. Same partial- ' +
       'population-BY-ROW-TYPE reading as the v21/v23 groups; record-only (R-4 — enforcement ' +
       'stays advisory, the server records what it cannot prevent), read back by the ' +
-      'execution_history action.',
+      'execution_history action. ' +
+      'D-8 (v26) added interrupts_raised and remainders_accepted on the v21/v23 terms exactly: ' +
+      'terminal rows only, riding the same getRunTelemetry object both terminal writers spread. ' +
+      'They are the surviving audit of the mid-chain blocking-unknown interrupt once the ' +
+      'unknowns ledger (chain_runs residual document) and origin=remainder (chain_run_nodes) are ' +
+      'gone — both tables are ephemeral and PID-deleted, so nothing else outlives the process. ' +
+      'UNITS, which the names do not carry: interrupts_raised counts blocking LEDGER ENTRIES ' +
+      'rather than raise events (decideInterrupt is a function of open state and re-raises every ' +
+      'step while an unknown is open), and remainders_accepted counts DISTINCT unknown ids — the ' +
+      "same unit replaceRemainder's per-unknown-id cap counts, sharing one expression with it.",
   },
 ];
 

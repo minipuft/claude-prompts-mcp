@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createSymbolicCommandParser } from '../../../../src/engine/execution/parsers/symbolic-operator-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
+import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
 
 import type {
   ArgumentParser,
@@ -151,7 +152,7 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       const argumentParser = {
         parseArguments: jest.fn(async () => createArgumentResult()),
       } as unknown as ArgumentParser;
-      return new SymbolicCommandBuilder(argumentParser, logger);
+      return new SymbolicCommandBuilder(argumentParser, logger, compileWorkflowIR);
     }
 
     test('step carries inlineGateCriteria and no orphan command-level gate is seeded', async () => {

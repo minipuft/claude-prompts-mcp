@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import type { GateService } from '#engine/gates/services/gate-service-interface.js';
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
+import { RemainderProcessor } from '#engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '#engine/execution/capture/unknown-observation-processor.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
@@ -80,6 +81,7 @@ import { createToolDetectionService } from '#modules/automation/detection/tool-d
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
 import { compileWorkflowIR } from '#modules/workflow-ir/compiler.js';
+import { DEFAULT_WORKFLOW_CAPS } from '#modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
 
 /**
@@ -135,9 +137,14 @@ export class PipelineBuilder {
 
     // ── Stages 04-09: Parsing, Planning, Scripts ──
 
+    // `compileWorkflowIR` is passed to BOTH command builders (row A.2): a `-->` chain and a
+    // submitted IR are the same representation, so they compile through the same function rather
+    // than through two projections that agree by hand. Same layer reason as the port below — the
+    // composition root is the only place allowed to name both sides.
     const symbolicCommandBuilder = new SymbolicCommandBuilder(
       deps.parsingSystem.argumentParser,
-      deps.logger
+      deps.logger,
+      compileWorkflowIR
     );
     const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
     // The composition root is the only layer that may name both sides: `engine/` cannot
@@ -306,6 +313,17 @@ export class PipelineBuilder {
       deps.chainSessionStore,
       deps.logger
     );
+    // Row 2.3. Same composition-root reason as `workflowCommandBuilder` above: the validator and
+    // the caps are Layer 3 and stage 16 is Layer 2, so this is the only place allowed to name
+    // both. Stateless per pipeline, like everything else built here — a Streamable HTTP request
+    // rebuilds it, and nothing it holds outlives the call.
+    const remainderProcessor = new RemainderProcessor(
+      deps.chainSessionStore,
+      { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+      deps.getConvertedPrompts,
+      deps.logger
+    );
+
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
       stepCaptureService,
@@ -315,7 +333,7 @@ export class PipelineBuilder {
       // P5-F6: post-advance review re-evaluation reuses the SAME GateEnhancementService instance
       // stage 11 uses — its `temporaryGateRegistry`/`runStepViewProvider` wiring is what the
       // step-target lookup needs, and nothing about it is per-call state.
-      gateEnhancementService
+      { gateEnhancementService, remainderProcessor }
     );
 
     // Shell verification stage

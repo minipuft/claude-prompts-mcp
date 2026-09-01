@@ -171,13 +171,26 @@ describe('compileWorkflowIR — run-level output', () => {
     expect(compiled.promptArgs).toEqual({ which: 'synthesize' });
   });
 
-  it('projects only the two budget fields that outlive validation', () => {
+  it('projects only the budget fields that outlive validation', () => {
     const compiled = compileValidated(
       ir({
         budget: { maxNodes: 4, maxFanOut: 2, maxInsertions: 1, declaredCostCeiling: 50_000 },
       })
     );
     expect(compiled.budget).toEqual({ maxInsertions: 1, declaredCostCeiling: 50_000 });
+  });
+
+  it('carries pauseOnBlocking, the behavioural dial, past the stripper (row 1.3, hop 2 of 4)', () => {
+    // `compileBudget` drops every budget field with no post-validation reader, so a knob declared
+    // only on `workflowBudgetSchema` never reaches stage 16 — it typechecks the whole way and
+    // reads `undefined` forever (DEV-T0-3). This assertion is that hop.
+    expect(compileValidated(ir({ budget: { pauseOnBlocking: true } })).budget).toEqual({
+      pauseOnBlocking: true,
+    });
+    // An explicit `false` is carried too: the run must be able to report what it was asked for.
+    expect(compileValidated(ir({ budget: { pauseOnBlocking: false } })).budget).toEqual({
+      pauseOnBlocking: false,
+    });
   });
 
   it('omits the budget entirely when only structural caps were declared', () => {

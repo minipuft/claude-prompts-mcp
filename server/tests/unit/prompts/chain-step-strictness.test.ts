@@ -28,11 +28,13 @@ describe('ChainStepSchema — unknown keys are rejected, not dropped', () => {
     expect(JSON.stringify(result.error?.issues)).toContain('notAField');
   });
 
-  it('still ACCEPTS the step — rejecting is a resource-format break needing a major bump', () => {
-    // `delegation`/`delegationAgent` have no schema entry anywhere and
-    // their tolerated stripping is an asserted contract (delegation-schema.test.ts), so `.strict()`
-    // would reject YAML that loads today. This test is the guard against re-tightening by accident.
-    expect(ChainStepSchema.safeParse({ ...STEP, delegation: true }).success).toBe(true);
+  it('still LOADS a step carrying `delegation` — it is stripped, not declared and not rejected', () => {
+    // Tier A moved `delegation` off the schema: it has no runtime reader, so it may not be part
+    // of the step vocabulary shared with `-->` and the Workflow IR. It is removed before
+    // validation instead, so YAML the skills-sync exporter provably honours keeps loading. The
+    // schema itself therefore rejects it, and the ingress path does not.
+    expect(ChainStepSchema.safeParse({ ...STEP, delegation: true }).success).toBe(false);
+    expect(validatePromptYaml(yamlChain([{ ...STEP, delegation: true }])).valid).toBe(true);
   });
 
   it('fails the load through validatePromptYaml, naming the key and its step index', () => {

@@ -12,7 +12,7 @@ tags:
 
 # Unknowns Corpus → Prompt Evolution
 
-Split out of `plans/features/mid-chain-unknown-surfacing-2026-08-20.md` (interview 2026-08-30).
+Split out of `plans/reference/features/mid-chain-unknown-surfacing-2026-08-20.md` (interview 2026-08-30).
 
 ## Idea (operator-originated)
 

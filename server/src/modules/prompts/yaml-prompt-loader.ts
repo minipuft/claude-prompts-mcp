@@ -15,12 +15,14 @@ import * as path from 'node:path';
 
 import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
 
-import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
+import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
 import type { PromptData } from './types.js';
 
+import { linearize } from '#modules/workflow-ir/linearizer.js';
 import { type Logger, PromptArgument } from '#shared/types/index.js';
 import { INJECTION_TYPES } from '#shared/types/injection.js';
+import { mintNodeIds } from '#shared/utils/node-order.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ============================================
@@ -66,6 +68,10 @@ export interface LoadedPromptFile {
     framework?: string;
     /** Inline gate ids for this step — mirrors `ChainStepSchema.inlineGateIds`. Wired (P6 T4). */
     inlineGateIds?: string[];
+    /** Raw `::`-style gate tokens, resolved at stage 11 — mirrors `ChainStepSchema.inlineGateCriteria` (A.2). */
+    inlineGateCriteria?: string[];
+    /** Declared context isolation — mirrors `ChainStepSchema.delegated` (A.2). */
+    delegated?: boolean;
     /**
      * Per-step visibility policy (P5 Tier 1) — mirrors `ChainStepSchema.visibility`. Threaded and
      * consumed at the render chokepoints (P5 Tiers 2-3); carried here since P5 Tier 1, ahead of
@@ -384,15 +390,19 @@ function normalizeArguments(args: PromptYaml['arguments']): PromptArgument[] {
  * Shared between yamlToPromptData (PromptData path) and loadYamlPrompt (LoadedPromptFile path).
  */
 function normalizeChainSteps(
-  steps: PromptYaml['chainSteps']
+  steps: PromptYaml['chainSteps'],
+  edges?: PromptYaml['edges']
 ): NonNullable<PromptData['chainSteps']> | undefined {
   if (!steps) return undefined;
-  return steps.map((step) => {
+  const normalized = steps.map((step) => {
     const normalized: NonNullable<PromptData['chainSteps']>[number] = {
       promptId: step.promptId,
       stepName: step.stepName,
     };
     if (step.id != null) normalized.id = step.id;
+    // `args` is carried here as of Tier A, together with the stage-04 projection — a field
+    // carried at fewer than all the strippers on this path is silently dead (P6-F7).
+    if (step.args != null) normalized.args = step.args;
     if (step.inputMapping) normalized.inputMapping = step.inputMapping;
     if (step.outputMapping) normalized.outputMapping = step.outputMapping;
     if (typeof step.retries === 'number') normalized.retries = step.retries;
@@ -408,12 +418,53 @@ function normalizeChainSteps(
     // `step.inlineGateIds` and feeds it to `GateSetResolver` at rank `inline-operator`. Wiring is
     // therefore removal of two strippers, not addition of a reader.
     if (step.inlineGateIds != null) normalized.inlineGateIds = step.inlineGateIds;
+    // `inlineGateCriteria` and `delegated` join the node vocabulary at row A.2 (OQ-A2b). They are
+    // carried here and at the stage-04 projection in the same change for the standing reason: a
+    // field carried at fewer than all three strippers is silently dead (P6-F7). Their readers
+    // already exist — `InlineGateProcessor` partitions the criteria per step at stage 11, and
+    // `markDelegatedStepPrompts` reads the declaration at stage 06.
+    if (step.inlineGateCriteria != null) normalized.inlineGateCriteria = step.inlineGateCriteria;
+    if (step.delegated != null) normalized.delegated = step.delegated;
     // `visibility` declares which context items a step's render may see. It was carried ahead of
     // `inlineGateIds` because a preserved-but-unread declaration carried no risk of newly
     // changing what a chain does (P5 Tier 1: additive/threading only); both are live now.
     if (step.visibility != null) normalized.visibility = step.visibility;
     return normalized;
   });
+
+  return orderChainSteps(normalized, edges);
+}
+
+/**
+ * Reorder chain steps under their declared dependency edges (Tier A).
+ *
+ * Edges are ordering CONSTRAINTS, never control flow — the same meaning a submitted Workflow IR
+ * gives them — and they are resolved HERE, at load, rather than in the pipeline. That is the one
+ * placement that needs no new engine wiring: `linearize` lives in `modules/workflow-ir/` and
+ * `engine/` is architecturally barred from value-importing it ('engine-no-modules-or-mcp-value',
+ * severity error), while `modules/prompts/` may. Downstream of this function a YAML chain is a
+ * plain ordered list exactly as it always was, and no stage learns a second ordering rule.
+ *
+ * The edge endpoints are the ids `mintNodeIds` derives — explicit `id` when the step declares
+ * one, otherwise a slug of `stepName`. `validatePromptYaml` has already rejected a missing
+ * endpoint or a cycle by the time a load reaches here; a cycle that arrives anyway (an in-process
+ * caller that skipped validation) leaves the authored order untouched rather than dropping steps.
+ */
+function orderChainSteps(
+  steps: NonNullable<PromptData['chainSteps']>,
+  edges?: PromptYaml['edges']
+): NonNullable<PromptData['chainSteps']> {
+  if (edges === undefined || edges.length === 0) return steps;
+
+  const ids = mintNodeIds(steps);
+  const result = linearize(
+    steps.map((step, index) => ({ id: ids[index] as string, promptId: step.promptId })),
+    edges
+  );
+  if (!result.ok) return steps;
+
+  const byId = new Map(ids.map((id, index) => [id, steps[index] as (typeof steps)[number]]));
+  return result.order.map((id) => byId.get(id) as (typeof steps)[number]);
 }
 
 /**
@@ -505,6 +556,8 @@ export function yamlToPromptData(yaml: PromptYaml, filePath?: string): PromptDat
     arguments: rawArgs,
     category,
     chainSteps: rawChainSteps,
+    edges: rawEdges,
+    budget: rawBudget,
     gateConfiguration: rawGateConfig,
     // Destructured so the raw YAML shape does not reach PromptData through the passthrough
     // spread below — it must arrive normalized or not at all.
@@ -512,15 +565,47 @@ export function yamlToPromptData(yaml: PromptYaml, filePath?: string): PromptDat
     ...passthroughFields
   } = yaml;
 
+  const budget = normalizeChainBudget(rawBudget);
+
   return {
     ...passthroughFields,
     category: category ?? 'general',
     file: filePath ?? `${yaml.id}/prompt.yaml`,
     arguments: normalizeArguments(rawArgs),
-    chainSteps: normalizeChainSteps(rawChainSteps),
+    chainSteps: normalizeChainSteps(rawChainSteps, rawEdges),
+    ...(rawEdges !== undefined ? { edges: rawEdges.map((edge) => ({ ...edge })) } : {}),
+    ...(budget !== undefined ? { budget } : {}),
     gateConfiguration: normalizeGateConfiguration(rawGateConfig),
     injection: normalizeInjectionConfig(rawInjection),
   };
+}
+
+/**
+ * Project a chain's declared budget onto the fields that outlive validation.
+ *
+ * Mirrors `compileWorkflowIR`'s `compileBudget` deliberately: `maxNodes` and `maxFanOut` are
+ * answered from the submission itself and have no reader afterwards, so carrying them past
+ * validation would create write-only fields on every loaded chain. Returns `undefined` when
+ * nothing durable was declared, so an all-structural budget leaves no budget object at all.
+ *
+ * One of the FOUR strippers a budget field must be added to — the list, and what happens when a
+ * field is added to only some of them, is on `DeclaredRunBudget`. This is the hop that makes an
+ * IR-only knob reach a TEMPLATE chain, which is the whole point of Tier A's one-step
+ * representation: `pauseOnBlocking` declared in `prompt.yaml` has to arrive at stage 16 exactly
+ * as it does from a submitted IR.
+ */
+function normalizeChainBudget(
+  budget: PromptYaml['budget']
+): NonNullable<PromptData['budget']> | undefined {
+  if (budget === undefined) return undefined;
+  const normalized: NonNullable<PromptData['budget']> = {
+    ...(budget.maxInsertions !== undefined ? { maxInsertions: budget.maxInsertions } : {}),
+    ...(budget.declaredCostCeiling !== undefined
+      ? { declaredCostCeiling: budget.declaredCostCeiling }
+      : {}),
+    ...(budget.pauseOnBlocking !== undefined ? { pauseOnBlocking: budget.pauseOnBlocking } : {}),
+  };
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 // ============================================
@@ -712,7 +797,7 @@ export function loadYamlPrompt(
 
   applyInjectionConfig(loadedContent, yamlData.injection);
 
-  const normalizedChainSteps = normalizeChainSteps(yamlData.chainSteps);
+  const normalizedChainSteps = normalizeChainSteps(yamlData.chainSteps, yamlData.edges);
   if (normalizedChainSteps) {
     loadedContent.chainSteps = normalizedChainSteps;
     loadedContent.isChain = normalizedChainSteps.length > 0;

@@ -644,6 +644,14 @@ export interface ChainStep {
    * defaults to a slug of `stepName` at mint time when omitted. Additive only; not yet consumed.
    */
   id?: string;
+  /**
+   * Static arguments declared for this step (Tier A — the one step vocabulary).
+   *
+   * Mirrors `WorkflowNode.args`. On the YAML path these OVERRIDE the run's invocation arguments
+   * for this step only: a constant declared on the step beats what the caller happened to pass,
+   * which is the point of declaring it. Upstream step results still arrive via `inputMapping`.
+   */
+  args?: Record<string, unknown>;
   /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
   inputMapping?: Record<string, string>;
   /** Name this step's output for downstream steps */
@@ -668,6 +676,22 @@ export interface ChainStep {
    * reader predated the producer, so wiring meant removing two strippers, not adding a consumer.
    */
   inlineGateIds?: string[];
+  /**
+   * Raw `::`-style gate tokens applied to this step (row A.2, OQ-A2b — WIRED).
+   *
+   * A sibling of `inlineGateIds`, not a spelling of it: these are UNRESOLVED tokens, split into
+   * registered ids and free-text criteria by `InlineGateProcessor.partitionGateCriteria` at stage
+   * 11, which is the first place that holds the gate registry. Carried through
+   * `normalizeChainSteps` and the stage-04 projection onto `ChainStepPrompt.inlineGateCriteria`.
+   */
+  inlineGateCriteria?: string[];
+  /**
+   * Declared context isolation for this step (row A.2) — the `==>` operator's landing field, and
+   * the one way YAML can ask for isolation without naming a `subagentModel` it does not care
+   * about. A DECLARATION: `markDelegatedStepPrompts` (stage 06) is the single producer of the
+   * runtime flag and reads this alongside `subagentModel`.
+   */
+  delegated?: boolean;
   /**
    * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
    * expose to this step's render. Mirrors `ChainStepSchema.visibility`. Additive only — threaded
@@ -720,6 +744,20 @@ export interface PromptData {
   injection?: import('./injection.js').PromptInjectionConfig;
   /** Chain steps for multi-step execution (YAML format) */
   chainSteps?: ChainStep[];
+  /**
+   * Dependency edges between chain steps, addressed by minted node id (Tier A).
+   *
+   * Ordering constraints, never control flow — the same meaning a submitted Workflow IR gives
+   * them. The loader linearizes them into `chainSteps` order at load time (`yaml-prompt-loader`),
+   * so nothing downstream of the loader ever sees an edge; this field is kept so a round-tripped
+   * prompt still declares what it was authored with.
+   */
+  edges?: Array<{ from: string; to: string }>;
+  /**
+   * Run-level budget declared by this chain (Tier A), same shape a submitted Workflow IR carries.
+   * Projected onto `ParsedCommand.budget` by the stage-04 chain projection.
+   */
+  budget?: import('./chain-session.js').DeclaredRunBudget;
   /** Whether to register this prompt with MCP. Overrides category default. */
   registerWithMcp?: boolean;
   /**

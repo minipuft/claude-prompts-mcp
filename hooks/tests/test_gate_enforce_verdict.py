@@ -134,7 +134,7 @@ class TestPendingGateResolution:
         """Parity: the shipped artifact carries exactly the contract's flagged parameters."""
         contract_path = HOOKS_DIR.parent / "server" / "tooling" / "contracts" / "prompt-engine.json"
         contract = json.loads(contract_path.read_text())
-        flagged = {p["name"] for p in contract["parameters"] if p.get("resolvesPendingGate") is True}
+        flagged = {p["name"] for p in contract["parameters"] if p.get("resolvesPendingRun") is True}
         assert flagged, "contract flags no resolution parameters"
         assert hook_mod.load_resolution_params() == flagged
 

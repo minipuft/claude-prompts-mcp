@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
+import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
 
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -63,7 +64,7 @@ describe('Tier D — empty symbolic args resolve through ArgumentParser', () => 
       error: jest.fn(),
     } as unknown as Logger;
 
-    builder = new SymbolicCommandBuilder(createArgumentParser(logger), logger);
+    builder = new SymbolicCommandBuilder(createArgumentParser(logger), logger, compileWorkflowIR);
     jest.clearAllMocks();
   });
 

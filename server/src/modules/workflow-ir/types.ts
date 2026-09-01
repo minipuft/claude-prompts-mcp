@@ -18,6 +18,7 @@
 
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { GateSpecification } from '#shared/types/execution.js';
+import type { WorkflowEdge, WorkflowRejection } from './node-schema.js';
 
 /**
  * One node of a submitted workflow.
@@ -64,17 +65,17 @@ export interface WorkflowNode {
    * (OQ-P6-8) — the same channel `ChainStepSchema.inlineGateIds` now feeds.
    */
   readonly inlineGateIds?: readonly string[];
-}
-
-/**
- * A dependency assertion: `to` may not run before `from`.
- *
- * NOT control flow. The linearizer consumes edges as ordering constraints and emits a total
- * order; nothing downstream ever sees an edge.
- */
-export interface WorkflowEdge {
-  readonly from: string;
-  readonly to: string;
+  /**
+   * Raw `::` gate tokens for this node, resolved per step at stage 11 by `InlineGateProcessor`
+   * (row A.2, OQ-A2b). A sibling of `inlineGateIds`, not a spelling of it — see
+   * `node-schema.ts` for why the run-level `gates[]` channel provably cannot carry them.
+   */
+  readonly inlineGateCriteria?: readonly string[];
+  /**
+   * Declared context isolation — the `==>` operator's landing field. A DECLARATION;
+   * `markDelegatedStepPrompts` (stage 06) stays the single producer of the runtime flag.
+   */
+  readonly delegated?: boolean;
 }
 
 /**
@@ -103,6 +104,12 @@ export interface WorkflowBudget {
   readonly maxInsertions?: number;
   /** RECORDED ONLY — never enforced, never compared against a server-side estimate. */
   readonly declaredCostCeiling?: number;
+  /**
+   * BEHAVIOURAL DIAL — not a cap, so there is nothing to narrow. `true` makes a blocking unknown
+   * HARD-PAUSE the run on the reserved `__unknown_interrupt__` review instead of continuing into
+   * the inserted investigation step (D-2). Default `false`.
+   */
+  readonly pauseOnBlocking?: boolean;
 }
 
 /** A submitted workflow. `version` is a literal so a future shape change is a typed discriminant. */
@@ -120,50 +127,48 @@ export interface WorkflowIR {
 }
 
 /**
- * Named rejection reasons.
+ * How a submitted remainder meets the nodes already on the run.
  *
- * A vocabulary, not a boolean plus a message — mirroring `MutationNoneReason`
- * (`decisions/mutation/types.ts:23`) and `PatchRejection` (P7 `template-patch.ts`). Acceptance
- * clause (b) requires rejections to be ACTIONABLE, which means addressed: every rejection names
- * the node or edge it is about.
- *
- * `ambiguous-order` was authored into this vocabulary by the plan (§Interfaces) and is
- * DELIBERATELY ABSENT — see {@link linearize}. Kahn's algorithm with a total tiebreak has no
- * ambiguous case to report, so the member would have had no producer, which is the
- * declaration-dead shape `validate:no-phantom-columns` exists to catch one table over.
+ * ONE MECHANISM, TWO SPELLINGS (OQ-A1): `append` is also what a `chain_id` call whose command
+ * begins with `-->` compiles to, so the two spellings share this vocabulary rather than each
+ * carrying a private notion of "add to the end".
  */
-export type WorkflowRejectionReason =
-  | 'empty-workflow'
-  /**
-   * The submission carried a workflow AND another command source (`command` or `chain_id`).
-   *
-   * Produced by the stage that owns request shape (`04-parsing-stage.ts`), not by
-   * {@link validateWorkflowIR} — the validator is a pure function of ONE IR and cannot see the
-   * rest of the request. It belongs in this vocabulary anyway because it reaches the client
-   * through the same addressed-rejection channel, and a second rejection shape for one class of
-   * client error is how error text drifts apart.
-   */
-  | 'mutually-exclusive-source'
-  | 'duplicate-node-id'
-  | 'invalid-node-id'
-  | 'unknown-prompt'
-  | 'edge-endpoint-missing'
-  | 'cycle'
-  | 'cap-exceeded'
-  | 'gate-target-missing'
-  | 'required-argument-missing'
-  | 'unknown-visibility-item';
+type RemainderMode = 'replace' | 'append';
 
-/** One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the two run-level ones. */
-export interface WorkflowRejection {
-  readonly reason: WorkflowRejectionReason;
-  /** The node this rejection is about, when it is about one. */
-  readonly nodeId?: string;
-  /** The edge this rejection is about, when it is about one. */
-  readonly edge?: WorkflowEdge;
-  /** Human-readable detail. Names the offending value and the rule it violated. */
-  readonly detail: string;
+/**
+ * A model-authored rewrite of the rest of a RUNNING chain, submitted when a blocking unknown has
+ * invalidated the plan's shape.
+ *
+ * Declared HERE, beside {@link WorkflowIR}, and not in `mcp/tools/schemas/`, for the reason
+ * `WorkflowIR` is: the consumers are `engine/` stages and the chain store, and `engine/` may not
+ * import `mcp/`. The Zod schema (`prompt-engine.schema.ts`) validates against this shape and a
+ * compile-time drift guard there fails `tsc` if the two diverge.
+ *
+ * The server never authors one — it validates and applies. That is the advisory posture the whole
+ * unknowns mechanism keeps: the model declares, the server decides whether the declaration is
+ * admissible.
+ */
+export interface RemainderSubmission {
+  readonly mode: RemainderMode;
+  /** The replacement (or appended) steps, in declaration order — same vocabulary as {@link WorkflowNode}. */
+  readonly nodes: readonly WorkflowNode[];
+  /** Dependency assertions among the submitted nodes. Linearized exactly as {@link WorkflowIR.edges} are. */
+  readonly edges?: readonly WorkflowEdge[];
 }
+
+/**
+ * The edge and rejection vocabularies live in {@link ./node-schema.js} and are re-exported here so
+ * `types.js` remains this module's one type surface for consumers.
+ *
+ * WHY THEY MOVED (Tier A). `linearize` consumes both, and `modules/prompts/prompt-schema.ts` now
+ * calls it to validate a YAML chain's declared edges. This file type-imports `GateSpecification`
+ * from `shared/types/execution.ts`, which type-imports `WorkflowIR` back — a documented, tracked,
+ * warn-level cycle. Reaching it from the prompt schema would have pulled that cycle into
+ * `cli-shared`'s import graph, where the isolation gate (`tests/unit/cli-shared/
+ * import-isolation.test.ts`) requires ZERO violations. `node-schema.ts` imports nothing but Zod,
+ * so the linearizer is now cycle-free and the gate keeps its meaning.
+ */
+export type { WorkflowEdge, WorkflowRejection, WorkflowRejectionReason } from './node-schema.js';
 
 /** Discriminated result of validation or linearization. `order` is the linearized node ids. */
 export type WorkflowValidation =
@@ -182,45 +187,6 @@ export interface WorkflowPromptInfo {
   /** Names of arguments the prompt declares `required: true`. */
   readonly requiredArguments: readonly string[];
 }
-
-/**
- * Structural caps the server enforces. A submission's `budget` may narrow these, never widen —
- * widening is rejected at the Zod schema boundary (`workflow-ir.schema.ts`), not here.
- */
-export interface WorkflowCaps {
-  readonly maxNodes: number;
-  readonly maxFanOut: number;
-  readonly maxInsertions: number;
-}
-
-/**
- * Server defaults.
- *
- * `maxInsertions` mirrors `MAX_INSERTIONS_PER_RUN` rather than importing it: `modules/` may
- * value-import `engine/`, but tying the IR's declared submission ceiling to the runtime's
- * adaptive-mutation ceiling would make a change to one silently retune the other. The Zod schema
- * asserts the relationship instead (a declared value may only narrow — `workflowBudgetSchema`'s
- * `.max()` bound), and a drift test pins the two numbers together so the mirror cannot rot
- * silently.
- */
-export const DEFAULT_WORKFLOW_CAPS: WorkflowCaps = {
-  maxNodes: 32,
-  maxFanOut: 8,
-  maxInsertions: 3,
-};
-
-/**
- * Node-id vocabulary: kebab-case, the same shape `mintNodeIds` derives from a YAML chain's
- * `stepName`.
- *
- * `temporaryGateObjectSchema.target_step_id` accepts this pattern OR the `n\d+` symbolic form.
- * The second alternative is deliberately not repeated here — and MEASURED (2026-08-13) to be
- * redundant if it were: `n1` already matches kebab-case, so the two alternatives overlap and no
- * regex here can exclude the symbolic form. Nothing is lost by that: the symbolic `nK` ids are
- * minted per run by the symbolic parser, and an IR submission and a symbolic parse are never the
- * same run, so there is no id space to collide with.
- */
-export const WORKFLOW_NODE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** The visibility item vocabulary, mirroring `VisibilityItemSchema`'s enum values. */
 export const WORKFLOW_VISIBILITY_ITEMS: readonly VisibilityItem[] = [

@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
@@ -109,6 +110,47 @@ describe('DirectChainRunRegistry handoff transfer', () => {
     const evicted = await donor.save([session], DONOR);
     expect(evicted).toEqual(['s-claim']);
     expect((await claimer.load(CLAIMER)).map((s) => s.sessionId)).toContain('s-claim');
+  });
+
+  test('a run HOLDING on the unknown interrupt hands the hold to the claimer (D-9, row 4.2)', async () => {
+    // The claimer must receive the INTERRUPT, not the next step. The mechanism the ruling bets on
+    // is that `__unknown_interrupt__` is an ordinary `pendingGateReview` riding the run's residual
+    // document, so ownership transfer carries it like any other pending state — "expected free".
+    // Free is a prediction about a path nobody drove, which is why D-9 asks for a test.
+    const held = makeSession('s-held', 'hnd_token-held');
+    held.pendingGateReview = {
+      combinedPrompt: 'A blocking unknown stopped this plan.',
+      gateIds: [UNKNOWN_INTERRUPT_GATE_ID],
+      prompts: [],
+      createdAt: 1,
+      attemptCount: 0,
+      maxAttempts: 1,
+      metadata: { unknownId: 'plan-shape' },
+    } as unknown as ChainSession['pendingGateReview'];
+    held.unknownsLedger = [
+      {
+        id: 'plan-shape',
+        statement: 'the rest of the plan may be wrong',
+        state: 'active',
+        blocking: true,
+        openedAt: 1,
+        updatedAt: 1,
+      },
+    ] as unknown as ChainSession['unknownsLedger'];
+    await donor.save([held], DONOR);
+
+    const result = claimer.claimRunByToken('hnd_token-held', CLAIMER);
+
+    expect(result.status).toBe('claimed');
+    if (result.status !== 'claimed') return;
+    expect(result.session.pendingGateReview?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
+    // The hold alone is not enough to re-raise the interrupt on the claimer's side — the OPEN
+    // blocking entry is what `decideInterrupt` reads, and it has to survive the transfer too.
+    expect(result.session.unknownsLedger?.[0]).toMatchObject({
+      id: 'plan-shape',
+      blocking: true,
+      state: 'active',
+    });
   });
 
   test('a spent token is refused', async () => {

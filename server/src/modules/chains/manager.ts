@@ -11,6 +11,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+
 import { DirectChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
 import { ArgumentHistoryTracker, TextReferenceStore } from '../text-refs/index.js';
 
@@ -34,6 +35,10 @@ import type {
   ChainSessionSummary,
   GateReviewOutcomeUpdate,
   ParsedCommandSnapshot,
+  RemainderMode,
+  RemainderNodeSpec,
+  RemainderOutcome,
+  RemainderRejectionReason,
   SessionBlueprint,
   UnknownLedgerEntry,
   UnknownObservation,
@@ -91,6 +96,78 @@ const TERMINAL_STEP_LIFECYCLES: ReadonlySet<StepLifecycle> = new Set<StepLifecyc
 /** Step lifecycles that mean "this step has already been rendered, run, or retired". */
 function hasStepStarted(state: StepLifecycle | undefined): boolean {
   return state !== undefined && state !== 'pending';
+}
+
+/**
+ * Hard ceiling on ACCEPTED REMAINDERS per run, independent of how many distinct unknowns raised
+ * an interrupt (plan §Interrupt payload: "a `maxInsertions`-style ceiling per run").
+ *
+ * Its own number rather than a reuse of `MAX_INSERTIONS_PER_RUN`: the two ceilings count
+ * different acts (the SERVER inserting one investigation node vs the CALLER rewriting the plan)
+ * and mirroring 3 is a coincidence of taste, not a shared rule — importing the other constant
+ * would make a change to one silently retune the other, which is the reason
+ * `DEFAULT_WORKFLOW_CAPS.maxInsertions` mirrors rather than imports it too.
+ *
+ * Enforced HERE rather than at the submission boundary because the count is recomputed from
+ * persisted rows (`origin === 'remainder'`), so a resumed run and a cold-loaded one enforce the
+ * same ceiling. A submission-declared NARROWING of it belongs to the caller, which can refuse
+ * before calling; this is the floor no caller can widen.
+ */
+export const MAX_REMAINDERS_PER_RUN = 3;
+
+/**
+ * How many remainders a run has accepted: DISTINCT unknown ids among its `origin: 'remainder'`
+ * nodes.
+ *
+ * One expression with two callers, deliberately. `refuseRemainder` measures the per-run cap with
+ * it and `getRunTelemetry` reports `remaindersAccepted` with it (D-8), so the recorded number and
+ * the ceiling it is measured against cannot come to mean different things — a remainder of four
+ * nodes is ONE remainder to both.
+ */
+function countRemainderUnknownIds(nodes: readonly ChainNode[]): number {
+  return new Set(
+    nodes
+      .filter((node) => node.origin === 'remainder')
+      .map((node) => node.originUnknownId)
+      .filter((id): id is string => id !== undefined)
+  ).size;
+}
+
+/**
+ * Turn a caller's remainder specs into run nodes with unique ids and remainder provenance.
+ *
+ * Ids are reserved against EVERY id the run currently carries — including the tail a
+ * `'replace'` is about to remove. Freeing those ids for immediate reuse would let a replacement
+ * mint a node with the id of the node it just deleted, and gate targets, execution records and
+ * `executionOrder` entries address nodes by id: the new step would silently inherit the old
+ * one's addressing. Reservation is also cumulative across the batch, so two specs asking for the
+ * same id get two distinct nodes rather than one collision.
+ *
+ * A declared id is honoured when it is free and slugified/suffixed by `mintInsertionId` when it
+ * is not; a spec with no id is minted from its `stepName`, exactly as an inserted node is.
+ */
+function mintRemainderNodes(
+  specs: readonly RemainderNodeSpec[],
+  existing: readonly ChainNode[],
+  unknownId: string
+): ChainNode[] {
+  const taken = existing.map((node) => node.id);
+  return specs.map((spec) => {
+    const id = mintInsertionId(spec.id ?? spec.stepName, taken);
+    taken.push(id);
+    return {
+      id,
+      promptId: spec.promptId,
+      stepName: spec.stepName,
+      origin: 'remainder' as const,
+      originUnknownId: unknownId,
+      // A.5: the node's own declaration travels with it. Spread conditionally rather than bound
+      // to `undefined`, because `exactOptionalPropertyTypes` rejects an explicit undefined and
+      // the hook projection pins the resulting key set.
+      ...(spec.args !== undefined ? { args: spec.args } : {}),
+      ...(spec.delegated !== undefined ? { delegated: spec.delegated } : {}),
+    };
+  });
 }
 
 /** Callback invoked when a session is cleared (cleanup or explicit). */
@@ -352,32 +429,50 @@ export class ChainSessionStore implements ChainSessionService {
    * registry writes columns and one residual document per run, so it reads each field once
    * and nothing outstays the synchronous write. The clone existed to turn `stepStates` into
    * an array for JSON, and `stepStates` is now rows.
+   *
+   * Log-and-continue is this method's DELIBERATE posture, kept for the callers it has always
+   * had: an advisory mutation, a step capture and a cleanup pass each prefer a logged persist
+   * failure to a thrown one, because none of them can do anything about it. Callers that need
+   * the opposite — a write whose success they are about to REPORT — call
+   * {@link persistSessionsOrThrow}, which is the same write without the swallow.
    */
   private async persistSessions(): Promise<void> {
-    const db = this.resolvedDbEngine;
     try {
-      const sessions = Array.from(this.activeSessions.values());
-      if (!db) {
-        // No DB engine wired — fall back to non-transactional save (test contexts).
-        this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope));
-        return;
-      }
-      db.beginTransaction();
-      try {
-        const claimedElsewhere = await this.runRegistry.save(sessions, this.runScope);
-        // Evict BEFORE the projection so the hook view does not re-advertise a run this
-        // process no longer owns.
-        this.evictClaimedSessions(claimedElsewhere);
-        this.projectToHookView(db);
-        db.commit();
-      } catch (txError) {
-        db.rollback();
-        throw txError;
-      }
+      await this.persistSessionsOrThrow();
     } catch (error) {
       this.logger.error(
         `Failed to save sessions: ${error instanceof Error ? error.message : String(error)}`
       );
+    }
+  }
+
+  /**
+   * The persist above, with the failure left for the caller to decide about.
+   *
+   * `architecture.md`'s state-mutation contract: persistence THROWS and the caller owns the
+   * response. A caller that reports "your remainder was applied" cannot use the swallowing
+   * variant — it would report success while the rows say the run still holds the old plan, and
+   * the divergence would only surface on the next cold load.
+   */
+  private async persistSessionsOrThrow(): Promise<void> {
+    const db = this.resolvedDbEngine;
+    const sessions = Array.from(this.activeSessions.values());
+    if (!db) {
+      // No DB engine wired — fall back to non-transactional save (test contexts).
+      this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope));
+      return;
+    }
+    db.beginTransaction();
+    try {
+      const claimedElsewhere = await this.runRegistry.save(sessions, this.runScope);
+      // Evict BEFORE the projection so the hook view does not re-advertise a run this
+      // process no longer owns.
+      this.evictClaimedSessions(claimedElsewhere);
+      this.projectToHookView(db);
+      db.commit();
+    } catch (txError) {
+      db.rollback();
+      throw txError;
     }
   }
 
@@ -1377,6 +1472,126 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Apply a caller-authored remainder to the run's plan (OQ-3 / OQ-A1).
+   *
+   * Lives beside `insertNodeAfter` and `markNodeSkipped` for the same reason they live together:
+   * the run's node list has exactly one owner, and all three are traversal-affecting writes.
+   *
+   * The ONE shared path for both spellings of an append (OQ-A1) and for a replacement. Whether
+   * the nodes arrived as `remainder: {mode, nodes}` or as a leading-`-->` command string, they
+   * reach the run here — so caps, id minting and recorded provenance cannot differ between the
+   * two spellings, which is what OQ-A1 forbids.
+   *
+   * Contract, in the order the state-mutation rule requires: validate every refusal condition
+   * FIRST (nothing is mutated on a rejected submission), then mutate in memory, then `await` the
+   * strict persist, and only then report success. The persist THROWS on failure — unlike the
+   * advisory sibling mutations, an accepted remainder is a plan the caller now believes in, and
+   * reporting it applied while the rows say otherwise would leave the client executing a plan
+   * the server cannot resume.
+   *
+   * Refusals are DATA, not exceptions: {@link RemainderRejectionReason} names each one so row
+   * 2.2 can report it back to the submitter verbatim.
+   */
+  async replaceRemainder(
+    sessionId: string,
+    nodes: readonly RemainderNodeSpec[],
+    unknownId: string,
+    mode: RemainderMode
+  ): Promise<RemainderOutcome> {
+    const session = this.activeSessions.get(sessionId);
+    const refusal = this.refuseRemainder(session, nodes, unknownId, mode);
+    if (refusal !== undefined) {
+      this.logger.warn(
+        `[ChainRemainder] Refusing ${mode} of ${nodes.length} node(s) for unknown ${unknownId} in session ${sessionId}: ${refusal}`
+      );
+      return { kind: 'rejected', reason: refusal };
+    }
+    // `refuseRemainder` returning undefined already proved the session exists; the cast-free
+    // re-narrow keeps that fact visible to the type checker without a second lookup.
+    if (session === undefined) {
+      return { kind: 'rejected', reason: 'session-unknown' };
+    }
+
+    const existing = session.state.nodes;
+    const here = currentOrdinal(existing, session.state.currentNodeId);
+    const minted = mintRemainderNodes(nodes, existing, unknownId);
+
+    if (mode === 'replace') {
+      // `here` is 1-based, so it is already the array index of the first node AFTER the current
+      // one — the same arithmetic `insertNodeAfter` relies on. Everything from there is dropped.
+      const removed = existing.splice(here, existing.length - here, ...minted);
+      for (const node of removed) {
+        session.state.stepStates?.delete(node.id);
+      }
+      this.logger.debug(
+        `[ChainRemainder] Replaced ${removed.length} node(s) after ordinal ${here} with ${minted.length} in session ${sessionId} (unknown ${unknownId})`
+      );
+    } else {
+      existing.push(...minted);
+      this.logger.debug(
+        `[ChainRemainder] Appended ${minted.length} node(s) to session ${sessionId} (unknown ${unknownId})`
+      );
+    }
+
+    session.state.lastUpdated = Date.now();
+    session.lastActivity = Date.now();
+
+    await this.persistSessionsOrThrow();
+
+    return { kind: 'applied', mode, nodes: minted };
+  }
+
+  /**
+   * Every reason a remainder submission is refused, evaluated before anything is mutated.
+   *
+   * Returns `undefined` when the submission may proceed. Both caps are recomputed from the
+   * run's NODES rather than from in-memory bookkeeping, so a cold-loaded run enforces exactly
+   * what a hot one does — `origin`/`origin_unknown_id` are persisted columns for this reason.
+   */
+  private refuseRemainder(
+    session: ChainSession | undefined,
+    nodes: readonly RemainderNodeSpec[],
+    unknownId: string,
+    mode: RemainderMode
+  ): RemainderRejectionReason | undefined {
+    if (nodes.length === 0) {
+      return 'empty-remainder';
+    }
+    if (session === undefined) {
+      return 'session-unknown';
+    }
+    if (isTerminalRunStatus(session.runStatus) || session.state.currentNodeId === null) {
+      // A run standing on no node has already passed its terminal node, so "strictly after the
+      // current one" names nothing and an append would add steps nothing will ever reach.
+      return 'run-terminal';
+    }
+
+    const existing = session.state.nodes;
+    const remainderNodes = existing.filter((node) => node.origin === 'remainder');
+    if (remainderNodes.some((node) => node.originUnknownId === unknownId)) {
+      return 'cap-reached';
+    }
+    if (countRemainderUnknownIds(existing) >= MAX_REMAINDERS_PER_RUN) {
+      return 'cap-reached';
+    }
+
+    if (mode === 'replace') {
+      const here = currentOrdinal(existing, session.state.currentNodeId);
+      const doomed = existing.slice(here);
+      if (
+        doomed.some((node) => hasStepStarted(this.getStepState(session.sessionId, node.id)?.state))
+      ) {
+        // OQ-P4-2, applied to a range: a step the client has already been shown cannot be
+        // un-shown, so a replacement that would delete one is refused whole rather than
+        // partially applied.
+        return 'node-already-started';
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
    * Persist a step result to storage and optional tracking systems.
    */
   private async persistStepResult(
@@ -1564,6 +1779,11 @@ export class ChainSessionStore implements ChainSessionService {
       nodesSkipped: session.state.nodes.filter(
         (node) => stepStates?.get(node.id)?.state === 'skipped'
       ).length,
+      // D-8. Derived from the same two lists as everything above, never from a counter — see
+      // `RunTelemetry`'s docblock for what UNIT each one counts, which is the part a reader
+      // cannot recover from the column name alone.
+      interruptsRaised: ledger.filter((entry) => entry.blocking === true).length,
+      remaindersAccepted: countRemainderUnknownIds(session.state.nodes),
     };
   }
 
@@ -2319,6 +2539,20 @@ export class ChainSessionStore implements ChainSessionService {
    * owner. This method owns only lookup, in-memory mutation and persistence, in that
    * order: an invalid batch throws before `session.unknownsLedger` is touched, and a
    * persist failure throws rather than reporting a success the disk does not back.
+   *
+   * That last clause was FALSE from the day this method landed until row 1.4 (2026-08-30). It
+   * called `saveSessions`, which routes to the log-and-swallow `persistSessions`, so a failed
+   * write returned the new ledger and the caller reported the batch applied. It now calls
+   * {@link persistSessionsOrThrow} — the same write with the failure left to the caller —
+   * because a declared unknown is the one thing in this subsystem the CLIENT is told about: the
+   * ledger it just wrote is rendered back into this same call's chain context and, from row 2.1,
+   * into a `chain_interrupt`. Reporting either against rows that were never committed hands the
+   * client a plan the server cannot resume, and the divergence surfaces only on a cold load.
+   *
+   * A failed persist therefore fails the CALL. It propagates as a non-validation error out of
+   * `StepResponseCaptureStage.applyObservations` (which converts only
+   * `UnknownObservationValidationError`) to the pipeline error boundary, which is where
+   * `architecture.md` puts the response decision — the same posture `replaceRemainder` takes.
    */
   async applyUnknownObservations(
     sessionId: string,
@@ -2350,7 +2584,7 @@ export class ChainSessionStore implements ChainSessionService {
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
-    await this.saveSessions();
+    await this.persistSessionsOrThrow();
 
     return nextLedger.map((entry) => ({ ...entry }));
   }

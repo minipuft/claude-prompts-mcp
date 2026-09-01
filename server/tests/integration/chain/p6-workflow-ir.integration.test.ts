@@ -172,7 +172,7 @@ const buildPipeline = (
       parsingSystem.argumentParser,
       () => PROMPTS,
       logger,
-      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger),
+      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, compileWorkflowIR),
       { workflowCommandBuilder }
     ),
     OperatorValidation: new OperatorValidationStage(null, logger),
