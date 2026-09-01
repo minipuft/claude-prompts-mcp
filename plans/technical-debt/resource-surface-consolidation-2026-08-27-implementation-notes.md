@@ -736,3 +736,29 @@ sweeping `tests/` for both moved symbols rather than fixing only the file that e
 | `validate:prompts` (bundled)  | OK, 39 prompts, 2 deferred exemptions                                         |
 | `validate:prompts` (personal) | 1 schema error + 4 convention violations — all owner content, all now visible |
 | live load                     | all 9 renamed nested steps resolve under snake ids                            |
+
+### P5.1 / P5.10 closure (2026-09-01)
+
+**Owner ruled removal of `general/resume_variant_build`.** Measured before acting: a 127-byte
+`prompt.yaml` with `description: ''`, a **0-byte** `user-message.md`, and `name` equal to `id` —
+shadowing the id of the fully-authored six-step `resume/resume_variant_build`. Nothing in it could
+be aligned to the convention, because there was nothing in it. Preserved outside the served tree
+rather than destroyed, since the decision costs nothing to keep reversible.
+
+Result, measured on a live start: `Loaded 92 prompts from 12 categories`, **zero** `Invalid YAML`,
+**zero** `Dropped inline gate`. The count is 92 rather than 93 because the removed stub was the
+93rd — and it had never been among the loaded ones, which is why the served total is unchanged in
+substance. Removing it also retires the duplicate-`resume_variant_build` warning P5.6 surfaces.
+
+**DEV-P5-13 — a falsifier that overshot its row, caught on closing it.** P5.10's flip condition was
+written as "`validate:prompts --root <personal>` exits 0". That command also fails on CONVENTION
+violations, which are a different class from the invalid prompts P5.10 was about: those failed to
+LOAD, these load fine and merely violate the naming rule. Closing P5.10 on its authored falsifier
+would have required doing four unrelated renames first; closing it without them would have meant
+marking ✓ against a red command. Split instead — P5.10 closes on what it was about (all three
+prompts load), and the four renames became **P5.16** with the exits-0 falsifier that actually
+belongs to them. A falsifier borrowed from a convenient command tends to measure more than its row.
+
+**Gate P5 restated.** Its text still read "one row open" after two more were filed. A gate line that
+miscounts its own residue is the same defect class the gate exists to catch, so it now names the
+four closed probes and states plainly that the three open rows are renames, not probe defects.
