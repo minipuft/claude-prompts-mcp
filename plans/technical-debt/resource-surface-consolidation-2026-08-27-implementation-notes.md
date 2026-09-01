@@ -762,3 +762,39 @@ belongs to them. A falsifier borrowed from a convenient command tends to measure
 **Gate P5 restated.** Its text still read "one row open" after two more were filed. A gate line that
 miscounts its own residue is the same defect class the gate exists to catch, so it now names the
 four closed probes and states plainly that the three open rows are renames, not probe defects.
+
+### P6 — hot-reload parity, taken over from an abandoned branch (2026-09-01)
+
+**Provenance.** `fix/hot-reload-resources-root` carried an uncommitted `.staging/i229-plan-notes-append.md`
+holding a prior session's full measurement of issue #229. That analysis is absorbed into P6 and the
+file is now redundant. Its two conclusions, both preserved: the REPORTED defect (#229, "hot reload
+does not fire under STDIO") was already fixed by `233b2bf2` and is not transport-specific at all;
+and a second defect it found while measuring — overlaid prompts never reloading — was never filed.
+
+**DEV-P6-1 — the branch name described the wrong defect, which is why it read as stale.** Its
+headline fix (reload deriving the prompts root from `ConfigManager` rather than `PathResolver`) is
+genuinely redundant: #255 fixed it one layer down by giving `ConfigLoader` the `resourcePaths` port,
+so `getResolvedPromptsDirectory()` and `pathResolver.getPromptsPath()` now return the same value.
+Reading the call site alone was a trap — `prompt-refresh-service.ts` looks textually identical to
+the pre-fix code and IS correct. The branch's second, unlanded fix carried the whole remaining
+value, and nothing in its name or its commit subject said so.
+
+**DEV-P6-2 — the layer forced the design, and the first attempt inverted it.** The shared loader has
+to be callable from `runtime/data-loader.ts` (startup) and `modules/prompts/prompt-refresh-service.ts`
+(reload). My first cut left `mergePromptResults` in `runtime/` and imported it from `modules/`,
+which inverts the dependency direction. `validate:arch` reported 0 errors — it has no rule for that
+edge — so the gate would not have caught it. Moving the function to the module that owns prompts
+makes startup import it in the legal direction and removes the question.
+
+**DEV-P6-3 — an optional parameter silently dropped a check.** Extracting `loadWithBundledBase` I
+made `directoryExists` an optional injected argument, and neither caller passed it, so the
+bundled-root existence test stopped running. An absent bundled path would then load as an empty
+catalog and merge nothing — silent, and indistinguishable from a healthy start. Caught by asking
+what the two leftover single-reference symbols in `data-loader.ts` were for, rather than deleting
+them as dead. The helper moved into the loader and the check is unconditional again.
+
+**What is NOT done, and is the point of P6.2.** The fix has no regression test. Every existing check
+was blind to this defect and still is; the covering suites (181 unit, 9 e2e) pass equally with and
+without the fix, because none of them reloads under a workspace and reads served content. Marking
+P6.1 ✓ on those is honest only because the row claims the code change, not the behaviour — the
+behaviour claim is P6.2 and it is open.
