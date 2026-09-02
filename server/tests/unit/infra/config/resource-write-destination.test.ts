@@ -31,6 +31,10 @@ function resolverAt(root: string): ResourcePathSource {
     getFrameworksPath: () => path.join(root, 'frameworks'),
     // A bundled root distinct from the writable one, so a test that confuses the two fails.
     getBundledResourceDir: (resourceType: string) => path.join(root, 'bundled', resourceType),
+    // Distinct again, for the same reason: a reload that silently used the writable root
+    // instead of the overlay set is the defect P6.1 fixed, and a stub returning the same
+    // path either way could not tell them apart.
+    getOverlayResourceDirs: (resourceType: string) => [path.join(root, 'overlay', resourceType)],
   };
 }
 

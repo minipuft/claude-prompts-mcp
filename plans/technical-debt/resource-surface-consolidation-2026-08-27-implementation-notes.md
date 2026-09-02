@@ -762,3 +762,74 @@ belongs to them. A falsifier borrowed from a convenient command tends to measure
 **Gate P5 restated.** Its text still read "one row open" after two more were filed. A gate line that
 miscounts its own residue is the same defect class the gate exists to catch, so it now names the
 four closed probes and states plainly that the three open rows are renames, not probe defects.
+
+### P6 — hot-reload parity, taken over from an abandoned branch (2026-09-01)
+
+**Provenance.** `fix/hot-reload-resources-root` carried an uncommitted `.staging/i229-plan-notes-append.md`
+holding a prior session's full measurement of issue #229. That analysis is absorbed into P6 and the
+file is now redundant. Its two conclusions, both preserved: the REPORTED defect (#229, "hot reload
+does not fire under STDIO") was already fixed by `233b2bf2` and is not transport-specific at all;
+and a second defect it found while measuring — overlaid prompts never reloading — was never filed.
+
+**DEV-P6-1 — the branch name described the wrong defect, which is why it read as stale.** Its
+headline fix (reload deriving the prompts root from `ConfigManager` rather than `PathResolver`) is
+genuinely redundant: #255 fixed it one layer down by giving `ConfigLoader` the `resourcePaths` port,
+so `getResolvedPromptsDirectory()` and `pathResolver.getPromptsPath()` now return the same value.
+Reading the call site alone was a trap — `prompt-refresh-service.ts` looks textually identical to
+the pre-fix code and IS correct. The branch's second, unlanded fix carried the whole remaining
+value, and nothing in its name or its commit subject said so.
+
+**DEV-P6-2 — the layer forced the design, and the first attempt inverted it.** The shared loader has
+to be callable from `runtime/data-loader.ts` (startup) and `modules/prompts/prompt-refresh-service.ts`
+(reload). My first cut left `mergePromptResults` in `runtime/` and imported it from `modules/`,
+which inverts the dependency direction. `validate:arch` reported 0 errors — it has no rule for that
+edge — so the gate would not have caught it. Moving the function to the module that owns prompts
+makes startup import it in the legal direction and removes the question.
+
+**DEV-P6-3 — an optional parameter silently dropped a check.** Extracting `loadWithBundledBase` I
+made `directoryExists` an optional injected argument, and neither caller passed it, so the
+bundled-root existence test stopped running. An absent bundled path would then load as an empty
+catalog and merge nothing — silent, and indistinguishable from a healthy start. Caught by asking
+what the two leftover single-reference symbols in `data-loader.ts` were for, rather than deleting
+them as dead. The helper moved into the loader and the check is unconditional again.
+
+**What is NOT done, and is the point of P6.2.** The fix has no regression test. Every existing check
+was blind to this defect and still is; the covering suites (181 unit, 9 e2e) pass equally with and
+without the fix, because none of them reloads under a workspace and reads served content. Marking
+P6.1 ✓ on those is honest only because the row claims the code change, not the behaviour — the
+behaviour claim is P6.2 and it is open.
+
+### P6.2 / P6.3 execution (2026-09-01)
+
+**DEV-P6-4 — the row's own falsifier named the wrong instrument, and it was rejected on
+measurement.** P6.2 was written as "observed by `prompts/get` within one debounce window", which
+implies an e2e driving a live server through its 500ms watcher. Building it that way would have
+added transport and timing without adding evidence about the property in question — WHICH ROOTS the
+reload composes — and would have traded a deterministic assertion for a flaky one. The test reaches
+`reloadPromptData` directly against real temp directories and a real `PromptAssetManager`, mocking
+only the four config accessors that name the roots. The falsifier was rewritten in place rather than
+satisfied literally; the authored version is preserved in the row so the substitution is visible.
+
+**The finding that explains the whole defect: zero tests exercised `reloadPromptData`.** Not few —
+none. That is why a defect this large sat behind a green suite for as long as it did, and it is why
+P6.1's ✓ was honest only about the code change. The suite now covers the reload path at all.
+
+**Mutation result, and why the split matters.** Restoring the single-directory load fails **5 of 6**
+cases. The sixth — an edit to a PRIMARY-tree prompt — passes under both versions, by design: it is
+the positive control, and it passed throughout the defect's lifetime. A suite where all six went red
+would have been the weaker result, because it could not distinguish "the fix works" from "the reload
+returns nothing at all".
+
+**DEV-P6-5 — extending the port broke a test stub, for the second time.** Adding
+`getOverlayResourceDirs` to `ResourcePathSource` made `resource-write-destination.test.ts` fail
+`typecheck:tests:ratchet` — the identical failure P1.2 produced when it added
+`getBundledResourceDir`. Twice now, the same interface, the same stub, the same gate catching it.
+Worth noting that the gate DID catch it both times and `typecheck` alone did not: `tsconfig.json`
+excludes `tests/`, so the tests-ratchet is the only thing that sees a port change's call sites.
+
+**P6.3 — both worktrees retired.** `claude-prompts-mcp-issues` needed `--force` for its uncommitted
+`.staging/i229-plan-notes-append.md`; that file is the analysis this whole tier was built from, and
+it is absorbed into P6's rows and these notes, with a copy at `/tmp/p6-retired/` as cheap insurance.
+`feat/settability-parity`'s worktree was clean. Both branches took `-D`, not `-d`, because
+squash-merge leaves a fully-landed branch looking unmerged — the same trap that made PR #255 read as
+needing a rebase.

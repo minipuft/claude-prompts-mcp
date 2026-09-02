@@ -13,11 +13,11 @@ tags: []
 
 ## Where the work lives now
 
-| Location                                          | What's there                                                                                                      |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `backup/dashboard-work-2026-05-13` (local branch) | Three commits preserving the full feature: `22e6fee9` (initial), `0989ab59` (merge), `94c7702c` (eslint baseline) |
-| Local `main` (unpushed)                           | Same three commits — never pushed to `origin/main`                                                                |
-| `server/dashboard/` (working tree)                | **Removed** from this branch. Available via `git checkout backup/dashboard-work-2026-05-13 -- server/dashboard/`  |
+| Location                                                   | What's there                                                                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `rescue/local-main-observability-dashboard` (local branch) | Three commits preserving the full feature: `22e6fee9` (initial), `0989ab59` (merge), `94c7702c` (eslint baseline)         |
+| Local `main` (unpushed)                                    | Same three commits — never pushed to `origin/main`                                                                        |
+| `server/dashboard/` (working tree)                         | **Removed** from this branch. Available via `git checkout rescue/local-main-observability-dashboard -- server/dashboard/` |
 
 The work is **not** on `origin/main`. Pushing it requires a deliberate decision after refactor.
 
@@ -105,17 +105,17 @@ git checkout -b feat/observability-dashboard-refactor
 
 # Pull in dashboard work file-by-file (don't cherry-pick the mega-commit;
 # we want to redo the composition)
-git checkout backup/dashboard-work-2026-05-13 -- server/src/infra/observability/dashboard/
-git checkout backup/dashboard-work-2026-05-13 -- server/src/mcp/http/dashboard-routes.ts
-git checkout backup/dashboard-work-2026-05-13 -- server/src/mcp/http/dashboard-html.ts
-git checkout backup/dashboard-work-2026-05-13 -- server/dashboard/
+git checkout rescue/local-main-observability-dashboard -- server/src/infra/observability/dashboard/
+git checkout rescue/local-main-observability-dashboard -- server/src/mcp/http/dashboard-routes.ts
+git checkout rescue/local-main-observability-dashboard -- server/src/mcp/http/dashboard-html.ts
+git checkout rescue/local-main-observability-dashboard -- server/dashboard/
 
 # Then refactor in sequence per the plan above
 ```
 
 ## Notes
 
-- This plan is **untracked** (personal reference)
-- `backup/dashboard-work-2026-05-13` should not be deleted until refactor lands
+- This plan is tracked on `origin/main`. It previously said "untracked (personal reference)"; that stopped being true when it was committed, and the line is corrected here because a plan that misstates its own visibility also misstates who can see the branch reference above
+- `rescue/local-main-observability-dashboard` should not be deleted until refactor lands. **Renamed 2026-09-01**: this row and the five `git checkout` commands above named `backup/dashboard-work-2026-05-13`, which no longer exists — `git branch -a --contains 22e6fee9` returns this branch and nothing else, so it is the sole surviving copy. A retention instruction naming a dead ref protects nothing, and every resume command under "How to resume" failed as written
 - The `22e6fee9` commit's content is the "original code" — refactor will reshape it, not preserve it commit-by-commit
 - Pattern reference from this session: gate ↔ consumer pairing (`feedback_gate_consumer_pairing_pattern.md` in agent memory) — applies broadly, not just to dashboard

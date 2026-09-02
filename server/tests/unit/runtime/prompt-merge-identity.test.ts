@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from '@jest/globals';
 
-import { mergePromptResults } from '../../../src/runtime/data-loader.js';
+import { mergePromptResults } from '../../../src/modules/prompts/prompt-root-loader.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Category, PromptData } from '../../../src/modules/prompts/types.js';

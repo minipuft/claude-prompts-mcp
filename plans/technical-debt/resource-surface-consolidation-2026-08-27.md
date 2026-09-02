@@ -278,6 +278,51 @@ honesty, and it holds.
 
 ---
 
+## P6 — hot-reload parity (in flight, 2026-09-01)
+
+Taken over from `fix/hot-reload-resources-root`, a local branch investigating issue #229. That
+branch's headline fix was already superseded by `233b2bf2`; what it also found — and what nothing
+else in the repo recorded — is that **reload loaded a different root SET than startup**.
+
+**Branch**: `fix/hot-reload-overlay-parity`, based on `df2e9f14`. Commit `f091967d` landed the fix.
+
+| #    | St                                                                                                                                                                                   | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Verification                                                                                                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P6.1 | ✓ (verified 2026-09-01 · commit `f091967d` · typecheck, `validate:arch` 0 errors, unit runtime+prompts 181 passed, `bundled-resource-fallback.e2e` 9 passed)                         | **Startup and reload now call one loader.** `reloadPromptData` called `loadAndConvertPrompts(promptsDir)` — one directory, no merging inside it — while startup merged the bundled base and every overlay. Under a configured workspace the first hot reload rebuilt the live catalog from the primary root alone and published it with no error. `loadPromptsAcrossRoots` in `modules/prompts/prompt-root-loader.ts` is now the sole owner; `mergePromptResults` moved there rather than being reached for across a layer, and `loadWithBundledBase` + `directoryExists` moved in as its bundled branch. The `ResourcePathSource` port gained `getOverlayResourceDirs`, mirroring the `getBundledResourceDir` P1.2 added for the same reason — `modules/` cannot import `runtime/PathResolver`                                                                                                                                                                                                                                                                | one definition of the merge and of the precedence order; `rg loadWithBundledBase` returns nothing                                                                                |
+| P6.2 | ✓ (verified 2026-09-01 · `hot-reload-root-parity.integration.test.ts`, 6 cases; the mutation restoring the single-directory load fails 5 of 6 and leaves the positive control green) | **The regression test now exists.** ⚠ The row's authored falsifier named `prompts/get` and a debounce window; that shape was rejected on measurement — driving a live server adds transport and 500ms timing without adding evidence about which ROOTS the reload composes, trading a deterministic assertion for a flaky one. The test reaches `reloadPromptData` directly with real directories and a real `PromptAssetManager`, mocking only the four config accessors that name the roots. **Zero tests exercised `reloadPromptData` before this**, which is why a defect this large sat behind a green suite. A count-based gate cannot see it — `prompts/list` reported 113 before _and_ after, because binding is deduped per shell, so entries survive while their content stops tracking the file. **Any gate for this asserts on served CONTENT, never on catalog size.** The abandoned branch carried 121 lines of such tests (`reload-resources-root.test.ts`, 5 cases) written against a pre-`233b2bf2` architecture — worth reading, not merging | a live drive: edit a bundled-only prompt under an external root, assert `prompts/get` returns the new body within one debounce window; control arm edits an external-tree prompt |
+| P6.3 | ✓ (verified 2026-09-01 · `git worktree list` shows one entry; `git branch` shows `main`, this branch, and `rescue/…` only)                                                           | **Two worktrees retired.** `/home/minipuft/Applications/claude-prompts-mcp-issues` holds `fix/hot-reload-resources-root` (its only uncommitted file, `.staging/i229-plan-notes-append.md`, is the analysis this tier is built from — absorbed here, safe to discard). `/home/minipuft/Applications/claude-prompts-mcp-settability` holds `feat/settability-parity`, whose 18 commits are a byte-identical in-order prefix of PR #255's 33. Both branches need `-D`, not `-d`: squash-merge leaves them looking unmerged                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `git worktree remove` both, then `git branch -D` both                                                                                                                            |
+
+**Gate P6 — PASSED (verified 2026-09-01).** A hot reload serves the same catalog a restart would,
+and a gate holds it rather than care: startup and reload call one loader, and
+`hot-reload-root-parity.integration.test.ts` fails 5 of 6 if the single-directory load returns. The
+sixth is the positive control — a primary-tree edit, which passed throughout the defect's lifetime
+and proves the probe observes a reload when one occurs.
+
+**One residue is filed rather than closed.** The count-based blindness that hid the defect
+(`prompts/list` reporting 113 before and after) is asserted against inside P6.2's suite but enforced
+nowhere else, so a future reload gate written against catalog size would still read as passing.
+That is P6.4.
+
+| P6.4 | ☐ (as of 2026-09-01 · flips when a check fails a reload assertion written against catalog size rather than served content) | **Nothing stops the next reload gate being count-based.** `prompts/list` reported 113 before AND after the defect, because binding is deduped per shell — entries survive while their content stops tracking the file. P6.2's suite reads bodies for exactly that reason and documents it, but that is a convention held by one file's comments. Someone adding `expect(list.length).toBe(n)` to a reload test would get a green that proves nothing | a lint rule or gate that catches a size-based assertion in a reload test |
+
+**Do not re-derive these — they cost real measurement:**
+
+- `git cherry -v` is **useless** in this repository. It marked all 18 settability commits and all 3
+  rescue commits `+` (not upstream) when the settability work was fully landed. Squash-merge
+  breaks patch-equivalence. Compare CONTENT, or compare against the squash body's commit list.
+- Row **P1.5a**'s claim that `feat/settability-parity` "landed on main by fast-forward" is FALSE —
+  it landed as the squash of PR #255. The five commit hashes that row names exist on neither main
+  nor the branch; they are pre-rebase versions with identical subjects.
+- `rescue/local-main-observability-dashboard` is **KEEP, permanently until its refactor lands**.
+  `git branch -a --contains 22e6fee9` returns it and nothing else — it is the sole surviving copy
+  of work `plans/backlog/dashboard-refactor.md` protects, and the feature is absent from main
+  (`SpanPersister`, `telemetry_spans`, `dashboardHtml`, `PipelineWaterfall`: zero hits in `src`).
+- `docs/security-review-plan` was deleted (local + remote) 2026-09-01 after verifying **zero
+  branch-only prose lines** in both its files against main. PR #246 was closed unmerged, superseded
+  by #249. Commit `390dbb45` remains reflog-reachable.
+
+---
+
 ## Phase order
 
 P1 and P2 are independent and may run in either order. P3.1 is independent; P3.2–P3.3 need P2.1
