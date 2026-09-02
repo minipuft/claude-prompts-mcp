@@ -340,7 +340,8 @@ row terminal, retired) in the same PR, or the PR does not merge.
 (`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`, set 2026-09-01;
 `delete_branch_on_merge: true`, set 2026-09-02).
 Before it, GitHub concatenated every commit body: #254 landed on `main` as a 4,615-word commit
-message. The `PR Conventions` workflow asserts these settings on every PR; if they drift, reapply:
+message. The `PR Conventions` workflow asserts their effect on every PR (the newest squash on
+`main` must carry a PR-shaped body); if they drift, reapply:
 
 ```bash
 gh api -X PATCH repos/minipuft/claude-prompts-mcp \
