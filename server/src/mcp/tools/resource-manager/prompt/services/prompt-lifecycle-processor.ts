@@ -10,7 +10,11 @@ import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { mergeArgumentUpdates, type PromptArgumentUpdate } from '../operations/argument-updates.js';
-import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
+import {
+  ALL_PROMPT_DATA_KEYS,
+  FileOperations,
+  NO_WRITE_INTENT,
+} from '../operations/file-operations.js';
 import {
   PATCH_TARGET_FIELDS,
   applyTemplatePatches,
@@ -25,6 +29,7 @@ import {
   applyChainStepOperation,
   canonicalPromptSnapshot,
   diagnosePromptWrite,
+  resolveUnsetFields,
   validateChainStepReferences,
   validateRequiredFields,
   validateToolDefinitions,
@@ -384,8 +389,10 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    // Chain step-level operations (add/remove/reorder)
-    if (args.chain_step_operation && args.chain_step_operation !== 'replace') {
+    // Chain step-level operations (add/remove/reorder/update). Omitting the parameter is how a
+    // caller replaces the array wholesale — which is what `'replace'` used to spell as a second,
+    // redundant way of saying the same thing (P2.4).
+    if (args.chain_step_operation) {
       const existingSteps = (currentPrompt?.chainSteps ?? []) as unknown[];
       promptData.chainSteps = applyChainStepOperation(existingSteps, {
         operation: args.chain_step_operation,
@@ -394,6 +401,80 @@ export class PromptLifecycleProcessor {
         order: args.chain_step_order,
       });
       suppliedKeys.add('chainSteps');
+    }
+
+    // P2.3 — the tool binding's own remove verb. Three intents, and only one of them destroys
+    // anything: omitting `tool_operation` REPLACES the binding (so a narrowed `tools` array
+    // unbinds and leaves `tools/{id}/` on disk), `'add'` unions, and `'remove'` unbinds AND
+    // deletes the directories. The deletion is why `'remove'` demands `confirm` while the other
+    // two do not — it is the only `update` that destroys a file for which the caller sent no
+    // replacement, and `DESTRUCTIVE_ACTIONS` cannot express it because the ACTION is `update`.
+    let toolBinding: 'replace' | 'add' = 'replace';
+    let removedToolIds: readonly string[] = [];
+    const requestedToolIds: string[] = (suppliedArgs['tool_ids'] as string[] | undefined) ?? [];
+
+    if (args.tool_operation === 'add') {
+      if (!Array.isArray(args.tools) || args.tools.length === 0) {
+        return this.blockedUpdate(
+          '❌ **Prompt update blocked**: `tool_operation: "add"` needs the `tools` definitions to ' +
+            'add. To unbind instead, send a narrowed `tools` array; to delete, use ' +
+            '`tool_operation: "remove"`.'
+        );
+      }
+      toolBinding = 'add';
+    } else if (args.tool_operation === 'remove') {
+      if (requestedToolIds.length === 0) {
+        return this.blockedUpdate(
+          '❌ **Prompt update blocked**: `tool_operation: "remove"` needs `tool_ids` naming what ' +
+            'to remove.'
+        );
+      }
+      if (args.confirm !== true) {
+        return this.blockedUpdate(
+          `⚠️ **Prompt update blocked**: removing ${requestedToolIds.map((id) => `\`${id}\``).join(', ')} ` +
+            `deletes their \`tools/{id}/\` directories, which no other update does. Re-send the ` +
+            `same call with \`confirm: true\`.\n\n` +
+            `💡 To unbind without deleting, send a \`tools\` array without them instead.`
+        );
+      }
+      removedToolIds = requestedToolIds;
+      // The subtraction happens in the writer (only it can read the current binding), but the
+      // yaml must be REWRITTEN for that to reach disk — so this call touches `tools`.
+      suppliedKeys.add('tools');
+    } else if (requestedToolIds.length > 0) {
+      // A parameter that silently does nothing is worse than a refusal: it reads as a removal
+      // that happened.
+      return this.blockedUpdate(
+        '❌ **Prompt update blocked**: `tool_ids` only applies to `tool_operation: "remove"`. ' +
+          'Nothing was removed.'
+      );
+    }
+
+    // P2.1 — the "remove" verb (owner ruling D1). Deliberately LAST of the field-writing blocks:
+    // the conflict check reads `suppliedKeys`, so by running after `UPDATE_FIELDS`,
+    // `argument_updates`, `patch` and the chain-step operation it sees every data key this call
+    // writes, whatever parameter name delivered it. Checking parameter names instead would miss
+    // `unset: ['arguments']` sent alongside `argument_updates`, which write the same key under
+    // different names.
+    //
+    // Clearing joins `suppliedKeys` because a cleared field IS a field this call touches. Without
+    // that, Fix B's write-scope narrowing would leave `prompt.yaml` unopened and the removal would
+    // be a silent no-op — the same shape as the preserve-on-omit trap in the writer.
+    const unsetArgument = suppliedArgs['unset'] as string[] | undefined;
+    let unsetKeys: ReadonlySet<string> = NO_WRITE_INTENT.unsetKeys;
+    if (unsetArgument !== undefined && unsetArgument.length > 0) {
+      const resolved = resolveUnsetFields(unsetArgument, suppliedKeys);
+      if (!resolved.ok) {
+        return this.blockedUpdate(
+          `❌ **Prompt update blocked**: ${resolved.message}\n\n` +
+            `💡 Nothing was written and no version was consumed.`
+        );
+      }
+      unsetKeys = resolved.dataKeys;
+      for (const dataKey of unsetKeys) {
+        delete promptFields[dataKey];
+        suppliedKeys.add(dataKey);
+      }
     }
 
     // Chain step reference validation (non-blocking warnings)
@@ -524,7 +605,8 @@ export class PromptLifecycleProcessor {
     const result = await this.fileOperations.updatePromptImplementation(
       promptData,
       suppliedKeys,
-      currentPrompt?.sourceRoot
+      currentPrompt?.sourceRoot,
+      { unsetKeys, toolBinding, removedToolIds }
     );
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
     const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);

@@ -185,6 +185,7 @@ export class ResourceManagerRouter {
       argument_updates: args.argument_updates,
       patch: args.patch,
       dry_run: args.dry_run,
+      unset: args.unset,
       expected_version: args.expected_version,
       chain_steps: args.chain_steps,
       chain_step_operation: args.chain_step_operation,
@@ -192,6 +193,8 @@ export class ResourceManagerRouter {
       chain_step_data: args.chain_step_data,
       chain_step_order: args.chain_step_order,
       tools: args.tools,
+      tool_operation: args.tool_operation,
+      tool_ids: args.tool_ids,
       gate_configuration: args.gate_configuration,
       composer: args.composer,
       // OQ-P7-8. Pass-through, no renaming: `UPDATE_FIELDS` owns the single snake_case →

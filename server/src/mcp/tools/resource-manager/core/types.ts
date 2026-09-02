@@ -218,6 +218,12 @@ export interface ResourceManagerInput {
   /** [Prompt] Render and diff the update without writing it or recording a version. */
   dry_run?: boolean;
   /**
+   * [Prompt] Update-only: tool parameter names whose fields this call CLEARS (P2.1). Kept in
+   * lockstep with the `unset` member of `resourceManagerInputSchema`; the accepted vocabulary is
+   * `UNSETTABLE_FIELDS`, which `resolveUnsetFields` validates against.
+   */
+  unset?: string[];
+  /**
    * Workspace whose version history to READ, when it is not this one.
    *
    * Read-only and scope-local-on-write: honoured by `history` and `compare`, rejected by
@@ -225,8 +231,8 @@ export interface ResourceManagerInput {
    */
   source_workspace?: string;
   chain_steps?: Array<Record<string, unknown>>;
-  /** [Prompt] Step-level operation for chain updates (default: replace entire array) */
-  chain_step_operation?: 'add' | 'remove' | 'reorder' | 'replace';
+  /** [Prompt] Step-level operation for chain updates; omit to replace the entire array */
+  chain_step_operation?: 'add' | 'remove' | 'reorder' | 'update';
   /** [Prompt] Target index for add (insertion point) or remove (step to delete) */
   chain_step_index?: number;
   /** [Prompt] Step definition for add operation */
@@ -235,6 +241,10 @@ export interface ResourceManagerInput {
   chain_step_order?: number[];
   /** [Prompt] Script tools to create with the prompt */
   tools?: ToolDefinitionInput[];
+  /** [Prompt] Update-only: union with the current binding (`add`) or unbind and delete (`remove`). */
+  tool_operation?: 'add' | 'remove';
+  /** [Prompt] Tool ids to unbind and delete; required by `tool_operation: 'remove'`. */
+  tool_ids?: string[];
   gate_configuration?: {
     include?: string[];
     exclude?: string[];

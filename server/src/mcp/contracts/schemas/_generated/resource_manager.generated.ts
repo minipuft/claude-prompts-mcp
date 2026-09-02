@@ -39,6 +39,9 @@ export type resource_managerParamName =
   | 'patch'
   | 'source_workspace'
   | 'dry_run'
+  | 'tool_operation'
+  | 'tool_ids'
+  | 'unset'
   | 'chain_steps'
   | 'tools'
   | 'gate_configuration'
@@ -198,6 +201,33 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'boolean',
     description:
       'Preview a mutation instead of performing it — nothing is written and no version is recorded. `update` (prompt): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. Not valid on `create` — there is nothing to diff against.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'tool_operation',
+    type: '"add" | "remove"',
+    description:
+      '[Prompt] Update-only: how a `tools` change relates to the CURRENT binding. Omit it and a supplied `tools` array REPLACES the binding, so a narrowed array unbinds the dropped ids and leaves their `tools/{id}/` files on disk — the non-destructive default. `add` unions the supplied definitions with what is already bound. `remove` names ids in `tool_ids`, unbinds them AND deletes their directories, and therefore requires `confirm: true`: it is the only `update` that destroys a file the caller sent no replacement for.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'tool_ids',
+    type: 'array<string>',
+    description:
+      '[Prompt] Tool ids to unbind and delete. Required by `tool_operation: "remove"` and refused without it, because a parameter that silently does nothing reads as a removal that happened.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'unset',
+    type: 'array<string>',
+    description:
+      '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, chain_steps, composer, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
