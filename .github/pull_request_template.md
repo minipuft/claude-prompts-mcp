@@ -1,18 +1,16 @@
 ## Summary
 
 <!-- One sentence completing "After this merges, ___" — the OUTCOME, not the activity.
-     Then ≤5 bullets, each ONE consumer-observable change in ≤2 lines. Link the plan if
-     there is one (`plans/...`); do not re-tell it. Anything only a session participant
-     would understand belongs in the plan's implementation-notes, linked, not here.
-     A PR is one PLAN or GOAL; each concern inside it is its own commit. -->
+     Then ≤5 bullets, each ONE consumer-observable change in ≤2 lines. No plan vocabulary or
+     row ids anywhere in the body: the `Plan:` footer (bottom) is the only sanctioned plan
+     mention, and session reasoning lives in the implementation-notes or the collapsed
+     Appendix. A PR is one PLAN or GOAL; each concern inside it is its own commit. -->
 
 ## Demonstration
 
-<!-- REQUIRED for feat / fix / perf / refactor — show it, do not describe it. Pick one:
-       · a tool-response transcript, BEFORE and AFTER, in fenced blocks (this server's screenshot)
-       · a ```mermaid``` stateDiagram / sequenceDiagram for a lifecycle or pipeline change
-       · a before/after table for a contract or output-shape change
-       · a screenshot or GIF when there is a UI or terminal to show
+<!-- REQUIRED for feat / fix / perf / refactor — show the CONSUMER-OBSERVABLE DELTA: the surface
+     someone actually touches (tool response, CLI output, refusal message, lifecycle), BEFORE and
+     AFTER, one screen max. Forms by how they age: fenced transcript > mermaid > table > image.
      `verify-*.mjs` drives already emit transcripts — capture, do not paraphrase.
      docs / chore / ci PRs may write `n/a: <reason>`. -->
 
@@ -21,19 +19,17 @@
 <!-- REQUIRED. A TABLE, not a count wall — one row per property:
        | Claim | Probe (command) | Baseline → measured | Mutation that fails it |
      A number without a baseline is noise; a null result ("no leak") needs the positive
-     control that proves the probe can see something. CI results belong here only if CI
-     actually exercises the changed path. -->
+     control that proves the probe can see something. An unfilled row fails the gate. -->
 
 ## Notes for Reviewers
 
 <!-- REQUIRED. ≤3 pointers: the commit or file to DISTRUST and why. A reviewer's scarcest
-     resource is knowing where to look. No history here — a falsified ruling or a deviation
-     is a link to implementation-notes, not a paragraph. -->
+     resource is knowing where to look. History and rationale go in the Appendix, not here. -->
 
 ## Still open
 
-<!-- Plan row ids + links, one line each. Write "None" if none.
-     A draft PR says here what makes it ready. -->
+<!-- Remaining work in plain reader terms, one line each; write "None" if none.
+     No plan row ids — and note the Plan footer contract below. -->
 
 ## README Charter Compliance
 
@@ -47,8 +43,18 @@
 5. Any new cross-link — what Diátaxis quadrant does it point to?
 
 <!--
-Generate this skeleton pre-filled from your branch: `npm run pr:body -- --out /tmp/pr-body.md`
-(inside server/). Check it before opening: `node scripts/validate-pr-body.mjs --body-file /tmp/pr-body.md --title "<title>"`.
-The squash-merge commit carries THIS body, verbatim — it is what `git log` shows forever.
+TWO-REGISTER BODY. Reader voice above; below, an optional collapsed archive:
+  <details><summary>Appendix — session archive</summary> … </details>
+The appendix (deviation log excerpts, captured drive transcripts, extended verification) is
+exempt from the word budget and — because squash merges carry the PR body — lands greppable
+in main's history. The generator seeds it from your implementation-notes.
+
+PLAN FOOTER CONTRACT. If this PR executes a plan, end the body with exactly one line:
+  Plan: `plans/<path>.md`
+The gate FAILS while that plan's `status:` is non-final — finalize (every row terminal,
+retired) in this same PR. No other plan mention belongs in the body.
+
+Generate this skeleton pre-filled: `npm run pr:body -- --out /tmp/pr-body.md` (inside server/).
+Check before opening: `node scripts/validate-pr-body.mjs --body-file /tmp/pr-body.md --title "<title>"`.
 A commit map is appended automatically by CI — do not maintain one by hand.
 -->
