@@ -249,6 +249,23 @@ conventions, and P2.2 is a different axis (preview), so splitting there does not
   Clearing it narrowed the write scope to a file the writer then never opened, leaving
   `systemMessageFile:` pointing at a `.md` the same call had just deleted. Caught by the
   enumeration test, not by review. Any `unset` now forces the `prompt.yaml` rewrite.
+- **P2-F6 — a rebase plus force-push gets the light `pre-push` route on a heavy change.**
+  `scripts/classify-validation-scope.js` reads the PUSH RANGE. After a rebase the range is
+  `<old-head>..<new-head>`, which describes the delta between two versions of the branch, not what
+  the branch changes relative to `main`. Measured 2026-09-02: a force-push whose range held one
+  `CHANGELOG.md` commit classified as `docs` and ran the documentation-only route, while every
+  commit on the branch had just been rewritten onto a new base — including all the TypeScript. CI
+  is unconditional so nothing escapes, and the full suite had been run locally first, but the local
+  gate's subset claim quietly does not hold across a rebase. Not this plan's to fix; recorded
+  because the handbook's "every local route is a subset of CI" is the sentence it falsifies.
+- **P2-F7 — a clean rebase is not a rebase that kept your content.** Resolving the `#261` conflict
+  to the upstream side and re-inserting this branch's three CHANGELOG entries by script: the script
+  aborted on an anchor `#261` had deleted, `git rebase --continue` was chained after it in the same
+  command and ran regardless, and the rebase completed carrying NEITHER version. Caught by grepping
+  the file, not by the rebase's own success report. Same shape as the push that succeeded while its
+  paired commit failed, an hour earlier — a verification step chained to the action it gates runs
+  even when it has nothing to verify.
+
 - **P2-F5 — a fresh worktree has no `dist/`, and `test:all` does not build.** The e2e suite
   reported 160 failures across 7 suites on first run here; after `npm run build`, 184 passed.
   Nothing to fix in this plan, but the first reading of that output was "my change broke e2e",
