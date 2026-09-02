@@ -22,13 +22,19 @@ name: PR Conventions
 #   It does NOT judge prose quality, and it deliberately does not gate labels: the type label is
 #   derived here automatically, and a gate you satisfy automatically is theatre.
 #
-# ADVISORY ON PURPOSE. Not listed in `.github/required-contexts.json`, so a red run is visible
-# without blocking a merge.
-#   FLIPS TO REQUIRED WHEN: it has run on 5 consecutive PRs with zero false positives, counted
-#   from the first PR opened after 2026-09-01 (the Demonstration and title checks reset the count).
-#   Add "PR Conventions" to required-contexts.json at that point and delete this paragraph. An
-#   advisory gate with no promotion condition is permanently advisory, which is the state this
-#   repository's own rules forbid.
+# REQUIRED SINCE 2026-09-02 (listed in `.github/required-contexts.json`). The original flip
+# condition — five consecutive clean PRs, zero false positives — was dropped by an operator
+# ruling: it had no counter and no detector (the exact "retirability without detection" failure
+# cleanup-standards.md names), and it was unsatisfiable anyway, because every renovate and
+# release-please PR failed the body check from the day the gate existed (#252, #253 probed
+# FAILURE 2026-09-01). Bot PRs are now exempt from the authored-body checks — their bodies and
+# titles are machine-owned surface — which removes the known false-positive sources; a wrong
+# failure after this is a defect to fix, not a count to reset.
+#
+# This workflow also asserts the merge-settings contract by its EFFECT (the newest squash on
+# main carries a PR-shaped body): the settings are invisible to any file-based gate AND to the
+# workflow token, and the two-register body design depends on them — the collapsed appendix
+# reaches main's history only because the squash body does.
 
 on:
   pull_request:
@@ -82,6 +88,42 @@ jobs:
             });
             core.info(`Applied "${label}".`);
 
+      - name: Assert the merge-settings contract by its effect
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // The merge-settings fields on repos.get are visible only to admin tokens, and the
+            // workflow GITHUB_TOKEN is not one — probed 2026-09-02 on #259, where all three
+            // fields read `undefined` and the first version of this step failed on its own PR.
+            // A probe that cannot observe must not stand as a gate, so assert the EFFECT the
+            // contract exists for: the newest squash merge on the default branch must carry a
+            // PR-shaped body (PR_BODY squash opens with a `## ` heading). Detection lags by one
+            // merge — the best a non-admin observer can do, and it fires before the NEXT merge
+            // compounds the drift. delete_branch_on_merge has no non-admin observable and is
+            // deliberately not asserted; it is convenience, not contract.
+            const { data: commits } = await github.rest.repos.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 20,
+            });
+            const squash = commits.find((c) => /\(#\d+\)$/.test(c.commit.message.split('\n')[0]));
+            if (!squash) {
+              core.info('No squash-shaped commit in the last 20 on the default branch.');
+              return;
+            }
+            const body = squash.commit.message.split('\n').slice(1).join('\n');
+            if (/^## /m.test(body)) {
+              core.info(`Squash ${squash.sha.slice(0, 8)} carries a PR-shaped body — contract holds.`);
+              return;
+            }
+            core.setFailed(
+              `Squash commit ${squash.sha.slice(0, 8)} does not carry the PR body — the ` +
+                'squash_merge_commit_message setting has drifted from PR_BODY. Reapply:\n' +
+                '  gh api -X PATCH repos/' + context.repo.owner + '/' + context.repo.repo + ' \\\n' +
+                '    -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY \\\n' +
+                '    -F delete_branch_on_merge=true'
+            );
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -91,15 +133,18 @@ jobs:
           node-version-file: .node-version
 
       - name: Prove the body check can fail (positive control)
+        if: github.event.pull_request.user.type != 'Bot'
         run: node scripts/validate-pr-body.mjs --self-test
 
       - name: Check the body against the template (scripts/validate-pr-body.mjs)
+        if: github.event.pull_request.user.type != 'Bot'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node scripts/validate-pr-body.mjs
 
       - name: Lint the title with the repo's commitlint config
+        if: github.event.pull_request.user.type != 'Bot'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         # Root package.json holds only commitlint + husky; `--ignore-scripts` skips the husky

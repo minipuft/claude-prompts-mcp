@@ -310,18 +310,43 @@ gh pr create --title "feat(scope): outcome" --body-file /tmp/pr-body.md
 **Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`.
 
 The `PR Conventions` workflow runs the same validator on every PR and lints the title with the
-repo's own `commitlint.config.mjs`. It is advisory until it has run clean on five consecutive PRs
-(the workflow header records the flip condition). CI also auto-comments a validation summary and
-the changed-file list -- never maintain those by hand.
+repo's own `commitlint.config.mjs`. It is a **required** context (since 2026-09-02) on every
+non-bot PR; bot PRs (renovate, release-please) are exempt from the authored-body checks because
+their bodies are machine-owned. The validator fails on surviving `___` placeholders, unfilled
+verification rows, and a non-finalized `Plan:` footer. CI also auto-comments a validation summary
+and the changed-file list -- never maintain those by hand.
+
+**The body is a two-register document.** Reader voice above the fold (the 400-word budget counts
+only this -- fenced blocks, tables, and `<details>` content are exempt); below it, an optional
+collapsed appendix:
+
+```markdown
+<details><summary>Appendix -- session archive (not review material)</summary>
+ ... deviation-log excerpts, captured drive transcripts, extended verification ...
+</details>
+```
+
+Because the squash commit carries the PR body, the appendix lands **greppable in main's history**
+-- it replaces the per-commit bodies squash discards. `npm run pr:body` seeds it from your
+implementation-notes' `## Deviations`. Commit bodies are therefore ephemeral working notes: keep
+them one-concern and short (commitlint warns past 1,500 characters).
+
+**Plan footer contract.** A PR executing a plan ends its body with exactly one line --
+`` Plan: `plans/<path>.md` `` -- and mentions the plan nowhere else (no row ids, no plan
+vocabulary). The gate fails while that plan's `status:` is non-final: finalize the plan (every
+row terminal, retired) in the same PR, or the PR does not merge.
 
 **The squash-merge commit carries the PR title and body, verbatim.** That is a repository setting
-(`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`, set 2026-09-01).
+(`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`, set 2026-09-01;
+`delete_branch_on_merge: true`, set 2026-09-02).
 Before it, GitHub concatenated every commit body: #254 landed on `main` as a 4,615-word commit
-message. If the setting drifts, reapply it:
+message. The `PR Conventions` workflow asserts their effect on every PR (the newest squash on
+`main` must carry a PR-shaped body); if they drift, reapply:
 
 ```bash
 gh api -X PATCH repos/minipuft/claude-prompts-mcp \
-  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY \
+  -F delete_branch_on_merge=true
 ```
 
 #### Write for the reader, not the session
@@ -335,14 +360,14 @@ template; it was that one session wrote every artifact in its own voice.
 
 Each reader question has ONE owning artifact. The PR body **links** to the others; it never re-tells them.
 
-| The reader asks                                              | Owner                              | Voice                                                 |
-| ------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------- |
-| What can I now do / what no longer happens?                  | `CHANGELOG.md` `[Unreleased]`      | consumer; one behavior per bullet, two sentences max  |
-| Show me                                                      | PR body `## Demonstration`         | transcript, `mermaid`, before/after table, screenshot |
-| Where do I look, what do I distrust?                         | PR body `## Notes for Reviewers`   | reviewer; three pointers at most                      |
-| Why this diff?                                               | commit body                        | one concern; the why, not a restated diff             |
-| Why did the session decide X? Falsified rulings, deviations? | plan + `*-implementation-notes.md` | session voice -- this is where it belongs             |
-| Did CI run, which files changed?                             | bot comment                        | derived                                               |
+| The reader asks                                              | Owner                                                                          | Voice                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| What can I now do / what no longer happens?                  | `CHANGELOG.md` `[Unreleased]`                                                  | consumer; one behavior per bullet, two sentences max  |
+| Show me                                                      | PR body `## Demonstration`                                                     | transcript, `mermaid`, before/after table, screenshot |
+| Where do I look, what do I distrust?                         | PR body `## Notes for Reviewers`                                               | reviewer; three pointers at most                      |
+| Why this diff?                                               | commit body                                                                    | one concern; the why, not a restated diff             |
+| Why did the session decide X? Falsified rulings, deviations? | plan + `*-implementation-notes.md`, excerpted into the PR's collapsed Appendix | session voice -- collapsed, never above the fold      |
+| Did CI run, which files changed?                             | bot comment                                                                    | derived                                               |
 
 **Boundary test**: if a sentence only makes sense to someone who was in the session, it goes in the
 implementation-notes and the PR links it. Nothing is lost -- the notes are committed -- it is just not

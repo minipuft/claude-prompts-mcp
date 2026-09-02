@@ -84,17 +84,19 @@ function openRows(planPath) {
     });
 }
 
-function summary({ subjects }, plan) {
+function summary({ subjects }) {
   const lines = ['After this merges, ___.', ''];
   for (const s of subjects) lines.push(`- ${s}`);
-  if (plan) lines.push('', `Plan: \`${plan}\``);
   return lines;
 }
 
 function demonstration({ files }) {
   const drives = files.filter((f) => /verify-.*\.mjs$/.test(f));
-  if (drives.length === 0) return ['<!-- transcript / mermaid / before-after table, or `n/a: <reason>` -->'];
-  return ['Capture the output of:', '', ...drives.map((d) => `- \`node ${d.replace(/^server\//, '')}\``)];
+  const lines = ['**Before**', '', '```', '___', '```', '', '**After**', '', '```', '___', '```'];
+  if (drives.length > 0) {
+    lines.push('', 'Capture from:', ...drives.map((d) => `- \`node ${d.replace(/^server\//, '')}\``));
+  }
+  return lines;
 }
 
 function verified({ files }) {
@@ -113,11 +115,38 @@ function notes({ numstat }) {
 
 function stillOpen(plan) {
   const rows = openRows(plan);
-  return rows.length === 0 ? ['None'] : rows.map((r) => `- ${r}`);
+  if (rows.length === 0) return ['None'];
+  return [
+    '___',
+    '',
+    '<!-- open rows at generation time — the Plan footer gate refuses to merge until the plan is',
+    '     finalized, so close or kill these in this PR:',
+    ...rows.map((r) => `       ${r}`),
+    '-->',
+  ];
 }
 
 function readme({ files }) {
   return files.includes('README.md') ? [] : ['Not applicable'];
+}
+
+/** The collapsed archive register: Deviations excerpts from any implementation-notes in the diff. */
+function appendix({ files }) {
+  const notes = files.filter((f) => f.endsWith('implementation-notes.md'));
+  const parts = ['<details>', '<summary>Appendix — session archive (not review material)</summary>', ''];
+  for (const n of notes) {
+    const notePath = path.join(REPO_ROOT, n);
+    if (!existsSync(notePath)) continue;
+    const deviations = /## Deviations[\s\S]*?(?=\n## |$)/.exec(readFileSync(notePath, 'utf8'));
+    if (deviations) parts.push(`From \`${n}\`:`, '', deviations[0].trim(), '');
+  }
+  parts.push(
+    '<!-- captured drive transcripts, extended verification, deviation detail — collapsed content',
+    '     is exempt from the word budget and lands greppable on main via the squash body -->',
+    '',
+    '</details>'
+  );
+  return parts;
 }
 
 /** Insert derived lines under each heading, after the template's own comment block. */
@@ -149,15 +178,18 @@ function main() {
   const facts = branchFacts(base);
   const plan = detectPlan(facts.files, readArg('--plan'));
   const body = fill(readFileSync(TEMPLATE, 'utf8'), {
-    Summary: summary(facts, plan),
+    Summary: summary(facts),
     Demonstration: demonstration(facts),
     'How it was verified': verified(facts),
     'Notes for Reviewers': notes(facts),
     'Still open': stillOpen(plan),
     'README Charter Compliance': readme(facts),
   });
-  const footer = `<!-- derived: ${facts.subjects.length} commits · ${facts.files.length} files · base ${base} -->`;
-  const result = `${body.trimEnd()}\n${footer}\n`;
+  const tail = [''];
+  if (plan) tail.push(`Plan: \`${plan}\``, '');
+  tail.push(...appendix(facts), '');
+  tail.push(`<!-- derived: ${facts.subjects.length} commits · ${facts.files.length} files · base ${base} -->`);
+  const result = `${body.trimEnd()}\n${tail.join('\n')}\n`;
 
   const out = readArg('--out');
   if (out) {
