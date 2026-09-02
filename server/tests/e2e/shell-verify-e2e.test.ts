@@ -40,7 +40,7 @@ describe('Shell Verify E2E', () => {
 
   afterEach(async () => {
     try {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true, maxRetries: 5 });
     } catch {
       // Ignore cleanup errors
     }

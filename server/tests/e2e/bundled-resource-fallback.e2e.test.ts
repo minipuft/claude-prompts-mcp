@@ -140,7 +140,7 @@ describe('a workspace resource directory overlays the bundled tree (P1.0a)', () 
   }, 120_000);
 
   afterAll(async () => {
-    if (workspace) await rm(workspace, { recursive: true, force: true });
+    if (workspace) await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
   });
 
   it('starts, rather than dying on a bundled framework the workspace does not carry', () => {

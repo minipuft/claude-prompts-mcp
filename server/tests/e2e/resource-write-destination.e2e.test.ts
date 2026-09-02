@@ -123,8 +123,19 @@ class ProbeServer {
     };
   }
 
-  stop(): void {
-    this.proc?.kill();
+  /**
+   * `kill()` only SIGNALS; it does not wait. Returning immediately let the workspace `rm` race
+   * the server's own log flush, so teardown failed with `ENOTEMPTY: rmdir '<ws>/logs'` on the
+   * first CI runs of #257 and #259 while every assertion had passed. Same fix as
+   * resource-path-containment's ProbeServer; the timeout keeps a wedged child from hanging.
+   */
+  async stop(): Promise<void> {
+    if (this.proc === undefined || this.proc.exitCode !== null) return;
+    await new Promise<void>((resolve) => {
+      this.proc.once('exit', () => resolve());
+      this.proc.kill();
+      setTimeout(resolve, 5_000);
+    });
   }
 }
 
@@ -147,8 +158,8 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    server?.stop();
-    if (workspace) await rm(workspace, { recursive: true, force: true });
+    await server?.stop();
+    if (workspace) await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
 
     // If the defect regresses, these land in the package tree — the very thing the test asserts
     // against — and a red run would leave them behind as untracked files in the repo. Clean them
