@@ -2,7 +2,7 @@
   "$comment": [
     "SSOT for the status checks required to merge into `main`.",
     "GitHub matches a required context against a check-run NAME, which is a job's `name:`",
-    "field — not its job id. Writing the id produces a context nothing ever reports, and every",
+    "field \u2014 not its job id. Writing the id produces a context nothing ever reports, and every",
     "PR then blocks with all checks green. That is exactly what happened here: protection",
     "required [\"lint\",\"build\"] while CI reported `Lint & Validate` and `Build`.",
     "",
@@ -14,5 +14,11 @@
     "    --input -"
   ],
   "branch": "main",
-  "contexts": ["Lint & Validate", "CLI", "Build", "Test Suite"]
+  "contexts": [
+    "Lint & Validate",
+    "CLI",
+    "Build",
+    "Test Suite",
+    "PR Conventions"
+  ]
 }

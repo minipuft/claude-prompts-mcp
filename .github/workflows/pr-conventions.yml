@@ -22,13 +22,19 @@ name: PR Conventions
 #   It does NOT judge prose quality, and it deliberately does not gate labels: the type label is
 #   derived here automatically, and a gate you satisfy automatically is theatre.
 #
-# ADVISORY ON PURPOSE. Not listed in `.github/required-contexts.json`, so a red run is visible
-# without blocking a merge.
-#   FLIPS TO REQUIRED WHEN: it has run on 5 consecutive PRs with zero false positives, counted
-#   from the first PR opened after 2026-09-01 (the Demonstration and title checks reset the count).
-#   Add "PR Conventions" to required-contexts.json at that point and delete this paragraph. An
-#   advisory gate with no promotion condition is permanently advisory, which is the state this
-#   repository's own rules forbid.
+# REQUIRED SINCE 2026-09-02 (listed in `.github/required-contexts.json`). The original flip
+# condition — five consecutive clean PRs, zero false positives — was dropped by an operator
+# ruling: it had no counter and no detector (the exact "retirability without detection" failure
+# cleanup-standards.md names), and it was unsatisfiable anyway, because every renovate and
+# release-please PR failed the body check from the day the gate existed (#252, #253 probed
+# FAILURE 2026-09-01). Bot PRs are now exempt from the authored-body checks — their bodies and
+# titles are machine-owned surface — which removes the known false-positive sources; a wrong
+# failure after this is a defect to fix, not a count to reset.
+#
+# This workflow also asserts the merge-settings contract (squash carries PR_TITLE + PR_BODY,
+# branches delete on merge): those are repository SETTINGS, invisible to any file-based gate,
+# and the two-register body design depends on them — the collapsed appendix reaches main's
+# history only because the squash body does.
 
 on:
   pull_request:
@@ -82,6 +88,32 @@ jobs:
             });
             core.info(`Applied "${label}".`);
 
+      - name: Assert the merge-settings contract still holds
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const expected = {
+              squash_merge_commit_title: 'PR_TITLE',
+              squash_merge_commit_message: 'PR_BODY',
+              delete_branch_on_merge: true,
+            };
+            const drifted = Object.entries(expected).filter(([k, v]) => data[k] !== v);
+            if (drifted.length === 0) {
+              core.info('Merge settings match the contract.');
+              return;
+            }
+            for (const [k, v] of drifted) core.error(`${k} is ${data[k]}, expected ${v}`);
+            core.setFailed(
+              'Repository merge settings drifted from the two-register body contract. Reapply:\n' +
+                '  gh api -X PATCH repos/' + context.repo.owner + '/' + context.repo.repo + ' \\\n' +
+                '    -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY \\\n' +
+                '    -F delete_branch_on_merge=true'
+            );
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -91,15 +123,18 @@ jobs:
           node-version-file: .node-version
 
       - name: Prove the body check can fail (positive control)
+        if: github.event.pull_request.user.type != 'Bot'
         run: node scripts/validate-pr-body.mjs --self-test
 
       - name: Check the body against the template (scripts/validate-pr-body.mjs)
+        if: github.event.pull_request.user.type != 'Bot'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node scripts/validate-pr-body.mjs
 
       - name: Lint the title with the repo's commitlint config
+        if: github.event.pull_request.user.type != 'Bot'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         # Root package.json holds only commitlint + husky; `--ignore-scripts` skips the husky
