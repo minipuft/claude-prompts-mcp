@@ -780,8 +780,8 @@ structured HTTP without creating a second writer or history:
 | `GET`  | `/api/v1/authority/prompts/{id}`          | read       | `id: string`                                        | executable detail plus `current_version`            |
 | `GET`  | `/api/v1/authority/prompts/{id}/history`  | read       | `limit: integer` (`1..100`, default `20`)           | ordered version metadata                            |
 | `GET`  | `/api/v1/authority/prompts/{id}/compare`  | read       | `from_version`, `to_version`: non-negative integers | unified diff and stats                              |
-| `POST` | `/api/v1/authority/prompts/{id}/dry-run`  | write      | `expected_version` plus strict update fields        | validation, diff, resulting prompt; nothing written |
-| `POST` | `/api/v1/authority/prompts/{id}/apply`    | write      | dry-run fields plus `confirmed: true`               | canonical mutation receipt                          |
+| `POST` | `/api/v1/authority/prompts/{id}/preview`  | write      | `expected_version` plus strict update fields        | validation, diff, resulting prompt; nothing written |
+| `POST` | `/api/v1/authority/prompts/{id}/apply`    | write      | preview fields plus `confirmed: true`               | canonical mutation receipt                          |
 | `POST` | `/api/v1/authority/prompts/{id}/rollback` | write      | `version`, `expected_version`, `confirmed: true`    | restored/current versions and refresh status        |
 
 Example apply request:

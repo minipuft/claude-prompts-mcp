@@ -192,8 +192,12 @@ The matrix's rows 2, 3, 4 and 5b, plus SF-2. D1 established these are **one miss
 **Gate P2**: the tool can express "remove this" for every clearable field, and preview is reachable
 without confirming the thing being previewed.
 
-**Gate P2 status (2026-09-02): first half MET, second half blocked on P2.2.** "Remove this" is
-expressible for all 11 clearable fields and for a tool binding. Preview is untouched until P2b.
+**Gate P2 — PASSED (verified 2026-09-03).** "Remove this" is expressible for all 11 clearable
+fields and for a tool binding, and a preview is reachable without confirming the thing being
+previewed — proven on gate and framework `delete` through the router, with the confirmation guard
+still refusing the real `delete`. The second half is held by a gate rather than by care:
+`validate:preview-vocabulary` fails on a reintroduced declaration, key, CLI flag or route, and its
+satisfied-exemption arm fails an exemption whose condition has lapsed.
 
 ### P2 split into P2a / P2b (2026-09-02)
 
@@ -216,8 +220,15 @@ conventions, and P2.2 is a different axis (preview), so splitting there does not
   `name`, `category`, `description` and `user_message_template` are refused BY NAME. They remain
   fully settable — the owner's constraint was that every field stay reachable and rewritable —
   but a prompt missing one does not load, so clearing them is not offered. The refusal says so.
-- **D-P2c — the `dry_run` removal sweeps the CLI too**, and the survivor is `preview` plus a
-  detail level. In `skills_sync`, `dry_run` (planned changes, 4 commands) and `preview` (unified
+- **D-P2c — the `dry_run` removal sweeps every surface, not only `resource_manager`**, and the
+  survivor is `preview` plus a detail level. ⚠ **The ruling's location claim was false**: it named
+  "the CLI, `cli/src/**/skills-sync/service.ts`, ~29 occurrences". Re-measured 2026-09-03 — `cli/`
+  contains **zero** occurrences of `dry_run`/`dryRun`/`--dry-run` and has no skills-sync surface at
+  all (17 command files, none of them sync). The 29 are in `server/src/modules/skills-sync/
+service.ts`, a server module whose CLI entry point is `tsx scripts/skills-sync.ts`. The ruling's
+  INTENT — do not scope the sweep to `resource_manager` — was right and was executed; only the
+  directory was wrong, and executing it as written would have produced a no-op change to `cli/`
+  and left the 29 real sites standing. In `skills_sync`, `dry_run` (planned changes, 4 commands) and `preview` (unified
   diffs, `pull` only, enforced at `service.ts:555`) are NOT synonyms — they were presented as an
   overlap and are not one. `preview: true` becomes the single verb across all four commands, and
   `preview_detail: 'diff'` upgrades to unified diffs where a diff exists, so both behaviours
@@ -270,6 +281,72 @@ conventions, and P2.2 is a different axis (preview), so splitting there does not
   reported 160 failures across 7 suites on first run here; after `npm run build`, 184 passed.
   Nothing to fix in this plan, but the first reading of that output was "my change broke e2e",
   which cost a cycle. Worth a line in CONTRIBUTING §Working in a second worktree.
+
+### Findings (P2b)
+
+- **P2-F8 — `dry_run` was accepted on gate and framework `update`, where nothing read it, so
+  those two previews PERFORMED the mutation.** The router forwarded the parameter to every manager
+  for every action; only 7 of the 9 (type × action) pairs had a branch that read it. A gate or
+  framework `update` with `dry_run: true` wrote the file and returned a success receipt. D-P2a
+  authored `preview_action` as a flat `'update'|'delete'|'rollback'`, which would have carried the
+  defect into the new vocabulary under a better name — the enum is now per-type
+  (`PREVIEWABLE_ACTIONS_BY_TYPE`), and an unsupported pair is refused by name. The regression test
+  enumerates the COMPLEMENT of that table rather than listing the two known pairs, so a resource
+  type added later (P3.1's `style`) cannot inherit a preview that writes. Same shape as P2-F3:
+  the channel that carries a capability must be checked where it is CONSUMED, not where it is
+  declared.
+- **P2-F9 — D-P2c's file location was wrong and the row's own count belonged elsewhere.** See the
+  correction under the ruling. Recorded separately because the reusable part is not the path: the
+  ruling was taken from a `rg` result read as "cli/…/service.ts" when the match was
+  `server/src/modules/skills-sync/service.ts`, and a plan row states a path far more confidently
+  than the measurement that produced it. Every path in a ruling is re-measured before it is
+  executed, which is [[feedback_untrusted_inventory]] applied to a decision rather than a count.
+- **P2-F10 — two gates read the dispatch table by TEXT ANCHOR, and a correct refactor blinded
+  both.** Binding the resolved action inline — `switch (resolveDispatchAction(args))` — typechecked,
+  passed every test, and made `verify:action-metadata` throw and `validate:registry-coherence`
+  report six findings, three of them "the gate cannot see this file, so its rules are being
+  evaluated zero times". The fix is a one-line local, `const action = resolveDispatchAction(args)`,
+  and a comment at each of the three sites saying why the shape is load-bearing. Both gates failed
+  LOUDLY, which is the whole reason this is a finding and not an incident: a gate that reads code
+  by anchor must fail closed when the anchor moves, and these did.
+- **P2-F11 — `validate:registry-coherence` read comments as code, and its own mutation fixture
+  mutated a comment.** Two compounding defects surfaced in one run. Its `switchSegments` scanner
+  searched raw text, so a doc comment QUOTING `switch (action)` moved the scan's start above the
+  real table; and its self-test fixture replaced the first textual occurrence of that string, which
+  was the comment, leaving the statement intact — the mutation test reported "no findings", i.e. a
+  mutation that mutated nothing. Both fixed here: the scanner strips comments, and the fixture
+  anchors to statement position and reads whichever spelling the router currently uses instead of
+  pinning one. Found only because the gate's self-test is a real positive control; a gate whose
+  self-test can pass vacuously is the exact thing this repo's Gate P5 is about.
+- **P2-F12 — Prettier disarmed an escape marker by formatting around it.** The
+  `validate:preview-vocabulary` allowance for a documentation migration note was scoped "marker
+  line to the next blank line". Prettier puts a blank line after an HTML comment, so the scope
+  closed before the paragraph began and the marker looked applied while doing nothing. Scope now
+  skips blanks between the marker and its paragraph. The general rule: **a marker the repo's own
+  formatter can disarm is worse than no marker**, because its presence reads as coverage — the
+  same failure shape as a satisfied exemption, arriving from the toolchain instead of from drift.
+
+### Deviations (P2b)
+
+- **DEV-P2-3 — the bundled `examples/create_prompt` prompt was hand-edited.** Its user message
+  teaches the maintenance sequence and named `update(dry_run:true)`. Core Principle 1 routes edits
+  under `server/resources/prompts/**` through MCP tooling, and the tool could not reach it: the
+  running server is pointed at the personal library at `~/.claude/resources` (P1.5), not at this
+  worktree, and there is no way to retarget a live STDIO server from inside a session. Leaving it
+  would have shipped a bundled prompt instructing readers to use a removed parameter. This is
+  P4.9's gap reached from the other side — that row is about a resource the tool cannot repair
+  because it will not load; this is one it cannot repair because it is in the wrong tree.
+- **DEV-P2-4 — the HTTP route `/dry-run` was renamed to `/preview`, which the tier did not ask
+  for.** Scope named the `prompt-authority-api.ts` FIELD, not the path. Renamed anyway: the route
+  is the surface an operator reads most often, and a vocabulary that survives on the URL after
+  being removed from the parameter is exactly the split the enumeration gate exists to prevent.
+  Carries its own CHANGELOG breaking entry.
+- **DEV-P2-5 — `eslint --fix` over `src` and `scripts` edited five files outside this change.**
+  Run to clear an import-order ratchet regression from the new imports; it also reformatted
+  `renderer.ts`, `chain-operator-executor.ts`, `interrupt-policy.ts`,
+  `03-identity-resolution-stage.ts` and `request-identity-resolver.ts`. Reverted with
+  `git checkout --`, and the ratchet passes without them. `--fix` takes a path, not a diff; scope
+  it to the files the change touched or read `git status` immediately after.
 
 ### Deviations (P2a)
 
