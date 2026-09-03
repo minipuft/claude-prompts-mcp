@@ -27,6 +27,7 @@ import type {
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
+import type { PreviewableAction } from '../../shared/preview-action.js';
 import type { PromptArgumentUpdate } from '../prompt/operations/argument-updates.js';
 import type { TemplatePatchOperation } from '../prompt/operations/template-patch.js';
 
@@ -71,6 +72,7 @@ export type ResourceAction =
   | 'list'
   | 'inspect'
   | 'validate' // prompt only, non-mutating draft validation
+  | 'preview' // names its target in `preview_action`; never writes
   | 'reload'
   | 'analyze_type' // prompt only
   | 'analyze_gates' // prompt only
@@ -96,6 +98,11 @@ export type ResourceAction =
  * action that never had one changes behaviour for existing callers.
  *
  * `reload` is deliberately absent: it re-reads from disk and destroys nothing.
+ *
+ * `preview` is absent for the same reason, and that absence is the whole point of it being an
+ * action. While previewing was `dry_run: true` on `delete`, this guard saw `delete` and demanded
+ * `confirm: true` — so seeing what a deletion would cost required confirming the deletion. A
+ * membership test cannot get that backwards; a second condition on a boolean could.
  */
 export const DESTRUCTIVE_ACTIONS: ReadonlySet<ResourceAction> = new Set<ResourceAction>([
   'delete',
@@ -143,6 +150,7 @@ export const COMMON_ACTIONS: ResourceAction[] = [
   'delete',
   'list',
   'inspect',
+  'preview',
   'reload',
   'history',
   'rollback',
@@ -215,8 +223,13 @@ export interface ResourceManagerInput {
    * change to `TemplatePatchOperation` cannot leave this layer describing a different shape.
    */
   patch?: TemplatePatchOperation[];
-  /** [Prompt] Render and diff the update without writing it or recording a version. */
-  dry_run?: boolean;
+  /**
+   * What `action: 'preview'` would do. Required with that action and refused without it.
+   *
+   * Which pairs are previewable is per resource type — `PREVIEWABLE_ACTIONS_BY_TYPE` owns that,
+   * and the router refuses the rest by name.
+   */
+  preview_action?: PreviewableAction;
   /**
    * [Prompt] Update-only: tool parameter names whose fields this call CLEARS (P2.1). Kept in
    * lockstep with the `unset` member of `resourceManagerInputSchema`; the accepted vocabulary is

@@ -9,6 +9,7 @@
 import { z } from 'zod/v4';
 
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
+import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
 import {
   ArgumentValidationSchema,
@@ -65,6 +66,7 @@ export const resourceManagerInputSchema = z
       'list',
       'inspect',
       'validate',
+      'preview',
       'analyze_type',
       'analyze_gates',
       'guide',
@@ -131,7 +133,7 @@ export const resourceManagerInputSchema = z
      * when supplied; an omitted field leaves that entry's existing value untouched. Mutually
      * exclusive with `arguments` in the same call — both would make the result depend on an
      * evaluation order the caller cannot see. Rejected on `create` (nothing exists yet to overlay
-     * onto). `dry_run` previews it like any other update.
+     * onto). `action:"preview"` with `preview_action:"update"` previews it like any other update.
      */
     argument_updates: z.array(promptArgumentSchema).optional(),
     /**
@@ -154,11 +156,19 @@ export const resourceManagerInputSchema = z
       )
       .optional(),
     /**
-     * [Prompt] Render and diff the update without writing it — no file change, no version row.
-     * Applies to a full update as well as a patch; it is how an operator confirms an anchor
-     * matched before spending a version.
+     * What `action: 'preview'` would do — required with that action, and refused without it.
+     *
+     * Preview replaced the `dry_run` boolean (P2.2, owner ruling D-P2a). As a flag it was a
+     * modifier on three actions, and the pre-dispatch confirmation guard reads `action`: previewing
+     * a deletion therefore demanded `confirm: true`, so an operator had to confirm the deletion in
+     * order to be shown what it would cost. As an action it is simply not a member of
+     * `DESTRUCTIVE_ACTIONS`, which is a membership test rather than a polarity anyone can invert.
+     *
+     * Which pairs are previewable is PER RESOURCE TYPE and `PREVIEWABLE_ACTIONS_BY_TYPE` owns it:
+     * prompt supports all three, gate and framework support `delete` and `rollback` only. The
+     * router refuses the rest by name rather than accepting a preview that would write.
      */
-    dry_run: z.boolean().optional(),
+    preview_action: z.enum(PREVIEWABLE_ACTIONS).optional(),
     /**
      * [Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use
      * to set them. The missing "remove" verb (P2.1, owner ruling D1).

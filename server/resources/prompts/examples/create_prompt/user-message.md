@@ -38,7 +38,7 @@ Use this bounded workflow:
 
 For an existing prompt, do not recreate it. Use:
 
-`inspect(detail:"full") → update(dry_run:true, expected_version:<current>) → approval → update(expected_version:<current>) → reload → render smoke test → receipt`
+`inspect(detail:"full") → preview(preview_action:"update", expected_version:<current>) → approval → update(expected_version:<current>) → reload → render smoke test → receipt`
 
 Do not publish, announce, or otherwise make authored material public without explicit confirmation.
 

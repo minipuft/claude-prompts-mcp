@@ -414,3 +414,76 @@ scenarios:
     # No `confirm`, so the call must refuse and say so. This is the arm that proves the
     # confirmation is structural rather than advisory.
     expect: { error_contains: 'confirm: true' }
+
+  # ── Preview as an action (P2.2) ────────────────────────────────────────────
+
+  - id: prompt-delete-preview-needs-no-confirmation
+    claim_source: >-
+      resource_manager contract — `action: "preview"` writes nothing and records no version, so it
+      is not a destructive action and takes no `confirm`. This is the claim the `dry_run` boolean
+      could not make: the guard keys on `action`, so previewing a deletion demanded confirmation of
+      the deletion.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_delete_preview
+          name: Conformance Delete Preview
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_DELETE_PREVIEW_BODY
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: preview
+          preview_action: delete
+          id: conformance_delete_preview
+    expect:
+      text_contains: 'Nothing was removed'
+      # The discriminating half. Without it a refusal that happens to mention the prompt would
+      # read as a pass, which is how the old behaviour would have scored here.
+      text_not_contains: 'requires confirmation'
+
+  - id: prompt-delete-preview-leaves-the-prompt-servable
+    claim_source: >-
+      resource_manager contract — a preview reports what would be removed and removes nothing, so
+      the prompt still resolves afterwards.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_preview_survives
+          name: Conformance Preview Survives
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_PREVIEW_SURVIVES_BODY
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: preview
+          preview_action: delete
+          id: conformance_preview_survives
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: inspect
+          id: conformance_preview_survives
+    # The positive control for the assertion above: the preview claimed to remove nothing, and the
+    # prompt is still here to prove it.
+    expect: { text_contains: 'conformance_preview_survives' }
+
+  - id: gate-update-preview-is-refused-by-name
+    claim_source: >-
+      resource_manager contract — `preview_action` is validated per resource type. A gate has no
+      update preview path, so accepting `preview_action: "update"` there would perform the update.
+      It is refused by name instead.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: preview
+          preview_action: update
+          id: conformance_gate_preview
+    expect: { error_contains: 'not supported for resource_type' }

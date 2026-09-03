@@ -49,7 +49,7 @@ const mutationFields = {
   gate_configuration: z.record(z.string(), z.unknown()).optional(),
   patch: z.array(patchSchema).min(1).optional(),
 } as const;
-const dryRunSchema = z.object(mutationFields).strict();
+const previewSchema = z.object(mutationFields).strict();
 const applySchema = z.object({ ...mutationFields, confirmed: z.literal(true) }).strict();
 const rollbackSchema = z
   .object({ version: versionSchema, expected_version: versionSchema, confirmed: z.literal(true) })
@@ -80,8 +80,8 @@ export class PromptAuthorityApi {
       (req, res) => void this.compare(req, res)
     );
     app.post(
-      '/api/v1/authority/prompts/:promptId/dry-run',
-      (req, res) => void this.dryRun(req, res)
+      '/api/v1/authority/prompts/:promptId/preview',
+      (req, res) => void this.preview(req, res)
     );
     app.post('/api/v1/authority/prompts/:promptId/apply', (req, res) => void this.apply(req, res));
     app.post(
@@ -131,17 +131,24 @@ export class PromptAuthorityApi {
     });
   }
 
-  private async dryRun(req: Request, res: Response): Promise<void> {
+  /**
+   * Render what `apply` would write, without writing it.
+   *
+   * Route and method renamed from `dry-run` when the tool parameter behind them was replaced by
+   * `action: 'preview'` (P2.2). Leaving the HTTP path on the old spelling would have kept the
+   * removed vocabulary alive on the one surface an operator reads most often.
+   */
+  private async preview(req: Request, res: Response): Promise<void> {
     const id = this.decodeId(req, res);
     if (id === null) return;
-    const body = dryRunSchema.safeParse(req.body);
+    const body = previewSchema.safeParse(req.body);
     if (!body.success) return this.invalid(res, body.error);
     await this.respondWithAction(res, {
       resource_type: 'prompt',
-      action: 'update',
+      action: 'preview',
+      preview_action: 'update',
       id,
       ...body.data,
-      dry_run: true,
     });
   }
 

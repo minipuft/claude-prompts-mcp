@@ -36,11 +36,11 @@ export interface SkillsSyncInput {
   resource_type?: ResourceType;
   id?: string;
   prune?: boolean;
-  dry_run?: boolean;
   output?: string;
   file?: string;
   category?: string;
   preview?: boolean;
+  preview_detail?: 'summary' | 'diff';
   force?: boolean;
 }
 
@@ -257,11 +257,11 @@ export class ConsolidatedSkillsSync {
           resourceType: args.resource_type,
           id: args.id,
           prune: args.prune,
-          dryRun: args.dry_run,
           output: args.output,
           file: args.file,
           category: args.category,
           preview: args.preview,
+          previewDetail: args.preview_detail,
           force: args.force,
           dbManager: this.dbManager,
         },

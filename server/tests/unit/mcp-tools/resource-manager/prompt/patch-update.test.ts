@@ -235,19 +235,20 @@ describe('patch-mode update', () => {
   });
 });
 
-describe('dry_run', () => {
+describe('preview', () => {
   test('renders the result and writes nothing, recording no version', async () => {
     const { processor, updatePromptImplementation, recordEditResult } = createProcessor();
 
     const response = await processor.updatePrompt({
+      action: 'preview',
+      preview_action: 'update',
       id: 'review_code',
       patch: [PROSE_TO_BULLETS],
-      dry_run: true,
     } as never);
 
     expect(response.isError).toBe(false);
     const text = textOf(response as never);
-    expect(text).toContain('Dry run');
+    expect(text).toContain('Preview');
     expect(text).toContain('Answer in bullet points.');
     expect(updatePromptImplementation).not.toHaveBeenCalled();
     expect(recordEditResult).not.toHaveBeenCalled();
@@ -257,9 +258,10 @@ describe('dry_run', () => {
     const { processor, updatePromptImplementation, recordEditResult } = createProcessor();
 
     const response = await processor.updatePrompt({
+      action: 'preview',
+      preview_action: 'update',
       id: 'review_code',
       description: 'A different description entirely',
-      dry_run: true,
     } as never);
 
     expect(response.isError).toBe(false);
@@ -271,9 +273,10 @@ describe('dry_run', () => {
     const { processor, recordEditResult } = createProcessor();
 
     const response = await processor.updatePrompt({
+      action: 'preview',
+      preview_action: 'update',
       id: 'review_code',
       patch: [{ field: 'user_message_template', old_string: 'nope', new_string: 'x' }],
-      dry_run: true,
     } as never);
 
     expect(response.isError).toBe(true);

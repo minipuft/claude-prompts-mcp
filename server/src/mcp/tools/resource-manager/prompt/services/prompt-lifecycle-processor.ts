@@ -5,6 +5,7 @@ import {
   PromptMutationReceiptService,
   type PromptMutationReceipt,
 } from './prompt-mutation-receipt-service.js';
+import { isPreviewRequest } from '../../../shared/preview-action.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -375,7 +376,7 @@ export class PromptLifecycleProcessor {
 
       if (!patchResult.ok) {
         return this.blockedUpdate(
-          `❌ **Prompt update blocked** — patch not applied (${patchResult.rejection.reason}):\n\n${patchResult.rejection.message}\n\n💡 Nothing was written and no version was consumed. Use \`action:"inspect"\` to read the current text, or \`dry_run: true\` to test an anchor.`
+          `❌ **Prompt update blocked** — patch not applied (${patchResult.rejection.reason}):\n\n${patchResult.rejection.message}\n\n💡 Nothing was written and no version was consumed. Use \`action:"inspect"\` to read the current text, or \`action:"preview"\` with \`preview_action:"update"\` to test an anchor.`
         );
       }
 
@@ -537,11 +538,11 @@ export class PromptLifecycleProcessor {
       );
     }
 
-    // `dry_run` returns the produced bodies and the diff and stops here — ahead of the version
+    // A preview returns the produced bodies and the diff and stops here — ahead of the version
     // record and the write, so neither happens. It is the operator's pre-check that an anchor
     // matched before a version is spent.
-    if (suppliedArgs['dry_run'] === true) {
-      return this.renderDryRun(beforeContent, promptData, patchedFields, diagnosis.preExisting);
+    if (isPreviewRequest(args)) {
+      return this.renderPreview(beforeContent, promptData, patchedFields, diagnosis.preExisting);
     }
 
     let versionSaved: number | undefined;
@@ -709,6 +710,35 @@ export class PromptLifecycleProcessor {
     // The dependency list is computed BEFORE the gate so the refusal can name what would break.
     // Reporting the blast radius and then proceeding anyway — the previous behaviour — told the
     // caller exactly why to stop, after stopping was no longer possible.
+    // A preview reports the same blast radius the refusal names, without needing the refusal — a
+    // caller who already knows they want to delete can still see what it costs first. It sits
+    // ABOVE the confirm gate, where the old `dry_run` branch could not: as a modifier on
+    // `action:"delete"` it had to stay below the gate or it would have been a way to skip
+    // confirming a real deletion — which meant an operator had to confirm the deletion in order to
+    // be shown what it would cost. As its own action there is nothing to skip, because there is no
+    // path from here to the removal below.
+    if (isPreviewRequest(args)) {
+      const blastRadius =
+        dependencies.length > 0
+          ? `\n⚠️ ${dependencies.length} prompt(s) reference it and would break:\n` +
+            dependencies.map((dep) => `- ${dep.name} (${dep.id})`).join('\n') +
+            '\n'
+          : '';
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `🔍 **Preview** — deletion of prompt '${id}' (${promptToDelete.name})\n\n` +
+              `Nothing was removed.\n${blastRadius}\n` +
+              `⚠️ Deletion cannot be undone — rollback cannot restore a deleted prompt.\n\n` +
+              `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`,
+          },
+        ],
+        isError: false,
+      };
+    }
+
     if (confirm !== true) {
       const blastRadius =
         dependencies.length > 0
@@ -726,31 +756,6 @@ export class PromptLifecycleProcessor {
           },
         ],
         isError: true,
-      };
-    }
-
-    // `dry_run` reports the same blast radius the refusal names, without needing the refusal — a
-    // caller who already knows they want to delete can still see what it costs first. Placed after
-    // the confirm gate so `dry_run` never becomes a way to skip it.
-    if (args.dry_run === true) {
-      const blastRadius =
-        dependencies.length > 0
-          ? `\n⚠️ ${dependencies.length} prompt(s) reference it and would break:\n` +
-            dependencies.map((dep) => `- ${dep.name} (${dep.id})`).join('\n') +
-            '\n'
-          : '';
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `🔍 **Dry run** — deletion of prompt '${id}' (${promptToDelete.name})\n\n` +
-              `Nothing was removed.\n${blastRadius}\n` +
-              `⚠️ Deletion cannot be undone — rollback cannot restore a deleted prompt.\n\n` +
-              `💡 Re-send the same call without \`dry_run\` to apply it.`,
-          },
-        ],
-        isError: false,
       };
     }
 
@@ -785,10 +790,10 @@ export class PromptLifecycleProcessor {
   }
 
   /**
-   * Render what an update WOULD produce. Reached only from the `dry_run` branch, which sits ahead
+   * Render what an update WOULD produce. Reached only from the preview branch, which sits ahead
    * of both the version record and the file write, so this method is the whole effect of the call.
    */
-  private renderDryRun(
+  private renderPreview(
     beforeContent: ConvertedPrompt | null,
     promptData: Record<string, unknown>,
     patchedFields: readonly PatchTargetField[],
@@ -796,7 +801,7 @@ export class PromptLifecycleProcessor {
   ): ToolResponse {
     const diff = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 
-    let text = `🔍 **Dry run** — nothing written, no version recorded for \`${String(promptData['id'])}\`\n\n`;
+    let text = `🔍 **Preview** — nothing written, no version recorded for \`${String(promptData['id'])}\`\n\n`;
     if (patchedFields.length > 0) {
       text += `🩹 Patched field(s): ${patchedFields.map((field) => `\`${field}\``).join(', ')}\n\n`;
     }
@@ -817,14 +822,14 @@ export class PromptLifecycleProcessor {
       text += `\n\n`;
     }
 
-    text += `💡 Re-send the same call without \`dry_run\` to apply it.`;
+    text += `💡 Re-send as \`action:"update"\` to apply it.`;
 
     return {
       content: [{ type: 'text' as const, text }],
       structuredContent: {
-        action: 'update',
+        action: 'preview',
+        preview_action: 'update',
         id: String(promptData['id']),
-        dry_run: true,
         valid: true,
         mutated: false,
         has_changes: diff.hasChanges,

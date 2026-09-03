@@ -14,6 +14,7 @@ import { PromptLifecycleProcessor } from './services/prompt-lifecycle-processor.
 import { PromptVersioningProcessor } from './services/prompt-versioning-processor.js';
 import { promptResourceMetadata } from '../../../metadata/definitions/prompt-resource.js';
 import { recordActionInvocation } from '../../../metadata/usage-tracker.js';
+import { resolveDispatchAction } from '../../shared/preview-action.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
@@ -134,9 +135,21 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
     },
     _extra: any
   ): Promise<ToolResponse> {
-    const { action } = args;
-    this.logger.info(`📝 Prompt Resource: Executing action "${action}"`);
-    recordActionInvocation('resource_manager', action, 'received');
+    const { action: requestedAction } = args;
+    // A preview runs its TARGET's code path — `resolveDispatchAction` says which — so validation,
+    // resolution and diffing have exactly one implementation and cannot disagree with the real
+    // call. `args.action` itself stays `'preview'` all the way into the processor, which is what
+    // each early return reads; there is no second field to keep in lockstep.
+    //
+    // The resolved value is bound to `action` rather than switched on inline because two gates —
+    // `verify:action-metadata` and `validate:registry-coherence` — read this dispatch table by
+    // locating the literal `switch (action)`. Switching on the call expression compiled and passed
+    // every test while making both gates return zero rows for this file, which each reports as a
+    // clean result. Telemetry keeps `requestedAction`: recording a preview as a delete would log a
+    // deletion that did not happen.
+    const action = resolveDispatchAction(args) as PromptResourceActionId;
+    this.logger.info(`📝 Prompt Resource: Executing action "${requestedAction}"`);
+    recordActionInvocation('resource_manager', requestedAction, 'received');
 
     try {
       let response: ToolResponse;
@@ -181,23 +194,35 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
         case 'compare':
           response = await this.versioningService.handleCompare(args);
           break;
+        // Reached only when `preview_action` is absent, which the router refuses ahead of
+        // dispatch. Kept because the handler is also called directly, and "Unknown action:
+        // preview" would name the wrong problem.
+        case 'preview':
+          throw new ValidationError(
+            'action:"preview" requires \'preview_action\' — a preview of WHAT. ' +
+              'Valid values for prompt are: "update", "delete", "rollback".'
+          );
         default:
-          recordActionInvocation('resource_manager', action, 'unknown');
-          throw new ValidationError(`Unknown action: ${action}`);
+          recordActionInvocation('resource_manager', requestedAction, 'unknown');
+          throw new ValidationError(`Unknown action: ${requestedAction}`);
       }
 
-      response = this.appendActionWarnings(response, action);
-      recordActionInvocation('resource_manager', action, 'success');
+      response = this.appendActionWarnings(response, requestedAction);
+      recordActionInvocation('resource_manager', requestedAction, 'success');
 
       const resourceId = args['id'] as string | undefined;
       if (
-        ['create', 'update', 'delete'].includes(action) &&
+        ['create', 'update', 'delete'].includes(requestedAction) &&
         response.isError !== true &&
         resourceId !== undefined &&
         resourceId !== ''
       ) {
         const operation =
-          action === 'create' ? 'added' : action === 'delete' ? 'removed' : 'modified';
+          requestedAction === 'create'
+            ? 'added'
+            : requestedAction === 'delete'
+              ? 'removed'
+              : 'modified';
         const promptsDir = this.dependencies.configManager.getResolvedPromptsDirectory();
         const category = (args['category'] as string | undefined) ?? 'general';
         const filePath = `${promptsDir}/${slugifyCategoryDirectory(category)}/${resourceId}/prompt.yaml`;

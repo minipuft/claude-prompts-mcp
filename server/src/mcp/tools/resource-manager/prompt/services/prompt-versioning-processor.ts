@@ -1,5 +1,6 @@
 // @lifecycle canonical - Prompt version history operations.
 
+import { isPreviewRequest } from '../../../shared/preview-action.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptResourceContext } from '../core/context.js';
 import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
@@ -270,10 +271,10 @@ export class PromptVersioningProcessor {
 
     const currentState = canonicalPromptSnapshot(id, currentPrompt);
 
-    // `dry_run` returns here — after validation, so a preview refuses an unrestorable version the
-    // same way the real call does, and BEFORE the version row is recorded, so neither the file nor
-    // the table moves.
-    if (args.dry_run === true) {
+    // A preview returns here — after validation, so it refuses an unrestorable version the same
+    // way the real call does, and BEFORE the version row is recorded, so neither the file nor the
+    // table moves.
+    if (isPreviewRequest(args)) {
       const diff = this.textDiffService.generateObjectDiff(
         currentState,
         snapshot,
@@ -287,10 +288,10 @@ export class PromptVersioningProcessor {
           },
         ],
         structuredContent: {
-          action: 'rollback',
+          action: 'preview',
+          preview_action: 'rollback',
           id,
           target_version: version,
-          dry_run: true,
           valid: true,
           mutated: false,
           has_changes: diff.hasChanges,

@@ -169,7 +169,7 @@ export const SNAPSHOT_PRESERVED_FIELDS = [
  * loader-resolved runtime keys the recorded shape never has (`registerWithMcp`, `mcpPromptMode`,
  * `promptDir`, `scriptTools`, …), and the comparison is JSON-based, so passing the raw converted
  * prompt makes every post-reload edit look out-of-band and bridge — doubling rows in steady
- * state. Both sides of every before/after comparison (bridge check, diffs, dry-run) must
+ * state. Both sides of every before/after comparison (bridge check, diffs, preview) must
  * therefore come from THIS one projection; `updatePrompt`'s produced `promptData` is this object
  * plus `tools` (which only ever arrives via `args.tools` — the live prompt carries loaded
  * `scriptTools`, not the raw id list, so the prior value is not reconstructable here and the key

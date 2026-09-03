@@ -789,6 +789,7 @@
           "list",
           "inspect",
           "validate",
+          "preview",
           "analyze_type",
           "analyze_gates",
           "guide",
@@ -1222,9 +1223,6 @@
         ],
         "type": "string"
       },
-      "dry_run": {
-        "type": "boolean"
-      },
       "enabled": {
         "type": "boolean"
       },
@@ -1461,6 +1459,14 @@
       "phases": {
         "items": {},
         "type": "array"
+      },
+      "preview_action": {
+        "enum": [
+          "update",
+          "delete",
+          "rollback"
+        ],
+        "type": "string"
       },
       "reason": {
         "type": "string"
