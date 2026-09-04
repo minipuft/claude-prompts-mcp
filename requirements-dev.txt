@@ -18,7 +18,7 @@
 # group needs `pip install --group`, which requires pip >= 25.1, and the CI job runs the GitHub
 # runner's own pip with no setup-python step pinning it. Adding an unverifiable version floor to
 # the runner is the same class of failure this file exists to remove.
-ruff==0.16.1
-pyrefly==1.1.1
+ruff==0.16.5
+pyrefly==1.2.0
 pytest==9.1.1
 PyYAML==6.0.3
