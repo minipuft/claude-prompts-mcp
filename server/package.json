@@ -128,6 +128,8 @@
     "validate:no-stepstate": "node scripts/validate-no-stepstate.js",
     "validate:hermetic-child-env": "node scripts/validate-hermetic-child-env.js",
     "validate:hermetic-child-env:self-test": "node scripts/validate-hermetic-child-env.js --self-test",
+    "validate:preview-vocabulary": "node scripts/validate-preview-vocabulary.js",
+    "validate:preview-vocabulary:self-test": "node scripts/validate-preview-vocabulary.js --self-test",
     "validate:prompts": "tsx scripts/validate-prompts.ts",
     "validate:prompts:self-test": "tsx scripts/validate-prompts.ts --self-test",
     "validate:no-methodology-vocab": "node scripts/validate-no-methodology-vocab.js",

@@ -97,7 +97,10 @@ export class PromptDraftService {
   private validateActionShape(args: PromptDraftInput): string[] {
     const errors: string[] = [];
     if (args.patch !== undefined) errors.push('patch is update-only');
-    if (args.dry_run !== undefined) errors.push('dry_run is update-only; use action:"validate"');
+    if (args.preview_action !== undefined)
+      errors.push(
+        'preview_action belongs to action:"preview"; a draft is checked with action:"validate"'
+      );
     if (args.argument_updates !== undefined) errors.push('argument_updates is update-only');
 
     for (const field of ['id', 'name', 'description'] as const) {

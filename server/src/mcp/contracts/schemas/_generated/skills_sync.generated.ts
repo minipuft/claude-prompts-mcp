@@ -29,11 +29,11 @@ export type skills_syncParamName =
   | 'resource_type'
   | 'id'
   | 'prune'
-  | 'dry_run'
+  | 'preview'
   | 'output'
   | 'file'
   | 'category'
-  | 'preview'
+  | 'preview_detail'
   | 'force';
 export const skills_syncParameters: ToolParameter[] = [
   {
@@ -47,10 +47,10 @@ export const skills_syncParameters: ToolParameter[] = [
     examples: [
       'skills_sync({"action":"status"})',
       'skills_sync({"action":"export","client":"claude-code","scope":"project"})',
-      'skills_sync({"action":"sync","client":"claude-code","scope":"user","dry_run":true})',
+      'skills_sync({"action":"sync","client":"claude-code","scope":"user","preview":true})',
       'skills_sync({"action":"diff","client":"all"})',
       'skills_sync({"action":"diff","client":"claude-code","output":"./patches"})',
-      'skills_sync({"action":"pull","client":"claude-code","preview":true})',
+      'skills_sync({"action":"pull","client":"claude-code","preview":true,"preview_detail":"diff"})',
       'skills_sync({"action":"clone","file":"~/.claude/skills/my-skill/SKILL.md","id":"my-skill","category":"tools"})',
     ],
   },
@@ -91,9 +91,10 @@ export const skills_syncParameters: ToolParameter[] = [
     compatibility: 'canonical',
   },
   {
-    name: 'dry_run',
+    name: 'preview',
     type: 'boolean',
-    description: 'For export/sync/pull/clone: show planned changes without writing files.',
+    description:
+      'For export/sync/pull/clone: report every file, prune and registration change the run would make, and make none of them.',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -119,9 +120,10 @@ export const skills_syncParameters: ToolParameter[] = [
     compatibility: 'canonical',
   },
   {
-    name: 'preview',
-    type: 'boolean',
-    description: 'For pull: show unified diffs without writing changes.',
+    name: 'preview_detail',
+    type: 'string',
+    description:
+      'How much `preview` shows: `summary` (default) lists the planned changes; `diff` adds unified diffs and is valid for `pull` only, the one command that computes prose changes. Requires `preview: true` — on its own it would not be read, so it is refused by name.',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -144,13 +146,13 @@ export const skills_syncCommands: ToolCommand[] = [
   {
     id: 'export',
     summary: 'Export skills from canonical resources.',
-    parameters: ['action', 'client', 'scope', 'resource_type', 'id', 'dry_run'],
+    parameters: ['action', 'client', 'scope', 'resource_type', 'id', 'preview'],
     status: 'working',
   },
   {
     id: 'sync',
     summary: 'Reconcile clients to registrations (export/update plus optional prune).',
-    parameters: ['action', 'client', 'scope', 'resource_type', 'id', 'prune', 'dry_run'],
+    parameters: ['action', 'client', 'scope', 'resource_type', 'id', 'prune', 'preview'],
     status: 'working',
   },
   {
@@ -162,13 +164,13 @@ export const skills_syncCommands: ToolCommand[] = [
   {
     id: 'pull',
     summary: 'Merge exported prose edits back into canonical YAML.',
-    parameters: ['action', 'client', 'scope', 'resource_type', 'id', 'preview', 'dry_run'],
+    parameters: ['action', 'client', 'scope', 'resource_type', 'id', 'preview', 'preview_detail'],
     status: 'working',
   },
   {
     id: 'clone',
     summary: 'Create canonical resources from external SKILL.md.',
-    parameters: ['action', 'file', 'id', 'category', 'resource_type', 'force', 'dry_run'],
+    parameters: ['action', 'file', 'id', 'category', 'resource_type', 'force', 'preview'],
     status: 'working',
   },
 ];

@@ -88,7 +88,8 @@ registrations:
 #   npx tsx scripts/skills-sync.ts sync  export, then PRUNE what this file no longer registers
 #
 # Only `export`, `diff` and `pull` have npm aliases; `sync` and `patch` dispatch but must be
-# invoked through the script directly. Add `--dry-run` to any of them.
+# invoked through the script directly. Add `--preview` to any of them; `--preview-detail diff`
+# adds unified diffs on `pull`.
 #
 # `sync` DELETES: it removes previously-exported directories that are no longer registered, using
 # the manifest in state.db (`skills_sync_manifests`). Removing a key here and running sync is how

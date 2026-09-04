@@ -13,6 +13,7 @@ import {
   DESTRUCTIVE_ACTIONS,
   HANDLER_OWNED_CONFIRMATION,
 } from './types.js';
+import { describePreviewRefusal } from '../../shared/preview-action.js';
 
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
@@ -68,6 +69,16 @@ export class ResourceManagerRouter {
     const validationResult = this.validateActionForResourceType(resource_type, action);
     if (!validationResult.valid) {
       return this.createErrorResponse(validationResult.error ?? 'Invalid action');
+    }
+
+    // A preview must name what it would do, and the pair must be one this resource type can
+    // actually preview. Checked ahead of the confirmation guard because a malformed preview should
+    // be told what is wrong with it, not asked to confirm a deletion it never requested. The
+    // per-type check is the load-bearing half: `dry_run` was accepted on gate and framework
+    // `update`, where nothing read it, so those two previews performed the mutation.
+    const previewRefusal = describePreviewRefusal(resource_type, args);
+    if (previewRefusal !== null) {
+      return this.createErrorResponse(previewRefusal);
     }
 
     // One confirmation guard for every destructive action, ahead of dispatch. Deliberately above
@@ -181,10 +192,11 @@ export class ResourceManagerRouter {
       system_message: args.system_message,
       arguments: args.arguments,
       // Pass-through, no renaming (mcp-contracts.md): the processor reads `argument_updates`,
-      // `patch`, and `dry_run` under the names the caller sent.
+      // `patch`, and `preview_action` under the names the caller sent.
       argument_updates: args.argument_updates,
       patch: args.patch,
-      dry_run: args.dry_run,
+      preview_action: args.preview_action,
+      unset: args.unset,
       expected_version: args.expected_version,
       chain_steps: args.chain_steps,
       chain_step_operation: args.chain_step_operation,
@@ -192,6 +204,8 @@ export class ResourceManagerRouter {
       chain_step_data: args.chain_step_data,
       chain_step_order: args.chain_step_order,
       tools: args.tools,
+      tool_operation: args.tool_operation,
+      tool_ids: args.tool_ids,
       gate_configuration: args.gate_configuration,
       composer: args.composer,
       // OQ-P7-8. Pass-through, no renaming: `UPDATE_FIELDS` owns the single snake_case →
@@ -284,8 +298,8 @@ export class ResourceManagerRouter {
     if (args.confirm !== undefined) {
       gateArgs.confirm = args.confirm;
     }
-    if (args.dry_run !== undefined) {
-      gateArgs.dry_run = args.dry_run;
+    if (args.preview_action !== undefined) {
+      gateArgs.preview_action = args.preview_action as 'delete' | 'rollback';
     }
     if (args.source_workspace !== undefined) {
       gateArgs.source_workspace = args.source_workspace;
@@ -378,8 +392,8 @@ export class ResourceManagerRouter {
     if (args.confirm !== undefined) {
       frameworkArgs.confirm = args.confirm;
     }
-    if (args.dry_run !== undefined) {
-      frameworkArgs.dry_run = args.dry_run;
+    if (args.preview_action !== undefined) {
+      frameworkArgs.preview_action = args.preview_action as 'delete' | 'rollback';
     }
     if (args.source_workspace !== undefined) {
       frameworkArgs.source_workspace = args.source_workspace;

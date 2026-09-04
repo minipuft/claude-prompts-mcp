@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
+import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
@@ -230,18 +231,18 @@ export class GateLifecycleProcessor {
       return this.error(`Gate not found: '${id}'. Nothing was removed.`);
     }
 
-    // `dry_run` reports what would be removed and returns before anything is. Deletion is the one
+    // A preview reports what would be removed and returns before anything is. Deletion is the one
     // destructive action rollback cannot undo — there is no version row for a gate that no longer
     // exists — so a preview is worth more here than anywhere else.
-    if (args.dry_run === true) {
+    if (isPreviewRequest(args)) {
       return this.success(
-        `🔍 **Dry run** — deletion of gate '${id}'\n\n` +
+        `🔍 **Preview** — deletion of gate '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${gateDir}\n` +
           `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
           `since rollback resolves the gate first\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted gate.\n\n` +
-          `💡 Re-send the same call without \`dry_run\` to apply it.`
+          `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`
       );
     }
 

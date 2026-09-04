@@ -49,6 +49,96 @@ export const UPDATE_FIELDS: Record<string, string> = {
 };
 
 /**
+ * Tool parameters `unset` may CLEAR, mapped to the `promptData` key each one writes.
+ *
+ * P2.1 (owner ruling D1): "remove" is one verb, not four defects. Before this, the tool had two
+ * write intents and needed three — supplying a value SETS it, omitting it PRESERVES it, and
+ * nothing said REMOVE. Callers reached for `system_message: ''` and `tools: []`, which set an
+ * empty value rather than removing the key, and for the six `PRESERVED_PROMPT_YAML_KEYS` omission
+ * is the explicit preserve signal, so those could not be cleared at all.
+ *
+ * The four settable fields deliberately absent — `name`, `category`, `description`,
+ * `user_message_template` — are what a prompt IS. Every write path emits all four, and a directory
+ * missing one does not load back as a prompt. They stay fully SETTABLE: send a new value to change
+ * one. They are merely not CLEARABLE, and `unset` refuses them BY NAME rather than writing a
+ * prompt that fails on the next reload. Everything listed here is optional in `PromptYamlSchema`,
+ * so its absence is a state the loader already handles.
+ *
+ * Keys are the snake_case parameter names the caller sends, matching every other tool parameter.
+ * `tools` is the one entry whose data key is named here rather than looked up in `UPDATE_FIELDS`,
+ * because `tools` reaches `promptData` directly instead of through that map — the same exception
+ * `suppliedKeys` already carries its own check for.
+ */
+export const UNSETTABLE_FIELDS: Record<string, string> = {
+  system_message: 'systemMessage',
+  arguments: 'arguments',
+  chain_steps: 'chainSteps',
+  tools: 'tools',
+  gate_configuration: 'gateConfiguration',
+  composer: 'composer',
+  injection: 'injection',
+  register_with_mcp: 'registerWithMcp',
+  mcp_prompt_mode: 'mcpPromptMode',
+  subagent_model: 'subagentModel',
+  agent_type: 'agentType',
+};
+
+/** A resolved `unset` list, or the refusal explaining which name stopped it. */
+export type UnsetResolution =
+  { ok: true; dataKeys: ReadonlySet<string> } | { ok: false; message: string };
+
+/**
+ * Turn an `unset` parameter list into the `promptData` keys to clear, refusing by name.
+ *
+ * `alreadyWritten` is the caller's `suppliedKeys` — the data keys this same call is already
+ * writing. Checking against THAT rather than against the raw parameter names is what makes the
+ * conflict check total: `argument_updates`, `patch` and `chain_step_operation` all reach
+ * `promptData` under a different parameter name than the field they write, so a name-level check
+ * would miss `unset: ['arguments']` sent alongside `argument_updates`. Both would then apply in
+ * an order the caller cannot see, which is the same hazard the `patch`/`arguments` exclusions
+ * already refuse.
+ */
+export function resolveUnsetFields(
+  unset: readonly string[],
+  alreadyWritten: ReadonlySet<string>
+): UnsetResolution {
+  const dataKeys = new Set<string>();
+
+  for (const name of unset) {
+    const dataKey = UNSETTABLE_FIELDS[name];
+    if (dataKey === undefined) {
+      return { ok: false, message: describeUnsettableRefusal(name) };
+    }
+    if (alreadyWritten.has(dataKey)) {
+      return {
+        ok: false,
+        message:
+          `\`${name}\` is both written and listed in \`unset\` in the same call. Set it or ` +
+          `clear it — not both, because the result would depend on an evaluation order you ` +
+          `cannot see.`,
+      };
+    }
+    dataKeys.add(dataKey);
+  }
+
+  return { ok: true, dataKeys };
+}
+
+/** Why one `unset` entry was refused. Separated so the caller's branching stays flat. */
+function describeUnsettableRefusal(name: string): string {
+  if (name in UPDATE_FIELDS) {
+    return (
+      `\`${name}\` cannot be unset — it is part of what a prompt IS, and a prompt missing it ` +
+      `would not load. It remains settable: send a new value to change it.`
+    );
+  }
+  return (
+    `\`${name}\` is not an unsettable prompt field. Unsettable: ` +
+    `${Object.keys(UNSETTABLE_FIELDS).sort().join(', ')}.`
+  );
+}
+
+/**
  * The three preserved fields the canonical snapshot projects, and the two it cannot.
  *
  * A field belongs here only when the projection SOURCE holds its authored value. `ConvertedPrompt`
@@ -79,7 +169,7 @@ export const SNAPSHOT_PRESERVED_FIELDS = [
  * loader-resolved runtime keys the recorded shape never has (`registerWithMcp`, `mcpPromptMode`,
  * `promptDir`, `scriptTools`, …), and the comparison is JSON-based, so passing the raw converted
  * prompt makes every post-reload edit look out-of-band and bridge — doubling rows in steady
- * state. Both sides of every before/after comparison (bridge check, diffs, dry-run) must
+ * state. Both sides of every before/after comparison (bridge check, diffs, preview) must
  * therefore come from THIS one projection; `updatePrompt`'s produced `promptData` is this object
  * plus `tools` (which only ever arrives via `args.tools` — the live prompt carries loaded
  * `scriptTools`, not the raw id list, so the prior value is not reconstructable here and the key
@@ -392,7 +482,7 @@ export function validateToolDefinitions(tools: ToolDefinitionInput[]): string[] 
 // ---------------------------------------------------------------------------
 
 export interface ChainStepOperationOptions {
-  operation: 'add' | 'remove' | 'reorder' | 'replace';
+  operation: 'add' | 'remove' | 'reorder' | 'update';
   index?: number;
   stepData?: Record<string, unknown>;
   order?: number[];
@@ -455,8 +545,34 @@ export function applyChainStepOperation(
       }
       return opts.order.map((i) => currentSteps[i]);
     }
-    case 'replace':
-      return currentSteps;
+    case 'update': {
+      // P2.4. Replaced the vestigial `'replace'`, which returned `currentSteps` untouched and let
+      // the plain `chain_steps` array overlay instead — a second spelling of "omit the parameter",
+      // and the only enum member that did not name an operation. `update` is what the surface was
+      // missing: edit ONE step in place without resending the whole array, the per-step analogue
+      // of the `argument_updates` overlay.
+      //
+      // Overlay, not replacement: supplied fields win, omitted fields keep the step's current
+      // value. Sending a whole new step object is still available — that is `chain_steps`.
+      if (opts.index === undefined) {
+        throw new ValidationError('chain_step_index required for update operation');
+      }
+      if (opts.stepData == null) {
+        throw new ValidationError('chain_step_data required for update operation');
+      }
+      if (opts.index < 0 || opts.index >= currentSteps.length) {
+        throw new ValidationError(
+          `chain_step_index ${opts.index} out of range [0, ${currentSteps.length - 1}]`
+        );
+      }
+      const steps = [...currentSteps];
+      const current = steps[opts.index];
+      steps[opts.index] = {
+        ...(typeof current === 'object' && current !== null ? current : {}),
+        ...opts.stepData,
+      };
+      return steps;
+    }
     default:
       throw new ValidationError(`Unknown chain_step_operation: ${String(opts.operation)}`);
   }

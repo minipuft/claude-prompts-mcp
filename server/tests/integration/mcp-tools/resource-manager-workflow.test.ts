@@ -584,10 +584,10 @@ describe('Resource Manager Workflow Integration', () => {
     /**
      * P7 row 3.4. The router builds its prompt payload by enumerating keys, so a parameter the
      * schema accepts but the router forgets is silently dropped one layer below validation —
-     * exactly how P7-D1's `required` was lost. `patch` and `dry_run` must arrive under their own
-     * names, unrenamed (mcp-contracts.md).
+     * exactly how P7-D1's `required` was lost. `patch` and `preview_action` must arrive under
+     * their own names, unrenamed (mcp-contracts.md).
      */
-    test('patch and dry_run reach the prompt handler unrenamed', async () => {
+    test('patch and preview_action reach the prompt handler unrenamed', async () => {
       const patch = [
         {
           field: 'user_message_template' as const,
@@ -599,16 +599,21 @@ describe('Resource Manager Workflow Integration', () => {
       await router.handleAction(
         {
           resource_type: 'prompt',
-          action: 'update',
+          action: 'preview',
+          preview_action: 'update',
           id: 'existing-prompt',
           patch,
-          dry_run: true,
         },
         {}
       );
 
       expect(promptResourceHandler.handleAction).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'update', id: 'existing-prompt', patch, dry_run: true }),
+        expect.objectContaining({
+          action: 'preview',
+          preview_action: 'update',
+          id: 'existing-prompt',
+          patch,
+        }),
         expect.any(Object)
       );
     });

@@ -311,15 +311,15 @@ describe('Pull Command Integration', () => {
     expect(pullOut.logs.some((l) => l.includes('no prose changes'))).toBe(true);
   });
 
-  it('dry-run mode reports changes without writing files', async () => {
-    await writePromptResource(serverRoot, 'test', 'dry-run-test', {
-      name: 'Dry Run',
-      description: 'Dry run test',
+  it('preview mode reports changes without writing files', async () => {
+    await writePromptResource(serverRoot, 'test', 'preview-test', {
+      name: 'Preview',
+      description: 'Preview test',
       systemMessage: 'Original content.',
     });
     await writeSyncConfig(serverRoot, outputDir);
 
-    const skillPath = await exportAndGetSkillPath('dry-run-test');
+    const skillPath = await exportAndGetSkillPath('preview-test');
     const exported = await readFile(skillPath, 'utf-8');
     const edited = exported.replace('Original content.', 'Modified content.');
     await writeFile(skillPath, edited);
@@ -330,7 +330,7 @@ describe('Pull Command Integration', () => {
         command: 'pull',
         client: 'claude-code',
         scope: 'user',
-        dryRun: true,
+        preview: true,
       } as SkillsSyncOptions,
       pullOut
     );
@@ -340,7 +340,7 @@ describe('Pull Command Integration', () => {
 
     // But file should NOT be modified
     const sysContent = await readFile(
-      path.join(serverRoot, 'resources', 'prompts', 'test', 'dry-run-test', 'system-message.md'),
+      path.join(serverRoot, 'resources', 'prompts', 'test', 'preview-test', 'system-message.md'),
       'utf-8'
     );
     expect(sysContent).toBe('Original content.');
@@ -439,6 +439,9 @@ describe('Pull Command Integration', () => {
         client: 'claude-code',
         scope: 'user',
         preview: true,
+        // The depth is what produces a unified diff. Plain `preview` reports the planned change
+        // and stops, which is the behaviour the old `--dry-run` had.
+        previewDetail: 'diff',
       } as SkillsSyncOptions,
       pullOut
     );

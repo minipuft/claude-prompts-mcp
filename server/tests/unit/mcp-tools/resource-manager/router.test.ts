@@ -504,31 +504,144 @@ describe('ResourceManagerRouter', () => {
     });
 
     /**
-     * `dry_run` reaches the gate and framework handlers.
+     * `preview_action` reaches the gate and framework handlers.
      *
      * Both routes build their payload from an explicit allowlist rather than spreading the input,
      * so a parameter that exists in the schema, in the manager's input type, and in the handler
      * can still be structurally dead — that is exactly how `version_description` came to be typed,
-     * read, and unreachable (F6). Typechecking cannot see it: every layer compiles fine while the
-     * router quietly drops the field.
+     * read, and unreachable (F6), and how `dry_run` reached these same two routes before it was
+     * removed. Typechecking cannot see it: every layer compiles fine while the router quietly
+     * drops the field.
      */
     test.each([
       ['gate' as const, () => mockGateManager.handleAction],
       ['framework' as const, () => mockFrameworkManager.handleAction],
-    ])('forwards dry_run to the %s handler', async (resourceType, handler) => {
+    ])('forwards preview_action to the %s handler', async (resourceType, handler) => {
       await router.handleAction(
         {
           resource_type: resourceType,
-          action: 'rollback',
+          action: 'preview',
+          preview_action: 'rollback',
           id: `test-${resourceType}`,
           version: 1,
-          confirm: true,
-          dry_run: true,
         } as ResourceManagerInput,
         {}
       );
 
-      expect(handler()).toHaveBeenCalledWith(expect.objectContaining({ dry_run: true }), {});
+      expect(handler()).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'preview', preview_action: 'rollback' }),
+        {}
+      );
+    });
+
+    /**
+     * A preview needs no `confirm`, and that is the point of the whole change.
+     *
+     * The pre-dispatch guard keys on `action`, so while previewing was `dry_run: true` on
+     * `action:"delete"` the guard saw `delete` and refused — an operator had to confirm the
+     * deletion in order to be shown what it would cost. `preview` is simply not a member of
+     * `DESTRUCTIVE_ACTIONS`, so there is no condition to get backwards.
+     */
+    test.each([
+      ['gate' as const, () => mockGateManager.handleAction],
+      ['framework' as const, () => mockFrameworkManager.handleAction],
+    ])('a %s delete preview reaches dispatch with no confirm', async (resourceType, handler) => {
+      const response = await router.handleAction(
+        {
+          resource_type: resourceType,
+          action: 'preview',
+          preview_action: 'delete',
+          id: `test-${resourceType}`,
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(response.isError).not.toBe(true);
+      expect(handler()).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'preview', preview_action: 'delete' }),
+        {}
+      );
+    });
+
+    /**
+     * Positive control for the two refusals below: without it, "the handler was not called" is
+     * evidence about nothing, since a typo in the fixture produces the same silence.
+     */
+    test('a well-formed prompt update preview reaches the prompt handler', async () => {
+      await router.handleAction(
+        {
+          resource_type: 'prompt',
+          action: 'preview',
+          preview_action: 'update',
+          id: 'test-prompt',
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(mockPromptResourceHandler.handleAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'preview', preview_action: 'update' }),
+        expect.anything()
+      );
+    });
+
+    /**
+     * The refusal that carries the real defect.
+     *
+     * `dry_run` was forwarded to every manager for every action, but only seven of the nine
+     * (type × action) pairs read it — gate and framework `update` accepted the parameter and wrote
+     * anyway, so a preview of those two performed the mutation and reported success. A flat
+     * previewable-action list would have carried that into the new vocabulary under a better name.
+     */
+    test.each([['gate' as const], ['framework' as const]])(
+      'refuses preview_action:"update" for %s, which has no update preview path',
+      async (resourceType) => {
+        const response = await router.handleAction(
+          {
+            resource_type: resourceType,
+            action: 'preview',
+            preview_action: 'update',
+            id: `test-${resourceType}`,
+          } as ResourceManagerInput,
+          {}
+        );
+
+        expect(response.isError).toBe(true);
+        expect(response.content[0]?.text).toContain('not supported for resource_type');
+        expect(
+          resourceType === 'gate' ? mockGateManager.handleAction : mockFrameworkManager.handleAction
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+    test('refuses action:"preview" with no preview_action', async () => {
+      const response = await router.handleAction(
+        { resource_type: 'prompt', action: 'preview', id: 'test-prompt' } as ResourceManagerInput,
+        {}
+      );
+
+      expect(response.isError).toBe(true);
+      expect(response.content[0]?.text).toContain("requires 'preview_action'");
+      expect(mockPromptResourceHandler.handleAction).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A parameter that silently does nothing reads as a preview that ran. Refused rather than
+     * ignored — the same reason the cross-workspace guard below refuses `source_workspace`.
+     */
+    test('refuses preview_action without action:"preview"', async () => {
+      const response = await router.handleAction(
+        {
+          resource_type: 'prompt',
+          action: 'update',
+          preview_action: 'update',
+          id: 'test-prompt',
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(response.isError).toBe(true);
+      expect(response.content[0]?.text).toContain('only meaningful with action:"preview"');
+      expect(mockPromptResourceHandler.handleAction).not.toHaveBeenCalled();
     });
 
     test.each([

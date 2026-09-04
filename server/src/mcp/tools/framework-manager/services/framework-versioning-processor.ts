@@ -2,6 +2,7 @@
 
 import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
+import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
@@ -81,9 +82,9 @@ export class FrameworkVersioningProcessor {
 
     const currentState = frameworkSnapshotContract.project(id, existingData);
 
-    // `dry_run` returns here — after validation, so a preview refuses an unrestorable version the
-    // same way the real call does, and BEFORE the version row is recorded.
-    if (args.dry_run === true) {
+    // A preview returns here — after validation, so it refuses an unrestorable version the same
+    // way the real call does, and BEFORE the version row is recorded.
+    if (isPreviewRequest(args)) {
       return this.success(
         describeRollbackPreview(
           'framework',

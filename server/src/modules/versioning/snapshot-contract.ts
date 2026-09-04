@@ -165,7 +165,7 @@ export function projectWriteModel(
  * because they never refused at all.
  */
 /**
- * What a `dry_run` rollback reports instead of performing one.
+ * What `action: 'preview'` with `preview_action: 'rollback'` reports instead of rolling back.
  *
  * Stated here beside the refusal message because the two are the operator's whole view of a
  * rollback before it happens, and the guarantee they carry is the same one: nothing was written.
@@ -180,7 +180,7 @@ export function describeRollbackPreview(
   unrecordedFields?: readonly string[]
 ): string {
   let text =
-    `🔍 **Dry run** — rollback of ${resourceType} '${id}' to version ${version}\n\n` +
+    `🔍 **Preview** — rollback of ${resourceType} '${id}' to version ${version}\n\n` +
     `Nothing was written: no file changed and no version row was recorded.\n\n`;
 
   text += diff.hasChanges
@@ -193,7 +193,7 @@ export function describeRollbackPreview(
       `Those would keep their current values.\n\n`;
   }
 
-  return `${text}💡 Re-send the same call without \`dry_run\` to apply it.`;
+  return `${text}💡 Re-send as \`action:"rollback"\` with \`confirm: true\` to apply it.`;
 }
 
 export function describeIncompleteSnapshot(

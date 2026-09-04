@@ -180,16 +180,197 @@ session in this plan should.
 The matrix's rows 2, 3, 4 and 5b, plus SF-2. D1 established these are **one missing verb**
 ("remove"), not four defects; fixing them separately would produce four conventions for one verb.
 
-| #    | St                                                                                                                              | Change                                                                                                                                                                                                                | Depends   | Verification                                                                         |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------ |
-| P2.1 | ☐ (as of 2026-08-27 · flips when `unset: ['system_message']` deletes `system-message.md` and drops the `systemMessageFile` key) | `unset: [keys]` parameter, reusing the `suppliedKeys` write-scope machinery. Closes rows 2 and 4 together and dissolves row 3's "empty array means no change"                                                         | —         | an update sending `unset` removes the key; `tools: []` still means "set to empty"    |
-| P2.2 | ☐ (as of 2026-08-27 · flips when a delete preview runs without `confirm: true`)                                                 | `action: 'preview'` replaces `dry_run`, which is **removed**. Preview is not in `DESTRUCTIVE_ACTIONS`, so non-destructiveness is structural rather than a flag someone can get backwards — which is how SF-2 happened | —         | preview reaches dispatch with no `confirm`; `rg dry_run` returns zero                |
-| P2.3 | ☐ (as of 2026-08-27 · flips when `tools: []` clears the on-disk id list AND a dropped id's `tools/{id}/` directory is removed)  | `tool_operation: 'add'\|'remove'` with directory deletion on explicit removal only, behind `confirm`. A narrowed `tools` array unbinds without deleting                                                               | P2.1      | a removal deletes the directory; a narrowed array does not                           |
-| P2.4 | ☐ (as of 2026-08-27 · flips when an `update`-at-index operation exists and `'replace'` is gone from the enum)                   | `chain_step_operation: 'update'` at index; **remove** the vestigial `'replace'` no-op at `validation.ts:443`                                                                                                          | —         | a single step field edits without resending the array; `rg "'replace'"` returns zero |
-| P2.5 | ☐ (as of 2026-08-27 · flips when `[Unreleased]` names both removals under a breaking heading)                                   | CHANGELOG breaking entries for `dry_run` and `'replace'`, per CONTRIBUTING §Breaking Changes                                                                                                                          | P2.2 P2.4 | `[Unreleased]` carries both                                                          |
+| #     | St                                                                                                                                                                                                                                                                         | Change                                                                                                                                                                                                                                                                                                                                            | Depends | Verification                                                                         |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| P2.1  | ✓ (verified 2026-09-02 · `unset` clears all 11 unsettable fields in a table-driven test over `UNSETTABLE_FIELDS` itself; `system-message.md` is deleted and `systemMessageFile` dropped; 4 mutations kill 1–7 cases each)                                                  | `unset: [keys]` parameter, reusing the `suppliedKeys` write-scope machinery. Closes rows 2 and 4 together and dissolves row 3's "empty array means no change"                                                                                                                                                                                     | —       | an update sending `unset` removes the key; `tools: []` still means "set to empty"    |
+| P2.2  | ✓ (verified 2026-09-03 · a gate and a framework delete preview each reach dispatch with no `confirm`; `validate:preview-vocabulary` reports zero declarations, keys, flags or routes across 4 source and 5 doc roots; 6 mutations killed)                                  | `action: 'preview'` + required `preview_action` replaces `dry_run`, which is **removed** — from `resource_manager`, `skills_sync` (merged to `preview` + `preview_detail`), the CLI flag and the HTTP route. Preview is not in `DESTRUCTIVE_ACTIONS`. ⚠ **Which pairs are previewable is PER TYPE, which the row did not anticipate** — see P2-F8 | —       | preview reaches dispatch with no `confirm`; `validate:preview-vocabulary` exits 0    |
+| P2.3  | ✓ (verified 2026-09-02 · a narrowed `tools` array unbinds and the directory SURVIVES; `tool_operation:'remove'` + `confirm` deletes it; both arms mutation-killed. Unblocked — P1.6 is ✓, so the D6 argument no longer applies)                                            | `tool_operation: 'add'\|'remove'` with directory deletion on explicit removal only, behind `confirm`. A narrowed `tools` array unbinds without deleting                                                                                                                                                                                           | P2.1    | a removal deletes the directory; a narrowed array does not                           |
+| P2.4  | ✓ (verified 2026-09-02 · `'update'` overlays at an index and refuses a missing index/data/range; `'replace'` now falls to the default arm and is named as unknown)                                                                                                         | `chain_step_operation: 'update'` at index; **remove** the vestigial `'replace'` no-op at `validation.ts:443`                                                                                                                                                                                                                                      | —       | a single step field edits without resending the array; `rg "'replace'"` returns zero |
+| P2.5a | ✓ (verified 2026-09-02 · `[Unreleased]` carries the `'replace'` removal under ⚠ BREAKING CHANGES, plus Added entries for `unset` and `tool_operation`)                                                                                                                     | CHANGELOG breaking entry for `'replace'`, per CONTRIBUTING §Breaking Changes                                                                                                                                                                                                                                                                      | P2.4    | `[Unreleased]` carries it                                                            |
+| P2.5b | ✓ (verified 2026-09-03 · `[Unreleased]` carries four breaking entries — the `resource_manager` removal, the per-type narrowing, the `skills_sync` merge plus CLI flag, and the HTTP route rename — and the stale `dry_run` Added entry is rewritten in the new vocabulary) | CHANGELOG breaking entries for `dry_run`. Split from P2.5 because P2.2 moved to P2b — one row cannot be terminal while half its subject is unwritten. Four surfaces, not one, so four entries                                                                                                                                                     | P2.2    | `[Unreleased]` carries it                                                            |
 
 **Gate P2**: the tool can express "remove this" for every clearable field, and preview is reachable
 without confirming the thing being previewed.
+
+**Gate P2 — PASSED (verified 2026-09-03).** "Remove this" is expressible for all 11 clearable
+fields and for a tool binding, and a preview is reachable without confirming the thing being
+previewed — proven on gate and framework `delete` through the router, with the confirmation guard
+still refusing the real `delete`. The second half is held by a gate rather than by care:
+`validate:preview-vocabulary` fails on a reintroduced declaration, key, CLI flag or route, and its
+satisfied-exemption arm fails an exemption whose condition has lapsed.
+
+### P2 split into P2a / P2b (2026-09-02)
+
+The tier as authored reached ~21 source files, 10 test files, 2 contracts and 5 docs — past one
+reviewable change. The seam is D1's own argument: D1 forbids fragmenting the REMOVE verb into four
+conventions, and P2.2 is a different axis (preview), so splitting there does not violate it.
+
+- **P2a** (P2.1, P2.3, P2.4, P2.5a) — landed 2026-09-02, one PR.
+- **P2b** (P2.2, P2.5b) — the preview sweep, now the larger half after ruling D-P2c below.
+
+### Rulings taken 2026-09-02 (owner, before compiling the tier)
+
+- **D-P2a — preview names its target.** `action:'preview'` takes a required
+  `preview_action: 'update'|'delete'|'rollback'`. A bare `action:'preview'` loses WHICH operation
+  is being previewed (`dry_run` is a modifier on three of them), and inferring it from the payload
+  makes the server guess at something the caller can state. Preview stays out of
+  `DESTRUCTIVE_ACTIONS`, so non-destructiveness is structural rather than a boolean anyone can
+  invert — which is how SF-2 happened.
+- **D-P2b — `unset` is allowlisted, not universal.** `UNSETTABLE_FIELDS` holds 11 entries;
+  `name`, `category`, `description` and `user_message_template` are refused BY NAME. They remain
+  fully settable — the owner's constraint was that every field stay reachable and rewritable —
+  but a prompt missing one does not load, so clearing them is not offered. The refusal says so.
+- **D-P2c — the `dry_run` removal sweeps every surface, not only `resource_manager`**, and the
+  survivor is `preview` plus a detail level. ⚠ **The ruling's location claim was false**: it named
+  "the CLI, `cli/src/**/skills-sync/service.ts`, ~29 occurrences". Re-measured 2026-09-03 — `cli/`
+  contains **zero** occurrences of `dry_run`/`dryRun`/`--dry-run` and has no skills-sync surface at
+  all (17 command files, none of them sync). The 29 are in `server/src/modules/skills-sync/
+service.ts`, a server module whose CLI entry point is `tsx scripts/skills-sync.ts`. The ruling's
+  INTENT — do not scope the sweep to `resource_manager` — was right and was executed; only the
+  directory was wrong, and executing it as written would have produced a no-op change to `cli/`
+  and left the 29 real sites standing. In `skills_sync`, `dry_run` (planned changes, 4 commands) and `preview` (unified
+  diffs, `pull` only, enforced at `service.ts:555`) are NOT synonyms — they were presented as an
+  overlap and are not one. `preview: true` becomes the single verb across all four commands, and
+  `preview_detail: 'diff'` upgrades to unified diffs where a diff exists, so both behaviours
+  survive under one vocabulary and the pull-only restriction becomes a property of the detail
+  level rather than of a whole flag.
+
+### Findings (P2a)
+
+- **P2-F1 — `rg "'replace'"` returns zero was never achievable.** P2.4's authored verification is
+  a homonym check: every remaining `'replace'` in `src/` is a DIFFERENT concept — `RemainderMode`
+  (chain remainder), `enhancementMode` (style schema), the `prompt_engine` remainder contract.
+  Zero of them is `chain_step_operation`. Measured: 8 surviving occurrences, all unrelated.
+  Corrected verification: `chain_step_operation` no longer accepts `'replace'` and the enum has
+  three members. Same shape as the `feedback_homonym_false_consumer` sighting.
+- **P2-F2 — `rg dry_run` returns zero is likewise unachievable** (P2.2's verification, for P2b).
+  `dry_run` is also a `skills_sync` parameter, a `--dry-run` CLI flag, and a
+  `prompt-authority-api.ts` field. Authored: "returns zero". Measured at HEAD: 21 source files,
+  10 test files, 2 contracts, 5 docs. Under D-P2c the sweep now covers them, so the verification
+  becomes reachable — but it was not when written, and would have read as a passing check against
+  a `resource_manager`-scoped grep.
+- **P2-F3 — omission is the preserve signal, so removal needed its own channel.** `unset` could
+  not be implemented as "delete the key from `promptData`": `resolvePreservedPromptYamlFields`
+  treats an undefined value as "keep the file's own declaration", so six fields would have been
+  read straight back off disk and rewritten — a removal reporting success and changing nothing.
+  The `tools` fallback is a second such branch. Two of the three were found by reading, which is
+  the method that misses the third, so the regression test enumerates `UNSETTABLE_FIELDS` itself
+  rather than a hand-written list.
+- **P2-F4 — `systemMessage` is not a `PROMPT_YAML_RESIDENT_KEYS` member but owns a yaml key.**
+  Clearing it narrowed the write scope to a file the writer then never opened, leaving
+  `systemMessageFile:` pointing at a `.md` the same call had just deleted. Caught by the
+  enumeration test, not by review. Any `unset` now forces the `prompt.yaml` rewrite.
+- **P2-F6 — a rebase plus force-push gets the light `pre-push` route on a heavy change.**
+  `scripts/classify-validation-scope.js` reads the PUSH RANGE. After a rebase the range is
+  `<old-head>..<new-head>`, which describes the delta between two versions of the branch, not what
+  the branch changes relative to `main`. Measured 2026-09-02: a force-push whose range held one
+  `CHANGELOG.md` commit classified as `docs` and ran the documentation-only route, while every
+  commit on the branch had just been rewritten onto a new base — including all the TypeScript. CI
+  is unconditional so nothing escapes, and the full suite had been run locally first, but the local
+  gate's subset claim quietly does not hold across a rebase. Not this plan's to fix; recorded
+  because the handbook's "every local route is a subset of CI" is the sentence it falsifies.
+- **P2-F7 — a clean rebase is not a rebase that kept your content.** Resolving the `#261` conflict
+  to the upstream side and re-inserting this branch's three CHANGELOG entries by script: the script
+  aborted on an anchor `#261` had deleted, `git rebase --continue` was chained after it in the same
+  command and ran regardless, and the rebase completed carrying NEITHER version. Caught by grepping
+  the file, not by the rebase's own success report. Same shape as the push that succeeded while its
+  paired commit failed, an hour earlier — a verification step chained to the action it gates runs
+  even when it has nothing to verify.
+
+- **P2-F5 — a fresh worktree has no `dist/`, and `test:all` does not build.** The e2e suite
+  reported 160 failures across 7 suites on first run here; after `npm run build`, 184 passed.
+  Nothing to fix in this plan, but the first reading of that output was "my change broke e2e",
+  which cost a cycle. Worth a line in CONTRIBUTING §Working in a second worktree.
+
+### Findings (P2b)
+
+- **P2-F8 — `dry_run` was accepted on gate and framework `update`, where nothing read it, so
+  those two previews PERFORMED the mutation.** The router forwarded the parameter to every manager
+  for every action; only 7 of the 9 (type × action) pairs had a branch that read it. A gate or
+  framework `update` with `dry_run: true` wrote the file and returned a success receipt. D-P2a
+  authored `preview_action` as a flat `'update'|'delete'|'rollback'`, which would have carried the
+  defect into the new vocabulary under a better name — the enum is now per-type
+  (`PREVIEWABLE_ACTIONS_BY_TYPE`), and an unsupported pair is refused by name. The regression test
+  enumerates the COMPLEMENT of that table rather than listing the two known pairs, so a resource
+  type added later (P3.1's `style`) cannot inherit a preview that writes. Same shape as P2-F3:
+  the channel that carries a capability must be checked where it is CONSUMED, not where it is
+  declared.
+- **P2-F9 — D-P2c's file location was wrong and the row's own count belonged elsewhere.** See the
+  correction under the ruling. Recorded separately because the reusable part is not the path: the
+  ruling was taken from a `rg` result read as "cli/…/service.ts" when the match was
+  `server/src/modules/skills-sync/service.ts`, and a plan row states a path far more confidently
+  than the measurement that produced it. Every path in a ruling is re-measured before it is
+  executed, which is [[feedback_untrusted_inventory]] applied to a decision rather than a count.
+- **P2-F10 — two gates read the dispatch table by TEXT ANCHOR, and a correct refactor blinded
+  both.** Binding the resolved action inline — `switch (resolveDispatchAction(args))` — typechecked,
+  passed every test, and made `verify:action-metadata` throw and `validate:registry-coherence`
+  report six findings, three of them "the gate cannot see this file, so its rules are being
+  evaluated zero times". The fix is a one-line local, `const action = resolveDispatchAction(args)`,
+  and a comment at each of the three sites saying why the shape is load-bearing. Both gates failed
+  LOUDLY, which is the whole reason this is a finding and not an incident: a gate that reads code
+  by anchor must fail closed when the anchor moves, and these did.
+- **P2-F11 — `validate:registry-coherence` read comments as code, and its own mutation fixture
+  mutated a comment.** Two compounding defects surfaced in one run. Its `switchSegments` scanner
+  searched raw text, so a doc comment QUOTING `switch (action)` moved the scan's start above the
+  real table; and its self-test fixture replaced the first textual occurrence of that string, which
+  was the comment, leaving the statement intact — the mutation test reported "no findings", i.e. a
+  mutation that mutated nothing. Both fixed here: the scanner strips comments, and the fixture
+  anchors to statement position and reads whichever spelling the router currently uses instead of
+  pinning one. Found only because the gate's self-test is a real positive control; a gate whose
+  self-test can pass vacuously is the exact thing this repo's Gate P5 is about.
+- **P2-F12 — Prettier disarmed an escape marker by formatting around it.** The
+  `validate:preview-vocabulary` allowance for a documentation migration note was scoped "marker
+  line to the next blank line". Prettier puts a blank line after an HTML comment, so the scope
+  closed before the paragraph began and the marker looked applied while doing nothing. Scope now
+  skips blanks between the marker and its paragraph. The general rule: **a marker the repo's own
+  formatter can disarm is worse than no marker**, because its presence reads as coverage — the
+  same failure shape as a satisfied exemption, arriving from the toolchain instead of from drift.
+
+- **P2-F13 — a batched writeback reported success while two of five edits silently missed, and
+  that state was committed AND pushed.** The plan writeback applied five replacements in one pass
+  and asserted `s != before` at the end. Three matched; the P2.2 and P2.5b row rewrites did not,
+  because `npm run format` had reflowed the table's column padding between the Read that supplied
+  the search strings and the write that used them. The whole-batch assert passed on the three that
+  landed, so `Gate P2 — PASSED` was published over two rows still reading `☐` — a gate claiming a
+  pass over its own open rows, which is the exact contradiction the row/gate split exists to make
+  visible. **Third sighting of one shape**: the push that succeeded while its paired commit failed,
+  the rebase that completed carrying neither side, and now a batch edit whose check could not see
+  which members applied. The rule is not "verify after acting" — that was done each time — it is
+  that a check over a BATCH answers a different question than a check over each member. The
+  corrected pass asserts per row and names the ones that did not rewrite.
+
+### Deviations (P2b)
+
+- **DEV-P2-3 — the bundled `examples/create_prompt` prompt was hand-edited.** Its user message
+  teaches the maintenance sequence and named `update(dry_run:true)`. Core Principle 1 routes edits
+  under `server/resources/prompts/**` through MCP tooling, and the tool could not reach it: the
+  running server is pointed at the personal library at `~/.claude/resources` (P1.5), not at this
+  worktree, and there is no way to retarget a live STDIO server from inside a session. Leaving it
+  would have shipped a bundled prompt instructing readers to use a removed parameter. This is
+  P4.9's gap reached from the other side — that row is about a resource the tool cannot repair
+  because it will not load; this is one it cannot repair because it is in the wrong tree.
+- **DEV-P2-4 — the HTTP route `/dry-run` was renamed to `/preview`, which the tier did not ask
+  for.** Scope named the `prompt-authority-api.ts` FIELD, not the path. Renamed anyway: the route
+  is the surface an operator reads most often, and a vocabulary that survives on the URL after
+  being removed from the parameter is exactly the split the enumeration gate exists to prevent.
+  Carries its own CHANGELOG breaking entry.
+- **DEV-P2-5 — `eslint --fix` over `src` and `scripts` edited five files outside this change.**
+  Run to clear an import-order ratchet regression from the new imports; it also reformatted
+  `renderer.ts`, `chain-operator-executor.ts`, `interrupt-policy.ts`,
+  `03-identity-resolution-stage.ts` and `request-identity-resolver.ts`. Reverted with
+  `git checkout --`, and the ratchet passes without them. `--fix` takes a path, not a diff; scope
+  it to the files the change touched or read `git status` immediately after.
+
+### Deviations (P2a)
+
+- **DEV-P2-1 — P2.5 was split into P2.5a/P2.5b.** The row paired the `dry_run` and `'replace'`
+  CHANGELOG entries, which cannot both be terminal once P2.2 moved to P2b. A row half-done is
+  neither `✓` nor `☐`, so it became two rows rather than a status the ledger cannot express.
+- **DEV-P2-2 — `updatePromptImplementation`'s new argument is an object, not two positionals.**
+  P2.1 alone would have added `unsetKeys`; P2.3 then needed a tool-binding mode and a removed-id
+  list. All three say what the write REMOVES — the thing an absent field cannot mean — so they
+  group as `PromptWriteIntent` rather than leaving a call site reading
+  `undefined, new Set([...]), 'replace', []`.
 
 ---
 

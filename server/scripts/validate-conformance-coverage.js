@@ -232,13 +232,13 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ...exceptionGroup(
     'resource_manager',
     [
-      'system_message',
+      // `system_message` and `tools` were removed from this list on 2026-09-02: the P2.1/P2.3
+      // scenarios in workspace-and-mutations.yaml now exercise both, and this check's own
+      // satisfied-exception arm is what caught them still being listed.
       'arguments',
       'argument_updates',
       'patch',
-      'dry_run',
       'chain_steps',
-      'tools',
       'gate_configuration',
       'injection',
       'register_with_mcp',
@@ -314,11 +314,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'resource_type',
       'id',
       'prune',
-      'dry_run',
       'output',
       'file',
       'category',
       'preview',
+      'preview_detail',
       'force',
     ],
     'skills_sync has no conformance corpus file at all — the tool ships zero scenarios, so every ' +

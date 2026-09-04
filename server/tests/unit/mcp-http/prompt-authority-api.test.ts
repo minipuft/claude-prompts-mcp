@@ -99,7 +99,7 @@ describe('prompt authority HTTP API', () => {
 
   it('requires the distinct write credential, confirmation, and current revision', async () => {
     const origin = await start();
-    const readOnly = await fetch(`${origin}/api/v1/authority/prompts/governed_prompt/dry-run`, {
+    const readOnly = await fetch(`${origin}/api/v1/authority/prompts/governed_prompt/preview`, {
       method: 'POST',
       headers: { authorization: 'Bearer read-token', 'content-type': 'application/json' },
       body: JSON.stringify({ expected_version: 2, user_message_template: 'Version three' }),
@@ -109,7 +109,7 @@ describe('prompt authority HTTP API', () => {
       headers: { authorization: 'Bearer write-token', 'content-type': 'application/json' },
       body: JSON.stringify({ expected_version: 2, user_message_template: 'Version three' }),
     });
-    const dryRun = await fetch(`${origin}/api/v1/authority/prompts/governed_prompt/dry-run`, {
+    const preview = await fetch(`${origin}/api/v1/authority/prompts/governed_prompt/preview`, {
       method: 'POST',
       headers: { authorization: 'Bearer write-token', 'content-type': 'application/json' },
       body: JSON.stringify({ expected_version: 2, user_message_template: 'Version three' }),
@@ -134,8 +134,12 @@ describe('prompt authority HTTP API', () => {
 
     expect(readOnly.status).toBe(401);
     expect(unconfirmed.status).toBe(400);
-    expect(dryRun.status).toBe(200);
-    await expect(dryRun.json()).resolves.toMatchObject({ dry_run: true, mutated: false });
+    expect(preview.status).toBe(200);
+    await expect(preview.json()).resolves.toMatchObject({
+      action: 'preview',
+      preview_action: 'update',
+      mutated: false,
+    });
     expect(apply.status).toBe(200);
     await expect(apply.json()).resolves.toMatchObject({
       receipt: { current_version: 3 },
@@ -146,7 +150,7 @@ describe('prompt authority HTTP API', () => {
 
   it('fails closed when read and write credentials are accidentally identical', async () => {
     const origin = await start({ readToken: 'shared-token', writeToken: 'shared-token' });
-    const response = await fetch(`${origin}/api/v1/authority/prompts/governed_prompt/dry-run`, {
+    const response = await fetch(`${origin}/api/v1/authority/prompts/governed_prompt/preview`, {
       method: 'POST',
       headers: { authorization: 'Bearer shared-token', 'content-type': 'application/json' },
       body: JSON.stringify({ expected_version: 2, user_message_template: 'change' }),
@@ -180,19 +184,22 @@ describe('prompt authority HTTP API', () => {
         structuredContent: { action: 'compare', id: args['id'], has_changes: true, diff: 'diff' },
       };
     }
-    if (args['action'] === 'update' && args['expected_version'] !== currentVersion) {
+    if (
+      (args['action'] === 'update' || args['action'] === 'preview') &&
+      args['expected_version'] !== currentVersion
+    ) {
       return {
         content: [{ type: 'text', text: 'conflict' }],
         isError: true,
         structuredContent: { action: 'update', conflict: true, current_version: currentVersion },
       };
     }
-    if (args['action'] === 'update' && args['dry_run'] === true) {
+    if (args['action'] === 'preview' && args['preview_action'] === 'update') {
       return {
-        content: [{ type: 'text', text: 'dry run' }],
+        content: [{ type: 'text', text: 'preview' }],
         structuredContent: {
-          action: 'update',
-          dry_run: true,
+          action: 'preview',
+          preview_action: 'update',
           valid: true,
           mutated: false,
           has_changes: true,

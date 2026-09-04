@@ -1,6 +1,7 @@
 // @lifecycle canonical - Gate versioning operations: history, rollback, compare.
 
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
+import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
@@ -63,10 +64,10 @@ export class GateVersioningProcessor {
 
     const currentState = gateSnapshotContract.project(id, existingGate);
 
-    // `dry_run` returns here — after validation, so a preview refuses an unrestorable version the
-    // same way the real call does, and BEFORE the version row is recorded, so neither of the two
+    // A preview returns here — after validation, so it refuses an unrestorable version the same
+    // way the real call does, and BEFORE the version row is recorded, so neither of the two
     // side-effect surfaces moves.
-    if (args.dry_run === true) {
+    if (isPreviewRequest(args)) {
       return this.success(
         describeRollbackPreview(
           'gate',

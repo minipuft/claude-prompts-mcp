@@ -16,6 +16,7 @@ export type FrameworkManagerActionId =
   | 'delete'
   | 'list'
   | 'inspect'
+  | 'preview'
   | 'reload'
   | 'switch'
   | 'history'
@@ -173,12 +174,13 @@ export interface FrameworkManagerInput {
   persist?: boolean;
   confirm?: boolean;
   /**
-   * Preview a destructive action instead of performing it.
+   * What `action: 'preview'` would do.
    *
-   * Honoured on `rollback` and `delete`. A preview returns before the version row is recorded and
-   * before any file is touched, so neither of the two side-effect surfaces moves.
+   * A framework preview targets `delete` or `rollback` — the two that touch files or the version
+   * table. `update` is deliberately not previewable here: no framework update path ever read the
+   * old `dry_run`, so accepting it would perform the update. The router refuses it by name.
    */
-  dry_run?: boolean;
+  preview_action?: 'delete' | 'rollback';
   /** Workspace whose version history to READ. Honoured by `history`/`compare`; the router
    * refuses it on `rollback`. */
   source_workspace?: string;

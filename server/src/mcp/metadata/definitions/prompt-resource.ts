@@ -38,6 +38,16 @@ const promptResourceActions = [
     issues: [],
   },
   {
+    id: 'preview',
+    displayName: 'Preview a Mutation',
+    category: 'lifecycle',
+    status: 'working',
+    requiredArgs: ['id', 'preview_action'],
+    description:
+      'Render what update, delete, or rollback would do, without writing a file or recording a version. Needs no confirm — nothing is destroyed.',
+    issues: [],
+  },
+  {
     id: 'update',
     displayName: 'Update Prompt',
     category: 'lifecycle',

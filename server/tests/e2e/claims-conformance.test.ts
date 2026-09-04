@@ -121,6 +121,21 @@ interface Scenario {
      */
     text_contains?: string;
     /**
+     * The response must SUCCEED and its text must NOT contain this substring.
+     *
+     * The mode a REMOVAL claim needs: "the field is gone" has no positive spelling, and asserting
+     * only that the call succeeded passes against a no-op — which is exactly how the `unset`
+     * defect presented, since omission is the writer's preserve signal and a removal that changed
+     * nothing still reported success.
+     *
+     * A bare absence is evidence about nothing, so this mode REQUIRES a companion
+     * `text_contains` and the loader refuses it without one. That makes the positive control
+     * structural rather than a convention: the same response must be shown to contain something
+     * before its not containing something else means anything. An erroring response, which
+     * trivially contains neither, is rejected by the success check.
+     */
+    text_not_contains?: string;
+    /**
      * `resources/list` must advertise every one of these URIs.
      *
      * `ok: true` is structurally blind on this method: the server answers `resources/list` with
@@ -184,6 +199,7 @@ function loadCorpus(): Scenario[] {
         'ok',
         'error_contains',
         'text_contains',
+        'text_not_contains',
         'tools_include',
         'resources_include',
         'resources_empty',
@@ -191,6 +207,16 @@ function loadCorpus(): Scenario[] {
       if (!assertions.some((key) => key in s.expect)) {
         throw new Error(
           `${file}: scenario "${s.id}" asserts nothing — expect must set one of ${assertions.join(', ')}`
+        );
+      }
+      // A negative assertion needs a positive control, and requiring it here is what stops that
+      // rule from being a convention someone forgets. Without a companion `text_contains`, a
+      // scenario asserting only an absence passes against a response that says nothing at all.
+      if (s.expect.text_not_contains !== undefined && s.expect.text_contains === undefined) {
+        throw new Error(
+          `${file}: scenario "${s.id}" asserts text_not_contains with no companion ` +
+            `text_contains. An absence is evidence only once the same response is shown to ` +
+            `contain something — otherwise an empty or truncated reply passes.`
         );
       }
       scenarios.push({ ...s, workspace });
@@ -222,7 +248,11 @@ function claimHoldsFor(
     return outcome.isError && outcome.text.includes(want.error_contains);
   }
   if (want.text_contains !== undefined) {
-    return !outcome.isError && outcome.text.includes(want.text_contains);
+    return (
+      !outcome.isError &&
+      outcome.text.includes(want.text_contains) &&
+      (want.text_not_contains === undefined || !outcome.text.includes(want.text_not_contains))
+    );
   }
   // Every mode this function cannot evaluate must SAY SO rather than fall through to a default.
   // The fall-through is what broke it before: `text_contains` was added to the schema after the
@@ -445,7 +475,12 @@ async function runScenario(active: StreamableHttpMcpClient, scenario: Scenario):
     expect(
       outcome.isError ? `EXPECTED SUCCESS, server said: ${outcome.text.slice(0, 1200)}` : 'ok'
     ).toBe('ok');
+    // The positive control runs FIRST. If the response does not carry what it should, the absence
+    // below is unfalsifiable and the failure the reader needs to see is this one.
     expect(outcome.text).toContain(want.text_contains);
+    if (want.text_not_contains !== undefined) {
+      expect(outcome.text).not.toContain(want.text_not_contains);
+    }
     return;
   }
   if (want.ok === true) {
