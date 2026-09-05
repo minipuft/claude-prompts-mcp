@@ -45,6 +45,76 @@ const promptArgumentSchema = z.object({
   validation: ArgumentValidationSchema.optional(),
 });
 
+// ── Framework advanced-field element shapes (P4.1 / P4.5) ──────────────────
+//
+// These eleven fields were settable long before they were declared: `FrameworkManagerInput`
+// carried every one of them, the router forwarded them, and the writer persisted them — but the
+// published schema named none, so they rode the outer `.passthrough()` and no client reading the
+// contract could discover one. `framework_gates` was the sharpest case: `FrameworkDraftValidator`
+// HARD-REQUIRES it, so its only published shape was an example inside the error you got for
+// omitting it. A caller had to provoke a failure to learn the surface.
+//
+// Each shape below mirrors its loader schema field for field, for the same reason the prompt
+// shapes do: the value goes straight into the YAML the loader reads back, so a wider shape here
+// is accepted at the call and rejected at load. Where the loader accepts a field only via
+// `.passthrough()` (`frameworkElements`, `argumentSuggestions` — both read by
+// `generic-framework-guide.ts`), the shape mirrors that engine reader instead.
+
+/** Mirrors `FrameworkGateSchema` (framework-schema.ts:18). Only `id` and `name` are required. */
+const frameworkGateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  frameworkArea: z.string().optional(),
+  priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+  validationCriteria: z.array(z.string()).optional(),
+  criteria: z.array(z.string()).optional(),
+  severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+});
+
+/** Mirrors `TemplateSuggestionSchema` (framework-schema.ts:34). */
+const templateSuggestionSchema = z.object({
+  section: z.enum(['system', 'user']),
+  type: z.enum(['addition', 'structure', 'modification']),
+  description: z.string().optional(),
+  content: z.string().optional(),
+  frameworkJustification: z.string().optional(),
+  impact: z.enum(['high', 'medium', 'low']).optional(),
+});
+
+/** Mirrors `PhaseGuardSchema` (framework-schema.ts:48) — deterministic per-section checks. */
+const phaseGuardSchema = z.object({
+  required: z.boolean().optional(),
+  min_length: z.number().int().positive().optional(),
+  max_length: z.number().int().positive().optional(),
+  contains_any: z.array(z.string().min(1)).optional(),
+  contains_all: z.array(z.string().min(1)).optional(),
+  matches_pattern: z.string().optional(),
+  forbidden_terms: z.array(z.string().min(1)).optional(),
+});
+
+/** Mirrors `ProcessingStepSchema` (framework-schema.ts:63), a `phases.yaml` member. */
+const processingStepSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  frameworkBasis: z.string().min(1),
+  order: z.number().int().positive(),
+  required: z.boolean(),
+  section_header: z.string().optional(),
+  guards: phaseGuardSchema.optional(),
+});
+
+/** Mirrors `ExecutionStepSchema` (framework-schema.ts:79), a `phases.yaml` member. */
+const executionStepSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  action: z.string().min(1),
+  frameworkPhase: z.string().min(1),
+  dependencies: z.array(z.string()).optional(),
+  expected_output: z.string().min(1),
+});
+
 /**
  * Resource Manager input schema.
  *
@@ -281,8 +351,32 @@ export const resourceManagerInputSchema = z
     search_query: z.string().optional(),
 
     // ── Gate parameters ──────────────────────────────────────────────────
-    /** [Gate] Gate type: validation (pass/fail) or guidance (advisory). */
+    /**
+     * [Gate] Gate type: validation (pass/fail) or guidance (advisory).
+     *
+     * NAME COLLISION, load-bearing. This parameter maps to the gate.yaml key `type`
+     * (`router.ts` `gateArgs.type = args.gate_type`), NOT to the gate.yaml key `gate_type` —
+     * which is a different field entirely (`framework` | `category` | `custom`, the
+     * classification `gate-loader.ts` filters framework gates on). That second field is
+     * therefore still unauthorable through this tool, because its own name is already taken
+     * here by this one.
+     *
+     * Deliberately NOT resolved by aliasing it to a third name: the correct end state is
+     * `type` ↔ `type` and `gate_type` ↔ `gate_type`, which is a rename and so breaking. A
+     * placeholder name would ship a parameter we already intend to delete. Tracked as P4.10
+     * against the next major.
+     */
     gate_type: z.enum(['validation', 'guidance']).optional(),
+    /**
+     * [Gate] Severity for prioritization. Omitting it leaves an existing gate's value
+     * untouched; a new gate takes the loader default `medium`.
+     */
+    severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+    /**
+     * [Gate] Enforcement mode override. Defaults to the severity-based mapping when absent,
+     * so setting `severity` alone stays sufficient for the common case.
+     */
+    enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional(),
     /** [Gate] Structured pass criteria definitions. */
@@ -307,6 +401,73 @@ export const resourceManagerInputSchema = z
     enabled: z.boolean().optional(),
     /** [Framework] For switch: persist the change to config. */
     persist: z.boolean().optional(),
+
+    // ── Framework advanced parameters (P4.1 / P4.5) ──────────────────────
+    // Settable before they were declared; see the element-shape block above for why.
+    // Six land in `framework.yaml`, five in `phases.yaml` — noted per field, because a
+    // caller reasoning about a partial write needs to know which file a value reaches.
+    /**
+     * [Framework] Quality gates specific to this framework → `framework.yaml`.
+     *
+     * REQUIRED to create a framework: `FrameworkDraftValidator` refuses a draft without it,
+     * and element shape is checked at the same time, so `[{id, description}]` is rejected for
+     * missing `name` rather than written and rolled back at load.
+     */
+    framework_gates: z.array(frameworkGateSchema).optional(),
+    /** [Framework] Prompt-enhancement suggestions surfaced when active → `framework.yaml`. */
+    template_suggestions: z.array(templateSuggestionSchema).optional(),
+    /**
+     * [Framework] Section structure this framework expects of a prompt → `framework.yaml`
+     * (as `frameworkElements`). Read by `generic-framework-guide.ts` to build creation guidance.
+     */
+    framework_elements: z
+      .object({
+        requiredSections: z.array(z.string()),
+        optionalSections: z.array(z.string()).optional(),
+        sectionDescriptions: z.record(z.string(), z.string()),
+      })
+      .optional(),
+    /**
+     * [Framework] Arguments this framework suggests a prompt declare → `framework.yaml`
+     * (as `argumentSuggestions`).
+     */
+    argument_suggestions: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          type: z.enum(['string', 'array', 'object', 'boolean', 'number']),
+          description: z.string(),
+          frameworkReason: z.string().optional(),
+          examples: z.array(z.string()).optional(),
+        })
+      )
+      .optional(),
+    /** [Framework] Judge-prompt body, written to the file `judgePromptFile` names. */
+    judge_prompt: z.string().optional(),
+    /** [Framework] Ordered template-processing steps → `phases.yaml`. */
+    processing_steps: z.array(processingStepSchema).optional(),
+    /** [Framework] Execution steps with dependencies → `phases.yaml`. */
+    execution_steps: z.array(executionStepSchema).optional(),
+    /** [Framework] Per-execution-type step overlays (chain vs single) → `phases.yaml`. */
+    execution_type_enhancements: z.record(z.string(), z.unknown()).optional(),
+    /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
+    template_enhancements: z
+      .object({
+        systemPromptAdditions: z.array(z.string()).optional(),
+        userPromptModifications: z.array(z.string()).optional(),
+        contextualHints: z.array(z.string()).optional(),
+      })
+      .optional(),
+    /** [Framework] Pre/post/validation hooks around execution → `phases.yaml`. */
+    execution_flow: z
+      .object({
+        preProcessingSteps: z.array(z.string()).optional(),
+        postProcessingSteps: z.array(z.string()).optional(),
+        validationSteps: z.array(z.string()).optional(),
+      })
+      .optional(),
+    /** [Framework] Per-phase keywords and patterns for compliance scoring → `phases.yaml`. */
+    quality_indicators: z.record(z.string(), z.unknown()).optional(),
 
     // ── Versioning parameters ────────────────────────────────────────────
     /** [Versioning] Target version number for rollback action. */

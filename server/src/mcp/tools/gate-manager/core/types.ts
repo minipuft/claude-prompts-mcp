@@ -29,6 +29,14 @@ export interface GateManagerInput {
   id?: string;
   name?: string;
   type?: 'validation' | 'guidance';
+  /**
+   * Severity for prioritization. Reaches `gate.yaml` through `PRESERVED_GATE_YAML_KEYS`:
+   * supplied here it is written, omitted it is carried forward from the existing file, so an
+   * update never silently resets a hand-authored value to the loader default.
+   */
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  /** Enforcement mode override; absent, the loader derives it from `severity`. */
+  enforcementMode?: 'blocking' | 'advisory' | 'informational';
   description?: string;
   guidance?: string;
   pass_criteria?: Array<{
@@ -97,4 +105,12 @@ export interface GateCreationData {
   pass_criteria?: GateManagerInput['pass_criteria'];
   activation?: GateManagerInput['activation'];
   retry_config?: GateManagerInput['retry_config'];
+  /**
+   * Keys `GateFileWriter` builds no value for, carried here under their gate.yaml spelling so
+   * `resolvePreservedGateYamlFields` finds a supplied value by the same name it preserves.
+   * Until P4.4 nothing populated these, and that resolver's supplied-value branch was
+   * unreachable — it is the settable half of a preservation mechanism that already existed.
+   */
+  severity?: GateManagerInput['severity'];
+  enforcementMode?: GateManagerInput['enforcementMode'];
 }

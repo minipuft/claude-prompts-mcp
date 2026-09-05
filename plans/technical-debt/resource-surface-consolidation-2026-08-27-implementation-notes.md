@@ -885,3 +885,64 @@ clear an import-order ratchet regression from four new imports, also reformatted
 relationship to this change. `--fix` takes a path, not a diff. Caught by reading `git status`
 immediately after; reverted with `git checkout --`, and the ratchet passes without them. Scope
 `--fix` to the files the change touched, or diff before staging.
+
+## P4 batch A — the declaration rows (2026-09-05)
+
+Branch `feat/resource-surface-declarations`, stacked on `feat/settability-verbs`. The owner first
+chose a branch off `main` on my recommendation, and that recommendation was wrong: I asserted P4
+"shares no code with the verbs arc" without diffing. It shares ten of twelve files, two of them
+generated artifacts that cannot be hand-merged. Re-measured and re-decided before any code was
+written, which is the only reason it cost a `git reset` rather than a conflict resolution.
+
+**P4.1 was a strict subset of P4.5 and the plan listed them as peers.** `framework_gates` is the
+first of the eleven advanced fields; the only thing distinguishing it is that
+`FrameworkDraftValidator` hard-requires it. Executing P4.1 alone would have declared one member of
+an enumeration and left ten identical instances standing. When a row's subject is one member of a
+set, the row should name the set — otherwise the fix closes an instance and reads as closing a
+class.
+
+**The premise `ResourceManagerInput` was missing the fields turned out to be false.** All eleven
+were already declared on the TypeScript interface, with a comment explaining they were withheld
+from the published schema "for token efficiency". So the types agreed throughout and only the zod
+schema — the artifact a client actually reads — disagreed. The rationale was real but it bought
+tokens by making a required field undiscoverable, and `includeInDescription: false` already buys
+the same tokens without that cost.
+
+**DEV-P4-1 — `gate_type` could not ship with its two siblings.** The tool parameter spelled
+`gate_type` maps to the YAML key `type`; the loader has a _different_ key genuinely named
+`gate_type`. Neither side reads as wrong alone, only the pair does. Ruled: split to P4.10 rather
+than alias to a third name, because an alias is a parameter we would ship already intending to
+delete — `cleanup-standards.md`'s "parallel system with a nicer name". Recorded as an exemption in
+the new gate whose condition is re-evaluated every run, so the day the rename lands the exemption
+reports itself rather than lingering.
+
+**DEV-P4-2 — the row I could not close is the one that blocks verifying the rows I did.** P4.6
+turned out not to be "inspect's JSON projection drops fields" but "there is no JSON projection":
+`format` is declared, contracted, routed at `core/router.ts:223`, and read by nothing. That makes
+the new fields writable and unreadable through the tool, so the conformance corpus — which asserts
+on tool responses — genuinely cannot cover them. The honest resolution was a unit test asserting
+the written YAML plus a declared exception naming P4.6, not a corpus scenario that would assert
+`ok:` and prove nothing.
+
+**The stale thing was an exemption's REASON, not its existence.** `format` already sat in a
+`validate:conformance-coverage` exception group, filed under "every list scenario uses default
+arguments only" — which says a scenario would close it. A scenario would have passed while proving
+nothing. The gate audits whether its exceptions are _satisfied_; nothing audits whether the
+_stated reason_ is still true, and a wrong reason is what keeps a defect looking handled. This is
+the `cleanup-standards.md` §A Status Outlives What It Described shape one level in: the marker was
+current, the justification underneath it had rotted.
+
+**Positive controls, both directions.** The class gate was shown to fail on each of its own
+motivating instances — deleting the gate `severity` declaration and deleting the framework
+`processing_steps` declaration each exit 1 naming that key — and to return green when restored.
+The new unit test was mutation-verified by making `resolvePreservedGateYamlFields`' supplied-value
+branch dead: two of three tests fail, and the third (the converse control, "omitting writes
+neither key") correctly survives, which is what tells the two assertions apart.
+
+**DEV-P4-3.** The e2e suite failed 166 tests on first run because this worktree had never been
+built and `dist/index.js` did not exist. Attributed before acting rather than investigated as a
+regression. A fresh worktree needs `npm run build` before `test:all`.
+
+**DEV-P4-4.** `npm run format` and `format:server` between them did not cover
+`server/scripts/*.ts`, so the new gate script reached `pre-commit` unformatted and was rejected
+there. Formatting at authoring time only works if you know which glob owns the file you created.

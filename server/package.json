@@ -130,6 +130,8 @@
     "validate:no-stepstate": "node scripts/validate-no-stepstate.js",
     "validate:hermetic-child-env": "node scripts/validate-hermetic-child-env.js",
     "validate:hermetic-child-env:self-test": "node scripts/validate-hermetic-child-env.js --self-test",
+    "validate:declared-surface": "tsx scripts/validate-declared-surface.ts",
+    "validate:declared-surface:self-test": "tsx scripts/validate-declared-surface.ts --self-test",
     "validate:preview-vocabulary": "node scripts/validate-preview-vocabulary.js",
     "validate:preview-vocabulary:self-test": "node scripts/validate-preview-vocabulary.js --self-test",
     "validate:prompts": "tsx scripts/validate-prompts.ts",

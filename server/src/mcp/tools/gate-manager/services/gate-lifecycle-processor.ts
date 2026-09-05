@@ -18,7 +18,18 @@ export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
 
   async handleCreate(args: GateManagerInput): Promise<ToolResponse> {
-    const { id, name, type, description, guidance, pass_criteria, activation, retry_config } = args;
+    const {
+      id,
+      name,
+      type,
+      description,
+      guidance,
+      pass_criteria,
+      activation,
+      retry_config,
+      severity,
+      enforcementMode,
+    } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
     if (!name) return this.error('Gate name is required for create action');
@@ -38,6 +49,8 @@ export class GateLifecycleProcessor {
       pass_criteria,
       activation,
       retry_config,
+      severity,
+      enforcementMode,
     };
 
     const result = await this.ctx.gateFileService.writeGateFiles(gateData);
@@ -82,7 +95,18 @@ export class GateLifecycleProcessor {
   }
 
   async handleUpdate(args: GateManagerInput): Promise<ToolResponse> {
-    const { id, name, type, description, guidance, pass_criteria, activation, retry_config } = args;
+    const {
+      id,
+      name,
+      type,
+      description,
+      guidance,
+      pass_criteria,
+      activation,
+      retry_config,
+      severity,
+      enforcementMode,
+    } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
 
@@ -114,6 +138,14 @@ export class GateLifecycleProcessor {
       pass_criteria: pass_criteria ?? existingDefinition.pass_criteria,
       activation: activation ?? existingDefinition.activation,
       retry_config: retry_config ?? existingDefinition.retry_config,
+      // Deliberately NOT defaulted to the existing definition, unlike the three above. These
+      // two are preserved keys, not projected ones: `resolvePreservedGateYamlFields` already
+      // falls back to the on-disk value when the caller omits them. Reading them from
+      // `existingDefinition` here would work by coincidence and would defeat the preservation
+      // path the moment the two disagree — the loader applies a `severity` default, so the
+      // definition reports `medium` for a file that declares nothing.
+      severity,
+      enforcementMode,
     };
 
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —

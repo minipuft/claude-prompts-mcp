@@ -391,6 +391,13 @@ export const SUITE = [
       'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
   },
   {
+    script: 'validate:declared-surface',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED both ways — the self-test drives the comparator with a synthetic surface carrying an undeclared key (must report), declared keys alongside it (must stay silent), a satisfied exemption (must report) and a holding one (must not); the motivating instances are the positive control, and removing either the gate `severity` declaration or the framework `processing_steps` declaration exits 1 naming that exact key',
+  },
+  {
     script: 'validate:preview-vocabulary',
     io: 'read',
     reads: ['file', 'walk'],
