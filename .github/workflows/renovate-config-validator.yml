@@ -52,7 +52,7 @@ jobs:
       # two runs of an unchanged file. Renovate proposes its own bumps here via the
       # customManagers regex in .github/renovate.json5.
       - name: Install Renovate
-        run: npm install -g renovate@44.6.0
+        run: npm install -g renovate@44.59.1
 
       - name: Validate Renovate config
         run: renovate-config-validator --strict .github/renovate.json5
