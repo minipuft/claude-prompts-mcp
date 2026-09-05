@@ -946,3 +946,64 @@ regression. A fresh worktree needs `npm run build` before `test:all`.
 **DEV-P4-4.** `npm run format` and `format:server` between them did not cover
 `server/scripts/*.ts`, so the new gate script reached `pre-commit` unformatted and was rejected
 there. Formatting at authoring time only works if you know which glob owns the file you created.
+
+## P4 batch B — the defect rows (2026-09-05)
+
+Same branch as batch A. **Net code change: none.** P4.8 is killed, and P4.2/P4.3 have corrected
+premises. That is a worse outcome than intended and a better one than the alternative, which was
+shipping a regression.
+
+The P4.2 fix was fully implemented — reorder in all three processors, a shared helper, a
+mutation-verified unit test, `validate:all` 55/55, 3026 unit tests green — and then reverted,
+because ONE integration test caught that it traded away a safety property an earlier row of this
+same plan had deliberately established. The revert is the finding; see P4-F9 and P4-F10 in the
+plan.
+
+**Two of the four rows named one instance of a class.** P4.2 named the framework processor; the
+gate and prompt processors carried the identical `recordEditResult`-before-write ordering. P4.3
+named one hardcoded literal; there is a second at `registry.ts:376` feeding the registry's own
+`isBuiltIn`. Batch A had exactly this shape too (P4.1 was a subset of P4.5). Three for three, which
+stops being a coincidence: a row is written from the site where the defect was NOTICED, and the
+site where it was noticed is rarely the whole set.
+
+**DEV-P4B-1 — the prompt processor had already reasoned about this ordering, and reasoned about
+the other direction.** Its comment (P7-D2/OQ-P7-6) explains at length why a failed snapshot must
+abort BEFORE the write: `version_history` is durable, nothing regenerates its rows, so writing past
+a failed snapshot leaves a gap while reporting success. All true. But the argument only considers
+snapshot-fails-then-write, never record-succeeds-then-write-fails, and the second is the worse of
+the two — a phantom version makes rollback restore content that was never live. Superseded
+explicitly in the comment rather than quietly reordered, because the original reasoning is correct
+about its own half and a future reader needs to see which half moved.
+
+**Two tests failed, and they meant opposite things.** The first — a unit test asserting the old
+abort-before-write contract — was the change being reached, and rewriting it was right. The second,
+an INTEGRATION test named "a persistence failure leaves the file unmodified", was the change being
+WRONG, and I nearly rewrote it the same way. The difference is that the second one's docstring
+argues for the property; a test that explains itself is a decision, not an assertion, and
+rewriting it to match new code discards the decision silently. `test:all` came back with
+exactly one unit failure: the test asserting the old abort-before-write contract. My own new test
+covers the gate processor, so nothing I wrote would have caught a prompt-side reorder that silently
+did not apply. Rewritten to the new contract rather than deleted — the failure it covers still
+exists, it just resolves differently now.
+
+**DEV-P4B-2 — P4.8 asked for a security regression, and its `☐` is why.** The row wants
+`user_message_template_file` to resolve in `src/`. Those parameters were removed on purpose in
+`390ae26e`, and the CHANGELOG says why: `>>create_prompt` "no longer accepts author-controlled
+file-path inputs". Because `☐` asserts nothing, nothing re-read the row after the capability was
+deleted, and executing it as written would have reinstated author-controlled paths in a guided
+authoring workflow. `cleanup-standards.md` §A Status Outlives What It Described predicts the stale
+`☐`; what it does not say is that the cost is occasionally a security regression rather than a
+wasted pass.
+
+**P4.3's obvious fix is wrong, and only measuring both paths shows it.** The literal looks like it
+wants to become "refuse anything in the bundled tree" — and `getBundledResourceDir` returns
+`<packageRoot>/resources/<type>`, which EQUALS `getFrameworksDirectory()` in a default install. So
+that guard would also refuse to delete a framework the operator created themselves. The property
+needed is "ships with the package", which no disk test can answer when the two roots coincide.
+Left open rather than guessed.
+
+**A comment cited a plan row by number and that made it read as done.**
+`framework-lifecycle-processor.ts:264` claims the bundled guard "also covers focus, liquescent,
+radiant and verify ... (P4.3)". The guard is nested inside `if (!existsSync(frameworkDir))` and
+those directories exist, so it never runs for them. The citation is what sells it: prose naming the
+row it discharges reads like a receipt. Recorded as P4-F6.
