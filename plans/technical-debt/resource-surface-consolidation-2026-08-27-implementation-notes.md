@@ -1007,3 +1007,28 @@ Left open rather than guessed.
 radiant and verify ... (P4.3)". The guard is nested inside `if (!existsSync(frameworkDir))` and
 those directories exist, so it never runs for them. The citation is what sells it: prose naming the
 row it discharges reads like a receipt. Recorded as P4-F6.
+
+**Artifacts created and deleted by the P4.2 revert**, named here because they are the shape the
+transactional fix should NOT take:
+
+- `server/src/mcp/tools/shared/version-after-write.ts` — a shared `recordVersionAfterWrite` +
+  `renderVersionGap`. The extraction itself was right (three processors held three copies of the
+  same block, and pulling it out is what fixed a cognitive-complexity ratchet regression the
+  inline `try`/`catch` had caused). Its CONTRACT was wrong: it swallowed a recording failure and
+  returned it for the caller to render. The transactional fix needs the opposite — the helper must
+  THROW, so the surrounding `ResourceMutationTransaction.run()` restores the files. Rebuild it with
+  that signature rather than restoring this file.
+- `server/tests/unit/mcp-tools/gate-manager/version-record-after-write.test.ts` — three cases with
+  a positive control, mutation-verified. Its first two assertions (forced write failure records
+  nothing; successful write does record) are still exactly right and should be carried into the
+  transactional version. Its third — that a recording failure reports a gap rather than failing —
+  encodes the behaviour that broke the safety property, and must be replaced by the converse: a
+  recording failure leaves the file byte-identical.
+
+**DEV-P4B-3 — the plan-sync tripwire cannot forget a deleted file.** These two paths stayed in
+`source_since_touch` after the revert removed them. `retained_edits` decides what to forget by
+comparing each pending path's mtime against the newest plan-side mtime, and a path that no longer
+exists reports `0.0`, which fails the `0.0 < mtime` test and is retained forever. So a session
+that creates a file, flushes its findings, and then deletes the file is blocked on every
+subsequent turn with nothing it can do to clear it — a gate nobody can pass. Fixed in
+`~/.claude/hooks/lib/plan_hygiene.py` in the same session that hit it.
