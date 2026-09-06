@@ -49,10 +49,13 @@
  *   node scripts/validate-pr-body.mjs --self-test
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { planRowStates } from '../server/scripts/validate-plan-row-tracking.js';
 
 export const REQUIRED_SECTIONS = ['Summary', 'How it was verified', 'Notes for Reviewers'];
 export const DEMONSTRATION_SECTION = 'Demonstration';
@@ -155,21 +158,135 @@ function checkVerificationRows(sections, failures) {
   }
 }
 
-function checkPlanFooter(body, failures, repoRoot) {
+/**
+ * The plan as it stood at the merge base, or `null` when that cannot be read.
+ *
+ * Merge base rather than the base branch tip: rows closed on `main` after this branch forked are
+ * not this PR's progress, and counting them would let a stale branch pass on someone else's work.
+ *
+ * `null` is NOT "no change" — it is "cannot measure", and the caller fails on it. A shallow
+ * checkout (`actions/checkout` defaults to `fetch-depth: 1`) reaches this path, and a gate that
+ * read an unreadable base as a silent pass would report green for exactly the configuration that
+ * blinded it.
+ */
+function planAtMergeBase(repoRoot, relPath) {
+  const baseRef = process.env.GITHUB_BASE_REF
+    ? `origin/${process.env.GITHUB_BASE_REF}`
+    : 'origin/HEAD';
+  const git = (args) =>
+    execFileSync('git', args, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  try {
+    return git(['show', `${git(['merge-base', baseRef, 'HEAD']).trim()}:${relPath}`]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A `Plan:` footer asserts that this PR advances the plan it names. This checks that assertion.
+ *
+ * WHY IT IS NO LONGER "the plan must be finalized in this PR". That was the original rule, and it
+ * is satisfiable only by a plan short enough to finish in one PR. Measured 2026-09-06 on #262: the
+ * plan it names is a six-phase umbrella whose open rows span a whole unbuilt resource type and a
+ * four-repository rename arc, so no PR in this repo could ever retire it — the gate was red with
+ * no reachable green, which `cleanup-standards.md` prices as a bug rather than a standard. The
+ * defect the plan `status:` field exists for is narrower, and that plan's own preamble states it:
+ * "`status:`, so "is it done" had no answer — Arc 1 was complete while 29 rows were open."
+ *
+ * So the guarantee splits into the two halves that are separately checkable, and BOTH are derived
+ * from the diff rather than asserted by the author. There is deliberately no opt-out flag: a
+ * footer marker that suppressed this check would be author-set and unfalsifiable, which retires
+ * the gate instead of satisfying it.
+ *
+ *   PROGRESS — the PR must move at least one row from ☐ to a terminal mark. A footer on a PR that
+ *   closes nothing is either pointed at the wrong plan or decorating.
+ *
+ *   CLOSURE — when no row is left unfinished, the plan must carry a final `status:`. This is the
+ *   original guarantee, enforced at the one moment it is both meaningful and reachable: the last
+ *   PR of a plan still cannot leave it open.
+ *
+ * WHERE IT DECLINES TO MEASURE, and why that falls back to the OLD rule rather than to a pass:
+ * plans are graded through the ☐/✓/✗/⊘ vocabulary, and some tables use words instead (`RULED`,
+ * `REVISED`) or carry no status column at all. When the plan has no ☐ row at the merge base there
+ * is no progress to measure, so the original strict rule applies unchanged. The relaxation reaches
+ * exactly the plans this vocabulary can grade, and nothing else.
+ */
+function checkPlanFooter(body, failures, repoRoot, readPlanAtMergeBase) {
   const match = /^Plan:\s*`?(plans\/\S+?)`?\s*$/m.exec(stripComments(body));
   if (!match) return;
-  const planPath = path.join(repoRoot, match[1]);
+  const relPath = match[1];
+  const planPath = path.join(repoRoot, relPath);
   if (!existsSync(planPath)) {
-    failures.push(`\`Plan:\` footer names \`${match[1]}\`, which does not exist at this checkout`);
+    failures.push(`\`Plan:\` footer names \`${relPath}\`, which does not exist at this checkout`);
     return;
   }
-  const status = /^status:\s*(\S+)/m.exec(readFileSync(planPath, 'utf8'))?.[1]?.toLowerCase();
+
+  const head = readFileSync(planPath, 'utf8');
+  const status = /^status:\s*(\S+)/m.exec(head)?.[1]?.toLowerCase();
   if (status === undefined) {
-    failures.push(`\`Plan:\` footer names \`${match[1]}\`, which declares no \`status:\``);
-  } else if (NON_FINAL_STATUSES.has(status)) {
+    failures.push(`\`Plan:\` footer names \`${relPath}\`, which declares no \`status:\``);
+    return;
+  }
+
+  const mustFinalize = () =>
     failures.push(
-      `\`Plan:\` footer names \`${match[1]}\` with status \`${status}\` — a PR carrying a plan ` +
+      `\`Plan:\` footer names \`${relPath}\` with status \`${status}\` — a PR carrying a plan ` +
         'merges only once that plan is finalized (retired with every row terminal) in this same PR'
+    );
+
+  const rows = planRowStates(head);
+  const unfinished = rows.filter((row) => row.state !== 'terminal');
+
+  // No gradable row at all: nothing to measure, so the original rule stands.
+  if (rows.length === 0) {
+    if (NON_FINAL_STATUSES.has(status)) mustFinalize();
+    return;
+  }
+
+  // CLOSURE. `unmarked` counts as unfinished on purpose — a row nobody has spoken for cannot
+  // certify that a plan is complete, and reading it as terminal would demand the retirement of a
+  // plan with live work in it.
+  if (unfinished.length === 0) {
+    if (NON_FINAL_STATUSES.has(status)) {
+      failures.push(
+        `\`Plan:\` footer names \`${relPath}\`, whose ${rows.length} rows are all terminal while ` +
+          `\`status:\` is still \`${status}\` — the PR that closes a plan's last row retires the ` +
+          'plan. Set a final `status:` in this PR.'
+      );
+    }
+    return;
+  }
+
+  // A plan already carrying a final status has nothing left to prove here.
+  if (!NON_FINAL_STATUSES.has(status)) return;
+
+  const base = readPlanAtMergeBase(relPath);
+  if (base === null) {
+    failures.push(
+      `\`Plan:\` footer names \`${relPath}\`, but the plan as it stood at the merge base could ` +
+        'not be read, so the rows this PR closes cannot be measured. The checkout needs full ' +
+        'history (`fetch-depth: 0`) and a fetched base ref.'
+    );
+    return;
+  }
+
+  const baseState = new Map(planRowStates(base).map((row) => [row.id, row.state]));
+  if (![...baseState.values()].includes('open')) {
+    mustFinalize();
+    return;
+  }
+
+  // PROGRESS.
+  const closed = rows.filter((row) => row.state === 'terminal' && baseState.get(row.id) === 'open');
+  if (closed.length === 0) {
+    failures.push(
+      `\`Plan:\` footer names \`${relPath}\` with status \`${status}\` and ${unfinished.length} ` +
+        'unfinished row(s), and this PR closes none of them. A plan footer asserts that this PR ' +
+        'advances that plan — mark the rows it finishes terminal (✓, ✗ or ⊘), or drop the footer.'
     );
   }
 }
@@ -198,13 +315,17 @@ function collectWarnings(body, sections) {
  */
 export function checkBody(body, title, options = {}) {
   const repoRoot = options.repoRoot ?? REPO_ROOT;
+  // Injected so the self-test drives the plan rules off fixtures rather than a real git history,
+  // which keeps every rule in this file pure and replayable.
+  const readPlanAtMergeBase =
+    options.readPlanAtMergeBase ?? ((relPath) => planAtMergeBase(repoRoot, relPath));
   const sections = splitSections(body);
   const failures = [];
   checkRequiredSections(sections, failures);
   checkDemonstration(sections, title, failures);
   checkPlaceholders(body, failures);
   checkVerificationRows(sections, failures);
-  checkPlanFooter(body, failures, repoRoot);
+  checkPlanFooter(body, failures, repoRoot, readPlanAtMergeBase);
   return { failures, warnings: collectWarnings(body, sections) };
 }
 
@@ -213,12 +334,79 @@ function readArg(flag) {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
+/** A minimal plan whose table carries the `St` column `planRowStates` grades. */
+function fixturePlan(status, rows) {
+  const body = rows.map(([id, mark]) => `| ${id} | ${mark} | change |`).join('\n');
+  return `---\nstatus: ${status}\n---\n\n| Id | St | Change |\n|---|---|---|\n${body}\n`;
+}
+
+const OPEN_PAIR = [
+  ['R1', '☐'],
+  ['R2', '☐'],
+];
+
+/**
+ * Plan fixtures as `{ [relPath]: [headText, baseText] }`; a `null` base models one that cannot be
+ * read.
+ *
+ * Every plan rule is exercised in BOTH directions — a case where it must fire and a case where it
+ * must stay silent — because a rule that only ever fires is indistinguishable from one that always
+ * fires.
+ */
+const PLAN_FIXTURES = {
+  // Rowless plans: the original rule, unchanged.
+  'plans/active.md': ['---\nstatus: active\n---\n', null],
+  'plans/retired.md': ['---\nstatus: reference\n---\n', null],
+  // PROGRESS, in each of the three terminal marks.
+  'plans/progress.md': [
+    fixturePlan('active', [['R1', '✓'], ['R2', '☐']]),
+    fixturePlan('active', OPEN_PAIR),
+  ],
+  'plans/killed.md': [
+    fixturePlan('active', [['R1', '✗'], ['R2', '☐']]),
+    fixturePlan('active', OPEN_PAIR),
+  ],
+  'plans/no-change-needed.md': [
+    fixturePlan('active', [['R1', '⊘'], ['R2', '☐']]),
+    fixturePlan('active', OPEN_PAIR),
+  ],
+  // PROGRESS, converse: nothing moved.
+  'plans/stalled.md': [fixturePlan('active', OPEN_PAIR), fixturePlan('active', OPEN_PAIR)],
+  // CLOSURE, both directions.
+  'plans/all-terminal-active.md': [
+    fixturePlan('active', [['R1', '✓'], ['R2', '⊘']]),
+    fixturePlan('active', OPEN_PAIR),
+  ],
+  'plans/all-terminal-retired.md': [
+    fixturePlan('reference', [['R1', '✓'], ['R2', '⊘']]),
+    fixturePlan('active', OPEN_PAIR),
+  ],
+  // An unmarked row is not terminal: closure must NOT demand retirement while one survives.
+  'plans/unmarked-row.md': [
+    fixturePlan('active', [['R1', '✓'], ['R2', 'RULED']]),
+    fixturePlan('active', [['R1', '☐'], ['R2', 'RULED']]),
+  ],
+  // Graded by words rather than glyphs: no ☐ at base, so the original rule applies.
+  'plans/word-vocabulary.md': [
+    fixturePlan('active', [['R1', 'RULED'], ['R2', 'REVISED']]),
+    fixturePlan('active', [['R1', 'RULED'], ['R2', 'REVISED']]),
+  ],
+  // A merge base that cannot be read (a shallow checkout): must fail, never silently pass.
+  'plans/unreadable-base.md': [fixturePlan('active', [['R1', '✓'], ['R2', '☐']]), null],
+};
+
 function selfTestFixtures() {
   const root = mkdtempSync(path.join(tmpdir(), 'pr-body-selftest-'));
   mkdirSync(path.join(root, 'plans'), { recursive: true });
-  writeFileSync(path.join(root, 'plans', 'active.md'), '---\nstatus: active\n---\n');
-  writeFileSync(path.join(root, 'plans', 'retired.md'), '---\nstatus: reference\n---\n');
+  for (const [relPath, [head]] of Object.entries(PLAN_FIXTURES)) {
+    writeFileSync(path.join(root, relPath), head);
+  }
   return root;
+}
+
+/** Serves the fixture base texts; `null` models a base that cannot be read. */
+function fixtureBaseReader(relPath) {
+  return PLAN_FIXTURES[relPath]?.[1] ?? null;
 }
 
 function selfTest() {
@@ -293,6 +481,60 @@ function selfTest() {
       expect: (r) => r.failures.some((f) => f.includes('does not exist')),
     },
     {
+      name: 'a PR that closes an open row passes though the plan stays active',
+      body: `${filled}\nPlan: \`plans/progress.md\`\n`,
+      title: 'feat(chains): x',
+      expect: noFail,
+    },
+    {
+      name: 'a ✗ kill closes a row',
+      body: `${filled}\nPlan: \`plans/killed.md\`\n`,
+      title: 'feat(chains): x',
+      expect: noFail,
+    },
+    {
+      name: 'a ⊘ no-change-required closes a row',
+      body: `${filled}\nPlan: \`plans/no-change-needed.md\`\n`,
+      title: 'feat(chains): x',
+      expect: noFail,
+    },
+    {
+      name: 'a footer on a plan this PR does not advance fails',
+      body: `${filled}\nPlan: \`plans/stalled.md\`\n`,
+      title: 'feat(chains): x',
+      expect: (r) => r.failures.some((f) => f.includes('closes none of them')),
+    },
+    {
+      name: 'closing the last row without retiring the plan fails',
+      body: `${filled}\nPlan: \`plans/all-terminal-active.md\`\n`,
+      title: 'feat(chains): x',
+      expect: (r) => r.failures.some((f) => f.includes('retires the')),
+    },
+    {
+      name: 'closing the last row and retiring the plan passes',
+      body: `${filled}\nPlan: \`plans/all-terminal-retired.md\`\n`,
+      title: 'feat(chains): x',
+      expect: noFail,
+    },
+    {
+      name: 'an unmarked row is unfinished, so closure does not demand retirement',
+      body: `${filled}\nPlan: \`plans/unmarked-row.md\`\n`,
+      title: 'feat(chains): x',
+      expect: (r) => noFail(r) && !r.failures.some((f) => f.includes('retires the')),
+    },
+    {
+      name: 'a plan graded by words keeps the original finalize-in-this-PR rule',
+      body: `${filled}\nPlan: \`plans/word-vocabulary.md\`\n`,
+      title: 'feat(chains): x',
+      expect: (r) => r.failures.some((f) => f.includes('finalized')),
+    },
+    {
+      name: 'an unreadable merge base fails rather than passing silently',
+      body: `${filled}\nPlan: \`plans/unreadable-base.md\`\n`,
+      title: 'feat(chains): x',
+      expect: (r) => r.failures.some((f) => f.includes('merge base')),
+    },
+    {
       name: 'prose over budget warns, transcripts and details do not count',
       body:
         filled.replace('After this merges, x.', `${'word '.repeat(WORD_BUDGET + 1)}`) +
@@ -319,7 +561,10 @@ function selfTest() {
   ];
   let failed = 0;
   for (const c of cases) {
-    const result = checkBody(c.body, c.title, { repoRoot: root });
+    const result = checkBody(c.body, c.title, {
+      repoRoot: root,
+      readPlanAtMergeBase: fixtureBaseReader,
+    });
     const ok = c.expect(result);
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.name}`);
     if (!ok) {

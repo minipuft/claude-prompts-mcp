@@ -126,6 +126,13 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The plan-footer check measures which rows this PR closes by comparing the plan against
+          # its state at the merge base, so it needs history the default `fetch-depth: 1` does not
+          # fetch. The check fails loudly when the base is unreadable rather than passing, so a
+          # regression here surfaces as a red gate on every PR carrying a footer, not as a silent
+          # green — but it would be a wrong red, so keep this.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

@@ -115,6 +115,19 @@ const OPEN_MARK = '☐';
 /** Closed, no change required — settled but produced no edit. Rule 3 makes it carry a stamp too. */
 const CLOSED_MARK = '⊘';
 
+/** Killed — the work was judged not worth its cost. A terminal state, like ✓ and ⊘. */
+const KILLED_MARK = '✗';
+
+/**
+ * The three MARKED states. A row carrying any of them has been spoken for; `☐` has not.
+ *
+ * Kept as one list because every consumer that asks "is this row still open" must ask about all
+ * three. Enumerating two of them is the bug it exists to prevent: `⊘` was added after `✓` and `✗`,
+ * so a check written against the older pair reads a settled row as pending and reports a plan as
+ * unfinished forever.
+ */
+const TERMINAL_MARKS = [DONE_MARK, CLOSED_MARK, KILLED_MARK];
+
 /**
  * The stamp that turns an open marker into something re-checkable.
  *
@@ -287,6 +300,63 @@ function statusColumnByLine(lines) {
 function statusTextOf(line, column) {
   if (column === undefined) return line;
   return cellsOf(line)[column] ?? '';
+}
+
+/**
+ * Every gradable plan row, as `{ id, state }`, where `state` is `open` or `terminal`.
+ *
+ * This is the row-lifecycle primitive the other consumers of plan state share, so that "what
+ * counts as a row" and "what counts as closed" have ONE answer. `scripts/validate-pr-body.mjs`
+ * reads it to decide whether a PR advances the plan its footer names; keeping that logic here
+ * rather than reimplementing it there is the difference between a second parser and a second
+ * caller — a second parser drifts, and the drift is silent because both sides still return rows.
+ *
+ * `☐` wins over a terminal mark when a row somehow carries both. A row that is ambiguous about
+ * whether it is finished is not finished, and the conservative reading is the one that cannot
+ * report a plan as further along than it is.
+ *
+ * TWO DELIBERATE EXCLUSIONS, both of which cost coverage rather than correctness:
+ *
+ * A row is skipped when its table declares no status column (`statusColumnByLine` yields
+ * `undefined`). `auditOpenRows` falls back to scanning the whole line in that case; here the
+ * fallback would be worse than the gap, because this function's answer is compared ACROSS two
+ * revisions — a whole-line scan makes any prose edit that mentions a glyph look like a lifecycle
+ * transition. A plan whose tables carry no `St` column simply yields no rows, and the caller is
+ * responsible for saying so rather than reading the empty list as "nothing left to do".
+ *
+ * A row is skipped when its first cell is empty, because the id is what lets the same row be
+ * recognised on both sides of a diff. Rows are matched by id and never by position: a plan grows
+ * rows between two revisions, so line numbers name different rows in each.
+ *
+ * @param {string} content
+ * @returns {{ id: string, state: 'open' | 'terminal', line: number }[]}
+ */
+export function planRowStates(content) {
+  const lines = content.split('\n');
+  const statusColumn = statusColumnByLine(lines);
+  const rows = [];
+
+  for (const [index, line] of lines.entries()) {
+    if (!line.trim().startsWith('|')) continue;
+    if (isSeparatorRow(line)) continue;
+
+    const column = statusColumn[index];
+    if (column === undefined) continue;
+
+    const id = (cellsOf(line)[0] ?? '').replace(/[*`]/g, '').trim();
+    if (!id) continue;
+
+    const status = statusTextOf(line, column);
+    const state = status.includes(OPEN_MARK)
+      ? 'open'
+      : TERMINAL_MARKS.some((mark) => status.includes(mark))
+        ? 'terminal'
+        : 'unmarked';
+
+    rows.push({ id, state, line: index + 1 });
+  }
+
+  return rows;
 }
 
 /**
@@ -797,4 +867,10 @@ function selfTest() {
   return failures === 0 ? 0 : 1;
 }
 
-process.exit(process.argv.includes('--self-test') ? selfTest() : run());
+// Run only when invoked as a command. This file exports its audits so other gates can reuse the
+// row vocabulary, and an unguarded `process.exit` made those exports unreachable: importing them
+// ran the whole plan audit and terminated the importing process. Same idiom as
+// `run-validation-suite.js`.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(process.argv.includes('--self-test') ? selfTest() : run());
+}
