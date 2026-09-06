@@ -179,10 +179,36 @@ function planAtMergeBase(repoRoot, relPath) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
+
+  // A shallow clone has no fork point to find. Measured 2026-09-06: `git merge-base` does not
+  // error there — it resolves to HEAD, and the plan is then compared against ITSELF. That vacuous
+  // comparison reports "this PR closes no rows" for every PR, which is a WRONG red wearing the
+  // message of a right one, and it sends the author to their plan rows instead of the checkout.
+  if (git(['rev-parse', '--is-shallow-repository']).trim() === 'true') {
+    return { error: 'the checkout is shallow, so there is no merge base to compare against' };
+  }
+
+  let mergeBase;
   try {
-    return git(['show', `${git(['merge-base', baseRef, 'HEAD']).trim()}:${relPath}`]);
+    mergeBase = git(['merge-base', baseRef, 'HEAD']).trim();
   } catch {
-    return null;
+    return { error: `\`${baseRef}\` is not present in this checkout` };
+  }
+
+  // The same vacuity, reached a second way: a base ref that resolves to HEAD itself measures
+  // nothing. Checked by value rather than by name, because which ref aliases HEAD varies by how
+  // the checkout was made.
+  if (mergeBase === git(['rev-parse', 'HEAD']).trim()) {
+    return {
+      error: `\`${baseRef}\` resolves to this branch's own tip, so the comparison would be vacuous`,
+    };
+  }
+
+  try {
+    return { text: git(['show', `${mergeBase}:${relPath}`]) };
+  } catch {
+    // Absent at the merge base means this PR introduces the plan — measurable, and permitted.
+    return { text: null };
   }
 }
 
@@ -265,16 +291,21 @@ function checkPlanFooter(body, failures, repoRoot, readPlanAtMergeBase) {
   if (!NON_FINAL_STATUSES.has(status)) return;
 
   const base = readPlanAtMergeBase(relPath);
-  if (base === null) {
+  if (base.error) {
     failures.push(
-      `\`Plan:\` footer names \`${relPath}\`, but the plan as it stood at the merge base could ` +
-        'not be read, so the rows this PR closes cannot be measured. The checkout needs full ' +
-        'history (`fetch-depth: 0`) and a fetched base ref.'
+      `\`Plan:\` footer names \`${relPath}\`, but the rows this PR closes cannot be measured: ` +
+        `${base.error}. The workflow checkout needs full history (\`fetch-depth: 0\`) and a ` +
+        'fetched base ref.'
     );
     return;
   }
 
-  const baseState = new Map(planRowStates(base).map((row) => [row.id, row.state]));
+  // The plan does not exist at the merge base, so this PR introduces it. Writing a plan IS
+  // advancing it, and demanding that a PR close a row of a plan it just authored would block the
+  // one PR that legitimately has no prior state to beat.
+  if (base.text === null) return;
+
+  const baseState = new Map(planRowStates(base.text).map((row) => [row.id, row.state]));
   if (![...baseState.values()].includes('open')) {
     mustFinalize();
     return;
@@ -391,8 +422,13 @@ const PLAN_FIXTURES = {
     fixturePlan('active', [['R1', 'RULED'], ['R2', 'REVISED']]),
     fixturePlan('active', [['R1', 'RULED'], ['R2', 'REVISED']]),
   ],
-  // A merge base that cannot be read (a shallow checkout): must fail, never silently pass.
-  'plans/unreadable-base.md': [fixturePlan('active', [['R1', '✓'], ['R2', '☐']]), null],
+  // A merge base that cannot be measured (a shallow checkout): must fail, never silently pass.
+  'plans/unreadable-base.md': [
+    fixturePlan('active', [['R1', '✓'], ['R2', '☐']]),
+    { error: 'the checkout is shallow, so there is no merge base to compare against' },
+  ],
+  // Absent at the merge base: this PR introduces the plan, which is itself the advance.
+  'plans/brand-new.md': [fixturePlan('active', [['R1', '☐'], ['R2', '☐']]), { text: null }],
 };
 
 function selfTestFixtures() {
@@ -404,9 +440,15 @@ function selfTestFixtures() {
   return root;
 }
 
-/** Serves the fixture base texts; `null` models a base that cannot be read. */
+/**
+ * Serves the fixture base state in the shape `planAtMergeBase` returns: `{ text }` for a readable
+ * base, `{ text: null }` for a plan this PR introduces, `{ error }` for one that cannot be
+ * measured. A bare string is sugar for `{ text }`.
+ */
 function fixtureBaseReader(relPath) {
-  return PLAN_FIXTURES[relPath]?.[1] ?? null;
+  const base = PLAN_FIXTURES[relPath]?.[1];
+  if (base === undefined || base === null) return { text: null };
+  return typeof base === 'string' ? { text: base } : base;
 }
 
 function selfTest() {
@@ -529,10 +571,18 @@ function selfTest() {
       expect: (r) => r.failures.some((f) => f.includes('finalized')),
     },
     {
-      name: 'an unreadable merge base fails rather than passing silently',
+      name: 'an unmeasurable merge base fails, naming the checkout rather than the plan',
       body: `${filled}\nPlan: \`plans/unreadable-base.md\`\n`,
       title: 'feat(chains): x',
-      expect: (r) => r.failures.some((f) => f.includes('merge base')),
+      expect: (r) =>
+        r.failures.some((f) => f.includes('shallow') && f.includes('fetch-depth')) &&
+        !r.failures.some((f) => f.includes('closes none of them')),
+    },
+    {
+      name: 'a plan this PR introduces needs no prior row to close',
+      body: `${filled}\nPlan: \`plans/brand-new.md\`\n`,
+      title: 'feat(chains): x',
+      expect: noFail,
     },
     {
       name: 'prose over budget warns, transcripts and details do not count',
