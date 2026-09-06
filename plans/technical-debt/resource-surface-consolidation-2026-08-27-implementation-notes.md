@@ -833,3 +833,5 @@ it is absorbed into P6's rows and these notes, with a copy at `/tmp/p6-retired/`
 `feat/settability-parity`'s worktree was clean. Both branches took `-D`, not `-d`, because
 squash-merge leaves a fully-landed branch looking unmerged — the same trap that made PR #255 read as
 needing a rebase.
+
+<!-- CI gate probe 2026-09-06T18:42:46Z — disposable branch, never merged. -->
