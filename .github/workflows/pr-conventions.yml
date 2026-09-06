@@ -143,6 +143,15 @@ jobs:
         if: github.event.pull_request.user.type != 'Bot'
         run: node scripts/validate-pr-body.mjs --self-test
 
+      # The self-test above drives the plan rules off fixtures, so it proves the RULES and says
+      # nothing about whether this checkout can supply them a base to compare against. That gap is
+      # where the `fetch-depth` regression lives: a shallow checkout does not error, it compares the
+      # plan against itself and reports "closes no rows" for every PR. Asserted on every PR, not
+      # only ones carrying a footer, because the configuration is repository-wide.
+      - name: Prove the checkout can measure plan progress (positive control)
+        if: github.event.pull_request.user.type != 'Bot'
+        run: node scripts/validate-pr-body.mjs --assert-base-measurable
+
       - name: Check the body against the template (scripts/validate-pr-body.mjs)
         if: github.event.pull_request.user.type != 'Bot'
         env:

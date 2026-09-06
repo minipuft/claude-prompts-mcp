@@ -159,17 +159,20 @@ function checkVerificationRows(sections, failures) {
 }
 
 /**
- * The plan as it stood at the merge base, or `null` when that cannot be read.
+ * The commit this PR forked from, as `{ mergeBase }`, or `{ error }` when no honest comparison is
+ * available from this checkout.
  *
  * Merge base rather than the base branch tip: rows closed on `main` after this branch forked are
  * not this PR's progress, and counting them would let a stale branch pass on someone else's work.
  *
- * `null` is NOT "no change" — it is "cannot measure", and the caller fails on it. A shallow
- * checkout (`actions/checkout` defaults to `fetch-depth: 1`) reaches this path, and a gate that
- * read an unreadable base as a silent pass would report green for exactly the configuration that
- * blinded it.
+ * BOTH failure modes are vacuity, not absence, and that is the whole reason this is separate from
+ * the read below. Measured 2026-09-06 by cloning one branch twice, once with `--depth=1`: a shallow
+ * checkout does NOT make `git merge-base` fail. It resolves to HEAD, the plan is compared against
+ * ITSELF, and every PR is told it closes no rows — a wrong red wearing the message of a right one,
+ * pointing the author at their plan instead of at the checkout. `actions/checkout` defaults to
+ * `fetch-depth: 1`, so that is the configuration a regression lands in.
  */
-function planAtMergeBase(repoRoot, relPath) {
+function resolveMergeBase(repoRoot) {
   const baseRef = process.env.GITHUB_BASE_REF
     ? `origin/${process.env.GITHUB_BASE_REF}`
     : 'origin/HEAD';
@@ -180,10 +183,6 @@ function planAtMergeBase(repoRoot, relPath) {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
 
-  // A shallow clone has no fork point to find. Measured 2026-09-06: `git merge-base` does not
-  // error there — it resolves to HEAD, and the plan is then compared against ITSELF. That vacuous
-  // comparison reports "this PR closes no rows" for every PR, which is a WRONG red wearing the
-  // message of a right one, and it sends the author to their plan rows instead of the checkout.
   if (git(['rev-parse', '--is-shallow-repository']).trim() === 'true') {
     return { error: 'the checkout is shallow, so there is no merge base to compare against' };
   }
@@ -195,7 +194,7 @@ function planAtMergeBase(repoRoot, relPath) {
     return { error: `\`${baseRef}\` is not present in this checkout` };
   }
 
-  // The same vacuity, reached a second way: a base ref that resolves to HEAD itself measures
+  // The same vacuity reached a second way: a base ref that resolves to HEAD itself measures
   // nothing. Checked by value rather than by name, because which ref aliases HEAD varies by how
   // the checkout was made.
   if (mergeBase === git(['rev-parse', 'HEAD']).trim()) {
@@ -204,8 +203,15 @@ function planAtMergeBase(repoRoot, relPath) {
     };
   }
 
+  return { mergeBase, git };
+}
+
+/** The plan as it stood at the merge base; `{ text: null }` when this PR introduces it. */
+function planAtMergeBase(repoRoot, relPath) {
+  const resolved = resolveMergeBase(repoRoot);
+  if (resolved.error) return { error: resolved.error };
   try {
-    return { text: git(['show', `${mergeBase}:${relPath}`]) };
+    return { text: resolved.git(['show', `${resolved.mergeBase}:${relPath}`]) };
   } catch {
     // Absent at the merge base means this PR introduces the plan — measurable, and permitted.
     return { text: null };
@@ -625,9 +631,37 @@ function selfTest() {
   return failed === 0;
 }
 
+/**
+ * Asserts this checkout can answer "which rows did this PR close" AT ALL.
+ *
+ * A positive control for the plan-footer check, and deliberately built on `resolveMergeBase` — the
+ * same call the check itself makes — so the control cannot report a measurable checkout while the
+ * gate reads an unmeasurable one. Runs on every PR rather than only on PRs carrying a footer,
+ * because the configuration it guards (`fetch-depth`) is repository-wide: a regression should
+ * surface on the next PR of any kind, not lie in wait for the next one that names a plan.
+ */
+function assertBaseMeasurable() {
+  const resolved = resolveMergeBase(REPO_ROOT);
+  const ci = process.env.GITHUB_ACTIONS === 'true';
+  if (resolved.error) {
+    const message =
+      `the plan-footer check cannot measure this checkout: ${resolved.error}. Any PR carrying ` +
+      'a `Plan:` footer would be judged against a vacuous comparison. Restore `fetch-depth: 0` ' +
+      'on the checkout step in .github/workflows/pr-conventions.yml.';
+    console.log(ci ? `::error::${message}` : `error: ${message}`);
+    return false;
+  }
+  const base = resolved.mergeBase.slice(0, 8);
+  console.log(`merge base resolves to ${base} — plan progress is measurable.`);
+  return true;
+}
+
 function main() {
   if (process.argv.includes('--self-test')) {
     process.exit(selfTest() ? 0 : 1);
+  }
+  if (process.argv.includes('--assert-base-measurable')) {
+    process.exit(assertBaseMeasurable() ? 0 : 1);
   }
   const bodyFile = readArg('--body-file');
   const body = bodyFile ? readFileSync(bodyFile, 'utf8') : (process.env.PR_BODY ?? '');
