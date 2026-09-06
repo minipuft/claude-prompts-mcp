@@ -333,8 +333,27 @@ them one-concern and short (commitlint warns past 1,500 characters).
 
 **Plan footer contract.** A PR executing a plan ends its body with exactly one line --
 `` Plan: `plans/<path>.md` `` -- and mentions the plan nowhere else (no row ids, no plan
-vocabulary). The gate fails while that plan's `status:` is non-final: finalize the plan (every
-row terminal, retired) in the same PR, or the PR does not merge.
+vocabulary). The footer is an assertion -- _this PR advances that plan_ -- and the gate checks it
+in two halves, both derived from the diff rather than taken on the author's word:
+
+| Half         | What it requires                                                                                             | When it fires                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| **Progress** | at least one row moves from `☐` to a terminal mark (`✓`, `✗`, `⊘`) between the merge base and this PR's head | every PR carrying a footer     |
+| **Closure**  | the plan carries a final `status:`                                                                           | once no row is left unfinished |
+
+So a multi-phase plan merges in as many PRs as it takes, and the PR that closes its last row is the
+one that must retire it. There is deliberately no opt-out marker: a footer flag saying "partial"
+would be author-set and unfalsifiable, which retires the gate rather than satisfying it.
+
+A row nobody has marked counts as **unfinished**, not as done -- so an unmarked row keeps a plan
+open rather than triggering a demand to retire it. Where a plan's tables are graded by words
+(`RULED`, `REVISED`) instead of the `☐`/`✓`/`✗`/`⊘` vocabulary, there is no progress to measure and
+the original rule stands unchanged: finalize the plan in the same PR, or the PR does not merge.
+
+_Until 2026-09-06 the single rule was "finalize the plan in this PR". It was reachable only by
+plans short enough to finish in one PR: #262 named a six-phase umbrella whose open rows spanned an
+unbuilt resource type and a four-repository rename arc, so the gate was red with no green available
+to it -- a gate that cannot be retired, which `cleanup-standards.md` prices as a bug._
 
 **The squash-merge commit carries the PR title and body, verbatim.** That is a repository setting
 (`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`, set 2026-09-01;
