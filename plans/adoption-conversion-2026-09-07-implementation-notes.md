@@ -1,3 +1,11 @@
+---
+title: "Adoption conversion — implementation notes"
+plan: adoption-conversion-2026-09-07.md
+date: 2026-09-07
+status: active
+tags: [adoption, implementation-notes]
+---
+
 # Adoption Conversion — Implementation Notes
 
 Deviation log for `adoption-conversion-2026-09-07.md`. Session voice; the plan carries the reader
