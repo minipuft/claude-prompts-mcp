@@ -11,6 +11,10 @@ import { ValidationContext } from '../core/types.js';
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
 
+import {
+  describeUnresolvedChainStep,
+  resolveChainSteps,
+} from '#modules/prompts/chain-step-resolution.js';
 import { ResourceVerificationService } from '#modules/resources/services/index.js';
 import { ValidationError } from '#shared/utils/index.js';
 
@@ -584,32 +588,31 @@ export function applyChainStepOperation(
 
 export interface ChainStepReferenceValidation {
   valid: boolean;
-  warnings: string[];
+  /** One addressed line per step whose `promptId` names nothing this write will produce. */
+  problems: string[];
 }
 
 /**
- * Validate that chain step promptId references point to registered prompts.
- * Non-blocking — returns warnings, does not throw.
- * Skips nested references (containing '/') since those are sub-prompts.
+ * Validate that a chain's step `promptId`s point at prompts that exist — the WRITE posture.
+ *
+ * BLOCKING. A step naming an unregistered prompt used to be a warning next to a saved file, and
+ * the run failed at that step one invocation later, far from the write that introduced it.
+ *
+ * The classification is `modules/prompts/chain-step-resolution.ts`, shared with the load-time
+ * diagnostic and the CI check so all three cannot disagree. What is local to this boundary is the
+ * POSTURE: `scaffolded-by-this-write` is accepted here, because `scaffoldChainStepDirectories`
+ * creates exactly those directories later in the same call. Nowhere else may accept it.
  */
 export function validateChainStepReferences(
   steps: unknown[],
+  chainId: string,
   registeredIds: string[]
 ): ChainStepReferenceValidation {
-  const warnings: string[] = [];
-  const idSet = new Set(registeredIds);
+  const problems = resolveChainSteps(steps, chainId, registeredIds)
+    .filter((reference) => reference.resolution === 'unresolved')
+    .map(describeUnresolvedChainStep);
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i] as Record<string, unknown> | null;
-    const promptId = step?.['promptId'];
-    if (typeof promptId === 'string' && promptId.length > 0) {
-      if (!promptId.includes('/') && !idSet.has(promptId)) {
-        warnings.push(`Step ${i + 1} references unknown promptId '${promptId}'`);
-      }
-    }
-  }
-
-  return { valid: warnings.length === 0, warnings };
+  return { valid: problems.length === 0, problems };
 }
 
 // ---------------------------------------------------------------------------
