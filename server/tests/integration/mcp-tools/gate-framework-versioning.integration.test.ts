@@ -38,6 +38,7 @@ import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/gat
 import { GateLifecycleProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-lifecycle-processor.js';
 import { GateVersioningProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-versioning-processor.js';
 import { validateFrameworkSchema } from '../../../src/engine/frameworks/definitions/framework-schema.js';
+import { isShippedFrameworkId } from '../../../src/engine/frameworks/definitions/shipped-frameworks.js';
 import { FrameworkDraftValidator } from '../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 import { FrameworkFileWriter } from '../../../src/mcp/tools/framework-manager/services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-lifecycle-processor.js';
@@ -1407,6 +1408,17 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     readonly clearCacheCalls: string[] = [];
 
     constructor(private readonly dir: string) {}
+
+    /**
+     * The deletion guard asks the manager whether an id ships with the server (P4.3).
+     *
+     * Delegates to the real predicate rather than answering a constant: the guard's whole job is
+     * to separate shipped ids from operator-created ones, and a stub that always said `false`
+     * would let a regression that deletes `focus` from the bundled tree pass this suite.
+     */
+    isShippedFramework(id: string): boolean {
+      return isShippedFrameworkId(id);
+    }
 
     // ---- RuntimeFrameworkLoader surface -------------------------------------------------
     getRuntimeLoader(): { clearCache: (id?: string) => void } {

@@ -391,6 +391,13 @@ export const SUITE = [
       'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
   },
   {
+    script: 'validate:shipped-frameworks',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the comparator with an agreeing set (must stay silent), a framework on disk but undeclared (must report; this is the motivating instance, since an undeclared shipped framework was deletable from the bundled tree), a declared id with no directory (must report, because the registry loads every shipped id fail-fast), and both together; the live set is compared against this checkout as a fifth case',
+  },
+  {
     script: 'validate:declared-surface',
     io: 'read',
     reads: ['declared'],

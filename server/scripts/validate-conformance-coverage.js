@@ -280,9 +280,13 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'under a reason implying a scenario would close it. A scenario would PASS and prove ' +
       'nothing, which is worse than no scenario. Measured with a positive control: the same ' +
       'probe run against `detail` finds two real read sites.',
-    'P4.6 — implementing the projection `format` advertises. Until then this parameter has no ' +
-      'observable behaviour to assert, and the honest coverage state is "unimplemented", not ' +
-      '"untested".'
+    'P4.12 — REMOVING this parameter at the next major. Repointed 2026-09-07 when P4.6 was ' +
+      'killed: this exception previously named the row that would implement the projection, and ' +
+      'that row died because building one is feature work nobody asked for. A parameter no ' +
+      'reader branches on has no observable behaviour to assert, so the honest coverage state is ' +
+      '"unimplemented" — and with no row left to implement it, the resolution is deletion, not a ' +
+      'scenario. Deliberately NOT repointed to P4.11, which covers reading written fields back ' +
+      'and would never close this.'
   ),
   ...exceptionGroup(
     'resource_manager',
@@ -293,7 +297,7 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'corpus cannot carry that proof: no `inspect` path surfaces either field, so the ' +
       'strongest assertion available to a scenario is that the call returned ok — which is ' +
       'equally true of a create that wrote loader defaults.',
-    'P4.6 — a lossless read-back surface. Once `inspect` reports what is on disk, these move ' +
+    'P4.11 — a lossless read-back surface. Once `inspect` reports what is on disk, these move ' +
       'into workspace-and-mutations.yaml as a create-then-read-back row.'
   ),
   ...exceptionGroup(
@@ -315,7 +319,7 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'before the declaration, not unimplemented — the router forwarded them and the writer ' +
       'split them across framework.yaml and phases.yaml throughout. Same read-back blocker as ' +
       'the gate fields above: framework `inspect` surfaces none of them.',
-    'P4.6 — a lossless read-back surface, then one isolated-workspace scenario creating a ' +
+    'P4.11 — a lossless read-back surface, then one isolated-workspace scenario creating a ' +
       'framework carrying the advanced fields and reading them back.'
   ),
   ...exceptionGroup(

@@ -12,6 +12,7 @@
  */
 
 import { FrameworkRegistry, createFrameworkRegistry } from './definitions/index.js';
+import { SHIPPED_FRAMEWORK_IDS, isShippedFrameworkId } from './definitions/shipped-frameworks.js';
 import { substituteTemplateVariables } from './prompt-guidance/template-variables.js';
 import {
   FrameworkDefinition,
@@ -425,6 +426,28 @@ export class FrameworkManager extends BaseResourceHandler<
    */
   getFrameworkIds(enabledOnly: boolean = false): string[] {
     return this.listFrameworks(enabledOnly).map((f) => f.id);
+  }
+
+  /**
+   * Whether this framework ships inside the package, and therefore may not be deleted.
+   *
+   * The question every caller actually has is "may I remove this", and the honest discriminator is
+   * provenance, not location: in a default install the bundled resources directory and the
+   * configured frameworks directory are the SAME path, so "is it on disk under the resources root"
+   * would also answer yes for a framework the operator created. `SHIPPED_FRAMEWORK_IDS` is the one
+   * declared answer, and `validate:shipped-frameworks` keeps it matched to the tree.
+   *
+   * Exposed here because this manager owns framework validity (project CLAUDE.md, Domain Ownership
+   * Matrix): before 2026-09-07 the deletion guard carried its own stale copy of the list, which is
+   * exactly the hardcoding that matrix forbids.
+   */
+  isShippedFramework(id: string): boolean {
+    return isShippedFrameworkId(id);
+  }
+
+  /** The shipped set, for callers that need to name it rather than test one id. */
+  getShippedFrameworkIds(): readonly string[] {
+    return SHIPPED_FRAMEWORK_IDS;
   }
 
   /**

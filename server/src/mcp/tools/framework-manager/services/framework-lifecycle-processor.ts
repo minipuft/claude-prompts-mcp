@@ -242,14 +242,6 @@ export class FrameworkLifecycleProcessor {
     // further down already tolerates a framework the registry does not know, and logs when that
     // happens. Same removal, same reasoning, as the gate side in `b7102dd9`.
 
-    // Prevent deleting built-in frameworks
-    const builtInFrameworks = ['cageerf', 'react', '5w1h', 'scamper'];
-    if (builtInFrameworks.includes(id.toLowerCase())) {
-      return this.error(
-        `Cannot delete built-in framework '${id}'. Only custom frameworks can be deleted.`
-      );
-    }
-
     // Resolve through the SAME root a framework write resolves through.
     //
     // This built `join(getServerRoot(), 'resources', 'frameworks', id)` — hardcoding the package
@@ -260,12 +252,39 @@ export class FrameworkLifecycleProcessor {
     const frameworksDir = this.ctx.configManager.getFrameworksDirectory();
     const frameworkDir = resolveContainedPath(frameworksDir, id.toLowerCase());
 
+    // Refuse to delete a framework that ships with the package.
+    //
+    // This asked a hardcoded four-id literal until 2026-09-07 while eight ship, so `focus`,
+    // `liquescent`, `radiant` and `verify` fell through to `fs.rm` and were deleted FROM THE
+    // BUNDLED TREE in a default install. The comment below claimed the bundled-tree check covered
+    // them; it could not, because that check sits inside `if (!existsSync(frameworkDir))` and
+    // those directories exist at the configured root. The owner of framework validity answers this
+    // now — project CLAUDE.md's Domain Ownership Matrix says never hardcode a framework list.
+    //
+    // Placed AFTER path resolution, not before, so the refusal can say where the thing it is
+    // protecting actually lives. P1.3 ruled that a refusal states the reason that is true and
+    // names the location, and an e2e case asserts it; refusing earlier would have been correct and
+    // less useful, which is the kind of regression a message-only assertion exists to catch.
+    if (this.ctx.frameworkManager.isShippedFramework(id)) {
+      return this.error(
+        `Cannot delete framework '${id}': it ships with the server and is served from ` +
+          `${frameworkDir}, which is read-only for deletion. Only frameworks you created can be ` +
+          `deleted. Update it instead — the update copies it into your own resources root first ` +
+          `and your copy takes precedence.`
+      );
+    }
+
     if (!existsSync(frameworkDir)) {
       // P1.3 — a framework served from the bundled tree is loaded and selectable; refusing it as
-      // "directory not found" described a path that was never meant to exist. This also covers
-      // `focus`, `liquescent`, `radiant` and `verify`, which ship but are absent from the
-      // hardcoded built-in list above (P4.3) — they now refuse for the reason that is true of
-      // them rather than falling through to a missing-directory message.
+      // "directory not found" described a path that was never meant to exist.
+      //
+      // This branch does NOT carry the shipped frameworks, and a comment here said it did until
+      // 2026-09-07. It could not: the whole branch is unreachable while `frameworkDir` exists,
+      // which it does at the configured root for every shipped id, and its inner test additionally
+      // requires the bundled root to DIFFER from the resources root — equal in a default install.
+      // A claim of coverage from a branch that cannot execute is the shape that hid this defect,
+      // so what remains here is only the case it can serve: an operator whose resources root is
+      // separate from the bundle naming something that exists only in the bundle.
       const bundledRoot = this.ctx.configManager.getBundledResourceDirectory('frameworks');
       if (bundledRoot !== undefined && path.resolve(bundledRoot) !== path.resolve(frameworksDir)) {
         const bundledDir = resolveContainedPath(bundledRoot, id.toLowerCase());
