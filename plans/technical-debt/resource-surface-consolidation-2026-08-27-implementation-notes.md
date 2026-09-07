@@ -1044,3 +1044,45 @@ worktree and two in `~/.claude`, while the banner names only the two here. That 
 retained-vs-reported split behaving correctly — repository scoping decides what a banner may SAY,
 never what the ledger REMEMBERS, so the `~/.claude` edits stay owed against a plan in their own
 repo instead of being erased by a plan bound in this one.
+
+## Tier P4-C — P4.3 closed, P4.6 killed (2026-09-07)
+
+**DEV-P4C-1 — the second literal was a loader, not a mirror.** The row described `registry.ts:376`
+as a second copy feeding `isBuiltIn`. It is that, but it is also the registry's fail-fast LOAD
+list: ids in it are required and throw `FATAL` when absent, and everything else arrives through a
+`try`/`catch` discovery pass. Correcting the set therefore changed startup behaviour, not only
+reporting — an install missing a shipped framework now fails fast. Recorded because the row would
+have read as a pure rename otherwise, and because the blast radius is startup rather than a tool
+call.
+
+**DEV-P4C-2 — a declared set, not a scan, and the reason is in the file.** The obvious closure for
+"never hardcode a framework list" is to read `resources/frameworks/*` at runtime. It cannot be
+done here: `getBundledResourceDirectory('frameworks')` resolves to `getFrameworksDirectory()` in a
+default install, so a scan cannot separate a shipped framework from one the operator created, and
+refusing both trades data loss for a capability bug. The list stays declared and
+`validate:shipped-frameworks` is what keeps it honest.
+
+**DEV-P4C-3 — the refusal moved after path resolution, because a test held a ruling.** The first
+version raised the shipped-framework refusal before resolving the directory. Correct, and it broke
+`resource-copy-on-write.e2e.test.ts` §"a refusal states the reason that is true, naming where it
+lives" — P1.3 ruled that a refusal names the location. The guard now runs after resolution so the
+message can. This is the second time in this plan that an e2e/integration case has held a property
+no unit suite could see; the first was P4.2's reverted reorder.
+
+**DEV-P4C-4 — a mock stopped modelling the manager.** Adding `isShippedFramework` to
+`FrameworkManager` broke two integration cases whose `DriftableFrameworkRegistry` stub lacked it.
+Fixed by giving the stub the method and delegating to the real predicate rather than returning a
+constant: a stub answering `false` would let a regression that deletes `focus` pass the suite.
+Distinct from rewriting an assertion to match new code — the assertions were untouched.
+
+**DEV-P4C-5 — killing P4.6 orphaned three exemptions, and one could not be repointed.** Three
+`validate-conformance-coverage.js` exceptions named P4.6 as their closing condition. Two describe a
+read-back gap and moved to the new P4.11. The third is the `format` parameter itself, whose closing
+condition was "implement the projection" — the exact scope the kill removed. Repointing it to P4.11
+would have made the exemption a lie, so `format` became its own row (P4.12, remove at the next
+major). A killed row's dependants are findings, and they surface only if you re-read each reason
+against the new world rather than against its own text.
+
+**DEV-P4C-6 — e2e reads `dist/`.** The e2e refusal case failed against the previous message for one
+run after the source was fixed, because the suite spawns a server from the build. Rebuild before
+attributing an e2e failure to the change under test.
