@@ -103,3 +103,43 @@ export function resolveChainSteps(
 export function describeUnresolvedChainStep(reference: ChainStepReference): string {
   return `step ${reference.stepIndex + 1} references unknown promptId '${reference.promptId}'`;
 }
+
+/** A loaded chain and the steps of it that resolve to nothing. */
+export interface BrokenChain {
+  readonly chainId: string;
+  readonly unresolvedSteps: readonly ChainStepReference[];
+}
+
+/**
+ * The LOAD posture over a whole catalog: every chain carrying at least one step that names no
+ * loaded prompt.
+ *
+ * `scaffolded-by-this-write` counts as broken here, and that is the whole difference from the
+ * write boundary — nothing is being written, so an id of that shape means the scaffold never ran
+ * or the directory was removed afterwards.
+ *
+ * Runs over the MERGED catalog, after every root is loaded. Running it per-root would report a
+ * workspace chain whose steps live in the bundled tree as broken, which is a supported overlay.
+ */
+export function findBrokenChains(
+  prompts: Iterable<{ id: string; chainSteps?: readonly unknown[] | undefined }>,
+  registeredIds: Iterable<string>
+): BrokenChain[] {
+  const idSet = registeredIds instanceof Set ? registeredIds : new Set(registeredIds);
+  const broken: BrokenChain[] = [];
+
+  for (const prompt of prompts) {
+    const steps = prompt.chainSteps;
+    if (steps === undefined || steps.length === 0) {
+      continue;
+    }
+    const unresolvedSteps = resolveChainSteps(steps, prompt.id, idSet).filter(
+      (reference) => reference.resolution !== 'resolved'
+    );
+    if (unresolvedSteps.length > 0) {
+      broken.push({ chainId: prompt.id, unresolvedSteps });
+    }
+  }
+
+  return broken;
+}

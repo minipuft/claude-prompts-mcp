@@ -402,7 +402,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops",
+      "CHECKED both ways — the self-test asserts a valid prompt and a chain whose step resolves are NOT reported, alongside a prompt with an empty description, a gate missing `guidance` and a chain step naming no prompt, all three of which must be; it runs the loader's own `validatePromptYaml`, `normalizeInlineGateDefinitions` and `resolveChainSteps` rather than reimplementing any of them, so it cannot drift into accepting what the server drops. Falsified 2026-09-07 by stubbing `findChainProblems` to return nothing: the chain arm exits 1",
   },
   {
     script: 'validate:agent-plugins',

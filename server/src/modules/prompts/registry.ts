@@ -6,6 +6,7 @@
 
 import { z } from 'zod/v4';
 
+import { describeUnresolvedChainStep, findBrokenChains } from './chain-step-resolution.js';
 import { buildLauncherMessages } from './launcher-envelope.js';
 import { ConversationStore } from '../text-refs/conversation.js';
 
@@ -97,6 +98,38 @@ export class PromptRegistry {
    */
   setLivePrompts(prompts: ConvertedPrompt[]): void {
     this.livePrompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+    this.reportBrokenChains(prompts);
+  }
+
+  /**
+   * Name every chain whose step references nothing, once each.
+   *
+   * REPORTS, never refuses (R3): the chain still loads and the runtime's own throw sites stay the
+   * refusal for an in-process caller. A chain that references a deleted prompt is not a reason to
+   * withhold the other 38 prompts from a client.
+   *
+   * This is the one place in the load path where the answer is decidable. It runs from
+   * `setLivePrompts`, which is the single funnel both the startup loader (`data-loader.ts`) and
+   * the hot-reload path (`PromptManager.reloadPrompts`) pass through AFTER the bundled tree, the
+   * primary root and every workspace overlay have been merged — an earlier hook would report a
+   * workspace chain whose steps live in the bundle, which is a supported overlay, not a defect.
+   */
+  private reportBrokenChains(prompts: readonly ConvertedPrompt[]): void {
+    const broken = findBrokenChains(prompts, this.livePrompts.keys());
+
+    for (const chain of broken) {
+      this.logger.warn(
+        `Chain '${chain.chainId}' references ${chain.unresolvedSteps.length} unregistered ` +
+          `prompt(s): ${chain.unresolvedSteps.map(describeUnresolvedChainStep).join('; ')}`,
+        {
+          chainId: chain.chainId,
+          unresolvedSteps: chain.unresolvedSteps.map((reference) => ({
+            stepIndex: reference.stepIndex,
+            promptId: reference.promptId,
+          })),
+        }
+      );
+    }
   }
 
   /**
