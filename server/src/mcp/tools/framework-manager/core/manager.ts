@@ -12,6 +12,7 @@
  */
 
 import { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
+import { resolveDispatchAction } from '../../shared/preview-action.js';
 import { FrameworkDiscoveryProcessor } from '../services/framework-discovery-processor.js';
 import { FrameworkDraftValidator } from '../services/framework-draft-validator.js';
 import { FrameworkFileWriter } from '../services/framework-file-writer.js';
@@ -78,7 +79,14 @@ export class FrameworkToolHandler {
     args: FrameworkManagerInput,
     _context: Record<string, unknown>
   ): Promise<ToolResponse> {
-    const { action } = args;
+    // A preview dispatches to its target's own handler and that handler returns before it writes,
+    // so there is one delete path and one rollback path rather than a second read-only copy of
+    // each. `args.action` stays `'preview'`, which is what those early returns read.
+    //
+    // Bound to `action` rather than switched on inline: `validate:registry-coherence` locates this
+    // dispatch table by the literal `switch (action)`, and an inline call expression makes it
+    // report zero rows for this file — which reads as a clean result.
+    const action = resolveDispatchAction(args);
 
     try {
       switch (action) {
@@ -102,6 +110,19 @@ export class FrameworkToolHandler {
           return await this.versioning.handleRollback(args);
         case 'compare':
           return await this.versioning.handleCompare(args);
+        // Reached only when `preview_action` is absent, which the router refuses ahead of dispatch.
+        case 'preview':
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  'Error: action:"preview" requires \'preview_action\' — a preview of WHAT. ' +
+                  'Valid values for framework are: "delete", "rollback".',
+              },
+            ],
+            isError: true,
+          };
         default:
           return {
             content: [{ type: 'text', text: `Error: Unknown action: ${action}` }],

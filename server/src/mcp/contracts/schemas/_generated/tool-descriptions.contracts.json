@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-08-30T22:19:52.148Z",
+  "lastUpdated": "2026-09-03T00:06:30.998Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -40,12 +40,12 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | validate | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> update dry_run:true -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
       "shortDescription": "Manage prompts, gates, and frameworks",
       "category": "management",
       "parameters": {
         "resource_type": "Type of resource to manage. Routes to appropriate handler.",
-        "action": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. Framework-only: switch. Versioning: history/rollback/compare.",
+        "action": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",
         "description": "Resource description explaining its purpose (create/update).",
@@ -70,11 +70,11 @@
         "resource_type": "Optional resource type filter.",
         "id": "Optional resource id filter.",
         "prune": "For sync: when true (default), remove stale managed skills not present in current registrations.",
-        "dry_run": "For export/sync/pull/clone: show planned changes without writing files.",
+        "preview": "For export/sync/pull/clone: report every file, prune and registration change the run would make, and make none of them.",
         "output": "For diff: write .patch files to this directory instead of stdout only.",
         "file": "For clone: path to the source SKILL.md file. Required for clone action.",
         "category": "For clone: target category for prompt resources. Default: general.",
-        "preview": "For pull: show unified diffs without writing changes.",
+        "preview_detail": "How much `preview` shows: `summary` (default) lists the planned changes; `diff` adds unified diffs and is valid for `pull` only, the one command that computes prose changes. Requires `preview: true` — on its own it would not be read, so it is refused by name.",
         "force": "For clone: overwrite existing resource directory."
       },
       "frameworkAware": {

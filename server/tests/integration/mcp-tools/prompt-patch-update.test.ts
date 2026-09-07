@@ -309,12 +309,14 @@ describe('patch-mode update against the real writer', () => {
     expect(harness.recordEditResult).not.toHaveBeenCalled();
   });
 
-  test('dry_run leaves the file untouched and spends no version', async () => {
+  test('a preview leaves the file untouched and spends no version', async () => {
     const harness = createHarness(workspace());
     await seed(harness);
     const before = harness.readFiles();
 
     const response = await harness.processor.updatePrompt({
+      action: 'preview',
+      preview_action: 'update',
       id: PROMPT_ID,
       patch: [
         {
@@ -323,7 +325,6 @@ describe('patch-mode update against the real writer', () => {
           new_string: 'Answer in bullet points.',
         },
       ],
-      dry_run: true,
     } as never);
 
     expect(response.isError).toBe(false);
@@ -829,15 +830,16 @@ describe('argument_updates — structured per-field overlay (Fix D)', () => {
     expect(harness.recordEditResult).not.toHaveBeenCalled();
   });
 
-  test('dry_run with argument_updates previews without writing or spending a version', async () => {
+  test('a preview with argument_updates writes nothing and spends no version', async () => {
     const harness = createHarness(workspace());
     await seedWithArguments(harness);
     const before = harness.readFiles();
 
     const response = await harness.processor.updatePrompt({
+      action: 'preview',
+      preview_action: 'update',
       id: PROMPT_ID,
       argument_updates: [{ name: 'team', description: 'Preview only' }],
-      dry_run: true,
     } as never);
 
     expect(response.isError).toBe(false);

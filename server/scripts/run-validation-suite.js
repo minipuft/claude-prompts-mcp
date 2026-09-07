@@ -384,6 +384,13 @@ export const SUITE = [
       'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
   },
   {
+    script: 'validate:preview-vocabulary',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test runs each predicate over a real `dry_run` declaration, JSON key, CLI flag and HTTP route (must match), the replacement parameter and two comments explaining the removal (must not), and the inline-code gap that made an earlier prose rule flag two true sentences; the satisfied-exception arm fails an exemption whose file no longer contains the word',
+  },
+  {
     script: 'validate:prompts',
     io: 'read',
     reads: ['file', 'walk'],

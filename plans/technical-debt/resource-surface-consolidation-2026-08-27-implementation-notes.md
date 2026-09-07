@@ -833,3 +833,55 @@ it is absorbed into P6's rows and these notes, with a copy at `/tmp/p6-retired/`
 `feat/settability-parity`'s worktree was clean. Both branches took `-D`, not `-d`, because
 squash-merge leaves a fully-landed branch looking unmerged — the same trap that made PR #255 read as
 needing a rebase.
+
+## P2b — the preview sweep (2026-09-03)
+
+Commits `d6577106` (implementation) and `5bb2af3c` (changelog + plan) on `feat/settability-verbs`,
+PR #262. `validate:all` 54/54, unit 3019, integration 805, e2e 190, 6 mutations applied and 6
+killed. Not pushed — owner reviews pushes per push.
+
+**Discovery moved two premises before any code was written**, which is the reusable part of this
+tier. The task named `cli/src/**/skills-sync/service.ts` with ~29 occurrences; `cli/` contains zero
+occurrences of the vocabulary and has no skills-sync surface at all. The 29 are in
+`server/src/modules/skills-sync/service.ts`. Separately, four `server/scripts/` validators quote
+`npm ci --dry-run` and `renovate --dry-run=extract` — other tools' flags, not this repo's
+parameter, and so out of scope rather than exemptions. Both were found by running the enumeration
+BEFORE choosing an implementation, and both would have produced wrong work if trusted as authored.
+
+**The design decision, and the one it rejected.** The obvious implementation is for the router to
+translate a preview into its target action and set an internal boolean. That reintroduces the thing
+being removed, one layer down, where nobody can see it. Instead `action` stays `'preview'` all the
+way into the processor: every early return that read `dry_run === true` now reads
+`isPreviewRequest(args)`, which reads the caller's own `action`. There is no second field to keep
+in lockstep and no polarity to invert. Dispatch is `resolveDispatchAction`, so a preview runs its
+TARGET's code path — one validation, one resolution, one diff, which is what makes a preview
+unable to disagree with the real call.
+
+**The prompt delete branch moved above the confirm gate, deliberately.** As `dry_run: true` on
+`action:"delete"` it had to sit BELOW that gate, or it would have been a way to skip confirming a
+real deletion. That placement is exactly why previewing a deletion demanded confirming it. As its
+own action there is nothing to skip, because there is no path from the preview branch to the
+removal below it.
+
+**Three gates fought back, and all three were right to.** Documented as P2-F10 through P2-F12 in the
+plan. The pattern across them: a gate that reads code by TEXT ANCHOR is fragile in a specific,
+tolerable way — it fails closed and loudly when the anchor moves — but two failure modes hide inside
+that. `validate:registry-coherence` read comments as code, so a doc comment quoting the anchor moved
+its scan; and its own mutation fixture then replaced that comment rather than the statement,
+reporting "no findings" for a mutation that mutated nothing. A self-test that can pass vacuously is
+the Gate P5 problem arriving inside the machinery built to prevent it. Both are fixed here rather
+than filed, per the same-PR rule.
+
+**The escape hatch needed an escape hatch.** `validate:preview-vocabulary` allows documentation to
+name the old parameter once, in a marked migration note — deleting that note to satisfy a gate would
+make the gate the reason a reader cannot find the answer. The first scoping ("marker to next blank
+line") was disarmed by Prettier, which puts a blank line after an HTML comment: the marker was
+present, looked applied, and covered nothing. Scope now skips blanks before the paragraph. Marked
+notes are COUNTED in the OK line, so they cannot accumulate into a second vocabulary living in the
+docs.
+
+**DEV-P2-5, worth its own line because the cost was invisible.** `eslint --fix src scripts`, run to
+clear an import-order ratchet regression from four new imports, also reformatted five files with no
+relationship to this change. `--fix` takes a path, not a diff. Caught by reading `git status`
+immediately after; reverted with `git checkout --`, and the ratchet passes without them. Scope
+`--fix` to the files the change touched, or diff before staging.

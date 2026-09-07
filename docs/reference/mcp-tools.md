@@ -644,18 +644,19 @@ resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
 
 All resource types support these actions:
 
-| Action     | Purpose                  | Required Params                      | Note                        |
-| ---------- | ------------------------ | ------------------------------------ | --------------------------- |
-| `list`     | List all resources       | —                                    | _Prefer `resource://` URIs_ |
-| `inspect`  | Get resource details     | `id`                                 | _Prefer `resource://` URIs_ |
-| `validate` | Preview prompt creation  | `id`, `name`, `description`, content | Prompt-only; never writes   |
-| `create`   | Create new resource      | `id`, type-specific                  |                             |
-| `update`   | Modify existing resource | `id`, fields to update               |                             |
-| `delete`   | Remove resource          | `id`, `confirm:true`                 | `dry_run:true` to preview   |
-| `reload`   | Hot-reload from disk     | `id` (optional)                      |                             |
-| `history`  | View version history     | `id`                                 |                             |
-| `rollback` | Restore previous version | `id`, `version`, `confirm:true`      | `dry_run:true` to preview   |
-| `compare`  | Compare two versions     | `id`, `from_version`, `to_version`   |                             |
+| Action     | Purpose                  | Required Params                      | Note                                   |
+| ---------- | ------------------------ | ------------------------------------ | -------------------------------------- |
+| `list`     | List all resources       | —                                    | _Prefer `resource://` URIs_            |
+| `inspect`  | Get resource details     | `id`                                 | _Prefer `resource://` URIs_            |
+| `validate` | Preview prompt creation  | `id`, `name`, `description`, content | Prompt-only; never writes              |
+| `preview`  | Render a mutation        | `id`, `preview_action`               | Never writes; takes no `confirm`       |
+| `create`   | Create new resource      | `id`, type-specific                  |                                        |
+| `update`   | Modify existing resource | `id`, fields to update               |                                        |
+| `delete`   | Remove resource          | `id`, `confirm:true`                 | `preview_action:"delete"` to preview   |
+| `reload`   | Hot-reload from disk     | `id` (optional)                      |                                        |
+| `history`  | View version history     | `id`                                 |                                        |
+| `rollback` | Restore previous version | `id`, `version`, `confirm:true`      | `preview_action:"rollback"` to preview |
+| `compare`  | Compare two versions     | `id`, `from_version`, `to_version`   |                                        |
 
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 
@@ -724,7 +725,7 @@ Maintain an existing prompt through one bounded sequence:
 
 ```text
 inspect(detail:"full")
-→ update(dry_run:true, expected_version:<current_version>)
+→ preview(preview_action:"update", expected_version:<current_version>)
 → approval
 → update(expected_version:<current_version>)
 → reload
@@ -748,8 +749,22 @@ resource_manager(
   id:"weekly_report",
   patch:[
     {"field":"user_message_template", "old_string":"{{team}}", "new_string":"{{team_name}}"}
-  ],
-  dry_run:true
+  ]
+)
+```
+
+Send the identical payload with `action:"preview"` and `preview_action:"update"` to see the result
+first:
+
+```bash
+resource_manager(
+  resource_type:"prompt",
+  action:"preview",
+  preview_action:"update",
+  id:"weekly_report",
+  patch:[
+    {"field":"user_message_template", "old_string":"{{team}}", "new_string":"{{team_name}}"}
+  ]
 )
 ```
 
@@ -775,10 +790,10 @@ is rejected as a whole — nothing is written and no version is consumed:
 `patch` cannot be combined with the full-body parameter it targets in the same call: sending
 `user_message_template` or `system_message` alongside any `patch` operation is rejected, and
 sending `description` alongside a patch that targets `description` is rejected the same way — send
-one or the other. `dry_run:true` renders the produced text and a diff without writing anything or
-consuming a version; resend the same call without `dry_run` to apply it. Both `patch` and
-`dry_run` are update-only — `action:"create"` rejects either explicitly, since there is no
-existing prompt to patch or diff against.
+one or the other. `action:"preview"` with `preview_action:"update"` renders the produced text and a
+diff without writing anything or consuming a version; resend as `action:"update"` to apply it.
+`patch` is update-only, and `action:"create"` rejects both it and `preview_action` explicitly,
+since there is no existing prompt to patch or diff against.
 
 #### Argument Updates (Partial Argument Edit)
 
@@ -806,8 +821,45 @@ that entry's current value untouched, and every argument not named by an update 
 
 `argument_updates` is mutually exclusive with `arguments` in the same call (send one or the
 other), update-only like `patch` — `action:"create"` rejects it explicitly, since there is no
-existing argument to overlay updates onto — and combines with `dry_run:true` to preview the merge
-before spending a version.
+existing argument to overlay updates onto. Send the same payload as `action:"preview"` with
+`preview_action:"update"` to see the merge before spending a version.
+
+### Removing a field (`unset`)
+
+Supplying a value SETS it; omitting it PRESERVES it. Neither says REMOVE, so clearing a field has
+its own parameter:
+
+```bash
+resource_manager(
+  resource_type:"prompt", action:"update", id:"my_prompt",
+  unset:["system_message", "gate_configuration"]
+)
+```
+
+This matters more than it looks. `system_message:""` writes an _empty_ system message rather than
+dropping the key, and for the fields the writer carries forward off disk — `tools`, `injection`,
+`register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer` — omission is
+already the signal to keep the current value, so before `unset` they could not be cleared at all.
+
+Unsetting `system_message` also deletes `system-message.md`, so no orphan file is left pointing at
+nothing.
+
+**Refused by name:** `name`, `category`, `description`, `user_message_template`. They stay fully
+settable — send a new value to change one — but a prompt missing any of them does not load, so
+clearing them is not offered. Sending a field and unsetting it in the same call is also refused,
+rather than resolved in an order you cannot see.
+
+**Script tools have their own remove verb**, because unbinding and deleting are different acts:
+
+| Call                                                          | Binding    | `tools/{id}/` on disk |
+| ------------------------------------------------------------- | ---------- | --------------------- |
+| `tools:[...]` (narrowed array)                                | replaced   | **kept**              |
+| `unset:["tools"]`                                             | cleared    | **kept**              |
+| `tool_operation:"add"` + `tools:[...]`                        | unioned    | written               |
+| `tool_operation:"remove"` + `tool_ids:[...]` + `confirm:true` | subtracted | **deleted**           |
+
+Only the last row destroys a file you sent no replacement for, which is why it is the only
+`update` that requires `confirm:true`.
 
 ### Gates
 
@@ -872,23 +924,27 @@ resource_manager(
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                                                                                                           |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `category`              | Prompt category tag                                                                                                               |
-| `user_message_template` | Prompt body with `{{variables}}`                                                                                                  |
-| `system_message`        | Optional system message                                                                                                           |
-| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                     |
-| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit) |
-| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                 |
-| `dry_run`               | Preview an `update`/`patch`, a `rollback`, or a `delete` without writing — no version consumed                                    |
-| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                  |
-| `chain_steps`           | Chain step definitions                                                                                                            |
-| `gate_configuration`    | Gate include/exclude lists                                                                                                        |
-| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                               |
-| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                      |
-| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                               |
-| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                             |
-| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                        |
+| Parameter               | Purpose                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                                                                      |
+| `user_message_template` | Prompt body with `{{variables}}`                                                                                                         |
+| `system_message`        | Optional system message                                                                                                                  |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                            |
+| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)        |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                        |
+| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version |
+| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                         |
+| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                    |
+| `chain_steps`           | Chain step definitions                                                                                                                   |
+| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                |
+| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)  |
+| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                               |
+| `gate_configuration`    | Gate include/exclude lists                                                                                                               |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                      |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                             |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                      |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                    |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                               |
 
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block
@@ -1464,10 +1520,18 @@ missing fields. Substituting the current value for a missing one would land the 
 matching neither the target version nor the state before it — under a message saying version N had
 been restored.
 
-**Preview any of it with `dry_run`.** `dry_run:true` on `rollback` returns the diff between the
-current state and the version you would restore, writing no file and recording no version; it still
-refuses an incomplete snapshot, so the preview and the real call agree. `dry_run:true` on `delete`
-reports what would be removed — for a prompt, that includes the prompts that reference it.
+**Preview any of it.** `action:"preview"` with `preview_action:"rollback"` returns the diff between
+the current state and the version you would restore, writing no file and recording no version; it
+still refuses an incomplete snapshot, so the preview and the real call agree. With
+`preview_action:"delete"` it reports what would be removed — for a prompt, that includes the prompts
+that reference it. Neither needs `confirm`: `preview` is not a destructive action, so there is
+nothing to confirm.
+
+<!-- preview-vocabulary: migration-note -->
+
+That is the whole reason it is an action rather than the `dry_run` boolean it replaced: a flag sat on
+`delete`, and the confirmation guard reads the action, so previewing a deletion demanded that the
+deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaking-changes entry.
 
 ### What a rollback does not restore
 

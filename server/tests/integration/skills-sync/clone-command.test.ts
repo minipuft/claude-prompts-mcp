@@ -331,13 +331,13 @@ describe('Clone Command Integration', () => {
     expect(doc['id']).toBe('inferred-id');
   });
 
-  it('dry-run mode reports what would be created without writing', async () => {
-    const skillDir = path.join(tmpDir, 'source', 'dry-run-clone');
+  it('preview mode reports what would be created without writing', async () => {
+    const skillDir = path.join(tmpDir, 'source', 'preview-clone');
     await mkdir(skillDir, { recursive: true });
 
     const skillContent = buildSkillMd({
-      name: 'Dry Run Clone',
-      description: 'Tests dry run',
+      name: 'Preview Clone',
+      description: 'Tests preview mode',
       instructions: 'Be helpful.',
       arguments: [{ name: 'query', required: true, description: 'Search query' }],
     });
@@ -348,20 +348,20 @@ describe('Clone Command Integration', () => {
       {
         command: 'clone',
         file: path.join(skillDir, 'SKILL.md'),
-        id: 'dry-run-clone',
+        id: 'preview-clone',
         category: 'testing',
-        dryRun: true,
+        preview: true,
       } as SkillsSyncOptions,
       out
     );
 
     // Should report what would happen
-    expect(out.logs.some((l) => l.includes('dry-run'))).toBe(true);
-    expect(out.logs.some((l) => l.includes('dry-run-clone'))).toBe(true);
+    expect(out.logs.some((l) => l.includes('[preview]'))).toBe(true);
+    expect(out.logs.some((l) => l.includes('preview-clone'))).toBe(true);
     expect(out.logs.some((l) => l.includes('query'))).toBe(true);
 
     // But directory should NOT exist
-    const targetDir = path.join(serverRoot, 'resources', 'prompts', 'testing', 'dry-run-clone');
+    const targetDir = path.join(serverRoot, 'resources', 'prompts', 'testing', 'preview-clone');
     expect(existsSync(targetDir)).toBe(false);
   });
 

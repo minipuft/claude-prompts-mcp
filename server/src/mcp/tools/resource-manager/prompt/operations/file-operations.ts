@@ -88,11 +88,21 @@ export const PRESERVED_PROMPT_YAML_KEYS = [
  */
 export function resolvePreservedPromptYamlFields(
   promptData: Record<string, unknown>,
-  existingYaml: Record<string, unknown> | undefined
+  existingYaml: Record<string, unknown> | undefined,
+  unsetKeys: ReadonlySet<string>
 ): Record<string, unknown> {
   const preserved: Record<string, unknown> = {};
 
   for (const key of PRESERVED_PROMPT_YAML_KEYS) {
+    // P2.1. `unset` cannot be expressed as "delete the key from `promptData`" HERE, and this
+    // function is the reason: for these six keys, an undefined value is the explicit signal to
+    // preserve the file's own declaration. Clearing the field and stopping there would fall
+    // through to the branch below, read the value straight back off disk, and write it again —
+    // a removal that reports success and changes nothing. `unsetKeys` is the third state the
+    // supplied/omitted pair could not carry, and it has to arrive as its own channel.
+    if (unsetKeys.has(key)) {
+      continue;
+    }
     const supplied = promptData[key];
     if (supplied !== undefined) {
       preserved[key] = supplied;
@@ -141,6 +151,43 @@ export const ALL_PROMPT_DATA_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * What a write REMOVES, which its field payload cannot say.
+ *
+ * All three members exist for one reason: this writer reads an absent value as "preserve". That
+ * makes absence the preserve signal, so it is unavailable as the removal signal, and every kind of
+ * removal needs a channel of its own. Grouped into one argument rather than three more positional
+ * ones because they always arrive together from a single `update` call, and a call site reading
+ * `undefined, new Set([...]), 'replace', []` tells a reader nothing about which is which.
+ */
+export interface PromptWriteIntent {
+  /** `promptData` keys to CLEAR. See `resolvePreservedPromptYamlFields` for why deletion is not enough. */
+  unsetKeys: ReadonlySet<string>;
+  /** Whether a supplied `tools` array REPLACES the current binding (default) or ADDS to it. */
+  toolBinding: 'replace' | 'add';
+  /** Tool ids whose `tools/{id}/` directory this write DELETES rather than merely unbinds. */
+  removedToolIds: readonly string[];
+}
+
+/**
+ * "This call removes nothing" — the default for every write path except a tool `update` carrying
+ * `unset` or `tool_operation`. Named rather than inlined so the signatures taking it read as
+ * deliberately empty rather than accidentally unpassed.
+ */
+/** The bound tool ids a `prompt.yaml` declares, as a plain string list. */
+function readToolIds(existingYaml: Record<string, unknown> | undefined): string[] {
+  const declared = existingYaml?.['tools'];
+  return Array.isArray(declared)
+    ? declared.filter((id): id is string => typeof id === 'string')
+    : [];
+}
+
+export const NO_WRITE_INTENT: PromptWriteIntent = {
+  unsetKeys: new Set<string>(),
+  toolBinding: 'replace',
+  removedToolIds: [],
+};
+
+/**
  * File system operations for prompt management
  */
 export class FileOperations {
@@ -171,8 +218,12 @@ export class FileOperations {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
     promptData: any,
     suppliedKeys?: ReadonlySet<string>,
-    sourceRoot?: string
+    sourceRoot?: string,
+    writeIntent: PromptWriteIntent = NO_WRITE_INTENT
   ): Promise<OperationResult> {
+    // `writeIntent` passes through whole to `createOrUpdateYamlPrompt`, which owns the yaml-side
+    // clearing; only the tool-directory removals are this method's own work.
+    const { removedToolIds } = writeIntent;
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
     const effectiveCategory = slugifyCategoryDirectory(promptData.category);
     // `category` reaches this line straight from the tool payload. Validated here because
@@ -287,7 +338,8 @@ export class FileOperations {
           promptData,
           effectiveCategory,
           promptsDir,
-          suppliedKeysForWrite
+          suppliedKeysForWrite,
+          writeIntent
         );
 
         messages.push(`${promptExists ? 'Updated' : 'Created'} prompt: ${promptData.id}`);
@@ -315,6 +367,16 @@ export class FileOperations {
           );
           messages.push(...toolResult.messages);
           affectedFiles.push(...toolResult.paths);
+        }
+
+        // P2.3. Inside the transaction, so a failed write rolls the deletions back with
+        // everything else — a tool directory removed against a prompt.yaml that never landed
+        // would leave the binding pointing at files that are gone.
+        for (const toolId of removedToolIds) {
+          const toolDir = resolveContainedPath(promptDir, 'tools', toolId);
+          await fs.rm(toolDir, { recursive: true, force: true });
+          messages.push(`Removed tool '${toolId}' and deleted ${toolDir}`);
+          affectedFiles.push(toolDir);
         }
 
         return { messages, affectedFiles };
@@ -567,8 +629,10 @@ export class FileOperations {
     promptData: any,
     effectiveCategory: string,
     promptsDir: string,
-    suppliedKeys: ReadonlySet<string> = ALL_PROMPT_DATA_KEYS
+    suppliedKeys: ReadonlySet<string> = ALL_PROMPT_DATA_KEYS,
+    writeIntent: PromptWriteIntent = NO_WRITE_INTENT
   ): Promise<{ exists: boolean; paths: string[] }> {
+    const { unsetKeys } = writeIntent;
     // Same containment as the caller's join — this method is also reached directly (create,
     // rollback), so it cannot rely on `updatePromptImplementation` having checked first.
     const promptDir = resolveContainedPath(promptsDir, effectiveCategory, promptData.id);
@@ -584,11 +648,26 @@ export class FileOperations {
     // EXISTING prompt's edit surface; it does not narrow what a fresh directory needs to become
     // one.
     const isFreshDirectory = !existsBefore;
+    // P2.1: any `unset` forces the `prompt.yaml` rewrite, including `systemMessage` — which is
+    // NOT a `PROMPT_YAML_RESIDENT_KEYS` member (its text lives in its own file) but still owns a
+    // key IN the yaml, `systemMessageFile`. Without this clause, clearing it narrowed the write
+    // scope to a file the writer then never opened, so the orphaned `systemMessageFile:` survived
+    // pointing at a `.md` this same call had just deleted. Caught by the enumeration test.
     const writesYaml =
-      isFreshDirectory || PROMPT_YAML_RESIDENT_KEYS.some((key) => suppliedKeys.has(key));
+      isFreshDirectory ||
+      unsetKeys.size > 0 ||
+      PROMPT_YAML_RESIDENT_KEYS.some((key) => suppliedKeys.has(key));
     const writesUserMessage = isFreshDirectory || suppliedKeys.has('userMessageTemplate');
+    // P2.1. `systemMessage` is the one unsettable field with a FILE behind it, so clearing it is
+    // two operations, not one: `buildPromptYamlData` drops `systemMessageFile` (its guard is
+    // already truthiness-based, and the key is gone from `promptData` by now), and the `.md` has
+    // to be removed here. Dropping only the key would leave an orphan `system-message.md` that no
+    // loader reads and every `git status` shows — a removal that half happened.
+    const removesSystemMessage = unsetKeys.has('systemMessage');
     const writesSystemMessage =
-      Boolean(promptData.systemMessage) && (isFreshDirectory || suppliedKeys.has('systemMessage'));
+      Boolean(promptData.systemMessage) &&
+      !removesSystemMessage &&
+      (isFreshDirectory || suppliedKeys.has('systemMessage'));
 
     // Read BEFORE the directory is (re)created, and only when `prompt.yaml` is actually going to
     // be rewritten — field preservation feeds ONLY that write, and reading it otherwise is I/O a
@@ -606,7 +685,8 @@ export class FileOperations {
       const promptYamlData = this.buildPromptYamlData(
         promptData as Record<string, unknown>,
         existingYaml,
-        suppliedKeys
+        suppliedKeys,
+        writeIntent
       );
       const promptYamlPath = path.join(promptDir, 'prompt.yaml');
       const yamlContent = serializeYaml(promptYamlData, { sortKeys: false });
@@ -623,6 +703,14 @@ export class FileOperations {
     if (writesSystemMessage) {
       const systemMessagePath = path.join(promptDir, 'system-message.md');
       await safeWriteFile(systemMessagePath, promptData.systemMessage, 'utf8');
+      paths.push(systemMessagePath);
+    }
+
+    if (removesSystemMessage) {
+      // `force` because an `unset` on a prompt that never had a system message is a valid, and
+      // successful, no-op — the caller asked for a state, not for a deletion event.
+      const systemMessagePath = path.join(promptDir, 'system-message.md');
+      await fs.rm(systemMessagePath, { force: true });
       paths.push(systemMessagePath);
     }
 
@@ -643,8 +731,10 @@ export class FileOperations {
   private buildPromptYamlData(
     promptData: Record<string, unknown>,
     existingYaml: Record<string, unknown> | undefined,
-    suppliedKeys: ReadonlySet<string>
+    suppliedKeys: ReadonlySet<string>,
+    writeIntent: PromptWriteIntent
   ): Record<string, unknown> {
+    const { unsetKeys } = writeIntent;
     const promptYamlData: Record<string, unknown> = {
       // Basename, not the qualified id — see toYamlPromptId
       id: toYamlPromptId(promptData['id'] as string),
@@ -696,19 +786,39 @@ export class FileOperations {
     // template patch, ...) would otherwise silently drop the binding on write, orphaning the
     // `tools/{id}/` files the loader can then no longer reach. The on-disk shape (`string[]`
     // ids) already matches this key's expected shape — carried forward verbatim, not remapped.
+    // P2.1: `tools` is the second preserve-on-omit branch in this method (the six preserved keys
+    // below are the other), so it needs the same explicit clear channel for the same reason —
+    // omission here means "keep the binding", and without this guard `unset: ['tools']` would
+    // read the id list straight back off disk. The `unset` path deliberately leaves the
+    // `tools/{id}/` directories alone; unbinding is not deleting, and P2.3's `tool_operation`
+    // owns the removal that does delete them.
     const suppliedTools = promptData['tools'] as ToolDefinitionInput[] | undefined;
     if (Array.isArray(suppliedTools) && suppliedTools.length > 0) {
-      promptYamlData['tools'] = suppliedTools.map((t) => t.id);
-    } else {
-      const existingTools = existingYaml?.['tools'];
-      if (Array.isArray(existingTools) && existingTools.length > 0) {
+      const suppliedIds = suppliedTools.map((t) => t.id);
+      // P2.3. `'add'` has to union HERE rather than in the processor, because the current binding
+      // is only legible from the on-disk yaml — `ConvertedPrompt` carries no `tools` field
+      // (P7-F8), so the caller building `promptData` cannot see what is already bound.
+      promptYamlData['tools'] =
+        writeIntent.toolBinding === 'add'
+          ? [...new Set([...readToolIds(existingYaml), ...suppliedIds])]
+          : suppliedIds;
+    } else if (!unsetKeys.has('tools')) {
+      // P2.3. A `remove` unbinds by SUBTRACTION from the on-disk list, because the caller names
+      // ids to drop rather than resending the survivors — so the survivors are only knowable here.
+      const existingTools = readToolIds(existingYaml).filter(
+        (id) => !writeIntent.removedToolIds.includes(id)
+      );
+      if (existingTools.length > 0) {
         promptYamlData['tools'] = existingTools;
       }
     }
 
     // Carry forward the fields this writer builds no value for. Without this, every update
     // deletes them (P7-F2).
-    Object.assign(promptYamlData, resolvePreservedPromptYamlFields(promptData, existingYaml));
+    Object.assign(
+      promptYamlData,
+      resolvePreservedPromptYamlFields(promptData, existingYaml, unsetKeys)
+    );
 
     return promptYamlData;
   }

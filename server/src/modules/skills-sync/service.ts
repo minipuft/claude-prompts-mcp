@@ -460,11 +460,21 @@ export interface SkillsSyncOptions {
   resourceType?: ResourceType;
   id?: string;
   prune?: boolean;
-  dryRun?: boolean;
   output?: string;
   file?: string;
   category?: string;
+  /**
+   * Plan the run without writing: report every file, prune and registration change and touch none.
+   *
+   * The single preview verb for all four commands (P2.2, owner ruling D-P2c). It replaces
+   * `dryRun`, and absorbs the old `preview` flag — which was NOT a synonym for it. That flag meant
+   * "render unified diffs", was accepted only by `pull`, and was presented as an overlap when it
+   * is a level of detail. Depth now lives in `previewDetail`, which leaves the pull-only
+   * restriction as a property of the detail rather than of a whole flag.
+   */
   preview?: boolean;
+  /** How much a preview shows. `'diff'` adds unified diffs, and only `pull` can produce them. */
+  previewDetail?: 'summary' | 'diff';
   force?: boolean;
   json?: boolean;
   dbManager?: DatabasePort;
@@ -486,10 +496,10 @@ export interface SkillsSyncFailure {
  */
 export interface SkillsSyncRunReport {
   command: string;
-  dryRun: boolean;
+  preview: boolean;
   /** Resources loaded from canonical YAML */
   resources: number;
-  /** Files written (0 on a dry run) */
+  /** Files written (0 on a preview) */
   written: number;
   /** Managed skill directories pruned */
   pruned: number;
@@ -497,8 +507,8 @@ export interface SkillsSyncRunReport {
 }
 
 /** Empty report — the single place the shape is constructed. */
-function emptyRunReport(command: string, dryRun: boolean): SkillsSyncRunReport {
-  return { command, dryRun, resources: 0, written: 0, pruned: 0, failures: [] };
+function emptyRunReport(command: string, preview: boolean): SkillsSyncRunReport {
+  return { command, preview, resources: 0, written: 0, pruned: 0, failures: [] };
 }
 
 export interface SkillsSyncOutput {
@@ -552,8 +562,14 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
     );
   }
 
-  if (opts.preview === true && opts.command !== 'pull') {
-    throw usageError('--preview is only valid for the pull command.');
+  // The restriction that used to belong to `--preview` belongs to its DEPTH. Every command can
+  // now say "plan this without writing"; only `pull` computes a prose diff to render.
+  if (opts.previewDetail != null && opts.preview !== true) {
+    throw usageError('--preview-detail requires --preview; on its own it would not be read.');
+  }
+
+  if (opts.previewDetail === 'diff' && opts.command !== 'pull') {
+    throw usageError('--preview-detail diff is only valid for the pull command.');
   }
 
   if (opts.output != null && opts.command !== 'diff' && opts.command !== 'patch') {
@@ -3074,8 +3090,8 @@ async function exportCommand(
           // traversing id would place a skill file outside the directory the operator pointed the
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
-          if (opts.dryRun) {
-            output.log(`  [dry-run] ${file.relativePath}`);
+          if (opts.preview) {
+            output.log(`  [preview] ${file.relativePath}`);
           } else {
             await mkdir(path.dirname(fullPath), { recursive: true });
             await writeFile(fullPath, file.content);
@@ -3105,7 +3121,7 @@ async function exportCommand(
         });
       }
 
-      if (!opts.dryRun) {
+      if (!opts.preview) {
         const manifestSaved = await saveManifestBatch(
           clientId,
           scope,
@@ -3133,7 +3149,7 @@ async function exportCommand(
     }
   }
 
-  if (!opts.dryRun) {
+  if (!opts.preview) {
     const mutationResult = await applyRegistrationMutations(getConfigPath(), registrationMutations);
     if (mutationResult.updated) {
       output.log(`Updated skills-sync.yaml registrations (+${mutationResult.addedKeys} key(s))`);
@@ -3232,7 +3248,7 @@ async function adoptUnmarkedSkillDirs(
   clientId: string,
   scope: 'user' | 'project',
   markerManagedSkillDirs: ManagedSkillDirMap,
-  dryRun: boolean,
+  preview: boolean,
   output: SkillsSyncOutput,
   report: SkillsSyncRunReport
 ): Promise<string[]> {
@@ -3250,8 +3266,8 @@ async function adoptUnmarkedSkillDirs(
     if (!content) continue;
 
     const resourceKey = `prompt:${skillDir}`;
-    if (dryRun) {
-      output.log(`  [dry-run] adopt ${skillDir}/ as ${resourceKey}`);
+    if (preview) {
+      output.log(`  [preview] adopt ${skillDir}/ as ${resourceKey}`);
       adopted.push(skillDir);
       continue;
     }
@@ -3275,7 +3291,7 @@ async function adoptUnmarkedSkillDirs(
 async function applySyncPrune(
   baseDir: string,
   pruneSkillDirs: string[],
-  dryRun: boolean,
+  preview: boolean,
   output: SkillsSyncOutput,
   report: SkillsSyncRunReport
 ): Promise<void> {
@@ -3285,8 +3301,8 @@ async function applySyncPrune(
 
   for (const skillDir of pruneSkillDirs) {
     const fullPath = path.join(baseDir, skillDir);
-    if (dryRun) {
-      output.log(`  [dry-run] prune ${skillDir}/`);
+    if (preview) {
+      output.log(`  [preview] prune ${skillDir}/`);
       continue;
     }
     await rm(fullPath, { recursive: true, force: true });
@@ -3361,11 +3377,11 @@ async function syncCommand(
       const registrationMutations: RegistrationMutation[] = [
         { clientId, scope, resourceKeys: desiredResourceKeys },
       ];
-      if (opts.dryRun) {
+      if (opts.preview) {
         const previewResult = await previewRegistrationMutations(configPath, registrationMutations);
         if (previewResult.updated) {
           output.log(
-            `  [dry-run] update skills-sync.yaml registrations (+${previewResult.addedKeys} key(s))`
+            `  [preview] update skills-sync.yaml registrations (+${previewResult.addedKeys} key(s))`
           );
         }
       } else {
@@ -3399,7 +3415,7 @@ async function syncCommand(
         clientId,
         scope,
         markerManagedSkillDirs,
-        opts.dryRun === true,
+        opts.preview === true,
         output,
         report
       );
@@ -3438,8 +3454,8 @@ async function syncCommand(
           // traversing id would place a skill file outside the directory the operator pointed the
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
-          if (opts.dryRun) {
-            output.log(`  [dry-run] ${file.relativePath}`);
+          if (opts.preview) {
+            output.log(`  [preview] ${file.relativePath}`);
           } else {
             await mkdir(path.dirname(fullPath), { recursive: true });
             await writeFile(fullPath, file.content);
@@ -3472,7 +3488,7 @@ async function syncCommand(
         await applySyncPrune(
           baseDir,
           prunePlan.pruneSkillDirs,
-          opts.dryRun === true,
+          opts.preview === true,
           output,
           report
         );
@@ -3480,9 +3496,9 @@ async function syncCommand(
         output.log(`  prune skipped (${prunePlan.pruneSkillDirs.length} stale managed skill(s))`);
       }
 
-      if (opts.dryRun) {
+      if (opts.preview) {
         output.log(
-          `  [dry-run] manifest update (${manifestEntries.size} entries, scope: ${scope})`
+          `  [preview] manifest update (${manifestEntries.size} entries, scope: ${scope})`
         );
       } else {
         const updatedConfigRaw = await readFile(configPath, 'utf-8');
@@ -3940,7 +3956,7 @@ async function pullCommand(
           output.log(`    [${change.section}] → ${change.file}`);
         }
 
-        if (opts.preview) {
+        if (opts.previewDetail === 'diff') {
           for (const change of changes) {
             const patch = createTwoFilesPatch(
               `canonical/${change.file}`,
@@ -3953,7 +3969,7 @@ async function pullCommand(
           continue;
         }
 
-        if (opts.dryRun) {
+        if (opts.preview) {
           pullCount++;
           continue;
         }
@@ -4087,8 +4103,8 @@ async function cloneCommand(
     userMessage = reverseCompilePlaintext(userMessage);
   }
 
-  if (opts.dryRun) {
-    output.log(`[dry-run] Would create ${resourceType} "${resourceId}" at ${targetDir}`);
+  if (opts.preview) {
+    output.log(`[preview] Would create ${resourceType} "${resourceId}" at ${targetDir}`);
     output.log(`  name: ${parsed.name}`);
     output.log(`  description: ${parsed.description}`);
     if (parsed.arguments.length > 0) {
@@ -4378,11 +4394,11 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
       id: { type: 'string' },
       prune: { type: 'boolean' },
       'no-prune': { type: 'boolean' },
-      'dry-run': { type: 'boolean' },
       output: { type: 'string' },
       file: { type: 'string' },
       category: { type: 'string' },
       preview: { type: 'boolean' },
+      'preview-detail': { type: 'string' },
       force: { type: 'boolean' },
       json: { type: 'boolean' },
     },
@@ -4397,11 +4413,11 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
     resourceType: values['resource-type'] as ResourceType | undefined,
     id: values.id,
     prune: values['no-prune'] ? false : values.prune,
-    dryRun: values['dry-run'] ?? false,
     output: values.output,
     file: values.file,
     category: values.category,
     preview: values.preview ?? false,
+    previewDetail: values['preview-detail'] as 'summary' | 'diff' | undefined,
     force: values.force ?? false,
     json: values.json ?? false,
   };
@@ -4428,9 +4444,9 @@ Options:
   --id <resourceId>           Filter to single resource
   --prune                     For sync: delete stale managed skills (default)
   --no-prune                  For sync: skip stale managed skill deletion
-  --dry-run                   Show what would change without writing
   --output <dir>              Write .patch files to directory (diff command)
-  --preview                   Show diffs without writing (pull command)
+  --preview                   Show what would change without writing
+  --preview-detail <level>    summary (default) | diff — unified diffs (pull command)
   --file <path>               Source SKILL.md file (clone command)
   --category <name>           Target category (clone command, default: general)
   --force                     Overwrite existing resource (clone command)
@@ -4444,7 +4460,7 @@ export async function runSkillsSyncCommand(
 ): Promise<SkillsSyncRunReport> {
   validateSkillsSyncOptions(opts);
 
-  const report = emptyRunReport(opts.command, opts.dryRun ?? false);
+  const report = emptyRunReport(opts.command, opts.preview ?? false);
 
   // In JSON mode stdout carries the report and nothing else, so the human
   // progress log is suppressed. warn/error keep their own channel (stderr),

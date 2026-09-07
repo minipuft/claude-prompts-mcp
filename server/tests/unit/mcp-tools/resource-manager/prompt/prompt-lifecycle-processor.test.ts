@@ -582,8 +582,8 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
 });
 
 /**
- * OQ-P7-9: `patch` and `dry_run` are update-only verbs — the schema accepts both on every
- * action, so `create` has to reject them itself. `updatePromptImplementation` not being called
+ * OQ-P7-9: `patch` and `preview_action` do not belong on `create` — the schema accepts both on
+ * every action, so `create` has to reject them itself. `updatePromptImplementation` not being called
  * is the discriminating assertion: a rejection that still wrote would be the same
  * accepted-here/ignored-there asymmetry P7-D4 exists to kill, just moved one level down.
  */
@@ -601,20 +601,23 @@ describe('PromptLifecycleProcessor.createPrompt rejects update-only verbs (OQ-P7
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
 
-  test('rejects dry_run on create before any side effect', async () => {
+  test('rejects preview_action on create before any side effect', async () => {
     const { processor, updatePromptImplementation } = createProcessor();
 
-    const response = await processor.createPrompt({ ...codePromptArgs, dry_run: true } as never);
+    const response = await processor.createPrompt({
+      ...codePromptArgs,
+      preview_action: 'update',
+    } as never);
 
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toMatch(/dry_run.*update-only/i);
+    expect(textOf(response)).toMatch(/preview_action.*action:"preview"/i);
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
 
   /**
    * Fix D (tier-b-settability-proposal §2 / P6-F16): `argument_updates` overlays fields onto an
    * EXISTING argument by name — a `create` has no prior argument to overlay onto, the same
-   * "no referent on create" reasoning as `patch`/`dry_run` above.
+   * "no referent on create" reasoning as `patch`/`preview_action` above.
    */
   test('rejects argument_updates on create before any side effect', async () => {
     const { processor, updatePromptImplementation } = createProcessor();

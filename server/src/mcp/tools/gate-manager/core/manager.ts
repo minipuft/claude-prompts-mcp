@@ -10,6 +10,7 @@
  */
 
 import { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
+import { resolveDispatchAction } from '../../shared/preview-action.js';
 import { GateDiscoveryProcessor } from '../services/gate-discovery-processor.js';
 import { GateFileWriter } from '../services/gate-file-writer.js';
 import { GateLifecycleProcessor } from '../services/gate-lifecycle-processor.js';
@@ -61,7 +62,15 @@ export class GateToolHandler {
   }
 
   async handleAction(args: GateManagerInput, _context: Record<string, any>): Promise<ToolResponse> {
-    switch (args.action) {
+    // A preview dispatches to its target's own handler and that handler returns before it writes,
+    // so there is one delete path and one rollback path rather than a second read-only copy of
+    // each. `args.action` stays `'preview'`, which is what those early returns read.
+    //
+    // Bound to `action` rather than switched on inline: `validate:registry-coherence` locates this
+    // dispatch table by the literal `switch (action)`, and an inline call expression makes it
+    // report zero rows for this file — which reads as a clean result.
+    const action = resolveDispatchAction(args);
+    switch (action) {
       case 'create':
         return this.lifecycle.handleCreate(args);
       case 'update':
@@ -80,6 +89,19 @@ export class GateToolHandler {
         return this.versioning.handleRollback(args);
       case 'compare':
         return this.versioning.handleCompare(args);
+      // Reached only when `preview_action` is absent, which the router refuses ahead of dispatch.
+      case 'preview':
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                '❌ action:"preview" requires \'preview_action\' — a preview of WHAT. ' +
+                'Valid values for gate are: "delete", "rollback".',
+            },
+          ],
+          isError: true,
+        };
       default:
         return {
           content: [{ type: 'text', text: `❌ Unknown action: ${args.action}` }],

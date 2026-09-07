@@ -38,7 +38,10 @@ export type resource_managerParamName =
   | 'argument_updates'
   | 'patch'
   | 'source_workspace'
-  | 'dry_run'
+  | 'preview_action'
+  | 'tool_operation'
+  | 'tool_ids'
+  | 'unset'
   | 'chain_steps'
   | 'tools'
   | 'gate_configuration'
@@ -84,7 +87,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[create|validate|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
     description:
-      'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. Framework-only: switch. Versioning: history/rollback/compare.',
+      'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -170,7 +173,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'argument_updates',
     type: 'array<{name,description?,type?,required?,defaultValue?,validation?}>',
     description:
-      "[Prompt] Update-only: per-field overlay onto EXISTING arguments, addressed by `name`. `name` must match an argument this prompt already declares — no upsert, so adding/removing/renaming an argument still requires the full `arguments` array. Every other field overlays onto the matched entry only when supplied; an omitted field leaves that entry's current value untouched. Mutually exclusive with `arguments` in the same call. Rejected on `create`. Combine with `dry_run: true` to preview.",
+      '[Prompt] Update-only: per-field overlay onto EXISTING arguments, addressed by `name`. `name` must match an argument this prompt already declares — no upsert, so adding/removing/renaming an argument still requires the full `arguments` array. Every other field overlays onto the matched entry only when supplied; an omitted field leaves that entry\'s current value untouched. Mutually exclusive with `arguments` in the same call. Rejected on `create`. Send the same payload as `action:"preview"` with `preview_action:"update"` to see the result first.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -179,7 +182,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'patch',
     type: 'array<{field,old_string,new_string,replace_all?}>',
     description:
-      '[Prompt] Anchored edits applied server-side on `update`, so one section can be changed without resending the rest. `field` is user_message_template|system_message|description; `old_string` must match the current text EXACTLY (whitespace included) and uniquely, otherwise the update is rejected naming the anchor and its occurrence count; `new_string` may be empty to delete. Operations apply in order. Pass `replace_all: true` to accept a multi-occurrence anchor. Mutually exclusive with `user_message_template`/`system_message` in the same call. Combine with `dry_run: true` to preview.',
+      '[Prompt] Anchored edits applied server-side on `update`, so one section can be changed without resending the rest. `field` is user_message_template|system_message|description; `old_string` must match the current text EXACTLY (whitespace included) and uniquely, otherwise the update is rejected naming the anchor and its occurrence count; `new_string` may be empty to delete. Operations apply in order. Pass `replace_all: true` to accept a multi-occurrence anchor. Mutually exclusive with `user_message_template`/`system_message` in the same call. Send the same payload as `action:"preview"` with `preview_action:"update"` to confirm an anchor matched before spending a version.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -194,10 +197,37 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'dry_run',
-    type: 'boolean',
+    name: 'preview_action',
+    type: 'string',
     description:
-      'Preview a mutation instead of performing it — nothing is written and no version is recorded. `update` (prompt): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. Not valid on `create` — there is nothing to diff against.',
+      'Required with `action:"preview"`, and refused without it — it names WHICH mutation is being previewed. `update` (prompt only): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. A preview writes nothing, records no version, and needs no `confirm` — it is not a destructive action. `update` is refused for gate and framework, which have no update preview path and would perform the update.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'tool_operation',
+    type: '"add" | "remove"',
+    description:
+      '[Prompt] Update-only: how a `tools` change relates to the CURRENT binding. Omit it and a supplied `tools` array REPLACES the binding, so a narrowed array unbinds the dropped ids and leaves their `tools/{id}/` files on disk — the non-destructive default. `add` unions the supplied definitions with what is already bound. `remove` names ids in `tool_ids`, unbinds them AND deletes their directories, and therefore requires `confirm: true`: it is the only `update` that destroys a file the caller sent no replacement for.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'tool_ids',
+    type: 'array<string>',
+    description:
+      '[Prompt] Tool ids to unbind and delete. Required by `tool_operation: "remove"` and refused without it, because a parameter that silently does nothing reads as a removal that happened.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'unset',
+    type: 'array<string>',
+    description:
+      '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, chain_steps, composer, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

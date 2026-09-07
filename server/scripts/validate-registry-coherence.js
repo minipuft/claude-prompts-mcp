@@ -221,12 +221,28 @@ function toRelative(absolute) {
  * Returns [] for a file with no such switch, which is how non-routers are excluded — by shape,
  * not by a filename convention that a rename would break.
  */
-function switchSegments(text) {
-  // `switch (action)` AND `switch (args.action)` — both spellings ship here today, and requiring
-  // the first silently dropped the entire gate router from the universe on this gate's own first
-  // run, while `byName` still classified its processor. That is the exact silent pass this file
-  // exists to prevent, found in the file preventing it; the missing-edge finding below is the
-  // structural fix, this pattern is the immediate one.
+function switchSegments(rawText) {
+  // Comments are stripped first. A doc comment that QUOTES `switch (action)` while explaining it
+  // moves the scan's starting point to the comment, so the gate reads the prose above a dispatch
+  // table instead of the table. Found 2026-09-03 by this gate's own mutation fixture, which
+  // reported 'no findings' after correctly mutating the real statement — the comment above it
+  // kept the pattern satisfied. A scanner that cannot tell code from prose about code is the same
+  // defect class this file exists to catch.
+  const text = rawText
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/\/\/.*$/, ''))
+    .join('\n');
+
+  // `switch (action)` AND `switch (args.action)`. Requiring only the first silently dropped the
+  // entire gate router from the universe on this gate's own first run, while `byName` still
+  // classified its processor — the exact silent pass this file exists to prevent, found in the
+  // file preventing it. The missing-edge finding below is the structural fix; this pattern is the
+  // immediate one.
+  //
+  // As of P2.2 all three routers spell it `switch (action)`, so the `args.action` arm currently
+  // has no live subject. Kept rather than narrowed: the reason it exists is that the spelling
+  // varies, and it has now varied twice in the other direction.
   const switchIndex = text.search(/switch\s*\(\s*(?:\w+\.)?action\s*\)/);
   if (switchIndex < 0) return [];
 
@@ -636,14 +652,30 @@ function selfTest() {
   //     the gate's own first-run failure, encoded: `switch (args.action)` did not match the
   //     pattern, the gate router vanished from the universe, and the run reported success with
   //     the gate rules evaluated zero times.
+  //
+  //     The fixture reads whichever spelling the gate router currently uses rather than pinning
+  //     one, because the spelling has now moved twice. It became `switch (action)` when `preview`
+  //     was added (P2.2) and the resolved dispatch target had to be bound to a local — and the
+  //     fixture, pinned to the other spelling, failed CLOSED with 'not found', which is the right
+  //     direction but still an unrun case. Reading the live spelling keeps the case exercised;
+  //     failing when NEITHER is present keeps it honest.
   {
     const file = 'src/mcp/tools/gate-manager/core/manager.ts';
     const original = clean.get(file);
-    if (original === undefined || !original.includes('switch (args.action)')) {
-      record('unreached-processor fixture', false, 'switch (args.action) not found in gate router');
+    //     Anchored to STATEMENT position (start of line), not to the bare substring. Replacing
+    //     the first textual occurrence hit a doc comment that quoted the anchor while explaining
+    //     it, so the real switch survived, the gate found everything, and the case reported
+    //     'no findings' — a mutation test that mutated nothing.
+    const STATEMENT = /^(\s*)switch \((?:args\.)?action\) \{/m;
+    if (original === undefined || !STATEMENT.test(original)) {
+      record(
+        'unreached-processor fixture',
+        false,
+        'no switch (action) statement found in the gate router'
+      );
     } else {
       const mutated = new Map(clean);
-      mutated.set(file, original.replace('switch (args.action)', 'switch (someOtherThing)'));
+      mutated.set(file, original.replace(STATEMENT, '$1switch (someOtherThing) {'));
       const { findings } = check(mutated);
       record(
         'a processor no dispatch edge reaches reds the gate (no vacuous pass)',

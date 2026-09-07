@@ -6,6 +6,7 @@ import * as path from 'node:path';
 
 import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
+import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
@@ -280,12 +281,12 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Framework '${id}' not found. Nothing was removed.`);
     }
 
-    // `dry_run` reports what would be removed and returns before anything is. Deletion is the one
+    // A preview reports what would be removed and returns before anything is. Deletion is the one
     // destructive action rollback cannot undo — there is no version row for a framework that no
     // longer exists.
-    if (args.dry_run === true) {
+    if (isPreviewRequest(args)) {
       return this.success(
-        `🔍 **Dry run** — deletion of framework '${id}'\n\n` +
+        `🔍 **Preview** — deletion of framework '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${frameworkDir}\n` +
           // Corrects a claim the live path never made good on: deletion is `fs.rm` +
@@ -295,7 +296,7 @@ export class FrameworkLifecycleProcessor {
           `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
           `since rollback resolves the framework first\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted framework.\n\n` +
-          `💡 Re-send the same call without \`dry_run\` to apply it.`
+          `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`
       );
     }
 

@@ -58,6 +58,7 @@ import type {
 import type { PromptResourceContext } from '../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { ConfigManager, Logger } from '../../../src/shared/types/index.js';
+import { resolveDispatchAction } from '../../../src/mcp/tools/shared/preview-action.js';
 
 const GATE_ID = 'versioning-probe';
 
@@ -159,16 +160,25 @@ describe('Gate versioning through the real write path', () => {
     return readFileSync(path.join(gatesDir, GATE_ID, 'guidance.md'), 'utf8');
   }
 
-  /** Drive an action through the processor under test, then reload so reads see disk. */
+  /**
+   * Drive an action through the processor under test, then reload so reads see disk.
+   *
+   * Dispatch goes through the production `resolveDispatchAction`, not a copy of it, so a preview
+   * reaches the same processor the router would send it to. The chain below ends in an
+   * unconditional `handleHistory`, so an action this helper does not recognise silently becomes a
+   * history read — which is exactly what a preview did before this line existed, and it asserted
+   * as a confusing string mismatch rather than as an unroutable action.
+   */
   async function run(args: GateManagerInput) {
+    const dispatch = resolveDispatchAction(args);
     const response =
-      args.action === 'create'
+      dispatch === 'create'
         ? await lifecycle.handleCreate(args)
-        : args.action === 'update'
+        : dispatch === 'update'
           ? await lifecycle.handleUpdate(args)
-          : args.action === 'rollback'
+          : dispatch === 'rollback'
             ? await versioning.handleRollback(args)
-            : args.action === 'delete'
+            : dispatch === 'delete'
               ? await lifecycle.handleDelete(args)
               : await versioning.handleHistory(args);
     await registry.reload(GATE_ID);
@@ -410,15 +420,14 @@ describe('Gate versioning through the real write path', () => {
     expect(rowsBefore).toBeGreaterThan(0);
 
     const preview = await run({
-      action: 'rollback',
+      action: 'preview',
+      preview_action: 'rollback',
       id: GATE_ID,
       version: target.version,
-      confirm: true,
-      dry_run: true,
     } as GateManagerInput);
 
     expect(preview.isError).toBe(false);
-    expect(preview.content[0]!.text).toContain('Dry run');
+    expect(preview.content[0]!.text).toContain('Preview');
     expect(preview.content[0]!.text).toContain('Nothing was written');
 
     expect(countVersionRows()).toBe(rowsBefore);
@@ -498,14 +507,13 @@ describe('Gate versioning through the real write path', () => {
     } as GateManagerInput);
 
     const preview = await run({
-      action: 'delete',
+      action: 'preview',
+      preview_action: 'delete',
       id: GATE_ID,
-      confirm: true,
-      dry_run: true,
     } as GateManagerInput);
 
     expect(preview.isError).toBe(false);
-    expect(preview.content[0]!.text).toContain('Dry run');
+    expect(preview.content[0]!.text).toContain('Preview');
     expect(readGateYaml()['id']).toBe(GATE_ID);
   });
 
@@ -1649,9 +1657,9 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     await create();
 
     const response = await lifecycle.handleDelete({
-      action: 'delete',
+      action: 'preview',
+      preview_action: 'delete',
       id: ID,
-      dry_run: true,
     } as FrameworkManagerInput);
 
     const text = response.content[0]!.text!;

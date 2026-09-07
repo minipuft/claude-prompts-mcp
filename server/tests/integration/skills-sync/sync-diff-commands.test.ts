@@ -158,11 +158,11 @@ describe('sync and diff commands end to end (F11)', () => {
     expect(untouched).not.toContain('managed-by');
   });
 
-  it('sync does not adopt on a dry run', async () => {
+  it('sync does not adopt on a preview', async () => {
     await writePrompt('kept_prompt');
     await writeUnmarkedSkillDir('legacy_export', '## Instructions');
 
-    await run({ command: 'sync', dryRun: true });
+    await run({ command: 'sync', preview: true });
 
     const unchanged = await readFile(path.join(outputDir, 'legacy_export', 'SKILL.md'), 'utf-8');
     expect(unchanged).not.toContain('managed-by');
