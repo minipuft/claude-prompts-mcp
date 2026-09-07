@@ -10,6 +10,7 @@ import {
   runDependencyCruiser,
   type DependencyCruiserGraph,
 } from './lib/dependency-cruiser-graph.js';
+import { collectOwnershipRecords, resolveOwnershipDefinitions } from './lib/domain-ownership.js';
 import {
   loadSemanticModuleTree,
   nearestSemanticDescriptor,
@@ -27,9 +28,19 @@ export interface BoundaryEdge {
   readonly typeOnly: boolean;
 }
 
+/** One `owns` declaration, resolved to the file that actually exports the symbol. */
+export interface OwnershipCatalogRow {
+  readonly capability: string;
+  readonly symbol: string;
+  readonly moduleId: string;
+  /** Definition path relative to `server/src`, or `—` when no single file exports the symbol. */
+  readonly definedIn: string;
+}
+
 export interface ModuleCatalogModel {
   readonly descriptors: readonly SemanticModuleDescriptor[];
   readonly edges: readonly BoundaryEdge[];
+  readonly ownership: readonly OwnershipCatalogRow[];
 }
 
 function sourceModulePath(modulePath: string): boolean {
@@ -65,6 +76,38 @@ export function aggregateBoundaryEdges(
   );
 }
 
+/**
+ * The declarations `validate:domain-ownership` checks, resolved to where each symbol lives.
+ *
+ * Sorted by module then capability so the section is stable regardless of descriptor order.
+ */
+export function collectOwnershipRows(
+  descriptors: readonly SemanticModuleDescriptor[],
+  repoRoot: string,
+  sourceRoot: string
+): OwnershipCatalogRow[] {
+  const records = collectOwnershipRecords(descriptors, repoRoot);
+  const definitions = resolveOwnershipDefinitions(
+    sourceRoot,
+    records.map((record) => record.symbol)
+  );
+  return records
+    .map((record) => {
+      const paths = definitions.get(record.symbol) ?? [];
+      return {
+        capability: record.capability,
+        symbol: record.symbol,
+        moduleId: record.moduleId,
+        definedIn: paths.length === 1 ? (paths[0] as string) : '—',
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.moduleId.localeCompare(right.moduleId) ||
+        left.capability.localeCompare(right.capability)
+    );
+}
+
 function escapeTableCell(value: string): string {
   return value.replaceAll('|', '\\|').replaceAll('\n', ' ');
 }
@@ -93,6 +136,11 @@ export function renderModuleCatalog(model: ModuleCatalogModel): string {
     );
   });
 
+  const ownershipRows = model.ownership.map(
+    (row) =>
+      `| ${escapeTableCell(row.capability)} | \`${row.symbol}\` | \`${row.moduleId}\` | \`${row.definedIn}\` |`
+  );
+
   const nodes = model.descriptors.map(
     (descriptor) => `  ${mermaidId(descriptor.id)}["${descriptor.id}"]`
   );
@@ -115,6 +163,16 @@ remains in \`server/.dependency-cruiser.cjs\`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 ${rows.join('\n')}
 
+## Domain ownership
+
+Generated from each module's \`module.yaml\` \`owns:\` block. \`validate:domain-ownership\` checks
+these rows against the Domain Ownership Matrix in the root \`CLAUDE.md\` in both directions, so a
+capability listed here and a row there cannot diverge. "Defined in" is relative to \`server/src\`.
+
+| Capability | Owner | Module | Defined in |
+| --- | --- | --- | --- |
+${ownershipRows.join('\n')}
+
 ## Observed boundary graph
 
 Solid arrows include at least one value import. Dotted arrows contain only type imports.
@@ -135,6 +193,7 @@ export function buildModuleCatalog(): ModuleCatalogModel {
   return {
     descriptors: tree.descriptors,
     edges: aggregateBoundaryEdges(graph, tree.descriptors, SERVER_ROOT),
+    ownership: collectOwnershipRows(tree.descriptors, REPO_ROOT, SOURCE_ROOT),
   };
 }
 
@@ -178,6 +237,7 @@ function selfTest(): void {
       lifecycle: 'canonical',
       description: 'Alpha.',
       children: 'internal',
+      owns: [{ capability: 'Alpha capability', symbol: 'AlphaService' }],
       absoluteDirectory: path.join(root, 'src', 'alpha'),
       descriptorPath: path.join(root, 'src', 'alpha', 'module.yaml'),
       sourcePath: 'alpha',
@@ -216,11 +276,24 @@ function selfTest(): void {
   };
   const edges = aggregateBoundaryEdges(graph, descriptors, root);
   assert.deepEqual(edges, [{ from: 'alpha', to: 'beta', typeOnly: false }]);
-  const rendered = renderModuleCatalog({ descriptors, edges });
+  const ownership: OwnershipCatalogRow[] = [
+    {
+      capability: 'Alpha capability',
+      symbol: 'AlphaService',
+      moduleId: 'alpha',
+      definedIn: 'alpha/alpha-service.ts',
+    },
+  ];
+  const rendered = renderModuleCatalog({ descriptors, edges, ownership });
   assert.match(rendered, /alpha --> module_beta/u);
   assert.doesNotMatch(rendered, /node:path/u);
-  assert.equal(rendered, renderModuleCatalog({ descriptors, edges }));
-  process.stdout.write('generate:module-catalog self-test — 5/5 cases passed\n');
+  assert.match(rendered, /## Domain ownership/u);
+  assert.match(
+    rendered,
+    /\| Alpha capability \| `AlphaService` \| `alpha` \| `alpha\/alpha-service\.ts` \|/u
+  );
+  assert.equal(rendered, renderModuleCatalog({ descriptors, edges, ownership }));
+  process.stdout.write('generate:module-catalog self-test — 7/7 cases passed\n');
 }
 
 function main(): void {

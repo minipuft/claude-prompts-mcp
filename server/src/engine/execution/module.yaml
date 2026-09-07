@@ -4,3 +4,14 @@ kind: domain
 lifecycle: canonical
 description: Parses commands and coordinates the staged client-guided execution pipeline.
 children: internal
+owns:
+  - capability: Gate enforcement mode
+    symbol: resolveEnforcementMode
+  - capability: Command parsing
+    symbol: UnifiedCommandParser
+  - capability: Step capture
+    symbol: StepCaptureService
+  - capability: Response assembly
+    symbol: ResponseAssembler
+  - capability: Injection decisions
+    symbol: InjectionDecisionService

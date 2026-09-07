@@ -157,7 +157,10 @@ Descriptors explain what a boundary is. Import permission remains in
 `server/.dependency-cruiser.cjs`, which validates the dependency graph. The generated
 [Semantic Module Catalog](../reference/module-catalog.md) combines both views: authored boundary
 meaning and observed imports. Use that catalog for the current boundary inventory instead of adding
-a source tree here.
+a source tree here. Its **Domain ownership** section is generated from the `owns:` declarations in
+those same descriptors, and `validate:domain-ownership` checks them against the Domain Ownership
+Matrix in the root `CLAUDE.md` in both directions, so neither the matrix nor a declaration can drift
+alone.
 
 | Boundary                | Responsibility                                                                 |
 | ----------------------- | ------------------------------------------------------------------------------ |

@@ -5,3 +5,6 @@ lifecycle: canonical
 description: Owns prompt discovery, schema, registry, and lifecycle behavior.
 children: internal
 publicEntry: index.ts
+owns:
+  - capability: Prompt resolution
+    symbol: PromptRegistry

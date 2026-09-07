@@ -17,6 +17,44 @@ const MODULE_KINDS = [
 const MODULE_LIFECYCLES = ['canonical', 'migrating', 'legacy'] as const;
 const MODULE_CHILD_POLICIES = ['semantic', 'internal'] as const;
 
+/**
+ * One row of the Domain Ownership Matrix, declared where the owner lives.
+ *
+ * The matrix in the root CLAUDE.md was prose: two of its fourteen rows named a symbol or a path
+ * that no longer existed. `owns` moves the claim next to the code so
+ * `validate:domain-ownership` can check both directions.
+ */
+const ModuleOwnershipEntrySchema = z
+  .object({
+    capability: z.string().trim().min(1),
+    symbol: z.string().regex(/^[A-Za-z_$][A-Za-z0-9_$]*$/, 'must be a bare identifier'),
+  })
+  .strict();
+
+export type ModuleOwnershipEntry = z.infer<typeof ModuleOwnershipEntrySchema>;
+
+/**
+ * A symbol may own SEVERAL capabilities — `FrameworkManager` owns both framework selection and
+ * framework validity — so only the (symbol, capability) pair has to be unique.
+ */
+function checkOwnershipUniqueness(
+  owns: readonly ModuleOwnershipEntry[] | undefined,
+  context: z.RefinementCtx
+): void {
+  const seen = new Set<string>();
+  for (const [index, entry] of (owns ?? []).entries()) {
+    const key = `${entry.symbol}\u0000${entry.capability}`;
+    if (seen.has(key)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['owns', index],
+        message: `duplicate ownership entry: ${entry.symbol} already owns '${entry.capability}'`,
+      });
+    }
+    seen.add(key);
+  }
+}
+
 export const ModuleDescriptorDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -32,9 +70,11 @@ export const ModuleDescriptorDocumentSchema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       .optional(),
     removeWhen: z.string().trim().min(1).optional(),
+    owns: z.array(ModuleOwnershipEntrySchema).optional(),
   })
   .strict()
   .superRefine((descriptor, context) => {
+    checkOwnershipUniqueness(descriptor.owns, context);
     const requiresRemoval = descriptor.lifecycle !== 'canonical';
     if (requiresRemoval && descriptor.replacement === undefined) {
       context.addIssue({

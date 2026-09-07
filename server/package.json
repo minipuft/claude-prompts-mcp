@@ -91,6 +91,8 @@
     "validate:arch:self-test": "tsx scripts/validate-arch.ts --self-test",
     "validate:module-descriptors": "tsx scripts/validate-semantic-module-descriptors.ts",
     "validate:module-descriptors:self-test": "tsx scripts/validate-semantic-module-descriptors.ts --self-test",
+    "validate:domain-ownership": "tsx scripts/validate-domain-ownership.ts",
+    "validate:domain-ownership:self-test": "tsx scripts/validate-domain-ownership.ts --self-test",
     "generate:module-catalog": "tsx scripts/generate-module-catalog.ts",
     "validate:module-catalog": "tsx scripts/generate-module-catalog.ts --check",
     "validate:module-catalog:self-test": "tsx scripts/generate-module-catalog.ts --self-test",

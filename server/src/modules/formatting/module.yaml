@@ -5,3 +5,6 @@ lifecycle: canonical
 description: Owns response styles and output formatting behavior.
 children: internal
 publicEntry: index.ts
+owns:
+  - capability: Style resolution
+    symbol: StyleManager

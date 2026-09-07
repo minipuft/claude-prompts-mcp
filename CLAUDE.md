@@ -147,6 +147,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | `npm run validate:all`            | Full validation suite                                                                                                                                                            |
 | `npm run validate:arch`           | Dependency Cruiser architecture rules                                                                                                                                            |
 | `npm run validate:contracts`      | Verify generated artifacts in sync                                                                                                                                               |
+| `npm run validate:domain-ownership` | Check the Domain Ownership Matrix against every module's `owns` declaration, both directions                                                                                    |
 | `npm run test:integration`        | FIRST for new features                                                                                                                                                           |
 | `npm run test:coverage`           | Baseline coverage (target: >80%)                                                                                                                                                 |
 | `npm run skills:export`           | Export skills from `skills-sync.yaml`                                                                                                                                            |
@@ -154,6 +155,8 @@ Read the relevant doc before editing. Update docs when behavior changes.
 ## Domain Ownership Matrix (ENFORCED)
 
 **Stages are thin orchestration. Domain logic lives in owner services.**
+
+`validate:domain-ownership` checks this table both ways against each module's `module.yaml` `owns` block -- a row and its declaration must change together, and a row naming a symbol nobody exports, or a path the symbol is not defined in, fails.
 
 | If you need...          | Owner Service                                                        | Stage May Only                                                                                                                                |
 | ----------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -164,13 +167,13 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Gate verdict processing | GateVerdictProcessor (`gates/services/`)                             | Call `processor.handleGateAction()`                                                                                                           |
 | Inline gate parsing     | InlineGateProcessor (`gates/services/`)                              | Call `processor.processInlineGates()`                                                                                                         |
 | Prompt resolution       | PromptRegistry (`prompts/registry.ts`)                               | Call `registry.get()`                                                                                                                         |
-| Command parsing         | CommandParser (`execution/parsers/`)                                 | Call `parser.parseCommand()`                                                                                                                  |
+| Command parsing         | UnifiedCommandParser (`execution/parsers/command-parser.ts`)         | Call `parser.parseCommand()`                                                                                                                  |
 | Step capture            | StepCaptureService (`execution/capture/`)                            | Call `captureService.captureStep()`                                                                                                           |
 | Response assembly       | ResponseAssembler (`execution/formatting/`)                          | Call `assembler.format*()`                                                                                                                    |
 | Framework selection     | FrameworkManager (`frameworks/`)                                     | Call `frameworkManager.selectFramework()`                                                                                                     |
 | Framework validity      | FrameworkManager                                                     | Call `frameworkManager.getFramework(id)` -- never hardcode                                                                                    |
 | Injection decisions     | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()`                                                                                                                       |
-| Style resolution        | StyleManager (`styles/style-manager.ts`)                             | Call `styleManager.getStyle()`                                                                                                                |
+| Style resolution        | StyleManager (`modules/formatting/style-manager.ts`)                 | Call `styleManager.getStyle()`                                                                                                                |
 
 ## MCP Tool Layer Structure
 
