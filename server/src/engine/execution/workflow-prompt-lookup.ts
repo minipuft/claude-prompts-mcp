@@ -34,8 +34,14 @@ export function createConvertedPromptLookup(
   return (promptId) => byId.get(promptId);
 }
 
-/** What the Workflow IR validator reads off a prompt — the whole projection, in one place. */
-export function toWorkflowPromptInfo(prompt: ConvertedPrompt): WorkflowPromptInfo {
+/**
+ * What the Workflow IR validator reads off a prompt — the whole projection, in one place.
+ *
+ * Module-private: `workflowPromptInfoLookup` is the surface. Exporting the projection alone would
+ * let a caller re-pair it with its own lookup, which is the two-derivations shape this file exists
+ * to remove.
+ */
+function toWorkflowPromptInfo(prompt: ConvertedPrompt): WorkflowPromptInfo {
   return {
     requiredArguments: prompt.arguments
       .filter((argument) => argument.required === true)

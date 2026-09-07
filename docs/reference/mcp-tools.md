@@ -935,7 +935,7 @@ resource_manager(
 | `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version |
 | `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                         |
 | `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                    |
-| `chain_steps`           | Chain step definitions                                                                                                                   |
+| `chain_steps`           | Chain step definitions — every `promptId` must name a registered prompt or the write is refused                                          |
 | `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                |
 | `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)  |
 | `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                               |
@@ -949,6 +949,12 @@ resource_manager(
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block
 (`pattern`, `minLength`, `maxLength`).
+
+A chain step naming a prompt that does not exist refuses the whole call, with one addressed line
+per step (`step 2 references unknown promptId 'run_smoke_tests'`) — nothing is written, nothing is
+scaffolded, and no version is consumed. The one exemption is a step named `<promptId>/<step>`, one
+level deep, which this same call scaffolds into a sub-prompt directory. See
+[Step References Must Resolve](../concepts/chains-lifecycle.md#step-references-must-resolve).
 
 The last five are written into `prompt.yaml` verbatim and are otherwise carried forward untouched:
 supply one and it is set, omit it and the prompt keeps whatever it already declared. Two of them
