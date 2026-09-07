@@ -123,6 +123,13 @@ export const SUITE = [
       'CHECKED both ways — a semantic parent with an undescribed child fails, and an internal parent with a nested descriptor also fails',
   },
   {
+    script: 'validate:domain-ownership',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED both ways — a matrix row with no `owns` declaration fails, and an `owns` declaration with no matrix row fails; the row must also name a symbol some file under src/ exports and point at the path it is defined in',
+  },
+  {
     script: 'validate:module-catalog',
     io: 'read',
     reads: ['file', 'spawn'],

@@ -4,3 +4,14 @@ kind: domain
 lifecycle: canonical
 description: Selects, enhances, and evaluates quality-gate guidance.
 children: internal
+owns:
+  - capability: Gate normalization
+    symbol: GateService
+  - capability: Gate enhancement
+    symbol: GateEnhancementService
+  - capability: Gate selection
+    symbol: GateManager
+  - capability: Gate verdict processing
+    symbol: GateVerdictProcessor
+  - capability: Inline gate parsing
+    symbol: InlineGateProcessor

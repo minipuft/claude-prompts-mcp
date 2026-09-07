@@ -47,6 +47,29 @@ remains in `server/.dependency-cruiser.cjs`.
 | `shared-types` | `src/shared/types` | shared | canonical | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>semantic<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
 | `shared-utils` | `src/shared/utils` | shared | canonical | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>shared-core<br>skills-sync<br>text-references<br>versioning |
 
+## Domain ownership
+
+Generated from each module's `module.yaml` `owns:` block. `validate:domain-ownership` checks
+these rows against the Domain Ownership Matrix in the root `CLAUDE.md` in both directions, so a
+capability listed here and a row there cannot diverge. "Defined in" is relative to `server/src`.
+
+| Capability | Owner | Module | Defined in |
+| --- | --- | --- | --- |
+| Command parsing | `UnifiedCommandParser` | `engine-execution` | `engine/execution/parsers/command-parser.ts` |
+| Gate enforcement mode | `resolveEnforcementMode` | `engine-execution` | `engine/execution/pipeline/decisions/gates/enforcement-mode.ts` |
+| Injection decisions | `InjectionDecisionService` | `engine-execution` | `engine/execution/pipeline/decisions/injection/injection-decision-service.ts` |
+| Response assembly | `ResponseAssembler` | `engine-execution` | `engine/execution/formatting/response-assembler.ts` |
+| Step capture | `StepCaptureService` | `engine-execution` | `engine/execution/capture/step-capture-service.ts` |
+| Framework selection | `FrameworkManager` | `engine-frameworks` | `engine/frameworks/framework-manager.ts` |
+| Framework validity | `FrameworkManager` | `engine-frameworks` | `engine/frameworks/framework-manager.ts` |
+| Gate enhancement | `GateEnhancementService` | `engine-gates` | `engine/gates/services/gate-enhancement-service.ts` |
+| Gate normalization | `GateService` | `engine-gates` | `engine/gates/services/gate-service-interface.ts` |
+| Gate selection | `GateManager` | `engine-gates` | `engine/gates/gate-manager.ts` |
+| Gate verdict processing | `GateVerdictProcessor` | `engine-gates` | `engine/gates/services/gate-verdict-processor.ts` |
+| Inline gate parsing | `InlineGateProcessor` | `engine-gates` | `engine/gates/services/inline-gate-processor.ts` |
+| Style resolution | `StyleManager` | `formatting` | `modules/formatting/style-manager.ts` |
+| Prompt resolution | `PromptRegistry` | `prompts` | `modules/prompts/registry.ts` |
+
 ## Observed boundary graph
 
 Solid arrows include at least one value import. Dotted arrows contain only type imports.
