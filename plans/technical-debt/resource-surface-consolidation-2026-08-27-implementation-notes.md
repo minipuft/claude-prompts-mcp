@@ -1032,3 +1032,15 @@ exists reports `0.0`, which fails the `0.0 < mtime` test and is retained forever
 that creates a file, flushes its findings, and then deletes the file is blocked on every
 subsequent turn with nothing it can do to clear it — a gate nobody can pass. Fixed in
 `~/.claude/hooks/lib/plan_hygiene.py` in the same session that hit it.
+
+**DEV-P4B-3 verified in production, not just in unit tests.** The stamp landed on the live session
+state (`vanished_seen_ts` carries both deleted paths), which is the half the unit suite cannot
+show: those tests drive `retained_edits` directly, so they prove the predicate and say nothing
+about whether the Stop hook persists what it computed. The persistence was the actual defect —
+the old caller saved only when the pending list shrank, and on a stamping turn it does not.
+
+One further thing the live state makes visible: `source_since_touch` holds four paths, two in this
+worktree and two in `~/.claude`, while the banner names only the two here. That is the
+retained-vs-reported split behaving correctly — repository scoping decides what a banner may SAY,
+never what the ledger REMEMBERS, so the `~/.claude` edits stay owed against a plan in their own
+repo instead of being erased by a plan bound in this one.
