@@ -312,6 +312,9 @@ export class SymbolicCommandBuilder {
     const compilation = this.compileWorkflow(
       { version: 1, nodes, ...(edges.length > 0 ? { edges } : {}) },
       order,
+      // A memo over the prompts THIS call already resolved through `findPrompt` above — every
+      // node's `promptId` is a `convertedPrompt.id` set in that same loop, so the map always
+      // hits and the `??` arm is the shared lookup standing behind it.
       { lookupPrompt: (promptId) => promptsById.get(promptId) ?? findPrompt(promptId) }
     );
 
