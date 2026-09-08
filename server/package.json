@@ -134,6 +134,8 @@
     "validate:declared-surface:self-test": "tsx scripts/validate-declared-surface.ts --self-test",
     "validate:shipped-frameworks": "tsx scripts/validate-shipped-frameworks.ts",
     "validate:shipped-frameworks:self-test": "tsx scripts/validate-shipped-frameworks.ts --self-test",
+    "validate:mutation-atomicity": "tsx scripts/validate-mutation-atomicity.ts",
+    "validate:mutation-atomicity:self-test": "tsx scripts/validate-mutation-atomicity.ts --self-test",
     "validate:preview-vocabulary": "node scripts/validate-preview-vocabulary.js",
     "validate:preview-vocabulary:self-test": "node scripts/validate-preview-vocabulary.js --self-test",
     "validate:prompts": "tsx scripts/validate-prompts.ts",

@@ -15,17 +15,48 @@ export interface ResourceMutationTarget {
   kind?: 'file' | 'directory';
 }
 
-export interface ResourceMutationTransactionOptions<T> {
+/**
+ * What a resource WRITER accepts so its caller can put a durable record inside the write's
+ * transaction. One shared shape across the prompt, gate and framework writers, because P4.2's
+ * finding was that the same split existed in all three and a per-writer option would let them
+ * drift apart again.
+ */
+export interface ResourceWriteCommitOptions {
+  commit?: () => Promise<void>;
+}
+
+export interface ResourceMutationTransactionOptions<T, C = void> {
   targets: ResourceMutationTarget[];
   mutate: () => Promise<T> | T;
   validate?: () => Promise<ResourceVerificationResult> | ResourceVerificationResult;
+  /**
+   * Durable bookkeeping that must succeed or the files go back — the version record, above all.
+   *
+   * WHY THIS IS NOT THE CALLER'S BUSINESS ANY MORE (P4.2 / SF-3). A resource write and the
+   * version row describing it were two sequential steps, and a sequential two-step can only
+   * CHOOSE which way it breaks: record-first leaves a phantom row for a write that failed,
+   * write-first leaves a file no version row describes, which is unrecoverable because nothing
+   * regenerates `version_history`. Both orderings were tried here; the second was reverted.
+   *
+   * Running the record INSIDE the transaction is what dissolves the choice. It runs after the
+   * files are written and verified, so a write or validation failure never reaches it and the
+   * ledger stays untouched; and it throws on failure into the same catch that restores every
+   * snapshot, so a record failure leaves the files byte-identical. Neither half depends on the
+   * other having been ordered correctly.
+   *
+   * Runs LAST on purpose. Committing before `validate` would record a state the transaction is
+   * about to roll back — the phantom row under a different name.
+   */
+  commit?: () => Promise<C> | C;
 }
 
-export interface ResourceMutationTransactionResult<T> {
+export interface ResourceMutationTransactionResult<T, C = void> {
   success: boolean;
   result?: T;
   validation?: ResourceVerificationResult;
   verificationFailure?: ResourceVerificationFailurePayload;
+  /** Present only on success — a failed `commit` rolls the whole mutation back. */
+  commitResult?: C | undefined;
   rolledBack: boolean;
   error?: string;
 }
@@ -48,9 +79,9 @@ export class ResourceMutationTransaction {
     private readonly verificationService: ResourceVerificationService = new ResourceVerificationService()
   ) {}
 
-  async run<T>(
-    options: ResourceMutationTransactionOptions<T>
-  ): Promise<ResourceMutationTransactionResult<T>> {
+  async run<T, C = void>(
+    options: ResourceMutationTransactionOptions<T, C>
+  ): Promise<ResourceMutationTransactionResult<T, C>> {
     const snapshotRoot = await mkdtemp(join(tmpdir(), 'cpm-resource-txn-'));
     let snapshots: TargetSnapshot[] = [];
     let rolledBack = false;
@@ -59,8 +90,9 @@ export class ResourceMutationTransaction {
       snapshots = await this.captureSnapshots(snapshotRoot, options.targets);
       const result = await options.mutate();
 
+      let validation: ResourceVerificationResult | undefined;
       if (options.validate !== undefined) {
-        const validation = await options.validate();
+        validation = await options.validate();
         if (!validation.valid) {
           await this.restoreSnapshots(snapshots);
           rolledBack = true;
@@ -88,11 +120,14 @@ export class ResourceMutationTransaction {
               this.verificationService.formatFailurePayload(verificationFailure),
           };
         }
-
-        return { success: true, result, validation, rolledBack };
       }
 
-      return { success: true, result, rolledBack };
+      // Last, and inside the `try` — a throw here lands in the catch below, which restores every
+      // snapshot. That is the whole mechanism: the caller writes `commit` as an ordinary await and
+      // gets file-level atomicity across it without ordering anything.
+      const commitResult = options.commit !== undefined ? await options.commit() : undefined;
+
+      return { success: true, result, validation, commitResult, rolledBack };
     } catch (error) {
       if (snapshots.length > 0) {
         await this.restoreSnapshots(snapshots);

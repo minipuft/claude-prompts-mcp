@@ -302,36 +302,18 @@ export class PromptVersioningProcessor {
       };
     }
 
-    // PHASE 2 — record. Throws on persistence failure, which aborts with nothing on disk. This
-    // ordering is the safety property: recording after the write would leave a written file with
-    // no version row. Projected through the same shape `updatePrompt` records, because the raw
-    // ConvertedPrompt carries loader-resolved runtime keys and passing it here would make the
-    // bridge check always see the live state as unrecorded (see canonicalPromptSnapshot).
-    let saveResult;
-    try {
-      saveResult = await this.context.versionHistoryService.commitEdit(
-        'prompt',
-        id,
-        currentState,
-        snapshot,
-        { description: `Rollback to v${version}`, diff_summary: '' }
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `❌ Rollback failed: could not record the version snapshot — ${message}\n\n` +
-              `The prompt was left unchanged.`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    // PHASE 2 + 3 — write and record as ONE transaction (P4.2 / SF-3). The safety property used to
+    // ride on their ORDER, which could only choose a failure mode: recording first left a row for
+    // a write that could still fail, recording second left a written file with no version row. The
+    // record now runs inside the write's transaction after verification, so a failed write records
+    // nothing and a failed record restores the files. Projected through the same shape
+    // `updatePrompt` records, because the raw ConvertedPrompt carries loader-resolved runtime keys
+    // and passing it here would make the bridge check always see the live state as unrecorded (see
+    // canonicalPromptSnapshot).
+    let restoredVersion: number | undefined;
+    let recordFailure: string | undefined;
 
-    // PHASE 3 — write. Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
+    // Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
     // rollback inherits the on-disk field preservation Tier 1.4 established, so the
     // prompt-level fields the writer builds no value for survive a rollback exactly as they
     // survive an update. `ALL_PROMPT_DATA_KEYS`: rollback owns the WHOLE restored state (Fix B,
@@ -340,7 +322,54 @@ export class PromptVersioningProcessor {
     // to a version recorded under a DIFFERENT category perform a category move (Part 2): the
     // writer resolves that purely from `restore.promptData.category` vs the on-disk directory,
     // with no rollback-specific code needed here.
-    await this.fileOperations.updatePromptImplementation(restore.promptData, ALL_PROMPT_DATA_KEYS);
+    try {
+      await this.fileOperations.updatePromptImplementation(
+        restore.promptData,
+        ALL_PROMPT_DATA_KEYS,
+        undefined,
+        undefined,
+        {
+          commit: async (): Promise<void> => {
+            try {
+              const saveResult = await this.context.versionHistoryService.commitEdit(
+                'prompt',
+                id,
+                currentState,
+                snapshot,
+                { description: `Rollback to v${version}`, diff_summary: '' }
+              );
+              restoredVersion = saveResult.version;
+            } catch (error) {
+              recordFailure = error instanceof Error ? error.message : String(error);
+              throw error;
+            }
+          },
+        }
+      );
+    } catch (error) {
+      const message = recordFailure ?? (error instanceof Error ? error.message : String(error));
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              (recordFailure !== undefined
+                ? `❌ Rollback failed: could not record the version snapshot — ${message}\n\n`
+                : `❌ Rollback failed: the write did not complete — ${message}\n\n`) +
+              `The prompt was left unchanged.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    if (restoredVersion === undefined) {
+      // Unreachable: `commit` either assigns or throws, and a throw is caught above.
+      throw new Error(
+        `Rollback of prompt '${id}' reported a successful write without recording a version`
+      );
+    }
+
     await this.context.dependencies.onRefresh();
 
     return {
@@ -349,7 +378,7 @@ export class PromptVersioningProcessor {
           type: 'text' as const,
           text:
             `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
-            `📜 Restored state recorded as version ${saveResult.version}\n` +
+            `📜 Restored state recorded as version ${restoredVersion}\n` +
             describeUnversionedScriptTools(currentPrompt) +
             `🔄 Prompts reloaded`,
         },
@@ -358,7 +387,7 @@ export class PromptVersioningProcessor {
         action: 'rollback',
         id,
         restored_version: version,
-        current_version: saveResult.version,
+        current_version: restoredVersion,
         mutated: true,
         refreshed: true,
       },

@@ -545,70 +545,91 @@ export class PromptLifecycleProcessor {
       return this.renderPreview(beforeContent, promptData, patchedFields, diagnosis.preExisting);
     }
 
+    // `recordEditResult` throws on persistence failure (P7-D2, OQ-P7-6), and the update ABORTS on
+    // it: `version_history` is durable and nothing regenerates its rows, so content written past a
+    // failed snapshot leaves an unrecoverable gap while reporting success. Go-forward numbering
+    // (OQ-P7-3): the recorded snapshot is the state this edit PRODUCES, so the newest version
+    // equals what `inspect` shows; any unrecorded prior state gets a bridge row first (era
+    // transition, out-of-band edit).
+    //
+    // The record used to run HERE, ahead of the write, so "nothing was written" held by ordering
+    // alone — and the mirror failure (a write that lands with no version row) was reachable the
+    // moment anyone flipped that order, which is what P4.2 / SF-3 found in all three processors.
+    // It now runs as the write transaction's `commit` step: it happens only if the files were
+    // written and verified, and if it throws the transaction restores them. `versionFailure` is
+    // what lets this method still tell an operator WHICH half failed, since both now surface as
+    // one rejected write.
     let versionSaved: number | undefined;
+    let versionFailure: string | undefined;
     const skipVersion = args.skip_version === true;
-    if (
+    const commitOptions =
       beforeContent !== null &&
       this.context.versionHistoryService.isAutoVersionEnabled() &&
       !skipVersion
-    ) {
-      const diffForVersion = this.textDiffService.generatePromptDiff(beforeContent, promptData);
-      const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
-
-      // `recordEditResult` throws on persistence failure (P7-D2, OQ-P7-6). The update ABORTS here
-      // rather than proceeding: `version_history` is durable and nothing regenerates its rows, so
-      // writing the new content past a failed snapshot leaves an unrecoverable gap while reporting
-      // success. Caught here rather than at the router boundary only to state the one fact the
-      // operator needs — that nothing was written, because the write is still ahead of this point.
-      // Go-forward numbering (OQ-P7-3): the recorded snapshot is the state this edit PRODUCES, so
-      // the newest version equals what `inspect` shows; any unrecorded prior state gets a bridge
-      // row first (era transition, out-of-band edit).
-      try {
-        const versionResult = await this.context.versionHistoryService.recordEditResult(
-          'prompt',
-          promptData.id,
-          beforeContent as unknown as Record<string, unknown>,
-          { ...promptData },
-          {
-            description: 'Update via resource_manager',
-            diff_summary: diffSummary,
-          }
-        );
-
-        versionSaved = versionResult.version;
-        this.context.dependencies.logger.debug(
-          `Saved version ${versionSaved} for prompt ${promptData.id}`
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.context.dependencies.logger.error(
-          `Aborting update of prompt ${promptData.id}: ${message}`
-        );
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text:
-                `❌ **Prompt update aborted**: the version snapshot could not be saved.\n\n` +
-                `${message}\n\n` +
-                `💡 No changes were written to '${promptData.id}'. Retry, or pass ` +
-                `\`skip_version: true\` to update without recording a version.`,
+        ? {
+            // Inlined rather than extracted to a helper on purpose — see the note in
+            // `framework-lifecycle-processor.ts`: `validate:mutation-atomicity` reads the record's
+            // position lexically, and a gate that cannot see the property is not guarding it.
+            commit: async (): Promise<void> => {
+              try {
+                const diffForVersion = this.textDiffService.generatePromptDiff(
+                  beforeContent,
+                  promptData
+                );
+                const versionResult = await this.context.versionHistoryService.recordEditResult(
+                  'prompt',
+                  promptData.id,
+                  beforeContent as unknown as Record<string, unknown>,
+                  { ...promptData },
+                  {
+                    description: 'Update via resource_manager',
+                    diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  }
+                );
+                versionSaved = versionResult.version;
+                this.context.dependencies.logger.debug(
+                  `Saved version ${versionSaved} for prompt ${promptData.id}`
+                );
+              } catch (error) {
+                versionFailure = error instanceof Error ? error.message : String(error);
+                throw error;
+              }
             },
-          ],
-          isError: true,
-        };
-      }
-    }
+          }
+        : {};
 
     // `currentPrompt.sourceRoot`, not `promptData` — provenance is deliberately absent from
     // `canonicalPromptSnapshot`, which is what `promptData` is built from, so that it never
     // reaches a version snapshot or a diff. It has to arrive as its own argument (P1.2).
-    const result = await this.fileOperations.updatePromptImplementation(
-      promptData,
-      suppliedKeys,
-      currentPrompt?.sourceRoot,
-      { unsetKeys, toolBinding, removedToolIds }
-    );
+    let result;
+    try {
+      result = await this.fileOperations.updatePromptImplementation(
+        promptData,
+        suppliedKeys,
+        currentPrompt?.sourceRoot,
+        { unsetKeys, toolBinding, removedToolIds },
+        commitOptions
+      );
+    } catch (error) {
+      if (versionFailure === undefined) throw error;
+
+      this.context.dependencies.logger.error(
+        `Aborting update of prompt ${promptData.id}: ${versionFailure}`
+      );
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `❌ **Prompt update aborted**: the version snapshot could not be saved.\n\n` +
+              `${versionFailure}\n\n` +
+              `💡 No changes were written to '${promptData.id}'. Retry, or pass ` +
+              `\`skip_version: true\` to update without recording a version.`,
+          },
+        ],
+        isError: true,
+      };
+    }
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
     const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 

@@ -149,33 +149,49 @@ export class FrameworkLifecycleProcessor {
     // Auto-versioning — go-forward: version N holds the state edit N produced, matching prompts
     // and gates. `recordEditResult` bridges the prior live state when it is not already the newest
     // row, which carries pre-existing framework rows across the era boundary without a migration.
+    //
+    // Handed to the writer as its transaction's `commit` step rather than run ahead of it (P4.2 /
+    // SF-3). The record then lands after the files are written and verified, and a record failure
+    // restores those files — so neither a version row describing a write that never happened nor a
+    // file no version row describes is reachable. Sequencing the two steps could only choose which
+    // of those two the caller got; both orderings were shipped here and one was reverted.
     let versionSaved: number | undefined;
     const skipVersion = args.skip_version === true;
-    if (this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion) {
-      const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-        beforeState,
-        afterState,
-        `${id}/framework.yaml`
-      );
-      const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
-
-      const versionResult = await this.ctx.versionHistoryService.recordEditResult(
-        'framework',
-        id,
-        beforeState,
-        afterState,
-        {
-          description: 'Update via resource_manager',
-          diff_summary: diffSummary,
-        }
-      );
-
-      versionSaved = versionResult.version;
-      this.ctx.logger.debug(`Saved version ${versionSaved} for framework ${id}`);
-    }
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            // Inlined rather than extracted to a helper on purpose: `validate:mutation-atomicity`
+            // reads the record's position lexically, so a call one indirection away reads to the
+            // gate exactly like the pre-fix shape — and a gate that cannot see the property is
+            // not guarding it.
+            commit: async (): Promise<void> => {
+              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
+                beforeState,
+                afterState,
+                `${id}/framework.yaml`
+              );
+              const versionResult = await this.ctx.versionHistoryService.recordEditResult(
+                'framework',
+                id,
+                beforeState,
+                afterState,
+                {
+                  description: 'Update via resource_manager',
+                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                }
+              );
+              versionSaved = versionResult.version;
+              this.ctx.logger.debug(`Saved version ${versionSaved} for framework ${id}`);
+            },
+          }
+        : {};
 
     // Write framework files with merge from existing data
-    const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
+    const result = await this.ctx.fileService.writeFrameworkFiles(
+      frameworkData,
+      existingData,
+      commitOptions
+    );
 
     if (!result.success) {
       return this.error(`Failed to update framework: ${result.error}`);

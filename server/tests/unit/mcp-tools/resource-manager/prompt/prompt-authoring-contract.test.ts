@@ -69,13 +69,31 @@ function createHarness(
     onRefresh,
     onRestart: jest.fn(async () => {}),
   };
-  const updatePromptImplementation = jest.fn(async (prompt: Record<string, unknown>) => {
-    pendingPrompt = prompt;
-    return {
-      message: 'written',
-      affectedFiles: [`/workspace/prompts/general/${String(prompt['id'])}/prompt.yaml`],
-    };
-  });
+  // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+  // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+  // longer exists.
+  const updatePromptImplementation = jest.fn(
+    async (
+      promptData: Record<string, unknown>,
+      _suppliedKeys?: unknown,
+      _sourceRoot?: unknown,
+      _writeIntent?: unknown,
+      options?: { commit?: () => Promise<void> }
+    ) => {
+      const previous = pendingPrompt;
+      pendingPrompt = promptData;
+      try {
+        await options?.commit?.();
+      } catch (error) {
+        pendingPrompt = previous;
+        throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+      }
+      return {
+        message: 'written',
+        affectedFiles: [`/workspace/prompts/general/${String(promptData['id'])}/prompt.yaml`],
+      };
+    }
+  );
   const loadHistory = jest.fn(async (_type: string, id: string) =>
     id === 'existing_prompt' || pendingPrompt?.['id'] === id
       ? ({ current_version: currentVersion } as never)

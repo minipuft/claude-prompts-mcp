@@ -398,6 +398,13 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the comparator with an agreeing set (must stay silent), a framework on disk but undeclared (must report; this is the motivating instance, since an undeclared shipped framework was deletable from the bundled tree), a declared id with no directory (must report, because the registry loads every shipped id fail-fast), and both together; the live set is compared against this checkout as a fifth case',
   },
   {
+    script: 'validate:mutation-atomicity',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over a record inside a `commit` callback (must stay silent), record-before-write on an update path and a bare `commitEdit` on a rollback path (both must report; these are the motivating instances, and one of them shipped and was reverted), and a `commit` callback elsewhere in the same method as a bare call (must still report, since a nearby callback must not launder it); the live tree is the fifth case, and a scan finding no recording call at all exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
     script: 'validate:declared-surface',
     io: 'read',
     reads: ['declared'],

@@ -11,6 +11,7 @@ import {
   ResourceMutationTransaction,
   ResourceVerificationService,
   type ResourceVerificationFailurePayload,
+  type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
@@ -137,7 +138,10 @@ export class GateFileWriter {
       dependencies.resourceMutationTransaction ?? new ResourceMutationTransaction();
   }
 
-  async writeGateFiles(data: GateCreationData): Promise<GateFileWriteResult> {
+  async writeGateFiles(
+    data: GateCreationData,
+    options: ResourceWriteCommitOptions = {}
+  ): Promise<GateFileWriteResult> {
     // `data.id` is caller-supplied and unvalidated for path segments. Measured 2026-08-30:
     // `id: '../../ESCAPED_GATE'` wrote gate.yaml and guidance.md outside the resources root, and
     // the tool reported the write. Contained before the directory is created.
@@ -167,6 +171,7 @@ export class GateFileWriter {
         return { paths };
       },
       validate: () => this.verificationService.validateFile('gates', data.id, yamlPath),
+      ...(options.commit !== undefined ? { commit: options.commit } : {}),
     });
 
     if (!transactionResult.success) {

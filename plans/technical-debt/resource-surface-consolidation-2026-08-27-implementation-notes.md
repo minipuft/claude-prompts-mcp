@@ -1086,3 +1086,38 @@ against the new world rather than against its own text.
 **DEV-P4C-6 — e2e reads `dist/`.** The e2e refusal case failed against the previous message for one
 run after the source was fixed, because the suite spawns a server from the build. Rebuild before
 attributing an e2e failure to the change under test.
+
+**DEV-P4C-7 — P4.2's authored cost was wrong in both directions, and the cheap half was the
+abstraction.** The row priced the fix as a new `ResourceMutationTransaction` plus a version helper
+rewritten to throw. Both already existed: the transaction is 199 lines in
+`src/modules/resources/services/`, all three writers already wrap their file writes in it
+(`framework-file-writer.ts:328`, `gate-file-writer.ts:152`, `file-operations.ts:300`), and
+`recordEditResult` has thrown since P7-D2. Only the record sat outside. What the row UNDERSTATED is
+the site count — six, not the three P4-F5 found, because each processor splits the pair on `update`
+and again on `rollback`. Re-measuring an inventory is worth doing when it might make the work
+smaller too; the correction that mattered here was the one that made it bigger.
+
+**DEV-P4C-8 — the gate rejected the first draft of its own fix, and was right.** Extracting the
+record into a private `recordUpdateVersion` per processor read better and put the call one
+indirection outside the `commit` callback, which is lexically indistinguishable from the pre-fix
+shape. `validate:mutation-atomicity` reported all three. Two ways out: widen the gate to follow one
+level of call graph, or inline the record so the property holds structurally. Inlined — a gate that
+cannot see the property is not guarding it, and the cost is three slightly longer callbacks against
+a check that stays simple enough to trust. Written on the TS AST rather than as a regex or a brace
+count for the same reason: a false PASS is the outcome this check exists to prevent.
+
+**DEV-P4C-9 — an assertion that measured the ORDER rather than the property.**
+`prompt-lifecycle-processor.test.ts` asserted `expect(updatePromptImplementation).not
+.toHaveBeenCalled()` on a failed version save. That could only hold while the record ran ahead of
+the write; under one transaction the writer is entered and rolls back. The property — nothing
+survives a failed update — is unchanged and still asserted, and it is now proved on real bytes in
+`gate-framework-versioning.integration.test.ts`, which a mocked writer cannot do. Superseded in
+place with the reason, not deleted. Four writer doubles across three unit files also needed to
+start honouring `options.commit`; a double that ignores a new argument the real collaborator now
+acts on is the DEV-P4C-4 shape again, and it cost 5 red tests to notice.
+
+**DEV-P4C-10 — `sed`/`perl` in-place edits keep costing more than they save.** A `perl -0pi`
+substitution used `$2` against a NON-capturing group, so it silently replaced three variable
+declarations with `const  = ...`. Exit code 0. Caught only by the next typecheck. This is the same
+family as the silent no-op recorded earlier in this arc: the failure mode is not that the pattern
+misses, it is that the result is never read. Use the editing tools, or read back what was written.

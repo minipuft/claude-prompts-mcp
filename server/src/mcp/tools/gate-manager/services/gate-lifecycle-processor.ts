@@ -160,32 +160,41 @@ export class GateLifecycleProcessor {
     // version always equals what `inspect` shows. `recordEditResult` bridges the prior live state
     // first when it is not already the newest row, which is what carries pre-P7 gate rows across
     // the era boundary with no data migration.
+    //
+    // Runs as the writer transaction's `commit` step, not ahead of it (P4.2 / SF-3) — see the
+    // matching comment in `framework-lifecycle-processor.ts` for why ordering the record against
+    // the write could only pick which failure mode the caller got.
     let versionSaved: number | undefined;
     const skipVersion = args.skip_version === true;
-    if (this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion) {
-      const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-        beforeState,
-        afterState,
-        `${id}/gate.yaml`
-      );
-      const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            // Inlined rather than extracted to a helper on purpose — see the note in
+            // `framework-lifecycle-processor.ts`: `validate:mutation-atomicity` reads the record's
+            // position lexically, and a gate that cannot see the property is not guarding it.
+            commit: async (): Promise<void> => {
+              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
+                beforeState,
+                afterState,
+                `${id}/gate.yaml`
+              );
+              const versionResult = await this.ctx.versionHistoryService.recordEditResult(
+                'gate',
+                id,
+                beforeState,
+                afterState,
+                {
+                  description: 'Update via resource_manager',
+                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                }
+              );
+              versionSaved = versionResult.version;
+              this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
+            },
+          }
+        : {};
 
-      const versionResult = await this.ctx.versionHistoryService.recordEditResult(
-        'gate',
-        id,
-        beforeState,
-        afterState,
-        {
-          description: 'Update via resource_manager',
-          diff_summary: diffSummary,
-        }
-      );
-
-      versionSaved = versionResult.version;
-      this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
-    }
-
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
     if (!result.success) {
       return this.error(`Failed to update gate: ${result.error}`);
     }

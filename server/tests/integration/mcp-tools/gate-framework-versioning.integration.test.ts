@@ -140,6 +140,7 @@ describe('Gate versioning through the real write path', () => {
   let registry: DiskBackedGateRegistry;
   let lifecycle: GateLifecycleProcessor;
   let versioning: GateVersioningProcessor;
+  let gateWriter: GateFileWriter;
   let mockLogger: MockLogger;
 
   /** Row count for this gate's history — the measurement F3's claim is about. */
@@ -208,16 +209,21 @@ describe('Gate versioning through the real write path', () => {
       getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
 
+    // Held in a variable so a test can fault the WRITE half. The file-writer instance is the only
+    // seam that fails inside the transaction's `mutate()` without asking the filesystem to
+    // cooperate, which is what the forced-write-failure case below needs.
+    gateWriter = new GateFileWriter({
+      logger: mockLogger as unknown as Logger,
+      configManager,
+    });
+
     const ctx: GateResourceContext = {
       logger: mockLogger as unknown as Logger,
       gateManager: registry as unknown as GateResourceContext['gateManager'],
       configManager,
       textDiffService: new ObjectDiffGenerator(),
       versionHistoryService,
-      gateFileService: new GateFileWriter({
-        logger: mockLogger as unknown as Logger,
-        configManager,
-      }),
+      gateFileService: gateWriter,
       onRefresh: async () => {
         await registry.reload(GATE_ID);
       },
@@ -594,6 +600,112 @@ describe('Gate versioning through the real write path', () => {
       // unchanged, and this test would assert nothing about ordering. The fault having been
       // reached is what makes the untouched file evidence about `record → write` specifically.
       expect(persistenceWasReached).toBe(true);
+    });
+
+    /**
+     * The mirror half, and the one P4.2 / SF-3 found missing (2026-09-07).
+     *
+     * The two cases above prove a RECORD failure writes no file. They say nothing about the other
+     * direction, and for as long as the record ran ahead of the write there was nothing to say: a
+     * write failure necessarily left the version row it had already written. That row describes a
+     * state no file ever held, and `version_history` is durable — nothing prunes it, so a rollback
+     * to it restores content that never existed.
+     *
+     * Now that both halves run in one transaction, neither direction is a matter of ordering, and
+     * BOTH are asserted here so a future reorder cannot quietly trade one for the other. Faulted at
+     * the writer rather than at the filesystem for the same reason as above: it throws where the
+     * write throws, inside `mutate()`, without needing the disk to cooperate.
+     */
+    function failWrite() {
+      return jest
+        .spyOn(gateWriter as unknown as { buildGateYaml: () => unknown }, 'buildGateYaml')
+        .mockImplementation(() => {
+          throw new Error('Failed to write gate.yaml: disk full');
+        });
+    }
+
+    it('records no version when the file write throws during an update', async () => {
+      await run({
+        action: 'create',
+        id: GATE_ID,
+        name: 'Versioning Probe',
+        type: 'validation',
+        description: 'v1 description',
+        guidance: 'v1 guidance body',
+      } as GateManagerInput);
+
+      const rowsBefore = countVersionRows();
+      const yamlBefore = readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8');
+
+      const spy = failWrite();
+      let writeWasReached = false;
+      try {
+        const outcome = await run({
+          action: 'update',
+          id: GATE_ID,
+          description: 'v2 description',
+          guidance: 'v2 guidance body',
+        } as GateManagerInput).catch((error: unknown) => ({
+          isError: true,
+          content: [{ text: String(error) }],
+        }));
+
+        expect(outcome.isError).toBe(true);
+        writeWasReached = spy.mock.calls.length > 0;
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The claim. A failed write must leave the ledger exactly as it was — no row for the edit,
+      // and no bridge row either, since the record never ran at all.
+      expect(countVersionRows()).toBe(rowsBefore);
+      expect(readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8')).toBe(yamlBefore);
+
+      // Same guard against vacuity as the record-failure cases: an update rejected before it
+      // reached the writer would also leave the ledger unchanged and would assert nothing.
+      expect(writeWasReached).toBe(true);
+    });
+
+    it('records no version when the file write throws during a rollback', async () => {
+      await run({
+        action: 'create',
+        id: GATE_ID,
+        name: 'Versioning Probe',
+        type: 'validation',
+        description: 'v1 description',
+        guidance: 'v1 guidance body',
+      } as GateManagerInput);
+      await run({
+        action: 'update',
+        id: GATE_ID,
+        description: 'v2 description',
+        guidance: 'v2 guidance body',
+      } as GateManagerInput);
+
+      const rowsBefore = countVersionRows();
+      const yamlBefore = readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8');
+
+      const spy = failWrite();
+      let writeWasReached = false;
+      try {
+        const outcome = await run({
+          action: 'rollback',
+          id: GATE_ID,
+          version: 1,
+        } as GateManagerInput).catch((error: unknown) => ({
+          isError: true,
+          content: [{ text: String(error) }],
+        }));
+
+        expect(outcome.isError).toBe(true);
+        writeWasReached = spy.mock.calls.length > 0;
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(countVersionRows()).toBe(rowsBefore);
+      expect(readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8')).toBe(yamlBefore);
+      expect(writeWasReached).toBe(true);
     });
 
     it('aborts a rollback with nothing written when committing the edit throws', async () => {

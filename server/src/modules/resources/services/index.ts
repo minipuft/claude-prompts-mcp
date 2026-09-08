@@ -13,4 +13,5 @@ export {
   type ResourceMutationTarget,
   type ResourceMutationTransactionOptions,
   type ResourceMutationTransactionResult,
+  type ResourceWriteCommitOptions,
 } from './resource-mutation-transaction.js';
