@@ -134,3 +134,148 @@ Every ☐ above: (as of 2026-09-07 · flips when the row's Verify command passes
   arrives without it, naming the step and the missing line; the default `advisory` records
   `delegation_skipped` for every delegated step, gated or not. Claude Code handoffs now pin
   `run_in_background: false`.
+
+## Discovery (step 1)
+
+- The server never waits: `prompt_engine` renders one step and returns; the run sits in
+  `chain_runs` at `current_node_id` until a resume arrives. No timer, no tail, no SubagentStop
+  hook.
+- Three mechanisms, no shared owner: the brief + `user_response` resume (cross-client, verifies
+  nothing), `hooks/delegation-enforce.py` (Claude Code only, clears state at Task/Agent
+  invocation, so it tracks spawn, not completion), `resolveDelegationSkipped` (post-hoc, gated
+  steps only). gemini-prompts carries its own hook copy; opencode-prompts has none.
+- Sibling pattern for a refusal at resume: stage 16 already refuses observations, remainder and
+  interrupt verbs by setting an error response and returning `false` before any mutation.
+- Gate `scope: 'chain'` is declared (`execution/types.ts:343`) and read by nothing. Contract-layer
+  D5 `findings[]` is in `tooling/contracts/prompt-engine.json` only, not in code.
+- Intent: feature (secondary refactor), risk medium (a refuse in the resume hot path; mitigated by
+  the `advisory` default and a positive-control test), external deps none.
+
+## Design (step 2)
+
+Pre-flight: 0 failures, compound none. Identification: pure functions, no state, one module under
+`engine/execution/delegation/` imported by both the brief renderer and the resume capture. Probed
+complexity: `step-capture-service.ts:61 captureStep` 14, `16-response-capture-stage.ts:100
+execute` 13. Rejected alternatives: a `DelegationHandoffService` class (no state to hold), a new
+`prompt_engine` parameter for the token (union addition, major bump), hook-only enforcement
+(single client, spawn-not-completion).
+
+Interfaces:
+
+```ts
+// delegation/handoff-contract.ts
+export const HANDOFF_RESULT_HEADING = "HANDOFF RESULT";
+export type HandoffEvidenceMode = "advisory" | "required";
+export function resolveHandoffEvidenceMode(
+  configured?: HandoffEvidenceMode,
+): HandoffEvidenceMode; // ?? 'advisory'
+export function handoffNodeToken(step: {
+  nodeId?: string;
+  stepNumber: number;
+}): string;
+export interface ParsedHandoffTrailer {
+  readonly node: string | null;
+  readonly proposedGateReview: string | null;
+  readonly findingsBlock: string | null;
+}
+export function parseHandoffTrailer(reply: string): ParsedHandoffTrailer;
+export type HandoffEvidence =
+  | { kind: "ok" }
+  | {
+      kind: "missing";
+      expected: string;
+      missing: "trailer" | "node-line" | "node-mismatch";
+      found: string | null;
+    };
+export function resolveHandoffEvidence(input: {
+  delegated: boolean | undefined;
+  mode: HandoffEvidenceMode;
+  expectedToken: string;
+  reply: string;
+}): HandoffEvidence;
+export function buildHandoffResultSection(
+  token: string,
+  hasGates: boolean,
+): string;
+// delegation/types.ts      DelegationPayload += readonly nodeToken: string; readonly mode: 'blocking' | 'detached';
+// delegation/strategy.ts   formatToolCall(agentType, model, mode)
+// acknowledgment.ts        resolveDelegationSkipped({ delegated, capturedResponse, expectedToken }) → boolean | undefined
+// core-config.ts           ExecutionConfig += delegation?: { evidence?: HandoffEvidenceMode }
+// tests/helpers/delegation/fake-worker.ts   runFakeWorker(brief: string): string
+```
+
+## Verified paths (step 3)
+
+27 references probed with `ls`, `wc -l`, `rg -n`; no shims. Corrections the tables above already
+carry: fake worker under `server/tests/helpers/` (no `tests/support`); `SCHEMA_VERSION` is 27, so
+Tier 4 bumps to 28; two payload construction sites (`chain-operator-executor.ts:573` via
+`renderDelegatedStepHandoff`, and `:878`); `ExecutionConfig` at `core-config.ts:163` (the `judge`
+at `:605` is a legacy interface); `ledgerCapturedStep` at `:209`; architecture overview insertion
+at `:477`.
+
+## Validation (step 5)
+
+### Testing strategy
+
+| What to test                                                                                         | Test type   | Location                                                                                                       | Why this type                                                                                              |
+| ---------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| token derivation (`nodeId` / `n<ordinal>`), trailer parse, evidence decision, advisory short-circuit | unit        | `server/tests/unit/execution/delegation/handoff-contract.test.ts`                                              | pure functions; every branch reachable without a pipeline                                                  |
+| Claude handoff renders `run_in_background: false`; other strategies unchanged                        | unit        | `server/tests/unit/execution/delegation/strategy.test.ts`                                                      | string rendering, six strategies                                                                           |
+| brief ends with `HANDOFF RESULT` + `node: <token>`; gates block kept                                 | unit        | existing brief tests                                                                                           | render-only                                                                                                |
+| `resolveDelegationSkipped` for ungated delegated steps                                               | unit        | `server/tests/unit/execution/delegation/acknowledgment.test.ts`                                                | predicate                                                                                                  |
+| positive control: `required` + prose-only resume → refused naming token                              | integration | `server/tests/integration/chain/delegation-handoff-evidence.integration.test.ts`                               | must run the real pipeline against `node:sqlite`; a unit test cannot show the refusal reaches the response |
+| accept path: fake-worker reply → captured, chain advances                                            | integration | same file                                                                                                      | same                                                                                                       |
+| advisory path: prose-only → captured, `delegation_skipped = 1`                                       | integration | same file + `delegation-skipped.integration.test.ts`                                                           | column write is the observable                                                                             |
+| legacy chain without node ids uses `n<ordinal>` at both sites                                        | integration | `delegated-resume-brief.integration.test.ts`                                                                   | both sites in one run                                                                                      |
+| ownership row ↔ `module.yaml` `owns`                                                                 | validator   | `npm run validate:domain-ownership`                                                                            | checked contract                                                                                           |
+| Tier 1–3 end to end in a client                                                                      | live drive  | Claude Code: `>>reference_demo ==> >>reference_demo` with `evidence: required`, then with the worker's trailer | green gates do not show the client flow                                                                    |
+
+### Done criteria
+
+| Criterion              | Validation                                                                                                                  | Pass condition                                               |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| positive control fires | integration suite, `required` mode                                                                                          | refusal response names the node token and the missing line   |
+| accept path advances   | integration suite                                                                                                           | `chain_runs.current_node_id` moves to the next node          |
+| advisory records       | `execution_records.delegation_skipped`                                                                                      | 1 for prose-only, 0 for trailer, NULL only for non-delegated |
+| foreground pinned      | strategy unit test                                                                                                          | Claude block contains `run_in_background: false`             |
+| complexity budget held | `sonarjs/cognitive-complexity`                                                                                              | `execute` ≤ 15, `captureStep` = 14                           |
+| ownership contract     | `npm run validate:domain-ownership`                                                                                         | exit 0 with the new row                                      |
+| full suite             | `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:all && npm run validate:arch` | exit 0                                                       |
+| docs current           | `docs/concepts/chains-lifecycle.md`, `docs/architecture/overview.md`, `CHANGELOG.md`                                        | describe the trailer, the config key, the layering           |
+| live drive             | Claude Code with the built `dist/`                                                                                          | refusal seen, then acceptance seen                           |
+
+### Documentation
+
+| Doc                                     | Update needed                                                                                |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `docs/concepts/chains-lifecycle.md`     | why delegate (D1); `HANDOFF RESULT` trailer; `execution.delegation.evidence`; foreground pin |
+| `docs/architecture/overview.md`         | enforcement layering under Execution Domain                                                  |
+| `CHANGELOG.md`                          | Added entry (above)                                                                          |
+| `CLAUDE.md`                             | Domain Ownership Matrix row (with `module.yaml`)                                             |
+| `hooks/delegation-enforce.py` docstring | server evidence is the floor                                                                 |
+
+### Risks
+
+| Risk                                                              | Impact                                | Mitigation                                                                   | Rollback                                             |
+| ----------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------- |
+| false refusal blocks every delegated chain                        | high                                  | default `advisory`; positive control AND accept path in CI                   | set `evidence: advisory`; no schema change to revert |
+| parent pastes the worker reply without the trailer                | medium (advisory) / blocks (required) | brief's last section is the contract; refusal message names the missing line | same                                                 |
+| `formatToolCall` signature ripples through six strategies + tests | medium                                | `typecheck:tests:ratchet` before commit                                      | revert Tier 1 commit                                 |
+| `delegation_skipped` semantics widen (ungated steps now 0/1)      | low                                   | `table-contracts.ts` comment updated in the same commit                      | none needed; append-only log                         |
+| Tier 4 schema bump drops ephemeral tables                         | low (documented posture)              | separate PR, after one release of Tier 1–3 measurement                       | revert the bump                                      |
+
+### Release
+
+- commit convention: `feat(execution): the brief's node token is the evidence a delegated step needs to resume`
+- scope: `execution` (Tier 1–2), `docs` (Tier 3), `chains` (Tier 4)
+
+### Growth capture
+
+- [ ] `/knowledge-capture`: "the wait is the client's tool call" — a request/response server
+      cannot wait; enforce the handshake at the boundary it owns (render ↔ accept)
+- [ ] memory: update `reference_chain_execution_internals` with the trailer contract once landed
+- [ ] skill: none until a second sighting
+
+## Implementation notes
+
+Deviations and ruling rationales: `plans/delegation-handoff-contract-2026-09-07-implementation-notes.md`.
