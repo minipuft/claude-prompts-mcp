@@ -1,7 +1,7 @@
 ---
 title: "A chain step that names an unregistered prompt is refused at write, reported at load, and failed in CI"
 date: 2026-09-07
-status: active
+status: reference
 tags: [chains, resources, validation, contracts]
 ---
 

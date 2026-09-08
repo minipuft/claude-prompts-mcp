@@ -2,7 +2,7 @@
 title: "Chain integrity — implementation notes"
 plan: chain-integrity-2026-09-07.md
 date: 2026-09-07
-status: active
+status: reference
 tags: [chains, implementation-notes]
 ---
 
@@ -28,3 +28,7 @@ Receipts recorded in the plan rows 0.1–0.4 (2026-09-07). The one design conseq
 | 7   | 2026-09-07 | 3.2 | The shared piece lives in `engine/execution/workflow-prompt-lookup.ts`, not beside `modules/prompts/chain-step-resolution.ts`.                                                                                                                                                                                   | `.dependency-cruiser.cjs` rule `engine-no-modules-or-mcp-value` forbids `engine/` from value-importing `modules/`. R1's "the same function" is not reachable across that boundary; what IS shared is the question, answered once per layer in that layer's vocabulary (registered ids at write/load/CI, a loaded `ConvertedPrompt` collection inside a run). Same precedent as `shared/utils/resource-ids.ts`. |
 | 8   | 2026-09-07 | 3.3 | Beyond the named site, `chain-operator-executor.ts:163` performs the same `find` and is left as a soft miss, with a comment naming why.                                                                                                                                                                          | It renders an ALREADY-EXECUTED step as review context, and that step's own render (the site now throwing) refused an unresolvable id before a review could be reached. Making it throw would refuse a review over missing _quoted_ content.                                                                                                                                                                    |
 | 9   | 2026-09-07 | 4.4 | `toWorkflowPromptInfo` was exported, then un-exported after `validate:knip-ratchet` flagged it (+1 unused export).                                                                                                                                                                                               | The projection has one consumer, `workflowPromptInfoLookup`, in the same file. Exporting it alone would let a caller re-pair it with a private lookup — the two-derivations shape row 3.2 exists to remove — so the ratchet was pointing at a real defect, not a bookkeeping one.                                                                                                                              |
+
+## Session close 2026-09-07
+
+All rows terminal on `fix/chain-integrity` (six commits, unpushed; push and PR await the owner). The eight source edits the plan-sync hook still lists under the `-own` worktree belong to the ownership validator, merged as #266 (d88b35e1); that worktree is removed and those edits are on main.
