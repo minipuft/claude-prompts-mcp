@@ -368,6 +368,18 @@ gh api -X PATCH repos/minipuft/claude-prompts-mcp \
   -F delete_branch_on_merge=true
 ```
 
+**Merge with `gh pr merge <n> --squash` and nothing else.** `--subject` and `--body` override those
+settings for that one merge, so the commit lands without the PR body while the settings themselves
+stay correct — and the workflow's check then reports drift that never happened. Measured 2026-09-08:
+#265 was merged that way, and #269 read the resulting commit and had to be admin-bypassed. Put the
+prose in the PR body before merging, which is where this section already says it belongs. If you
+only need a tidier message, edit the PR body; the squash copies it verbatim.
+
+_That check reports and never blocks, deliberately. Its subject is the newest squash on `main` --
+state no PR controls and only a merge changes -- so failing would block the merge that clears it
+while doing nothing about the merge that caused it. `server/tests/unit/scripts/pr-conventions-merge-settings.test.ts`
+holds that property, and the two-cause diagnosis, against controls._
+
 #### Write for the reader, not the session
 
 Measured 2026-09-01 on #254 and #255: both PRs satisfied the template and were still unreadable at
