@@ -1,11 +1,13 @@
 // @lifecycle test - Tier 2 row 2.0: a delegated step resumed through the REAL blueprint restore renders its brief.
 /**
- * S8 / R-4 flip condition, end to end through the real pipeline:
+ * What the BRIEF carries, end to end through the real pipeline: a delegated step resumed through
+ * the real blueprint restore renders its self-contained EXECUTION BRIEF, and that brief ends with
+ * the `HANDOFF RESULT` trailer contract carrying this node's token — `nodeId` when the chain has
+ * one, `n<ordinal>` when it does not.
  *
- *   - a DELEGATED, GATED step resumed WITHOUT the `Proposed Gate Review:` block produces a
- *     capture-time execution_records row with delegation_skipped = 1;
- *   - the same resume WITH the block produces delegation_skipped = 0;
- *   - a NON-delegated step's captured row binds NULL (partial population by row type).
+ * The RECORDED half (what `execution_records.handoff_evidence` ends up holding, and the refusal
+ * when the trailer is absent) lives in `delegation-handoff-evidence.integration.test.ts`, which
+ * shares this harness.
  *
  * Harness cloned from step-lifecycle.integration.test.ts: real SessionManagementStage,
  * StepResponseCaptureStage (with StepCaptureService holding the record store — the writer under
@@ -135,7 +137,10 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       unknowns_closed INTEGER,
       nodes_inserted INTEGER,
       nodes_skipped INTEGER,
-      delegation_skipped INTEGER,
+      handoff_evidence TEXT CHECK (
+        handoff_evidence IS NULL
+        OR handoff_evidence IN ('ok', 'trailer', 'node-line', 'node-mismatch')
+      ),
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
@@ -198,7 +203,7 @@ const buildPipeline = (options: {
     StepResponseCapture: new StepResponseCaptureStage(
       new GateVerdictProcessor(sessionStore, logger),
       // The writer under test: StepCaptureService holding the record store appends the
-      // capture-time `completed` row that carries delegation_skipped.
+      // capture-time `completed` row that carries handoff_evidence.
       new StepCaptureService(sessionStore, logger, recordStore),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),

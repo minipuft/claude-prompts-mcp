@@ -10,35 +10,41 @@
  */
 
 /** The literal heading a conforming worker's reply ends its trailer with. */
+import type { HandoffEvidenceMode, HandoffEvidenceReason } from '#shared/types/handoff-evidence.js';
+
+import { HANDOFF_EVIDENCE_REASONS } from '#shared/types/handoff-evidence.js';
+
+// The vocabulary lives in shared/types (config and records need it without an engine edge);
+// the contract module is where every consumer of the FUNCTIONS finds the names too.
+export { HANDOFF_EVIDENCE_REASONS };
+export type { HandoffEvidenceMode, HandoffEvidenceReason };
+
 export const HANDOFF_RESULT_HEADING = 'HANDOFF RESULT';
 
 /**
  * The literal heading a conforming worker's proposed self-review opens with, INSIDE the
- * `HANDOFF RESULT` trailer. Exported as the SSOT for that token: the S8 delegation-acknowledgment
- * predicate (`acknowledgment.ts#resolveDelegationSkipped`) detects a spawned worker by this exact
- * string in the captured step output, so the emitter ({@link buildHandoffResultSection}) and the
- * detector must share one spelling. Moved here from `brief.ts` — this module is the one both the
+ * `HANDOFF RESULT` trailer. Exported as the SSOT for that token: {@link buildHandoffResultSection}
+ * emits it into the brief and the fake worker in `tests/helpers/delegation/` echoes it back, so
+ * one spelling serves both sides. Moved here from `brief.ts` — this module is the one both the
  * render side and the capture side import.
  */
 export const PROPOSED_GATE_REVIEW_TOKEN = 'Proposed Gate Review:';
-
-/** Whether an unanswered handoff trailer merely records or refuses the resume. */
-export type HandoffEvidenceMode = 'advisory' | 'required';
 
 /**
  * Resolve the delegation evidence mode for a resume.
  *
  * A configuration may leave the mode unset — either because `execution.delegation.evidence` was
- * never declared or because no config layer reached the point of assigning one. In that case the
- * server records without refusing: an unstated mode means "not yet tightened", not "enforce".
- * Callers that want refusal must say so (mirrors `resolveEnforcementMode`'s style — pure function
- * over an optional dependency, not a method reached through `context.foo?.`).
+ * never declared or because no config layer reached the point of assigning one. An unstated mode
+ * is `required` (owner ruling R3, 2026-09-08): the contract the brief printed is the floor, and
+ * `advisory` is the deliberate opt-out for an operator who wants the reason recorded without the
+ * refusal. Mirrors `resolveEnforcementMode`'s style — a pure function over an optional
+ * dependency, not a method reached through `context.foo?.`, so no `?.` can silently relax it.
  *
  * @param configured - Mode from config, or undefined when unset
- * @returns The configured mode, or 'advisory' when none was configured
+ * @returns The configured mode, or 'required' when none was configured
  */
 export function resolveHandoffEvidenceMode(configured?: HandoffEvidenceMode): HandoffEvidenceMode {
-  return configured ?? 'advisory';
+  return configured ?? 'required';
 }
 
 /** The minimal step shape {@link handoffNodeToken} needs. */
@@ -130,6 +136,52 @@ export function parseHandoffTrailer(reply: string): ParsedHandoffTrailer {
   };
 }
 
+/** The single classification both public projections read. */
+interface HandoffClassification {
+  readonly reason: HandoffEvidenceReason;
+  /** The token the reply actually named, when it named one at all. */
+  readonly found: string | null;
+}
+
+/**
+ * Classify a reply against the token the brief printed. ONE parse, ONE ordering of the three
+ * failure shapes — {@link resolveHandoffEvidenceReason} and {@link resolveHandoffEvidence} are
+ * both projections of this, so the recorded reason and the refusal can never disagree.
+ */
+function classifyHandoffReply(expectedToken: string, reply: string): HandoffClassification {
+  if (findLastHeadingIndex(reply.split('\n')) === -1) {
+    return { reason: 'trailer', found: null };
+  }
+  const trailer = parseHandoffTrailer(reply);
+  if (trailer.node === null) {
+    return { reason: 'node-line', found: null };
+  }
+  if (trailer.node !== expectedToken) {
+    return { reason: 'node-mismatch', found: trailer.node };
+  }
+  return { reason: 'ok', found: trailer.node };
+}
+
+/**
+ * The reason a delegated step's resume was (or was not) acceptable — the value recorded on the
+ * step's execution record, independent of the mode in force.
+ *
+ * `undefined` when the step was not delegated: the fact does not exist, and the writer binds
+ * NULL. Every delegated step gets one of the four reasons, including `ok`, which is the half the
+ * retired S8 boolean could not express — it was `undefined` for a delegated step with no gates,
+ * so "nothing to say" and "nothing observed" shared one spelling.
+ */
+export function resolveHandoffEvidenceReason(input: {
+  delegated: boolean | undefined;
+  expectedToken: string;
+  reply: string;
+}): HandoffEvidenceReason | undefined {
+  if (input.delegated !== true) {
+    return undefined;
+  }
+  return classifyHandoffReply(input.expectedToken, input.reply).reason;
+}
+
 /** Whether a resume carried the handoff evidence a configured mode requires. */
 export type HandoffEvidence =
   | { kind: 'ok' }
@@ -143,11 +195,11 @@ export type HandoffEvidence =
 /**
  * Decide whether a resume's reply satisfies the handoff contract for a delegated step.
  *
- * Not delegated, or mode `advisory` → always `ok` (advisory records elsewhere; it never
- * refuses). Under `required`: no `HANDOFF RESULT` heading at all → `missing: 'trailer'`; heading
- * present but no `node:` line → `missing: 'node-line'`; a node line whose token does not match
- * the step's expected token → `missing: 'node-mismatch'` (with the found token); a matching
- * token → `ok`.
+ * The REFUSAL projection of {@link resolveHandoffEvidenceReason}'s classification: not
+ * delegated, or mode `advisory`, or reason `ok` → `{ kind: 'ok' }`; any other reason under
+ * `required` → `missing`, carrying the reason and the token the reply named (null when it named
+ * none). The classification itself is shared, so a run recorded `node-mismatch` is exactly a run
+ * that would have been refused under `required`.
  */
 export function resolveHandoffEvidence(input: {
   delegated: boolean | undefined;
@@ -158,23 +210,16 @@ export function resolveHandoffEvidence(input: {
   if (input.delegated !== true || input.mode === 'advisory') {
     return { kind: 'ok' };
   }
-  const headingIndex = findLastHeadingIndex(input.reply.split('\n'));
-  if (headingIndex === -1) {
-    return { kind: 'missing', expected: input.expectedToken, missing: 'trailer', found: null };
+  const classification = classifyHandoffReply(input.expectedToken, input.reply);
+  if (classification.reason === 'ok') {
+    return { kind: 'ok' };
   }
-  const trailer = parseHandoffTrailer(input.reply);
-  if (trailer.node === null) {
-    return { kind: 'missing', expected: input.expectedToken, missing: 'node-line', found: null };
-  }
-  if (trailer.node !== input.expectedToken) {
-    return {
-      kind: 'missing',
-      expected: input.expectedToken,
-      missing: 'node-mismatch',
-      found: trailer.node,
-    };
-  }
-  return { kind: 'ok' };
+  return {
+    kind: 'missing',
+    expected: input.expectedToken,
+    missing: classification.reason,
+    found: classification.found,
+  };
 }
 
 /**

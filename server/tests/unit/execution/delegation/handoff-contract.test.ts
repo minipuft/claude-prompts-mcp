@@ -2,6 +2,7 @@
 import { describe, expect, test } from '@jest/globals';
 
 import {
+  HANDOFF_EVIDENCE_REASONS,
   HANDOFF_RESULT_HEADING,
   PROPOSED_GATE_REVIEW_TOKEN,
   buildHandoffResultSection,
@@ -9,12 +10,17 @@ import {
   parseHandoffTrailer,
   resolveHandoffEvidence,
   resolveHandoffEvidenceMode,
+  resolveHandoffEvidenceReason,
 } from '../../../../src/engine/execution/delegation/handoff-contract.js';
 
 describe('resolveHandoffEvidenceMode', () => {
-  test('defaults to advisory when unconfigured', () => {
-    expect(resolveHandoffEvidenceMode()).toBe('advisory');
-    expect(resolveHandoffEvidenceMode(undefined)).toBe('advisory');
+  // R3 (owner, 2026-09-08): `required` is the DEFAULT and `advisory` is the opt-out. This case
+  // asserted the opposite through Tier 1 and is flipped here rather than deleted — the direction
+  // of the default is the whole behavioural claim of Tier 2, and an absent case would let it
+  // drift back with nothing failing.
+  test('defaults to required when unconfigured', () => {
+    expect(resolveHandoffEvidenceMode()).toBe('required');
+    expect(resolveHandoffEvidenceMode(undefined)).toBe('required');
   });
 
   test('passes through an explicit configured mode', () => {
@@ -165,5 +171,147 @@ describe('buildHandoffResultSection', () => {
     const section = buildHandoffResultSection('n1', false);
     expect(section).toContain('Do not call `prompt_engine`');
     expect(section).toContain('the orchestrating agent owns the run');
+  });
+});
+
+/**
+ * The reason projection (row 2.2). These cases are the surviving half of the retired
+ * `acknowledgment.test.ts`: the S8 boolean predicate answered "was the contracted block absent"
+ * for a delegated+gated step and `undefined` for everything else, so a delegated step with no
+ * gates and a step that was never delegated shared one answer. The reason keeps them apart —
+ * `undefined` now means exactly "not delegated", and gate text is not consulted at all.
+ */
+describe('resolveHandoffEvidenceReason', () => {
+  const GATED_CONTRACT_REPLY = [
+    'work product body',
+    '',
+    '```',
+    HANDOFF_RESULT_HEADING,
+    'node: n2',
+    PROPOSED_GATE_REVIEW_TOKEN,
+    '- step-quality: PASS — evidence named',
+    '```',
+  ].join('\n');
+
+  test('not delegated → undefined (the writer binds NULL)', () => {
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: false,
+        expectedToken: 'n2',
+        reply: 'inline answer, no trailer',
+      })
+    ).toBeUndefined();
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: undefined,
+        expectedToken: 'n2',
+        reply: 'inline answer, no trailer',
+      })
+    ).toBeUndefined();
+  });
+
+  test('delegated with NO gate text is still evaluable — the S8 boolean could not say this', () => {
+    // The retired predicate returned `undefined` here because it looked for the gate-review
+    // token, which an ungated brief never asks for. The reason reads the node line instead, so
+    // an ungated delegated step is recorded like any other.
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: 'worker output with no trailer at all',
+      })
+    ).toBe('trailer');
+  });
+
+  test('delegated + trailer naming this node → ok', () => {
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: GATED_CONTRACT_REPLY,
+      })
+    ).toBe('ok');
+  });
+
+  test('delegated + heading with no node line → node-line', () => {
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: ['work product', '', HANDOFF_RESULT_HEADING].join('\n'),
+      })
+    ).toBe('node-line');
+  });
+
+  test('delegated + trailer naming another node → node-mismatch', () => {
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: ['work product', '', HANDOFF_RESULT_HEADING, 'node: n7'].join('\n'),
+      })
+    ).toBe('node-mismatch');
+  });
+
+  test('the emitted Result Contract satisfies its own reader', () => {
+    // The brief's Result Contract is the emitter and this is the reader; pinning the two here
+    // means a drift in either spelling fails by name rather than at a client.
+    const contract = buildHandoffResultSection('step-review', true);
+    expect(
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'step-review',
+        reply: `worker output\n\n${contract}`,
+      })
+    ).toBe('ok');
+  });
+
+  test('every reason it can return is in the exported enumeration', () => {
+    // HANDOFF_EVIDENCE_REASONS is what the sqlite CHECK constraint repeats, so a reason the
+    // resolver produces but the list omits would be an INSERT the column rejects at runtime.
+    const produced = [
+      resolveHandoffEvidenceReason({ delegated: true, expectedToken: 'n2', reply: '' }),
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: HANDOFF_RESULT_HEADING,
+      }),
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: `${HANDOFF_RESULT_HEADING}\nnode: n9`,
+      }),
+      resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply: `${HANDOFF_RESULT_HEADING}\nnode: n2`,
+      }),
+    ];
+    expect(new Set(produced)).toEqual(new Set(HANDOFF_EVIDENCE_REASONS));
+    expect(HANDOFF_EVIDENCE_REASONS).toHaveLength(4);
+  });
+
+  test('the reason and the refusal are one classification', () => {
+    // resolveHandoffEvidence is the refusal projection of the same classifier: whatever reason
+    // is recorded under `advisory` is exactly what `required` would have refused on.
+    for (const reply of [
+      'prose only',
+      HANDOFF_RESULT_HEADING,
+      `${HANDOFF_RESULT_HEADING}\nnode: n9`,
+    ]) {
+      const reason = resolveHandoffEvidenceReason({
+        delegated: true,
+        expectedToken: 'n2',
+        reply,
+      });
+      const evidence = resolveHandoffEvidence({
+        delegated: true,
+        mode: 'required',
+        expectedToken: 'n2',
+        reply,
+      });
+      expect(evidence.kind).toBe('missing');
+      expect(evidence.kind === 'missing' ? evidence.missing : null).toBe(reason);
+    }
   });
 });

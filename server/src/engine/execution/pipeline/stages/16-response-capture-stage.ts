@@ -1,6 +1,12 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
+  HANDOFF_RESULT_HEADING,
+  handoffNodeToken,
+  resolveHandoffEvidence,
+  resolveHandoffEvidenceMode,
+} from '../../delegation/handoff-contract.js';
+import {
   decideInterrupt,
   decideMutation,
   isInterruptResolutionAction,
@@ -26,6 +32,7 @@ import type {
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
 import type { UnknownObservationProcessor } from '../../capture/unknown-observation-processor.js';
 import type { ExecutionContext, SessionContext } from '../../context/index.js';
+import type { HandoffEvidence, HandoffEvidenceMode } from '../../delegation/handoff-contract.js';
 import type { ChainInterrupt, ChainMutation } from '../decisions/index.js';
 
 import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
@@ -43,6 +50,37 @@ const INVESTIGATION_PROMPT_ID = 'investigate_unknown';
 
 /** Longest statement fragment carried into an inserted node's step name. */
 const INSERTED_STEP_NAME_STATEMENT_LIMIT = 60;
+
+/** What the resume was missing, in the words a client sees. */
+const HANDOFF_MISSING_PHRASE: Readonly<
+  Record<Extract<HandoffEvidence, { kind: 'missing' }>['missing'], string>
+> = {
+  trailer: 'trailer',
+  'node-line': 'node line',
+  'node-mismatch': 'matching node',
+};
+
+/**
+ * The refusal a client reads when a delegated node's resume carries no acceptable trailer.
+ *
+ * Presentation only — every fact in it comes from the `missing` verdict this receives. It names
+ * the node, what was absent, what was found instead, and prints the exact block to append, so
+ * the fix is a copy rather than a re-read of the brief.
+ */
+function describeMissingHandoffEvidence(
+  evidence: Extract<HandoffEvidence, { kind: 'missing' }>
+): string {
+  return [
+    `❌ Delegated node ${evidence.expected}: the resume carries no ` +
+      `${HANDOFF_MISSING_PHRASE[evidence.missing]} (found: ${evidence.found ?? 'nothing'}). ` +
+      `End the worker's reply with:`,
+    '```',
+    HANDOFF_RESULT_HEADING,
+    `node: ${evidence.expected}`,
+    '```',
+    'Resubmit with chain_id and user_response containing that block.',
+  ].join('\n');
+}
 
 /**
  * Outcome of handing this call's observation batch to the processor.
@@ -88,10 +126,16 @@ export class StepResponseCaptureStage extends BasePipelineStage {
      *   falls back to the pre-existing behavior (no post-advance review).
      * - `remainderProcessor` — the `remainder` parameter (row 2.3). Absent, a submitted remainder
      *   is REFUSED rather than dropped (see `applyRemainder`).
+     * - `handoffEvidenceMode` — the configured delegation evidence mode, read as a GETTER so a
+     *   hot-reloaded `config.json` is honored (the identity stage and the gates config are both
+     *   wired this way). Absent, the stage resolves the default mode itself
+     *   (`resolveHandoffEvidenceMode(undefined)` — `required`), so a lightweight harness that
+     *   omits the bag gets the shipped behavior rather than a quieter one.
      */
     private readonly collaborators: {
       readonly gateEnhancementService?: GateEnhancementService;
       readonly remainderProcessor?: RemainderProcessor;
+      readonly handoffEvidenceMode?: () => HandoffEvidenceMode;
     } = {}
   ) {
     super(logger);
@@ -131,6 +175,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
+
+    if (!this.runHandoffEvidencePhase(context, currentNodeIdAtStart, currentStepAtStart)) {
+      this.logExit({ handoffEvidence: 'refused' });
+      return;
+    }
 
     if (!(await this.runUnknownsPhase(context, sessionId, sessionContext, currentNodeIdAtStart))) {
       return;
@@ -229,6 +278,57 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Refuse a delegated node's resume that does not carry the brief's `HANDOFF RESULT` trailer.
+   *
+   * FIRST in `execute`, ahead of the unknowns phase, the lifecycle decision, the gate action and
+   * every verdict path, because a refusal must leave the run exactly where it stood: no ledger
+   * entry, no mutation, no captured step, no recorded verdict. A resume the server will not
+   * accept must not be half-accepted.
+   *
+   * Three applicability conditions, none of them a defensive guard on the decision itself:
+   * a call carrying no `user_response` is not a capture (it renders, or it answers a gate), so
+   * there is nothing to check; a step the two-key lookup cannot resolve has no token to expect;
+   * and `resolveHandoffEvidence` owns the rest — whether the step was delegated at all, and
+   * whether the mode in force refuses. The stage classifies nothing.
+   *
+   * @returns `false` when a refusal response was set and the pipeline must stop.
+   */
+  private runHandoffEvidencePhase(
+    context: ExecutionContext,
+    currentNodeIdAtStart: string | null,
+    currentStepAtStart: number
+  ): boolean {
+    const reply = context.mcpRequest.user_response?.trim() ?? '';
+    if (reply.length === 0) {
+      return true;
+    }
+
+    // The same two-key resolution `ledgerCapturedStep` and stage 20 use: the node id is the
+    // identity, the ordinal is the fallback for a chain parsed before node-id minting.
+    const steps = context.parsedCommand?.steps;
+    const step =
+      (currentNodeIdAtStart !== null
+        ? steps?.find((candidate) => candidate.nodeId === currentNodeIdAtStart)
+        : undefined) ?? steps?.find((candidate) => candidate.stepNumber === currentStepAtStart);
+    if (step === undefined) {
+      return true;
+    }
+
+    const evidence = resolveHandoffEvidence({
+      delegated: step.delegated,
+      mode: this.collaborators.handoffEvidenceMode?.() ?? resolveHandoffEvidenceMode(undefined),
+      expectedToken: handoffNodeToken(step),
+      reply,
+    });
+    if (evidence.kind === 'ok') {
+      return true;
+    }
+
+    context.setResponse(this.buildErrorResponse(describeMissingHandoffEvidence(evidence)));
+    return false;
   }
 
   /**

@@ -114,7 +114,10 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       nodes_skipped INTEGER,
       interrupts_raised INTEGER,
       remainders_accepted INTEGER,
-      delegation_skipped INTEGER,
+      handoff_evidence TEXT CHECK (
+        handoff_evidence IS NULL
+        OR handoff_evidence IN ('ok', 'trailer', 'node-line', 'node-mismatch')
+      ),
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);

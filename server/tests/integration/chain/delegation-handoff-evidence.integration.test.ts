@@ -1,19 +1,24 @@
-// @lifecycle test - S8: delegation_skipped telemetry, driven as a client drives a resume.
+// @lifecycle test - Tier 2 row 2.7: the server refuses a delegated resume with no handoff trailer.
 /**
- * S8 / R-4 flip condition, end to end through the real pipeline:
+ * The delegation handoff contract at the boundary the server actually owns — render ↔ accept.
  *
- *   - a DELEGATED, GATED step resumed WITHOUT the `Proposed Gate Review:` block produces a
- *     capture-time execution_records row with delegation_skipped = 1;
- *   - the same resume WITH the block produces delegation_skipped = 0;
- *   - a NON-delegated step's captured row binds NULL (partial population by row type).
+ * The server cannot wait for a spawned worker, so the only place it can verify a handoff is the
+ * resume it is handed. Under the shipped default (`required`, R3) a delegated node's resume that
+ * does not echo the brief's node token is REFUSED, and every delegated capture records the reason
+ * it carried in `execution_records.handoff_evidence`.
  *
- * Harness cloned from step-lifecycle.integration.test.ts: real SessionManagementStage,
- * StepResponseCaptureStage (with StepCaptureService holding the record store — the writer under
- * test), StepExecutionStage, GateReviewStage, ResponseFormattingStage, ChainSessionStore,
- * GateVerdictProcessor, GateEnforcementAuthority, ExecutionRecordStore against real in-memory
- * SQLite. Stubs supply parsing/planning/gate-selection inputs and decide nothing about
- * lifecycle. The DDL below mirrors `execution_records` in sqlite-engine.ts so schema/code drift
- * surfaces here as a SQL error rather than a silently-swallowed append.
+ * POSITIVE CONTROL FIRST: the accept path (case 2) and the refusal path (case 1) are asserted
+ * against the same chain, the same harness and the same worker helper, so "nothing was captured"
+ * is only evidence because the sibling case shows the same probe capturing when the trailer is
+ * present. `runFakeWorker` reads the token out of the RENDERED brief rather than taking it as an
+ * argument, so an accept-path assertion cannot pass against a brief the server never printed.
+ *
+ * Harness cloned from `delegated-resume-brief.integration.test.ts` (which owns the render half):
+ * real SessionManagementStage, StepResponseCaptureStage, StepExecutionStage, GateReviewStage,
+ * ResponseFormattingStage, ChainSessionStore, GateVerdictProcessor, GateEnforcementAuthority and
+ * ExecutionRecordStore against real in-memory SQLite. The DDL below mirrors `execution_records`
+ * in sqlite-engine.ts — including the `handoff_evidence` CHECK — so a writer that drifts to a
+ * value the column does not admit surfaces here as a SQL error rather than a swallowed append.
  */
 
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
@@ -23,9 +28,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
-import { PROPOSED_GATE_REVIEW_TOKEN } from '../../../src/engine/execution/delegation/handoff-contract.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
+import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
@@ -38,16 +43,19 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 
+import type { HandoffEvidenceMode } from '../../../src/engine/execution/delegation/handoff-contract.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 
-const CHAIN_BASE = 'chain-delegation-skipped-demo';
 const GATE_ID = 'step-quality';
 /** The delegated step's own gate text — the field the brief derives its Result Contract from. */
 const STEP_GATE_TEXT = '## Quality Gates\n\n- step-quality: output must name its evidence';
+/** Step 2's node id, deliberately not `n2`, so a token assertion cannot pass by ordinal accident. */
+const DELEGATED_NODE_ID = 'step-review';
 
 const createLogger = (): Logger =>
   ({
@@ -77,22 +85,24 @@ const stepPrompt = (id: string, name: string): ConvertedPrompt => ({
 
 const PROMPTS: ConvertedPrompt[] = [stepPrompt('draft', 'Draft'), stepPrompt('review', 'Review')];
 
-/**
- * `>>draft ==> >>review`-shaped parse: step 1 is DELEGATED and carries its own gate text in
- * `metadata['gateInstructions']` (stage 11's per-step field, stubbed here the way the
- * GateEnhancement stub stands in for stage 11); step 2 is a plain non-delegated step.
- */
-const parsedChainSteps = () => [
+/** `>>draft ==> >>review`: step 1 plain, step 2 DELEGATED and carrying its own gate text. */
+const parsedChainSteps = (withNodeIds = true) => [
   {
     stepNumber: 1,
-    nodeId: 'draft',
+    ...(withNodeIds ? { nodeId: 'n1' } : {}),
     promptId: 'draft',
     args: {},
     convertedPrompt: PROMPTS[0],
+  },
+  {
+    stepNumber: 2,
+    ...(withNodeIds ? { nodeId: DELEGATED_NODE_ID } : {}),
+    promptId: 'review',
+    args: {},
+    convertedPrompt: PROMPTS[1],
     delegated: true,
     metadata: { gateInstructions: STEP_GATE_TEXT },
   },
-  { stepNumber: 2, nodeId: 'review', promptId: 'review', args: {}, convertedPrompt: PROMPTS[1] },
 ];
 
 const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
@@ -125,7 +135,10 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       nodes_skipped INTEGER,
       interrupts_raised INTEGER,
       remainders_accepted INTEGER,
-      delegation_skipped INTEGER,
+      handoff_evidence TEXT CHECK (
+        handoff_evidence IS NULL
+        OR handoff_evidence IN ('ok', 'trailer', 'node-line', 'node-mismatch')
+      ),
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
@@ -178,20 +191,22 @@ const buildPipeline = (options: {
   sessionStore: ChainSessionStore;
   recordStore: ExecutionRecordStore;
   logger: Logger;
+  steps?: ReturnType<typeof parsedChainSteps>;
+  /** Omitted = the collaborators bag carries no mode, which is the shipped default (`required`). */
+  evidenceMode?: HandoffEvidenceMode;
 }): PromptExecutionPipeline => {
-  const { sessionStore, recordStore, logger } = options;
+  const { sessionStore, recordStore, logger, steps = parsedChainSteps(), evidenceMode } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
 
   const realStages: Record<string, PipelineStage> = {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
       new GateVerdictProcessor(sessionStore, logger),
-      // The writer under test: StepCaptureService holding the record store appends the
-      // capture-time `completed` row that carries delegation_skipped.
       new StepCaptureService(sessionStore, logger, recordStore),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
-      logger
+      logger,
+      evidenceMode === undefined ? {} : { handoffEvidenceMode: () => evidenceMode }
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -221,11 +236,16 @@ const buildPipeline = (options: {
       return {
         name,
         execute: async (context: ExecutionContext) => {
+          // The live path: a resume never re-parses — stage 04 restores the persisted blueprint.
+          if (context.mcpRequest.chain_id) {
+            new ChainBlueprintResolver(sessionStore, logger).restoreFromBlueprint(context);
+            return;
+          }
           context.parsedCommand = {
             commandType: 'chain',
             promptId: 'draft',
-            chainId: CHAIN_BASE,
-            steps: parsedChainSteps(),
+            chainId: 'chain-delegation-handoff-evidence',
+            steps,
             promptArgs: {},
             convertedPrompt: PROMPTS[0],
           } as never;
@@ -270,11 +290,11 @@ const buildPipeline = (options: {
   });
 };
 
-describe('delegation_skipped telemetry (S8), driven the way a client drives it', () => {
+describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
   let db: DatabaseSync;
+  let logger: Logger;
   let recordStore: ExecutionRecordStore;
   let sessionStore: ChainSessionStore;
-  let pipeline: PromptExecutionPipeline;
   let saveSpy: jest.SpiedFunction<() => Promise<void>>;
   let loadSpy: jest.SpiedFunction<() => Promise<void>>;
   let schedulerSpy: jest.SpiedFunction<() => void>;
@@ -282,7 +302,7 @@ describe('delegation_skipped telemetry (S8), driven the way a client drives it',
   beforeEach(() => {
     const created = createInMemoryDb();
     db = created.db;
-    const logger = createLogger();
+    logger = createLogger();
     recordStore = new ExecutionRecordStore(created.port, logger);
 
     saveSpy = jest
@@ -296,11 +316,9 @@ describe('delegation_skipped telemetry (S8), driven the way a client drives it',
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-delegation-skipped-integration',
+      serverRoot: '/tmp/test-delegation-handoff-evidence',
       cleanupIntervalMs: 60_000,
     });
-
-    pipeline = buildPipeline({ sessionStore, recordStore, logger });
   });
 
   afterEach(async () => {
@@ -311,23 +329,8 @@ describe('delegation_skipped telemetry (S8), driven the way a client drives it',
     db.close();
   });
 
-  const onlySession = () => {
-    const sessions = Array.from((sessionStore as any).activeSessions.values());
-    expect(sessions).toHaveLength(1);
-    return sessions[0] as { sessionId: string; chainId: string };
-  };
-
-  /** The capture-time rows this feature writes: per-step `completed` rows, oldest first. */
-  const capturedRows = (
-    sessionId: string
-  ): Array<{ step_number: number | null; delegation_skipped: number | null }> =>
-    db
-      .prepare(
-        `SELECT step_number, delegation_skipped FROM execution_records
-         WHERE session_id = ? AND status = 'completed' AND step_number IS NOT NULL
-         ORDER BY execution_id ASC`
-      )
-      .all(sessionId) as Array<{ step_number: number | null; delegation_skipped: number | null }>;
+  const text = (response: { content?: Array<{ text?: string }> }): string =>
+    (response.content ?? []).map((c) => c.text ?? '').join('\n');
 
   const passVerdict = renderGateVerdict({
     overall: 'PASS',
@@ -335,72 +338,168 @@ describe('delegation_skipped telemetry (S8), driven the way a client drives it',
     per_gate: [{ index: 1, passed: true, rationale: `${GATE_ID}: satisfied` }],
   });
 
-  /** Start the chain, then resume step 1 (the delegated, gated step) with the given output. */
-  const startAndResumeStepOne = async (
-    stepOneResponse: string
-  ): Promise<{ chainId: string; sessionId: string }> => {
-    await pipeline.execute({ command: `>>draft ==> >>review` });
+  const onlySession = (): {
+    sessionId: string;
+    chainId: string;
+    state: { currentNodeId: string };
+  } =>
+    Array.from((sessionStore as any).activeSessions.values())[0] as {
+      sessionId: string;
+      chainId: string;
+      state: { currentNodeId: string };
+    };
+
+  /** The capture-time rows this feature writes: per-step `completed` rows, oldest first. */
+  const capturedRows = (
+    sessionId: string
+  ): Array<{ step_number: number | null; handoff_evidence: string | null }> =>
+    db
+      .prepare(
+        `SELECT step_number, handoff_evidence FROM execution_records
+         WHERE session_id = ? AND status = 'completed' AND step_number IS NOT NULL
+         ORDER BY execution_id ASC`
+      )
+      .all(sessionId) as Array<{ step_number: number | null; handoff_evidence: string | null }>;
+
+  /**
+   * Start the chain and resume step 1 (plain, non-delegated), which advances onto step 2 and
+   * renders its delegation brief. Returns the ids plus the RENDERED brief the fake worker reads.
+   */
+  const advanceToDelegatedStep = async (
+    pipeline: PromptExecutionPipeline
+  ): Promise<{ chainId: string; sessionId: string; brief: string }> => {
+    await pipeline.execute({ command: `>>draft ==> >>review` } as any);
     const { chainId, sessionId } = onlySession();
-    await pipeline.execute({
+    const rendered = await pipeline.execute({
       chain_id: chainId,
-      user_response: stepOneResponse,
+      user_response: 'step 1 output',
       gate_verdict: passVerdict,
     } as any);
-    return { chainId, sessionId };
+    const brief = text(rendered);
+    expect(brief).toContain('EXECUTION BRIEF');
+    return { chainId, sessionId, brief };
   };
 
-  test('FLIP: a delegated gated step resumed WITHOUT the Proposed Gate Review block rows delegation_skipped = 1', async () => {
-    const { sessionId } = await startAndResumeStepOne(
-      'inline answer produced by the parent — no worker was spawned'
-    );
+  describe('the shipped default (no config key set → `required`)', () => {
+    test('POSITIVE CONTROL: a prose-only resume of the delegated node is refused, and nothing moves', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger });
+      const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
 
-    const rows = capturedRows(sessionId);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({ step_number: 1, delegation_skipped: 1 });
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { omitTrailer: true }),
+        gate_verdict: passVerdict,
+      } as any);
+      const message = text(refused);
+
+      expect(refused.isError).toBe(true);
+      expect(message).toContain('❌ Delegated node');
+      expect(message).toContain(DELEGATED_NODE_ID);
+      // The refusal prints the exact block to append, so the fix is a copy.
+      expect(message).toContain('HANDOFF RESULT');
+      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+
+      // Nothing moved: the run still stands on the delegated node, only step 1 was ever
+      // captured, and the gate verdict submitted alongside the prose was not consumed. The
+      // `working` row stage 18 wrote when it RENDERED step 2 is not a capture and is excluded
+      // by `status = 'completed'` — case 2 below shows the same query seeing a step-2 row.
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+
+    test('a conforming worker reply is captured, the chain advances, and the row reads `ok`', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger });
+      const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
+
+      const accepted = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: passVerdict,
+      } as any);
+
+      expect(accepted.isError).not.toBe(true);
+      expect(text(accepted)).not.toContain('❌ Delegated node');
+      expect(capturedRows(sessionId)).toEqual([
+        { step_number: 1, handoff_evidence: null },
+        { step_number: 2, handoff_evidence: 'ok' },
+      ]);
+      // The read-back path (the execution_history source) surfaces the same value.
+      const captured = recordStore
+        .queryRecent(50)
+        .find(
+          (record) =>
+            record.sessionId === sessionId &&
+            record.status === 'completed' &&
+            record.stepNumber === 2
+        );
+      expect(captured?.handoffEvidence).toBe('ok');
+    });
+
+    test('a trailer naming ANOTHER node is refused, and the message names the token it found', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger });
+      const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
+
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { overrideToken: 'some-other-node' }),
+        gate_verdict: passVerdict,
+      } as any);
+      const message = text(refused);
+
+      expect(refused.isError).toBe(true);
+      expect(message).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
+      expect(message).toContain('matching node');
+      expect(message).toContain('found: some-other-node');
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
   });
 
-  test('FLIP: the same resume WITH the Proposed Gate Review block rows delegation_skipped = 0', async () => {
-    const { sessionId } = await startAndResumeStepOne(
-      [
-        'worker result body',
-        '',
-        PROPOSED_GATE_REVIEW_TOKEN,
-        `- ${GATE_ID}: PASS — evidence named`,
-      ].join('\n')
-    );
+  test('`advisory` accepts the prose-only resume and records what it carried', async () => {
+    const pipeline = buildPipeline({
+      sessionStore,
+      recordStore,
+      logger,
+      evidenceMode: 'advisory',
+    });
+    const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
 
-    const rows = capturedRows(sessionId);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({ step_number: 1, delegation_skipped: 0 });
+    const accepted = await pipeline.execute({
+      chain_id: chainId,
+      user_response: runFakeWorker(brief, { omitTrailer: true }),
+      gate_verdict: passVerdict,
+    } as any);
+
+    expect(accepted.isError).not.toBe(true);
+    expect(text(accepted)).not.toContain('❌ Delegated node');
+    // The reason is recorded in BOTH modes — this is the row `required` would have refused on.
+    expect(capturedRows(sessionId)).toEqual([
+      { step_number: 1, handoff_evidence: null },
+      { step_number: 2, handoff_evidence: 'trailer' },
+    ]);
   });
 
-  test('a NON-delegated step’s captured row binds NULL — partial population by row type', async () => {
-    const { chainId, sessionId } = await startAndResumeStepOne(
-      [
-        'worker result body',
-        '',
-        PROPOSED_GATE_REVIEW_TOKEN,
-        `- ${GATE_ID}: PASS — evidence named`,
-      ].join('\n')
-    );
+  test('a legacy chain with no node ids uses `n2` in the brief AND in the accepted trailer', async () => {
+    const pipeline = buildPipeline({
+      sessionStore,
+      recordStore,
+      logger,
+      steps: parsedChainSteps(false),
+    });
+    const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
 
-    // Resume step 2 (non-delegated): its capture row must bind NULL, not 0.
-    await pipeline.execute({ chain_id: chainId, user_response: 'plain step 2 output' } as any);
+    expect(brief).toContain('node: n2');
+    expect(brief).not.toContain(`node: ${DELEGATED_NODE_ID}`);
 
-    const rows = capturedRows(sessionId);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toEqual({ step_number: 1, delegation_skipped: 0 });
-    expect(rows[1]).toEqual({ step_number: 2, delegation_skipped: null });
-  });
+    const accepted = await pipeline.execute({
+      chain_id: chainId,
+      user_response: runFakeWorker(brief),
+      gate_verdict: passVerdict,
+    } as any);
 
-  test('the read-back path (queryRecent, the execution_history source) surfaces the mark', async () => {
-    const { sessionId } = await startAndResumeStepOne('inline answer, no review block');
-
-    const records = recordStore.queryRecent(50);
-    const captured = records.find(
-      (record) =>
-        record.sessionId === sessionId && record.status === 'completed' && record.stepNumber === 1
-    );
-    expect(captured?.delegationSkipped).toBe(true);
+    expect(accepted.isError).not.toBe(true);
+    expect(capturedRows(sessionId)).toEqual([
+      { step_number: 1, handoff_evidence: null },
+      { step_number: 2, handoff_evidence: 'ok' },
+    ]);
   });
 });

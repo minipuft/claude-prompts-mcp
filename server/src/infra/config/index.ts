@@ -772,16 +772,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       };
     }
 
-    // Ensure execution config exists
-    if (!this.config.execution) {
-      this.config.execution = { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
-    } else {
-      const judgeValue = this.config.execution.judge;
-      this.config.execution =
-        judgeValue !== undefined
-          ? { judge: judgeValue }
-          : { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
-    }
+    // Ensure execution config exists, PRESERVING every other key in the section.
+    //
+    // This used to rebuild the object from `judge` alone, which silently discarded anything else
+    // an operator had written: the reader saw `undefined` and its own default stood, so the
+    // config file said one thing and the runtime did another with no error anywhere. That was
+    // invisible while `judge` was the only member; `execution.delegation.evidence` is the second,
+    // and a validator that accepts the key while the loader drops it is a knob nobody can turn.
+    this.config.execution = {
+      ...this.config.execution,
+      judge: this.config.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge ?? true,
+    };
 
     // Ensure versioning config exists with all required fields
     this.config.versioning = {
