@@ -2,6 +2,7 @@
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { BRIEF_END, BRIEF_START, assembleBriefBody } from '../delegation/brief.js';
+import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer, renderDelegatedStepHandoff } from '../delegation/renderer.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
@@ -557,6 +558,7 @@ export class ChainOperatorExecutor {
           ? step.metadata['gateInstructions']
           : undefined;
       briefHasGates = stepGateText !== undefined && stepGateText.trim().length > 0;
+      const nodeToken = handoffNodeToken(step);
       const briefBody = assembleBriefBody({
         workerLines: lines.splice(0, lines.length),
         stepGateText,
@@ -567,6 +569,7 @@ export class ChainOperatorExecutor {
           withheld
         ),
         manifest: visibility.manifest,
+        nodeToken,
       });
       lines.push(BRIEF_START, briefBody, BRIEF_END);
       lines.push(
@@ -580,6 +583,7 @@ export class ChainOperatorExecutor {
           inlineGateCount: step.inlineGateIds?.length,
           hasGates: briefHasGates,
           gateGuidanceEnabled,
+          nodeToken,
         })
       );
     }
@@ -877,6 +881,8 @@ export class ChainOperatorExecutor {
       ...(subagentModel != null ? { subagentModel } : {}),
       gateCount: 0,
       hasGates: gateGuidanceEnabled,
+      nodeToken: handoffNodeToken(nextStep),
+      mode: 'blocking',
     };
 
     return new DelegationRenderer().renderNextStepAdvisory(payload);

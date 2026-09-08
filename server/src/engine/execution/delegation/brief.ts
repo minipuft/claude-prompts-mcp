@@ -10,6 +10,8 @@
  * imports.
  */
 
+import { buildHandoffResultSection } from './handoff-contract.js';
+
 const BRIEF_DELIMITER = '═'.repeat(65);
 
 export const BRIEF_START = `${BRIEF_DELIMITER}\nEXECUTION BRIEF (sub-agent prompt — pass everything between these delimiters)\n${BRIEF_DELIMITER}`;
@@ -67,46 +69,6 @@ export function buildChainHistorySection(entries: readonly BriefHistoryEntry[]):
 }
 
 /**
- * The literal heading a conforming worker's proposed self-review opens with. Exported as the
- * SSOT for that token: the S8 delegation-acknowledgment predicate
- * (`acknowledgment.ts#resolveDelegationSkipped`) detects a spawned worker by this exact string
- * in the captured step output, so the emitter and the detector must share one spelling.
- */
-export const PROPOSED_GATE_REVIEW_TOKEN = 'Proposed Gate Review:';
-
-/**
- * Result contract (R-2 — worker proposes, parent ratifies). The worker returns its work product
- * plus, when gates exist, a `Proposed Gate Review` block in the same per-gate shape as
- * `gate_verdict.per_gate`. It is labelled PROPOSED because the worker's verdict is never
- * authoritative: the parent reviews against the same criteria, may override any entry, and is
- * the only party that submits `gate_verdict`. The worker-boundary line states that exclusion in
- * the brief every host renders; until 2026-08-27 it was enforced for Claude Code alone by the
- * shipped `chain-executor` agent's tool list, and by nothing on any other client.
- */
-export function buildResultContractSection(hasGates: boolean): string {
-  const parts = [
-    '### Result Contract',
-    '',
-    'Return your complete work product as plain text — it becomes the chain’s step output verbatim.',
-    '',
-    'You are the worker for this one step. Do not call `prompt_engine` or any other chain tool, and do not put chain metadata or tool calls in your reply — the orchestrating agent owns the run and resumes it with your text.',
-  ];
-  if (hasGates) {
-    parts.push(
-      '',
-      'Then append a proposed self-review — PROPOSED only; the orchestrating agent reviews and may override before submitting the actual verdict:',
-      '',
-      '```',
-      PROPOSED_GATE_REVIEW_TOKEN,
-      '- [gate 1 name]: PASS|FAIL — <one-line rationale>',
-      '- [gate 2 name]: PASS|FAIL — <one-line rationale>',
-      '```'
-    );
-  }
-  return parts.join('\n');
-}
-
-/**
  * Withheld-context manifest line for the brief (names only, never values — P5 OQ-P5-3).
  * Same wording as the envelope renderer used, so hooks or readers keying on the phrase see one
  * spelling.
@@ -128,6 +90,8 @@ export interface BriefBodyInputs {
   readonly historyEntries: readonly BriefHistoryEntry[];
   /** Withheld item names for the manifest line. */
   readonly manifest: readonly string[];
+  /** The delegated node's handoff token — the closing section's `HANDOFF RESULT` trailer. */
+  readonly nodeToken: string;
 }
 
 /**
@@ -147,6 +111,6 @@ export function assembleBriefBody(inputs: BriefBodyInputs): string {
   const manifestLine = buildWithheldManifestLine(inputs.manifest);
   if (manifestLine !== null) parts.push(manifestLine);
 
-  parts.push(buildResultContractSection(gates !== null));
+  parts.push(buildHandoffResultSection(inputs.nodeToken, gates !== null));
   return parts.filter(Boolean).join('\n\n');
 }

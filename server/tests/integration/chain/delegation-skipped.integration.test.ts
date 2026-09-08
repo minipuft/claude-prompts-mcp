@@ -23,7 +23,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
-import { PROPOSED_GATE_REVIEW_TOKEN } from '../../../src/engine/execution/delegation/brief.js';
+import { PROPOSED_GATE_REVIEW_TOKEN } from '../../../src/engine/execution/delegation/handoff-contract.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';

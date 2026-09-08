@@ -2,13 +2,13 @@
 /**
  * S8 / R-4 (owner-ruled): enforcement stays advisory — the server records what it cannot
  * prevent. A delegated step with gate text hands the worker a brief whose Result Contract
- * REQUIRES a `Proposed Gate Review:` block ({@link buildResultContractSection}); a captured
+ * REQUIRES a `Proposed Gate Review:` block ({@link buildHandoffResultSection}); a captured
  * step output missing that token is therefore evidence the parent answered inline instead of
  * spawning the worker. This module owns that predicate, and nothing else: the caller decides
  * where the verdict lands (`execution_records.delegation_skipped`).
  */
 
-import { PROPOSED_GATE_REVIEW_TOKEN } from './brief.js';
+import { PROPOSED_GATE_REVIEW_TOKEN } from './handoff-contract.js';
 
 /** Inputs the predicate needs, all derivable at the step-capture site. */
 export interface DelegationAcknowledgmentInput {

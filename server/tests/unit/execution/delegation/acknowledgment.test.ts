@@ -1,11 +1,11 @@
 // @lifecycle test - S8: delegation acknowledgment predicate (presence / absence / not-evaluable).
 import { describe, expect, test } from '@jest/globals';
 
+import { resolveDelegationSkipped } from '../../../../src/engine/execution/delegation/acknowledgment.js';
 import {
   PROPOSED_GATE_REVIEW_TOKEN,
-  buildResultContractSection,
-} from '../../../../src/engine/execution/delegation/brief.js';
-import { resolveDelegationSkipped } from '../../../../src/engine/execution/delegation/acknowledgment.js';
+  buildHandoffResultSection,
+} from '../../../../src/engine/execution/delegation/handoff-contract.js';
 
 const GATE_TEXT = '## Quality Gates\n\n- step-quality: output must name its evidence';
 
@@ -81,7 +81,7 @@ describe('resolveDelegationSkipped (S8 acknowledgment predicate)', () => {
     test('detects the exact token the Result Contract instructs a worker to emit', () => {
       // The brief's Result Contract is the emitter; the predicate is the detector. This pins
       // the two to one spelling — if the contract's token drifts, this fails by name.
-      const contract = buildResultContractSection(true);
+      const contract = buildHandoffResultSection('n1', true);
       expect(contract).toContain(PROPOSED_GATE_REVIEW_TOKEN);
       expect(
         resolveDelegationSkipped({

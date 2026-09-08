@@ -82,11 +82,24 @@ const PROMPTS: ConvertedPrompt[] = [stepPrompt('draft', 'Draft'), stepPrompt('re
  * `metadata['gateInstructions']` (stage 11's per-step field, stubbed here the way the
  * GateEnhancement stub stands in for stage 11); step 2 is a plain non-delegated step.
  */
-const parsedChainSteps = () => [
-  { stepNumber: 1, nodeId: 'n1', promptId: 'draft', args: {}, convertedPrompt: PROMPTS[0] },
+/**
+ * `withNodeIds` distinguishes the two handoff-token branches (Tier 1 row 1.4): step 2's nodeId
+ * is deliberately NOT `n2` when node ids are present, so its rendered token can only match the
+ * `nodeId` branch of `handoffNodeToken`, never the `n<stepNumber>` fallback — a legacy chain
+ * with `withNodeIds: false` exercises that fallback instead, and both cases land on a different
+ * literal string so a test asserting one cannot pass by accident against the other.
+ */
+const parsedChainSteps = (withNodeIds = true) => [
+  {
+    stepNumber: 1,
+    ...(withNodeIds ? { nodeId: 'n1' } : {}),
+    promptId: 'draft',
+    args: {},
+    convertedPrompt: PROMPTS[0],
+  },
   {
     stepNumber: 2,
-    nodeId: 'n2',
+    ...(withNodeIds ? { nodeId: 'step-review' } : {}),
     promptId: 'review',
     args: {},
     convertedPrompt: PROMPTS[1],
@@ -176,8 +189,9 @@ const buildPipeline = (options: {
   sessionStore: ChainSessionStore;
   recordStore: ExecutionRecordStore;
   logger: Logger;
+  steps?: ReturnType<typeof parsedChainSteps>;
 }): PromptExecutionPipeline => {
-  const { sessionStore, recordStore, logger } = options;
+  const { sessionStore, recordStore, logger, steps = parsedChainSteps() } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
 
   const realStages: Record<string, PipelineStage> = {
@@ -229,7 +243,7 @@ const buildPipeline = (options: {
             commandType: 'chain',
             promptId: 'draft',
             chainId: CHAIN_BASE,
-            steps: parsedChainSteps(),
+            steps,
             promptArgs: {},
             convertedPrompt: PROMPTS[0],
           } as never;
@@ -276,9 +290,11 @@ const buildPipeline = (options: {
 
 describe('a delegated step resumed through the real blueprint restore (Tier 2 row 2.0)', () => {
   let db: DatabaseSync;
+  let logger: Logger;
   let recordStore: ExecutionRecordStore;
   let sessionStore: ChainSessionStore;
   let pipeline: PromptExecutionPipeline;
+  let legacyPipeline: PromptExecutionPipeline;
   let saveSpy: jest.SpiedFunction<() => Promise<void>>;
   let loadSpy: jest.SpiedFunction<() => Promise<void>>;
   let schedulerSpy: jest.SpiedFunction<() => void>;
@@ -286,7 +302,7 @@ describe('a delegated step resumed through the real blueprint restore (Tier 2 ro
   beforeEach(() => {
     const created = createInMemoryDb();
     db = created.db;
-    const logger = createLogger();
+    logger = createLogger();
     recordStore = new ExecutionRecordStore(created.port, logger);
 
     saveSpy = jest
@@ -305,6 +321,15 @@ describe('a delegated step resumed through the real blueprint restore (Tier 2 ro
     });
 
     pipeline = buildPipeline({ sessionStore, recordStore, logger });
+    // A legacy chain with no node ids at all (P3 D10 keeps `nodeId` optional) — exercises the
+    // `n<stepNumber>` fallback branch of `handoffNodeToken`, sharing the same session store so
+    // both pipelines' sessions can coexist across separate chain_ids within one test.
+    legacyPipeline = buildPipeline({
+      sessionStore,
+      recordStore,
+      logger,
+      steps: parsedChainSteps(false),
+    });
   });
 
   afterEach(async () => {
@@ -348,5 +373,30 @@ describe('a delegated step resumed through the real blueprint restore (Tier 2 ro
     expect(rendered).toContain('subagent_type: "general-purpose"');
     expect(rendered).not.toContain('chain-executor');
     expect(rendered).not.toContain('claude-prompts:');
+    // Tier 1 row 1.4: the brief's HANDOFF RESULT trailer carries the step's own nodeId, not the
+    // ordinal fallback — this chain's step 2 is `nodeId: 'step-review'`, deliberately not `n2`.
+    expect(rendered).toContain('node: step-review');
+    // Tier 1 row 1.5: the Claude Code handoff pins the worker to the foreground (D7).
+    expect(rendered).toContain('run_in_background: false');
+  });
+
+  test('a legacy chain with no node ids falls back to n<stepNumber> in the brief trailer', async () => {
+    const first = await legacyPipeline.execute({ command: `>>draft ==> >>review` } as any);
+    expect(text(first)).toContain('is delegated');
+    const sessions = Array.from((sessionStore as any).activeSessions.values()) as Array<{
+      chainId: string;
+    }>;
+    const chainId = sessions[0]!.chainId;
+
+    const resumed = await legacyPipeline.execute({
+      chain_id: chainId,
+      user_response: 'step 1 output',
+      gate_verdict: passVerdict,
+    } as any);
+    const rendered = text(resumed);
+
+    expect(rendered).toContain('EXECUTION BRIEF');
+    expect(rendered).toContain('node: n2');
+    expect(rendered).not.toContain('node: step-review');
   });
 });
