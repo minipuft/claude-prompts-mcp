@@ -78,11 +78,10 @@ const stepPrompt = (id: string, name: string): ConvertedPrompt => ({
 const PROMPTS: ConvertedPrompt[] = [stepPrompt('draft', 'Draft'), stepPrompt('review', 'Review')];
 
 /**
- * `>>draft ==> >>review`-shaped parse: step 1 is DELEGATED and carries its own gate text in
- * `metadata['gateInstructions']` (stage 11's per-step field, stubbed here the way the
- * GateEnhancement stub stands in for stage 11); step 2 is a plain non-delegated step.
- */
-/**
+ * `>>draft ==> >>review`-shaped parse: step 1 is a plain non-delegated step; step 2 is DELEGATED
+ * and carries its own gate text in `metadata['gateInstructions']` (stage 11's per-step field,
+ * stubbed here the way the GateEnhancement stub stands in for stage 11).
+ *
  * `withNodeIds` distinguishes the two handoff-token branches (Tier 1 row 1.4): step 2's nodeId
  * is deliberately NOT `n2` when node ids are present, so its rendered token can only match the
  * `nodeId` branch of `handoffNodeToken`, never the `n<stepNumber>` fallback — a legacy chain
