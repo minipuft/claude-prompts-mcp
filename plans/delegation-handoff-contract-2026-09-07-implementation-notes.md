@@ -13,8 +13,19 @@ Deviations, rulings on open questions, and probe output for
 
 ## Rulings
 
-| id  | date | ruling |
-| --- | ---- | ------ |
+| id  | date       | ruling                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | 2026-09-08 | Owner: advisory mode records the REASON, not a boolean. `execution_records.handoff_evidence TEXT` (`ok` · `trailer` · `node-line` · `node-mismatch`, NULL for a non-delegated step) REPLACES `delegation_skipped` — the boolean is a projection of the reason and keeping both is a parallel channel. Schema 27 → 28 in Tier 2 (drop/recreate; no Python reader of the column); Tier 4's bump becomes 29. Rows 2.2, 2.3, 2.5 change shape; new row 2.8 owns the bump.                                                                                                                                                                                                                    |
+| R2  | 2026-09-08 | Owner: the Claude Code hook tightens in THIS PR. `hooks/delegation-enforce.py` on `Task`/`Agent` while `pending_delegation`: allow and clear only when `tool_input.run_in_background` is literally `false`; absent or `true` → DENY naming the parameter (absent is the harness default, which is background — the original defect). New pytest beside `test_delegation_deadlock_fixes.py`: absent → deny, `true` → deny, `false` → allow+clear, no pending → no-op. Tier 3 row 3.4 becomes code + test, not docstring; PR scope is `full` (mixed).                                                                                                                                      |
+| R3  | 2026-09-08 | Owner: `required` ships as the DEFAULT this release; `advisory` is the opt-out. Adapter question answered by survey: per-client delegation hooks already exist as ports — `codex-prompts/hooks/delegation-enforce.py` (PreToolUse `Bash\|apply_patch\|collaborationspawn_agent`, `.codex-plugin/plugin.json`), `gemini-prompts/hooks/delegation-enforce.py` (BeforeTool `task_tool`), none in `opencode-prompts`; all share `hooks/lib` from this package by symlink. So the adapter extension is a shared predicate in `hooks/lib` (row 3.4) that each port calls; the Codex/Gemini rows are downstream follow-ups gated on whether `spawn_agent`/`task_tool` expose a foreground flag. |
+
+## Tier 1 landing
+
+- `1ba4d7a1` feat(execution) — rows 1.1–1.6; gate receipt in the plan. Deviations 1–6 below.
+- `9babae4c` test(tests) — the resume fixture's doc comment named step 1 as delegated; the fixture
+  and every assertion use step 2. Surfaced by the Tier 1 subagent's late receipt (it resumed after
+  its own background jest wait, saw `1ba4d7a1` under it, and converged to HEAD with nothing left
+  uncommitted).
 
 ## Deviations
 
