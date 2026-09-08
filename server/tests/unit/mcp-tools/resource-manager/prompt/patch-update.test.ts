@@ -75,10 +75,28 @@ function createProcessor(
     onRefresh: jest.fn(async () => {}),
     onRestart: jest.fn(async () => {}),
   };
-  const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-    currentPrompt = promptData;
-    return { message: 'written' };
-  });
+  // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+  // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+  // longer exists.
+  const updatePromptImplementation = jest.fn(
+    async (
+      promptData: Record<string, unknown>,
+      _suppliedKeys?: unknown,
+      _sourceRoot?: unknown,
+      _writeIntent?: unknown,
+      options?: { commit?: () => Promise<void> }
+    ) => {
+      const previous = currentPrompt;
+      currentPrompt = promptData;
+      try {
+        await options?.commit?.();
+      } catch (error) {
+        currentPrompt = previous;
+        throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+      }
+      return { message: 'written' };
+    }
+  );
   const recordEditResult = jest.fn(
     async (
       _type: string,

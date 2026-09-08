@@ -11,6 +11,7 @@ import {
   ResourceMutationTransaction,
   ResourceVerificationService,
   type ResourceVerificationFailurePayload,
+  type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
@@ -60,10 +61,15 @@ const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
  *    keys; it cannot catch a third passthrough-only field the way it catches a new declared one
  *    — that gap is the one still open here.
  *
- * `GateCreationData` never carries any of these fields (settability is a separate, out-of-scope
- * initiative), so the "caller supplied a value" branch of `resolvePreservedGateYamlFields` is
- * presently unreachable in practice — every one of these keys resolves purely from the existing
- * on-disk file.
+ * `GateCreationData` carries `severity` and `enforcementMode` since P4.4, so the "caller supplied
+ * a value" branch of `resolvePreservedGateYamlFields` is reachable for those two: supplied, they
+ * are written; omitted, they still resolve from the existing on-disk file. That separation is the
+ * whole point of routing them through preservation rather than projection — settability did not
+ * cost the carry-forward.
+ *
+ * `gate_type` remains resolvable only from disk, because its name is already taken on the tool
+ * surface by a parameter that maps to the YAML key `type`. Not an oversight: resolving it means
+ * renaming that parameter, which is breaking. Tracked as P4.10.
  */
 export const PRESERVED_GATE_YAML_KEYS = [
   ...GATE_YAML_DECLARED_KEYS.filter(
@@ -132,7 +138,10 @@ export class GateFileWriter {
       dependencies.resourceMutationTransaction ?? new ResourceMutationTransaction();
   }
 
-  async writeGateFiles(data: GateCreationData): Promise<GateFileWriteResult> {
+  async writeGateFiles(
+    data: GateCreationData,
+    options: ResourceWriteCommitOptions = {}
+  ): Promise<GateFileWriteResult> {
     // `data.id` is caller-supplied and unvalidated for path segments. Measured 2026-08-30:
     // `id: '../../ESCAPED_GATE'` wrote gate.yaml and guidance.md outside the resources root, and
     // the tool reported the write. Contained before the directory is created.
@@ -162,6 +171,7 @@ export class GateFileWriter {
         return { paths };
       },
       validate: () => this.verificationService.validateFile('gates', data.id, yamlPath),
+      ...(options.commit !== undefined ? { commit: options.commit } : {}),
     });
 
     if (!transactionResult.success) {

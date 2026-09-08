@@ -100,32 +100,54 @@ export class FrameworkVersioningProcessor {
       );
     }
 
-    // PHASE 2 — record, before any write, so a persistence failure aborts with nothing on disk.
-    let saveResult;
-    try {
-      saveResult = await this.ctx.versionHistoryService.commitEdit(
-        'framework',
-        id,
-        currentState,
-        snapshot,
-        { description: `Rollback to v${version}`, diff_summary: '' }
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return this.error(
-        `Rollback failed: could not record the version snapshot — ${message}\n\n` +
-          `The framework was left unchanged.`
-      );
-    }
+    // PHASE 2 + 3 — write and record, as ONE transaction rather than as two ordered steps
+    // (P4.2 / SF-3). The record runs inside the write's transaction after the files are verified,
+    // so a failed write records nothing and a failed record restores the files. `recordFailure`
+    // keeps the two causes tellable apart in the response now that both surface as one rejection.
+    //
+    // Fields outside the projection are carried forward by the writer's deep merge over the
+    // existing YAML, which is why they are not in the projection to begin with.
+    let restoredVersion: number | undefined;
+    let recordFailure: string | undefined;
 
-    // PHASE 3 — write. Fields outside the projection are carried forward by the writer's deep
-    // merge over the existing YAML, which is why they are not in the projection to begin with.
     const writeResult = await this.ctx.fileService.writeFrameworkFiles(
       restore.writeModel,
-      existingData
+      existingData,
+      {
+        commit: async (): Promise<void> => {
+          try {
+            const saveResult = await this.ctx.versionHistoryService.commitEdit(
+              'framework',
+              id,
+              currentState,
+              snapshot,
+              { description: `Rollback to v${version}`, diff_summary: '' }
+            );
+            restoredVersion = saveResult.version;
+          } catch (error) {
+            recordFailure = error instanceof Error ? error.message : String(error);
+            throw error;
+          }
+        },
+      }
     );
+
     if (!writeResult.success) {
-      return this.error(`Rollback write failed: ${writeResult.error}`);
+      return recordFailure !== undefined
+        ? this.error(
+            `Rollback failed: could not record the version snapshot — ${recordFailure}\n\n` +
+              `The framework was left unchanged.`
+          )
+        : this.error(`Rollback write failed: ${writeResult.error}`);
+    }
+
+    if (restoredVersion === undefined) {
+      // Unreachable: `commit` either assigns or throws, and a throw fails the write above. Loud
+      // rather than defaulted, because a rollback that silently reported no version would be the
+      // unrecorded-write defect this row exists to close, wearing a nicer number.
+      throw new Error(
+        `Rollback of framework '${id}' reported a successful write without recording a version`
+      );
     }
 
     // Re-register the framework this rollback just rewrote. `onRefresh` does not do it — see
@@ -139,7 +161,7 @@ export class FrameworkVersioningProcessor {
 
     let response =
       `✅ Framework '${id}' rolled back to version ${version}\n\n` +
-      `📜 Restored state recorded as version ${saveResult.version}\n`;
+      `📜 Restored state recorded as version ${restoredVersion}\n`;
 
     // A merge writer cannot remove a key, so a field the snapshot never recorded keeps its
     // current value. Saying so is the difference between a partial restore and a partial restore

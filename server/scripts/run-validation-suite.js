@@ -391,6 +391,27 @@ export const SUITE = [
       'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
   },
   {
+    script: 'validate:shipped-frameworks',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the comparator with an agreeing set (must stay silent), a framework on disk but undeclared (must report; this is the motivating instance, since an undeclared shipped framework was deletable from the bundled tree), a declared id with no directory (must report, because the registry loads every shipped id fail-fast), and both together; the live set is compared against this checkout as a fifth case',
+  },
+  {
+    script: 'validate:mutation-atomicity',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over a record inside a `commit` callback (must stay silent), record-before-write on an update path and a bare `commitEdit` on a rollback path (both must report; these are the motivating instances, and one of them shipped and was reverted), and a `commit` callback elsewhere in the same method as a bare call (must still report, since a nearby callback must not launder it); the live tree is the fifth case, and a scan finding no recording call at all exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
+    script: 'validate:declared-surface',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED both ways — the self-test drives the comparator with a synthetic surface carrying an undeclared key (must report), declared keys alongside it (must stay silent), a satisfied exemption (must report) and a holding one (must not); the motivating instances are the positive control, and removing either the gate `severity` declaration or the framework `processing_steps` declaration exits 1 naming that exact key',
+  },
+  {
     script: 'validate:preview-vocabulary',
     io: 'read',
     reads: ['file', 'walk'],

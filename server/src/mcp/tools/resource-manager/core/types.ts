@@ -285,7 +285,10 @@ export interface ResourceManagerInput {
   search_query?: string;
 
   // Gate-specific parameters
+  /** Maps to the gate.yaml key `type`, NOT to `gate_type` — see the schema note on the collision. */
   gate_type?: 'validation' | 'guidance';
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   guidance?: string;
   pass_criteria?: Array<string | GatePassCriteria>;
   activation?: {
@@ -311,7 +314,14 @@ export interface ResourceManagerInput {
   enabled?: boolean;
   persist?: boolean;
 
-  // Advanced framework parameters (not advertised for token efficiency)
+  // Advanced framework parameters.
+  //
+  // These were withheld from the published schema for token efficiency, which made them
+  // settable and undiscoverable at the same time — including `framework_gates`, which
+  // `FrameworkDraftValidator` hard-requires, so the cheapest way to learn the surface was to
+  // provoke its error. Declared in `resourceManagerInputSchema` since P4.1/P4.5; the token
+  // cost is paid in the contract's parameter list, where `includeInDescription: false` keeps
+  // it out of the tool description a client sees on every call.
   framework_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
   framework_elements?: FrameworkElements;

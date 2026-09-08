@@ -16,6 +16,7 @@ import type { FrameworkCreationData } from '../core/types.js';
 import {
   ResourceMutationTransaction,
   ResourceVerificationService,
+  type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
@@ -309,7 +310,8 @@ export class FrameworkFileWriter {
    */
   async writeFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData?: ExistingFrameworkData | null
+    existingData?: ExistingFrameworkData | null,
+    options: ResourceWriteCommitOptions = {}
   ): Promise<FrameworkFileResult> {
     const frameworkDir = this.getFrameworkDir(data.id);
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
@@ -395,6 +397,7 @@ export class FrameworkFileWriter {
       },
       validate: () =>
         this.verificationService.validateFile('frameworks', data.id, frameworkYamlPath),
+      ...(options.commit !== undefined ? { commit: options.commit } : {}),
     });
 
     if (!txResult.success) {

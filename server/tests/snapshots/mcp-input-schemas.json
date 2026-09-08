@@ -811,6 +811,45 @@
         "minLength": 1,
         "type": "string"
       },
+      "argument_suggestions": {
+        "items": {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "examples": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "frameworkReason": {
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "string",
+                "array",
+                "object",
+                "boolean",
+                "number"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "type",
+            "description"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
       "argument_updates": {
         "items": {
           "properties": {
@@ -1229,12 +1268,91 @@
       "enabled_only": {
         "type": "boolean"
       },
+      "enforcement_mode": {
+        "enum": [
+          "blocking",
+          "advisory",
+          "informational"
+        ],
+        "type": "string"
+      },
+      "execution_flow": {
+        "properties": {
+          "postProcessingSteps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "preProcessingSteps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "validationSteps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "execution_hint": {
         "enum": [
           "single",
           "chain"
         ],
         "type": "string"
+      },
+      "execution_steps": {
+        "items": {
+          "properties": {
+            "action": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "dependencies": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "expected_output": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "frameworkPhase": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "action",
+            "frameworkPhase",
+            "expected_output"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "execution_type_enhancements": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
       },
       "expected_version": {
         "maximum": 9007199254740991,
@@ -1254,6 +1372,92 @@
       },
       "framework": {
         "type": "string"
+      },
+      "framework_elements": {
+        "properties": {
+          "optionalSections": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requiredSections": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sectionDescriptions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "requiredSections",
+          "sectionDescriptions"
+        ],
+        "type": "object"
+      },
+      "framework_gates": {
+        "items": {
+          "properties": {
+            "criteria": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": {
+              "type": "string"
+            },
+            "frameworkArea": {
+              "type": "string"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "priority": {
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low"
+              ],
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low"
+              ],
+              "type": "string"
+            },
+            "validationCriteria": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "type": "object"
+        },
+        "type": "array"
       },
       "from_version": {
         "type": "number"
@@ -1405,6 +1609,9 @@
         },
         "type": "object"
       },
+      "judge_prompt": {
+        "type": "string"
+      },
       "limit": {
         "type": "number"
       },
@@ -1468,6 +1675,98 @@
         ],
         "type": "string"
       },
+      "processing_steps": {
+        "items": {
+          "properties": {
+            "description": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "frameworkBasis": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "guards": {
+              "properties": {
+                "contains_all": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "contains_any": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "forbidden_terms": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "matches_pattern": {
+                  "type": "string"
+                },
+                "max_length": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "min_length": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "order": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "section_header": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "description",
+            "frameworkBasis",
+            "order",
+            "required"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "quality_indicators": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
       "reason": {
         "type": "string"
       },
@@ -1492,6 +1791,15 @@
       "search_query": {
         "type": "string"
       },
+      "severity": {
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low"
+        ],
+        "type": "string"
+      },
       "skip_version": {
         "type": "boolean"
       },
@@ -1512,6 +1820,73 @@
       },
       "system_prompt_guidance": {
         "type": "string"
+      },
+      "template_enhancements": {
+        "properties": {
+          "contextualHints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "systemPromptAdditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "userPromptModifications": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "template_suggestions": {
+        "items": {
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "frameworkJustification": {
+              "type": "string"
+            },
+            "impact": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "type": "string"
+            },
+            "section": {
+              "enum": [
+                "system",
+                "user"
+              ],
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "addition",
+                "structure",
+                "modification"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "section",
+            "type"
+          ],
+          "type": "object"
+        },
+        "type": "array"
       },
       "to_version": {
         "type": "number"

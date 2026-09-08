@@ -264,11 +264,63 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ),
   ...exceptionGroup(
     'resource_manager',
-    ['enabled_only', 'filter', 'format', 'search_query'],
+    ['enabled_only', 'filter', 'search_query'],
     'resource_manager list-action refinement field; every `list` scenario in the corpus uses ' +
       'default arguments (`{resource_type, action: list}`) only.',
-    'A conformance scenario asserting the filtered/formatted list output differs from the ' +
-      'unfiltered default.'
+    'A conformance scenario asserting the filtered list output differs from the unfiltered ' +
+      'default.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
+    ['format'],
+    'NOT a coverage gap — `format` is declared in the schema and the contract, forwarded by ' +
+      'the router (core/router.ts:223), and read by NOTHING: no prompt, gate or framework ' +
+      'processor branches on it, so `format: "json"` returns the same markdown as ' +
+      '`format: "text"`. It shared a group with the list-refinement fields until 2026-09-05, ' +
+      'under a reason implying a scenario would close it. A scenario would PASS and prove ' +
+      'nothing, which is worse than no scenario. Measured with a positive control: the same ' +
+      'probe run against `detail` finds two real read sites.',
+    'P4.12 — REMOVING this parameter at the next major. Repointed 2026-09-07 when P4.6 was ' +
+      'killed: this exception previously named the row that would implement the projection, and ' +
+      'that row died because building one is feature work nobody asked for. A parameter no ' +
+      'reader branches on has no observable behaviour to assert, so the honest coverage state is ' +
+      '"unimplemented" — and with no row left to implement it, the resolution is deletion, not a ' +
+      'scenario. Deliberately NOT repointed to P4.11, which covers reading written fields back ' +
+      'and would never close this.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
+    ['severity', 'enforcement_mode'],
+    'Declared by P4.4 and proven to reach gate.yaml by ' +
+      '`tests/unit/mcp-tools/gate-manager/settable-gate-fields.test.ts`, which asserts a ' +
+      'non-default value in the written file and mutation-kills a writer that drops it. The ' +
+      'corpus cannot carry that proof: no `inspect` path surfaces either field, so the ' +
+      'strongest assertion available to a scenario is that the call returned ok — which is ' +
+      'equally true of a create that wrote loader defaults.',
+    'P4.11 — a lossless read-back surface. Once `inspect` reports what is on disk, these move ' +
+      'into workspace-and-mutations.yaml as a create-then-read-back row.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
+    [
+      'framework_gates',
+      'template_suggestions',
+      'framework_elements',
+      'argument_suggestions',
+      'judge_prompt',
+      'processing_steps',
+      'execution_steps',
+      'execution_type_enhancements',
+      'template_enhancements',
+      'execution_flow',
+      'quality_indicators',
+    ],
+    'Framework advanced fields, declared by P4.1/P4.5. They were settable and undiscoverable ' +
+      'before the declaration, not unimplemented — the router forwarded them and the writer ' +
+      'split them across framework.yaml and phases.yaml throughout. Same read-back blocker as ' +
+      'the gate fields above: framework `inspect` surfaces none of them.',
+    'P4.11 — a lossless read-back surface, then one isolated-workspace scenario creating a ' +
+      'framework carrying the advanced fields and reading them back.'
   ),
   ...exceptionGroup(
     'resource_manager',

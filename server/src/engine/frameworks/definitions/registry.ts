@@ -13,6 +13,7 @@ import {
   getDefaultRuntimeLoader,
   type RuntimeFrameworkLoaderConfig,
 } from './runtime-framework-loader.js';
+import { SHIPPED_FRAMEWORK_IDS } from './shipped-frameworks.js';
 import { FrameworkGuide } from '../types/index.js';
 
 import { Logger } from '#infra/logging/index.js';
@@ -372,8 +373,11 @@ export class FrameworkRegistry {
   private async loadBuiltInGuides(): Promise<void> {
     this.logger.debug('Loading built-in framework guides from YAML...');
 
-    // Required built-in framework IDs
-    const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
+    // Required built-in framework IDs. Every framework the package ships is required and is
+    // registered as built-in — this list held four of the eight on disk until 2026-09-07, so the
+    // other four registered through the discovery pass below and every `isBuiltIn` reader called
+    // them operator-created. `validate:shipped-frameworks` fails when the set drifts again.
+    const builtInIds: string[] = [...SHIPPED_FRAMEWORK_IDS];
 
     // Fail-fast: RuntimeFrameworkLoader is required
     if (!this.runtimeLoader) {

@@ -11,7 +11,10 @@ import * as path from 'node:path';
 import { OperationResult, PromptResourceDependencies } from '../core/types.js';
 import { validateCategoryName } from '../utils/validation.js';
 
-import type { ResourceMutationTarget } from '#modules/resources/services/index.js';
+import type {
+  ResourceMutationTarget,
+  ResourceWriteCommitOptions,
+} from '#modules/resources/services/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
 
@@ -219,7 +222,8 @@ export class FileOperations {
     promptData: any,
     suppliedKeys?: ReadonlySet<string>,
     sourceRoot?: string,
-    writeIntent: PromptWriteIntent = NO_WRITE_INTENT
+    writeIntent: PromptWriteIntent = NO_WRITE_INTENT,
+    options: ResourceWriteCommitOptions = {}
   ): Promise<OperationResult> {
     // `writeIntent` passes through whole to `createOrUpdateYamlPrompt`, which owns the yaml-side
     // clearing; only the tool-directory removals are this method's own work.
@@ -382,6 +386,7 @@ export class FileOperations {
         return { messages, affectedFiles };
       },
       validate: () => this.verificationService.validateFile('prompts', yamlId, yamlPath),
+      ...(options.commit !== undefined ? { commit: options.commit } : {}),
     });
 
     if (!txResult.success) {

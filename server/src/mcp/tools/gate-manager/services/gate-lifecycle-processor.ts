@@ -18,7 +18,18 @@ export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
 
   async handleCreate(args: GateManagerInput): Promise<ToolResponse> {
-    const { id, name, type, description, guidance, pass_criteria, activation, retry_config } = args;
+    const {
+      id,
+      name,
+      type,
+      description,
+      guidance,
+      pass_criteria,
+      activation,
+      retry_config,
+      severity,
+      enforcementMode,
+    } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
     if (!name) return this.error('Gate name is required for create action');
@@ -38,6 +49,8 @@ export class GateLifecycleProcessor {
       pass_criteria,
       activation,
       retry_config,
+      severity,
+      enforcementMode,
     };
 
     const result = await this.ctx.gateFileService.writeGateFiles(gateData);
@@ -82,7 +95,18 @@ export class GateLifecycleProcessor {
   }
 
   async handleUpdate(args: GateManagerInput): Promise<ToolResponse> {
-    const { id, name, type, description, guidance, pass_criteria, activation, retry_config } = args;
+    const {
+      id,
+      name,
+      type,
+      description,
+      guidance,
+      pass_criteria,
+      activation,
+      retry_config,
+      severity,
+      enforcementMode,
+    } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
 
@@ -114,6 +138,14 @@ export class GateLifecycleProcessor {
       pass_criteria: pass_criteria ?? existingDefinition.pass_criteria,
       activation: activation ?? existingDefinition.activation,
       retry_config: retry_config ?? existingDefinition.retry_config,
+      // Deliberately NOT defaulted to the existing definition, unlike the three above. These
+      // two are preserved keys, not projected ones: `resolvePreservedGateYamlFields` already
+      // falls back to the on-disk value when the caller omits them. Reading them from
+      // `existingDefinition` here would work by coincidence and would defeat the preservation
+      // path the moment the two disagree — the loader applies a `severity` default, so the
+      // definition reports `medium` for a file that declares nothing.
+      severity,
+      enforcementMode,
     };
 
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —
@@ -128,32 +160,41 @@ export class GateLifecycleProcessor {
     // version always equals what `inspect` shows. `recordEditResult` bridges the prior live state
     // first when it is not already the newest row, which is what carries pre-P7 gate rows across
     // the era boundary with no data migration.
+    //
+    // Runs as the writer transaction's `commit` step, not ahead of it (P4.2 / SF-3) — see the
+    // matching comment in `framework-lifecycle-processor.ts` for why ordering the record against
+    // the write could only pick which failure mode the caller got.
     let versionSaved: number | undefined;
     const skipVersion = args.skip_version === true;
-    if (this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion) {
-      const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-        beforeState,
-        afterState,
-        `${id}/gate.yaml`
-      );
-      const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            // Inlined rather than extracted to a helper on purpose — see the note in
+            // `framework-lifecycle-processor.ts`: `validate:mutation-atomicity` reads the record's
+            // position lexically, and a gate that cannot see the property is not guarding it.
+            commit: async (): Promise<void> => {
+              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
+                beforeState,
+                afterState,
+                `${id}/gate.yaml`
+              );
+              const versionResult = await this.ctx.versionHistoryService.recordEditResult(
+                'gate',
+                id,
+                beforeState,
+                afterState,
+                {
+                  description: 'Update via resource_manager',
+                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                }
+              );
+              versionSaved = versionResult.version;
+              this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
+            },
+          }
+        : {};
 
-      const versionResult = await this.ctx.versionHistoryService.recordEditResult(
-        'gate',
-        id,
-        beforeState,
-        afterState,
-        {
-          description: 'Update via resource_manager',
-          diff_summary: diffSummary,
-        }
-      );
-
-      versionSaved = versionResult.version;
-      this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
-    }
-
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
     if (!result.success) {
       return this.error(`Failed to update gate: ${result.error}`);
     }

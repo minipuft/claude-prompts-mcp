@@ -965,12 +965,21 @@ older history rows, so restoring one could silently freeze a prompt that never d
 
 **Gate Parameters:**
 
-| Parameter       | Purpose                                           |
-| --------------- | ------------------------------------------------- |
-| `gate_type`     | `validation` (pass/fail) or `guidance` (advisory) |
-| `guidance`      | Gate criteria content                             |
-| `pass_criteria` | Array of success conditions                       |
-| `activation`    | When gate activates (categories, frameworks)      |
+| Parameter          | Purpose                                                                      |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `gate_type`        | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `severity`         | `critical` \| `high` \| `medium` \| `low`. Default `medium`                  |
+| `enforcement_mode` | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity` |
+| `guidance`         | Gate criteria content                                                        |
+| `pass_criteria`    | Array of success conditions                                                  |
+| `activation`       | When gate activates (categories, frameworks)                                 |
+
+Omitting `severity` or `enforcement_mode` on an update leaves the gate's current value alone; it
+does not reset to the default.
+
+`gate_type` writes the `gate.yaml` key **`type`**. The separate `gate.yaml` key `gate_type`
+(`framework` \| `category` \| `custom`) is not authorable through the tool — its name is taken by
+this parameter — so it is carried forward from the file and edited by hand.
 
 **Framework Parameters:**
 
@@ -980,6 +989,24 @@ older history rows, so restoring one could silently freeze a prompt that never d
 | `phases`                 | Array of phase definitions                  |
 | `gates`                  | Gate include/exclude configuration          |
 | `persist`                | Save switch to config (for `switch` action) |
+
+**Framework advanced parameters.** All eleven were accepted before they were documented; they are
+now declared in the tool schema, so a client can read each one's shape from the contract. Six land
+in `framework.yaml`, five in `phases.yaml` — which matters when reasoning about a partial write.
+
+| Parameter                     | Lands in         | Purpose                                                                             |
+| ----------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| `framework_gates`             | `framework.yaml` | **Required to create a framework.** Quality gates; each entry needs `id` and `name` |
+| `template_suggestions`        | `framework.yaml` | Prompt-enhancement suggestions surfaced when active                                 |
+| `framework_elements`          | `framework.yaml` | Section structure expected of a prompt                                              |
+| `argument_suggestions`        | `framework.yaml` | Arguments the framework suggests a prompt declare                                   |
+| `judge_prompt`                | own file         | Judge-prompt body, written where `judgePromptFile` points                           |
+| `processing_steps`            | `phases.yaml`    | Ordered template-processing steps, with optional guards                             |
+| `execution_steps`             | `phases.yaml`    | Execution steps with dependencies and expected output                               |
+| `execution_type_enhancements` | `phases.yaml`    | Per-execution-type step overlays (chain vs single)                                  |
+| `template_enhancements`       | `phases.yaml`    | System/user prompt additions and contextual hints                                   |
+| `execution_flow`              | `phases.yaml`    | Pre/post/validation hooks around execution                                          |
+| `quality_indicators`          | `phases.yaml`    | Per-phase keywords and patterns for compliance scoring                              |
 
 </details>
 
@@ -1538,12 +1565,12 @@ deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaki
 A version snapshot records the resource's authored surface, not every byte in its directory. What
 falls outside it is left to the file writers, which carry it forward from disk:
 
-| Resource  | Not in the snapshot                                                             | What happens on rollback                  |
-| --------- | ------------------------------------------------------------------------------- | ----------------------------------------- |
-| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values         |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so** |
-| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml`          |
-| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge     |
+| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                              |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                      |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity` and `enforcementMode` became settable, since they are preserved keys rather than projected ones |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                          |
 
 Where a rollback restores only part of a resource, the response names what it did not restore.
 Frameworks additionally report any projected field the target version never recorded, because the

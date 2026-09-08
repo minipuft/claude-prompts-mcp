@@ -68,10 +68,31 @@ function createProcessor() {
   };
   // Typed argument so `mock.calls[0][0]` is reachable — an untyped jest.fn() infers a
   // zero-length tuple and indexing it is a type error, not just a lint nit.
-  const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-    writtenPrompt = promptData;
-    return { message: 'written', affectedFiles: ['/test/prompts/general/review_code/prompt.yaml'] };
-  });
+  // Models the real writer's transaction, which runs the caller's `commit` step after the write
+  // and rolls the files back if it throws (P4.2). A double that ignored `options` would leave
+  // every version assertion below measuring a writer that no longer exists.
+  const updatePromptImplementation = jest.fn(
+    async (
+      promptData: Record<string, unknown>,
+      _suppliedKeys?: unknown,
+      _sourceRoot?: unknown,
+      _writeIntent?: unknown,
+      options?: { commit?: () => Promise<void> }
+    ) => {
+      const previous = writtenPrompt;
+      writtenPrompt = promptData;
+      try {
+        await options?.commit?.();
+      } catch (error) {
+        writtenPrompt = previous;
+        throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+      }
+      return {
+        message: 'written',
+        affectedFiles: ['/test/prompts/general/review_code/prompt.yaml'],
+      };
+    }
+  );
 
   const context = {
     dependencies,
@@ -200,10 +221,28 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-      currentPrompt = promptData;
-      return { message: 'written' };
-    });
+    // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+    // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+    // longer exists.
+    const updatePromptImplementation = jest.fn(
+      async (
+        promptData: Record<string, unknown>,
+        _suppliedKeys?: unknown,
+        _sourceRoot?: unknown,
+        _writeIntent?: unknown,
+        options?: { commit?: () => Promise<void> }
+      ) => {
+        const previous = currentPrompt;
+        currentPrompt = promptData;
+        try {
+          await options?.commit?.();
+        } catch (error) {
+          currentPrompt = previous;
+          throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+        }
+        return { message: 'written' };
+      }
+    );
 
     const context = {
       dependencies,
@@ -291,10 +330,28 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-      currentPrompt = promptData;
-      return { message: 'written' };
-    });
+    // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+    // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+    // longer exists.
+    const updatePromptImplementation = jest.fn(
+      async (
+        promptData: Record<string, unknown>,
+        _suppliedKeys?: unknown,
+        _sourceRoot?: unknown,
+        _writeIntent?: unknown,
+        options?: { commit?: () => Promise<void> }
+      ) => {
+        const previous = currentPrompt;
+        currentPrompt = promptData;
+        try {
+          await options?.commit?.();
+        } catch (error) {
+          currentPrompt = previous;
+          throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+        }
+        return { message: 'written' };
+      }
+    );
 
     const context = {
       dependencies,
@@ -470,10 +527,28 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
-    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-      currentPrompt = promptData;
-      return { message: 'written' };
-    });
+    // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+    // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+    // longer exists.
+    const updatePromptImplementation = jest.fn(
+      async (
+        promptData: Record<string, unknown>,
+        _suppliedKeys?: unknown,
+        _sourceRoot?: unknown,
+        _writeIntent?: unknown,
+        options?: { commit?: () => Promise<void> }
+      ) => {
+        const previous = currentPrompt;
+        currentPrompt = promptData;
+        try {
+          await options?.commit?.();
+        } catch (error) {
+          currentPrompt = previous;
+          throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+        }
+        return { message: 'written' };
+      }
+    );
     // P7 row 2.4: the update path records through `recordEditResult` (go-forward numbering);
     // the abort posture is asserted against that seam.
     const recordEditResult = jest.fn(async () => {
@@ -511,7 +586,13 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
     } as never)) as { isError: boolean; content: Array<{ text?: string }> };
 
     expect(recordEditResult).toHaveBeenCalledTimes(1);
-    expect(updatePromptImplementation).not.toHaveBeenCalled();
+    // Was `expect(updatePromptImplementation).not.toHaveBeenCalled()`, which measured the ORDER —
+    // true only while the record ran ahead of the write. P4.2 replaced that ordering with one
+    // transaction spanning both, so the writer is now entered and rolls back. The property is
+    // unchanged and still asserted: nothing survives the failed update. Where that property is
+    // proved on real bytes is `gate-framework-versioning.integration.test.ts` §'a persistence
+    // failure leaves the file unmodified'; a mocked writer cannot observe a file.
+    expect(updatePromptImplementation).toHaveBeenCalledTimes(1);
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('No changes were written');
   });
@@ -528,10 +609,28 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
       onRestart: jest.fn(async () => {}),
     };
     let currentPrompt: Record<string, unknown> = existingPrompt;
-    const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-      currentPrompt = promptData;
-      return { message: 'written' };
-    });
+    // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+    // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+    // longer exists.
+    const updatePromptImplementation = jest.fn(
+      async (
+        promptData: Record<string, unknown>,
+        _suppliedKeys?: unknown,
+        _sourceRoot?: unknown,
+        _writeIntent?: unknown,
+        options?: { commit?: () => Promise<void> }
+      ) => {
+        const previous = currentPrompt;
+        currentPrompt = promptData;
+        try {
+          await options?.commit?.();
+        } catch (error) {
+          currentPrompt = previous;
+          throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+        }
+        return { message: 'written' };
+      }
+    );
     const recordEditResult = jest.fn(async () => ({ success: true, version: 7, bridged: false }));
     const context = {
       dependencies,

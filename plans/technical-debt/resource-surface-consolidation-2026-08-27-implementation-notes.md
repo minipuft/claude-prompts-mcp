@@ -885,3 +885,239 @@ clear an import-order ratchet regression from four new imports, also reformatted
 relationship to this change. `--fix` takes a path, not a diff. Caught by reading `git status`
 immediately after; reverted with `git checkout --`, and the ratchet passes without them. Scope
 `--fix` to the files the change touched, or diff before staging.
+
+## P4 batch A — the declaration rows (2026-09-05)
+
+Branch `feat/resource-surface-declarations`, stacked on `feat/settability-verbs`. The owner first
+chose a branch off `main` on my recommendation, and that recommendation was wrong: I asserted P4
+"shares no code with the verbs arc" without diffing. It shares ten of twelve files, two of them
+generated artifacts that cannot be hand-merged. Re-measured and re-decided before any code was
+written, which is the only reason it cost a `git reset` rather than a conflict resolution.
+
+**P4.1 was a strict subset of P4.5 and the plan listed them as peers.** `framework_gates` is the
+first of the eleven advanced fields; the only thing distinguishing it is that
+`FrameworkDraftValidator` hard-requires it. Executing P4.1 alone would have declared one member of
+an enumeration and left ten identical instances standing. When a row's subject is one member of a
+set, the row should name the set — otherwise the fix closes an instance and reads as closing a
+class.
+
+**The premise `ResourceManagerInput` was missing the fields turned out to be false.** All eleven
+were already declared on the TypeScript interface, with a comment explaining they were withheld
+from the published schema "for token efficiency". So the types agreed throughout and only the zod
+schema — the artifact a client actually reads — disagreed. The rationale was real but it bought
+tokens by making a required field undiscoverable, and `includeInDescription: false` already buys
+the same tokens without that cost.
+
+**DEV-P4-1 — `gate_type` could not ship with its two siblings.** The tool parameter spelled
+`gate_type` maps to the YAML key `type`; the loader has a _different_ key genuinely named
+`gate_type`. Neither side reads as wrong alone, only the pair does. Ruled: split to P4.10 rather
+than alias to a third name, because an alias is a parameter we would ship already intending to
+delete — `cleanup-standards.md`'s "parallel system with a nicer name". Recorded as an exemption in
+the new gate whose condition is re-evaluated every run, so the day the rename lands the exemption
+reports itself rather than lingering.
+
+**DEV-P4-2 — the row I could not close is the one that blocks verifying the rows I did.** P4.6
+turned out not to be "inspect's JSON projection drops fields" but "there is no JSON projection":
+`format` is declared, contracted, routed at `core/router.ts:223`, and read by nothing. That makes
+the new fields writable and unreadable through the tool, so the conformance corpus — which asserts
+on tool responses — genuinely cannot cover them. The honest resolution was a unit test asserting
+the written YAML plus a declared exception naming P4.6, not a corpus scenario that would assert
+`ok:` and prove nothing.
+
+**The stale thing was an exemption's REASON, not its existence.** `format` already sat in a
+`validate:conformance-coverage` exception group, filed under "every list scenario uses default
+arguments only" — which says a scenario would close it. A scenario would have passed while proving
+nothing. The gate audits whether its exceptions are _satisfied_; nothing audits whether the
+_stated reason_ is still true, and a wrong reason is what keeps a defect looking handled. This is
+the `cleanup-standards.md` §A Status Outlives What It Described shape one level in: the marker was
+current, the justification underneath it had rotted.
+
+**Positive controls, both directions.** The class gate was shown to fail on each of its own
+motivating instances — deleting the gate `severity` declaration and deleting the framework
+`processing_steps` declaration each exit 1 naming that key — and to return green when restored.
+The new unit test was mutation-verified by making `resolvePreservedGateYamlFields`' supplied-value
+branch dead: two of three tests fail, and the third (the converse control, "omitting writes
+neither key") correctly survives, which is what tells the two assertions apart.
+
+**DEV-P4-3.** The e2e suite failed 166 tests on first run because this worktree had never been
+built and `dist/index.js` did not exist. Attributed before acting rather than investigated as a
+regression. A fresh worktree needs `npm run build` before `test:all`.
+
+**DEV-P4-4.** `npm run format` and `format:server` between them did not cover
+`server/scripts/*.ts`, so the new gate script reached `pre-commit` unformatted and was rejected
+there. Formatting at authoring time only works if you know which glob owns the file you created.
+
+## P4 batch B — the defect rows (2026-09-05)
+
+Same branch as batch A. **Net code change: none.** P4.8 is killed, and P4.2/P4.3 have corrected
+premises. That is a worse outcome than intended and a better one than the alternative, which was
+shipping a regression.
+
+The P4.2 fix was fully implemented — reorder in all three processors, a shared helper, a
+mutation-verified unit test, `validate:all` 55/55, 3026 unit tests green — and then reverted,
+because ONE integration test caught that it traded away a safety property an earlier row of this
+same plan had deliberately established. The revert is the finding; see P4-F9 and P4-F10 in the
+plan.
+
+**Two of the four rows named one instance of a class.** P4.2 named the framework processor; the
+gate and prompt processors carried the identical `recordEditResult`-before-write ordering. P4.3
+named one hardcoded literal; there is a second at `registry.ts:376` feeding the registry's own
+`isBuiltIn`. Batch A had exactly this shape too (P4.1 was a subset of P4.5). Three for three, which
+stops being a coincidence: a row is written from the site where the defect was NOTICED, and the
+site where it was noticed is rarely the whole set.
+
+**DEV-P4B-1 — the prompt processor had already reasoned about this ordering, and reasoned about
+the other direction.** Its comment (P7-D2/OQ-P7-6) explains at length why a failed snapshot must
+abort BEFORE the write: `version_history` is durable, nothing regenerates its rows, so writing past
+a failed snapshot leaves a gap while reporting success. All true. But the argument only considers
+snapshot-fails-then-write, never record-succeeds-then-write-fails, and the second is the worse of
+the two — a phantom version makes rollback restore content that was never live. Superseded
+explicitly in the comment rather than quietly reordered, because the original reasoning is correct
+about its own half and a future reader needs to see which half moved.
+
+**Two tests failed, and they meant opposite things.** The first — a unit test asserting the old
+abort-before-write contract — was the change being reached, and rewriting it was right. The second,
+an INTEGRATION test named "a persistence failure leaves the file unmodified", was the change being
+WRONG, and I nearly rewrote it the same way. The difference is that the second one's docstring
+argues for the property; a test that explains itself is a decision, not an assertion, and
+rewriting it to match new code discards the decision silently. `test:all` came back with
+exactly one unit failure: the test asserting the old abort-before-write contract. My own new test
+covers the gate processor, so nothing I wrote would have caught a prompt-side reorder that silently
+did not apply. Rewritten to the new contract rather than deleted — the failure it covers still
+exists, it just resolves differently now.
+
+**DEV-P4B-2 — P4.8 asked for a security regression, and its `☐` is why.** The row wants
+`user_message_template_file` to resolve in `src/`. Those parameters were removed on purpose in
+`390ae26e`, and the CHANGELOG says why: `>>create_prompt` "no longer accepts author-controlled
+file-path inputs". Because `☐` asserts nothing, nothing re-read the row after the capability was
+deleted, and executing it as written would have reinstated author-controlled paths in a guided
+authoring workflow. `cleanup-standards.md` §A Status Outlives What It Described predicts the stale
+`☐`; what it does not say is that the cost is occasionally a security regression rather than a
+wasted pass.
+
+**P4.3's obvious fix is wrong, and only measuring both paths shows it.** The literal looks like it
+wants to become "refuse anything in the bundled tree" — and `getBundledResourceDir` returns
+`<packageRoot>/resources/<type>`, which EQUALS `getFrameworksDirectory()` in a default install. So
+that guard would also refuse to delete a framework the operator created themselves. The property
+needed is "ships with the package", which no disk test can answer when the two roots coincide.
+Left open rather than guessed.
+
+**A comment cited a plan row by number and that made it read as done.**
+`framework-lifecycle-processor.ts:264` claims the bundled guard "also covers focus, liquescent,
+radiant and verify ... (P4.3)". The guard is nested inside `if (!existsSync(frameworkDir))` and
+those directories exist, so it never runs for them. The citation is what sells it: prose naming the
+row it discharges reads like a receipt. Recorded as P4-F6.
+
+**Artifacts created and deleted by the P4.2 revert**, named here because they are the shape the
+transactional fix should NOT take:
+
+- `server/src/mcp/tools/shared/version-after-write.ts` — a shared `recordVersionAfterWrite` +
+  `renderVersionGap`. The extraction itself was right (three processors held three copies of the
+  same block, and pulling it out is what fixed a cognitive-complexity ratchet regression the
+  inline `try`/`catch` had caused). Its CONTRACT was wrong: it swallowed a recording failure and
+  returned it for the caller to render. The transactional fix needs the opposite — the helper must
+  THROW, so the surrounding `ResourceMutationTransaction.run()` restores the files. Rebuild it with
+  that signature rather than restoring this file.
+- `server/tests/unit/mcp-tools/gate-manager/version-record-after-write.test.ts` — three cases with
+  a positive control, mutation-verified. Its first two assertions (forced write failure records
+  nothing; successful write does record) are still exactly right and should be carried into the
+  transactional version. Its third — that a recording failure reports a gap rather than failing —
+  encodes the behaviour that broke the safety property, and must be replaced by the converse: a
+  recording failure leaves the file byte-identical.
+
+**DEV-P4B-3 — the plan-sync tripwire cannot forget a deleted file.** These two paths stayed in
+`source_since_touch` after the revert removed them. `retained_edits` decides what to forget by
+comparing each pending path's mtime against the newest plan-side mtime, and a path that no longer
+exists reports `0.0`, which fails the `0.0 < mtime` test and is retained forever. So a session
+that creates a file, flushes its findings, and then deletes the file is blocked on every
+subsequent turn with nothing it can do to clear it — a gate nobody can pass. Fixed in
+`~/.claude/hooks/lib/plan_hygiene.py` in the same session that hit it.
+
+**DEV-P4B-3 verified in production, not just in unit tests.** The stamp landed on the live session
+state (`vanished_seen_ts` carries both deleted paths), which is the half the unit suite cannot
+show: those tests drive `retained_edits` directly, so they prove the predicate and say nothing
+about whether the Stop hook persists what it computed. The persistence was the actual defect —
+the old caller saved only when the pending list shrank, and on a stamping turn it does not.
+
+One further thing the live state makes visible: `source_since_touch` holds four paths, two in this
+worktree and two in `~/.claude`, while the banner names only the two here. That is the
+retained-vs-reported split behaving correctly — repository scoping decides what a banner may SAY,
+never what the ledger REMEMBERS, so the `~/.claude` edits stay owed against a plan in their own
+repo instead of being erased by a plan bound in this one.
+
+## Tier P4-C — P4.3 closed, P4.6 killed (2026-09-07)
+
+**DEV-P4C-1 — the second literal was a loader, not a mirror.** The row described `registry.ts:376`
+as a second copy feeding `isBuiltIn`. It is that, but it is also the registry's fail-fast LOAD
+list: ids in it are required and throw `FATAL` when absent, and everything else arrives through a
+`try`/`catch` discovery pass. Correcting the set therefore changed startup behaviour, not only
+reporting — an install missing a shipped framework now fails fast. Recorded because the row would
+have read as a pure rename otherwise, and because the blast radius is startup rather than a tool
+call.
+
+**DEV-P4C-2 — a declared set, not a scan, and the reason is in the file.** The obvious closure for
+"never hardcode a framework list" is to read `resources/frameworks/*` at runtime. It cannot be
+done here: `getBundledResourceDirectory('frameworks')` resolves to `getFrameworksDirectory()` in a
+default install, so a scan cannot separate a shipped framework from one the operator created, and
+refusing both trades data loss for a capability bug. The list stays declared and
+`validate:shipped-frameworks` is what keeps it honest.
+
+**DEV-P4C-3 — the refusal moved after path resolution, because a test held a ruling.** The first
+version raised the shipped-framework refusal before resolving the directory. Correct, and it broke
+`resource-copy-on-write.e2e.test.ts` §"a refusal states the reason that is true, naming where it
+lives" — P1.3 ruled that a refusal names the location. The guard now runs after resolution so the
+message can. This is the second time in this plan that an e2e/integration case has held a property
+no unit suite could see; the first was P4.2's reverted reorder.
+
+**DEV-P4C-4 — a mock stopped modelling the manager.** Adding `isShippedFramework` to
+`FrameworkManager` broke two integration cases whose `DriftableFrameworkRegistry` stub lacked it.
+Fixed by giving the stub the method and delegating to the real predicate rather than returning a
+constant: a stub answering `false` would let a regression that deletes `focus` pass the suite.
+Distinct from rewriting an assertion to match new code — the assertions were untouched.
+
+**DEV-P4C-5 — killing P4.6 orphaned three exemptions, and one could not be repointed.** Three
+`validate-conformance-coverage.js` exceptions named P4.6 as their closing condition. Two describe a
+read-back gap and moved to the new P4.11. The third is the `format` parameter itself, whose closing
+condition was "implement the projection" — the exact scope the kill removed. Repointing it to P4.11
+would have made the exemption a lie, so `format` became its own row (P4.12, remove at the next
+major). A killed row's dependants are findings, and they surface only if you re-read each reason
+against the new world rather than against its own text.
+
+**DEV-P4C-6 — e2e reads `dist/`.** The e2e refusal case failed against the previous message for one
+run after the source was fixed, because the suite spawns a server from the build. Rebuild before
+attributing an e2e failure to the change under test.
+
+**DEV-P4C-7 — P4.2's authored cost was wrong in both directions, and the cheap half was the
+abstraction.** The row priced the fix as a new `ResourceMutationTransaction` plus a version helper
+rewritten to throw. Both already existed: the transaction is 199 lines in
+`src/modules/resources/services/`, all three writers already wrap their file writes in it
+(`framework-file-writer.ts:328`, `gate-file-writer.ts:152`, `file-operations.ts:300`), and
+`recordEditResult` has thrown since P7-D2. Only the record sat outside. What the row UNDERSTATED is
+the site count — six, not the three P4-F5 found, because each processor splits the pair on `update`
+and again on `rollback`. Re-measuring an inventory is worth doing when it might make the work
+smaller too; the correction that mattered here was the one that made it bigger.
+
+**DEV-P4C-8 — the gate rejected the first draft of its own fix, and was right.** Extracting the
+record into a private `recordUpdateVersion` per processor read better and put the call one
+indirection outside the `commit` callback, which is lexically indistinguishable from the pre-fix
+shape. `validate:mutation-atomicity` reported all three. Two ways out: widen the gate to follow one
+level of call graph, or inline the record so the property holds structurally. Inlined — a gate that
+cannot see the property is not guarding it, and the cost is three slightly longer callbacks against
+a check that stays simple enough to trust. Written on the TS AST rather than as a regex or a brace
+count for the same reason: a false PASS is the outcome this check exists to prevent.
+
+**DEV-P4C-9 — an assertion that measured the ORDER rather than the property.**
+`prompt-lifecycle-processor.test.ts` asserted `expect(updatePromptImplementation).not
+.toHaveBeenCalled()` on a failed version save. That could only hold while the record ran ahead of
+the write; under one transaction the writer is entered and rolls back. The property — nothing
+survives a failed update — is unchanged and still asserted, and it is now proved on real bytes in
+`gate-framework-versioning.integration.test.ts`, which a mocked writer cannot do. Superseded in
+place with the reason, not deleted. Four writer doubles across three unit files also needed to
+start honouring `options.commit`; a double that ignores a new argument the real collaborator now
+acts on is the DEV-P4C-4 shape again, and it cost 5 red tests to notice.
+
+**DEV-P4C-10 — `sed`/`perl` in-place edits keep costing more than they save.** A `perl -0pi`
+substitution used `$2` against a NON-capturing group, so it silently replaced three variable
+declarations with `const  = ...`. Exit code 0. Caught only by the next typecheck. This is the same
+family as the silent no-op recorded earlier in this arc: the failure mode is not that the pattern
+misses, it is that the result is never read. Use the editing tools, or read back what was written.

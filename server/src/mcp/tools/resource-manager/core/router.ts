@@ -257,6 +257,11 @@ export class ResourceManagerRouter {
     if (args.id) gateArgs.id = args.id;
     if (args.name) gateArgs.name = args.name;
     if (args.gate_type) gateArgs.type = args.gate_type;
+    if (args.severity) gateArgs.severity = args.severity;
+    // snake_case tool parameter → the gate.yaml key's own camelCase spelling. The YAML key is
+    // `enforcementMode`; every tool parameter is the snake_case form of its key, so the mapping
+    // lands here rather than diverging the published name from the file it writes.
+    if (args.enforcement_mode) gateArgs.enforcementMode = args.enforcement_mode;
     if (args.description) gateArgs.description = args.description;
     if (args.guidance) gateArgs.guidance = args.guidance;
     if (args.pass_criteria !== undefined) {

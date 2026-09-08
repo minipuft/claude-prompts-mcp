@@ -78,40 +78,58 @@ export class GateVersioningProcessor {
       );
     }
 
-    // PHASE 2 — record. Throws on persistence failure, which aborts with nothing on disk. The
-    // ordering is the safety property: recording after the write would leave a written file with
-    // no version row. Projected through the same contract `handleUpdate` records, or the bridge
-    // check would compare a projection against a differently-shaped live state and bridge on
-    // every rollback.
-    let saveResult;
-    try {
-      saveResult = await this.ctx.versionHistoryService.commitEdit(
-        'gate',
-        id,
-        currentState,
-        snapshot,
-        { description: `Rollback to v${version}`, diff_summary: '' }
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return this.error(
-        `Rollback failed: could not record the version snapshot — ${message}\n\n` +
-          `The gate was left unchanged.`
-      );
+    // PHASE 2 + 3 — write and record as ONE transaction (P4.2 / SF-3). The safety property is no
+    // longer carried by their ORDER, which is what made it fragile: recording first left a row for
+    // a write that could still fail, recording second left a written file with no row, and the
+    // sequence could only pick one. The record now runs inside the write's transaction after
+    // verification, so a failed write records nothing and a failed record restores the files.
+    // Projected through the same contract `handleUpdate` records, or the bridge check would
+    // compare a projection against a differently-shaped live state and bridge on every rollback.
+    //
+    // Fields outside the projection are carried forward from disk by
+    // `resolvePreservedGateYamlFields` inside the writer, which is where that live read belongs.
+    let restoredVersion: number | undefined;
+    let recordFailure: string | undefined;
+
+    const writeResult = await this.ctx.gateFileService.writeGateFiles(restore.writeModel, {
+      commit: async (): Promise<void> => {
+        try {
+          const saveResult = await this.ctx.versionHistoryService.commitEdit(
+            'gate',
+            id,
+            currentState,
+            snapshot,
+            { description: `Rollback to v${version}`, diff_summary: '' }
+          );
+          restoredVersion = saveResult.version;
+        } catch (error) {
+          recordFailure = error instanceof Error ? error.message : String(error);
+          throw error;
+        }
+      },
+    });
+
+    if (!writeResult.success) {
+      return recordFailure !== undefined
+        ? this.error(
+            `Rollback failed: could not record the version snapshot — ${recordFailure}\n\n` +
+              `The gate was left unchanged.`
+          )
+        : this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    // PHASE 3 — write. Fields outside the projection are carried forward from disk by
-    // `resolvePreservedGateYamlFields` inside the writer, which is where that live read belongs.
-    const writeResult = await this.ctx.gateFileService.writeGateFiles(restore.writeModel);
-    if (!writeResult.success) {
-      return this.error(`Rollback write failed: ${writeResult.error}`);
+    if (restoredVersion === undefined) {
+      // Unreachable: `commit` either assigns or throws, and a throw fails the write above.
+      throw new Error(
+        `Rollback of gate '${id}' reported a successful write without recording a version`
+      );
     }
 
     const reloaded = await this.ctx.gateManager.reload(id);
 
     return this.success(
       `✅ Gate '${id}' rolled back to version ${version}\n\n` +
-        `📜 Restored state recorded as version ${saveResult.version}\n` +
+        `📜 Restored state recorded as version ${restoredVersion}\n` +
         (reloaded
           ? `🔄 Gate reloaded with restored content`
           : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +

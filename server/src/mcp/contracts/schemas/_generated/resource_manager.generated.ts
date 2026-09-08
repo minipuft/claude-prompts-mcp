@@ -57,6 +57,8 @@ export type resource_managerParamName =
   | 'detail'
   | 'search_query'
   | 'gate_type'
+  | 'severity'
+  | 'enforcement_mode'
   | 'guidance'
   | 'pass_criteria'
   | 'activation'
@@ -68,6 +70,17 @@ export type resource_managerParamName =
   | 'tool_descriptions'
   | 'enabled'
   | 'persist'
+  | 'framework_gates'
+  | 'template_suggestions'
+  | 'framework_elements'
+  | 'argument_suggestions'
+  | 'judge_prompt'
+  | 'processing_steps'
+  | 'execution_steps'
+  | 'execution_type_enhancements'
+  | 'template_enhancements'
+  | 'execution_flow'
+  | 'quality_indicators'
   | 'version'
   | 'from_version'
   | 'to_version'
@@ -253,7 +266,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'gate_configuration',
     type: 'object',
     description:
-      '[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean).',
+      "[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean — whether this prompt runs its framework's gates; unrelated to the top-level framework_gates parameter, which defines them).",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -356,7 +369,25 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'gate_type',
     type: 'enum[validation|guidance]',
     description:
-      '[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation.',
+      "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'; the separate gate.yaml key 'gate_type' (framework|category|custom) is not authorable through this tool.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'severity',
+    type: 'enum[critical|high|medium|low]',
+    description:
+      '[Gate] Severity for prioritization. Default: medium. Omitted on update, an existing gate keeps its current value.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'enforcement_mode',
+    type: 'enum[blocking|advisory|informational]',
+    description:
+      '[Gate] Enforcement mode override. Absent, it is derived from severity, so setting severity alone is usually enough.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -414,7 +445,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'phases',
     type: 'array<object>',
     description:
-      '[Framework] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (framework_gates, processing_steps, execution_steps, etc.) are also accepted.',
+      '[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -447,6 +478,104 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'persist',
     type: 'boolean',
     description: '[Framework] For switch: persist the change to config. Default: false.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'framework_gates',
+    type: 'array<object>',
+    description:
+      '[Framework] Quality gates for this framework, written to framework.yaml. REQUIRED to create a framework. Each entry: id and name (both required), description, frameworkArea, priority (critical|high|medium|low), validationCriteria (array<string>), criteria, severity.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'template_suggestions',
+    type: 'array<object>',
+    description:
+      '[Framework] Prompt-enhancement suggestions, written to framework.yaml. Each entry: section (system|user) and type (addition|structure|modification) required; description, content, frameworkJustification, impact (high|medium|low).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'framework_elements',
+    type: 'object',
+    description:
+      '[Framework] Section structure expected of a prompt, written to framework.yaml as frameworkElements: requiredSections (array<string>), optionalSections, sectionDescriptions (object).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'argument_suggestions',
+    type: 'array<object>',
+    description:
+      '[Framework] Arguments this framework suggests a prompt declare, written to framework.yaml as argumentSuggestions. Each entry: name, type (string|array|object|boolean|number), description, frameworkReason, examples.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'judge_prompt',
+    type: 'string',
+    description: '[Framework] Judge-prompt body, written to the file judgePromptFile names.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'processing_steps',
+    type: 'array<object>',
+    description:
+      '[Framework] Ordered template-processing steps, written to phases.yaml. Each entry: id, name, description, frameworkBasis, order (positive int), required (boolean); optional section_header and guards.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'execution_steps',
+    type: 'array<object>',
+    description:
+      '[Framework] Execution steps with dependencies, written to phases.yaml. Each entry: id, name, action, frameworkPhase, expected_output; optional dependencies (array<string>).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'execution_type_enhancements',
+    type: 'object',
+    description:
+      '[Framework] Per-execution-type step overlays (chain vs single), written to phases.yaml.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'template_enhancements',
+    type: 'object',
+    description:
+      '[Framework] Written to phases.yaml: systemPromptAdditions, userPromptModifications, contextualHints (each array<string>).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'execution_flow',
+    type: 'object',
+    description:
+      '[Framework] Hooks around execution, written to phases.yaml: preProcessingSteps, postProcessingSteps, validationSteps (each array<string>).',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'quality_indicators',
+    type: 'object',
+    description:
+      '[Framework] Per-phase keywords and patterns for compliance scoring, written to phases.yaml.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
