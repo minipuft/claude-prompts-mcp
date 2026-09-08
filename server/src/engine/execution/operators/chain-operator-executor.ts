@@ -26,6 +26,7 @@ import type { ConvertedPrompt } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { DEFAULT_FRAMEWORK_ID, NAMED_OUTPUT_NAMESPACE } from '#shared/utils/constants.js';
+import { PromptError } from '#shared/utils/index.js';
 import { processTemplate, processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
@@ -157,7 +158,10 @@ export class ChainOperatorExecutor {
     // Get original content from last step if available
     let originalContent = '';
     if (targetStep) {
-      // Look up convertedPrompt if not already set
+      // Not an assert like `renderNormalStep`'s: this renders the ALREADY-EXECUTED step's content
+      // as review context, and that step's own render refused an unresolvable id before the run
+      // could reach a review. Missing here means the catalog moved mid-run; the review still
+      // renders, with no original content to quote.
       const convertedPrompt =
         targetStep.convertedPrompt ||
         this.convertedPrompts.find((p) => p.id === targetStep.promptId);
@@ -394,16 +398,13 @@ export class ChainOperatorExecutor {
       step.convertedPrompt || this.convertedPrompts.find((p) => p.id === step.promptId);
 
     if (!convertedPrompt) {
-      this.logger.warn(`Prompt not found: ${step.promptId}`);
-      // Return fallback content
-      return {
-        stepNumber: currentStepIndex + 1,
-        totalSteps: stepPrompts.length,
-        promptId: step.promptId,
-        promptName: step.promptId,
-        content: `Execute the prompt "${step.promptId}"`, // Corrected escaping for quotes
-        callToAction: 'Complete this step manually',
-      };
+      // The fifth site of the assert the other four already make (execution-planner.ts,
+      // symbolic-command-builder.ts x2, 04-parsing-stage.ts). It used to warn and render
+      // `Execute the prompt "<id>"` with `Complete this step manually`: a step that cannot run,
+      // reported as a step, in a run whose footer still counts it as progress. Reachable — a
+      // synthesized node (`node-step-projection.synthesizeStep`) carries no `convertedPrompt`,
+      // so a run resumed after a reload that removed the prompt lands exactly here.
+      throw new PromptError(`Converted prompt data not found for chain step: ${step.promptId}`);
     }
 
     const promptName = convertedPrompt.name || step.promptId;

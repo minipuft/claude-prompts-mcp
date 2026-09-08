@@ -104,17 +104,17 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).toContain('No executable steps');
   });
 
-  test('falls back when prompt is missing', async () => {
-    const result = await executor.renderStep({
-      executionType: 'normal',
-      stepPrompts: [{ stepNumber: 1, promptId: 'unknown_prompt', args: {} }],
-      currentStepIndex: 0,
-    });
-
-    expect(result.content).toContain('Execute the prompt "unknown_prompt"');
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Prompt not found: unknown_prompt')
-    );
+  test('refuses a step whose prompt is missing, like the four sibling assert sites', async () => {
+    // It used to warn and render `Execute the prompt "unknown_prompt"` with `Complete this step
+    // manually` — a step that cannot run, reported as a step, while the footer counted it as
+    // progress. The other four sites for this exact condition all throw.
+    await expect(
+      executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [{ stepNumber: 1, promptId: 'unknown_prompt', args: {} }],
+        currentStepIndex: 0,
+      })
+    ).rejects.toThrow('Converted prompt data not found for chain step: unknown_prompt');
   });
 
   test('parses key=value arguments correctly', async () => {

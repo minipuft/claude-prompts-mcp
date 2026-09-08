@@ -79,7 +79,9 @@ export class PromptLifecycleProcessor {
           action: 'validate',
           valid: false,
           errors: result.errors,
-          warnings: result.warnings,
+          // The key stays in the response shape; nothing feeds it. Chain integrity was its only
+          // producer and is now a refusal (an entry in `errors`), which is the point of the fix.
+          warnings: [],
           mutated: false,
         },
         isError: true,
@@ -93,8 +95,7 @@ export class PromptLifecycleProcessor {
           type: 'text' as const,
           text:
             `✅ **Prompt draft valid**: \`${result.draft.canonicalId}\`\n\n` +
-            `Nothing written; no version recorded. Re-send with action:"create" to persist it.` +
-            this.formatWarnings(result.draft.warnings),
+            `Nothing written; no version recorded. Re-send with action:"create" to persist it.`,
         },
       ],
       structuredContent: {
@@ -102,7 +103,7 @@ export class PromptLifecycleProcessor {
         valid: true,
         normalized_id: result.draft.canonicalId,
         draft: result.draft.promptData,
-        warnings: result.draft.warnings,
+        warnings: [],
         current_version: currentVersion,
         mutated: false,
       },
@@ -126,7 +127,7 @@ export class PromptLifecycleProcessor {
           action: 'create',
           valid: false,
           errors: prepared.errors,
-          warnings: prepared.warnings,
+          warnings: [],
           mutated: false,
         },
         isError: true,
@@ -134,7 +135,7 @@ export class PromptLifecycleProcessor {
     }
 
     const promptData = prepared.draft.promptData as any;
-    const { canonicalId, warnings: chainIntegrityWarnings } = prepared.draft;
+    const { canonicalId } = prepared.draft;
     const displayName = String(promptData['name']);
     const description = String(promptData['description']);
 
@@ -201,13 +202,6 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    if (chainIntegrityWarnings.length > 0) {
-      response += `\n⚠️ **Chain Integrity Warnings**:\n`;
-      for (const warning of chainIntegrityWarnings) {
-        response += `- ${warning}\n`;
-      }
-    }
-
     const verification = await this.receiptService.complete({
       action: 'create',
       id: canonicalId,
@@ -230,7 +224,7 @@ export class PromptLifecycleProcessor {
         action: 'create',
         valid: true,
         receipt: verification.receipt,
-        warnings: chainIntegrityWarnings,
+        warnings: [],
         mutated: true,
       },
       isError: !verification.verified,
@@ -478,14 +472,24 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    // Chain step reference validation (non-blocking warnings)
-    let chainIntegrityWarnings: string[] = [];
+    // A step naming a prompt that does not exist is a refusal, not a warning next to a saved
+    // file: the run used to fail at that step one invocation later, far from the write that
+    // introduced it. The chain's own `<chainId>/<step>` children are exempt — the write below
+    // scaffolds exactly those.
     if (promptData.chainSteps && promptData.chainSteps.length > 0) {
-      const allPromptIds = this.getConvertedPrompts().map((p) => p.id);
-      chainIntegrityWarnings = validateChainStepReferences(
+      const chainIntegrity = validateChainStepReferences(
         promptData.chainSteps,
-        allPromptIds
-      ).warnings;
+        String(promptData.id),
+        this.getConvertedPrompts().map((p) => p.id)
+      );
+      if (!chainIntegrity.valid) {
+        return this.blockedUpdate(
+          `❌ **Prompt update blocked** — a chain step names a prompt that does not exist:\n\n` +
+            `${chainIntegrity.problems.map((problem) => `- ${problem}`).join('\n')}\n\n` +
+            `💡 Nothing was written and no version was consumed. Create the missing prompt, or ` +
+            `nest the step under '${String(promptData.id)}/' so this call scaffolds it.`
+        );
+      }
     }
 
     // Reference validation for template changes. A patch changes a template without any full-body
@@ -646,13 +650,6 @@ export class PromptLifecycleProcessor {
       afterAnalysis.suggestions.forEach((suggestion, i) => {
         response += `${i + 1}. ${suggestion}\n`;
       });
-    }
-
-    if (chainIntegrityWarnings.length > 0) {
-      response += `\n⚠️ **Chain Integrity Warnings**:\n`;
-      for (const warning of chainIntegrityWarnings) {
-        response += `- ${warning}\n`;
-      }
     }
 
     const verification = await this.receiptService.complete({

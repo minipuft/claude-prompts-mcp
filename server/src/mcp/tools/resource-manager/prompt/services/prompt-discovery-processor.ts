@@ -6,14 +6,14 @@ import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { FilterParser } from '../search/filter-parser.js';
 import { PromptMatcher } from '../search/prompt-matcher.js';
-import {
-  canonicalPromptSnapshot,
-  validateChainStepReferences,
-  validateRequiredFields,
-} from '../utils/validation.js';
+import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/validation.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 
+import {
+  describeUnresolvedChainStep,
+  resolveChainSteps,
+} from '#modules/prompts/chain-step-resolution.js';
 import { ToolResponse } from '#shared/types/index.js';
 
 const PROMPT_RESOURCE_ACTIONS = promptResourceMetadata.data.actions;
@@ -329,12 +329,17 @@ export class PromptDiscoveryProcessor {
           response += `\n`;
         });
 
+        // The READ posture, not the write posture: nothing here is about to scaffold anything,
+        // so a `<chainId>/<step>` id with no registered prompt is a broken reference like any
+        // other. `validateChainStepReferences` accepts that shape and is deliberately not used.
         const allPromptIds = this.getConvertedPrompts().map((p) => p.id);
-        const refValidation = validateChainStepReferences(steps, allPromptIds);
-        if (!refValidation.valid) {
+        const broken = resolveChainSteps(steps, prompt.id, allPromptIds).filter(
+          (reference) => reference.resolution !== 'resolved'
+        );
+        if (broken.length > 0) {
           response += `\n**Chain Integrity**:\n`;
-          for (const warning of refValidation.warnings) {
-            response += `- ${warning}\n`;
+          for (const reference of broken) {
+            response += `- ${describeUnresolvedChainStep(reference)}\n`;
           }
         }
       }

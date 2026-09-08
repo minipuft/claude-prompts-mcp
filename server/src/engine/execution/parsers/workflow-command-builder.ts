@@ -24,6 +24,8 @@
  * how an IR-specific execution path starts.
  */
 
+import { workflowPromptInfoLookup } from '../workflow-prompt-lookup.js';
+
 import type { Logger } from '#infra/logging/index.js';
 import type { WorkflowCompilation, WorkflowCompilerDeps } from '#modules/workflow-ir/compiler.js';
 import type {
@@ -80,17 +82,7 @@ export class WorkflowCommandBuilder {
    */
   build(ir: WorkflowIR, findPrompt: PromptLookup): WorkflowCommandResult {
     const validation = this.workflowIr.validate(ir, {
-      lookupPrompt: (promptId) => {
-        const converted = findPrompt(promptId);
-        if (converted === undefined) {
-          return undefined;
-        }
-        return {
-          requiredArguments: converted.arguments
-            .filter((argument) => argument.required === true)
-            .map((argument) => argument.name),
-        };
-      },
+      lookupPrompt: workflowPromptInfoLookup(findPrompt),
     });
 
     if (!validation.ok) {
