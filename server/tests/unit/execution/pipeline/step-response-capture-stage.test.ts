@@ -57,6 +57,15 @@ const createSessionManager = () => {
   // then stands, which is what every case in this file asserts against.
   const getSessionBlueprint = jest.fn<(...args: any[]) => any>();
   getSessionBlueprint.mockReturnValue(undefined);
+  // Derived from `getStepState` rather than stubbed to a constant, mirroring
+  // `ChainSessionStore.isStepComplete` (manager.ts:1067-1070) exactly: completed AND not a
+  // placeholder. A constant here would decouple the double from the one fact the delegation
+  // evidence phase reads it for, and every case in this file already drives `getStepState`.
+  const isStepComplete = jest.fn((sessionId: string, nodeId: string): boolean => {
+    const state = getStepState(sessionId, nodeId) as
+      { state?: string; isPlaceholder?: boolean } | undefined;
+    return state?.state === 'completed' && state?.isPlaceholder !== true;
+  });
 
   return {
     manager: {
@@ -75,6 +84,7 @@ const createSessionManager = () => {
       insertNodeAfter,
       markNodeSkipped,
       getSessionBlueprint,
+      isStepComplete,
     } as unknown as ChainSessionService,
     applyUnknownObservations,
     getSession,
@@ -91,6 +101,7 @@ const createSessionManager = () => {
     insertNodeAfter,
     markNodeSkipped,
     getSessionBlueprint,
+    isStepComplete,
   };
 };
 

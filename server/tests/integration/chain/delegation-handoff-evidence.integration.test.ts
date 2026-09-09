@@ -36,6 +36,7 @@ import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
+import { PHASE_GUARD_GATE_ID } from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
@@ -194,6 +195,16 @@ const buildPipeline = (options: {
   steps?: ReturnType<typeof parsedChainSteps>;
   /** Omitted = the collaborators bag carries no mode, which is the shipped default (`required`). */
   evidenceMode?: HandoffEvidenceMode;
+  /**
+   * Stand a phase-guard review up on the FIRST call that carries a `user_response` — the live
+   * shape a `>>a ==> >>b` run hits under CAGEERF, where step 1's output fails a structural guard.
+   * The stub writes exactly what `19-phase-guard-verification-stage.ts:196-224` writes (a review
+   * whose `gateIds` is `[PHASE_GUARD_GATE_ID]`, no reviewed-step index in its metadata, persisted
+   * through the store AND republished on `context.sessionContext`), because the render under test
+   * is stage 20's and everything it can see about the review comes from those two writes. What is
+   * NOT reproduced is the guard's own decision to fail, which is not what these cases assert.
+   */
+  raisePhaseGuardReview?: boolean;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger, steps = parsedChainSteps(), evidenceMode } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
@@ -228,9 +239,40 @@ const buildPipeline = (options: {
     ),
   };
 
+  let phaseGuardRaised = false;
+
   const stages: PipelineStage[] = STAGE_ORDER.map((name) => {
     const real = realStages[name];
     if (real !== undefined) return real;
+
+    if (name === 'PhaseGuardVerification' && options.raisePhaseGuardReview === true) {
+      return {
+        name,
+        execute: async (context: ExecutionContext) => {
+          const sessionId = context.sessionContext?.sessionId;
+          const outputText = context.mcpRequest.user_response;
+          if (phaseGuardRaised || sessionId === undefined || outputText === undefined) return;
+          phaseGuardRaised = true;
+          const review = {
+            combinedPrompt: 'Your output is missing required sections.',
+            gateIds: [PHASE_GUARD_GATE_ID],
+            prompts: [],
+            createdAt: Date.now(),
+            attemptCount: 0,
+            maxAttempts: 3,
+            retryHints: ['Ensure your response includes the required "## Context" section'],
+            previousResponse: outputText,
+            metadata: {
+              source: 'phase-guard-verification',
+              failedPhases: ['context_analysis'],
+              mode: 'enforce',
+            },
+          };
+          await sessionStore.setPendingGateReview(sessionId, review);
+          context.sessionContext = { ...context.sessionContext!, pendingReview: review };
+        },
+      };
+    }
 
     if (name === 'CommandParsing') {
       return {
@@ -435,6 +477,58 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(captured?.handoffEvidence).toBe('ok');
     });
 
+    test('POSITIVE CONTROL: a verdict-only resume of the delegated node is refused, and nothing moves', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger });
+      const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
+
+      // No `user_response` at all — the guarantee-B bypass. The empty reply used to return from
+      // the evidence phase before the check ran, and the verdict then advanced the node with
+      // nothing captured.
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: passVerdict,
+      } as any);
+      const message = text(refused);
+
+      expect(refused.isError).toBe(true);
+      expect(message).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
+      // The message names THIS mistake, not the prose-only one the same classification produces.
+      expect(message).toContain('carries no worker reply');
+      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+
+      // Same "nothing moved" probe the prose-only control uses, and the sibling accept case
+      // below shows it seeing a step-2 row when a reply IS carried.
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+
+    test('the two-call pattern: reply captured first, then a verdict-only call is NOT refused', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger });
+      const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
+
+      // Call 1 carries the worker's reply and no verdict: this is the call the contract checks,
+      // and it captures a real (non-placeholder) output for the delegated node.
+      const captured = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+      } as any);
+      expect(captured.isError).not.toBe(true);
+      expect(text(captured)).not.toContain('❌ Delegated node');
+      expect(capturedRows(sessionId)).toEqual([
+        { step_number: 1, handoff_evidence: null },
+        { step_number: 2, handoff_evidence: 'ok' },
+      ]);
+
+      // Call 2 carries only the verdict. It is exempt because the node it stands on already holds
+      // that captured output — the exemption is "already verified", never "no reply present".
+      const ratified = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: passVerdict,
+      } as any);
+      expect(ratified.isError).not.toBe(true);
+      expect(text(ratified)).not.toContain('❌ Delegated node');
+    });
+
     test('a trailer naming ANOTHER node is refused, and the message names the token it found', async () => {
       const pipeline = buildPipeline({ sessionStore, recordStore, logger });
       const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
@@ -451,6 +545,79 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(message).toContain('matching node');
       expect(message).toContain('found: some-other-node');
       expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+  });
+
+  describe('a phase-guard review standing on the delegated node', () => {
+    /**
+     * The live shape (`>>creative ==> >>analytical` under CAGEERF): the resume that captures
+     * step 1 advances onto the delegated step 2, the phase guard then fails step 1's output and
+     * opens a review, and stage 20 re-renders — DISCARDING the brief stage 18 had already put in
+     * `executionResults`. The parent was handed a delegated step with nothing to hand a worker.
+     */
+    const advanceUnderReview = async (): Promise<{
+      pipeline: PromptExecutionPipeline;
+      chainId: string;
+      sessionId: string;
+      rendered: string;
+    }> => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        raisePhaseGuardReview: true,
+      });
+      await pipeline.execute({ command: `>>draft ==> >>review` } as any);
+      const { chainId, sessionId } = onlySession();
+      const rendered = await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: passVerdict,
+      } as any);
+      return { pipeline, chainId, sessionId, rendered: text(rendered) };
+    };
+
+    test('the first render under the review still carries the brief AND the review CTA', async () => {
+      const { rendered } = await advanceUnderReview();
+
+      // The review really is standing (otherwise this asserts the ordinary render path).
+      expect(rendered).toContain('Structural Review Required');
+      expect(rendered).toContain('Original Task Instructions');
+      // ...and the delegation payload is present in the same response.
+      expect(rendered).toContain('EXECUTION BRIEF');
+      expect(rendered).toContain('HANDOFF INSTRUCTIONS');
+      expect(rendered).toContain('HANDOFF RESULT');
+      expect(rendered).toContain(`node: ${DELEGATED_NODE_ID}`);
+      expect(rendered).toContain('run_in_background: false');
+      // The step's own gate text reaches the worker through the brief, as on the normal render.
+      expect(rendered).toContain('### Quality Gates');
+    });
+
+    test('the brief the review render printed is the one a conforming resume clears it with', async () => {
+      const { pipeline, chainId, sessionId, rendered } = await advanceUnderReview();
+
+      // The verdict the review asks for, submitted alone, is still refused — a delegated node
+      // does not advance on a verdict. This is the state the live drive found the bypass in.
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: passVerdict,
+      } as any);
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
+
+      // The worker's reply reads the token out of the brief this render printed, so the accept
+      // path cannot pass against a brief the review render never emitted.
+      const accepted = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(rendered),
+        gate_verdict: passVerdict,
+      } as any);
+
+      expect(accepted.isError).not.toBe(true);
+      expect(capturedRows(sessionId)).toEqual([
+        { step_number: 1, handoff_evidence: null },
+        { step_number: 2, handoff_evidence: 'ok' },
+      ]);
     });
   });
 
@@ -476,6 +643,34 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       { step_number: 1, handoff_evidence: null },
       { step_number: 2, handoff_evidence: 'trailer' },
     ]);
+  });
+
+  test('`advisory` accepts the verdict-only resume at the delegated node', async () => {
+    const pipeline = buildPipeline({
+      sessionStore,
+      recordStore,
+      logger,
+      evidenceMode: 'advisory',
+    });
+    const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
+
+    const accepted = await pipeline.execute({
+      chain_id: chainId,
+      gate_verdict: passVerdict,
+    } as any);
+
+    expect(accepted.isError).not.toBe(true);
+    expect(text(accepted)).not.toContain('❌ Delegated node');
+    // Measured, and recorded here because it is the behaviour `required` exists to stop: the
+    // verdict alone ADVANCES the delegated node — `currentNodeId` is null, the sentinel for a run
+    // standing past its terminal node — while writing NO execution record for step 2. A call with
+    // no `user_response` is not a capture: `StepCaptureService.resolveTarget`
+    // (step-capture-service.ts:144) sends it to the PREVIOUS step, which is already completed and
+    // non-placeholder, so `captureStep` returns before writing. The step therefore completes with
+    // no output and no row — which is exactly what the same call is refused for under `required`
+    // (positive control above), and the only difference between the two modes here.
+    expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    expect(onlySession().state.currentNodeId).toBeNull();
   });
 
   test('a legacy chain with no node ids uses `n2` in the brief AND in the accepted trailer', async () => {

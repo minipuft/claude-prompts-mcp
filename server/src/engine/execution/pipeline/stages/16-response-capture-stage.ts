@@ -63,17 +63,25 @@ const HANDOFF_MISSING_PHRASE: Readonly<
 /**
  * The refusal a client reads when a delegated node's resume carries no acceptable trailer.
  *
- * Presentation only — every fact in it comes from the `missing` verdict this receives. It names
- * the node, what was absent, what was found instead, and prints the exact block to append, so
- * the fix is a copy rather than a re-read of the brief.
+ * Presentation only — every fact in it comes from the `missing` verdict this receives, plus the
+ * one fact the verdict cannot carry: whether there was a reply at all. `missing: 'trailer'` with
+ * `found: null` is the classification of BOTH an empty resume and a prose-only one, and telling a
+ * client that a call it made with no `user_response` "carries no trailer" describes the symptom of
+ * a different mistake. The opening line splits; the copyable block below it does not.
  */
 function describeMissingHandoffEvidence(
-  evidence: Extract<HandoffEvidence, { kind: 'missing' }>
+  evidence: Extract<HandoffEvidence, { kind: 'missing' }>,
+  replyWasEmpty: boolean
 ): string {
-  return [
-    `❌ Delegated node ${evidence.expected}: the resume carries no ` +
+  const opening = replyWasEmpty
+    ? `❌ Delegated node ${evidence.expected}: the resume carries no worker reply. ` +
+      `A delegated node advances only on its worker's result — a gate verdict alone does not ` +
+      `stand in for one. End the worker's reply with:`
+    : `❌ Delegated node ${evidence.expected}: the resume carries no ` +
       `${HANDOFF_MISSING_PHRASE[evidence.missing]} (found: ${evidence.found ?? 'nothing'}). ` +
-      `End the worker's reply with:`,
+      `End the worker's reply with:`;
+  return [
+    opening,
     '```',
     HANDOFF_RESULT_HEADING,
     `node: ${evidence.expected}`,
@@ -176,7 +184,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
-    if (!this.runHandoffEvidencePhase(context, currentNodeIdAtStart, currentStepAtStart)) {
+    if (
+      !this.runHandoffEvidencePhase(context, sessionId, currentNodeIdAtStart, currentStepAtStart)
+    ) {
       this.logExit({ handoffEvidence: 'refused' });
       return;
     }
@@ -288,21 +298,31 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * entry, no mutation, no captured step, no recorded verdict. A resume the server will not
    * accept must not be half-accepted.
    *
-   * Three applicability conditions, none of them a defensive guard on the decision itself:
-   * a call carrying no `user_response` is not a capture (it renders, or it answers a gate), so
-   * there is nothing to check; a step the two-key lookup cannot resolve has no token to expect;
-   * and `resolveHandoffEvidence` owns the rest — whether the step was delegated at all, and
-   * whether the mode in force refuses. The stage classifies nothing.
+   * Two applicability conditions, neither a defensive guard on the decision itself: a node that
+   * ALREADY holds a real captured output has nothing left to verify (below); and a step the
+   * two-key lookup cannot resolve has no token to expect. `resolveHandoffEvidence` owns the rest
+   * — whether the step was delegated at all, and whether the mode in force refuses. The stage
+   * classifies nothing.
+   *
+   * An empty `user_response` is NOT exempt on its own. It used to be, and that was the guarantee-B
+   * bypass: with the run standing on a delegated node under a pending review, a verdict-only call
+   * carried no reply, returned here early, and the pending-review PASS path then advanced the node
+   * with nothing captured. The narrow exemption is the two-call pattern — reply first, verdict
+   * second — where the FIRST call already passed this check and captured a real (non-placeholder)
+   * output for this node, so the second has nothing to re-verify. Anything else hands the empty
+   * reply to the classifier as-is, which reads it as `missing: 'trailer'` for a delegated node
+   * under `required` and leaves every non-delegated node untouched.
    *
    * @returns `false` when a refusal response was set and the pipeline must stop.
    */
   private runHandoffEvidencePhase(
     context: ExecutionContext,
+    sessionId: string,
     currentNodeIdAtStart: string | null,
     currentStepAtStart: number
   ): boolean {
     const reply = context.mcpRequest.user_response?.trim() ?? '';
-    if (reply.length === 0) {
+    if (reply.length === 0 && this.hasCapturedOutput(sessionId, currentNodeIdAtStart)) {
       return true;
     }
 
@@ -327,8 +347,22 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return true;
     }
 
-    context.setResponse(this.buildErrorResponse(describeMissingHandoffEvidence(evidence)));
+    context.setResponse(
+      this.buildErrorResponse(describeMissingHandoffEvidence(evidence, reply.length === 0))
+    );
     return false;
+  }
+
+  /**
+   * Does the node the run stands on already hold a real captured output?
+   *
+   * `isStepComplete` is `completed` AND not a placeholder — the placeholder is exactly what a
+   * response-less call writes, so a run that has only ever been RENDERED at this node answers
+   * false here and its empty resume is classified rather than waved through. The one call site
+   * is the two-call exemption above; a `null` node id (a run standing nowhere) holds nothing.
+   */
+  private hasCapturedOutput(sessionId: string, nodeId: string | null): boolean {
+    return nodeId !== null && this.chainSessionStore.isStepComplete(sessionId, nodeId);
   }
 
   /**

@@ -1,9 +1,9 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
-import { BRIEF_END, BRIEF_START, assembleBriefBody } from '../delegation/brief.js';
+import { buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
-import { DelegationRenderer, renderDelegatedStepHandoff } from '../delegation/renderer.js';
+import { DelegationRenderer } from '../delegation/renderer.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
 import type { BriefHistoryEntry } from '../delegation/brief.js';
@@ -151,9 +151,8 @@ export class ChainOperatorExecutor {
     // context the step was denied. Index tracks `targetStep`: `lastStepIndex` when the review
     // step was resolved, else the fallback (last) index.
     const targetIndex = lastStepIndex >= 0 ? lastStepIndex : fallbackIndex;
-    const reviewWithheld = new Set<VisibilityItem>(
-      this.resolveStepVisibility(stepPrompts, targetIndex).withheld
-    );
+    const reviewVisibility = this.resolveStepVisibility(stepPrompts, targetIndex);
+    const reviewWithheld = new Set<VisibilityItem>(reviewVisibility.withheld);
 
     // Get original content from last step if available
     let originalContent = '';
@@ -346,9 +345,37 @@ export class ChainOperatorExecutor {
     // GateGuidanceRenderer (gateGuidance variable) as the single source of truth.
     const reviewPrompt = originalContent;
 
+    // A delegated step under review still has to be HANDED to a worker. The worker-facing half
+    // (framework guidance + the step's own task) moves inside the brief; everything below stays
+    // outside for the parent, who ratifies the verdict (R-2) — including the review CTA the
+    // assembler appends from the pending review itself.
+    //
+    // Two conditions, both about what the parent can act on rather than about safety. The step
+    // under review must be DELEGATED — a normal step's review is the parent's own work and needs
+    // no worker. And it must be the FIRST attempt: a retry already abbreviates the task body to
+    // "review the original task above", so a brief there would hand a worker a task the retry is
+    // not asking anyone to redo. The retry path is left exactly as it was.
+    const reviewBriefLines =
+      targetStep?.delegated === true && !isRetry
+        ? buildDelegatedStepLines({
+            step: targetStep,
+            totalSteps: stepPrompts.length,
+            promptName: this.getPromptDisplayName(targetStep),
+            clientProfile: this.extractClientProfile(chainContext),
+            historyEntries: this.collectBriefHistory(
+              stepPrompts,
+              targetIndex,
+              chainContext,
+              reviewWithheld
+            ),
+            manifest: reviewVisibility.manifest,
+            workerLines: [frameworkGuidance, reviewPrompt].filter((part) => part.trim().length > 0),
+            gateGuidanceEnabled,
+          }).lines
+        : null;
+
     const contentParts = [
-      frameworkGuidance,
-      reviewPrompt,
+      ...(reviewBriefLines ?? [frameworkGuidance, reviewPrompt]),
       gateGuidance,
       supplementalSections.join('\n\n'),
       responseFormatSection,
@@ -553,15 +580,11 @@ export class ChainOperatorExecutor {
     const isCurrentDelegated = step.delegated === true;
     let briefHasGates = false;
     if (isCurrentDelegated) {
-      const stepGateText =
-        typeof step.metadata?.['gateInstructions'] === 'string'
-          ? step.metadata['gateInstructions']
-          : undefined;
-      briefHasGates = stepGateText !== undefined && stepGateText.trim().length > 0;
-      const nodeToken = handoffNodeToken(step);
-      const briefBody = assembleBriefBody({
-        workerLines: lines.splice(0, lines.length),
-        stepGateText,
+      const brief = buildDelegatedStepLines({
+        step,
+        totalSteps,
+        promptName: this.getPromptDisplayName(step),
+        clientProfile: this.extractClientProfile(chainContext),
         historyEntries: this.collectBriefHistory(
           stepPrompts,
           currentStepIndex,
@@ -569,23 +592,11 @@ export class ChainOperatorExecutor {
           withheld
         ),
         manifest: visibility.manifest,
-        nodeToken,
+        workerLines: lines.splice(0, lines.length),
+        gateGuidanceEnabled,
       });
-      lines.push(BRIEF_START, briefBody, BRIEF_END);
-      lines.push(
-        renderDelegatedStepHandoff({
-          stepNumber: step.stepNumber,
-          totalSteps: stepPrompts.length,
-          promptName: this.getPromptDisplayName(step),
-          agentType: step.agentType ?? step.convertedPrompt?.agentType,
-          subagentModel: step.subagentModel ?? step.convertedPrompt?.subagentModel,
-          clientProfile: this.extractClientProfile(chainContext),
-          inlineGateCount: step.inlineGateIds?.length,
-          hasGates: briefHasGates,
-          gateGuidanceEnabled,
-          nodeToken,
-        })
-      );
+      briefHasGates = brief.hasGates;
+      lines.push(...brief.lines);
     }
 
     // Required Response Format — guides structured output for delivery verification.
