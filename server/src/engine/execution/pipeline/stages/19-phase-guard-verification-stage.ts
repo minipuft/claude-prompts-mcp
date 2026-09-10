@@ -212,6 +212,10 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
         source: 'phase-guard-verification',
         failedPhases: result.failedPhases,
         mode: config.mode,
+        // WHICH step this review graded (row 2.11). Without it the renderer falls through to
+        // `current_step`, which by this point in the pipeline names the step the run ADVANCED
+        // to — so the review quoted step N+1's task above step N's missing sections.
+        ...this.resolveReviewedStepIdentity(context),
       },
     };
 
@@ -273,6 +277,27 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       }
     }
     return headers;
+  }
+
+  /**
+   * The identity of the step this stage is grading, for the review's metadata (row 2.11).
+   *
+   * Read from what the capture RECORDED (`context.state.session.capturedStep`), never derived
+   * from the run's position: this stage runs after StepResponseCaptureStage has already advanced
+   * the run, and `currentStep - 1` is wrong exactly on the calls where no advance happened — the
+   * final step, and any step whose advance a pending review blocked.
+   *
+   * Empty when this call captured nothing, which is not a defect and not a guard: a review with
+   * no step identity is what every phase-guard review was before this row, and
+   * `ChainOperatorExecutor.resolveReviewStep` still resolves it from `current_step`. Stamping a
+   * guess instead would put a wrong number where a missing one is handled.
+   */
+  private resolveReviewedStepIdentity(
+    context: ExecutionContext
+  ): { stepNumber: number; nodeId: string } | Record<string, never> {
+    const captured = context.state.session.capturedStep;
+    if (captured === undefined) return {};
+    return { stepNumber: captured.ordinal, nodeId: captured.nodeId };
   }
 
   /**

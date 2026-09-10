@@ -1269,6 +1269,17 @@ export class ChainOperatorExecutor {
       return undefined;
     }
 
+    // Node id first — the same two-key resolution `StepCaptureService.ledgerCapturedStep` and
+    // `GateReviewStage` use, for the same reason: an ordinal stamped before a mid-run node
+    // insertion no longer points at the step it named, while the id does. The `!== undefined`
+    // half is not defensive — without it a chain parsed before node-id minting matches its first
+    // step against a review carrying no id. Falls through rather than clamping when the id names
+    // no step here, so an id this chain does not have resolves by ordinal, not to position 0.
+    const byNodeId = stepPrompts.find(
+      (step) => step.nodeId !== undefined && step.nodeId === pendingReview.metadata?.['nodeId']
+    );
+    if (byNodeId !== undefined) return byNodeId;
+
     const metadataIndex = this.extractStepIndexFromMetadata(pendingReview.metadata);
     if (typeof metadataIndex === 'number') {
       return stepPrompts[this.clampStepIndex(metadataIndex, stepPrompts.length)];

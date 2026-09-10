@@ -28,6 +28,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
@@ -36,7 +37,7 @@ import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
-import { PHASE_GUARD_GATE_ID } from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
+import { PhaseGuardVerificationStage } from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
@@ -86,14 +87,47 @@ const stepPrompt = (id: string, name: string): ConvertedPrompt => ({
 
 const PROMPTS: ConvertedPrompt[] = [stepPrompt('draft', 'Draft'), stepPrompt('review', 'Review')];
 
+/**
+ * The framework the phase-guard cases run under: one guarded phase requiring a `## Context`
+ * section. Both halves of the declaration contract read this same object — the render declares
+ * the header (through `declaredSectionsProvider`) and stage 19 grades against it — so a case
+ * cannot be blocked on a header the model was never shown.
+ */
+const GUARD_FRAMEWORK_ID = 'guardfw';
+const GUARDED_HEADER = '## Context';
+const guardedFrameworkRegistry = () => ({
+  getFrameworkGuide: (id: string) =>
+    id === GUARD_FRAMEWORK_ID
+      ? ({
+          enhanceWithFramework: () => ({
+            processingEnhancements: [
+              {
+                id: 'context',
+                name: 'Context',
+                section_header: GUARDED_HEADER,
+                guards: { required: true },
+              },
+            ],
+          }),
+        } as never)
+      : undefined,
+});
+const guardFrameworkContext = {
+  selectedFramework: { id: GUARD_FRAMEWORK_ID, name: 'Guard FW', type: GUARD_FRAMEWORK_ID },
+  systemPrompt: '',
+  executionGuidelines: [],
+  metadata: { selectionReason: 'test', confidence: 1, appliedAt: new Date() },
+};
+
 /** `>>draft ==> >>review`: step 1 plain, step 2 DELEGATED and carrying its own gate text. */
-const parsedChainSteps = (withNodeIds = true) => [
+const parsedChainSteps = (withNodeIds = true, withFramework = false) => [
   {
     stepNumber: 1,
     ...(withNodeIds ? { nodeId: 'n1' } : {}),
     promptId: 'draft',
     args: {},
     convertedPrompt: PROMPTS[0],
+    ...(withFramework ? { frameworkContext: guardFrameworkContext } : {}),
   },
   {
     stepNumber: 2,
@@ -103,6 +137,7 @@ const parsedChainSteps = (withNodeIds = true) => [
     convertedPrompt: PROMPTS[1],
     delegated: true,
     metadata: { gateInstructions: STEP_GATE_TEXT },
+    ...(withFramework ? { frameworkContext: guardFrameworkContext } : {}),
   },
 ];
 
@@ -196,18 +231,38 @@ const buildPipeline = (options: {
   /** Omitted = the collaborators bag carries no mode, which is the shipped default (`required`). */
   evidenceMode?: HandoffEvidenceMode;
   /**
-   * Stand a phase-guard review up on the FIRST call that carries a `user_response` — the live
-   * shape a `>>a ==> >>b` run hits under CAGEERF, where step 1's output fails a structural guard.
-   * The stub writes exactly what `19-phase-guard-verification-stage.ts:196-224` writes (a review
-   * whose `gateIds` is `[PHASE_GUARD_GATE_ID]`, no reviewed-step index in its metadata, persisted
-   * through the store AND republished on `context.sessionContext`), because the render under test
-   * is stage 20's and everything it can see about the review comes from those two writes. What is
-   * NOT reproduced is the guard's own decision to fail, which is not what these cases assert.
+   * Run the REAL `PhaseGuardVerificationStage` against `guardedFrameworkRegistry` — the live
+   * shape a `>>a ==> >>b` run hits under CAGEERF, where a step's output fails a structural guard
+   * and the review that follows quotes a step back at the client. It is the real stage rather
+   * than a stub because row 2.11 is about WHICH step the review names, and that attribution is
+   * decided across three collaborators (capture records the graded step, this stage stamps it,
+   * stage 20 renders it) — a stub writing the metadata by hand asserts nothing about the chain
+   * that produces it. The framework's declared header reaches the render through
+   * `declaredSectionsProvider` below, so the guard blocks on a header the model was shown.
    */
-  raisePhaseGuardReview?: boolean;
+  phaseGuards?: boolean;
 }): PromptExecutionPipeline => {
-  const { sessionStore, recordStore, logger, steps = parsedChainSteps(), evidenceMode } = options;
-  const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
+  const {
+    sessionStore,
+    recordStore,
+    logger,
+    steps = parsedChainSteps(true, options.phaseGuards === true),
+    evidenceMode,
+  } = options;
+  const chainExecutor = new ChainOperatorExecutor(
+    logger as never,
+    PROMPTS,
+    undefined,
+    undefined,
+    options.phaseGuards === true
+      ? {
+          declaredSectionsProvider: (frameworkId: string) =>
+            frameworkId === GUARD_FRAMEWORK_ID
+              ? [{ header: GUARDED_HEADER, required: true, phaseId: 'context', criteria: [] }]
+              : [],
+        }
+      : undefined
+  );
 
   const realStages: Record<string, PipelineStage> = {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
@@ -239,37 +294,26 @@ const buildPipeline = (options: {
     ),
   };
 
-  let phaseGuardRaised = false;
-
   const stages: PipelineStage[] = STAGE_ORDER.map((name) => {
     const real = realStages[name];
     if (real !== undefined) return real;
 
-    if (name === 'PhaseGuardVerification' && options.raisePhaseGuardReview === true) {
+    if (name === 'PhaseGuardVerification' && options.phaseGuards === true) {
+      return new PhaseGuardVerificationStage(
+        guardedFrameworkRegistry as never,
+        () => ({ mode: 'enforce' as const, maxRetries: 2 }),
+        sessionStore,
+        logger
+      );
+    }
+
+    if (name === 'FrameworkResolution' && options.phaseGuards === true) {
       return {
         name,
         execute: async (context: ExecutionContext) => {
-          const sessionId = context.sessionContext?.sessionId;
-          const outputText = context.mcpRequest.user_response;
-          if (phaseGuardRaised || sessionId === undefined || outputText === undefined) return;
-          phaseGuardRaised = true;
-          const review = {
-            combinedPrompt: 'Your output is missing required sections.',
-            gateIds: [PHASE_GUARD_GATE_ID],
-            prompts: [],
-            createdAt: Date.now(),
-            attemptCount: 0,
-            maxAttempts: 3,
-            retryHints: ['Ensure your response includes the required "## Context" section'],
-            previousResponse: outputText,
-            metadata: {
-              source: 'phase-guard-verification',
-              failedPhases: ['context_analysis'],
-              mode: 'enforce',
-            },
-          };
-          await sessionStore.setPendingGateReview(sessionId, review);
-          context.sessionContext = { ...context.sessionContext!, pendingReview: review };
+          // What stage 12 publishes on a run whose framework resolved. Stage 19 reads `.id` off
+          // exactly this, and the render reads the same id off each step's own frameworkContext.
+          context.frameworkContext = guardFrameworkContext as never;
         },
       };
     }
@@ -548,56 +592,73 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
     });
   });
 
-  describe('a phase-guard review standing on the delegated node', () => {
+  describe('a phase-guard review beside the delegated node (rows 2.10 + 2.11)', () => {
     /**
-     * The live shape (`>>creative ==> >>analytical` under CAGEERF): the resume that captures
-     * step 1 advances onto the delegated step 2, the phase guard then fails step 1's output and
-     * opens a review, and stage 20 re-renders — DISCARDING the brief stage 18 had already put in
-     * `executionResults`. The parent was handed a delegated step with nothing to hand a worker.
+     * The live shape (`>>creative ==> >>analytical` under CAGEERF), driven through the REAL
+     * PhaseGuardVerificationStage: the resume that captures step 1 advances onto the delegated
+     * step 2, and the guard then fails STEP 1's output. Two facts have to hold in the one
+     * response that follows, and before row 2.11 neither did — the review quoted step 2's task
+     * above step 1's missing sections, and it was the only thing in the response.
      */
-    const advanceUnderReview = async (): Promise<{
+    const resumeStep1With = async (
+      reply: string
+    ): Promise<{
       pipeline: PromptExecutionPipeline;
       chainId: string;
       sessionId: string;
       rendered: string;
     }> => {
-      const pipeline = buildPipeline({
-        sessionStore,
-        recordStore,
-        logger,
-        raisePhaseGuardReview: true,
-      });
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger, phaseGuards: true });
       await pipeline.execute({ command: `>>draft ==> >>review` } as any);
       const { chainId, sessionId } = onlySession();
       const rendered = await pipeline.execute({
         chain_id: chainId,
-        user_response: 'step 1 output',
+        user_response: reply,
         gate_verdict: passVerdict,
       } as any);
       return { pipeline, chainId, sessionId, rendered: text(rendered) };
     };
 
-    test('the first render under the review still carries the brief AND the review CTA', async () => {
-      const { rendered } = await advanceUnderReview();
+    /** A step-1 reply that satisfies the guarded phase — the sibling case's positive control. */
+    const conformingStep1 = `${GUARDED_HEADER}\n\nThe context, stated.\n\nstep 1 output`;
 
-      // The review really is standing (otherwise this asserts the ordinary render path).
+    test('the review quotes STEP 1, the step it graded — not the node the run advanced to', async () => {
+      const { rendered } = await resumeStep1With('step 1 output');
+
+      // The guard really fired (otherwise this asserts the ordinary render path).
       expect(rendered).toContain('Structural Review Required');
-      expect(rendered).toContain('Original Task Instructions');
-      // ...and the delegation payload is present in the same response.
+
+      // Attribution is asserted against the REVIEW BODY alone — everything ahead of the brief.
+      // Step 2's task is legitimately present further down, inside the brief being handed to a
+      // worker (the sibling case), so a whole-response assertion could not tell the defect from
+      // the fix.
+      const reviewBody = rendered.slice(0, rendered.indexOf(BRIEF_START));
+      expect(reviewBody).toContain('Original Task Instructions');
+      // The two prompts render distinguishable text on purpose.
+      expect(reviewBody).toContain('Do Draft.');
+      expect(reviewBody).not.toContain('Do Review.');
+      // ...and the missing section named beside it is the one step 1 omitted.
+      expect(reviewBody).toContain(`"${GUARDED_HEADER}" section`);
+    });
+
+    test('the delegated node the run stands on is still handed over in that same response', async () => {
+      const { rendered } = await resumeStep1With('step 1 output');
+
+      // Row 2.11's consequence: the review is about step 1, but the run stands on the delegated
+      // step 2 and the client cannot resume it without the token only this render prints.
       expect(rendered).toContain('EXECUTION BRIEF');
       expect(rendered).toContain('HANDOFF INSTRUCTIONS');
       expect(rendered).toContain('HANDOFF RESULT');
       expect(rendered).toContain(`node: ${DELEGATED_NODE_ID}`);
       expect(rendered).toContain('run_in_background: false');
-      // The step's own gate text reaches the worker through the brief, as on the normal render.
       expect(rendered).toContain('### Quality Gates');
     });
 
-    test('the brief the review render printed is the one a conforming resume clears it with', async () => {
-      const { pipeline, chainId, sessionId, rendered } = await advanceUnderReview();
+    test('the brief in that response is the one a conforming worker reply clears the run with', async () => {
+      const { pipeline, chainId, sessionId, rendered } = await resumeStep1With('step 1 output');
 
       // The verdict the review asks for, submitted alone, is still refused — a delegated node
-      // does not advance on a verdict. This is the state the live drive found the bypass in.
+      // does not advance on a verdict, whichever step the review names.
       const refused = await pipeline.execute({
         chain_id: chainId,
         gate_verdict: passVerdict,
@@ -606,10 +667,10 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(text(refused)).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
 
       // The worker's reply reads the token out of the brief this render printed, so the accept
-      // path cannot pass against a brief the review render never emitted.
+      // path cannot pass against a brief the response never carried.
       const accepted = await pipeline.execute({
         chain_id: chainId,
-        user_response: runFakeWorker(rendered),
+        user_response: `${GUARDED_HEADER}\n\nWorker context.\n\n${runFakeWorker(rendered)}`,
         gate_verdict: passVerdict,
       } as any);
 
@@ -618,6 +679,17 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
         { step_number: 1, handoff_evidence: null },
         { step_number: 2, handoff_evidence: 'ok' },
       ]);
+    });
+
+    test('POSITIVE CONTROL: a conforming step 1 raises no review, and step 2 renders normally', async () => {
+      const { rendered } = await resumeStep1With(conformingStep1);
+
+      // Same harness, same guard, same chain — the only change is that step 1 declared the
+      // section. Without this case, "the review names step 1" could be a guard that always
+      // fires and a renderer that always quotes step 1.
+      expect(rendered).not.toContain('Structural Review Required');
+      expect(rendered).toContain('EXECUTION BRIEF');
+      expect(rendered).toContain(`node: ${DELEGATED_NODE_ID}`);
     });
   });
 

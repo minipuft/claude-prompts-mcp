@@ -194,6 +194,13 @@ export class StepCaptureService {
 
     this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent);
 
+    // Publish which step this call GRADED, for the stages that run after the advance (row 2.11).
+    // Here rather than at either call site because this is the one place a non-placeholder
+    // output is written — a placeholder must not claim to have produced gradeable output — and
+    // it is written BEFORE any advance, so the identity is the producing node's, not the next
+    // one's. Reader: `PhaseGuardVerificationStage` (`internal-state.ts` names both ends).
+    context.state.session.capturedStep = { nodeId: target.nodeId, ordinal: target.ordinal };
+
     this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
   }
 

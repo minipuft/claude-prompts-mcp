@@ -405,6 +405,9 @@ describe('PhaseGuardVerificationStage', () => {
     );
     const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    // Row 2.11: what StepResponseCapture wrote earlier in the SAME call — the only record of
+    // which step's output is being graded, since the run may already have advanced past it.
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
 
     await stage.execute(ctx);
 
@@ -423,10 +426,78 @@ describe('PhaseGuardVerificationStage', () => {
     expect(review.previousResponse).toBe('No context section here.');
     expect(review.metadata.source).toBe('phase-guard-verification');
     expect(review.metadata.failedPhases).toContain('context');
+    // Row 2.11: the review carries the identity of the step it GRADED, both keys.
+    expect(review.metadata.stepNumber).toBe(1);
+    expect(review.metadata.nodeId).toBe('n1');
 
     // Should also update context so GateReviewStage sees pending review
     expect(ctx.sessionContext!.pendingReview).toBeDefined();
     expect(ctx.sessionContext!.pendingReview!.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
+  });
+
+  /**
+   * Row 2.11 attribution. Stage 19 grades the `user_response` of the step stage 16 just
+   * CAPTURED, but it runs after stage 16 already advanced the run to the next node — so the
+   * only thing that can name the graded step is what the capture recorded. These two cases pin
+   * both polarities: stamped when the identity exists, ABSENT when it does not, because
+   * `resolveReviewStep`'s `current_step` fallback is a documented path (a call that captured
+   * nothing has no graded step to name) and a guessed ordinal there would be wrong exactly on
+   * the calls where advancement did not happen.
+   */
+  describe('reviewed-step attribution (row 2.11)', () => {
+    const failingGuide = () =>
+      createMockGuide([
+        {
+          id: 'context',
+          name: 'Context',
+          section_header: '## Context',
+          guards: { required: true },
+        },
+      ]);
+
+    const runFailingGuard = async (capturedStep?: {
+      nodeId: string;
+      ordinal: number;
+    }): Promise<Record<string, unknown>> => {
+      const stage = createPhaseGuardVerificationStage(
+        () => createRegistry(failingGuide()),
+        () => defaultConfig,
+        sessionStore,
+        logger
+      );
+      const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section.')));
+      ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+      // The run stands on step 2 — stage 16 advanced it before this stage ran. Every assertion
+      // below is about the review NOT inheriting this number.
+      ctx.sessionContext = { ...ctx.sessionContext!, currentStep: 2, currentNodeId: 'n2' };
+      if (capturedStep !== undefined) {
+        ctx.state.session.capturedStep = capturedStep;
+      }
+
+      await stage.execute(ctx);
+
+      const [, review] = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0] as [
+        string,
+        { metadata: Record<string, unknown> },
+      ];
+      return review.metadata;
+    };
+
+    test('the review names the CAPTURED step, not the node the run advanced to', async () => {
+      const metadata = await runFailingGuard({ nodeId: 'n1', ordinal: 1 });
+
+      expect(metadata['stepNumber']).toBe(1);
+      expect(metadata['nodeId']).toBe('n1');
+      expect(metadata['stepNumber']).not.toBe(2);
+    });
+
+    test('a call that captured nothing stamps no step, leaving the current_step fallback', async () => {
+      const metadata = await runFailingGuard();
+
+      expect(metadata['stepNumber']).toBeUndefined();
+      expect(metadata['nodeId']).toBeUndefined();
+      expect(metadata['source']).toBe('phase-guard-verification');
+    });
   });
 
   test('warn mode appends warning without creating review', async () => {
