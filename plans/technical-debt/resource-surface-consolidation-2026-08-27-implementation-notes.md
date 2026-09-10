@@ -1121,3 +1121,80 @@ substitution used `$2` against a NON-capturing group, so it silently replaced th
 declarations with `const  = ...`. Exit code 0. Caught only by the next typecheck. This is the same
 family as the silent no-op recorded earlier in this arc: the failure mode is not that the pattern
 misses, it is that the result is never read. Use the editing tools, or read back what was written.
+
+## Dispatch batch 1 — P4.11 closed, P4.13 opened (2026-09-09)
+
+First run of the Execution Dispatch section added at #269. The batch was chosen to be the smallest
+row precisely so a failure would be cheap; what it actually surfaced was that three of the four
+anchors the dispatching session had measured were wrong. Recorded here because the _pattern_ of the
+drift is the reusable part, not the corrected anchors.
+
+### Deviations
+
+**DEV-P4.11-1 — the anchor named a `private` method, and the reachable one would have lied.**
+Batch 1 was dispatched against `gate-loader.ts:290 toLightweightGate`, which does project
+`severity`/`enforcementMode` conditionally — and is `private` to `GateFileSystemLoader`, so no
+`inspect` path can call it. I had confirmed the _projection_ existed and never confirmed the
+_reachability_. The object `inspect` does hold (`gateManager.get(id)` → `GenericGateGuide`) resolves
+`severity ?? 'medium'` and `enforcementMode ?? DEFAULT_SEVERITY_TO_ENFORCEMENT[...]` in its
+constructor, so a renderer reading it would print `Severity: medium` for a `gate.yaml` that declares
+nothing — and a conformance scenario creating with `severity: blocking` and asserting
+`Severity: blocking` would still have PASSED. The read now goes through `GateGuide.getDefinition()`,
+the raw `GateDefinitionYaml`, which keeps `undefined` for an omitted key.
+
+The generalizable half: **a conditional projection and an unconditional default can carry the same
+field name, and only the unreachable one preserves the distinction under test.** The "no vacuous
+assertions" ruling written before dispatch was aimed at weak assertions (`ok` returns); this is a
+STRONG assertion against a field that is never absent. Same vacuity, opposite shape. A ruling that
+names one instance of a failure does not cover the class.
+
+**DEV-P4.11-2 — two of eleven fields had no read path, and the exception text asserted otherwise.**
+The framework advanced-fields exception read "the router forwarded them and the writer split them
+across framework.yaml and phases.yaml throughout", which implies a complete write side and a missing
+read side. For `judge_prompt` (inlined by `loadExistingFramework`, dropped before
+`FrameworkCreationData`) and `execution_type_enhancements` (written to `phases.yaml`, read by
+nothing) that was false. Both were declared authorable by P4.1/P4.5 and covered by tests asserting
+the _written file_, which is exactly what hid them: **a write check cannot observe that nothing will
+ever read the key back.** This is the argument for the row existing at all — a round trip is a
+different measurement, not a more thorough one.
+
+**DEV-P4.11-3 — closing an exception group satisfied four more, and only the gate's own audit saw
+it.** Predicted 67 → 54; measured 67 → 50. A create-then-read-back scenario must supply the required
+create fields, so `gate_type`, `guidance`, `system_prompt_guidance` and `phases` became covered as a
+byproduct. `validate-conformance-coverage.js`'s satisfied-exception audit reported them; they were
+removed from their groups with reasons and the still-uncovered siblings kept. The prediction was
+wrong in the safe direction, but it was wrong because I counted the fields I was closing rather than
+the fields the closing scenarios would have to touch.
+
+**DEV-P4.11-4 — a delegated executor died to a rate limit, and the recovery was measurement.** The
+first dispatch terminated mid-discovery (HTTP 429). Rather than resume blind or relaunch on
+assumption, the worktree was measured: `git status --short` and `git diff --stat` both empty, so a
+fresh launch was provably equivalent to a resume. Confirms the standing note that a long delegated
+run needs a measurable checkpoint; here the checkpoint was "nothing written", which is the cheapest
+possible one to verify.
+
+**DEV-P4.11-5 — a revert aimed at the wrong worktree.** `git apply` into the branch and
+`git checkout -- plans/` intended for the main checkout were chained in one command after a single
+`cd`, so the checkout undid the apply. No work lost — the writeback had been saved to a patch file
+first, precisely because uncommitted plan edits are volatile. The habit that saved it is the durable
+lesson; the mis-chained command is the DEV-P4C-10 family again, one `cd` from a different target.
+
+### Findings promoted to the plan
+
+- **P4-F13** — the private-projection / unconditional-default homonym (DEV-P4.11-1).
+- **P4-F12** — the two fields with no read path (DEV-P4.11-2).
+- **New row P4.13** — `toFrameworkCreationData` at cognitive 28 against the ≤15 limit. Pre-existing
+  and warning-level so `lint:ratchet` stays green, but this row added two of the blocks. Not fixed
+  inside P4.11: the two new blocks match thirteen siblings exactly, so decomposing is a different
+  change with a different blast radius, and doing it inside a read-back row would have buried it.
+  Worth naming that the shape it asks for — a declared field table instead of a hand-written block
+  per field — is also what would have PREVENTED P4-F12. Fifteen hand-written blocks can silently
+  omit two of eleven entries; a table cannot.
+
+### Receipt
+
+typecheck clean · lint:ratchet 3096/971 no regressions · typecheck:tests:ratchet 367 no regressions ·
+validate:all 58/58 · unit 3048 (was 3041) · integration 807 · e2e 193 (was 190) ·
+validate:conformance-coverage 67 → 50. Load-bearing mutation re-run by the dispatching session
+rather than accepted on report: substituting the guide's resolved properties for
+`gate.getDefinition()` fails `gate-inspect-read-back.test.ts` 1 of 2, and reverts clean.

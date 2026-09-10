@@ -53,12 +53,27 @@ export class GateDiscoveryProcessor {
     const guidance = gate.getGuidance();
     const guidancePreview = guidance.length > 500 ? guidance.substring(0, 500) + '...' : guidance;
 
+    // P4.11 — `severity`/`enforcementMode` are read from the on-disk definition
+    // (`GateGuide.getDefinition()`), not from `gate.severity`/`gate.enforcementMode`: the guide
+    // resolves both to a loader default (medium / severity-mapped) when the gate.yaml omits them,
+    // so the guide's own properties can never distinguish "author set it" from "loader defaulted
+    // it". The raw definition still has `undefined` for an omitted key, which is what the
+    // conditional-projection idiom (gate-loader.ts toLightweightGate) also keys off.
+    const definition = gate.getDefinition();
+    const severityLine =
+      definition.severity !== undefined ? `\n  - Severity: ${definition.severity}` : '';
+    const enforcementModeLine =
+      definition.enforcementMode !== undefined
+        ? `\n  - Enforcement Mode: ${definition.enforcementMode}`
+        : '';
+
     return this.success(
       `🚦 Gate: ${gate.name}\n\n` +
         `📋 Details:\n` +
         `  - ID: ${gate.gateId}\n` +
         `  - Type: ${typeIcon} ${gate.type}\n` +
-        `  - Description: ${gate.description}\n\n` +
+        `  - Description: ${gate.description}` +
+        `${severityLine}${enforcementModeLine}\n\n` +
         `📝 Guidance:\n${guidancePreview}`
     );
   }

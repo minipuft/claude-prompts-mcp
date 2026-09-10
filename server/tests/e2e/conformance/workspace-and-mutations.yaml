@@ -487,3 +487,127 @@ scenarios:
           preview_action: update
           id: conformance_gate_preview
     expect: { error_contains: 'not supported for resource_type' }
+
+  # ── P4.11 read-back: severity/enforcement_mode (gate), 11 framework advanced fields ────────
+  #
+  # Closes the two `validate-conformance-coverage.js` exceptions that named this row. Each value
+  # set below is NON-DEFAULT (`GenericGateGuide`'s loader default is `severity: 'medium'`,
+  # `enforcementMode` derived from severity when absent) so a create that silently wrote loader
+  # defaults instead of the caller's value would not satisfy the assertion — the exception's own
+  # "equally true of a create that wrote loader defaults" gap this closes.
+  - id: gate-create-then-inspect-reads-back-severity
+    claim_source: >-
+      resource_manager contract — `severity` (P4.4) reaches gate.yaml; P4.11 gives `inspect` a
+      read-back path for it (gate-discovery-processor.ts, GateGuide.getDefinition()).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_severity_readback
+          name: Conformance Gate Severity Readback
+          gate_type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          severity: high
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_severity_readback }
+    # 'high' is non-default (loader default is 'medium') and `enforcementMode` was never
+    # supplied, so a definition-level default would print nothing for it — asserting its absence
+    # here would be the P4.6-shaped gap this row closes; that field is covered by the sibling row.
+    expect: { text_contains: 'Severity: high' }
+
+  - id: gate-create-then-inspect-reads-back-enforcement-mode
+    claim_source: >-
+      resource_manager contract — `enforcement_mode` (P4.4) reaches gate.yaml; P4.11 gives
+      `inspect` a read-back path for it.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_enforcement_readback
+          name: Conformance Gate Enforcement Readback
+          gate_type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          enforcement_mode: blocking
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_enforcement_readback }
+    # `severity` was never supplied here, so the severity-derived default for an undeclared
+    # severity ('medium' → 'advisory') would print 'advisory' if the writer fell back to a
+    # derived default instead of the caller's explicit 'blocking' — this distinguishes them.
+    expect: { text_contains: 'Enforcement Mode: blocking' }
+
+  - id: framework-create-then-inspect-reads-back-advanced-fields
+    claim_source: >-
+      resource_manager contract — the 11 framework advanced fields (P4.1/P4.5) reach
+      framework.yaml/phases.yaml; P4.11 gives `inspect` a read-back path for all of them
+      (framework-advanced-field-summary.ts, via the same loadExistingFramework/
+      toFrameworkCreationData result `inspect` already computed for its quality score).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: framework
+          action: create
+          id: conformance_framework_advanced_readback
+          name: Conformance Framework Advanced Readback
+          system_prompt_guidance: Apply this framework systematically.
+          phases:
+            - { id: phase1, name: Phase 1, description: First phase }
+            - { id: phase2, name: Phase 2, description: Second phase }
+          framework_gates:
+            - id: g1
+              name: Gate One
+              description: Validates phase 1
+              frameworkArea: Phase 1
+              priority: high
+              validationCriteria: [Criteria 1]
+          template_suggestions:
+            - section: system
+              type: addition
+              description: Add guidance
+              content: Test content
+              frameworkJustification: Consistency
+              impact: high
+          framework_elements:
+            requiredSections: [Section A]
+            sectionDescriptions: { Section A: A description }
+          argument_suggestions:
+            - name: arg1
+              type: string
+              description: An argument
+              frameworkReason: Needed for phase 1
+              examples: [example1]
+          judge_prompt: JUDGE_PROMPT_FIRST_LINE_MARKER
+          processing_steps:
+            - id: s1
+              name: Step One
+              description: First step
+              frameworkBasis: Phase 1
+              order: 1
+              required: true
+          execution_steps:
+            - id: e1
+              name: Exec One
+              action: Do the thing
+              frameworkPhase: Phase 1
+              dependencies: []
+              expected_output: Output produced
+          execution_type_enhancements:
+            chain: { advancedChain: { marker: [x] } }
+          template_enhancements:
+            systemPromptAdditions: [Addition one]
+          execution_flow:
+            preProcessingSteps: [Pre step one]
+          quality_indicators:
+            phase1: { keywords: [k1], patterns: [p1] }
+      - tool: resource_manager
+        args:
+          { resource_type: framework, action: inspect, id: conformance_framework_advanced_readback }
+    # One exact, deterministic block: each field's summary line can only appear if that field's
+    # value survived create → disk → loadExistingFramework → toFrameworkCreationData → the
+    # renderer unchanged. A field silently dropped anywhere in that chain would break this
+    # substring rather than merely omit a line the assertion never checked.
+    expect:
+      text_contains: "Advanced Fields:\n  - framework_gates: 1 item\n  - template_suggestions: 1 item\n  - framework_elements: 2 keys\n  - argument_suggestions: 1 item\n  - judge_prompt: JUDGE_PROMPT_FIRST_LINE_MARKER\n  - processing_steps: 1 item\n  - execution_steps: 1 item\n  - execution_type_enhancements: 1 key\n  - template_enhancements: 1 key\n  - execution_flow: 1 key\n  - quality_indicators: 1 key"
