@@ -101,6 +101,29 @@ export interface PipelineInternalState {
     /** Chain variables for template rendering (from ChainSessionStore) */
     chainContext?: Record<string, unknown>;
     /**
+     * Identity of the step whose REAL output this call captured (row 2.11).
+     *
+     * Writer: `StepCaptureService.captureRealResponse` — the one place a non-placeholder output
+     * is written, so the field exists exactly when there is a graded-able output and never for a
+     * placeholder. Reader: `PhaseGuardVerificationStage`, which stamps it into the pending
+     * review's metadata so `ChainOperatorExecutor.resolveReviewStep` re-renders the step that was
+     * GRADED rather than the one the run advanced to in the same call.
+     *
+     * It exists because those two are different steps and nothing else records which: stage 19
+     * grades `user_response`, but stage 16 has already advanced the run past the node that
+     * produced it. Both keys, for the two-key resolution the rest of this pipeline uses — the
+     * node id is the identity, the ordinal is the fallback for a chain parsed before node-id
+     * minting.
+     *
+     * Absent whenever the call captured nothing: a placeholder write, a refusal, a verdict-only
+     * resume, a deferred-verdict early exit. Readers must fall back rather than derive
+     * `currentStep - 1`, which is wrong exactly when advancement did NOT happen (last step,
+     * advance blocked by a pending review).
+     *
+     * Assigned whole rather than mutated, per the pipeline-state rule.
+     */
+    capturedStep?: { readonly nodeId: string; readonly ordinal: number };
+    /**
      * The structured account a blocking unknown owes this call's caller (OQ-1).
      *
      * Written by `StepResponseCaptureStage` (row 2.1) from `decideInterrupt`, read by

@@ -427,6 +427,89 @@ describe('ChainOperatorExecutor', () => {
     );
   });
 
+  /**
+   * Row 2.11. `resolveReviewStep` decides which step a review re-renders as "Original Task
+   * Instructions". Its three keys are asserted here in priority order, because the LAST of them
+   * — `chainContext.current_step` — names the step the run has ADVANCED TO, which is not the
+   * step a phase-guard review graded. Both polarities are pinned: with the identity stamped the
+   * review must quote the graded step, and without it the `current_step` fallback must still
+   * work, so a legacy review (one persisted before the stamp existed) renders rather than
+   * throwing.
+   */
+  describe('reviewed-step attribution (row 2.11)', () => {
+    const twoSteps = [
+      { stepNumber: 1, nodeId: 'n1', promptId: 'analyze', args: { code: 'alpha' } },
+      { stepNumber: 2, nodeId: 'n2', promptId: 'summarize', args: { input: 'beta' } },
+    ];
+
+    const reviewOfStep = (metadata?: Record<string, unknown>) => ({
+      combinedPrompt: 'Your output is missing required sections.',
+      gateIds: ['__phase_guard__'],
+      prompts: [],
+      createdAt: Date.now(),
+      attemptCount: 0,
+      maxAttempts: 3,
+      retryHints: ['Ensure your response includes the required "## Context" section'],
+      ...(metadata !== undefined ? { metadata } : {}),
+    });
+
+    test('metadata.stepNumber wins over current_step: the review quotes the GRADED step', async () => {
+      const result = await executor.renderStep({
+        executionType: 'gate_review',
+        pendingGateReview: reviewOfStep({
+          source: 'phase-guard-verification',
+          stepNumber: 1,
+        }) as any,
+        stepPrompts: twoSteps,
+        // The run advanced to step 2 before the guard graded step 1's output.
+        chainContext: { current_step: 2 },
+        additionalGateIds: [],
+      });
+
+      expect(result.content).toContain('Analyze this code: alpha');
+      expect(result.content).not.toContain('Summarize:');
+      // The retry hints describe the same step the task body does — this is the pairing that
+      // was broken: step N+1's task above step N's missing sections.
+      expect(result.content).toContain('Improvements Needed');
+      expect(result.content).toContain('"## Context" section');
+    });
+
+    test('metadata.nodeId resolves the step by identity, not by position', async () => {
+      const result = await executor.renderStep({
+        executionType: 'gate_review',
+        pendingGateReview: reviewOfStep({
+          source: 'phase-guard-verification',
+          nodeId: 'n1',
+          // A stale ordinal — what an insertion mid-run leaves behind. The node id is the
+          // identity and must win, which is the same two-key rule capture and stage 20 use.
+          stepNumber: 2,
+        }) as any,
+        stepPrompts: twoSteps,
+        chainContext: { current_step: 2 },
+        additionalGateIds: [],
+      });
+
+      expect(result.content).toContain('Analyze this code: alpha');
+      expect(result.content).not.toContain('Summarize:');
+    });
+
+    test('POSITIVE CONTROL: a legacy review with no identity still falls back to current_step', async () => {
+      const result = await executor.renderStep({
+        executionType: 'gate_review',
+        pendingGateReview: reviewOfStep() as any,
+        stepPrompts: twoSteps,
+        chainContext: { current_step: 2 },
+        additionalGateIds: [],
+      });
+
+      // Documented path, not an accident: with nothing naming the graded step, the review
+      // renders the step the run stands on. This is the behavior row 2.11 replaces for
+      // phase-guard reviews, kept reachable for reviews that carry no identity at all.
+      expect(result.content).toContain('Summarize:');
+      expect(result.content).not.toContain('Analyze this code: alpha');
+    });
+  });
+
   describe('declared section headers (Tier 2.3, OQ-1)', () => {
     /** The four required CAGEERF sections, matching phases.yaml at HEAD 2026-08-17. */
     const cageerfSections: DeclaredSection[] = [

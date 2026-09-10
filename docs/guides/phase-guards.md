@@ -174,11 +174,30 @@ In `config.json`:
 ```
 Phase guards fail
   → PendingGateReview created with retry feedback
-  → Stage 10 renders feedback to the LLM
+  → Stage 20 renders feedback to the LLM
   → LLM revises response addressing structural issues
   → Stage 19 re-evaluates on next turn
   → After maxRetries: user gets gate_action prompt (retry/skip/abort)
 ```
+
+### Which Step the Review Is About
+
+A phase-guard review grades the `user_response` of the step that was just **captured**, and it
+names that step: stage 19 stamps the captured node's id and ordinal into the review's metadata, and
+the review render re-renders **that** step's template under `## Original Task Instructions`
+alongside its own missing sections.
+
+The distinction is load-bearing because stage 19 runs after stage 16 has already advanced the run.
+Without the stamp, the render resolved the reviewed step from the run's current position, so the
+review quoted the NEXT step's task above the previous step's missing sections. The graded step is
+never derived by subtracting one from the current position: advancement does not happen on every
+call (the final step, or an advance a pending review blocked), so that arithmetic is wrong exactly
+when it matters.
+
+One consequence for chains with a [delegated](../concepts/chains-lifecycle.md) step: when the
+review is about step N and the run now stands on step N+1, the response carries **both** — the
+review of step N, then the render of N+1 that the client still has to act on (for a delegated N+1,
+that render is its execution brief, and its handoff token is only available there).
 
 ### Warn Mode Flow
 

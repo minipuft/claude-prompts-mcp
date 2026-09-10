@@ -138,6 +138,39 @@ export class GateReviewStage extends BasePipelineStage {
     });
   }
 
+  /**
+   * The render this stage is about to replace, when the review is about a DIFFERENT node.
+   *
+   * Every gate review re-renders the reviewed step and overwrites `context.executionResults`,
+   * which is correct while the reviewed step is the one the run stands on. Row 2.11 made the two
+   * come apart: a phase-guard review grades the step just CAPTURED, and StepResponseCaptureStage
+   * has already advanced the run to the next node — the node StepExecutionStage rendered into
+   * `executionResults` moments ago. Discarding that render leaves the client holding a review of
+   * step N and a run standing on step N+1 it was never shown; when N+1 is delegated it is also
+   * unresumable, because the reply must echo a token only that render prints.
+   *
+   * Keyed on node identity, not on delegation: what makes the render worth keeping is that it is
+   * about a different step than the review, and a client that must act on both needs both.
+   * Returns '' when the review names no node (every review before row 2.11 — the reviewed step is
+   * then the standing one by construction), when the ids agree, or when nothing was rendered
+   * (stage 18 takes its pending-review early exit on a retry, which is also where the brief is
+   * deliberately suppressed).
+   */
+  private resolveCarriedRender(
+    context: ExecutionContext,
+    pendingReview: { metadata?: Record<string, unknown> },
+    run: { state: { currentNodeId: string | null } } | undefined
+  ): string {
+    const reviewedNodeId = pendingReview.metadata?.['nodeId'];
+    if (typeof reviewedNodeId !== 'string' || reviewedNodeId.length === 0) return '';
+
+    const standingNodeId = run?.state.currentNodeId ?? context.sessionContext?.currentNodeId;
+    if (standingNodeId == null || standingNodeId === reviewedNodeId) return '';
+
+    const rendered = context.executionResults?.content;
+    return typeof rendered === 'string' && rendered.trim().length > 0 ? rendered : '';
+  }
+
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
@@ -254,6 +287,10 @@ export class GateReviewStage extends BasePipelineStage {
       // array put the two on different scales the moment a node was inserted, so a review opened
       // on a step after an insertion quoted the NEXT step's task back to the client.
       const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+      // The render this stage is about to REPLACE, kept when the review is not about the node
+      // that render targeted (row 2.11). Resolved before the review render so it reads stage
+      // 18's output, not this stage's.
+      const carriedRender = this.resolveCarriedRender(context, pendingReview, run);
       const reviewSteps = planNodeDrivenRender({
         nodes: run?.state.nodes ?? [],
         parseSteps: steps,
@@ -290,7 +327,9 @@ export class GateReviewStage extends BasePipelineStage {
       }
 
       context.executionResults = {
-        content: shellSection ? `${renderResult.content}\n\n${shellSection}` : renderResult.content,
+        content: [renderResult.content, carriedRender, shellSection]
+          .filter((part) => part !== '' && part !== undefined)
+          .join('\n\n'),
         metadata: {
           stepNumber: renderResult.stepNumber,
           totalSteps: renderResult.totalSteps,
