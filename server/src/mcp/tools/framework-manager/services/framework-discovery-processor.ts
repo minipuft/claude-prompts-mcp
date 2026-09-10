@@ -1,5 +1,7 @@
 // @lifecycle canonical - Framework discovery operations: list, inspect.
 
+import { renderAdvancedFrameworkFields } from './framework-advanced-field-summary.js';
+
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
@@ -58,8 +60,12 @@ export class FrameworkDiscoveryProcessor {
     const isActive = this.ctx.frameworkStateStore?.getActiveFramework()?.id === framework.id;
     const activeStatus = isActive ? 'Active' : 'Inactive';
 
-    // Load framework data from disk to calculate validation score
+    // Load framework data from disk to calculate validation score, and — P4.11 — to read back the
+    // 11 advanced fields `update` already writes. One load serves both: `creationData` is the same
+    // disk-derived object each consumes, so this stays the single read-back source (ruling R1)
+    // rather than a second derivation next to the quality score.
     let validationInfo = '';
+    let advancedFieldsInfo = '';
     try {
       const existingData = await this.ctx.fileService.loadExistingFramework(id);
       if (existingData !== null) {
@@ -73,6 +79,7 @@ export class FrameworkDiscoveryProcessor {
               .map((w) => `  • ${w}`)
               .join('\n')}`;
           }
+          advancedFieldsInfo = renderAdvancedFrameworkFields(creationData);
         }
       }
     } catch (error) {
@@ -87,7 +94,8 @@ export class FrameworkDiscoveryProcessor {
         `  Status: ${activeStatus}\n` +
         `  Enabled: ${framework.enabled ? 'Yes' : 'No'}\n` +
         `  Description: ${framework.description || '(none)'}` +
-        `${validationInfo}`
+        `${validationInfo}` +
+        `${advancedFieldsInfo}`
     );
   }
 

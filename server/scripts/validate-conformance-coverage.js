@@ -288,43 +288,19 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'scenario. Deliberately NOT repointed to P4.11, which covers reading written fields back ' +
       'and would never close this.'
   ),
+  // `severity`/`enforcement_mode` (gate) and the 11 framework advanced fields both closed P4.11
+  // 2026-09-09: `GateDiscoveryProcessor.handleInspect` / `FrameworkDiscoveryProcessor.handleInspect`
+  // now read both back (gate-discovery-processor.ts via `GateGuide.getDefinition()`;
+  // framework-advanced-field-summary.ts via the same loadExistingFramework/toFrameworkCreationData
+  // result `inspect` already computed for its quality score), and
+  // workspace-and-mutations.yaml carries a create-then-read-back scenario for each — asserting the
+  // NON-DEFAULT value survived the round trip, not just that the call returned ok.
   ...exceptionGroup(
     'resource_manager',
-    ['severity', 'enforcement_mode'],
-    'Declared by P4.4 and proven to reach gate.yaml by ' +
-      '`tests/unit/mcp-tools/gate-manager/settable-gate-fields.test.ts`, which asserts a ' +
-      'non-default value in the written file and mutation-kills a writer that drops it. The ' +
-      'corpus cannot carry that proof: no `inspect` path surfaces either field, so the ' +
-      'strongest assertion available to a scenario is that the call returned ok — which is ' +
-      'equally true of a create that wrote loader defaults.',
-    'P4.11 — a lossless read-back surface. Once `inspect` reports what is on disk, these move ' +
-      'into workspace-and-mutations.yaml as a create-then-read-back row.'
-  ),
-  ...exceptionGroup(
-    'resource_manager',
-    [
-      'framework_gates',
-      'template_suggestions',
-      'framework_elements',
-      'argument_suggestions',
-      'judge_prompt',
-      'processing_steps',
-      'execution_steps',
-      'execution_type_enhancements',
-      'template_enhancements',
-      'execution_flow',
-      'quality_indicators',
-    ],
-    'Framework advanced fields, declared by P4.1/P4.5. They were settable and undiscoverable ' +
-      'before the declaration, not unimplemented — the router forwarded them and the writer ' +
-      'split them across framework.yaml and phases.yaml throughout. Same read-back blocker as ' +
-      'the gate fields above: framework `inspect` surfaces none of them.',
-    'P4.11 — a lossless read-back surface, then one isolated-workspace scenario creating a ' +
-      'framework carrying the advanced fields and reading them back.'
-  ),
-  ...exceptionGroup(
-    'resource_manager',
-    ['gate_type', 'guidance', 'pass_criteria', 'activation', 'retry_config'],
+    // `gate_type` and `guidance` were satisfied 2026-09-09 as a byproduct of the P4.11
+    // create-then-read-back gate scenarios above, which both create a gate and so had to supply
+    // them — caught by this file's own satisfied-exception audit, not a separate sweep.
+    ['pass_criteria', 'activation', 'retry_config'],
     'gate resource_type create/update payload field; the corpus exercises resource_type:gate ' +
       'only via read-only `inspect` on a bundled gate (`resource-manager-gate-inspect`), never ' +
       'create/update.',
@@ -332,15 +308,9 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ),
   ...exceptionGroup(
     'resource_manager',
-    [
-      'framework',
-      'system_prompt_guidance',
-      'phases',
-      'gates',
-      'tool_descriptions',
-      'enabled',
-      'persist',
-    ],
+    // `system_prompt_guidance` and `phases` were satisfied 2026-09-09 the same way, by the P4.11
+    // framework create-then-read-back scenario (framework create requires both).
+    ['framework', 'gates', 'tool_descriptions', 'enabled', 'persist'],
     'framework resource_type create/update payload field; the corpus exercises ' +
       'resource_type:framework only via read-only `inspect` (`resource-manager-framework-inspect`). ' +
       'Framework `switch` itself is exercised through system_control, a different tool contract.',

@@ -234,6 +234,13 @@ export class FrameworkFileWriter {
         FrameworkCreationData['tool_descriptions']
       >;
     }
+    // `existing.judgePrompt` is already inlined from `judgePromptFile` by `loadExistingFramework`
+    // (above) — this was the one advanced field that read-back reached (P4.11 measured) but never
+    // carried into `FrameworkCreationData`, so `inspect` could never surface it regardless of
+    // renderer. Same "loaded and thrown away" shape as the other ten, just one call deeper.
+    if (typeof existing.judgePrompt === 'string') {
+      data.judge_prompt = existing.judgePrompt;
+    }
 
     // Map phases-related fields (may come from phases.yaml or framework.yaml)
     // YAML uses camelCase (frameworkGates); framework_gates is the snake_case authoring-payload
@@ -248,6 +255,8 @@ export class FrameworkFileWriter {
     const rawTemplateEnhancements =
       phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
     const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
+    const rawExecutionTypeEnhancements =
+      phasesSource['executionTypeEnhancements'] ?? phasesSource['execution_type_enhancements'];
     const rawFrameworkElements =
       framework['frameworkElements'] ?? phasesSource['framework_elements'];
     const rawArgumentSuggestions =
@@ -283,6 +292,13 @@ export class FrameworkFileWriter {
     }
     if (rawExecutionFlow !== undefined && rawExecutionFlow !== null) {
       data.execution_flow = rawExecutionFlow;
+    }
+    // P4.11 measured: written by `writeFrameworkFiles` (`phasesData['executionTypeEnhancements']`
+    // below) but never mapped back here — the one advanced field that had neither a read-back nor
+    // a WRITTEN-then-thrown-away shape; it was simply never read. Same class as `judge_prompt`
+    // above, caught by the same create-then-inspect proof.
+    if (rawExecutionTypeEnhancements !== undefined && rawExecutionTypeEnhancements !== null) {
+      data.execution_type_enhancements = rawExecutionTypeEnhancements;
     }
     if (rawFrameworkElements !== undefined && rawFrameworkElements !== null) {
       data.framework_elements = rawFrameworkElements as NonNullable<
