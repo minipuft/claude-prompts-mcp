@@ -31,6 +31,8 @@ describe('DelegationRenderer', () => {
     promptName: 'research',
     gateCount: 0,
     hasGates: false,
+    nodeToken: 'n2',
+    mode: 'blocking',
   };
 
   test('current-step handoff renders header, instructions, and the brief pointer', () => {
@@ -136,6 +138,8 @@ const basePayloadForStrategy: DelegationPayload = {
   agentType: 'worker',
   gateCount: 0,
   hasGates: false,
+  nodeToken: 'n2',
+  mode: 'blocking',
 };
 
 describe('ClaudeCodeStrategy', () => {
@@ -149,6 +153,8 @@ describe('ClaudeCodeStrategy', () => {
       subagentModel: 'heavy',
       gateCount: 0,
       hasGates: false,
+      nodeToken: 'n2',
+      mode: 'blocking',
     };
     expect(strategy.resolveModel(payload)).toBe('opus');
   });
@@ -161,6 +167,8 @@ describe('ClaudeCodeStrategy', () => {
       subagentModel: 'standard',
       gateCount: 0,
       hasGates: false,
+      nodeToken: 'n2',
+      mode: 'blocking',
     };
     expect(strategy.resolveModel(payload)).toBe('sonnet');
   });
@@ -173,6 +181,8 @@ describe('ClaudeCodeStrategy', () => {
       subagentModel: 'fast',
       gateCount: 0,
       hasGates: false,
+      nodeToken: 'n2',
+      mode: 'blocking',
     };
     expect(strategy.resolveModel(payload)).toBe('haiku');
   });
@@ -184,6 +194,8 @@ describe('ClaudeCodeStrategy', () => {
       promptName: 'test',
       gateCount: 3,
       hasGates: true,
+      nodeToken: 'n2',
+      mode: 'blocking',
     };
     expect(strategy.resolveModel(payload)).toBe('opus');
   });
@@ -195,6 +207,8 @@ describe('ClaudeCodeStrategy', () => {
       promptName: 'test',
       gateCount: 1,
       hasGates: true,
+      nodeToken: 'n2',
+      mode: 'blocking',
     };
     expect(strategy.resolveModel(payload)).toBe('sonnet');
   });
@@ -202,7 +216,7 @@ describe('ClaudeCodeStrategy', () => {
   test('formatToolCall passes a bare host-catalog agent through unchanged', () => {
     // Built-ins and ~/.claude/agents/* carry no namespace. Prefixing them with the plugin
     // namespace (the pre-2026-08-27 behaviour) named agents no Task registry had.
-    const result = strategy.formatToolCall('Explore', 'sonnet');
+    const result = strategy.formatToolCall('Explore', 'sonnet', 'blocking');
     expect(result).toContain('Tool: Task');
     expect(result).toContain('subagent_type: "Explore"');
     expect(result).not.toContain('claude-prompts:');
@@ -210,12 +224,12 @@ describe('ClaudeCodeStrategy', () => {
   });
 
   test('formatToolCall preserves an author-namespaced plugin agent', () => {
-    const result = strategy.formatToolCall('custom-plugin:my-agent', 'sonnet');
+    const result = strategy.formatToolCall('custom-plugin:my-agent', 'sonnet', 'blocking');
     expect(result).toContain('subagent_type: "custom-plugin:my-agent"');
   });
 
   test('formatToolCall names the host general-purpose agent when none was declared', () => {
-    const result = strategy.formatToolCall(undefined, undefined);
+    const result = strategy.formatToolCall(undefined, undefined, 'blocking');
     expect(result).toContain(`subagent_type: "${CLAUDE_CODE_DEFAULT_AGENT_TYPE}"`);
     expect(result).toContain('subagent_type: "general-purpose"');
     expect(result).not.toContain('model:');
@@ -225,6 +239,16 @@ describe('ClaudeCodeStrategy', () => {
     const result = strategy.formatConstraints();
     expect(result).toContain('DO NOT');
     expect(result).toContain('BLOCKED');
+  });
+
+  test('formatToolCall pins run_in_background: false for a blocking node', () => {
+    const result = strategy.formatToolCall('worker', 'sonnet', 'blocking');
+    expect(result).toContain('run_in_background: false');
+  });
+
+  test('formatToolCall omits run_in_background for a detached node', () => {
+    const result = strategy.formatToolCall('worker', 'sonnet', 'detached');
+    expect(result).not.toContain('run_in_background');
   });
 
   test('accepts custom strategy via constructor', () => {
@@ -245,7 +269,7 @@ describe('ClaudeCodeStrategy', () => {
 describe('additional delegation strategies', () => {
   test('CodexStrategy formats spawn_agent call', () => {
     const strategy = new CodexStrategy();
-    const result = strategy.formatToolCall('worker', 'codex-standard');
+    const result = strategy.formatToolCall('worker', 'codex-standard', 'blocking');
     expect(result).toContain('Tool: spawn_agent (preferred)');
     expect(result).toContain('agent_type: "worker"');
   });
@@ -259,21 +283,21 @@ describe('additional delegation strategies', () => {
 
   test('NeutralStrategy omits fixed tool name and model', () => {
     const strategy = new NeutralStrategy();
-    const result = strategy.formatToolCall('worker', undefined);
+    const result = strategy.formatToolCall('worker', undefined, 'blocking');
     expect(result).toContain('Handoff: Use your client');
     expect(result).toContain('agent_type: "worker"');
   });
 
   test('GeminiStrategy renders Gemini-specific delegation guidance', () => {
     const strategy = new GeminiStrategy();
-    const result = strategy.formatToolCall('worker', undefined);
+    const result = strategy.formatToolCall('worker', undefined, 'blocking');
     expect(result).toContain("Gemini's sub-agent/handoff");
     expect(result).toContain('agent_type: "worker"');
   });
 
   test('OpenCodeStrategy renders OpenCode-specific delegation guidance', () => {
     const strategy = new OpenCodeStrategy();
-    const result = strategy.formatToolCall('worker', undefined);
+    const result = strategy.formatToolCall('worker', undefined, 'blocking');
     expect(result).toContain("OpenCode's agent");
     expect(result).toContain('Handoff:');
     expect(result).toContain('agent_type: "worker"');
@@ -281,7 +305,7 @@ describe('additional delegation strategies', () => {
 
   test('CursorStrategy renders Cursor-specific delegation guidance', () => {
     const strategy = new CursorStrategy();
-    const result = strategy.formatToolCall('worker', undefined);
+    const result = strategy.formatToolCall('worker', undefined, 'blocking');
     expect(result).toContain("Cursor's agent");
     expect(result).toContain('Handoff (experimental/testing)');
     expect(result).toContain('experimental/testing');
@@ -298,11 +322,11 @@ describe('additional delegation strategies', () => {
       new CursorStrategy(),
       new NeutralStrategy(),
     ]) {
-      const result = strategy.formatToolCall(undefined, undefined);
+      const result = strategy.formatToolCall(undefined, undefined, 'blocking');
       expect(result).not.toContain('agent_type');
       expect(result).not.toContain('Parameters:');
     }
-    const withModel = new CodexStrategy().formatToolCall(undefined, 'codex-high');
+    const withModel = new CodexStrategy().formatToolCall(undefined, 'codex-high', 'blocking');
     expect(withModel).toContain('Parameters:');
     expect(withModel).toContain('model: "codex-high"');
     expect(withModel).not.toContain('agent_type');
@@ -315,6 +339,20 @@ describe('additional delegation strategies', () => {
     expect(getHandoffFooterPrefix('cursor_agent_v1')).toBe('Handoff via Cursor agent capability');
     expect(getHandoffFooterInstruction('cursor_agent_v1')).toContain('experimental/testing');
     expect(getHandoffProfileStatus('cursor_agent_v1')).toBe('experimental');
+  });
+
+  test('non-Claude strategies ignore mode: blocking and detached render identically', () => {
+    for (const strategy of [
+      new CodexStrategy(),
+      new GeminiStrategy(),
+      new OpenCodeStrategy(),
+      new CursorStrategy(),
+      new NeutralStrategy(),
+    ]) {
+      expect(strategy.formatToolCall('worker', 'model-x', 'blocking')).toBe(
+        strategy.formatToolCall('worker', 'model-x', 'detached')
+      );
+    }
   });
 
   test('resolveDelegationStrategy routes by delegation profile', () => {

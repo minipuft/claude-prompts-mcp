@@ -5,11 +5,21 @@ PreToolUse hook: Enforce delegation when ==> operator requires sub-agent executi
 Fires on Edit|Write|Bash|Task|Agent tool calls.
 
 Behavior:
-- Task/Agent while delegation pending → clear state and allow (agent delegating correctly)
+- Task/Agent while delegation pending, pinned to the foreground → clear state
+  and allow (agent delegating correctly)
+- Task/Agent while delegation pending, NOT pinned to the foreground → DENY
+  (a backgrounded spawn cannot report the `HANDOFF RESULT` trailer before the
+  delegating agent continues); state is left pending, unchanged
 - Read-only + task-tracking tools while delegation pending → allow (research and
   Task* tracking calls before delegation are fine)
 - Action tools (Edit/Write/Bash) while delegation pending → DENY (hard block)
 - No delegation pending → no-op
+
+The server owns the floor: it renders `run_in_background: false` in the
+handoff instructions and refuses to resume a delegated node whose reply
+lacks the worker's `HANDOFF RESULT` trailer. This hook can only TIGHTEN on
+top of that floor for Claude Code — it denies a spawn call that was not
+actually pinned to the foreground before the server ever sees a resume.
 """
 
 import json
@@ -19,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import clear_delegation_state, load_session_state
+from spawn_pin import spawn_call_is_pinned
 
 # Tools allowed during pending delegation (read-only + delegation itself).
 # "Agent" is this Claude Code build's reported subagent-invocation tool name
@@ -73,10 +84,33 @@ def main():
     agent_type = state.get("delegation_agent_type", "general-purpose")
     model_hint = state.get("delegation_model_hint")
 
-    # Task/Agent tool call = agent is delegating correctly — clear state and allow.
+    # Task/Agent tool call = agent is delegating — but Claude Code spawns
+    # subagents in the BACKGROUND by default, and a backgrounded worker
+    # cannot supply the server's required `HANDOFF RESULT` trailer before
+    # this agent continues. Clear state and allow only when the call is
+    # pinned to the foreground; otherwise deny and leave state pending.
     # "Agent" is this client's reported name for subagent invocation; "Task"
     # covers other clients/older builds.
     if tool_name in {"Task", "Agent"}:
+        tool_input = hook_input.get("tool_input", {}) or {}
+        pinned, pin_reason = spawn_call_is_pinned("claude-code", tool_input)
+        if not pinned:
+            log(f"{tool_name} tool invoked but not pinned to foreground, BLOCKING ({pin_reason})")
+            response = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "==> step must run in the foreground: "
+                        f"{pin_reason} (the server refuses a resume that lacks the "
+                        "worker's HANDOFF RESULT trailer, and a background worker "
+                        "cannot supply it before you continue)."
+                    ),
+                }
+            }
+            print(json.dumps(response))
+            sys.exit(0)
+
         log(f"{tool_name} tool invoked, clearing delegation state (agent_type={agent_type})")
         clear_delegation_state(session_id)
         sys.exit(0)

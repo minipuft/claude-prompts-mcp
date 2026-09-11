@@ -10,6 +10,11 @@
  * imports.
  */
 
+import { buildHandoffResultSection, handoffNodeToken } from './handoff-contract.js';
+import { renderDelegatedStepHandoff } from './renderer.js';
+
+import type { RequestClientProfile } from '#shared/types/request-identity.js';
+
 const BRIEF_DELIMITER = '═'.repeat(65);
 
 export const BRIEF_START = `${BRIEF_DELIMITER}\nEXECUTION BRIEF (sub-agent prompt — pass everything between these delimiters)\n${BRIEF_DELIMITER}`;
@@ -67,46 +72,6 @@ export function buildChainHistorySection(entries: readonly BriefHistoryEntry[]):
 }
 
 /**
- * The literal heading a conforming worker's proposed self-review opens with. Exported as the
- * SSOT for that token: the S8 delegation-acknowledgment predicate
- * (`acknowledgment.ts#resolveDelegationSkipped`) detects a spawned worker by this exact string
- * in the captured step output, so the emitter and the detector must share one spelling.
- */
-export const PROPOSED_GATE_REVIEW_TOKEN = 'Proposed Gate Review:';
-
-/**
- * Result contract (R-2 — worker proposes, parent ratifies). The worker returns its work product
- * plus, when gates exist, a `Proposed Gate Review` block in the same per-gate shape as
- * `gate_verdict.per_gate`. It is labelled PROPOSED because the worker's verdict is never
- * authoritative: the parent reviews against the same criteria, may override any entry, and is
- * the only party that submits `gate_verdict`. The worker-boundary line states that exclusion in
- * the brief every host renders; until 2026-08-27 it was enforced for Claude Code alone by the
- * shipped `chain-executor` agent's tool list, and by nothing on any other client.
- */
-export function buildResultContractSection(hasGates: boolean): string {
-  const parts = [
-    '### Result Contract',
-    '',
-    'Return your complete work product as plain text — it becomes the chain’s step output verbatim.',
-    '',
-    'You are the worker for this one step. Do not call `prompt_engine` or any other chain tool, and do not put chain metadata or tool calls in your reply — the orchestrating agent owns the run and resumes it with your text.',
-  ];
-  if (hasGates) {
-    parts.push(
-      '',
-      'Then append a proposed self-review — PROPOSED only; the orchestrating agent reviews and may override before submitting the actual verdict:',
-      '',
-      '```',
-      PROPOSED_GATE_REVIEW_TOKEN,
-      '- [gate 1 name]: PASS|FAIL — <one-line rationale>',
-      '- [gate 2 name]: PASS|FAIL — <one-line rationale>',
-      '```'
-    );
-  }
-  return parts.join('\n');
-}
-
-/**
  * Withheld-context manifest line for the brief (names only, never values — P5 OQ-P5-3).
  * Same wording as the envelope renderer used, so hooks or readers keying on the phrase see one
  * spelling.
@@ -128,6 +93,8 @@ export interface BriefBodyInputs {
   readonly historyEntries: readonly BriefHistoryEntry[];
   /** Withheld item names for the manifest line. */
   readonly manifest: readonly string[];
+  /** The delegated node's handoff token — the closing section's `HANDOFF RESULT` trailer. */
+  readonly nodeToken: string;
 }
 
 /**
@@ -147,6 +114,90 @@ export function assembleBriefBody(inputs: BriefBodyInputs): string {
   const manifestLine = buildWithheldManifestLine(inputs.manifest);
   if (manifestLine !== null) parts.push(manifestLine);
 
-  parts.push(buildResultContractSection(gates !== null));
+  parts.push(buildHandoffResultSection(inputs.nodeToken, gates !== null));
   return parts.filter(Boolean).join('\n\n');
+}
+
+/**
+ * The step fields a delegated payload reads, structurally — so this module keeps taking plain
+ * data and takes no operator import. `ChainStepPrompt` satisfies it as written.
+ */
+interface DelegatedStepFacts {
+  readonly stepNumber: number;
+  readonly nodeId?: string;
+  readonly agentType?: string;
+  readonly subagentModel?: 'heavy' | 'standard' | 'fast';
+  readonly inlineGateIds?: readonly string[];
+  readonly metadata?: Record<string, unknown>;
+  readonly convertedPrompt?: {
+    readonly agentType?: string;
+    readonly subagentModel?: 'heavy' | 'standard' | 'fast';
+  };
+}
+
+/** Inputs for {@link buildDelegatedStepLines}; the caller applies visibility BEFORE building. */
+export interface DelegatedStepPayloadInputs {
+  readonly step: DelegatedStepFacts;
+  readonly totalSteps: number;
+  readonly promptName: string;
+  readonly clientProfile: RequestClientProfile | undefined;
+  readonly historyEntries: readonly BriefHistoryEntry[];
+  readonly manifest: readonly string[];
+  /** Already-rendered worker-facing sections — what belongs to the worker on THIS render path. */
+  readonly workerLines: readonly string[];
+  readonly gateGuidanceEnabled: boolean;
+}
+
+/**
+ * The whole worker-facing payload of a delegated step: the brief between its delimiters, then
+ * the handoff instructions that point at it.
+ *
+ * ONE assembly, TWO render paths. `renderNormalStep` composes it on a delegated step's ordinary
+ * render; `renderGateReviewStep` composes it when the step under review IS the delegated one and
+ * this is its first attempt — that render replaces the normal one (stage 18 skips on a pending
+ * review, and stage 20 overwrites `executionResults` when the review is raised the same turn), so
+ * without it the parent was handed a delegated step with nothing to hand a worker. Only the
+ * worker lines differ between the two; everything after them is identical and lives here.
+ *
+ * `hasGates` is returned rather than recomputed by callers: it is `buildQualityGatesSection`'s own
+ * verdict, the same one {@link assembleBriefBody} renders the section on, so the handoff's gate
+ * wording and the brief's gate section cannot disagree.
+ */
+export function buildDelegatedStepLines(inputs: DelegatedStepPayloadInputs): {
+  readonly lines: readonly string[];
+  readonly hasGates: boolean;
+} {
+  const { step } = inputs;
+  const stepGateText =
+    typeof step.metadata?.['gateInstructions'] === 'string'
+      ? step.metadata['gateInstructions']
+      : undefined;
+  const hasGates = buildQualityGatesSection(stepGateText) !== null;
+  const nodeToken = handoffNodeToken(step);
+  return {
+    lines: [
+      BRIEF_START,
+      assembleBriefBody({
+        workerLines: inputs.workerLines,
+        stepGateText,
+        historyEntries: inputs.historyEntries,
+        manifest: inputs.manifest,
+        nodeToken,
+      }),
+      BRIEF_END,
+      renderDelegatedStepHandoff({
+        stepNumber: step.stepNumber,
+        totalSteps: inputs.totalSteps,
+        promptName: inputs.promptName,
+        agentType: step.agentType ?? step.convertedPrompt?.agentType,
+        subagentModel: step.subagentModel ?? step.convertedPrompt?.subagentModel,
+        clientProfile: inputs.clientProfile,
+        inlineGateCount: step.inlineGateIds?.length,
+        hasGates,
+        gateGuidanceEnabled: inputs.gateGuidanceEnabled,
+        nodeToken,
+      }),
+    ],
+    hasGates,
+  };
 }

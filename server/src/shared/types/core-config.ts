@@ -12,6 +12,11 @@
  * file's independence still prevents.
  */
 
+// The delegation evidence mode's ONE definition lives with the contract that reads it, so the
+// config shape and the resolver cannot drift into two spellings of the same union. Type-only,
+// like `execution.ts`'s `#modules/workflow-ir` import — no value crosses the layer.
+import type { HandoffEvidenceMode } from './handoff-evidence.js';
+
 // ===== Prompt Configuration =====
 // Moved from modules/prompts/types.ts — consumed by Config interface.
 
@@ -163,6 +168,16 @@ export interface ResolvedFrameworkConfig {
 export interface ExecutionConfig {
   /** Enable judge mode (LLM-driven step selection) */
   judge?: boolean;
+  /** Delegated-step (`==>`) handoff settings. */
+  delegation?: {
+    /**
+     * What the server does when a delegated step's resume does not carry the brief's
+     * `HANDOFF RESULT` trailer. `required` (the default when unset) refuses the resume naming
+     * the node; `advisory` accepts it. Either way the reason is recorded on the step's
+     * execution record. Resolved through `resolveHandoffEvidenceMode`, never read raw.
+     */
+    evidence?: HandoffEvidenceMode;
+  };
 }
 
 /**

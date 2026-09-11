@@ -4,11 +4,12 @@ import {
   BRIEF_END,
   BRIEF_START,
   QUALITY_GATES_HEADING,
+  assembleBriefBody,
   buildChainHistorySection,
   buildQualityGatesSection,
-  buildResultContractSection,
   buildWithheldManifestLine,
 } from '../../../../src/engine/execution/delegation/brief.js';
+import { HANDOFF_RESULT_HEADING } from '../../../../src/engine/execution/delegation/handoff-contract.js';
 
 import type { BriefHistoryEntry } from '../../../../src/engine/execution/delegation/brief.js';
 
@@ -65,32 +66,54 @@ describe('delegation brief builders', () => {
     });
   });
 
-  describe('buildResultContractSection', () => {
+  describe('assembleBriefBody handoff result section', () => {
+    const baseInputs = {
+      workerLines: ['worker instructions'],
+      stepGateText: undefined,
+      historyEntries: [],
+      manifest: [],
+      nodeToken: 'n2',
+    };
+
+    test('ends with the HANDOFF RESULT section carrying the node token, after every other section', () => {
+      const body = assembleBriefBody({
+        ...baseInputs,
+        stepGateText: '## Quality Gates\n\n- step-quality: output must name its evidence',
+      });
+      expect(body.trim().endsWith('```')).toBe(true);
+      expect(body).toContain(HANDOFF_RESULT_HEADING);
+      expect(body).toContain('node: n2');
+      expect(body.indexOf(QUALITY_GATES_HEADING)).toBeLessThan(
+        body.indexOf(HANDOFF_RESULT_HEADING)
+      );
+    });
+
     test('with gates: includes the Proposed Gate Review block and PROPOSED framing', () => {
-      const section = buildResultContractSection(true);
-      expect(section).toContain('### Result Contract');
-      expect(section).toContain('Proposed Gate Review:');
-      expect(section).toContain('PROPOSED only');
-      expect(section).toContain('the orchestrating agent reviews and may override');
+      const body = assembleBriefBody({
+        ...baseInputs,
+        stepGateText: '## Quality Gates\n\n- step-quality: output must name its evidence',
+      });
+      expect(body).toContain('### Result Contract');
+      expect(body).toContain('Proposed Gate Review:');
+      expect(body).toContain('PROPOSED only');
+      expect(body).toContain('the orchestrating agent reviews and may override');
     });
 
     test('without gates: omits the Proposed Gate Review block', () => {
-      const section = buildResultContractSection(false);
-      expect(section).toContain('### Result Contract');
-      expect(section).not.toContain('Proposed Gate Review');
-      expect(section).not.toContain('PROPOSED only');
+      const body = assembleBriefBody(baseInputs);
+      expect(body).toContain('### Result Contract');
+      expect(body).not.toContain('Proposed Gate Review');
+      expect(body).not.toContain('PROPOSED only');
     });
-  });
 
-  describe('buildResultContractSection worker boundary', () => {
     test('states the worker boundary with and without gates', () => {
       // Replaces the tool restriction the shipped chain-executor agent used to carry for Claude
       // Code alone: every host renders this line, so the worker is told it owns one step and no
       // chain tool regardless of which agent the client spawned.
-      for (const hasGates of [true, false]) {
-        const section = buildResultContractSection(hasGates);
-        expect(section).toContain('Do not call `prompt_engine`');
-        expect(section).toContain('the orchestrating agent owns the run');
+      for (const stepGateText of [undefined, '## Quality Gates\n\n- step-quality: ok']) {
+        const body = assembleBriefBody({ ...baseInputs, stepGateText });
+        expect(body).toContain('Do not call `prompt_engine`');
+        expect(body).toContain('the orchestrating agent owns the run');
       }
     });
   });

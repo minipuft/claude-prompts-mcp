@@ -331,6 +331,12 @@ self-contained **EXECUTION BRIEF** in its own response at resume time — the sa
 inline step renders, so template content, per-step gate text, prior-step output, and chain
 history are all available together in one block, instead of being split across two responses.
 
+**Why delegate.** The worker gets a context the parent's own history and accumulated priors
+cannot degrade — a clean slate for the step's own work — and the parent, typically the larger
+and costlier model, is freed from carrying that step's token cost itself. It is not a
+concurrency mechanic: the run pauses at the delegated step and only resumes once the worker's
+result comes back as `user_response`.
+
 ```bash
 # Step 2 runs in a sub-agent
 prompt_engine(command:">>research ==> >>analyze --> >>summarize")
@@ -361,7 +367,19 @@ INSTRUCTIONS that point the parent at the delimited block as the sub-agent's pro
   carries gates, a **Proposed Gate Review** (per-gate pass/fail and a one-line rationale, the
   same shape as `gate_verdict.per_gate`). The worker proposes; it never submits — the parent
   reviews the proposal against the same criteria, may override any entry, and is the only party
-  that submits `gate_verdict`.
+  that submits `gate_verdict`. The section's last element is a fenced block the worker's reply
+  must echo back; for a step with gates it renders:
+  ```
+  HANDOFF RESULT
+  node: <token>
+  Proposed Gate Review:
+  - [gate 1 name]: PASS|FAIL — <one-line rationale>
+  - [gate 2 name]: PASS|FAIL — <one-line rationale>
+  ```
+  A step with no gates gets the same block without the `Proposed Gate Review:` lines. `<token>`
+  is the step's node id when the chain declares one, otherwise `n` followed by the step's number
+  (`n2` for step 2 in a chain with no node ids) — one derivation, shared by the brief and the
+  resume-side check below.
 
 **The step immediately before a delegated step gets a one-line advisory**
 (`⚡ Note: Step N ... is delegated`) instead of a full handoff — everything the worker needs is
@@ -379,6 +397,37 @@ no longer the step the run actually hands off to next; the run's live next-node 
 directly and matched back to the step it names, so the advisory note and the brief itself both
 point at the step that will really execute. Legacy chains whose steps carry no `id` (and calls
 made with no active run to ask) keep the pre-existing positional answer unchanged.
+
+### Resuming a delegated step
+
+The parent resumes the run with an ordinary `prompt_engine` call carrying the worker's reply as
+`user_response`; the server checks that reply for the trailer before anything else runs for the
+step. With the default `execution.delegation.evidence: required`, a reply with no `HANDOFF
+RESULT` heading at all, a heading with no `node:` line, or a `node:` line naming a different node
+is refused — the response names the node and what was missing, nothing is captured, and no
+verdict is recorded:
+
+````
+❌ Delegated node step-review: the resume carries no trailer (found: nothing). End the worker's reply with:
+```
+HANDOFF RESULT
+node: step-review
+```
+Resubmit with chain_id and user_response containing that block.
+````
+
+Setting `execution.delegation.evidence: advisory` accepts the same reply instead of refusing it.
+In both modes, every delegated step's execution record carries a `handoff_evidence` reason: `ok`
+(the trailer named this node), `trailer` (no `HANDOFF RESULT` heading), `node-line` (a heading
+with no `node:` line), or `node-mismatch` (a `node:` line naming some other node). A step that
+was never delegated records none of these.
+
+The brief's trailer contract and this resume-side check are the server's own floor, and they
+hold on every client regardless of hooks. Claude Code additionally renders `run_in_background:
+false` in a blocking delegated node's handoff, and its delegation hook denies a `Task`/`Agent`
+call for a pending delegated step that does not carry that value — a client-side tightening on
+top of the server floor, never a substitute for it. Other clients may tighten the same way in
+their own hooks.
 
 ### Model Selection
 

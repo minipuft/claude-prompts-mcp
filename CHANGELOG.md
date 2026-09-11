@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`action: "preview"` previews a `rollback` or a `delete`**, not just a prompt `update`. Name the target in `preview_action`; the call writes no file, records no version, and needs no `confirm`. A `delete` preview names what would be removed — for a prompt, the other prompts that reference it.
 - **`resource_manager` and `system_control` now advertise `destructiveHint`, and `prompt_engine` advertises that it is not destructive.** Clients can use this to gate destructive actions behind operator confirmation.
 - **Phase-guard section headers are now declared to the model, derived live from `phases.yaml`.** Chain steps and gated prompts render the header vocabulary and its declarable guard criteria (`contains_any`, `contains_all`, `max_length`) from the same source the guard evaluator grades against; a framework declaring `guards` on a phase with no `section_header` is refused at load.
+- **Delegated chain steps (`==>`) now render a `HANDOFF RESULT` trailer contract in the execution brief, and the server checks for it on resume.** The worker's reply must echo the brief's node token back with its work; by default (`execution.delegation.evidence: required`) a resume that arrives without it is refused, naming the step and the missing line, and nothing is captured — set `execution.delegation.evidence: advisory` to record the reason instead of refusing. Every delegated step's execution record carries `handoff_evidence`, the reason the resume was or was not acceptable. Claude Code handoffs additionally pin `run_in_background: false`, and its delegation hook refuses a `Task`/`Agent` call for a pending delegated step that does not carry it.
 
 ### Changed
 
@@ -50,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`>>create_prompt` now delegates validation and persistence to `resource_manager`.** It no longer accepts author-controlled file-path inputs, previews canonically before writing, and requires confirmation before creation.
 - **`>>strategicImplement` now compiles a tier-gated plan directly into one `prompt_engine` workflow submission, and `>>tier_execute` is removed with no alias.** Plan row ids become node ids, the Depends column becomes dependency edges, and gate ids named in a row's Verify column become that node's inline gates — so review fires on the row that earned it instead of batching to the end of a tier. `>>implementation_plan` already emits rows in this format.
 - **Destructive `resource_manager` actions are now denied by one shared guard before dispatch**, replacing six separate checks. `prompt delete` still returns its own refusal, naming the dependent prompts that would break.
+- **`execution_records.delegation_skipped` is replaced by `handoff_evidence`** (schema v28). The column now records one of four reasons (`ok`, `trailer`, `node-line`, `node-mismatch`) for every delegated step's resume, `NULL` for a step that was never delegated. `execution_records` is ephemeral, so the schema bump drops and recreates the table on next server start with no migration needed.
 
 ### Fixed
 

@@ -57,6 +57,15 @@ const createSessionManager = () => {
   // then stands, which is what every case in this file asserts against.
   const getSessionBlueprint = jest.fn<(...args: any[]) => any>();
   getSessionBlueprint.mockReturnValue(undefined);
+  // Derived from `getStepState` rather than stubbed to a constant, mirroring
+  // `ChainSessionStore.isStepComplete` (manager.ts:1067-1070) exactly: completed AND not a
+  // placeholder. A constant here would decouple the double from the one fact the delegation
+  // evidence phase reads it for, and every case in this file already drives `getStepState`.
+  const isStepComplete = jest.fn((sessionId: string, nodeId: string): boolean => {
+    const state = getStepState(sessionId, nodeId) as
+      { state?: string; isPlaceholder?: boolean } | undefined;
+    return state?.state === 'completed' && state?.isPlaceholder !== true;
+  });
 
   return {
     manager: {
@@ -75,6 +84,7 @@ const createSessionManager = () => {
       insertNodeAfter,
       markNodeSkipped,
       getSessionBlueprint,
+      isStepComplete,
     } as unknown as ChainSessionService,
     applyUnknownObservations,
     getSession,
@@ -91,6 +101,7 @@ const createSessionManager = () => {
     insertNodeAfter,
     markNodeSkipped,
     getSessionBlueprint,
+    isStepComplete,
   };
 };
 
@@ -722,5 +733,84 @@ describe('resolveDeclaredPauseOnBlocking — blueprint readback (row 1.3, hop 4 
   test('a declared true is read back as true, and a declared false as false', () => {
     expect(resolveDeclaredPauseOnBlocking(blueprint({ pauseOnBlocking: true }))).toBe(true);
     expect(resolveDeclaredPauseOnBlocking(blueprint({ pauseOnBlocking: false }))).toBe(false);
+  });
+});
+
+/**
+ * The delegation evidence gate at the stage boundary (row 2.4).
+ *
+ * The integration suite (`delegation-handoff-evidence.integration.test.ts`) drives the whole
+ * pipeline; this pair asserts the one thing only construction can show — what an OMITTED
+ * collaborators bag resolves to. A harness that forgets the bag must get the shipped default
+ * (`required`), not a quieter one, because "the default is whatever the wiring happened to pass"
+ * is exactly how an enforcement default goes missing without a test failing.
+ */
+describe('handoff evidence mode from the collaborators bag', () => {
+  const delegatedContext = (): ExecutionContext => {
+    const context = new ExecutionContext({
+      command: '>>chain',
+      chain_id: 'chain-1',
+      user_response: 'prose only, no HANDOFF RESULT trailer',
+    });
+    context.sessionContext = {
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      isChainExecution: true,
+      currentStep: 2,
+      currentNodeId: 'n2',
+      totalSteps: 2,
+    };
+    context.parsedCommand = {
+      commandType: 'chain',
+      promptId: 'draft',
+      chainId: 'chain-1',
+      steps: [
+        { stepNumber: 1, nodeId: 'n1', promptId: 'draft', args: {} },
+        { stepNumber: 2, nodeId: 'n2', promptId: 'review', args: {}, delegated: true },
+      ],
+      promptArgs: {},
+    } as never;
+    return context;
+  };
+
+  const managerWithDelegatedCurrentStep = () => {
+    const created = createSessionManager();
+    created.getSession.mockReturnValue({
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }] },
+    });
+    return created;
+  };
+
+  test('bag absent → the default mode refuses a delegated resume with no trailer', async () => {
+    const { manager } = managerWithDelegatedCurrentStep();
+    const stage = createStage(manager);
+
+    const context = delegatedContext();
+    await stage.execute(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(context.response?.content?.[0]?.text).toContain('❌ Delegated node n2');
+    // The refusal precedes every mutation this stage can make.
+    expect(manager.updateSessionState).not.toHaveBeenCalled();
+  });
+
+  test('bag supplying `advisory` accepts the same resume', async () => {
+    const { manager } = managerWithDelegatedCurrentStep();
+    const logger = createLogger();
+    const stage = new StepResponseCaptureStage(
+      new GateVerdictProcessor(manager, logger),
+      new StepCaptureService(manager, logger),
+      manager,
+      new UnknownObservationProcessor(manager, logger),
+      logger,
+      { handoffEvidenceMode: () => 'advisory' }
+    );
+
+    const context = delegatedContext();
+    await stage.execute(context);
+
+    expect(context.response?.isError).toBeUndefined();
   });
 });

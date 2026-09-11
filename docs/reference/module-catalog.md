@@ -56,6 +56,7 @@ capability listed here and a row there cannot diverge. "Defined in" is relative 
 | Capability | Owner | Module | Defined in |
 | --- | --- | --- | --- |
 | Command parsing | `UnifiedCommandParser` | `engine-execution` | `engine/execution/parsers/command-parser.ts` |
+| Delegation handoff evidence | `resolveHandoffEvidence` | `engine-execution` | `engine/execution/delegation/handoff-contract.ts` |
 | Gate enforcement mode | `resolveEnforcementMode` | `engine-execution` | `engine/execution/pipeline/decisions/gates/enforcement-mode.ts` |
 | Injection decisions | `InjectionDecisionService` | `engine-execution` | `engine/execution/pipeline/decisions/injection/injection-decision-service.ts` |
 | Response assembly | `ResponseAssembler` | `engine-execution` | `engine/execution/formatting/response-assembler.ts` |
