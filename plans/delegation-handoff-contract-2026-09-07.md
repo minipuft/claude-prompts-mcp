@@ -108,7 +108,7 @@ Row 3.5 receipt: ✓ 2026-09-08 — ledger carries D8–D14, open-decisions bloc
 
 Tier 3 gate: `scripts/classify-validation-scope.js` → full (mixed change); pre-push runs the full route.
 
-## Tier 4 — Detached mode (after Tiers 1–3 merge and one release measures `delegation_skipped`)
+## Tier 4 — Detached mode (same release as Tiers 1–3 — R4; stacked PR on #272)
 
 | #   | St                                                                                     | File                                                                                             | Change                                                                                                                             | ~Lines | Depends  | Verify                                                       | Justification                                     |
 | --- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- | ------------------------------------------------------------ | ------------------------------------------------- |
