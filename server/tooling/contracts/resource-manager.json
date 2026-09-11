@@ -217,13 +217,6 @@
       "includeInDescription": false
     },
     {
-      "name": "format",
-      "type": "enum[table|json|text]",
-      "description": "[Prompt] Output format for list/inspect.",
-      "status": "working",
-      "includeInDescription": false
-    },
-    {
       "name": "detail",
       "type": "enum[summary|full]",
       "description": "[Prompt] Detail level for list/inspect. summary=IDs only, full=complete prompt content.",
@@ -238,9 +231,16 @@
       "includeInDescription": false
     },
     {
-      "name": "gate_type",
+      "name": "type",
       "type": "enum[validation|guidance]",
-      "description": "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'; the separate gate.yaml key 'gate_type' (framework|category|custom) is not authorable through this tool.",
+      "description": "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "gate_type",
+      "type": "enum[framework|category|custom]",
+      "description": "[Gate] Gate classification. Default: custom. Writes the gate.yaml key 'gate_type'; 'framework' marks a gate that requires an active framework and is filtered out when framework gates are disabled.",
       "status": "working",
       "includeInDescription": false
     },
@@ -538,7 +538,6 @@
         "resource_type",
         "action",
         "filter",
-        "format",
         "detail",
         "search_query"
       ]
@@ -566,6 +565,7 @@
         "action",
         "id",
         "name",
+        "type",
         "gate_type",
         "description",
         "guidance",
@@ -582,6 +582,7 @@
         "action",
         "id",
         "name",
+        "type",
         "gate_type",
         "description",
         "guidance",
@@ -641,7 +642,7 @@
     {
       "id": "common:inspect",
       "summary": "Inspect resource details.",
-      "parameters": ["resource_type", "action", "id", "detail", "format"]
+      "parameters": ["resource_type", "action", "id", "detail"]
     },
     {
       "id": "common:reload",

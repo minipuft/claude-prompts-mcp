@@ -343,8 +343,6 @@ export const resourceManagerInputSchema = z
     execution_hint: z.enum(['single', 'chain']).optional(),
     /** [Prompt] List filter query. */
     filter: z.string().optional(),
-    /** [Prompt] Output format for list/inspect. */
-    format: z.enum(['table', 'json', 'text']).optional(),
     /** [Prompt] Detail level for list/inspect. */
     detail: z.enum(['summary', 'full']).optional(),
     /** [Prompt] Search query for filtering (list action). */
@@ -352,21 +350,22 @@ export const resourceManagerInputSchema = z
 
     // ── Gate parameters ──────────────────────────────────────────────────
     /**
-     * [Gate] Gate type: validation (pass/fail) or guidance (advisory).
+     * [Gate] Gate type: validation (pass/fail) or guidance (advisory). Writes the gate.yaml
+     * key `type`.
      *
-     * NAME COLLISION, load-bearing. This parameter maps to the gate.yaml key `type`
-     * (`router.ts` `gateArgs.type = args.gate_type`), NOT to the gate.yaml key `gate_type` —
-     * which is a different field entirely (`framework` | `category` | `custom`, the
-     * classification `gate-loader.ts` filters framework gates on). That second field is
-     * therefore still unauthorable through this tool, because its own name is already taken
-     * here by this one.
-     *
-     * Deliberately NOT resolved by aliasing it to a third name: the correct end state is
-     * `type` ↔ `type` and `gate_type` ↔ `gate_type`, which is a rename and so breaking. A
-     * placeholder name would ship a parameter we already intend to delete. Tracked as P4.10
-     * against the next major.
+     * Named `type` since P4.10. It was published as `gate_type` until then, which took the name
+     * of a DIFFERENT gate.yaml key and left that one unauthorable — every tool parameter is the
+     * snake_case spelling of the gate.yaml key it writes, and these two were the only pair where
+     * that was false.
      */
-    gate_type: z.enum(['validation', 'guidance']).optional(),
+    type: z.enum(['validation', 'guidance']).optional(),
+    /**
+     * [Gate] Gate classification, writing the gate.yaml key `gate_type`. `framework` is the
+     * load-bearing value: `gate-loader.ts` filters those gates out when framework gates are
+     * disabled, and `isGateActiveForContext` requires BOTH category and framework to match for
+     * them. Absent, the loader defaults to `custom`.
+     */
+    gate_type: z.enum(['framework', 'category', 'custom']).optional(),
     /**
      * [Gate] Severity for prioritization. Omitting it leaves an existing gate's value
      * untouched; a new gate takes the loader default `medium`.

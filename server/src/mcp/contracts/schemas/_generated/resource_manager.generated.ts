@@ -53,9 +53,9 @@ export type resource_managerParamName =
   | 'agent_type'
   | 'execution_hint'
   | 'filter'
-  | 'format'
   | 'detail'
   | 'search_query'
+  | 'type'
   | 'gate_type'
   | 'severity'
   | 'enforcement_mode'
@@ -341,14 +341,6 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'format',
-    type: 'enum[table|json|text]',
-    description: '[Prompt] Output format for list/inspect.',
-    status: 'working',
-    compatibility: 'canonical',
-    includeInDescription: false,
-  },
-  {
     name: 'detail',
     type: 'enum[summary|full]',
     description:
@@ -366,10 +358,19 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'gate_type',
+    name: 'type',
     type: 'enum[validation|guidance]',
     description:
-      "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'; the separate gate.yaml key 'gate_type' (framework|category|custom) is not authorable through this tool.",
+      "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'gate_type',
+    type: 'enum[framework|category|custom]',
+    description:
+      "[Gate] Gate classification. Default: custom. Writes the gate.yaml key 'gate_type'; 'framework' marks a gate that requires an active framework and is filtered out when framework gates are disabled.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -713,7 +714,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'prompt:list',
     summary: 'List prompts with filters.',
-    parameters: ['resource_type', 'action', 'filter', 'format', 'detail', 'search_query'],
+    parameters: ['resource_type', 'action', 'filter', 'detail', 'search_query'],
     status: 'working',
   },
   {
@@ -742,6 +743,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'action',
       'id',
       'name',
+      'type',
       'gate_type',
       'description',
       'guidance',
@@ -759,6 +761,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'action',
       'id',
       'name',
+      'type',
       'gate_type',
       'description',
       'guidance',
@@ -824,7 +827,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'common:inspect',
     summary: 'Inspect resource details.',
-    parameters: ['resource_type', 'action', 'id', 'detail', 'format'],
+    parameters: ['resource_type', 'action', 'id', 'detail'],
     status: 'working',
   },
   {

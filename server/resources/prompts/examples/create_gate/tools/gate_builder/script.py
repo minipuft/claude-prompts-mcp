@@ -146,7 +146,10 @@ def build_resource_manager_params(data: dict[str, Any]) -> dict[str, Any]:
         "action": "create",
         "id": data["id"],
         "name": data["name"],
-        "gate_type": data["type"],  # Map 'type' to 'gate_type' for resource_manager
+        # resource_manager's gate parameter is named for the gate.yaml key it writes, so
+        # 'type' passes straight through. It was 'gate_type' until P4.10, which took the name
+        # of the separate framework/category/custom key.
+        "type": data["type"],
         "description": data["description"],
     }
 

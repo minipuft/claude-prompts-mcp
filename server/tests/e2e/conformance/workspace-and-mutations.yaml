@@ -506,7 +506,7 @@ scenarios:
           action: create
           id: conformance_gate_severity_readback
           name: Conformance Gate Severity Readback
-          gate_type: validation
+          type: validation
           description: created by the conformance corpus
           guidance: Guidance text
           severity: high
@@ -528,7 +528,7 @@ scenarios:
           action: create
           id: conformance_gate_enforcement_readback
           name: Conformance Gate Enforcement Readback
-          gate_type: validation
+          type: validation
           description: created by the conformance corpus
           guidance: Guidance text
           enforcement_mode: blocking
@@ -538,6 +538,30 @@ scenarios:
     # severity ('medium' → 'advisory') would print 'advisory' if the writer fell back to a
     # derived default instead of the caller's explicit 'blocking' — this distinguishes them.
     expect: { text_contains: 'Enforcement Mode: blocking' }
+
+  - id: gate-create-then-inspect-reads-back-gate-type
+    claim_source: >-
+      resource_manager contract — `gate_type` (P4.10) reaches gate.yaml as the key of the same
+      name, once the parameter that had taken that name was renamed to `type`. `inspect` reads it
+      back off the raw definition (gate-discovery-processor.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_classification_readback
+          name: Conformance Gate Classification Readback
+          type: validation
+          gate_type: framework
+          description: created by the conformance corpus
+          guidance: Guidance text
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_classification_readback }
+    # 'framework' is non-default — the loader resolves an undeclared gate_type to 'custom', and
+    # `inspect` prints the line only when the raw definition declares the key. A write that
+    # dropped `gate_type` (the pre-P4.10 behaviour, where the name was taken by the type
+    # parameter) prints no Classification line at all and fails this row.
+    expect: { text_contains: 'Classification: framework' }
 
   - id: framework-create-then-inspect-reads-back-advanced-fields
     claim_source: >-

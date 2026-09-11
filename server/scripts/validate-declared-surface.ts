@@ -46,9 +46,8 @@ function toSnakeCase(key: string): string {
  */
 const NAME_ALIASES: Readonly<Record<string, Record<string, string>>> = {
   gate: {
-    // The collision. This tool parameter writes the YAML key `type`; the YAML key `gate_type`
-    // is a different field and is exempt below because its name is already spoken for.
-    type: 'gate_type',
+    // P4.10 removed this map's only gate entry that renamed anything: `type` now reaches the
+    // tool surface as `type` and `gate_type` as `gate_type`, so both fall out of `toSnakeCase`.
     enforcementMode: 'enforcement_mode',
   },
   framework: {
@@ -79,18 +78,6 @@ const EXEMPTIONS: Readonly<Record<string, readonly Exemption[]>> = {
         'value would name a file the writer does not produce.',
       stillExempt: () => true,
     },
-    {
-      key: 'gate_type',
-      reason:
-        'P4.10. The tool parameter named gate_type already maps to the YAML key `type`, so this ' +
-        "field's own name is taken. Resolving it is a rename, which is breaking.",
-      // Flips the moment the tool parameter `gate_type` stops meaning validation|guidance —
-      // i.e. the moment the rename lands and this exemption is the thing standing in the way.
-      stillExempt: () => {
-        const shape = resourceManagerInputSchema.shape as Record<string, unknown>;
-        return describesValidationGuidance(shape['gate_type']);
-      },
-    },
   ],
   framework: [
     {
@@ -109,10 +96,10 @@ const EXEMPTIONS: Readonly<Record<string, readonly Exemption[]>> = {
   ],
 };
 
-/** True when a zod field still describes the validation|guidance pair (the collision state). */
-function describesValidationGuidance(field: unknown): boolean {
+/** True when a zod field describes exactly the given enum members, in any order. */
+function describesEnum(field: unknown, expected: readonly string[]): boolean {
   const values = enumValuesOf(field);
-  return values.includes('validation') && values.includes('guidance');
+  return values.length === expected.length && expected.every((member) => values.includes(member));
 }
 
 function enumValuesOf(field: unknown): string[] {
@@ -257,12 +244,39 @@ function selfTest(): number {
     failures.push('control 4: a holding exemption produced a finding');
   }
 
-  // Control 5 — the alias map must be load-bearing: without it, the gate's own collision
-  // exemption would be measuring the wrong key.
-  if (!describesValidationGuidance(resourceManagerInputSchema.shape['gate_type'])) {
+  // Control 5 — the alias map must be load-bearing. `judgePromptFile` is the remaining genuine
+  // rename (tool parameter `judge_prompt`, so `toSnakeCase` alone yields the wrong name). Drive
+  // the SAME loader key under a resource type the map does not cover: it must be reported there
+  // and silent under `framework`, or the aliases are decoration and the next real rename passes
+  // unnoticed. `findDivergences` reads `NAME_ALIASES` by resource type, which is what makes the
+  // two runs differ.
+  const unaliased = findDivergences(
+    [{ resourceType: 'prompt', loaderKeys: ['judgePromptFile'] }],
+    realParameters,
+    {}
+  );
+  if (!unaliased.some((f) => f.detail.includes('judgePromptFile'))) {
+    failures.push('control 5: an un-aliased renamed loader key was NOT reported');
+  }
+  const aliased = findDivergences(
+    [{ resourceType: 'framework', loaderKeys: ['judgePromptFile'] }],
+    realParameters,
+    {}
+  );
+  if (aliased.length > 0) {
+    failures.push('control 5: the alias map failed to cover judgePromptFile');
+  }
+
+  // Control 6 — P4.10's end state, asserted directly. These two loader keys are the pair that
+  // shared one tool-parameter name; a regression that re-points either is a rename this gate's
+  // own alias map would happily absorb, so it is checked by VALUE rather than by presence.
+  const shape = resourceManagerInputSchema.shape as Record<string, unknown>;
+  if (!describesEnum(shape['type'], ['validation', 'guidance'])) {
+    failures.push("control 6: tool parameter 'type' no longer writes the gate.yaml key `type`");
+  }
+  if (!describesEnum(shape['gate_type'], ['framework', 'category', 'custom'])) {
     failures.push(
-      'control 5: gate_type no longer describes validation|guidance — the P4.10 exemption ' +
-        'is measuring a field that has changed underneath it'
+      "control 6: tool parameter 'gate_type' no longer writes the gate.yaml key `gate_type`"
     );
   }
 
@@ -271,7 +285,7 @@ function selfTest(): number {
     for (const failure of failures) console.error(`   - ${failure}`);
     return 1;
   }
-  console.log('✅ validate:declared-surface self-test passed (5 controls)');
+  console.log('✅ validate:declared-surface self-test passed (6 controls)');
   return 0;
 }
 

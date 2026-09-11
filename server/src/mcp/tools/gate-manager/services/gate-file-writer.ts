@@ -61,15 +61,15 @@ const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
  *    keys; it cannot catch a third passthrough-only field the way it catches a new declared one
  *    — that gap is the one still open here.
  *
- * `GateCreationData` carries `severity` and `enforcementMode` since P4.4, so the "caller supplied
- * a value" branch of `resolvePreservedGateYamlFields` is reachable for those two: supplied, they
- * are written; omitted, they still resolve from the existing on-disk file. That separation is the
- * whole point of routing them through preservation rather than projection — settability did not
- * cost the carry-forward.
+ * `GateCreationData` carries `severity` and `enforcementMode` since P4.4 and `gate_type` since
+ * P4.10, so the "caller supplied a value" branch of `resolvePreservedGateYamlFields` is reachable
+ * for all three: supplied, they are written; omitted, they still resolve from the existing
+ * on-disk file. That separation is the whole point of routing them through preservation rather
+ * than projection — settability did not cost the carry-forward.
  *
- * `gate_type` remains resolvable only from disk, because its name is already taken on the tool
- * surface by a parameter that maps to the YAML key `type`. Not an oversight: resolving it means
- * renaming that parameter, which is breaking. Tracked as P4.10.
+ * `gate_type` was the last one to become settable, because publishing it meant renaming the tool
+ * parameter that had taken its name (and wrote the YAML key `type`) — a breaking change, landed
+ * at P4.10.
  */
 export const PRESERVED_GATE_YAML_KEYS = [
   ...GATE_YAML_DECLARED_KEYS.filter(

@@ -879,7 +879,7 @@ resource_manager(
   action:"create",
   id:"source-verification",
   name:"Source Verification",
-  gate_type:"validation",
+  type:"validation",
   description:"Ensures all claims are properly sourced",
   guidance:"All factual claims must cite sources. No unsourced statistics.",
   pass_criteria:["All claims have citations", "Sources are authoritative"]
@@ -967,7 +967,8 @@ older history rows, so restoring one could silently freeze a prompt that never d
 
 | Parameter          | Purpose                                                                      |
 | ------------------ | ---------------------------------------------------------------------------- |
-| `gate_type`        | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `type`             | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `gate_type`        | `framework` \| `category` \| `custom`. Default `custom`                      |
 | `severity`         | `critical` \| `high` \| `medium` \| `low`. Default `medium`                  |
 | `enforcement_mode` | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity` |
 | `guidance`         | Gate criteria content                                                        |
@@ -977,9 +978,15 @@ older history rows, so restoring one could silently freeze a prompt that never d
 Omitting `severity` or `enforcement_mode` on an update leaves the gate's current value alone; it
 does not reset to the default.
 
-`gate_type` writes the `gate.yaml` key **`type`**. The separate `gate.yaml` key `gate_type`
-(`framework` \| `category` \| `custom`) is not authorable through the tool — its name is taken by
-this parameter — so it is carried forward from the file and edited by hand.
+Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
+different keys and each has its own parameter: `type` is the validation/guidance behaviour,
+`gate_type` is the classification the loader filters framework gates on. **Breaking change
+(P4.10):** the parameter now called `type` was published as `gate_type` until this release, where
+it took the other key's name and left that key unauthorable. Sending the validation/guidance value
+under `gate_type` is now rejected by the schema — send it under `type`.
+
+Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
+and `enforcement_mode` do.
 
 **Framework Parameters:**
 
@@ -1565,12 +1572,12 @@ deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaki
 A version snapshot records the resource's authored surface, not every byte in its directory. What
 falls outside it is left to the file writers, which carry it forward from disk:
 
-| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                       |
-| --------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                              |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                      |
-| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity` and `enforcementMode` became settable, since they are preserved keys rather than projected ones |
-| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                          |
+| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                           |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                                   |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode` and `gate_type` became settable, since they are preserved keys rather than projected ones |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                       |
 
 Where a rollback restores only part of a resource, the response names what it did not restore.
 Frameworks additionally report any projected field the target version never recorded, because the

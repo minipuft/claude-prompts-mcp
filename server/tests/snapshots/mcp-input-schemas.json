@@ -1362,14 +1362,6 @@
       "filter": {
         "type": "string"
       },
-      "format": {
-        "enum": [
-          "table",
-          "json",
-          "text"
-        ],
-        "type": "string"
-      },
       "framework": {
         "type": "string"
       },
@@ -1471,8 +1463,9 @@
       },
       "gate_type": {
         "enum": [
-          "validation",
-          "guidance"
+          "framework",
+          "category",
+          "custom"
         ],
         "type": "string"
       },
@@ -1915,6 +1908,13 @@
       "tools": {
         "items": {},
         "type": "array"
+      },
+      "type": {
+        "enum": [
+          "validation",
+          "guidance"
+        ],
+        "type": "string"
       },
       "unset": {
         "items": {

@@ -459,12 +459,19 @@ describe('ResourceManagerRouter', () => {
       );
     });
 
-    test('transforms gate_type to type for gate handler', async () => {
+    // P4.10. `type` and `gate_type` are two different gate.yaml keys, and the router used to
+    // rewrite the parameter `gate_type` into `type` — which is why the real `gate_type` key had
+    // no parameter at all. Both now pass through under their own names.
+    //
+    // KILLED BY: restoring `if (args.gate_type) gateArgs.type = args.gate_type;` in
+    // `routeToGateManager` — the handler then receives `type: 'framework'` and no `gate_type`.
+    test('forwards type and gate_type to the gate handler under their own names', async () => {
       const args: ResourceManagerInput = {
         resource_type: 'gate',
         action: 'create',
         id: 'test-gate',
-        gate_type: 'validation',
+        type: 'validation',
+        gate_type: 'framework',
         guidance: 'Test guidance',
       };
 
@@ -475,6 +482,7 @@ describe('ResourceManagerRouter', () => {
           action: 'create',
           id: 'test-gate',
           type: 'validation',
+          gate_type: 'framework',
           guidance: 'Test guidance',
         }),
         {}

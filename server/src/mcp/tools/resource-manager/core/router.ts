@@ -220,7 +220,6 @@ export class ResourceManagerRouter {
       full_restart: args.full_restart,
       execution_hint: args.execution_hint,
       filter: args.filter,
-      format: args.format,
       detail: args.detail,
       search_query: args.search_query,
       confirm: args.confirm,
@@ -247,8 +246,10 @@ export class ResourceManagerRouter {
     args: ResourceManagerInput,
     context: Record<string, unknown>
   ): Promise<ToolResponse> {
-    // Transform args to gate_manager format
-    // Note: gate_type -> type transformation
+    // Pass-through, no renaming (P4.10): `type` and `gate_type` are two different gate.yaml
+    // keys and each tool parameter now carries the name of the key it writes. Until P4.10 the
+    // parameter `gate_type` was rewritten to `type` here, which left the real `gate_type` key
+    // unauthorable because its name was taken.
     // Handler performs its own validation, so we cast the transformed object
     const gateArgs: GateManagerInput = {
       action: args.action as GateManagerActionId,
@@ -256,7 +257,8 @@ export class ResourceManagerRouter {
 
     if (args.id) gateArgs.id = args.id;
     if (args.name) gateArgs.name = args.name;
-    if (args.gate_type) gateArgs.type = args.gate_type;
+    if (args.type) gateArgs.type = args.type;
+    if (args.gate_type) gateArgs.gate_type = args.gate_type;
     if (args.severity) gateArgs.severity = args.severity;
     // snake_case tool parameter → the gate.yaml key's own camelCase spelling. The YAML key is
     // `enforcementMode`; every tool parameter is the snake_case form of its key, so the mapping

@@ -392,7 +392,7 @@ describe('Resource Manager Workflow Integration', () => {
           action: 'create',
           id: 'test-gate',
           name: 'Test Gate',
-          gate_type: 'validation',
+          type: 'validation',
           guidance: 'Test validation guidance',
         },
         {}
@@ -400,7 +400,8 @@ describe('Resource Manager Workflow Integration', () => {
       expect(createResult.isError).toBe(false);
       expect((createResult.content[0] as { text: string }).text).toContain('Created gate');
 
-      // Verify gate_type was transformed to type
+      // `type` reaches the handler under its own name (P4.10 — it was published as `gate_type`
+      // and rewritten here until then).
       expect(gateManager.handleAction).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'validation' }),
         expect.any(Object)
@@ -530,24 +531,26 @@ describe('Resource Manager Workflow Integration', () => {
   });
 
   describe('Parameter Transformation Integration', () => {
-    test('gate_type transforms to type for gate manager', async () => {
+    test('type and gate_type pass through to the gate manager unrenamed', async () => {
       await router.handleAction(
         {
           resource_type: 'gate',
           action: 'create',
           id: 'transform-test',
-          gate_type: 'guidance',
+          type: 'guidance',
+          gate_type: 'category',
           guidance: 'Test guidance',
         },
         {}
       );
 
-      // Verify the transformation happened
+      // P4.10: each parameter carries the name of the gate.yaml key it writes.
       expect(gateManager.handleAction).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'create',
           id: 'transform-test',
-          type: 'guidance', // Transformed from gate_type
+          type: 'guidance',
+          gate_type: 'category',
           guidance: 'Test guidance',
         }),
         expect.any(Object)
@@ -684,7 +687,7 @@ describe('Resource Manager Workflow Integration', () => {
           resource_type: 'gate',
           action: 'create',
           id: 'quality-gate',
-          gate_type: 'validation',
+          type: 'validation',
         },
         {}
       );

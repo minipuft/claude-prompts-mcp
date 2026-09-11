@@ -270,24 +270,10 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario asserting the filtered list output differs from the unfiltered ' +
       'default.'
   ),
-  ...exceptionGroup(
-    'resource_manager',
-    ['format'],
-    'NOT a coverage gap — `format` is declared in the schema and the contract, forwarded by ' +
-      'the router (core/router.ts:223), and read by NOTHING: no prompt, gate or framework ' +
-      'processor branches on it, so `format: "json"` returns the same markdown as ' +
-      '`format: "text"`. It shared a group with the list-refinement fields until 2026-09-05, ' +
-      'under a reason implying a scenario would close it. A scenario would PASS and prove ' +
-      'nothing, which is worse than no scenario. Measured with a positive control: the same ' +
-      'probe run against `detail` finds two real read sites.',
-    'P4.12 — REMOVING this parameter at the next major. Repointed 2026-09-07 when P4.6 was ' +
-      'killed: this exception previously named the row that would implement the projection, and ' +
-      'that row died because building one is feature work nobody asked for. A parameter no ' +
-      'reader branches on has no observable behaviour to assert, so the honest coverage state is ' +
-      '"unimplemented" — and with no row left to implement it, the resolution is deletion, not a ' +
-      'scenario. Deliberately NOT repointed to P4.11, which covers reading written fields back ' +
-      'and would never close this.'
-  ),
+  // `format` had an exception here until P4.12 (2026-09-11). It was not a coverage gap but a
+  // phantom declaration — declared, forwarded by the router, read by nothing — and its `closedBy`
+  // named removal rather than a scenario. The parameter is gone from the schema, the contract and
+  // the router, so the entry is gone with it rather than left behind as SUBJECT_MISSING.
   // `severity`/`enforcement_mode` (gate) and the 11 framework advanced fields both closed P4.11
   // 2026-09-09: `GateDiscoveryProcessor.handleInspect` / `FrameworkDiscoveryProcessor.handleInspect`
   // now read both back (gate-discovery-processor.ts via `GateGuide.getDefinition()`;
@@ -297,9 +283,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   // NON-DEFAULT value survived the round trip, not just that the call returned ok.
   ...exceptionGroup(
     'resource_manager',
-    // `gate_type` and `guidance` were satisfied 2026-09-09 as a byproduct of the P4.11
-    // create-then-read-back gate scenarios above, which both create a gate and so had to supply
-    // them — caught by this file's own satisfied-exception audit, not a separate sweep.
+    // `type` (the parameter P4.10 renamed out of `gate_type`) and `guidance` are satisfied by
+    // the P4.11 create-then-read-back gate scenarios above, which both create a gate and so have
+    // to supply them — caught by this file's own satisfied-exception audit, not a separate sweep.
+    // The renamed `gate_type` gets its own create-then-inspect row (P4.10), asserting the
+    // non-default `framework` classification survives to gate.yaml and back.
     ['pass_criteria', 'activation', 'retry_config'],
     'gate resource_type create/update payload field; the corpus exercises resource_type:gate ' +
       'only via read-only `inspect` on a bundled gate (`resource-manager-gate-inspect`), never ' +

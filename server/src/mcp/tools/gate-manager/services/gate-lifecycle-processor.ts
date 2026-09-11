@@ -29,6 +29,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      gate_type,
     } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
@@ -51,6 +52,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      gate_type,
     };
 
     const result = await this.ctx.gateFileService.writeGateFiles(gateData);
@@ -106,6 +108,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      gate_type,
     } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
@@ -143,9 +146,11 @@ export class GateLifecycleProcessor {
       // falls back to the on-disk value when the caller omits them. Reading them from
       // `existingDefinition` here would work by coincidence and would defeat the preservation
       // path the moment the two disagree — the loader applies a `severity` default, so the
-      // definition reports `medium` for a file that declares nothing.
+      // definition reports `medium` for a file that declares nothing. `gate_type` (P4.10) is
+      // the third such key and rides the same path.
       severity,
       enforcementMode,
+      gate_type,
     };
 
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —

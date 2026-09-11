@@ -280,13 +280,14 @@ export interface ResourceManagerInput {
   is_chain?: boolean;
   full_restart?: boolean;
   filter?: string;
-  format?: 'table' | 'json' | 'text';
   detail?: 'summary' | 'full';
   search_query?: string;
 
   // Gate-specific parameters
-  /** Maps to the gate.yaml key `type`, NOT to `gate_type` — see the schema note on the collision. */
-  gate_type?: 'validation' | 'guidance';
+  /** Writes the gate.yaml key `type` (P4.10 renamed this from `gate_type`). */
+  type?: 'validation' | 'guidance';
+  /** Writes the gate.yaml key `gate_type` — the framework/category/custom classification. */
+  gate_type?: 'framework' | 'category' | 'custom';
   severity?: 'critical' | 'high' | 'medium' | 'low';
   enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   guidance?: string;

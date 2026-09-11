@@ -66,6 +66,12 @@ export class GateDiscoveryProcessor {
       definition.enforcementMode !== undefined
         ? `\n  - Enforcement Mode: ${definition.enforcementMode}`
         : '';
+    // P4.10 — `gate_type` became settable through the tool once the parameter holding its name
+    // was renamed to `type`. Read back from the raw definition for the same reason as the two
+    // above: `GenericGateGuide.gateType` resolves an absent key to 'custom', so the guide's own
+    // property cannot distinguish an authored 'custom' from no declaration at all.
+    const gateTypeLine =
+      definition.gate_type !== undefined ? `\n  - Classification: ${definition.gate_type}` : '';
 
     return this.success(
       `🚦 Gate: ${gate.name}\n\n` +
@@ -73,7 +79,7 @@ export class GateDiscoveryProcessor {
         `  - ID: ${gate.gateId}\n` +
         `  - Type: ${typeIcon} ${gate.type}\n` +
         `  - Description: ${gate.description}` +
-        `${severityLine}${enforcementModeLine}\n\n` +
+        `${severityLine}${enforcementModeLine}${gateTypeLine}\n\n` +
         `📝 Guidance:\n${guidancePreview}`
     );
   }
