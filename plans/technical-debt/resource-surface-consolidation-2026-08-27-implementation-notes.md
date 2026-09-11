@@ -422,7 +422,7 @@ Fixing the three types was not fixing the class. Enumerating every file that res
 root and writes found a fourth — the HTTP `create_category` handler, joining a request body field
 into `mkdir`. Widening that enumeration to include roots rolled by hand from `getServerRoot()`
 found two more: framework `delete` and `skills-sync`. Six sites, three of which no per-type pass
-would have reached. `validate:contained-resource-writes` now runs the enumeration every build.
+would have reached. `validate:resource-path-containment` now runs the enumeration every build.
 
 **F-B — framework `delete` resolved a different root than framework `write`.** It built
 `join(getServerRoot(), 'resources', 'frameworks', id)`, hardcoding the package tree — the exact
