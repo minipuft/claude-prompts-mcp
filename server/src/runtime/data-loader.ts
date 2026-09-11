@@ -174,6 +174,28 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     logger.info(line);
   }
 
+  // Name the files, not just the count. `invalid: 3` on the line above is reconcilable arithmetic
+  // but not an actionable finding — an operator still has to guess which three, and the loader's
+  // own ERROR lines are hundreds of lines up in a startup log. Deliberately not gated on
+  // `!isQuiet`, for the reason the inventory block above records: STDIO auto-enables quiet, and
+  // STDIO is how every MCP client launches this server.
+  const quarantined = promptManager.getQuarantine().list();
+  const servedIdsForShadowCheck = new Set(convertedPrompts.map((prompt) => prompt.id));
+  for (const record of quarantined) {
+    const shadowed = servedIdsForShadowCheck.has(record.id)
+      ? ' (another root is serving this id — your edit is not live)'
+      : '';
+    logger.warn(
+      `🚧 quarantined prompt '${record.id}': ${record.path} — ${record.error}${shadowed}`
+    );
+  }
+  if (quarantined.length > 0) {
+    logger.warn(
+      `🚧 ${quarantined.length} prompt file(s) quarantined — repair with ` +
+        `resource_manager(action:"update"); they are on disk and not in the catalog`
+    );
+  }
+
   if (!isQuiet) {
     logger.info('=== PROMPT LOADING RESULTS ===');
     logger.info(`✓ Converted ${convertedPrompts.length} prompts to MCP format`);

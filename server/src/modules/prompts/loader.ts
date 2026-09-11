@@ -18,6 +18,7 @@ import * as path from 'node:path';
 
 import { CategoryManager, createCategoryManager } from './category-manager.js';
 import { parseMarkdownPromptContent } from './markdown-prompt-parser.js';
+import { PromptQuarantine, type QuarantineSink, type QuarantineView } from './quarantine.js';
 import {
   type LoadedPromptFile,
   discoverYamlPrompts,
@@ -61,6 +62,17 @@ export class PromptLoader {
   // Caching infrastructure (mirrors GateDefinitionLoader pattern)
   private promptFileCache = new Map<string, LoadedPromptFile>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
+  /**
+   * Files this loader refused, by root. ONE instance for the loader's lifetime.
+   *
+   * Published by reference rather than returned per load: the tool layer binds it once at wiring
+   * time and every later reload is already visible through the same object. A snapshot threaded
+   * through `updateData` would have to be re-passed at each of six call sites, which is the shape
+   * where one gets forgotten and the surface silently reports a stale catalog.
+   */
+  private readonly quarantine = new PromptQuarantine();
+  /** Sink for the walk currently in progress; absent outside `loadFromDirectories`. */
+  private activeQuarantineSink: QuarantineSink | undefined;
 
   constructor(logger: Logger, config: PromptLoaderConfig = {}) {
     this.logger = logger;
@@ -108,6 +120,11 @@ export class PromptLoader {
     };
   }
 
+  /** Live view of the prompt files that failed to load, across every root walked so far. */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
   /**
    * Get the CategoryManager instance for external access
    */
@@ -132,6 +149,12 @@ export class PromptLoader {
     if (!existsSync(promptsDir)) {
       throw new Error(`Prompts directory not found: ${promptsDir}`);
     }
+
+    // Everything previously recorded for THIS root is dropped before the walk, so a prompt
+    // repaired since the last load is simply never re-recorded. Clearing on begin rather than
+    // reconciling at the end means a walk that throws partway still describes the files it
+    // actually reached, instead of leaving a satisfied record standing as a live finding.
+    this.activeQuarantineSink = this.quarantine.beginRoot(promptsDir);
 
     // Phase 1: Discover categories from directory structure
     const entries = readdirSync(promptsDir, { withFileTypes: true });
@@ -213,6 +236,8 @@ export class PromptLoader {
 
     // Load categories into CategoryManager
     await this.categoryManager.loadCategories(categories);
+
+    this.activeQuarantineSink = undefined;
 
     const invalid = this.stats.loadErrors - errorsBefore;
     this.logger.info(
@@ -324,6 +349,7 @@ export class PromptLoader {
       stats: this.stats,
       enableCache: this.enableCache,
       debug: this.debug,
+      quarantine: this.activeQuarantineSink,
     };
   }
 

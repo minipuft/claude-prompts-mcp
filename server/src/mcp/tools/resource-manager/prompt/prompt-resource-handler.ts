@@ -17,6 +17,7 @@ import { recordActionInvocation } from '../../../metadata/usage-tracker.js';
 import { resolveDispatchAction } from '../../shared/preview-action.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { QuarantineView } from '#modules/prompts/quarantine.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
 import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type { ActionDescriptor } from '../../../metadata/definitions/types.js';
@@ -126,6 +127,19 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
   setFrameworkManager(frameworkManager: FrameworkManager): void {
     this.dependencies.frameworkManager = frameworkManager;
     this.logger.debug('Framework manager set in PromptResourceHandler');
+  }
+
+  /**
+   * Bind the loader's live quarantine view.
+   *
+   * A setter rather than an eighth constructor argument: the factory is already at seven, and the
+   * value is one live object for the process's lifetime, which is the same reason
+   * `setFrameworkManager` exists. Passing it through `updateData` instead would give every reload
+   * path its own chance to omit it.
+   */
+  setQuarantine(quarantine: QuarantineView): void {
+    this.dependencies.quarantine = quarantine;
+    this.logger.debug('Prompt quarantine view bound to PromptResourceHandler');
   }
 
   async handleAction(

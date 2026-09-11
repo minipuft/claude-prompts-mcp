@@ -252,6 +252,12 @@ export class McpToolRouter {
       onRestart
     );
 
+    // The loader's quarantine, bound by REFERENCE. Every later load writes through this same
+    // object, so `list`, `inspect` and the repair path in `update` see the current set without
+    // anything re-passing it. Wired here because this is the one place that holds both the
+    // prompt manager and the resource handler.
+    this.promptResourceHandler.setQuarantine(this.promptManager.getQuarantine());
+
     // Initialize 5 core consolidated tools
 
     this.systemControl = createConsolidatedSystemControl(this.logger, onRestart);

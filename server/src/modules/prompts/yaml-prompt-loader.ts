@@ -17,6 +17,7 @@ import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
 
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
+import type { QuarantineSink } from './quarantine.js';
 import type { PromptData } from './types.js';
 
 import { linearize } from '#modules/workflow-ir/linearizer.js';
@@ -100,6 +101,14 @@ export interface YamlLoadContext {
   readonly stats: { cacheHits: number; cacheMisses: number; loadErrors: number };
   readonly enableCache: boolean;
   readonly debug: boolean;
+  /**
+   * Where refused files are recorded, when this load is a root walk.
+   *
+   * Optional because `loadYamlPrompt` is also called for a single known file
+   * (`PromptLoader.loadPromptFile`), which THROWS on failure rather than dropping the prompt —
+   * there is no silent absence there for a record to explain. A walk always supplies one.
+   */
+  readonly quarantine?: QuarantineSink | undefined;
 }
 
 // ============================================
@@ -668,6 +677,25 @@ export function loadYamlPrompt(
     promptId = isFile ? path.basename(promptPath, '.yaml') : path.basename(promptPath);
   }
 
+  /**
+   * Refuse this file, and RECORD the refusal when this load is a root walk.
+   *
+   * One helper rather than four inline `ctx.quarantine?.record(...)` calls: every early return
+   * below is a prompt that vanishes from the catalog, and the whole point of quarantine is that
+   * none of them may vanish silently. A site that forgets to record is indistinguishable from the
+   * behaviour this change exists to remove, so there is exactly one way to leave.
+   */
+  const refuse = (error: string): null => {
+    ctx.stats.loadErrors++;
+    ctx.quarantine?.record({
+      id: promptId,
+      category: categoryRoot !== undefined ? path.basename(categoryRoot) : '',
+      path: yamlPath,
+      error,
+    });
+    return null;
+  };
+
   // Check cache first
   // Compute relative file path for PromptData.file
   // - Directory format: {id}/prompt.yaml
@@ -712,8 +740,7 @@ export function loadYamlPrompt(
       ctx.logger.error(
         `[PromptLoader] Invalid YAML in ${yamlPath}: ${validation.errors.join(', ')}`
       );
-      ctx.stats.loadErrors++;
-      return null;
+      return refuse(validation.errors.join(', '));
     }
 
     if (validation.warnings.length > 0 && ctx.debug) {
@@ -723,8 +750,7 @@ export function loadYamlPrompt(
     yamlData = validation.data!;
   } catch (e) {
     ctx.logger.error(`[PromptLoader] Failed to load YAML from ${yamlPath}:`, e);
-    ctx.stats.loadErrors++;
-    return null;
+    return refuse(`could not be parsed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // Inline file references (only applicable for directory format)
@@ -750,8 +776,7 @@ export function loadYamlPrompt(
       userMessageTemplate = readFileSync(userMessagePath, 'utf-8');
     } else {
       ctx.logger.error(`[PromptLoader] userMessageTemplateFile not found: ${userMessagePath}`);
-      ctx.stats.loadErrors++;
-      return null;
+      return refuse(`userMessageTemplateFile not found: ${yamlData.userMessageTemplateFile}`);
     }
   } else if (yamlData.userMessageTemplate) {
     userMessageTemplate = yamlData.userMessageTemplate;
@@ -766,8 +791,9 @@ export function loadYamlPrompt(
     ctx.logger.error(
       `[PromptLoader] Prompt requires userMessageTemplate, userMessageTemplateFile, chainSteps, or systemMessage: ${yamlPath}`
     );
-    ctx.stats.loadErrors++;
-    return null;
+    return refuse(
+      'declares none of userMessageTemplate, userMessageTemplateFile, chainSteps or systemMessage'
+    );
   }
 
   const loadedContent: LoadedPromptFile = {

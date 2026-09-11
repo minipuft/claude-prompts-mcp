@@ -37,10 +37,12 @@ import {
 } from '../utils/validation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { QuarantinedPrompt } from '#modules/prompts/quarantine.js';
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
+import { preferredRepairTarget } from '#modules/prompts/quarantine.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
 
@@ -241,6 +243,19 @@ export class PromptLifecycleProcessor {
     validateRequiredFields(args, ['id']);
 
     const currentPrompt = this.getConvertedPrompts().find((prompt) => prompt.id === args.id);
+    // The repair target: a file on disk the loader refused, whose id nothing in the catalog
+    // answers to. Consulted ONLY when the catalog has no entry, so a serving prompt is never
+    // redirected by a quarantined namesake — the valid resource wins unconditionally, because
+    // resolution never looks here.
+    //
+    // Without this, an update on an unloadable id produced the worst available outcome. Measured
+    // 2026-09-11 against `dist/`: `update` with a full body answered `✅ **Prompt Updated**` and
+    // wrote a SECOND prompt at `general/<id>` — the category `canonicalPromptSnapshot` falls back
+    // to — reported `Moved prompt '<id>' from '<id>' to 'general'` (nothing moved), and left the
+    // broken file exactly as it was. The record supplies the true category and root, so the write
+    // lands on the file that is actually broken.
+    const repairTarget =
+      currentPrompt === undefined ? this.resolveRepairTarget(String(args.id)) : undefined;
     const concurrencyRefusal = await this.checkExpectedVersion(args as PromptResourceInput);
     if (concurrencyRefusal !== undefined) {
       return concurrencyRefusal;
@@ -281,6 +296,14 @@ export class PromptLifecycleProcessor {
       ...canonicalPromptSnapshot(args.id, currentPrompt),
       tools: args.tools,
     };
+
+    // Ahead of the `UPDATE_FIELDS` merge, so an explicitly supplied `category` still wins and
+    // still moves the prompt. What this replaces is the FALLBACK: `canonicalPromptSnapshot`
+    // defaults an unknown prompt's category to `general`, which for a quarantined file is a
+    // category it does not live in.
+    if (repairTarget !== undefined) {
+      promptData.category = repairTarget.category;
+    }
 
     // Fix B (tier-b-settability-proposal §2 write-scope narrowing): the union of every
     // `promptData` key THIS call actually touches. `FileOperations` uses it to decide which
@@ -527,7 +550,14 @@ export class PromptLifecycleProcessor {
     if (diagnosis.blocking.length > 0) {
       const details = diagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
       return this.blockedUpdate(
-        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n💡 Nothing was written and no version was consumed.`
+        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n` +
+          (repairTarget !== undefined
+            ? `🚧 \`${repairTarget.id}\` is quarantined — the file at \`${repairTarget.path}\` ` +
+              `failed to load (${repairTarget.error}), so there is no loaded state to merge onto ` +
+              `and a repair has to supply the whole prompt. The content that failed validation is ` +
+              `deliberately not read back here.\n\n`
+            : '') +
+          `💡 Nothing was written and no version was consumed.`
       );
     }
     if (diagnosis.preExisting.length > 0) {
@@ -606,7 +636,7 @@ export class PromptLifecycleProcessor {
       result = await this.fileOperations.updatePromptImplementation(
         promptData,
         suppliedKeys,
-        currentPrompt?.sourceRoot,
+        currentPrompt?.sourceRoot ?? repairTarget?.root,
         { unsetKeys, toolBinding, removedToolIds },
         commitOptions
       );
@@ -686,6 +716,9 @@ export class PromptLifecycleProcessor {
       reason: `Prompt updated: ${String(args.id)}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
+    if (repairTarget !== undefined) {
+      response += this.formatRepairOutcome(repairTarget);
+    }
 
     return {
       content: [
@@ -803,6 +836,42 @@ export class PromptLifecycleProcessor {
   }
 
   /** One shape for every pre-write refusal on the update path: error response, nothing written. */
+  /**
+   * The quarantine record an unqualified `update` on this id means, if any.
+   *
+   * Nearest root first: `preferredRepairTarget` prefers the writable primary, matching
+   * `resolveResourceRoots`' precedence, so an operator repairing `foo` edits their own copy rather
+   * than the bundled one they cannot write to.
+   */
+  private resolveRepairTarget(id: string): QuarantinedPrompt | undefined {
+    const records = this.context.dependencies.quarantine?.byId(id) ?? [];
+    if (records.length === 0) return undefined;
+    return preferredRepairTarget(
+      records,
+      this.context.dependencies.configManager.getResolvedPromptsDirectory()
+    );
+  }
+
+  /**
+   * Say, in the update's own response, whether the repair actually took.
+   *
+   * This is the row's falsifier rendered at the surface an operator reads. The receipt above
+   * already forced a refresh, so the quarantine has been rebuilt from disk by the time this runs:
+   * a record still standing for the same path means the file is still refused, whatever the write
+   * reported. Saying nothing when the repair worked would leave "did it load?" answerable only by
+   * a second call.
+   */
+  private formatRepairOutcome(repairTarget: QuarantinedPrompt): string {
+    const stillQuarantined = (
+      this.context.dependencies.quarantine?.byId(repairTarget.id) ?? []
+    ).some((record) => record.path === repairTarget.path);
+    return stillQuarantined
+      ? `\n🚧 **Still quarantined**: \`${repairTarget.path}\` did not load after the write — ` +
+          `the prompt remains absent from the catalog.\n`
+      : `\n🩹 **Repaired**: \`${repairTarget.path}\` now loads; its quarantine record is cleared ` +
+          `and \`${repairTarget.id}\` is served again.\n`;
+  }
+
   private blockedUpdate(text: string): ToolResponse {
     return {
       content: [{ type: 'text' as const, text }],
