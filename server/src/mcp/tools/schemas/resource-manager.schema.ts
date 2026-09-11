@@ -125,8 +125,14 @@ const executionStepSchema = z.object({
 export const resourceManagerInputSchema = z
   .object({
     // ── Core parameters ──────────────────────────────────────────────────
-    /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'framework']),
+    /**
+     * Type of resource to manage. Routes to appropriate handler.
+     *
+     * `category` (P4.7) is an ADDED union member, which is the breaking half of
+     * CLAUDE.md §Public API Contract — the contract is the union of every reachable shape, and
+     * adding a member widens it.
+     */
+    resource_type: z.enum(['prompt', 'gate', 'framework', 'category']),
     /** Operation to perform. */
     action: z.enum([
       'create',
@@ -317,21 +323,31 @@ export const resourceManagerInputSchema = z
      */
     injection: PromptInjectionConfigSchema.optional(),
     /**
-     * [Prompt] Whether this prompt registers as a native MCP prompt.
+     * [Prompt | Category] Whether prompts register as native MCP prompts.
      *
-     * FREEZE HAZARD: this value is resolved through prompt → category → global → default `true`,
-     * and setting it writes an explicit prompt-level value that outranks all three PERMANENTLY —
-     * the prompt stops following any later change to the category or global default. Omit it
-     * unless this prompt specifically needs to differ from its category.
+     * ON `resource_type: 'prompt'` — FREEZE HAZARD: this value is resolved through
+     * prompt → category → global → default `true`, and setting it writes an explicit
+     * prompt-level value that outranks all three PERMANENTLY — the prompt stops following any
+     * later change to the category or global default. Omit it unless this prompt specifically
+     * needs to differ from its category.
+     *
+     * ON `resource_type: 'category'` (P4.7) — no freeze hazard, because this IS the category
+     * level: it writes `registerWithMcp` into `category.yaml`, which every prompt in the
+     * category inherits unless it declares its own. `loader.ts` has read that key since long
+     * before anything could write it.
      */
     register_with_mcp: z.boolean().optional(),
     /**
-     * [Prompt] Native MCP prompt behaviour: 'expand' (plain template text) or 'launch' (route
-     * through prompt_engine).
+     * [Prompt | Category] Native MCP prompt behaviour: 'expand' (plain template text) or
+     * 'launch' (route through prompt_engine).
      *
-     * FREEZE HAZARD: resolved through prompt → category → default `'expand'`; an explicit value
-     * outranks both PERMANENTLY and the prompt stops following any later change to the category
-     * default. Omit it unless this prompt specifically needs to differ from its category.
+     * ON `resource_type: 'prompt'` — FREEZE HAZARD: resolved through prompt → category →
+     * default `'expand'`; an explicit value outranks both PERMANENTLY and the prompt stops
+     * following any later change to the category default. Omit it unless this prompt
+     * specifically needs to differ from its category.
+     *
+     * ON `resource_type: 'category'` (P4.7) — writes `mcpPromptMode` into `category.yaml`, the
+     * default every prompt in the category inherits.
      */
     mcp_prompt_mode: z.enum(['expand', 'launch']).optional(),
     /** [Prompt] Client-agnostic capability hint for `==>` delegated steps. */

@@ -25,6 +25,11 @@ import type {
   ActionValidationResult,
 } from './types.js';
 import type {
+  CategoryManagerActionId,
+  CategoryManagerInput,
+} from '../../category-manager/core/types.js';
+import type { CategoryToolHandler } from '../../category-manager/index.js';
+import type {
   FrameworkManagerActionId,
   FrameworkManagerInput,
 } from '../../framework-manager/core/types.js';
@@ -43,12 +48,14 @@ export class ResourceManagerRouter {
   private readonly promptResourceHandler: PromptResourceHandlerPort;
   private readonly gateManager: GateToolHandler;
   private readonly frameworkManager: FrameworkToolHandler;
+  private readonly categoryManager: CategoryToolHandler;
 
   constructor(deps: ResourceManagerDependencies) {
     this.logger = deps.logger;
     this.promptResourceHandler = deps.promptResourceHandler;
     this.gateManager = deps.gateManager;
     this.frameworkManager = deps.frameworkManager;
+    this.categoryManager = deps.categoryManager;
 
     this.logger.debug('ResourceManagerRouter initialized');
   }
@@ -132,6 +139,8 @@ export class ResourceManagerRouter {
           return await this.routeToGateManager(args, enrichedContext);
         case 'framework':
           return await this.routeToFrameworkManager(args, enrichedContext);
+        case 'category':
+          return await this.routeToCategoryManager(args, enrichedContext);
         default:
           return this.createErrorResponse(`Unknown resource_type: ${resource_type}`);
       }
@@ -467,6 +476,64 @@ export class ResourceManagerRouter {
     }
 
     return await this.frameworkManager.handleAction(frameworkArgs, context);
+  }
+
+  /**
+   * Route to category manager
+   */
+  private async routeToCategoryManager(
+    args: ResourceManagerInput,
+    context: Record<string, unknown>
+  ): Promise<ToolResponse> {
+    // Pass-through, no renaming, with ONE mapping: `register_with_mcp` / `mcp_prompt_mode` are
+    // the snake_case tool parameters for the `category.yaml` keys `registerWithMcp` /
+    // `mcpPromptMode`, exactly as `enforcement_mode` is for the gate key `enforcementMode` ten
+    // lines up. The mapping lands here rather than diverging the published parameter name from
+    // the file key it writes.
+    const categoryArgs: CategoryManagerInput = {
+      action: args.action as CategoryManagerActionId,
+    };
+
+    if (args.id) categoryArgs.id = args.id;
+    if (args.name) categoryArgs.name = args.name;
+    if (args.description) categoryArgs.description = args.description;
+    if (args.register_with_mcp !== undefined) {
+      categoryArgs.registerWithMcp = args.register_with_mcp;
+    }
+    if (args.mcp_prompt_mode !== undefined) {
+      categoryArgs.mcpPromptMode = args.mcp_prompt_mode;
+    }
+    if (args.confirm !== undefined) {
+      categoryArgs.confirm = args.confirm;
+    }
+    if (args.preview_action !== undefined) {
+      categoryArgs.preview_action = args.preview_action as 'delete' | 'rollback';
+    }
+    if (args.source_workspace !== undefined) {
+      categoryArgs.source_workspace = args.source_workspace;
+    }
+    if (args.reason) {
+      categoryArgs.reason = args.reason;
+    }
+
+    // Versioning parameters (pass through directly - canonical names)
+    if (args.version !== undefined) {
+      categoryArgs.version = args.version;
+    }
+    if (args.from_version !== undefined) {
+      categoryArgs.from_version = args.from_version;
+    }
+    if (args.to_version !== undefined) {
+      categoryArgs.to_version = args.to_version;
+    }
+    if (args.skip_version !== undefined) {
+      categoryArgs.skip_version = args.skip_version;
+    }
+    if (args.limit !== undefined) {
+      categoryArgs.limit = args.limit;
+    }
+
+    return await this.categoryManager.handleAction(categoryArgs, context);
   }
 
   /**

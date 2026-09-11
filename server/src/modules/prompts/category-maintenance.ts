@@ -15,6 +15,38 @@ export interface CategoryResult {
   created: boolean;
 }
 
+/**
+ * The category directories under a prompts root, by the same rule the loader walks them.
+ *
+ * Extracted from `PromptLoader.loadFromDirectories` Phase 1 at P4.7 and CALLED from there, so
+ * there is one definition of "what counts as a category directory" rather than two. The tool
+ * layer's `list` and `inspect` need the same answer the loader gives; a second copy of the
+ * dot/underscore/`backup` filter would drift the day either side gained a rule.
+ *
+ * Sorted, so a listing is stable across filesystems — `readdirSync` order is not specified.
+ */
+export function discoverCategoryDirectories(promptsDir: string): string[] {
+  if (!existsSync(promptsDir)) {
+    return [];
+  }
+
+  try {
+    return readdirSync(promptsDir, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          !entry.name.startsWith('.') &&
+          !entry.name.startsWith('_') &&
+          entry.name !== 'backup'
+      )
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    // An unreadable root contributes no categories, exactly as an absent one does.
+    return [];
+  }
+}
+
 // ============================================
 // YAML Prompt Helpers
 // ============================================

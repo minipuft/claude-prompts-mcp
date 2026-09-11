@@ -29,6 +29,7 @@ import type { ToolResponse } from '../../../src/shared/types/index.js';
 import type { PromptResourceHandler } from '../../../src/mcp/tools/resource-manager/prompt/index.js';
 import type { GateToolHandler } from '../../../src/mcp/tools/gate-manager/index.js';
 import type { FrameworkToolHandler } from '../../../src/mcp/tools/framework-manager/index.js';
+import type { CategoryToolHandler } from '../../../src/mcp/tools/category-manager/index.js';
 
 // Mock factories
 const createLogger = (): Logger => ({
@@ -316,12 +317,66 @@ const createMockFrameworkManager = () => {
   } as Pick<PromptResourceHandler, 'handleAction'>;
 };
 
+/**
+ * A category double, added with `resource_type: 'category'` at P4.7.
+ *
+ * Deliberately thinner than the three above: this file's workflows exercise prompt, gate and
+ * framework lifecycles, and a fourth full state machine here would be a second implementation of
+ * `CategoryLifecycleProcessor` that the real unit and conformance suites already cover. What it
+ * DOES have to be is reachable — a router branch nothing ever calls is the shape of defect this
+ * file exists to catch — so it records the payloads it receives.
+ */
+const createMockCategoryManager = () => {
+  const declared = new Map<string, Record<string, unknown>>();
+
+  return {
+    handleAction: jest.fn(async (args: Record<string, unknown>) => {
+      const action = args['action'] as string;
+      const id = args['id'] as string | undefined;
+
+      if (action === 'create' && id !== undefined) {
+        declared.set(id, args);
+        return {
+          content: [{ type: 'text', text: `Category '${id}' created successfully` }],
+          isError: false,
+        } as ToolResponse;
+      }
+
+      if (action === 'inspect' && id !== undefined && declared.has(id)) {
+        const doc = declared.get(id) ?? {};
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Category: ${id}\n  - Name: ${String(doc['name'])}\n  - MCP Prompt Mode: ${String(
+                doc['mcpPromptMode']
+              )}`,
+            },
+          ],
+          isError: false,
+        } as ToolResponse;
+      }
+
+      return {
+        content: [{ type: 'text', text: `Unhandled category action: ${action}` }],
+        isError: true,
+      } as ToolResponse;
+    }),
+    _declared: declared,
+  };
+  // Deliberately NOT cast down to `Pick<PromptResourceHandler, 'handleAction'>` the way the three
+  // factories above are. That cast erases the `jest.Mock` type, which is why every
+  // `.mock.calls` / `.mockRejectedValueOnce` on those doubles is a baselined `tsc` error in this
+  // file. The cast the router needs happens once, at the `createResourceManagerRouter` call.
+};
+
 describe('Resource Manager Workflow Integration', () => {
   let router: ResourceManagerRouter;
   let logger: Logger;
   let promptResourceHandler: ReturnType<typeof createMockPromptResourceHandler>;
   let gateManager: ReturnType<typeof createMockGateManager>;
   let frameworkManager: ReturnType<typeof createMockFrameworkManager>;
+  let categoryManager: ReturnType<typeof createMockCategoryManager>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -329,12 +384,57 @@ describe('Resource Manager Workflow Integration', () => {
     promptResourceHandler = createMockPromptResourceHandler();
     gateManager = createMockGateManager();
     frameworkManager = createMockFrameworkManager();
+    categoryManager = createMockCategoryManager();
 
     router = createResourceManagerRouter({
       logger,
       promptResourceHandler: promptResourceHandler as unknown as PromptResourceHandler,
       gateManager: gateManager as unknown as GateToolHandler,
       frameworkManager: frameworkManager as unknown as FrameworkToolHandler,
+      categoryManager: categoryManager as unknown as CategoryToolHandler,
+    });
+  });
+
+  describe('Category Routing (P4.7)', () => {
+    test('routes resource_type category to the category handler, translating the two inherited parameters', async () => {
+      const createResult = await router.handleAction(
+        {
+          resource_type: 'category',
+          action: 'create',
+          id: 'analysis',
+          name: 'Analysis',
+          description: 'Analytical prompts',
+          register_with_mcp: false,
+          mcp_prompt_mode: 'launch',
+        } as ResourceManagerInput,
+        {}
+      );
+
+      expect(createResult.isError).toBe(false);
+
+      // The router's ONE mapping for this resource type: the snake_case tool parameters become
+      // the `category.yaml` keys they write. A pass-through that forwarded `register_with_mcp`
+      // unchanged would leave the writer building a document with neither key, and the create
+      // would still report success — which is why this asserts the translated names rather than
+      // the response text.
+      const forwarded = categoryManager.handleAction.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(forwarded['registerWithMcp']).toBe(false);
+      expect(forwarded['mcpPromptMode']).toBe('launch');
+      expect(forwarded).not.toHaveProperty('register_with_mcp');
+      expect(forwarded).not.toHaveProperty('mcp_prompt_mode');
+    });
+
+    test('refuses a category delete without confirmation, at the shared pre-dispatch guard', async () => {
+      const result = await router.handleAction(
+        { resource_type: 'category', action: 'delete', id: 'analysis' } as ResourceManagerInput,
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.text).toContain('requires confirmation');
+      // Nothing reached the handler — the guard is pre-dispatch, which is what makes it cover a
+      // resource type added later without anyone remembering to guard it.
+      expect(categoryManager.handleAction).not.toHaveBeenCalled();
     });
   });
 

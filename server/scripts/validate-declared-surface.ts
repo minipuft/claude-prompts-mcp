@@ -26,6 +26,7 @@
  *
  * Run: `npm run validate:declared-surface` · self-test: `--self-test`
  */
+import { CategorySchema } from '../src/modules/prompts/prompt-schema.js';
 import { GateDefinitionSchema } from '../src/engine/gates/core/gate-schema.js';
 import {
   FrameworkSchema,
@@ -125,6 +126,13 @@ function buildSurfaces(): SurfaceSpec[] {
       resourceType: 'framework',
       loaderKeys: [...Object.keys(FrameworkSchema.shape), ...Object.keys(PhasesFileSchema.shape)],
     },
+    // `category` joined at P4.7, and it is the surface this gate would most have wanted to be
+    // watching earlier: `CategorySchema` had a real reader for every one of its five keys and no
+    // WRITER anywhere in `src/`, so all five were loader-declared and unauthorable — the exact
+    // class stated at the top of this file, at its widest. It carries NO exemption: the tool
+    // parameters `id`, `name`, `description`, `register_with_mcp` and `mcp_prompt_mode` cover the
+    // whole schema, the last two having existed for prompts all along.
+    { resourceType: 'category', loaderKeys: Object.keys(CategorySchema.shape) },
   ];
 }
 

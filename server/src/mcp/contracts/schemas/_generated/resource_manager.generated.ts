@@ -90,8 +90,9 @@ export type resource_managerParamName =
 export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'resource_type',
-    type: 'enum[prompt|gate|framework]',
-    description: 'Type of resource to manage. Routes to appropriate handler.',
+    type: 'enum[prompt|gate|framework|category]',
+    description:
+      "Type of resource to manage. Routes to appropriate handler. `category` manages a prompt category's `category.yaml` — the directory holding the prompts is NOT the resource, so `delete` removes the declaration and leaves every prompt in place.",
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -293,7 +294,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'register_with_mcp',
     type: 'boolean',
     description:
-      '[Prompt] Whether this prompt registers as a native MCP prompt. FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category.',
+      '[Prompt | Category] Whether prompts register as native MCP prompts. On resource_type prompt — FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category. On resource_type category it writes registerWithMcp into category.yaml, which is that middle level — no freeze hazard, since every prompt in the category still inherits it unless it declares its own.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -302,7 +303,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'mcp_prompt_mode',
     type: 'enum[expand|launch]',
     description:
-      '[Prompt] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category.',
+      '[Prompt | Category] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). On resource_type prompt — FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category. On resource_type category it writes mcpPromptMode into category.yaml, the default every prompt in the category inherits.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -775,6 +776,44 @@ export const resource_managerCommands: ToolCommand[] = [
     id: 'gate:list',
     summary: 'List all registered gates.',
     parameters: ['resource_type', 'action', 'enabled_only'],
+    status: 'working',
+  },
+  {
+    id: 'category:create',
+    summary:
+      "Author a prompt category's category.yaml. Succeeds on a directory that already holds prompts — that is the first declaration, not a duplicate.",
+    parameters: [
+      'resource_type',
+      'action',
+      'id',
+      'name',
+      'description',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+    ],
+    status: 'working',
+  },
+  {
+    id: 'category:update',
+    summary:
+      "Update a category's declaration. Only provided fields change; omitted fields are carried forward from the file on disk.",
+    parameters: [
+      'resource_type',
+      'action',
+      'id',
+      'name',
+      'description',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+      'skip_version',
+    ],
+    status: 'working',
+  },
+  {
+    id: 'category:list',
+    summary:
+      'List every category across the bundled, primary and overlay prompt roots, marking which declare a category.yaml and which have their name and description derived from the directory name.',
+    parameters: ['resource_type', 'action'],
     status: 'working',
   },
   {

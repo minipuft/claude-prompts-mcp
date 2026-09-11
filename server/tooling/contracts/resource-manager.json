@@ -1,9 +1,9 @@
 {
   "tool": "resource_manager",
   "version": 1,
-  "summary": "Unified resource management for prompts, gates, and frameworks. Use resource_type to specify the resource kind, then action for the operation.",
+  "summary": "Unified resource management for prompts, gates, frameworks, and prompt categories. Use resource_type to specify the resource kind, then action for the operation.",
   "toolDescription": {
-    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
+    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks, categories.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | category\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
     "shortDescription": "Manage prompts, gates, and frameworks",
     "category": "management",
     "frameworkAware": {
@@ -14,8 +14,8 @@
   "parameters": [
     {
       "name": "resource_type",
-      "type": "enum[prompt|gate|framework]",
-      "description": "Type of resource to manage. Routes to appropriate handler.",
+      "type": "enum[prompt|gate|framework|category]",
+      "description": "Type of resource to manage. Routes to appropriate handler. `category` manages a prompt category's `category.yaml` — the directory holding the prompts is NOT the resource, so `delete` removes the declaration and leaves every prompt in place.",
       "status": "working",
       "required": true
     },
@@ -177,14 +177,14 @@
     {
       "name": "register_with_mcp",
       "type": "boolean",
-      "description": "[Prompt] Whether this prompt registers as a native MCP prompt. FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category.",
+      "description": "[Prompt | Category] Whether prompts register as native MCP prompts. On resource_type prompt — FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category. On resource_type category it writes registerWithMcp into category.yaml, which is that middle level — no freeze hazard, since every prompt in the category still inherits it unless it declares its own.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "mcp_prompt_mode",
       "type": "enum[expand|launch]",
-      "description": "[Prompt] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category.",
+      "description": "[Prompt | Category] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). On resource_type prompt — FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category. On resource_type category it writes mcpPromptMode into category.yaml, the default every prompt in the category inherits.",
       "status": "working",
       "includeInDescription": false
     },
@@ -595,6 +595,38 @@
       "id": "gate:list",
       "summary": "List all registered gates.",
       "parameters": ["resource_type", "action", "enabled_only"]
+    },
+    {
+      "id": "category:create",
+      "summary": "Author a prompt category's category.yaml. Succeeds on a directory that already holds prompts — that is the first declaration, not a duplicate.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "description",
+        "register_with_mcp",
+        "mcp_prompt_mode"
+      ]
+    },
+    {
+      "id": "category:update",
+      "summary": "Update a category's declaration. Only provided fields change; omitted fields are carried forward from the file on disk.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "description",
+        "register_with_mcp",
+        "mcp_prompt_mode",
+        "skip_version"
+      ]
+    },
+    {
+      "id": "category:list",
+      "summary": "List every category across the bundled, primary and overlay prompt roots, marking which declare a category.yaml and which have their name and description derived from the directory name.",
+      "parameters": ["resource_type", "action"]
     },
     {
       "id": "framework:create",

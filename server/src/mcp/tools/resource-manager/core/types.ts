@@ -25,6 +25,7 @@ import type {
   QualityIndicators,
 } from '../../framework-manager/core/types.js';
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
+import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
 import type { PreviewableAction } from '../../shared/preview-action.js';
@@ -58,9 +59,13 @@ export interface ToolDefinitionInput {
 }
 
 /**
- * Resource types supported by the unified manager
+ * Resource types supported by the unified manager.
+ *
+ * `'category'` joined at P4.7. A prompt category was directory-implied and its `category.yaml`
+ * had zero writers in `src/`, so the only way to author one was by hand — which core principle 1
+ * (MCP Tooling Only) forbids.
  */
-export type ResourceType = 'prompt' | 'gate' | 'framework';
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'category';
 
 /**
  * All possible actions across resource types
@@ -272,7 +277,16 @@ export interface ResourceManagerInput {
    * default once set; see the schema for the operator-facing statement of that.
    */
   injection?: PromptInjectionConfigYaml;
+  /**
+   * [Prompt | Category] The MCP-registration default.
+   *
+   * On `resource_type: 'prompt'` it FREEZES the prompt against its category and the global
+   * default. On `resource_type: 'category'` (P4.7) it writes the category-level default those
+   * prompts inherit — the middle layer of the prompt → category → global chain, which had a
+   * reader in `loader.ts` and no writer anywhere in `src/` until P4.7.
+   */
   register_with_mcp?: boolean;
+  /** [Prompt | Category] Native MCP prompt behaviour. Same two levels as `register_with_mcp`. */
   mcp_prompt_mode?: 'expand' | 'launch';
   subagent_model?: 'heavy' | 'standard' | 'fast';
   agent_type?: string;
@@ -369,6 +383,7 @@ export interface ResourceManagerDependencies {
   promptResourceHandler: PromptResourceHandlerPort;
   gateManager: GateToolHandler;
   frameworkManager: FrameworkToolHandler;
+  categoryManager: CategoryToolHandler;
 }
 
 /**

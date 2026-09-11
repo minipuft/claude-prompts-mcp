@@ -28,6 +28,10 @@ export const PREVIEWABLE_ACTIONS_BY_TYPE: Readonly<Record<string, readonly strin
   prompt: ['update', 'delete', 'rollback'],
   gate: ['delete', 'rollback'],
   framework: ['delete', 'rollback'],
+  // `category` (P4.7) joins gate and framework rather than prompt: no category update path reads
+  // a preview request, so accepting `update` here would perform the update — the exact defect
+  // the per-type table exists to prevent carrying forward.
+  category: ['delete', 'rollback'],
 };
 
 /** Every operation previewable for at least one resource type. The schema's `preview_action` enum. */

@@ -33,6 +33,11 @@ describe('ResourceManagerRouter', () => {
       (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<ToolResponse>
     >;
   };
+  let mockCategoryManager: {
+    handleAction: jest.MockedFunction<
+      (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<ToolResponse>
+    >;
+  };
 
   const successResponse: ToolResponse = {
     content: [{ type: 'text', text: 'Success' }],
@@ -61,6 +66,12 @@ describe('ResourceManagerRouter', () => {
       >(() => Promise.resolve(successResponse)),
     };
 
+    mockCategoryManager = {
+      handleAction: jest.fn<
+        (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<ToolResponse>
+      >(() => Promise.resolve(successResponse)),
+    };
+
     router = createResourceManagerRouter({
       logger: logger as unknown as Parameters<typeof createResourceManagerRouter>[0]['logger'],
       promptResourceHandler: mockPromptResourceHandler as unknown as Parameters<
@@ -72,17 +83,25 @@ describe('ResourceManagerRouter', () => {
       frameworkManager: mockFrameworkManager as unknown as Parameters<
         typeof createResourceManagerRouter
       >[0]['frameworkManager'],
+      categoryManager: mockCategoryManager as unknown as Parameters<
+        typeof createResourceManagerRouter
+      >[0]['categoryManager'],
     });
   });
 
   describe('destructive-action guard', () => {
-    const RESOURCE_TYPES = ['prompt', 'gate', 'framework'] as const;
+    // `category` joined at P4.7. Listed here rather than left out, because the guard this
+    // describe block exercises is PRE-DISPATCH and generic: a new resource type is exactly the
+    // thing that silently escapes a per-handler check, which is why the router owns it.
+    const RESOURCE_TYPES = ['prompt', 'gate', 'framework', 'category'] as const;
     const handlerFor = (type: (typeof RESOURCE_TYPES)[number]) =>
       type === 'prompt'
         ? mockPromptResourceHandler
         : type === 'gate'
           ? mockGateManager
-          : mockFrameworkManager;
+          : type === 'framework'
+            ? mockFrameworkManager
+            : mockCategoryManager;
 
     // Every member of DESTRUCTIVE_ACTIONS, on every resource type. A new destructive action added
     // to the registry without a guard shows up here rather than in production.

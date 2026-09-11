@@ -624,21 +624,33 @@ See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
 ## `resource_manager` — Unified Resource Management
 
-Create, update, delete, and manage prompts, gates, and frameworks through a single unified interface.
+Create, update, delete, and manage prompts, gates, frameworks, and prompt categories through a single unified interface.
 
 ### Basic Syntax
 
 ```bash
-resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
+resource_manager(resource_type:"prompt|gate|framework|category", action:"...", ...)
 ```
 
 ### Resource Types
 
-| Type        | Description                   | Specific Actions                         |
-| ----------- | ----------------------------- | ---------------------------------------- |
-| `prompt`    | Template and chain management | `analyze_type`, `analyze_gates`, `guide` |
-| `gate`      | Quality validation criteria   | —                                        |
-| `framework` | Execution frameworks          | `switch`                                 |
+| Type        | Description                     | Specific Actions                         |
+| ----------- | ------------------------------- | ---------------------------------------- |
+| `prompt`    | Template and chain management   | `analyze_type`, `analyze_gates`, `guide` |
+| `gate`      | Quality validation criteria     | —                                        |
+| `framework` | Execution frameworks            | `switch`                                 |
+| `category`  | A prompt category's declaration | —                                        |
+
+**`category` manages a `category.yaml`, not the directory of prompts around it.** A category
+exists because a directory exists under the prompts root; `category.yaml` is the optional document
+that gives it a name, a description, and the two MCP defaults its prompts inherit. So `create`
+succeeds on a directory that already holds prompts — that is the first declaration, not a
+duplicate — and `delete` removes the declaration and leaves every prompt in place, falling the
+category back to a name and description derived from its directory name. The directory is removed
+only when the declaration was the last thing in it.
+
+`reload` takes no `id` for this type. There is no per-category registry entry; the whole category
+set is rebuilt by the same walk that loads prompts.
 
 ### Common Actions
 
@@ -919,6 +931,32 @@ resource_manager(
 )
 ```
 
+### Categories
+
+```bash
+# List every category across the bundled, primary and overlay prompt roots
+resource_manager(resource_type:"category", action:"list")
+
+# Inspect one — renders only what category.yaml declares
+resource_manager(resource_type:"category", action:"inspect", id:"analysis")
+
+# Author the declaration a directory of prompts never had
+resource_manager(
+  resource_type:"category",
+  action:"create",
+  id:"analysis",
+  name:"Analysis",
+  description:"Analytical and research prompts",
+  mcp_prompt_mode:"launch"
+)
+
+# Change one field; the rest is carried forward from the file
+resource_manager(resource_type:"category", action:"update", id:"analysis", description:"Updated")
+
+# Remove the declaration. Prompts in the directory are NOT removed.
+resource_manager(resource_type:"category", action:"delete", id:"analysis", confirm:true)
+```
+
 <details>
 <summary><strong>Key Parameters by Resource Type</strong></summary>
 
@@ -987,6 +1025,30 @@ under `gate_type` is now rejected by the schema — send it under `type`.
 
 Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
 and `enforcement_mode` do.
+
+**Category Parameters:**
+
+| Parameter           | Purpose                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `id`                | The category **directory name** under the prompts root — what the loader names it by |
+| `name`              | Display name. Absent, the loader derives one from the id                             |
+| `description`       | Description. Absent, the loader derives `Prompts in the <id> category`               |
+| `register_with_mcp` | The category-level MCP-registration default every prompt in it inherits              |
+| `mcp_prompt_mode`   | `expand` or `launch` — the category-level default every prompt in it inherits        |
+
+`id`, `name` and `description` are all required to `create`; `CategorySchema` requires all three
+and the write is refused without them. The two inheritance defaults are carried forward on an
+update that omits them, the way gate `severity` is — supply one and it is set, omit it and the
+file keeps what it declared.
+
+Unlike the prompt-level versions of the same two parameters, these carry **no freeze hazard**:
+this IS the middle level of the `prompt → category → global` chain, so a prompt that declares
+nothing keeps following whatever the category says.
+
+`inspect` renders a field only when `category.yaml` declares it, and says so plainly when the file
+is absent. Nothing validates a `category.yaml` on load — the loader casts the parsed document — so
+the write-time check is the only one there is, and a document whose `id` disagrees with its
+directory is refused rather than silently served under the directory's name.
 
 **Framework Parameters:**
 

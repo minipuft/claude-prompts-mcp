@@ -1770,7 +1770,8 @@
         "enum": [
           "prompt",
           "gate",
-          "framework"
+          "framework",
+          "category"
         ],
         "type": "string"
       },

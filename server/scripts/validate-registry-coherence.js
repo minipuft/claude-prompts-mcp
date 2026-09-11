@@ -108,6 +108,32 @@ const RULES = {
       delete: ['onRefresh'],
     },
   },
+  'src/mcp/tools/category-manager/services/category-lifecycle-processor.ts': {
+    resource: 'category',
+    why:
+      'Categories side with PROMPTS, not with gates and frameworks, and the reason is mechanical: ' +
+      'there is no per-category registry entry to reload. The whole `Category[]` is rebuilt by ' +
+      'one walk of the prompt roots, which is exactly what `onRefresh` — the application full ' +
+      'server refresh — performs before republishing it through `updateData`. A per-id reload ' +
+      'here would have nothing to call. Declared rather than left to inference, per this file`s ' +
+      'own rule that the prompt/gate asymmetry must be stated.',
+    actions: {
+      create: ['onRefresh'],
+      update: ['onRefresh'],
+      delete: ['onRefresh'],
+      reload: ['onRefresh'],
+    },
+  },
+  'src/mcp/tools/category-manager/services/category-versioning-processor.ts': {
+    resource: 'category',
+    why:
+      '`rollback` rewrites `category.yaml` through the same file service as `update`, so it owes ' +
+      'the same registry consequence — and for categories that consequence is the full refresh, ' +
+      'for the reason the lifecycle entry above states.',
+    actions: {
+      rollback: ['onRefresh'],
+    },
+  },
   'src/mcp/tools/gate-manager/services/gate-lifecycle-processor.ts': {
     resource: 'gate',
     why:

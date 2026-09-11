@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-03T00:06:30.998Z",
+  "lastUpdated": "2026-09-11T12:09:48.020Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -40,11 +40,11 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, categories.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | category\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
       "shortDescription": "Manage prompts, gates, and frameworks",
       "category": "management",
       "parameters": {
-        "resource_type": "Type of resource to manage. Routes to appropriate handler.",
+        "resource_type": "Type of resource to manage. Routes to appropriate handler. `category` manages a prompt category's `category.yaml` — the directory holding the prompts is NOT the resource, so `delete` removes the declaration and leaves every prompt in place.",
         "action": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",

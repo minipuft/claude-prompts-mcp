@@ -12,10 +12,11 @@
  * @see GateDefinitionLoader for the caching pattern this follows
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { discoverCategoryDirectories } from './category-maintenance.js';
 import { CategoryManager, createCategoryManager } from './category-manager.js';
 import { parseMarkdownPromptContent } from './markdown-prompt-parser.js';
 import { PromptQuarantine, type QuarantineSink, type QuarantineView } from './quarantine.js';
@@ -156,15 +157,13 @@ export class PromptLoader {
     // actually reached, instead of leaving a satisfied record standing as a live finding.
     this.activeQuarantineSink = this.quarantine.beginRoot(promptsDir);
 
-    // Phase 1: Discover categories from directory structure
-    const entries = readdirSync(promptsDir, { withFileTypes: true });
-    const categoryDirs = entries.filter(
-      (entry) =>
-        entry.isDirectory() &&
-        !entry.name.startsWith('.') &&
-        !entry.name.startsWith('_') &&
-        entry.name !== 'backup'
-    );
+    // Phase 1: Discover categories from directory structure.
+    //
+    // Delegated to `discoverCategoryDirectories` since P4.7. The rule for what counts as a
+    // category directory is now read by `resource_manager`'s category `list`/`inspect` too, and
+    // a second inline copy of the dot/underscore/`backup` filter would drift the day either side
+    // gained a rule.
+    const categoryDirs = discoverCategoryDirectories(promptsDir);
 
     this.logger.info(`   Found ${categoryDirs.length} category directories`);
 
@@ -175,8 +174,7 @@ export class PromptLoader {
     // not the total — is what this load contributed.
     const errorsBefore = this.stats.loadErrors;
 
-    for (const categoryEntry of categoryDirs) {
-      const categoryId = categoryEntry.name;
+    for (const categoryId of categoryDirs) {
       const categoryDir = path.join(promptsDir, categoryId);
 
       // Try to load category metadata from category.yaml (optional)

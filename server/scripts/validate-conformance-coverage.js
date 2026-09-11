@@ -241,8 +241,13 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'chain_steps',
       'gate_configuration',
       'injection',
-      'register_with_mcp',
-      'mcp_prompt_mode',
+      // `register_with_mcp` and `mcp_prompt_mode` were removed from this list at P4.7
+      // (2026-09-11). They were never prompt-only: `loader.ts` has read both off `category.yaml`
+      // since long before anything could write one, and P4.7 made `resource_type: category` the
+      // surface that writes them. `category-create-then-inspect-reads-back-declared-fields` in
+      // workspace-and-mutations.yaml now sets both to non-default values and asserts the
+      // round trip, so these two entries would read SATISFIED — which this gate's own
+      // satisfied-exception audit is what catches. They are removed rather than reworded.
       'subagent_model',
       'agent_type',
       'execution_hint',

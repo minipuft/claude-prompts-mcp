@@ -157,10 +157,24 @@ export function mergePromptResults(
     convertedPrompts: ConvertedPrompt[];
   }
 ): number {
-  // Merge categories (ensure overlay categories exist, don't replace existing metadata)
+  // Merge categories, keyed on `id` and with the overlay WINNING — the same two rules the two
+  // prompt merges below follow, and for the same two reasons.
+  //
+  // It was keyed on `name` and the overlay never replaced anything, which is two defects wearing
+  // one line. Keyed on `name`: a category's display name is a free-text label and nothing
+  // enforces its uniqueness, so two categories with different ids and one label collapse into
+  // whichever loaded first — the identity defect this file's own `convertedPrompts` merge
+  // documents at length, left standing at the sibling site. Never replacing: `bundled` is the
+  // MERGE TARGET (see `loadPromptsAcrossRoots`), so `if (!exists) push` gave the LOWEST-precedence
+  // root the final say over category metadata. A workspace `category.yaml` for a category that
+  // also ships bundled was therefore written correctly, loaded correctly, and discarded at merge
+  // — invisible, and precisely the configuration a personal prompt library runs in. Prompts have
+  // followed "same ID = custom wins" since P1.0a; categories now do too.
   for (const overlayCat of overlay.categories) {
-    const exists = target.categories.some((c) => c.name === overlayCat.name);
-    if (!exists) {
+    const existingIdx = target.categories.findIndex((c) => c.id === overlayCat.id);
+    if (existingIdx !== -1) {
+      target.categories[existingIdx] = overlayCat;
+    } else {
       target.categories.push(overlayCat);
     }
   }
