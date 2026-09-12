@@ -26,7 +26,7 @@ import type { IGateManager } from './types.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
-import { EMPTY_QUARANTINE_VIEW, type QuarantineView } from '#shared/utils/resource-quarantine.js';
+import { lazyQuarantineView, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Configuration for GateManager
@@ -279,7 +279,7 @@ export class GateManager
    * the empty stand-in forever. Callers hold this manager, which is stable, and ask it each time.
    */
   getQuarantine(): QuarantineView {
-    return this.registry?.getLoader().getQuarantine() ?? EMPTY_QUARANTINE_VIEW;
+    return lazyQuarantineView(() => this.registry?.getLoader().getQuarantine());
   }
 
   /**

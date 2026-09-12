@@ -53,6 +53,7 @@ import {
 } from '#mcp/tools/tool-description-loader.js';
 import { getDefaultStyleDefinitionLoader } from '#modules/formatting/core/style-definition-loader.js';
 import { isChainPrompt } from '#shared/utils/chainUtils.js';
+import { mergeQuarantineViews } from '#shared/utils/resource-quarantine.js';
 
 export interface ModuleInitCallbacks {
   fullServerRefresh: () => Promise<void>;
@@ -302,11 +303,20 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   }
 
   // The loaders' record of what they refused, read by the two consumers that run their OWN
-  // filesystem walk — this baseline comparison and the ResourceIndexer near the bottom of this
-  // function. Prompts are the only loader filling it today; when the gate and framework sinks
-  // land, this is the expression that grows a `mergeQuarantineViews(...)` around it, and both
-  // consumers pick the coverage up without further change.
-  const quarantine = promptManager.getQuarantine();
+  // filesystem walk: this baseline comparison, and the ResourceIndexer near the bottom of this
+  // function.
+  //
+  // Prompts AND gates here, because `TrackedResourceType` is exactly `'prompt' | 'gate'` — this
+  // covers the comparison's whole domain, and adding the framework view would widen the merge past
+  // anything that reads it. The indexer walks frameworks too and merges a third view of its own.
+  //
+  // Both views are live: `GateManager.getQuarantine()` resolves its registry on every read
+  // (`lazyQuarantineView`), so this expression does not depend on having been evaluated after
+  // `createGateManager` — which it is, but a reader should not have to verify that to trust it.
+  const quarantine = mergeQuarantineViews(
+    promptManager.getQuarantine(),
+    gateManager.getQuarantine()
+  );
 
   if (resourceChangeTracker !== undefined) {
     await compareBaselineAndReport(
@@ -462,7 +472,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         // gets no row: the Python hooks read this table and hand its ids straight to
         // `prompt_engine`, which rejects an unloadable one. A quarantine MARKER would work only
         // for readers that remember to check it, and some of those readers are not in this repo.
-        quarantine,
+        //
+        // The framework view joins here and NOT in the `quarantine` merge above, because that one
+        // feeds the change tracker, whose `TrackedResourceType` has no framework member. This walk
+        // indexes prompt, gate, framework and style — so three of the four kinds it touches now
+        // have a refusal record, and `style` is the one that does not (P4.16).
+        quarantine: mergeQuarantineViews(quarantine, frameworkLoader.getQuarantine()),
       });
       const syncResult = await indexer.syncAll();
       reportSyncFindings(syncResult, logger);

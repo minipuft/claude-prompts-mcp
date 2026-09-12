@@ -234,6 +234,38 @@ export class ResourceQuarantine implements QuarantineView {
  * been refused, because nothing has been read — where returning `undefined` would push a
  * null-check into every call site and invite one of them to treat absence as a finding.
  */
+/**
+ * A view that resolves its backing collection on every read.
+ *
+ * WHY THIS EXISTS AND `?? EMPTY_QUARANTINE_VIEW` DOES NOT SUFFICE. Gate and framework loaders are
+ * built during their registry's `initialize()`, so `manager.getQuarantine()` has to answer
+ * something before then. Returning the empty constant answers it truthfully ONCE — and a caller
+ * that stores the result, which `mergeQuarantineViews` does by design, holds that constant forever.
+ * The registry arriving later changes nothing, and the consumer silently reports that no file was
+ * ever refused: an ordering bug wearing an existence check, which `refactoring.md` records five
+ * sightings of in this repo.
+ *
+ * Deferring the lookup makes the wiring order irrelevant instead of merely survivable. There is no
+ * state here to go stale — the loader owns the collection, and this reads through to whatever one
+ * is current.
+ */
+export function lazyQuarantineView(resolve: () => QuarantineView | undefined): QuarantineView {
+  return {
+    list: () => resolve()?.list() ?? [],
+    byId: (id) => resolve()?.byId(id) ?? [],
+    isRefused: (filePath) => resolve()?.isRefused(filePath) ?? false,
+    get size() {
+      return resolve()?.size ?? 0;
+    },
+  };
+}
+
+/**
+ * A permanently empty view, for test doubles that impersonate a manager.
+ *
+ * NOT for production wiring — see {@link lazyQuarantineView} for why a stored empty view is an
+ * ordering bug that reports as a clean catalog.
+ */
 export const EMPTY_QUARANTINE_VIEW: QuarantineView = {
   list: () => [],
   byId: () => [],
