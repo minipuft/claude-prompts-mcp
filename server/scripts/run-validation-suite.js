@@ -405,6 +405,13 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the predicate over a record inside a `commit` callback (must stay silent), record-before-write on an update path and a bare `commitEdit` on a rollback path (both must report; these are the motivating instances, and one of them shipped and was reverted), and a `commit` callback elsewhere in the same method as a bare call (must still report, since a nearby callback must not launder it); the live tree is the fifth case, and a scan finding no recording call at all exits 1 rather than passing on a probe that observed nothing',
   },
   {
+    script: 'validate:refusal-aware-consumers',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over a wired indexer and baseline call (must stay silent), an indexer config omitting `quarantine` and a baseline call missing its fourth argument (both must report; these are the motivating instances), and a `quarantine` named on the line above an unwired config (must still report, since proximity must not launder it); the live tree is the fifth case, and a scan finding no call site at all exits 1 rather than passing on a probe that observed nothing. All three production call sites were individually unwired and each exits 1 — the property-form config, the shorthand-form config, and the positional argument',
+  },
+  {
     script: 'validate:declared-surface',
     io: 'read',
     reads: ['declared'],
