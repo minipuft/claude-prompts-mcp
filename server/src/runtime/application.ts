@@ -807,7 +807,7 @@ export class Application {
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
         const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-        const { createResourceIndexer, reportResourceSyncFailures, reportShadowedResources } =
+        const { createResourceIndexer, reportSyncFindings } =
           await import('#infra/database/resource-indexer.js');
         const { ScriptToolDefinitionLoader } =
           await import('#modules/automation/core/script-definition-loader.js');
@@ -820,10 +820,15 @@ export class Application {
           resourcesDir,
           resourceRoots: indexerResourceRoots(this.pathResolver),
           toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
+          // Read by reference and re-read on every sync, which is what makes this the reload
+          // path's correction as well as startup's: `loadPromptsData()` above has just re-walked
+          // every root and replaced each one's quarantine records, so a prompt REPAIRED since the
+          // last load is no longer refused here and indexes as `added` on this very pass.
+          // `mergeQuarantineViews(...)` is where the gate and framework sinks join.
+          quarantine: this.promptManager.getQuarantine(),
         });
         const syncResult = await indexer.syncAll();
-        reportResourceSyncFailures(syncResult, this.logger);
-        reportShadowedResources(syncResult, this.logger);
+        reportSyncFindings(syncResult, this.logger);
         this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 

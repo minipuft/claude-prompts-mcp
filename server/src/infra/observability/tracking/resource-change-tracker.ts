@@ -383,18 +383,43 @@ export class ResourceChangeTracker {
       resourceType: TrackedResourceType;
       resourceId: string;
       filePath: string;
+      /**
+       * The owning loader refused this file, so it is on disk and NOT in the catalog.
+       *
+       * A plain boolean rather than a quarantine handle: all this loop needs to know is whether
+       * the file entered the catalog, and the caller already holds the collection that answers
+       * that. Threading the collection down here would give the tracker a second way to ask a
+       * question the loader has already answered.
+       */
+      refused?: boolean;
     }>
-  ): Promise<{ added: number; modified: number; removed: number }> {
+  ): Promise<{ added: number; modified: number; removed: number; refused: number }> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const result = { added: 0, modified: 0, removed: 0 };
+    const result = { added: 0, modified: 0, removed: 0, refused: 0 };
     const currentKeys = new Set<string>();
 
     for (const resource of resources) {
       const cacheKey = this.getCacheKey(resource.resourceType, resource.resourceId);
       currentKeys.add(cacheKey);
+
+      // A refusal is a THIRD disposition, not a variant of either other one.
+      //
+      // Not `added`: `resource_changes` is supposed to mean a resource entered the catalog, and
+      // this one did not — logging it told an operator a prompt was available that `prompt_engine`
+      // rejects. Not `removed` either: the key stays in `currentKeys` above, so the sweep below
+      // does not fire, because the file is still sitting on disk where they left it.
+      //
+      // The hash is deliberately NOT written. That is what makes the repair fire the event at the
+      // moment the resource actually enters the catalog: a file broken on its first sighting stays
+      // uncached and logs `added` once repaired, and a file that was valid, broke, and was repaired
+      // keeps its old hash and logs `modified`.
+      if (resource.refused === true) {
+        result.refused++;
+        continue;
+      }
 
       try {
         const content = await fs.readFile(resource.filePath, 'utf-8');
@@ -434,35 +459,45 @@ export class ResourceChangeTracker {
       }
     }
 
-    // Check for removed resources
-    for (const [cacheKey, _hash] of this.hashCache) {
-      if (!currentKeys.has(cacheKey)) {
-        // Split on the FIRST separator only. The cache key is `${resourceType}/${resourceId}` and
-        // a resourceId may itself contain '/' (a categorised prompt, a tool under its parent), so
-        // a plain split() truncates the id at its first segment and reports a removal for a
-        // resource that was never tracked under that name.
-        const separatorIndex = cacheKey.indexOf('/');
-        const resourceType = cacheKey.slice(0, separatorIndex) as TrackedResourceType;
-        const resourceId = cacheKey.slice(separatorIndex + 1);
-        await this.logChange({
-          source: 'external',
-          operation: 'removed',
-          resourceType,
-          resourceId,
-          filePath: `(removed: ${cacheKey})`,
-        });
-        result.removed++;
-      }
-    }
+    result.removed = await this.logRemovals(currentKeys);
 
-    if (result.added > 0 || result.modified > 0 || result.removed > 0) {
+    if (result.added > 0 || result.modified > 0 || result.removed > 0 || result.refused > 0) {
       this.logger.info(
         `📊 ResourceChangeTracker: Baseline comparison - ` +
-          `${result.added} added, ${result.modified} modified, ${result.removed} removed (external)`
+          `${result.added} added, ${result.modified} modified, ${result.removed} removed, ` +
+          `${result.refused} refused by their loader and not logged as a change (external)`
       );
     }
 
     return result;
+  }
+
+  /**
+   * Log a removal for every cached resource the current walk did not see, and return the count.
+   *
+   * Extracted from `compareBaseline` so that method stays under the cognitive-complexity limit
+   * once refusals became a third disposition there. It is also the half that reads the cache as a
+   * KEY SET rather than a hash store, which is a different question from the comparison above.
+   */
+  private async logRemovals(currentKeys: ReadonlySet<string>): Promise<number> {
+    let removed = 0;
+    for (const cacheKey of this.hashCache.keys()) {
+      if (currentKeys.has(cacheKey)) continue;
+      // Split on the FIRST separator only. The cache key is `${resourceType}/${resourceId}` and
+      // a resourceId may itself contain '/' (a categorised prompt, a tool under its parent), so
+      // a plain split() truncates the id at its first segment and reports a removal for a
+      // resource that was never tracked under that name.
+      const separatorIndex = cacheKey.indexOf('/');
+      await this.logChange({
+        source: 'external',
+        operation: 'removed',
+        resourceType: cacheKey.slice(0, separatorIndex) as TrackedResourceType,
+        resourceId: cacheKey.slice(separatorIndex + 1),
+        filePath: `(removed: ${cacheKey})`,
+      });
+      removed++;
+    }
+    return removed;
   }
 
   /**

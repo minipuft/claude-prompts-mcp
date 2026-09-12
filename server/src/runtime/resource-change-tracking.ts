@@ -14,6 +14,7 @@ import type {
   AuxiliaryReloadConfig,
   HotReloadEvent,
 } from '#modules/hot-reload/hot-reload-observer.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 import { ConfigLoader } from '#infra/config/index.js';
 import {
@@ -67,18 +68,35 @@ export function getResourceChangeTracker(): ResourceChangeTracker | undefined {
 /**
  * Compare current resources against baseline and log external changes
  * Called at startup to detect changes made while server was down
+ *
+ * `quarantine` is the loaders' record of what they refused. Without it this function runs its own
+ * filesystem walk and treats every readable file as a resource — a third derivation of "what is in
+ * the catalog", disagreeing with the loaders by construction, which is how a file that never
+ * entered the catalog came to be logged as `added`. With it, a refused file is neither added nor
+ * removed; see `ResourceChangeTracker.compareBaseline`.
  */
 export async function compareResourceBaseline(
   tracker: ResourceChangeTracker,
   configManager: ConfigLoader,
-  logger: Logger
-): Promise<{ added: number; modified: number; removed: number }> {
+  logger: Logger,
+  quarantine?: QuarantineView
+): Promise<{ added: number; modified: number; removed: number; refused: number }> {
   // Collect all current prompts and gates for baseline comparison
   const resources: Array<{
     resourceType: TrackedResourceType;
     resourceId: string;
     filePath: string;
+    refused?: boolean;
   }> = [];
+
+  /**
+   * Ask the quarantine by PATH, which is what this walk holds.
+   *
+   * Deliberately not by id: this scan derives an id from the directory name, the prompt loader
+   * derives one relative to the category root, and the two disagree for every nested prompt. The
+   * path is the one thing both sides hold unambiguously.
+   */
+  const isRefused = (filePath: string): boolean => quarantine?.isRefused(filePath) === true;
 
   try {
     // Get prompts directory
@@ -104,6 +122,7 @@ export async function compareResourceBaseline(
                 resourceType,
                 resourceId: entry.name,
                 filePath: promptYaml,
+                refused: isRefused(promptYaml),
               });
             }
             if (hasGateYaml) {
@@ -111,6 +130,7 @@ export async function compareResourceBaseline(
                 resourceType: 'gate',
                 resourceId: entry.name,
                 filePath: gateYaml,
+                refused: isRefused(gateYaml),
               });
             }
 
@@ -126,6 +146,7 @@ export async function compareResourceBaseline(
               resourceType,
               resourceId: id,
               filePath: entryPath,
+              refused: isRefused(entryPath),
             });
           }
         }
@@ -156,6 +177,7 @@ export async function compareResourceBaseline(
               resourceType: 'gate',
               resourceId: entry.name,
               filePath: gateYaml,
+              refused: isRefused(gateYaml),
             });
           }
         }
@@ -167,7 +189,7 @@ export async function compareResourceBaseline(
     return await tracker.compareBaseline(resources);
   } catch (error) {
     logger.warn('Failed to compare resource baseline:', error);
-    return { added: 0, modified: 0, removed: 0 };
+    return { added: 0, modified: 0, removed: 0, refused: 0 };
   }
 }
 

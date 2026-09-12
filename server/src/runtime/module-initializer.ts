@@ -33,6 +33,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -115,6 +116,50 @@ async function claimStateDatabase(
   if (runtimeDbPath === undefined) return;
   const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
   await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+}
+
+/**
+ * Run the startup baseline comparison and report what it found.
+ *
+ * WHY IT IS NOT AT THE TRACKER'S CONSTRUCTION SITE. The comparison runs its own filesystem walk
+ * and, before this, called every readable YAML file a resource — so a file the prompt loader had
+ * refused was logged to `resource_changes` as an external `added`, announcing a resource that
+ * `prompt_engine` rejects. Reading the quarantine fixes that, but only for loaders that have
+ * already run: prompts load before `initializeModules` is called at all, while gates load at
+ * `createGateManager` below. Calling from there covers both of the types this comparison tracks
+ * (`TrackedResourceType` is `'prompt' | 'gate'`), which the tracker's own construction site could
+ * not.
+ *
+ * Extracted rather than inlined for the reason `claimStateDatabase` records: `initializeModules`
+ * is already over the cognitive-complexity limit, and the ratchet counts violations rather than
+ * their size, so an inline block would grow one that is already counted.
+ *
+ * No try/catch: `compareResourceBaseline` catches its own failures and returns zeros. A second
+ * boundary here would be the two-level catch `architecture.md` names — the outer one never fires
+ * and the inner one hides the failure.
+ */
+async function compareBaselineAndReport(
+  tracker: ResourceChangeTracker,
+  configManager: ConfigLoader,
+  logger: Logger,
+  quarantine: QuarantineView,
+  isVerbose: boolean
+): Promise<void> {
+  const { added, modified, removed, refused } = await compareResourceBaseline(
+    tracker,
+    configManager,
+    logger,
+    quarantine
+  );
+  if (!isVerbose) return;
+  if (added > 0 || modified > 0 || removed > 0 || refused > 0) {
+    logger.info(
+      `📊 External changes detected: ${added} added, ${modified} modified, ${removed} removed, ` +
+        `${refused} refused (on disk, not in the catalog — no change event logged)`
+    );
+  } else {
+    logger.info('✅ ResourceChangeTracker baseline compared (no external changes detected)');
+  }
 }
 
 /**
@@ -203,22 +248,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         runtimeDbPath,
         trackerWorkspaceId != null ? { workspaceId: trackerWorkspaceId } : undefined
       );
-      // Compare baseline to detect external changes
-      const baselineResult = await compareResourceBaseline(
-        resourceChangeTracker,
-        configManager,
-        logger
-      );
-      if (isVerbose) {
-        const { added, modified, removed } = baselineResult;
-        if (added > 0 || modified > 0 || removed > 0) {
-          logger.info(
-            `📊 External changes detected: ${added} added, ${modified} modified, ${removed} removed`
-          );
-        } else {
-          logger.info('✅ ResourceChangeTracker initialized (no external changes detected)');
-        }
-      }
+      // The baseline comparison used to run HERE, and had to move: it must not report a refused
+      // file as an external addition, and it cannot know what was refused until the loaders that
+      // do the refusing have run. See the call below the Gate Manager.
+      if (isVerbose) logger.info('✅ ResourceChangeTracker initialized');
     } catch (error) {
       // Loud, not degraded. The `serverRoot` guard above already expresses "persistence
       // is not configured"; reaching this catch means it WAS configured and failed, and
@@ -266,6 +299,23 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   });
   if (isVerbose) {
     logger.info(`✅ GateManager initialized with ${gateManager.getStats().totalGates} gates`);
+  }
+
+  // The loaders' record of what they refused, read by the two consumers that run their OWN
+  // filesystem walk — this baseline comparison and the ResourceIndexer near the bottom of this
+  // function. Prompts are the only loader filling it today; when the gate and framework sinks
+  // land, this is the expression that grows a `mergeQuarantineViews(...)` around it, and both
+  // consumers pick the coverage up without further change.
+  const quarantine = promptManager.getQuarantine();
+
+  if (resourceChangeTracker !== undefined) {
+    await compareBaselineAndReport(
+      resourceChangeTracker,
+      configManager,
+      logger,
+      quarantine,
+      isVerbose
+    );
   }
 
   // Initialize framework + style loaders with PathResolver-resolved dirs
@@ -396,7 +446,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
       const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      const { createResourceIndexer, reportResourceSyncFailures, reportShadowedResources } =
+      const { createResourceIndexer, reportSyncFindings } =
         await import('#infra/database/resource-indexer.js');
       const { ScriptToolDefinitionLoader } =
         await import('#modules/automation/core/script-definition-loader.js');
@@ -408,10 +458,14 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         resourcesDir,
         resourceRoots: indexerResourceRoots(pathResolver),
         toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
+        // `resource_index` is a projection of the SERVED catalog, so a file the loaders refused
+        // gets no row: the Python hooks read this table and hand its ids straight to
+        // `prompt_engine`, which rejects an unloadable one. A quarantine MARKER would work only
+        // for readers that remember to check it, and some of those readers are not in this repo.
+        quarantine,
       });
       const syncResult = await indexer.syncAll();
-      reportResourceSyncFailures(syncResult, logger);
-      reportShadowedResources(syncResult, logger);
+      reportSyncFindings(syncResult, logger);
       // The index and the catalog are two derivations of one question; compare them rather than
       // assuming they agree, which is how they came to disagree by 41 prompts unnoticed.
       const indexedPromptIds = dbManager
