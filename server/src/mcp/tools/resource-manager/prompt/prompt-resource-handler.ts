@@ -17,8 +17,8 @@ import { recordActionInvocation } from '../../../metadata/usage-tracker.js';
 import { resolveDispatchAction } from '../../shared/preview-action.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { QuarantineView } from '#modules/prompts/quarantine.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type { ActionDescriptor } from '../../../metadata/definitions/types.js';
 import type { PromptResourceHandlerPort } from '../core/types.js';

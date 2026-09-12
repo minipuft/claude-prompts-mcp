@@ -19,7 +19,6 @@ import * as path from 'node:path';
 import { discoverCategoryDirectories } from './category-maintenance.js';
 import { CategoryManager, createCategoryManager } from './category-manager.js';
 import { parseMarkdownPromptContent } from './markdown-prompt-parser.js';
-import { PromptQuarantine, type QuarantineSink, type QuarantineView } from './quarantine.js';
 import {
   type LoadedPromptFile,
   discoverYamlPrompts,
@@ -31,6 +30,11 @@ import {
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
 
 import { type Logger } from '#shared/types/index.js';
+import {
+  ResourceQuarantine,
+  type QuarantineSink,
+  type QuarantineView,
+} from '#shared/utils/resource-quarantine.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // Re-export types from yaml-prompt-loader for backward compatibility
@@ -71,7 +75,7 @@ export class PromptLoader {
    * through `updateData` would have to be re-passed at each of six call sites, which is the shape
    * where one gets forgotten and the surface silently reports a stale catalog.
    */
-  private readonly quarantine = new PromptQuarantine();
+  private readonly quarantine = new ResourceQuarantine();
   /** Sink for the walk currently in progress; absent outside `loadFromDirectories`. */
   private activeQuarantineSink: QuarantineSink | undefined;
 
@@ -155,7 +159,7 @@ export class PromptLoader {
     // repaired since the last load is simply never re-recorded. Clearing on begin rather than
     // reconciling at the end means a walk that throws partway still describes the files it
     // actually reached, instead of leaving a satisfied record standing as a live finding.
-    this.activeQuarantineSink = this.quarantine.beginRoot(promptsDir);
+    this.activeQuarantineSink = this.quarantine.beginRoot('prompt', promptsDir);
 
     // Phase 1: Discover categories from directory structure.
     //

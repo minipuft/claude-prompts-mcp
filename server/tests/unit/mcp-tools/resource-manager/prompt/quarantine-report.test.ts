@@ -17,9 +17,10 @@ import {
   summarizeQuarantine,
 } from '../../../../../src/mcp/tools/resource-manager/prompt/utils/quarantine-report.js';
 
-import type { QuarantinedPrompt } from '../../../../../src/modules/prompts/quarantine.js';
+import type { QuarantinedResource } from '../../../../../src/shared/utils/resource-quarantine.js';
 
-const record = (overrides: Partial<QuarantinedPrompt> = {}): QuarantinedPrompt => ({
+const record = (overrides: Partial<QuarantinedResource> = {}): QuarantinedResource => ({
+  type: 'prompt',
   id: 'minimal_prompt',
   category: 'examples',
   root: '/ws/resources/prompts',

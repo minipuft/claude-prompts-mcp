@@ -1,15 +1,19 @@
-// @lifecycle canonical - Unit tests for the prompt quarantine collection and its loader wiring (P4.9)
+// @lifecycle canonical - Unit tests for the shared resource quarantine and its loader wiring (P4.9, P4.15)
 /**
- * The collection that holds refused prompt files, and the loader that fills it.
+ * The collection that holds refused resource files, and the loader that fills it.
  *
- * Two properties are load-bearing and neither is observable from a passing load:
+ * Three properties are load-bearing and none is observable from a passing load:
  *
  *   1. A record carries NO content. The instruction surface (systemMessage, description, argument
  *      descriptions, user template) is exactly what a client receives before invoking anything,
  *      and a quarantined file is the one whose content has not been validated. The shape test
  *      below fails if a content field is ever added, which a type alone cannot do at runtime.
- *   2. Records are keyed by (root, path), never by id. Keying by id would make a broken workspace
- *      file evict a broken bundled one and lose the path a repair needs.
+ *   2. Records are keyed by (type, root, path), never by id. Keying by id would make a broken
+ *      workspace file evict a broken bundled one and lose the path a repair needs; adding `type`
+ *      keeps a gate and a prompt of the same id in the same root from colliding.
+ *   3. `beginRoot` CLEARS, and it clears per (type, root). A gate walk of a root must not erase the
+ *      prompt records for that same root — which is the reason each loader owns its own instance
+ *      and cross-cutting consumers read through `mergeQuarantineViews` instead.
  */
 
 import { describe, expect, it, jest } from '@jest/globals';
@@ -19,10 +23,11 @@ import path from 'node:path';
 
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import {
-  PromptQuarantine,
+  ResourceQuarantine,
+  mergeQuarantineViews,
   preferredRepairTarget,
-  type QuarantinedPrompt,
-} from '../../../src/modules/prompts/quarantine.js';
+  type QuarantinedResource,
+} from '../../../src/shared/utils/resource-quarantine.js';
 
 const createLogger = () =>
   ({
@@ -32,7 +37,9 @@ const createLogger = () =>
     debug: jest.fn(),
   }) as never;
 
-const entry = (overrides: Partial<QuarantinedPrompt> = {}): Omit<QuarantinedPrompt, 'root'> => ({
+const entry = (
+  overrides: Partial<QuarantinedResource> = {}
+): Omit<QuarantinedResource, 'type' | 'root'> => ({
   id: 'broken',
   category: 'probecat',
   path: '/roots/a/probecat/broken/prompt.yaml',
@@ -40,13 +47,14 @@ const entry = (overrides: Partial<QuarantinedPrompt> = {}): Omit<QuarantinedProm
   ...overrides,
 });
 
-describe('PromptQuarantine', () => {
-  it('records a refused file under the root that was being walked', () => {
-    const quarantine = new PromptQuarantine();
-    quarantine.beginRoot('/roots/a').record(entry());
+describe('ResourceQuarantine', () => {
+  it('records a refused file under the type and root that were being walked', () => {
+    const quarantine = new ResourceQuarantine();
+    quarantine.beginRoot('prompt', '/roots/a').record(entry());
 
     expect(quarantine.size).toBe(1);
     expect(quarantine.list()[0]).toEqual({
+      type: 'prompt',
       id: 'broken',
       category: 'probecat',
       root: '/roots/a',
@@ -56,8 +64,8 @@ describe('PromptQuarantine', () => {
   });
 
   it('carries no field that could be executed or rendered as instruction', () => {
-    const quarantine = new PromptQuarantine();
-    quarantine.beginRoot('/roots/a').record(entry());
+    const quarantine = new ResourceQuarantine();
+    quarantine.beginRoot('prompt', '/roots/a').record(entry());
 
     // The exact key set, not a subset check: a subset check passes when a content field is added.
     expect(Object.keys(quarantine.list()[0] as object).sort()).toEqual([
@@ -66,41 +74,116 @@ describe('PromptQuarantine', () => {
       'id',
       'path',
       'root',
+      'type',
     ]);
   });
 
   it('keeps one record per (root, path), so the same id in two roots survives twice', () => {
-    const quarantine = new PromptQuarantine();
-    quarantine.beginRoot('/roots/a').record(entry({ path: '/roots/a/x/broken/prompt.yaml' }));
-    quarantine.beginRoot('/roots/b').record(entry({ path: '/roots/b/y/broken/prompt.yaml' }));
+    const quarantine = new ResourceQuarantine();
+    quarantine
+      .beginRoot('prompt', '/roots/a')
+      .record(entry({ path: '/roots/a/x/broken/prompt.yaml' }));
+    quarantine
+      .beginRoot('prompt', '/roots/b')
+      .record(entry({ path: '/roots/b/y/broken/prompt.yaml' }));
 
     expect(quarantine.size).toBe(2);
     expect(quarantine.byId('broken')).toHaveLength(2);
   });
 
   it('forgets only the root being re-walked', () => {
-    const quarantine = new PromptQuarantine();
-    quarantine.beginRoot('/roots/a').record(entry({ path: '/roots/a/x/broken/prompt.yaml' }));
-    quarantine.beginRoot('/roots/b').record(entry({ path: '/roots/b/y/other/prompt.yaml' }));
+    const quarantine = new ResourceQuarantine();
+    quarantine
+      .beginRoot('prompt', '/roots/a')
+      .record(entry({ path: '/roots/a/x/broken/prompt.yaml' }));
+    quarantine
+      .beginRoot('prompt', '/roots/b')
+      .record(entry({ path: '/roots/b/y/other/prompt.yaml' }));
 
     // Re-walking A with nothing refused this time must clear A and leave B standing.
-    quarantine.beginRoot('/roots/a');
+    quarantine.beginRoot('prompt', '/roots/a');
 
     expect(quarantine.list().map((record) => record.root)).toEqual(['/roots/b']);
   });
 
+  it('forgets only the TYPE being re-walked, so one loader cannot erase another', () => {
+    // The reason `beginRoot` takes a type at all. Without it, a gate walk of a root that refused
+    // nothing would clear the prompt records for that same root and the repair path would go dark
+    // for files nothing had repaired.
+    const quarantine = new ResourceQuarantine();
+    quarantine
+      .beginRoot('prompt', '/roots/a')
+      .record(entry({ path: '/roots/a/x/broken/prompt.yaml' }));
+    quarantine
+      .beginRoot('gate', '/roots/a')
+      .record(entry({ id: 'broken_gate', path: '/roots/a/broken_gate/gate.yaml' }));
+
+    quarantine.beginRoot('gate', '/roots/a');
+
+    expect(quarantine.list().map((record) => record.type)).toEqual(['prompt']);
+  });
+
+  it('answers isRefused by path, which is what a consumer holding a file walk has', () => {
+    const quarantine = new ResourceQuarantine();
+    quarantine.beginRoot('prompt', '/roots/a').record(entry());
+
+    expect(quarantine.isRefused('/roots/a/probecat/broken/prompt.yaml')).toBe(true);
+    // Positive control for the negative: a sibling path in the same root is NOT refused, so a
+    // blanket-true implementation cannot pass both halves.
+    expect(quarantine.isRefused('/roots/a/probecat/good/prompt.yaml')).toBe(false);
+  });
+
   it('returns nothing for an id it never refused', () => {
-    const quarantine = new PromptQuarantine();
-    quarantine.beginRoot('/roots/a').record(entry());
+    const quarantine = new ResourceQuarantine();
+    quarantine.beginRoot('prompt', '/roots/a').record(entry());
 
     expect(quarantine.byId('some_other_prompt')).toEqual([]);
   });
 });
 
+describe('mergeQuarantineViews', () => {
+  it('reads through to the live instances rather than copying', () => {
+    const prompts = new ResourceQuarantine();
+    const gates = new ResourceQuarantine();
+    const merged = mergeQuarantineViews(prompts, gates);
+
+    expect(merged.size).toBe(0);
+
+    // Recorded AFTER the merge was built: a snapshot-copying implementation stays at 0 here, which
+    // is the hot-reload failure this view exists to avoid.
+    prompts.beginRoot('prompt', '/roots/a').record(entry());
+    gates
+      .beginRoot('gate', '/roots/a')
+      .record(entry({ id: 'broken_gate', path: '/roots/a/broken_gate/gate.yaml' }));
+
+    expect(merged.size).toBe(2);
+    expect(
+      merged
+        .list()
+        .map((record) => record.type)
+        .sort()
+    ).toEqual(['gate', 'prompt']);
+    expect(merged.isRefused('/roots/a/broken_gate/gate.yaml')).toBe(true);
+    expect(merged.isRefused('/roots/a/probecat/good/prompt.yaml')).toBe(false);
+  });
+
+  it('collects every root claiming one id across the views it spans', () => {
+    const prompts = new ResourceQuarantine();
+    const gates = new ResourceQuarantine();
+    prompts.beginRoot('prompt', '/roots/a').record(entry({ id: 'shared_id' }));
+    gates
+      .beginRoot('gate', '/roots/b')
+      .record(entry({ id: 'shared_id', path: '/roots/b/shared_id/gate.yaml' }));
+
+    expect(mergeQuarantineViews(prompts, gates).byId('shared_id')).toHaveLength(2);
+  });
+});
+
 describe('preferredRepairTarget', () => {
-  const inA: QuarantinedPrompt = { ...entry(), root: '/roots/a' };
-  const inB: QuarantinedPrompt = {
+  const inA: QuarantinedResource = { ...entry(), type: 'prompt', root: '/roots/a' };
+  const inB: QuarantinedResource = {
     ...entry({ path: '/roots/b/probecat/broken/prompt.yaml' }),
+    type: 'prompt',
     root: '/roots/b',
   };
 
@@ -148,12 +231,23 @@ describe('PromptLoader fills the quarantine from a real directory walk', () => {
       const records = loader.getQuarantine().list();
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
+        type: 'prompt',
         id: 'broken_prompt',
         category: 'probecat',
         root,
         path: path.join(root, 'probecat', 'broken_prompt', 'prompt.yaml'),
       });
       expect(records[0]?.error).toContain('arguments');
+
+      // The path-keyed query the indexer and change tracker read (P4.14), against its own control.
+      expect(
+        loader
+          .getQuarantine()
+          .isRefused(path.join(root, 'probecat', 'broken_prompt', 'prompt.yaml'))
+      ).toBe(true);
+      expect(
+        loader.getQuarantine().isRefused(path.join(root, 'probecat', 'good_prompt', 'prompt.yaml'))
+      ).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

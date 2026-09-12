@@ -4,8 +4,8 @@
  */
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { QuarantineView } from '#modules/prompts/quarantine.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';

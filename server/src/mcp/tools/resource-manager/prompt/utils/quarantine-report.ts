@@ -21,7 +21,7 @@
  * decision this file could not be unit-tested for on its own.
  */
 
-import type { QuarantinedPrompt } from '#modules/prompts/quarantine.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 
 /** The served-catalog facts a report needs, without importing the catalog's type. */
 export interface ServedPromptSummary {
@@ -32,7 +32,7 @@ export interface ServedPromptSummary {
 
 /** A quarantine record paired with what, if anything, is serving its id instead. */
 export interface QuarantineFinding {
-  readonly record: QuarantinedPrompt;
+  readonly record: QuarantinedResource;
   /** The root currently answering this id, when one is. Absent means the id is unserved. */
   readonly servedFrom?: string | undefined;
   /** True when a valid definition answers this id from somewhere else. */
@@ -45,7 +45,7 @@ export interface QuarantineFinding {
  * Matching on id alone, not on path: the point is precisely that a DIFFERENT file is answering.
  */
 export function summarizeQuarantine(
-  records: readonly QuarantinedPrompt[],
+  records: readonly QuarantinedResource[],
   served: readonly ServedPromptSummary[]
 ): QuarantineFinding[] {
   const servedById = new Map(served.map((prompt) => [prompt.id, prompt]));
@@ -87,12 +87,15 @@ export function formatQuarantineSection(findings: readonly QuarantineFinding[]):
  * Replaces the bare `Prompt not found`, which was true of the catalog and false of the disk — and
  * a reason nobody can act on is the part that costs.
  */
-export function formatQuarantinedInspect(records: readonly QuarantinedPrompt[]): string {
+export function formatQuarantinedInspect(records: readonly QuarantinedResource[]): string {
   const lines = [`🚧 **Quarantined**: \`${records[0]?.id ?? ''}\` is on disk but failed to load\n`];
   for (const record of records) {
     lines.push(`\n**File**: ${record.path}`);
     lines.push(`\n**Root**: ${record.root}`);
-    lines.push(`\n**Category**: ${record.category}`);
+    // Conditional since the record type went shared: gates and frameworks are FLAT layouts with no
+    // category, and a `**Category**: undefined` line asserts a level of the tree that does not
+    // exist. Prompts always carry one, so this branch is unobservable on this surface today.
+    if (record.category !== undefined) lines.push(`\n**Category**: ${record.category}`);
     lines.push(`\n**Load error**: ${record.error}\n`);
   }
   lines.push(
@@ -109,7 +112,7 @@ export function formatQuarantinedInspect(records: readonly QuarantinedPrompt[]):
  * Empty when nothing shadows it, so an ordinary inspect stays unchanged.
  */
 export function formatShadowedNote(
-  records: readonly QuarantinedPrompt[],
+  records: readonly QuarantinedResource[],
   servedFrom: string | undefined
 ): string {
   if (records.length === 0) return '';

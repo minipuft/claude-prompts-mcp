@@ -17,7 +17,7 @@ import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
 
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
-import type { QuarantineSink } from './quarantine.js';
+import type { QuarantineSink } from '#shared/utils/resource-quarantine.js';
 import type { PromptData } from './types.js';
 
 import { linearize } from '#modules/workflow-ir/linearizer.js';

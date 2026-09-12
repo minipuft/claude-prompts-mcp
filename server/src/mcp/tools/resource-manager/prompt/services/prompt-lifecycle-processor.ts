@@ -37,14 +37,14 @@ import {
 } from '../utils/validation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { QuarantinedPrompt } from '#modules/prompts/quarantine.js';
 import type { PromptData } from '#modules/prompts/types.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
-import { preferredRepairTarget } from '#modules/prompts/quarantine.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
+import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 export class PromptLifecycleProcessor {
   private readonly context: PromptResourceContext;
@@ -843,7 +843,7 @@ export class PromptLifecycleProcessor {
    * `resolveResourceRoots`' precedence, so an operator repairing `foo` edits their own copy rather
    * than the bundled one they cannot write to.
    */
-  private resolveRepairTarget(id: string): QuarantinedPrompt | undefined {
+  private resolveRepairTarget(id: string): QuarantinedResource | undefined {
     const records = this.context.dependencies.quarantine?.byId(id) ?? [];
     if (records.length === 0) return undefined;
     return preferredRepairTarget(
@@ -861,7 +861,7 @@ export class PromptLifecycleProcessor {
    * reported. Saying nothing when the repair worked would leave "did it load?" answerable only by
    * a second call.
    */
-  private formatRepairOutcome(repairTarget: QuarantinedPrompt): string {
+  private formatRepairOutcome(repairTarget: QuarantinedResource): string {
     const stillQuarantined = (
       this.context.dependencies.quarantine?.byId(repairTarget.id) ?? []
     ).some((record) => record.path === repairTarget.path);

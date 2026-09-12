@@ -26,7 +26,7 @@ import { ConversationStore } from '../text-refs/conversation.js';
 import { TextReferenceStore } from '../text-refs/index.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { QuarantineView } from './quarantine.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
 import type { McpServer } from '@modelcontextprotocol/server';
 
