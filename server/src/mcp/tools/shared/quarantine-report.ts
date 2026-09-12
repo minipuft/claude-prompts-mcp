@@ -1,6 +1,6 @@
-// @lifecycle canonical - Renders quarantined prompt files for the resource_manager read surface.
+// @lifecycle canonical - Renders quarantined resource files for the resource_manager read surface.
 /**
- * How a refused prompt file is described to an operator.
+ * How a refused resource file is described to an operator.
  *
  * TWO THINGS ARE BEING ANNOUNCED, and they are different findings.
  *
@@ -19,12 +19,19 @@
  *
  * Pure: strings in, strings out, no I/O. The processors are orchestration and own no formatting
  * decision this file could not be unit-tested for on its own.
+ *
+ * ONE COPY, THREE RESOURCE KINDS. Written for prompts at P4.9 and generalized at P4.15 rather than
+ * copied twice: the only prompt-specific text was the noun in two repair hints, which is now the
+ * `noun` parameter. A per-kind copy would have three places to keep the content rule true, and the
+ * rule is the whole point. `category` stays optional on the record for the same reason — gates and
+ * frameworks are FLAT (`{root}/{id}/gate.yaml`), so rendering a category line for them would assert
+ * a level of the tree that does not exist.
  */
 
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 
 /** The served-catalog facts a report needs, without importing the catalog's type. */
-export interface ServedPromptSummary {
+export interface ServedResourceSummary {
   readonly id: string;
   /** Root the live definition was loaded from, when the loader stamped one. */
   readonly sourceRoot?: string | undefined;
@@ -46,9 +53,9 @@ export interface QuarantineFinding {
  */
 export function summarizeQuarantine(
   records: readonly QuarantinedResource[],
-  served: readonly ServedPromptSummary[]
+  served: readonly ServedResourceSummary[]
 ): QuarantineFinding[] {
-  const servedById = new Map(served.map((prompt) => [prompt.id, prompt]));
+  const servedById = new Map(served.map((resource) => [resource.id, resource]));
   return records.map((record) => {
     const live = servedById.get(record.id);
     return {
@@ -59,8 +66,18 @@ export function summarizeQuarantine(
   });
 }
 
-/** One line per finding, for the `list` surface. Empty array when nothing is quarantined. */
-export function formatQuarantineSection(findings: readonly QuarantineFinding[]): string {
+/**
+ * One line per finding, for the `list` surface. Empty string when nothing is quarantined.
+ *
+ * @param noun - What one of these resources is called, for the repair hint: `prompt`, `gate`,
+ *   `framework`. Not derived from `finding.record.type` so the caller — which already knows which
+ *   surface it is rendering — stays the single place that decides, and an empty `findings` list
+ *   still renders the same way.
+ */
+export function formatQuarantineSection(
+  findings: readonly QuarantineFinding[],
+  noun: string
+): string {
   if (findings.length === 0) return '';
 
   const lines = [`\n\n🚧 **Quarantined** (${findings.length}) — on disk, not in the catalog`];
@@ -75,8 +92,8 @@ export function formatQuarantineSection(findings: readonly QuarantineFinding[]):
     }
   }
   lines.push(
-    `\n\n_Repair with \`action:"update"\` and the full prompt body — a quarantined file's own ` +
-      `content is not read back, because it is the content that failed validation._`
+    `\n\n_Repair with \`action:"update"\` and the full ${noun} body — a quarantined file's own ` +
+      `content is not returned here, because it is the content that failed validation._`
   );
   return lines.join('');
 }
@@ -87,19 +104,22 @@ export function formatQuarantineSection(findings: readonly QuarantineFinding[]):
  * Replaces the bare `Prompt not found`, which was true of the catalog and false of the disk — and
  * a reason nobody can act on is the part that costs.
  */
-export function formatQuarantinedInspect(records: readonly QuarantinedResource[]): string {
+export function formatQuarantinedInspect(
+  records: readonly QuarantinedResource[],
+  noun: string
+): string {
   const lines = [`🚧 **Quarantined**: \`${records[0]?.id ?? ''}\` is on disk but failed to load\n`];
   for (const record of records) {
     lines.push(`\n**File**: ${record.path}`);
     lines.push(`\n**Root**: ${record.root}`);
-    // Conditional since the record type went shared: gates and frameworks are FLAT layouts with no
-    // category, and a `**Category**: undefined` line asserts a level of the tree that does not
-    // exist. Prompts always carry one, so this branch is unobservable on this surface today.
+    // Conditional because gates and frameworks are FLAT layouts with no category, and a
+    // `**Category**: undefined` line asserts a level of the tree that does not exist. Prompts
+    // always carry one.
     if (record.category !== undefined) lines.push(`\n**Category**: ${record.category}`);
     lines.push(`\n**Load error**: ${record.error}\n`);
   }
   lines.push(
-    `\n💡 Repair it with \`action:"update"\`, supplying the full prompt — there is no loaded ` +
+    `\n💡 Repair it with \`action:"update"\`, supplying the full ${noun} — there is no loaded ` +
       `state to merge onto, and the content that failed validation is deliberately not returned ` +
       `here. A successful reload clears the quarantine record.`
   );

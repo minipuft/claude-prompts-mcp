@@ -7,12 +7,14 @@ import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -114,6 +116,16 @@ export class GateLifecycleProcessor {
     if (!id) return this.error('Gate ID is required for update action');
 
     if (!this.ctx.gateManager.has(id)) {
+      // The registry has no entry — which is also true of a gate file the loader REFUSED, and that
+      // file is the one `resource_manager` is the only sanctioned way to fix. Sending an operator
+      // to `create` there is a dead end: `handleCreate` refuses nothing (the registry does not
+      // have it) and then writes over the broken file with no acknowledgement that it was broken,
+      // so the one response that could have said what is wrong says nothing. Consulted ONLY on
+      // this branch, so a registered gate is never redirected by a quarantined namesake.
+      const repairTarget = this.resolveRepairTarget(id);
+      if (repairTarget !== undefined) {
+        return await this.repairQuarantinedGate(args, repairTarget);
+      }
       return this.error(`Gate '${id}' not found. Use create action to add new gate.`);
     }
 
@@ -236,6 +248,134 @@ export class GateLifecycleProcessor {
     return this.success(response);
   }
 
+  /**
+   * Rewrite a gate file the loader refused, from the caller's body alone.
+   *
+   * NOT a merge. There is no loaded definition to fall back on — that is what quarantined means —
+   * so every field `handleUpdate` would carry forward from `existingGate` has to arrive in this
+   * call, and the three the schema requires are demanded up front rather than written as blanks
+   * that fail validation a second time. The broken file's own content is not returned to the
+   * caller: it is the content that failed validation, and a gate's `guidance` and `description`
+   * are instruction delivered to the client LLM (CLAUDE.md §Instruction surface).
+   *
+   * No version row is recorded, and the response says so. `recordEditResult` takes a prior LIVE
+   * snapshot, and a quarantined gate has none — passing an empty object would write a version
+   * claiming the gate used to be blank, which is a worse answer than no row.
+   */
+  private async repairQuarantinedGate(
+    args: GateManagerInput,
+    target: QuarantinedResource
+  ): Promise<ToolResponse> {
+    // Coalesced to `''` up front so the three fields are plain strings from here on: the refusal
+    // below is the only thing that distinguishes absent from supplied, and once it has not fired
+    // there is nothing left for a non-null assertion to assert.
+    const name = args.name ?? '';
+    const description = args.description ?? '';
+    const guidance = args.guidance ?? '';
+    const missing = Object.entries({ name, description, guidance })
+      .filter(([, value]) => value === '')
+      .map(([field]) => field);
+
+    if (missing.length > 0) {
+      return this.error(
+        `🚧 Gate '${target.id}' is quarantined — the file at ${target.path} failed to load ` +
+          `(${target.error}).\n\n` +
+          `A repair supplies the WHOLE gate: there is no loaded state to merge onto, and the ` +
+          `content that failed validation is deliberately not returned here. Missing: ` +
+          `${missing.join(', ')}.`
+      );
+    }
+
+    const gateData: GateCreationData = {
+      id: String(args.id),
+      name,
+      type: args.type ?? 'validation',
+      description,
+      guidance,
+      pass_criteria: args.pass_criteria,
+      activation: args.activation,
+      retry_config: args.retry_config,
+      severity: args.severity,
+      enforcementMode: args.enforcementMode,
+      gate_type: args.gate_type,
+    };
+
+    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    if (!result.success) {
+      return this.error(`Failed to repair gate: ${result.error}`);
+    }
+
+    // Reloads through the loader, which clears its cache for this id and re-reads the file — so
+    // the quarantine is rebuilt from disk before `formatRepairOutcome` reads it back. Without this
+    // the outcome line would report the state the write was ASKED to produce rather than the one
+    // the loader observed, which is the whole assertion the row turns on.
+    await this.ctx.gateManager.reload(String(args.id));
+    this.trackChange('modified', String(args.id));
+
+    const writtenPath = path.join(
+      this.ctx.configManager.getGatesDirectory(),
+      String(args.id).toLowerCase(),
+      'gate.yaml'
+    );
+
+    return this.success(
+      `🩺 Repair written for quarantined gate '${target.id}'\n\n` +
+        `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
+        `📜 No version was recorded — a quarantined gate has no prior loadable state to diff ` +
+        `against.\n` +
+        this.formatRepairOutcome(target, writtenPath)
+    );
+  }
+
+  /**
+   * The quarantine record an unqualified `update` on this id means, if any.
+   *
+   * Nearest root first: `preferredRepairTarget` prefers the writable primary, matching
+   * `resolveResourceRoots`' precedence, so an operator repairing `foo` means their own copy rather
+   * than the bundled one they cannot write to.
+   */
+  private resolveRepairTarget(id: string): QuarantinedResource | undefined {
+    const records = this.ctx.gateManager.getQuarantine().byId(id.toLowerCase());
+    if (records.length === 0) return undefined;
+    return preferredRepairTarget(records, this.ctx.configManager.getGatesDirectory());
+  }
+
+  /**
+   * Say, in the repair's own response, whether the file actually loads now.
+   *
+   * Three outcomes, not two. The write always lands in the WRITABLE root, and the refused file is
+   * not always there: a broken bundled gate is repaired by writing an overlay, which takes over
+   * the id while the bundled file stays exactly as broken as it was. Reporting that as
+   * "still quarantined" would read as a failed repair, and reporting it as repaired would claim a
+   * file was fixed that was never written.
+   */
+  private formatRepairOutcome(target: QuarantinedResource, writtenPath: string): string {
+    const stillRefused = this.ctx.gateManager
+      .getQuarantine()
+      .byId(target.id)
+      .some((record) => record.path === target.path);
+
+    if (!stillRefused) {
+      return (
+        `\n🩹 **Repaired**: \`${target.path}\` now loads; its quarantine record is cleared and ` +
+        `\`${target.id}\` is served again.\n`
+      );
+    }
+
+    if (path.resolve(target.path) !== path.resolve(writtenPath)) {
+      return (
+        `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
+        `\`${writtenPath}\`, which takes precedence, so \`${target.id}\` now serves your copy. ` +
+        `\`${target.path}\` stays quarantined.\n`
+      );
+    }
+
+    return (
+      `\n🚧 **Still quarantined**: \`${target.path}\` did not load after the write — the gate ` +
+      `remains absent from the registry. See the server log for the loader's reason.\n`
+    );
+  }
+
   async handleDelete(args: GateManagerInput): Promise<ToolResponse> {
     const { id } = args;
 
@@ -336,6 +476,16 @@ export class GateLifecycleProcessor {
     // disk, and that becomes the error below.
     const reloadSuccess = await this.ctx.gateManager.reload(id);
     if (!reloadSuccess) {
+      // The loader has just re-read the file, so the quarantine describes THIS attempt. Naming the
+      // reason beats the old message, which told an operator to check whether a file exists in the
+      // one case where it provably does — the loader read it and refused it.
+      const refused = this.ctx.gateManager.getQuarantine().byId(id.toLowerCase());
+      if (refused.length > 0) {
+        return this.error(
+          `Failed to reload gate '${id}' — the file was read and refused:\n` +
+            refused.map((record) => `  - ${record.path}: ${record.error}`).join('\n')
+        );
+      }
       return this.error(
         `Failed to reload gate '${id}' — no gate definition could be loaded from disk. ` +
           `Check that ${path.join(this.ctx.configManager.getGatesDirectory(), id, 'gate.yaml')} exists.`

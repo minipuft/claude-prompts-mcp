@@ -46,6 +46,7 @@ import { FrameworkVersioningProcessor } from '../../../src/mcp/tools/framework-m
 import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import { PromptVersioningProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../src/shared/utils/resource-quarantine.js';
 import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 import { MockLogger } from '../../helpers/test-helpers.js';
 
@@ -1086,6 +1087,17 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
 
     constructor(private readonly dir: string) {}
 
+    /**
+     * The loader's quarantine view, as the real manager exposes it (P4.15).
+     *
+     * Empty here on purpose: this harness never writes a schema-invalid file, so nothing is
+     * refused. `handleReload` reads it to say WHY a reload failed, and an empty view is what sends
+     * it down the "nothing on disk" branch these cases assert.
+     */
+    getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+      return EMPTY_QUARANTINE_VIEW;
+    }
+
     has(id: string): boolean {
       return this.cache.has(id);
     }
@@ -1512,6 +1524,17 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
   let promptRefreshes: number;
 
   class DriftableFrameworkRegistry {
+    /**
+     * The loader's quarantine view, as the real manager exposes it (P4.15).
+     *
+     * Empty here on purpose: this harness never writes a schema-invalid file, so nothing is
+     * refused. `handleReload` reads it to say WHY a reload failed, and an empty view is what sends
+     * it down the "nothing on disk" branch these cases assert.
+     */
+    getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+      return EMPTY_QUARANTINE_VIEW;
+    }
+
     /** `RuntimeFrameworkLoader`'s parsed-definition cache. Cleared ONLY by `clearCache`. */
     private readonly loaderCache = new Map<string, Record<string, unknown>>();
     private readonly guides = new Map<string, Record<string, unknown>>();

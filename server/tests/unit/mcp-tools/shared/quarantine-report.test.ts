@@ -1,4 +1,4 @@
-// @lifecycle canonical - Unit tests for how quarantined prompt files are reported (P4.9)
+// @lifecycle canonical - Unit tests for how quarantined resource files are reported (P4.9, P4.15)
 /**
  * The announcement half of quarantine.
  *
@@ -15,9 +15,9 @@ import {
   formatQuarantinedInspect,
   formatShadowedNote,
   summarizeQuarantine,
-} from '../../../../../src/mcp/tools/resource-manager/prompt/utils/quarantine-report.js';
+} from '../../../../src/mcp/tools/shared/quarantine-report.js';
 
-import type { QuarantinedResource } from '../../../../../src/shared/utils/resource-quarantine.js';
+import type { QuarantinedResource } from '../../../../src/shared/utils/resource-quarantine.js';
 
 const record = (overrides: Partial<QuarantinedResource> = {}): QuarantinedResource => ({
   type: 'prompt',
@@ -53,11 +53,11 @@ describe('summarizeQuarantine', () => {
 
 describe('formatQuarantineSection', () => {
   it('is empty when nothing is quarantined, so a healthy list is unchanged', () => {
-    expect(formatQuarantineSection([])).toBe('');
+    expect(formatQuarantineSection([], 'prompt')).toBe('');
   });
 
   it('names the id, the path and the load error', () => {
-    const section = formatQuarantineSection(summarizeQuarantine([record()], []));
+    const section = formatQuarantineSection(summarizeQuarantine([record()], []), 'prompt');
 
     expect(section).toContain('Quarantined** (1)');
     expect(section).toContain('/ws/resources/prompts/examples/minimal_prompt/prompt.yaml');
@@ -66,7 +66,8 @@ describe('formatQuarantineSection', () => {
 
   it('says the repair will change what serves, when a valid definition is shadowing it', () => {
     const section = formatQuarantineSection(
-      summarizeQuarantine([record()], [{ id: 'minimal_prompt', sourceRoot: '/pkg/prompts' }])
+      summarizeQuarantine([record()], [{ id: 'minimal_prompt', sourceRoot: '/pkg/prompts' }]),
+      'prompt'
     );
 
     expect(section).toContain('shadowed');
@@ -77,7 +78,10 @@ describe('formatQuarantineSection', () => {
 
 describe('formatQuarantinedInspect', () => {
   it('replaces "not found" with the path, root, category and reason', () => {
-    const text = formatQuarantinedInspect([record({ id: 'broken_prompt', category: 'probecat' })]);
+    const text = formatQuarantinedInspect(
+      [record({ id: 'broken_prompt', category: 'probecat' })],
+      'prompt'
+    );
 
     expect(text).toContain('Quarantined');
     expect(text).toContain('broken_prompt');
@@ -97,5 +101,36 @@ describe('formatShadowedNote', () => {
 
     expect(note).toContain('served from /pkg/resources/prompts');
     expect(note).toContain('/ws/resources/prompts/examples/minimal_prompt/prompt.yaml');
+  });
+});
+
+describe('the flat layouts gates and frameworks use (P4.15)', () => {
+  const gateRecord: QuarantinedResource = {
+    type: 'gate',
+    id: 'broken-gate',
+    root: '/ws/resources/gates',
+    path: '/ws/resources/gates/broken-gate/gate.yaml',
+    error: 'type: expected validation | guidance',
+  };
+
+  it('renders no category line for a record that carries none', () => {
+    const text = formatQuarantinedInspect([gateRecord], 'gate');
+
+    expect(text).toContain('/ws/resources/gates/broken-gate/gate.yaml');
+    expect(text).not.toContain('Category');
+    expect(text).not.toContain('undefined');
+  });
+
+  it('names the repaired thing by the caller\'s noun, not always "prompt"', () => {
+    const section = formatQuarantineSection(summarizeQuarantine([gateRecord], []), 'gate');
+
+    expect(section).toContain('the full gate body');
+    expect(section).not.toContain('the full prompt body');
+  });
+
+  it('POSITIVE CONTROL — a record that DOES carry a category still renders one', () => {
+    const text = formatQuarantinedInspect([record({ category: 'probecat' })], 'prompt');
+
+    expect(text).toContain('**Category**: probecat');
   });
 });
