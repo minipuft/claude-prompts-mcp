@@ -25,6 +25,7 @@ import {
 
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 
+import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
@@ -97,6 +98,11 @@ export class RuntimeFrameworkLoader {
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
+  /**
+   * Framework files this loader walked, read, and refused. ONE instance for the loader's lifetime,
+   * published by reference through {@link getQuarantine} — see the gate loader's twin.
+   */
+  private readonly quarantine = new ResourceQuarantine();
 
   constructor(config: RuntimeFrameworkLoaderConfig = {}) {
     this.frameworksDir = config.frameworksDir ?? this.resolveFrameworksDir();
@@ -238,6 +244,16 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
+   * Live view of the framework files that failed to load, across every root read from so far.
+   *
+   * Never consulted when resolving an id: `loadFramework` reads the catalog side only, so a broken
+   * workspace framework leaves the bundled framework of that id serving, exactly as before.
+   */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
+  /**
    * Get the frameworks directory being used
    */
   getFrameworksDir(): string {
@@ -259,11 +275,31 @@ export class RuntimeFrameworkLoader {
    * Load a framework from a specific base directory
    */
   private loadFromDir(id: string, baseDir: string): FrameworkResourceDefinition | undefined {
-    try {
-      const frameworkDir = join(baseDir, id);
-      const entryPath = join(frameworkDir, 'framework.yaml');
+    const frameworkDir = join(baseDir, id);
+    const entryPath = join(frameworkDir, 'framework.yaml');
+    const sink = this.quarantine.sinkFor('framework', baseDir);
 
+    /**
+     * Refuse this file, and RECORD the refusal.
+     *
+     * One helper rather than four inline `sink.record(...)` calls, mirroring the gate and prompt
+     * loaders: every return below is a framework that vanishes from the registry, and a site that
+     * forgets to record is indistinguishable from the `console.error`-and-drop this replaces.
+     *
+     * Diagnostic text only — never `systemPromptGuidance`, `judgePrompt`, `phases` or any other
+     * authored body. A framework's guidance is instruction delivered to the client LLM, and this
+     * file is the one whose content has not been validated.
+     */
+    const refuse = (error: string): undefined => {
+      this.stats.loadErrors++;
+      sink.record({ id, path: entryPath, error });
+      return undefined;
+    };
+
+    try {
       if (!existsSync(entryPath)) {
+        // NOT a refusal: nothing was walked or read. See the gate loader's twin — recording here
+        // would quarantine every id a root simply does not hold.
         if (this.debug) {
           console.error(`[RuntimeFrameworkLoader] Entry point not found: ${entryPath}`);
         }
@@ -276,63 +312,28 @@ export class RuntimeFrameworkLoader {
       });
 
       if (!definition) {
-        return undefined;
+        return refuse('framework.yaml is empty or does not parse to a YAML mapping');
       }
 
       // Inline referenced files
       this.inlineReferencedFiles(definition, frameworkDir);
 
-      // Validate if enabled
-      if (this.validateOnLoad) {
-        const validation = this.validateDefinition(definition, id);
-        if (!validation.valid) {
-          this.stats.loadErrors++;
-          console.error(
-            `[RuntimeFrameworkLoader] Validation failed for '${id}':`,
-            validation.errors.join('; ')
-          );
-          return undefined;
-        }
-        if (validation.warnings.length > 0) {
-          console.warn(
-            `[RuntimeFrameworkLoader] Warnings for '${id}':`,
-            validation.warnings.join('; ')
-          );
-        }
-
-        // Validate the inlined phases.yaml content (F1: previously dead code —
-        // validatePhasesSchema had zero callers, so a guards block with no
-        // section_header never reached this check despite existing as an ERROR).
-        if (definition.phases) {
-          const phasesValidation = this.validatePhases(definition.phases);
-          if (!phasesValidation.valid) {
-            this.stats.loadErrors++;
-            // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
-            console.error(
-              `[RuntimeFrameworkLoader] Phases validation failed for '${id}':`,
-              phasesValidation.errors.join('; ')
-            );
-            return undefined;
-          }
-          if (phasesValidation.warnings.length > 0) {
-            // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
-            console.warn(
-              `[RuntimeFrameworkLoader] Phases warnings for '${id}':`,
-              phasesValidation.warnings.join('; ')
-            );
-          }
-        }
+      const refusal = this.validationRefusal(definition, id);
+      if (refusal !== undefined) {
+        return refuse(refusal);
       }
 
       if (this.debug) {
         console.error(`[RuntimeFrameworkLoader] Loaded: ${definition.name} (${id})`);
       }
 
+      // The repair side of the record — see the gate loader's twin. This loader is called one id at
+      // a time, so a repaired file's record has to be dropped here or it outlives the repair.
+      sink.forget(entryPath);
       return definition;
     } catch (error) {
-      this.stats.loadErrors++;
       console.error(`[RuntimeFrameworkLoader] Failed to load '${id}':`, error);
-      return undefined;
+      return refuse(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -522,6 +523,63 @@ export class RuntimeFrameworkLoader {
       userMessageTemplate: userMatch?.[1]?.trim() ?? '',
       outputFormat: 'json',
     };
+  }
+
+  /**
+   * The refusal reason for a definition that fails validation, or undefined when it passes.
+   *
+   * Extracted from `loadFromDir` rather than left inline: validate-then-validate-phases is a
+   * decision with its own nesting, and folding it into the walk pushed that method further over
+   * the cognitive-complexity limit. Returning the reason rather than recording it keeps the single
+   * exit rule intact — this method writes nothing, so `refuse` remains the one place a refusal is
+   * recorded. Mirrors `GateDefinitionLoader.validationRefusal`.
+   */
+  private validationRefusal(
+    definition: FrameworkResourceDefinition,
+    id: string
+  ): string | undefined {
+    if (!this.validateOnLoad) return undefined;
+
+    const validation = this.validateDefinition(definition, id);
+    if (!validation.valid) {
+      console.error(
+        `[RuntimeFrameworkLoader] Validation failed for '${id}':`,
+        validation.errors.join('; ')
+      );
+      return validation.errors.join('; ');
+    }
+    if (validation.warnings.length > 0) {
+      console.warn(
+        `[RuntimeFrameworkLoader] Warnings for '${id}':`,
+        validation.warnings.join('; ')
+      );
+    }
+
+    // Validate the inlined phases.yaml content (F1: previously dead code — validatePhasesSchema had
+    // zero callers, so a guards block with no section_header never reached this check despite
+    // existing as an ERROR).
+    if (!definition.phases) return undefined;
+
+    const phasesValidation = this.validatePhases(definition.phases);
+    if (!phasesValidation.valid) {
+      // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
+      console.error(
+        `[RuntimeFrameworkLoader] Phases validation failed for '${id}':`,
+        phasesValidation.errors.join('; ')
+      );
+      // The caller records this against framework.yaml, not phases.yaml: the entry point is what
+      // the tool repairs and what `resolveExistingFrameworkDir` locates, and `phasesFile` is a
+      // reference the entry point owns. The text still names the phases failure.
+      return `phases: ${phasesValidation.errors.join('; ')}`;
+    }
+    if (phasesValidation.warnings.length > 0) {
+      // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
+      console.warn(
+        `[RuntimeFrameworkLoader] Phases warnings for '${id}':`,
+        phasesValidation.warnings.join('; ')
+      );
+    }
+    return undefined;
   }
 
   /**

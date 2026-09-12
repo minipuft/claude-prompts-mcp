@@ -106,6 +106,16 @@ export interface QuarantineSink {
   /** Root every record from this sink is stamped with. */
   readonly root: string;
   record(entry: QuarantineEntry): void;
+  /**
+   * Drop this root's record for one file, because that same file has just loaded.
+   *
+   * The per-file counterpart of `beginRoot`'s clear, for the loaders that never walk a root: gates
+   * and frameworks resolve ONE id at a time behind a cache, so there is no walk boundary at which
+   * a whole root could be dropped and rebuilt. Without this, the record a repair is supposed to
+   * clear would outlive the repair — `reload` loads exactly one id, and a stale record makes a
+   * working file report as still refused.
+   */
+  forget(filePath: string): void;
 }
 
 /** The read half. Consumers hold this; none of them can write. */
@@ -152,11 +162,28 @@ export class ResourceQuarantine implements QuarantineView {
    */
   beginRoot(type: QuarantinedResourceType, root: string): QuarantineSink {
     this.forgetRoot(type, root);
+    return this.sinkFor(type, root);
+  }
+
+  /**
+   * A write handle for `(type, root)` that clears NOTHING.
+   *
+   * For the loaders whose unit of work is a file rather than a root. `PromptLoader` walks a whole
+   * root inside one method, so clear-then-walk describes its disk exactly; `GateDefinitionLoader`
+   * and `RuntimeFrameworkLoader` are called per id, from a registry loop at startup and from a
+   * single-id `reload` afterwards, and clearing a root on either would erase the records for every
+   * OTHER broken file in it. Those two record on refusal and `forget` on success instead, which
+   * converges on the same set without a walk boundary to hang it on.
+   */
+  sinkFor(type: QuarantinedResourceType, root: string): QuarantineSink {
     return {
       type,
       root,
       record: (entry: QuarantineEntry): void => {
         this.records.set(keyOf(root, entry.path), { ...entry, type, root });
+      },
+      forget: (filePath: string): void => {
+        this.records.delete(keyOf(root, filePath));
       },
     };
   }
@@ -198,6 +225,21 @@ export class ResourceQuarantine implements QuarantineView {
     return this.records.size;
   }
 }
+
+/**
+ * The view a consumer reads before its loader's collection exists.
+ *
+ * Gate and framework loaders are built during their registry's `initialize()`, so a consumer that
+ * asks earlier has to be answered with something. An empty view says the honest thing — nothing has
+ * been refused, because nothing has been read — where returning `undefined` would push a
+ * null-check into every call site and invite one of them to treat absence as a finding.
+ */
+export const EMPTY_QUARANTINE_VIEW: QuarantineView = {
+  list: () => [],
+  byId: () => [],
+  isRefused: () => false,
+  size: 0,
+};
 
 /**
  * One read-only view over several loaders' collections.

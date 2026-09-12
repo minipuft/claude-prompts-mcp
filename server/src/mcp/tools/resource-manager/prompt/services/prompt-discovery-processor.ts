@@ -1,18 +1,18 @@
 // @lifecycle canonical - Prompt discovery and analysis operations.
 
 import { promptResourceMetadata } from '../../../../metadata/definitions/prompt-resource.js';
-import { GateAnalyzer } from '../analysis/gate-analyzer.js';
-import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
-import { PromptResourceContext } from '../core/context.js';
-import { FilterParser } from '../search/filter-parser.js';
-import { PromptMatcher } from '../search/prompt-matcher.js';
 import {
   formatQuarantineSection,
   formatQuarantinedInspect,
   formatShadowedNote,
   summarizeQuarantine,
   type QuarantineFinding,
-} from '../utils/quarantine-report.js';
+} from '../../../shared/quarantine-report.js';
+import { GateAnalyzer } from '../analysis/gate-analyzer.js';
+import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
+import { PromptResourceContext } from '../core/context.js';
+import { FilterParser } from '../search/filter-parser.js';
+import { PromptMatcher } from '../search/prompt-matcher.js';
 import {
   canonicalPromptSnapshot,
   validateChainStepReferences,
@@ -119,7 +119,7 @@ export class PromptDiscoveryProcessor {
             type: 'text' as const,
             text:
               `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'` +
-              formatQuarantineSection(this.quarantineFindings()),
+              formatQuarantineSection(this.quarantineFindings(), 'prompt'),
           },
         ],
         isError: false,
@@ -251,7 +251,7 @@ export class PromptDiscoveryProcessor {
       }
     }
 
-    result += formatQuarantineSection(this.quarantineFindings());
+    result += formatQuarantineSection(this.quarantineFindings(), 'prompt');
 
     return {
       content: [{ type: 'text' as const, text: result }],
@@ -303,7 +303,9 @@ export class PromptDiscoveryProcessor {
       const quarantined = this.context.dependencies.quarantine?.byId(String(args.id)) ?? [];
       if (quarantined.length > 0) {
         return {
-          content: [{ type: 'text' as const, text: formatQuarantinedInspect(quarantined) }],
+          content: [
+            { type: 'text' as const, text: formatQuarantinedInspect(quarantined, 'prompt') },
+          ],
           isError: true,
         };
       }

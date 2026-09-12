@@ -29,6 +29,7 @@ import type {
 
 // Import the real manager for integration testing
 import { FrameworkToolHandler } from '../../../src/mcp/tools/framework-manager/core/manager.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../src/shared/utils/resource-quarantine.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -75,6 +76,9 @@ const createMockFrameworkManager = (): FrameworkManager => {
 
   return {
     getFramework: jest.fn((id: string) => registeredFrameworks.get(id.toLowerCase())),
+    // `handleInspect` appends the shadowed-file note (P4.15), which reads the loader's quarantine
+    // through the manager. Empty is what a healthy process has.
+    getQuarantine: jest.fn(() => EMPTY_QUARANTINE_VIEW),
     listFrameworks: jest.fn(() => Array.from(registeredFrameworks.values())),
     registerFramework: jest.fn(async (id: string) => {
       registeredFrameworks.set(id.toLowerCase(), {

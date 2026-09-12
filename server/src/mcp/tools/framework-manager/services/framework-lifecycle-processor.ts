@@ -9,12 +9,14 @@ import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Optional framework fields that can be copied directly from input to framework data.
@@ -108,6 +110,15 @@ export class FrameworkLifecycleProcessor {
 
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
     if (existingFramework === undefined) {
+      // The registry has no entry — which is also true of a framework file the loader REFUSED, and
+      // that file is the one `resource_manager` is the only sanctioned way to fix. Sending an
+      // operator to `create` there is a dead end: `checkFrameworkExists` sees the directory and
+      // refuses, so neither verb could reach the file. Consulted ONLY on this branch, so a
+      // registered framework is never redirected by a quarantined namesake.
+      const repairTarget = this.resolveRepairTarget(id);
+      if (repairTarget !== undefined) {
+        return await this.repairQuarantinedFramework(args, repairTarget);
+      }
       return this.error(`Framework '${id}' not found. Use create action to add new framework.`);
     }
 
@@ -241,6 +252,119 @@ export class FrameworkLifecycleProcessor {
         `cause was transient — check the server log for the reason, then restart.`;
 
     return this.success(response);
+  }
+
+  /**
+   * Rewrite a framework file the loader refused, from the caller's body alone.
+   *
+   * NOT a merge — `existingData` is passed as `null` on purpose. `handleUpdate` deep-merges the
+   * request over the YAML already on disk, and here that YAML is the thing that failed validation:
+   * merging onto it would preserve the defect the caller is trying to remove. The broken file's
+   * content is not returned to the caller either — a framework's `systemPromptGuidance` and
+   * `judgePrompt` are instruction delivered to the client LLM (CLAUDE.md §Instruction surface),
+   * and this is the file whose content has not been checked.
+   *
+   * No version row is recorded, and the response says so. `recordEditResult` takes a prior LIVE
+   * snapshot and a quarantined framework has none; an empty one would write a version claiming the
+   * framework used to be blank.
+   */
+  private async repairQuarantinedFramework(
+    args: FrameworkManagerInput,
+    target: QuarantinedResource
+  ): Promise<ToolResponse> {
+    const id = String(args.id);
+
+    if (args.name === undefined || args.name === '') {
+      return this.error(
+        `Framework '${target.id}' is quarantined — the file at ${target.path} failed to load ` +
+          `(${target.error}).\n\n` +
+          `A repair supplies the WHOLE framework: there is no loaded state to merge onto, and the ` +
+          `content that failed validation is deliberately not returned here. Missing: name.`
+      );
+    }
+
+    // Same derivation `handleCreate` uses, and for the same reason: a repair has no prior `type`
+    // to fall back on, and the schema requires one.
+    const frameworkData: FrameworkCreationData = {
+      id,
+      name: args.name,
+      type:
+        args.framework !== undefined && args.framework !== ''
+          ? args.framework
+          : id.toUpperCase().replace(/-/g, '_'),
+      system_prompt_guidance: args.system_prompt_guidance ?? '',
+      enabled: args.enabled ?? true,
+    };
+    this.assignOptionalFields(frameworkData, args);
+
+    const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, null);
+    if (!result.success) {
+      return this.error(`Failed to repair framework: ${result.error}`);
+    }
+
+    // Clears the loader cache for this id and re-reads the file, so the quarantine describes THIS
+    // write by the time the outcome line reads it back — rather than the state the write was asked
+    // to produce, which is the assertion the row turns on.
+    await this.reregister(id);
+
+    const writtenPath = path.join(this.ctx.fileService.getFrameworkDir(id), 'framework.yaml');
+
+    return this.success(
+      `Repair written for quarantined framework '${target.id}'\n\n` +
+        `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
+        `📜 No version was recorded — a quarantined framework has no prior loadable state to diff ` +
+        `against.\n` +
+        this.formatRepairOutcome(target, writtenPath)
+    );
+  }
+
+  /**
+   * The quarantine record an unqualified `update` on this id means, if any.
+   *
+   * Nearest root first: `preferredRepairTarget` prefers the writable primary, matching
+   * `resolveResourceRoots`' precedence, so an operator repairing `foo` means their own copy rather
+   * than the bundled one they cannot write to.
+   */
+  private resolveRepairTarget(id: string): QuarantinedResource | undefined {
+    const records = this.ctx.frameworkManager.getQuarantine().byId(id.toLowerCase());
+    if (records.length === 0) return undefined;
+    return preferredRepairTarget(records, this.ctx.configManager.getFrameworksDirectory());
+  }
+
+  /**
+   * Say, in the repair's own response, whether the file actually loads now.
+   *
+   * Three outcomes, not two. The write always lands in the WRITABLE root, and the refused file is
+   * not always there: a broken bundled framework is repaired by writing an overlay, which takes
+   * over the id while the bundled file stays exactly as broken as it was. Reporting that as
+   * "still quarantined" reads as a failed repair; reporting it as repaired claims a file was fixed
+   * that was never written.
+   */
+  private formatRepairOutcome(target: QuarantinedResource, writtenPath: string): string {
+    const stillRefused = this.ctx.frameworkManager
+      .getQuarantine()
+      .byId(target.id)
+      .some((record) => record.path === target.path);
+
+    if (!stillRefused) {
+      return (
+        `\n🩹 **Repaired**: \`${target.path}\` now loads; its quarantine record is cleared and ` +
+        `\`${target.id}\` is served again.\n`
+      );
+    }
+
+    if (path.resolve(target.path) !== path.resolve(writtenPath)) {
+      return (
+        `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
+        `\`${writtenPath}\`, which takes precedence, so \`${target.id}\` now serves your copy. ` +
+        `\`${target.path}\` stays quarantined.\n`
+      );
+    }
+
+    return (
+      `\n🚧 **Still quarantined**: \`${target.path}\` did not load after the write — the ` +
+      `framework remains absent from the registry. See the server log for the loader's reason.\n`
+    );
   }
 
   async handleDelete(args: FrameworkManagerInput): Promise<ToolResponse> {
@@ -388,6 +512,16 @@ export class FrameworkLifecycleProcessor {
     const reloaded = await this.reregister(id);
 
     if (!reloaded) {
+      // The loader has just re-read the file, so the quarantine describes THIS attempt. When it
+      // holds a record the cause is known exactly, and naming it beats the deliberately vague
+      // fallback below.
+      const refused = this.ctx.frameworkManager.getQuarantine().byId(id.toLowerCase());
+      if (refused.length > 0) {
+        return this.error(
+          `Failed to reload framework '${id}' — the file was read and refused:\n` +
+            refused.map((record) => `  - ${record.path}: ${record.error}`).join('\n')
+        );
+      }
       // Deliberately does not name a single cause. `reregisterFramework` returns false for an
       // uninitialized manager, an unavailable registry, a guide that loads but cannot be
       // retrieved, a definition that fails to generate, or a thrown error — only one of which is

@@ -29,6 +29,7 @@ import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { frameworkLabel } from '#shared/utils/framework-label.js';
+import { EMPTY_QUARANTINE_VIEW, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)
@@ -510,6 +511,16 @@ export class FrameworkManager extends BaseResourceHandler<
   listFrameworkGuides(): FrameworkGuide[] {
     this.ensureInitialized();
     return this.frameworkRegistry!.getAllGuides(true);
+  }
+
+  /**
+   * Live view of the framework files the loader refused.
+   *
+   * Resolved on every call rather than bound once — the registry, and with it the loader that owns
+   * the collection, is built inside `initialize()`. See the gate manager's twin.
+   */
+  getQuarantine(): QuarantineView {
+    return this.frameworkRegistry?.getRuntimeLoader().getQuarantine() ?? EMPTY_QUARANTINE_VIEW;
   }
 
   /**

@@ -25,6 +25,7 @@ import {
   type GateDefinitionYaml,
 } from './gate-schema.js';
 
+import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
@@ -96,6 +97,14 @@ export class GateDefinitionLoader {
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
+  /**
+   * Gate files this loader walked, read, and refused. ONE instance for the loader's lifetime.
+   *
+   * Published by reference through {@link getQuarantine}, the way `PromptLoader` publishes its own:
+   * `GateRegistry` rebuilds guides on every reload, and a snapshot handed to the tool layer would
+   * describe whichever load happened to be last re-passed.
+   */
+  private readonly quarantine = new ResourceQuarantine();
 
   constructor(config: GateDefinitionLoaderConfig = {}) {
     this.gatesDir = config.gatesDir ?? this.resolveGatesDir();
@@ -235,6 +244,16 @@ export class GateDefinitionLoader {
   }
 
   /**
+   * Live view of the gate files that failed to load, across every root this loader has read from.
+   *
+   * Never consulted when resolving an id — `loadGate` reads the catalog side only, so a broken
+   * workspace gate still leaves the bundled gate of that id serving.
+   */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
+  /**
    * Get the gates directory being used
    */
   getGatesDir(): string {
@@ -259,11 +278,33 @@ export class GateDefinitionLoader {
    * @param baseDir - Directory to load from (defaults to primary gatesDir)
    */
   private loadFromYamlDir(id: string, baseDir?: string): GateDefinitionYaml | undefined {
-    try {
-      const gateDir = join(baseDir ?? this.gatesDir, id);
-      const entryPath = join(gateDir, 'gate.yaml');
+    const root = baseDir ?? this.gatesDir;
+    const gateDir = join(root, id);
+    const entryPath = join(gateDir, 'gate.yaml');
+    const sink = this.quarantine.sinkFor('gate', root);
 
+    /**
+     * Refuse this file, and RECORD the refusal.
+     *
+     * One helper rather than four inline `sink.record(...)` calls, exactly as the prompt loader
+     * has: every return below is a gate that vanishes from the registry, and a site that forgets
+     * to record is indistinguishable from the `console.error`-and-drop this replaces. There is one
+     * way to leave.
+     *
+     * Diagnostic text only. Never `definition.guidance`, `description` or `name` — a gate's
+     * guidance is instruction delivered to the client LLM, and a file that failed validation is
+     * precisely the one whose content has not been checked.
+     */
+    const refuse = (error: string): undefined => {
+      this.stats.loadErrors++;
+      sink.record({ id, path: entryPath, error });
+      return undefined;
+    };
+
+    try {
       if (!existsSync(entryPath)) {
+        // NOT a refusal: nothing was walked or read. Recording here would quarantine every id this
+        // root simply does not hold, which is every id the fall-through is asking about.
         if (this.debug) {
           console.error(`[GateDefinitionLoader] YAML entry not found: ${entryPath}`);
         }
@@ -276,43 +317,58 @@ export class GateDefinitionLoader {
       });
 
       if (!definition) {
-        return undefined;
+        return refuse('gate.yaml is empty or does not parse to a YAML mapping');
       }
 
       // Inline referenced files (guidance.md)
       this.inlineReferencedFiles(definition, gateDir);
 
-      // Validate if enabled
-      if (this.validateOnLoad) {
-        const validation = this.validateDefinition(definition, id);
-        if (!validation.valid) {
-          this.stats.loadErrors++;
-          console.error(
-            `[GateDefinitionLoader] Validation failed for '${id}':`,
-            validation.errors.join('; ')
-          );
-          return undefined;
-        }
-        if (validation.warnings.length > 0 && this.debug) {
-          console.warn(
-            `[GateDefinitionLoader] Warnings for '${id}':`,
-            validation.warnings.join('; ')
-          );
-        }
+      const refusal = this.validationRefusal(definition, id);
+      if (refusal !== undefined) {
+        return refuse(refusal);
       }
 
       if (this.debug) {
         console.error(`[GateDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
 
+      // The repair side of the record. This loader is called one id at a time — from the registry's
+      // discovery loop at startup and from `reloadGuide` after a write — so a repaired file is only
+      // ever re-read on its own, and its record has to be dropped here or it outlives the repair.
+      sink.forget(entryPath);
       return definition;
     } catch (error) {
-      this.stats.loadErrors++;
       if (this.debug) {
         console.error(`[GateDefinitionLoader] Failed to load YAML '${id}':`, error);
       }
-      return undefined;
+      return refuse(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /**
+   * The refusal reason for a definition that fails validation, or undefined when it passes.
+   *
+   * Extracted from `loadFromYamlDir` rather than left inline: the validate-or-refuse block is a
+   * decision, and folding it into the walk put that method one point over the cognitive-complexity
+   * limit. Returning the reason rather than calling `refuse` itself keeps the single exit rule
+   * intact — this method records nothing, so there is still exactly one place a refusal is written.
+   */
+  private validationRefusal(definition: GateDefinitionYaml, id: string): string | undefined {
+    if (!this.validateOnLoad) return undefined;
+
+    const validation = this.validateDefinition(definition, id);
+    if (!validation.valid) {
+      console.error(
+        `[GateDefinitionLoader] Validation failed for '${id}':`,
+        validation.errors.join('; ')
+      );
+      return validation.errors.join('; ');
+    }
+
+    if (validation.warnings.length > 0 && this.debug) {
+      console.warn(`[GateDefinitionLoader] Warnings for '${id}':`, validation.warnings.join('; '));
+    }
+    return undefined;
   }
 
   /**

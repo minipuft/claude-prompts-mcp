@@ -12,6 +12,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import { GateDiscoveryProcessor } from '../../../../src/mcp/tools/gate-manager/services/index.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
 
 import type { GateDefinitionYaml } from '../../../../src/engine/gates/types/index.js';
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
@@ -24,6 +25,10 @@ function buildProcessor(definitions: Map<string, GateDefinitionYaml>): GateDisco
   );
   const gateManager = {
     get: (id: string) => guides.get(id),
+    // `handleInspect` appends the shadowed-file note (P4.15), which reads the loader's quarantine
+    // through the manager. An empty view is what a healthy process has, so these cases still
+    // measure only the severity/enforcementMode read-back they were written for.
+    getQuarantine: () => EMPTY_QUARANTINE_VIEW,
   } as unknown as GateManager;
   const ctx = { gateManager } as unknown as GateResourceContext;
   return new GateDiscoveryProcessor(ctx);
