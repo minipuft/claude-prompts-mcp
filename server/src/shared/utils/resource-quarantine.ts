@@ -51,9 +51,19 @@ export type QuarantinedResourceType = 'prompt' | 'gate' | 'framework';
 /**
  * One file a loader walked, read, and refused.
  *
- * Keyed by `(type, root, path)` rather than by id: the id is derived from the path and two roots may
+ * Keyed by `(root, path)` rather than by id: the id is derived from the path and two roots may
  * legitimately hold the same id, which is the overlay contract. Keying on id would make a broken
  * workspace file evict the record of a broken bundled one, and lose the very path a repair needs.
+ *
+ * `type` is NOT part of the key, and the first draft of this file had it there with a reason that
+ * measurement disproved. The reason given was that `beginRoot` clears, so a gate walk of a root
+ * would otherwise erase that root's prompt records — true of the erasure, false of the key:
+ * {@link ResourceQuarantine.forgetRoot} filters on the record's fields, so the key never
+ * participates. Removing `type` from the key killed no test, while removing it from `forgetRoot`'s
+ * filter killed one and removing it from the record stamp killed two. A path determines its own
+ * type anyway (a `gate.yaml` is never a `prompt.yaml`), so a two-type collision on one key is not
+ * reachable. Kept here as the worked example: a component justified by a mechanism it is not part
+ * of reads as deliberate and is inert.
  */
 export interface QuarantinedResource {
   /** Which loader refused it — the discriminator a merged view is read through. */
@@ -115,8 +125,7 @@ export interface QuarantineView {
   readonly size: number;
 }
 
-const keyOf = (type: string, root: string, filePath: string): string =>
-  `${type} ${root} ${filePath}`;
+const keyOf = (root: string, filePath: string): string => `${root} ${filePath}`;
 
 /**
  * Live collection of refused resource files, replaced per root on every load.
@@ -147,12 +156,19 @@ export class ResourceQuarantine implements QuarantineView {
       type,
       root,
       record: (entry: QuarantineEntry): void => {
-        this.records.set(keyOf(type, root, entry.path), { ...entry, type, root });
+        this.records.set(keyOf(root, entry.path), { ...entry, type, root });
       },
     };
   }
 
-  /** Forget every record from one type's walk of one root. */
+  /**
+   * Forget every record from one type's walk of one root.
+   *
+   * The `type` test in this filter is the whole cross-loader protection, and it is the only place
+   * that protection lives: dropping it lets a gate walk of a root clear that root's prompt records,
+   * so a file nobody repaired goes quiet. Mutation-verified — see the note on
+   * {@link QuarantinedResource} for what the key does and does not contribute.
+   */
   forgetRoot(type: QuarantinedResourceType, root: string): void {
     for (const [key, record] of this.records) {
       if (record.type === type && record.root === root) this.records.delete(key);

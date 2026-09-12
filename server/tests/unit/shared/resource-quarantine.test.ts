@@ -2,18 +2,25 @@
 /**
  * The collection that holds refused resource files, and the loader that fills it.
  *
- * Three properties are load-bearing and none is observable from a passing load:
+ * Four properties are load-bearing and none is observable from a passing load:
  *
  *   1. A record carries NO content. The instruction surface (systemMessage, description, argument
  *      descriptions, user template) is exactly what a client receives before invoking anything,
  *      and a quarantined file is the one whose content has not been validated. The shape test
  *      below fails if a content field is ever added, which a type alone cannot do at runtime.
- *   2. Records are keyed by (type, root, path), never by id. Keying by id would make a broken
- *      workspace file evict a broken bundled one and lose the path a repair needs; adding `type`
- *      keeps a gate and a prompt of the same id in the same root from colliding.
- *   3. `beginRoot` CLEARS, and it clears per (type, root). A gate walk of a root must not erase the
- *      prompt records for that same root — which is the reason each loader owns its own instance
- *      and cross-cutting consumers read through `mergeQuarantineViews` instead.
+ *   2. Records are keyed by (root, path), never by id. Keying by id would make a broken workspace
+ *      file evict a broken bundled one and lose the path a repair needs.
+ *   3. `beginRoot` CLEARS, and `forgetRoot` scopes that clearing by TYPE. A gate walk of a root
+ *      must not erase the prompt records for that same root, or a file nobody repaired goes quiet.
+ *   4. `mergeQuarantineViews` reads through to the live instances. A snapshot would freeze the
+ *      catalog at wiring time and miss every hot reload.
+ *
+ * MUTATION-VERIFIED 2026-09-11, and one mutation changed the design. Removing `type` from the map
+ * KEY killed nothing — the protection in (3) lives entirely in `forgetRoot`'s field filter, so the
+ * key component was inert and is gone. Removing `type` from that filter kills the (3) test;
+ * removing the type stamp from `record()` kills two; inverting `isRefused` kills three; making the
+ * merged view snapshot at construction kills the (4) test. Each assertion below has been observed
+ * failing, which is the only thing that makes its passing evidence.
  */
 
 import { describe, expect, it, jest } from '@jest/globals';
