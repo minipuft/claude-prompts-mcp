@@ -45,6 +45,7 @@ import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Logger } from '../logging/index.js';
 
 import { computeContentHash } from '#shared/utils/hash.js';
+import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
 
 /**
  * Resource types supported by the indexer
@@ -883,6 +884,83 @@ export class ResourceIndexer {
   }
 
   /**
+   * Read a `{category}/{id}.yaml` prompt — the single-file layout — or `undefined` if it will not
+   * parse.
+   *
+   * The sibling of {@link readResourceDir} for the layout that has no directory of its own. It
+   * existed in the prompt loader from the beginning (`discoverYamlPrompts` calls it the "file
+   * pattern") and reached no `resource_index` row at all, because this walk skipped every
+   * non-directory entry: a prompt written this way loaded, served, and was invisible to every
+   * Python hook. Latent for the shipped tree, which uses the directory form throughout (measured
+   * 2026-09-13: zero single-file prompts ship), and live for anything an operator authors.
+   */
+  private async readSingleFilePrompt(
+    filePath: string,
+    root: string
+  ): Promise<{ id: string; scanned: ScannedResource } | undefined> {
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      return undefined;
+    }
+
+    try {
+      // `| undefined` rather than a bare cast: `yaml.load` returns undefined for an empty document,
+      // so the optional chain below is load-bearing rather than defensive.
+      const data = yaml.load(content) as Record<string, unknown> | undefined;
+      // Segments of the CONTAINING directory: `['general']` for `general/x.yaml`,
+      // `['general', 'chain']` for `general/chain/step.yaml`. The first is the category.
+      const segments = path.relative(root, path.dirname(filePath)).split(path.sep);
+      const baseName = singleFilePromptBaseName(path.basename(filePath));
+      return {
+        // Derived the loader's way and for the reason {@link identityOf} records: the path below
+        // the category, slash-joined, with the file's own basename last. `discoverYamlPrompts`
+        // prefixes a nested folder identically, so a step at `general/chain/step.yaml` is served
+        // as `chain/step` and the index must say the same.
+        id: [...segments.slice(1), baseName].join('/'),
+        scanned: {
+          filePath,
+          content,
+          category: (data?.['category'] as string | undefined) ?? segments[0],
+        },
+      };
+    } catch (error) {
+      this.logger.debug(`ResourceIndexer: Skipping ${filePath}: ${error}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Admit a scanned definition to the candidate map, unless its loader refused the file.
+   *
+   * Excluded BEFORE `recordScanned`, not filtered out afterwards. The map is id-keyed and
+   * last-root-wins, so a refused workspace file that reached it would displace the bundled
+   * definition the loaders fall back to — and the id would then be missing from the index while
+   * `prompt_engine` still answers to it. Declining candidacy is what lets precedence resolve the
+   * way `resolveResourceRoots` documents: the refused file is simply not there. It is also not
+   * recorded as shadowing anything, for the same reason — it hides nothing.
+   */
+  private considerCandidate(
+    type: IndexedResourceType,
+    found: { id: string; scanned: ScannedResource },
+    results: Map<string, ScannedResource>,
+    result: SyncResult
+  ): void {
+    if (this.quarantine?.isRefused(found.scanned.filePath) === true) {
+      result.refused.push({
+        type,
+        id: found.id,
+        filePath: found.scanned.filePath,
+        // Set by the removal sweep, which is the only place that can know.
+        rowDeleted: false,
+      });
+      return;
+    }
+    this.recordScanned(type, found.id, found.scanned, results, result);
+  }
+
+  /**
    * The id a resource is served under, derived the way its loader derives it.
    *
    * For prompts that is the path BELOW the category directory, slash-joined — a chain step at
@@ -928,33 +1006,70 @@ export class ResourceIndexer {
     const yamlFile = this.getYamlFileName(type);
 
     for (const entry of entries) {
+      if (entry.isFile()) {
+        await this.scanSingleFilePrompt({ entry, dir, type, root, depth, results, result });
+        continue;
+      }
       if (!entry.isDirectory() || entry.name === 'tools') continue;
 
       const subDir = path.join(dir, entry.name);
       const found = await this.readResourceDir(subDir, root, yamlFile);
-      if (found !== undefined) {
-        // Excluded BEFORE `recordScanned`, not filtered out afterwards. The map is id-keyed and
-        // last-root-wins, so a refused workspace file that reached it would displace the bundled
-        // definition the loaders fall back to — and the id would then be missing from the index
-        // while `prompt_engine` still answers to it. Declining candidacy is what lets precedence
-        // resolve the way `resolveResourceRoots` documents: the refused file is simply not there.
-        // It is also not recorded as shadowing anything, for the same reason — it hides nothing.
-        if (this.quarantine?.isRefused(found.scanned.filePath) === true) {
-          result.refused.push({
-            type,
-            id: found.id,
-            filePath: found.scanned.filePath,
-            // Set by the removal sweep, which is the only place that can know.
-            rowDeleted: false,
-          });
-        } else {
-          this.recordScanned(type, found.id, found.scanned, results, result);
-        }
-      }
+      if (found !== undefined) this.considerCandidate(type, found, results, result);
       if (depth + 1 < MAX_SCAN_DEPTH) {
         await this.scanResources(subDir, type, results, result, root, depth + 1);
       }
     }
+  }
+
+  /**
+   * Consider one FILE entry as a `{category}/{id}.yaml` prompt.
+   *
+   * Three conditions, each excluding something the loaders would not serve:
+   *
+   * - `type === 'prompt'` — no other kind has a single-file layout. Gates, frameworks and styles
+   *   are `{root}/{id}/{kind}.yaml` and nothing else, so admitting a bare file for one of them
+   *   would index a resource its own loader cannot find.
+   * - `depth > 0` — the prompt loader takes its categories from the root's DIRECTORIES and looks
+   *   for single-file prompts only inside one, so a `.yaml` at the prompts root is never served.
+   * - {@link isSingleFilePromptName} — `category.yaml`, `prompts.yaml`, `tool.yaml`, `prompt.yaml`
+   *   and `_`/`.`-prefixed files all parse as YAML and are not prompts. That rule is SHARED with
+   *   the loader and with the startup baseline walk; all three used to hold their own copy and two
+   *   were wrong in opposite directions.
+   *
+   * `tools/` never reaches here, because the directory branch above declines to descend into it.
+   */
+  private async scanSingleFilePrompt(params: {
+    entry: { name: string };
+    dir: string;
+    type: IndexedResourceType;
+    root: string;
+    depth: number;
+    results: Map<string, ScannedResource>;
+    result: SyncResult;
+  }): Promise<void> {
+    const { entry, dir, type, root, depth, results, result } = params;
+    if (type !== 'prompt' || depth === 0 || !isSingleFilePromptName(entry.name)) return;
+
+    const found = await this.readSingleFilePrompt(path.join(dir, entry.name), root);
+    if (found === undefined) return;
+
+    // The loader gives the DIRECTORY form precedence over a file of the same id
+    // (`discoverYamlPrompts`: "Only add if no directory version exists"), so a
+    // `{category}/{id}.yaml` sitting beside a `{category}/{id}/prompt.yaml` must not displace it —
+    // the index would then name a file the loader does not serve, which is the disagreement this
+    // whole walk exists to end. Tested by the recorded candidate's own filename, which is
+    // unambiguous: only the directory form is ever called `prompt.yaml`. Scoped to THIS root, so
+    // cross-root last-root-wins precedence is untouched.
+    const existing = results.get(found.id);
+    if (
+      existing !== undefined &&
+      path.basename(existing.filePath) === this.getYamlFileName(type) &&
+      !path.relative(root, existing.filePath).startsWith('..')
+    ) {
+      return;
+    }
+
+    this.considerCandidate(type, found, results, result);
   }
 
   /**
