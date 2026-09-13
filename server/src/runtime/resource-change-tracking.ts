@@ -22,6 +22,7 @@ import {
   ResourceChangeTracker,
   TrackedResourceType,
 } from '#infra/observability/tracking/index.js';
+import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
 
 /**
  * Singleton tracker instance for the application
@@ -104,8 +105,19 @@ export async function compareResourceBaseline(
     const fs = await import('node:fs');
     const fsPromises = await import('node:fs/promises');
 
-    // Scan for prompt YAML files
-    const scanDir = async (dir: string, resourceType: TrackedResourceType): Promise<void> => {
+    /**
+     * Walk one level of the prompts tree.
+     *
+     * `depth` is 0 at the prompts ROOT and counts levels below it. It is load-bearing rather than
+     * bookkeeping: the loader takes its categories from the root's DIRECTORIES
+     * (`discoverCategoryDirectories`) and only looks for single-file prompts inside one, so a
+     * `.yaml` sitting directly at the root is never served and must not be announced as added.
+     */
+    const scanDir = async (
+      dir: string,
+      resourceType: TrackedResourceType,
+      depth = 0
+    ): Promise<void> => {
       try {
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
@@ -137,11 +149,19 @@ export async function compareResourceBaseline(
             // Only recurse into directories that don't contain resource files
             // (directories with prompt.yaml/gate.yaml ARE the resource, not containers)
             if (!hasPromptYaml && !hasGateYaml) {
-              await scanDir(entryPath, resourceType);
+              await scanDir(entryPath, resourceType, depth + 1);
             }
-          } else if (entry.name.endsWith('.yaml') && !entry.name.startsWith('_')) {
-            // Single-file YAML prompt
-            const id = entry.name.replace(/\.yaml$/, '');
+          } else if (depth > 0 && isSingleFilePromptName(entry.name)) {
+            // Single-file YAML prompt: `{category}/{id}.yaml`.
+            //
+            // The filename rule is `#shared/utils/prompt-layout.js`, shared with the prompt loader
+            // that defines the catalog and with `ResourceIndexer`, because this walk used to have
+            // its own and it was wrong. It excluded only a leading `_`, so `category.yaml` — which
+            // ships under `resources/prompts/guidance/` and is a category declaration, not a
+            // prompt — was reported at every startup as an external addition of a prompt with the
+            // id `category`. That is the same "logged as added for a file that never entered the
+            // catalog" defect the quarantine closed, surviving in the branch it did not touch.
+            const id = singleFilePromptBaseName(entry.name);
             resources.push({
               resourceType,
               resourceId: id,

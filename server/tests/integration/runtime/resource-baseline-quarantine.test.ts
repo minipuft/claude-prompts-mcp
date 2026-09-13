@@ -209,6 +209,126 @@ describe('compareResourceBaseline refusal awareness', () => {
     expect(operationsFor('repairable')).toEqual(['added']);
   });
 
+  describe('files in a prompts tree that are not prompts (P4.22)', () => {
+    /**
+     * `category.yaml` is a category declaration, not a prompt.
+     *
+     * The walk recurses into any directory that holds no `prompt.yaml`/`gate.yaml` of its own —
+     * which is exactly what a category directory looks like — and its file branch accepted any
+     * `.yaml` not starting with `_`. So `resources/prompts/guidance/category.yaml`, which ships
+     * with the server, was reported at every startup as an external addition of a prompt with the
+     * id `category`. Same defect P4.14 closed, in the branch P4.14 did not touch: an event
+     * announcing a resource no loader ever serves.
+     */
+    it('reports no addition for a category declaration, while its sibling prompt is added', async () => {
+      await writePrompt('healthy_prompt', validPrompt('healthy_prompt'));
+      await fs.writeFile(
+        path.join(PROMPTS_DIR, CATEGORY, 'category.yaml'),
+        'name: General\ndescription: The general category\n',
+        'utf-8'
+      );
+
+      // Fixture control: the loader that DEFINES the catalog serves one prompt from this tree and
+      // does not serve anything called `category`. Without this the absence below could just mean
+      // the walk never reached the directory.
+      const loader = new PromptLoader(logger as never, { enableCache: false });
+      const loaded = await loader.loadFromDirectories(PROMPTS_DIR);
+      expect(loaded.promptsData.map((prompt) => prompt.id)).toEqual(['healthy_prompt']);
+
+      const result = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        loader.getQuarantine()
+      );
+
+      // The absence...
+      expect(operationsFor('category')).toEqual([]);
+      // ...and its positive control, from the same query over the same table.
+      expect(operationsFor('healthy_prompt')).toEqual(['added']);
+      expect(result.added).toBe(1);
+      // Not refused either: nothing was refused, the file is simply not a prompt.
+      expect(result.refused).toBe(0);
+    });
+
+    it('reports no addition for a script tool manifest under a prompt', async () => {
+      // `tool.yaml` is the other reserved name the loader excludes. In the shipped layout a
+      // `tools/` directory sits under a prompt directory, which holds `prompt.yaml`, so this walk
+      // does not descend into it — but the walk descends into ANY directory holding neither
+      // `prompt.yaml` nor `gate.yaml`, which is the shape below and is reachable the moment a
+      // `tools/` directory is not where the convention puts it. Measured: without the shared rule
+      // this case reports an addition of a prompt with the id `tool`.
+      const orphanToolDir = path.join(PROMPTS_DIR, CATEGORY, 'tools', 'word_count');
+      await fs.mkdir(orphanToolDir, { recursive: true });
+      await fs.writeFile(
+        path.join(orphanToolDir, 'tool.yaml'),
+        'id: word_count\nname: Word Count\n',
+        'utf-8'
+      );
+      await writePrompt('healthy_prompt', validPrompt('healthy_prompt'));
+
+      const result = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        await loadAndQuarantine()
+      );
+
+      expect(operationsFor('tool')).toEqual([]);
+      expect(operationsFor('healthy_prompt')).toEqual(['added']);
+      expect(result.added).toBe(1);
+    });
+
+    it('reports no addition for a YAML file sitting at the prompts root', async () => {
+      // The other half of the same shape. The loader takes its categories from the root's
+      // DIRECTORIES and looks for single-file prompts only inside one, so a `.yaml` at the root is
+      // never served — and the reserved-filename rule alone would still have announced it.
+      await fs.writeFile(path.join(PROMPTS_DIR, 'stray.yaml'), validPrompt('stray'), 'utf-8');
+      await writePrompt('healthy_prompt', validPrompt('healthy_prompt'));
+
+      const loader = new PromptLoader(logger as never, { enableCache: false });
+      const loaded = await loader.loadFromDirectories(PROMPTS_DIR);
+      // Fixture control: the loader really does not serve it.
+      expect(loaded.promptsData.map((prompt) => prompt.id)).toEqual(['healthy_prompt']);
+
+      const result = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        loader.getQuarantine()
+      );
+
+      expect(operationsFor('stray')).toEqual([]);
+      expect(operationsFor('healthy_prompt')).toEqual(['added']);
+      expect(result.added).toBe(1);
+    });
+
+    it('still reports a genuine single-file prompt, which is what keeps the rule honest', async () => {
+      // The positive control for the rule itself. A fix that simply stopped reporting file entries
+      // would pass both cases above and lose a layout the loader serves.
+      await fs.mkdir(path.join(PROMPTS_DIR, CATEGORY), { recursive: true });
+      await fs.writeFile(
+        path.join(PROMPTS_DIR, CATEGORY, 'inline_prompt.yaml'),
+        validPrompt('inline_prompt'),
+        'utf-8'
+      );
+
+      const loader = new PromptLoader(logger as never, { enableCache: false });
+      const loaded = await loader.loadFromDirectories(PROMPTS_DIR);
+      expect(loaded.promptsData.map((prompt) => prompt.id)).toEqual(['inline_prompt']);
+
+      const result = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        loader.getQuarantine()
+      );
+
+      expect(operationsFor('inline_prompt')).toEqual(['added']);
+      expect(result.added).toBe(1);
+    });
+  });
+
   it('logs modified when a previously-valid file is broken and then repaired', async () => {
     await writePrompt('round_trip', validPrompt('round_trip'));
     await compareResourceBaseline(tracker, configStub, logger as never, await loadAndQuarantine());

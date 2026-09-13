@@ -24,6 +24,7 @@ import { linearize } from '#modules/workflow-ir/linearizer.js';
 import { type Logger, PromptArgument } from '#shared/types/index.js';
 import { INJECTION_TYPES } from '#shared/types/injection.js';
 import { mintNodeIds } from '#shared/utils/node-order.js';
+import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ============================================
@@ -323,23 +324,12 @@ export function discoverYamlPrompts(categoryDir: string, prefix: string = ''): s
       // This enables chain directories to contain both the parent prompt AND nested step prompts
       const nested = discoverYamlPrompts(path.join(categoryDir, entry.name), nestedPrefix);
       nestedPaths.push(...nested);
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith('.yaml') &&
-      entry.name !== 'prompts.yaml' &&
-      entry.name !== 'category.yaml' &&
-      entry.name !== 'prompt.yaml' &&
-      // `tool.yaml` is a script-tool manifest under a prompt's reserved `tools/${id}/`
-      // directory, reached because discovery ALWAYS recurses (above). It is a reserved
-      // filename in the same sense as the three preceding it — not a prompt in a shape the
-      // prompt schema could ever accept. Without this, every boot logged
-      // `[PromptLoader] Invalid YAML in .../tools/word_count/tool.yaml: Prompt must have
-      // userMessageTemplate/... defined` at ERROR level for a file that is not a prompt,
-      // which is how a log level stops meaning anything.
-      entry.name !== 'tool.yaml'
-    ) {
-      // File pattern: {prompt_id}.yaml (skip metadata and directory-indicator files)
-      const baseName = entry.name.replace(/\.yaml$/, '');
+    } else if (entry.isFile() && isSingleFilePromptName(entry.name)) {
+      // File pattern: {prompt_id}.yaml. The reserved-filename rule lives in
+      // `#shared/utils/prompt-layout.js` because the resource indexer and the startup baseline
+      // comparison walk the same tree and must agree with this function about what a prompt is —
+      // they did not, and each was wrong in its own direction (see that module).
+      const baseName = singleFilePromptBaseName(entry.name);
       const id = prefix.length > 0 ? `${prefix}/${baseName}` : baseName;
       // Only add if no directory version exists
       if (!discoveries.has(id)) {
