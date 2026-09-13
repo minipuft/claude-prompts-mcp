@@ -20,6 +20,7 @@ import {
   ResourceIndexer,
   reportResourceSyncFailures,
 } from '../../../src/infra/database/index.js';
+import { reportRefusedResources } from '../../../src/infra/database/resource-indexer.js';
 
 // Mock logger
 const mockLogger = {
@@ -357,13 +358,19 @@ describe('ResourceIndexer', () => {
     });
   });
 
-  // ── F6: a tool that fails to load must not read as a tool that was deleted ──
+  // ── F6 / P4.17: a tool that fails to load is neither `removed` nor published ──
   //
-  // The defect this describes: `loadTool` returns undefined rather than throwing,
-  // `loadToolsForPrompt` skipped it silently, and `syncTools` then DELETED its
-  // index row counting `removed++`. Validation failure and disk deletion were the
-  // same observable event, and `errors` stayed 0 for both.
-  describe('tool sync failure reporting', () => {
+  // The original defect (F6): `loadTool` returned undefined rather than throwing,
+  // `loadToolsForPrompt` skipped it silently, and `syncTools` then DELETED its index
+  // row counting `removed++`. Validation failure and disk deletion were the same
+  // observable event, and `errors` stayed 0 for both.
+  //
+  // F6's remedy kept the row so the removal sweep would leave it alone, which fixed
+  // the conflation and left a second one: `queryTools()` publishes every row and
+  // `skills-sync` reads it, so a tool the loader refused was still advertised as an
+  // available tool. P4.17 gives it the `refused` disposition instead — no row, not
+  // `removed`, and not a sync `failure` either, because the indexer did its job.
+  describe('tool sync refusal reporting', () => {
     /**
      * A loader stub standing in for ScriptToolDefinitionLoader.
      *
@@ -406,7 +413,7 @@ describe('ResourceIndexer', () => {
       return withTools;
     }
 
-    it('reports a failing tool by id and reason instead of counting it removed', async () => {
+    it('reports a failing tool as refused by path, not as removed and not as a failure', async () => {
       // Index the tool successfully first, so there is a row that the removal
       // sweep could delete on the second pass.
       const warm = await indexOnePromptWith(
@@ -415,6 +422,7 @@ describe('ResourceIndexer', () => {
       const first = await warm.syncAll();
       expect(first.errors).toBe(0);
       expect(first.failures).toEqual([]);
+      expect(first.refused).toEqual([]);
 
       // Same tool, now failing validation — still present on disk.
       const cold = await indexOnePromptWith(
@@ -426,31 +434,78 @@ describe('ResourceIndexer', () => {
       const second = await cold.syncAll();
 
       expect(second.removed).toBe(0);
-      expect(second.errors).toBe(1);
-      expect(second.failures).toEqual([
+      // Not a sync failure: the indexer did exactly its job. One event, one disposition.
+      expect(second.errors).toBe(0);
+      expect(second.failures).toEqual([]);
+      expect(second.refused).toEqual([
         {
           type: 'tool',
           id: 'host_prompt/broken-parser',
-          reason: 'validation failed: missing script',
+          filePath: path.join(RESOURCES_DIR, 'prompts', 'host_prompt', 'tools', 'broken-parser'),
+          rowDeleted: true,
         },
       ]);
+      // `rowDeleted: true` is a claim about the table; check the table, not the claim.
+      expect(
+        dbManager.query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'tool'")
+      ).toEqual([]);
     });
 
-    it('keeps the failing tool indexed rather than dropping it from the index', async () => {
+    it('drops the failing tool from the index and from queryTools, keeping its valid sibling', async () => {
+      // The published surface, which is the residual F6 left behind: `queryTools()` is what
+      // `skills-sync` reads, so a row kept "so the sweep leaves it alone" was still an offer.
       const warm = await indexOnePromptWith(
-        loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
+        loaderReporting(
+          [
+            { id: 'broken-parser', name: 'Broken Parser' },
+            { id: 'good-parser', name: 'Good Parser' },
+          ],
+          []
+        )
       );
       await warm.syncAll();
+      // Positive control on the fixture: both tools really were indexed and published first, so
+      // the absence below is a deletion and not a tool that never arrived.
+      expect(Object.keys(warm.queryTools()).sort()).toEqual([
+        'host_prompt/broken-parser',
+        'host_prompt/good-parser',
+      ]);
 
       const cold = await indexOnePromptWith(
-        loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed' }])
+        loaderReporting(
+          [{ id: 'good-parser', name: 'Good Parser' }],
+          [{ toolId: 'broken-parser', reason: 'validation failed' }]
+        )
       );
-      await cold.syncAll();
+      const result = await cold.syncAll();
 
       const rows = dbManager.query<{ id: string }>(
         "SELECT id FROM resource_index WHERE type = 'tool'"
       );
-      expect(rows.map((r) => r.id)).toEqual(['host_prompt/broken-parser']);
+      // The absence...
+      expect(rows.map((r) => r.id)).toEqual(['host_prompt/good-parser']);
+      // ...and its positive control, from the same probe over the same published surface.
+      expect(Object.keys(cold.queryTools())).toEqual(['host_prompt/good-parser']);
+      expect(result.removed).toBe(0);
+    });
+
+    it('reports refused without a row deletion when the tool never indexed cleanly', async () => {
+      // `rowDeleted` distinguishes "a promise was withdrawn" from "one was never made"; a fixture
+      // that only ever fails proves the flag is read from the index rather than hardcoded true.
+      const cold = await indexOnePromptWith(
+        loaderReporting([], [{ toolId: 'never-loaded', reason: 'tool.yaml not found' }])
+      );
+      const result = await cold.syncAll();
+
+      expect(result.refused).toEqual([
+        {
+          type: 'tool',
+          id: 'host_prompt/never-loaded',
+          filePath: path.join(RESOURCES_DIR, 'prompts', 'host_prompt', 'tools', 'never-loaded'),
+          rowDeleted: false,
+        },
+      ]);
+      expect(result.removed).toBe(0);
     });
 
     it('still counts a genuinely deleted tool as removed', async () => {
@@ -470,35 +525,60 @@ describe('ResourceIndexer', () => {
       expect(result.failures).toEqual([]);
     });
 
-    it('reportResourceSyncFailures names every failure by id and reason', async () => {
-      // The two runtime call sites (module-initializer, application) discarded
-      // syncAll()'s return entirely. This is the composition they now perform.
+    it('reportRefusedResources names the refused tool by id and path', async () => {
+      // The runtime call sites report through `reportSyncFindings`, which fans out to all three
+      // reporters. A refused tool belongs to the refusal line, whose operator action is "repair
+      // this file" — not the failure line, which says the indexer could not do its job.
       const cold = await indexOnePromptWith(
         loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed: no script' }])
       );
       const result = await cold.syncAll();
 
       mockLogger.warn.mockClear();
-      reportResourceSyncFailures(result, mockLogger as any);
+      reportRefusedResources(result, mockLogger as any);
 
       const warned = mockLogger.warn.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
       expect(warned).toContain('host_prompt/broken-parser');
-      expect(warned).toContain('validation failed: no script');
+      expect(warned).toContain(path.join('host_prompt', 'tools', 'broken-parser'));
     });
 
-    it('reportResourceSyncFailures says nothing on a clean sync', async () => {
+    it('the failure reporter stays silent about a refused tool, and the refusal reporter about a clean sync', async () => {
+      const cold = await indexOnePromptWith(
+        loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed: no script' }])
+      );
+      const refusedResult = await cold.syncAll();
+
+      mockLogger.warn.mockClear();
+      reportResourceSyncFailures(refusedResult, mockLogger as any);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+
       const clean = await indexOnePromptWith(
         loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
       );
-      const result = await clean.syncAll();
+      const cleanResult = await clean.syncAll();
 
       mockLogger.warn.mockClear();
-      reportResourceSyncFailures(result, mockLogger as any);
-
+      reportRefusedResources(cleanResult, mockLogger as any);
       expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
-    it('keeps errors and failures.length in step', async () => {
+    it('keeps errors and failures.length in step when the loader itself throws', async () => {
+      // The remaining producer of a tool `failure`: the loader threw, so this walk really could
+      // not do its job for that prompt and there is no per-tool id to refuse. Re-pointed here
+      // because refusals no longer inflate `errors` — a fixture that only refuses would assert
+      // the invariant against 0 === 0 and prove nothing.
+      const throwing = await indexOnePromptWith((() => {
+        throw new Error('tools directory unreadable');
+      }) as unknown as ReturnType<typeof loaderReporting>);
+      const result = await throwing.syncAll();
+
+      expect(result.errors).toBe(result.failures.length);
+      expect(result.errors).toBe(1);
+      expect(result.failures[0]?.id).toBe('host_prompt/<all tools>');
+      expect(result.refused).toEqual([]);
+    });
+
+    it('does not inflate errors when several tools are refused at once', async () => {
       const cold = await indexOnePromptWith(
         loaderReporting(
           [],
@@ -510,8 +590,12 @@ describe('ResourceIndexer', () => {
       );
       const result = await cold.syncAll();
 
-      expect(result.errors).toBe(result.failures.length);
-      expect(result.errors).toBe(2);
+      expect(result.errors).toBe(0);
+      expect(result.failures).toEqual([]);
+      expect(result.refused.map((entry) => entry.id)).toEqual([
+        'host_prompt/broken-parser',
+        'host_prompt/other-tool',
+      ]);
     });
   });
 

@@ -37,6 +37,7 @@ export type ToolLoaderFn = (promptDir: string, promptId: string) => ScriptToolLo
 import type {
   JSONSchemaDefinition,
   LoadedScriptTool,
+  ScriptToolLoadFailure,
   ScriptToolLoadReport,
 } from '#shared/types/automation.js';
 import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
@@ -170,9 +171,13 @@ export interface SyncResult {
    *
    * Its own disposition rather than a use of `removed` or `failures`, because it is neither. A
    * refused file is still on disk, so counting it as `removed` asserts that a validation failure
-   * and a deleted directory are the same event — the conflation {@link ResourceIndexer.syncTools}
-   * already refuses for script tools. And `failures` means the indexer could not do its job;
-   * here it did exactly its job, which is to index the served catalog and nothing else.
+   * and a deleted directory are the same event. And `failures` means the indexer could not do its
+   * job; here it did exactly its job, which is to index the served catalog and nothing else.
+   *
+   * Carries script tools as well as the four directory-form kinds. Those two arrive by different
+   * routes for a reason that is not an inconsistency: a directory-form file is refused by a loader
+   * that walks a root, read back through {@link QuarantineView}, while a script tool is loaded per
+   * prompt and {@link ResourceIndexer.syncTools} already holds its loader's own failure report.
    *
    * A count-plus-array pair is deliberately avoided (`errors`/`failures` carry that debt and the
    * comment above records why they must be written together). One array cannot drift from itself.
@@ -1213,16 +1218,14 @@ export class ResourceIndexer {
           });
         }
         for (const failure of report.failures) {
-          const compositeId = `${prompt.id}/${failure.toolId}`;
-          // Marked seen deliberately: the tool IS on disk, it just did not load.
-          // Letting it fall through to the removal sweep below would delete its
-          // index row and report `removed`, which is the claim that a validation
-          // failure and a deleted directory are the same event.
-          seen.add(compositeId);
-          this.logger.warn(
-            `ResourceIndexer: Tool ${compositeId} failed to load: ${failure.reason}`
-          );
-          recordSyncFailure(result, 'tool', compositeId, failure.reason);
+          this.recordRefusedTool({
+            promptDir,
+            promptId: prompt.id,
+            failure,
+            indexed,
+            seen,
+            result,
+          });
         }
       } catch (error) {
         this.logger.debug(`ResourceIndexer: Error syncing tools for prompt ${prompt.id}:`, error);
@@ -1244,6 +1247,53 @@ export class ResourceIndexer {
     );
 
     return result;
+  }
+
+  /**
+   * A script tool whose definition its loader refused: no index row, and not `removed`.
+   *
+   * WHAT THIS REPLACED, AND WHY THAT WAS HALF RIGHT. The previous code kept the row and counted
+   * the tool as a `failure`, arguing that deleting it would make the removal sweep report
+   * `removed` for what is really a validation failure. The conflation it named is real — the tool
+   * is still on disk — but keeping the row was the wrong remedy, because `queryTools()` publishes
+   * every row and `skills-sync` reads it, so a tool the loader refused was still advertised as
+   * available. {@link RefusedResource} is the third disposition that did not exist when that
+   * comment was written: the row goes, and it is reported as neither removed nor a sync failure.
+   *
+   * NOT ALSO A `failure`. `failures` means the indexer could not do its job; here it did exactly
+   * its job. Counting one event under two dispositions is the conflation this whole family of
+   * changes exists to remove, and `errors` would then report a number an operator cannot act on.
+   *
+   * `seen` still takes the id, which is what keeps the removal sweep off it — this method has
+   * already decided the row's fate and recorded the reason.
+   */
+  private recordRefusedTool(params: {
+    promptDir: string;
+    promptId: string;
+    failure: ScriptToolLoadFailure;
+    indexed: Map<string, IndexedResource>;
+    seen: Set<string>;
+    result: SyncResult;
+  }): void {
+    const { promptDir, promptId, failure, indexed, seen, result } = params;
+    const compositeId = `${promptId}/${failure.toolId}`;
+    seen.add(compositeId);
+
+    const hadRow = indexed.has(compositeId);
+    if (hadRow) {
+      this.db.run("DELETE FROM resource_index WHERE id = ? AND type = 'tool'", [compositeId]);
+    }
+
+    this.logger.warn(`ResourceIndexer: Tool ${compositeId} failed to load: ${failure.reason}`);
+    result.refused.push({
+      type: 'tool',
+      id: compositeId,
+      // Derived rather than carried on the failure: `ScriptToolLoadFailure` reports an id and a
+      // reason, and this is the layout `ScriptToolDefinitionLoader` discovered it under — the
+      // same directory `LoadedScriptTool.toolDir` names for a tool that loaded.
+      filePath: path.join(promptDir, 'tools', failure.toolId),
+      rowDeleted: hadRow,
+    });
   }
 
   private upsertToolEntry(params: {
