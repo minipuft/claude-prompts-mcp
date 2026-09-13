@@ -25,6 +25,7 @@ import {
   type StyleDefinitionYaml,
 } from './style-schema.js';
 
+import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
@@ -91,6 +92,19 @@ export type { StyleSchemaValidationResult } from './style-schema.js';
 export class StyleDefinitionLoader {
   private cache = new Map<string, StyleDefinitionYaml>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
+  /**
+   * Style files this loader refused, by root. ONE instance for the loader's lifetime.
+   *
+   * Styles were the fourth kind `ResourceIndexer` walks and the only one with no refusal record,
+   * so the "absent from the index when the loader dropped it" property held for three kinds and
+   * silently did not for this one: a malformed `style.yaml` left the catalog and the indexer, which
+   * parses the same YAML itself and only ever checked that it parses, indexed it anyway.
+   *
+   * Published by reference (`getQuarantine`) rather than returned per load, the way `PromptLoader`
+   * publishes its own: the composition root binds it once and every later reload is visible through
+   * the same object.
+   */
+  private readonly quarantine = new ResourceQuarantine();
   private stylesDir: string;
   private additionalStylesDirs: string[];
   private enableCache: boolean;
@@ -236,6 +250,18 @@ export class StyleDefinitionLoader {
   }
 
   /**
+   * Live view of the style files that failed to load, across every root consulted so far.
+   *
+   * Populated by demand, not by discovery: `discoverStyles()` only lists directories holding a
+   * `style.yaml`, and a file is refused when it is READ. A consumer that needs the collection to
+   * describe the whole tree must drive {@link loadAllStyles} first — which is why the composition
+   * root reports the LOADED style count rather than the discovered one.
+   */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
+  /**
    * Get the styles directory being used
    */
   getStylesDir(): string {
@@ -303,55 +329,64 @@ export class StyleDefinitionLoader {
    * @param baseDir - Directory to load from (defaults to primary stylesDir)
    */
   private loadFromYamlDir(id: string, baseDir?: string): StyleDefinitionYaml | undefined {
-    try {
-      const styleDir = join(baseDir ?? this.stylesDir, id);
-      const entryPath = join(styleDir, 'style.yaml');
+    const root = baseDir ?? this.stylesDir;
+    const styleDir = join(root, id);
+    const entryPath = join(styleDir, 'style.yaml');
 
-      if (!existsSync(entryPath)) {
-        if (this.debug) {
-          console.error(`[StyleDefinitionLoader] YAML entry not found: ${entryPath}`);
-        }
-        return undefined;
+    // `sinkFor`, never `beginRoot`: this loader resolves ONE id at a time behind a cache, so there
+    // is no walk boundary at which a whole root could be dropped and rebuilt. Clearing the root
+    // here would erase the record of every OTHER broken style in it. Refusals are recorded per
+    // file and forgotten per file on success, which converges on the same set.
+    const sink = this.quarantine.sinkFor('style', root);
+
+    // An absent entry point is not a refusal — nothing was read, and this is the ordinary answer
+    // for an id that lives in a different root. Recording it would put a file that does not exist
+    // in front of a repair surface.
+    if (!existsSync(entryPath)) {
+      if (this.debug) {
+        console.error(`[StyleDefinitionLoader] YAML entry not found: ${entryPath}`);
       }
+      return undefined;
+    }
 
+    try {
       // Load main style.yaml
       const definition = loadYamlFileSync<StyleDefinitionYaml>(entryPath, {
         required: true,
       });
 
       if (!definition) {
+        this.stats.loadErrors++;
+        sink.record({ id, path: entryPath, error: 'style.yaml parsed to no definition' });
         return undefined;
       }
 
       // Inline referenced files (guidance.md)
       this.inlineReferencedFiles(definition, styleDir);
 
-      // Validate if enabled
-      if (this.validateOnLoad) {
-        const validation = this.validateDefinition(definition, id);
-        if (!validation.valid) {
-          this.stats.loadErrors++;
-          console.error(
-            `[StyleDefinitionLoader] Validation failed for '${id}':`,
-            validation.errors.join('; ')
-          );
-          return undefined;
-        }
-        if (validation.warnings.length > 0 && this.debug) {
-          console.warn(
-            `[StyleDefinitionLoader] Warnings for '${id}':`,
-            validation.warnings.join('; ')
-          );
-        }
+      const refusal = this.refusalReason(definition, id);
+      if (refusal !== undefined) {
+        this.stats.loadErrors++;
+        sink.record({ id, path: entryPath, error: refusal });
+        console.error(`[StyleDefinitionLoader] Validation failed for '${id}':`, refusal);
+        return undefined;
       }
 
       if (this.debug) {
         console.error(`[StyleDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
 
+      // This exact file loaded, so any record of it is now a lie — the stale-`✓` failure in
+      // reverse, and the reason a repaired style stops reporting as refused without a restart.
+      sink.forget(entryPath);
       return definition;
     } catch (error) {
       this.stats.loadErrors++;
+      sink.record({
+        id,
+        path: entryPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (this.debug) {
         console.error(`[StyleDefinitionLoader] Failed to load YAML '${id}':`, error);
       }
@@ -387,6 +422,24 @@ export class StyleDefinitionLoader {
       // Remove the file reference after inlining
       delete (definition as Record<string, unknown>)['guidanceFile'];
     }
+  }
+
+  /**
+   * Why this definition may not enter the catalog, or `undefined` when it may.
+   *
+   * One question, one answer: the caller records a refusal and needs the reason as text, and
+   * threading the whole `StyleSchemaValidationResult` out meant the caller re-derived "is this
+   * valid" from two fields. Warnings are emitted here because they belong to the same read and
+   * nothing outside acts on them.
+   */
+  private refusalReason(definition: StyleDefinitionYaml, id: string): string | undefined {
+    if (!this.validateOnLoad) return undefined;
+    const validation = this.validateDefinition(definition, id);
+    if (!validation.valid) return validation.errors.join('; ');
+    if (validation.warnings.length > 0 && this.debug) {
+      console.warn(`[StyleDefinitionLoader] Warnings for '${id}':`, validation.warnings.join('; '));
+    }
+    return undefined;
   }
 
   /**

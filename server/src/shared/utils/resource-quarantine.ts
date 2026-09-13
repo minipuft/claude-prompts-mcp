@@ -43,10 +43,15 @@
 /**
  * Resource kinds a loader can refuse and a tool can repair.
  *
- * Deliberately NOT every kind the indexer walks: `style` has no quarantine sink yet (P4.16), and a
- * member here with no loader writing to it would read as coverage this collection does not have.
+ * All four kinds the resource indexer walks as directories. `style` joined at P4.16, and only
+ * because `StyleDefinitionLoader` fills a sink — a member here with no loader writing to it would
+ * read as coverage this collection does not have. `tool` is deliberately absent and stays absent:
+ * a script tool is not loaded by a resource loader that walks a root, it is loaded per prompt by
+ * `ScriptToolDefinitionLoader`, whose `ScriptToolLoadReport.failures` already IS its refusal
+ * record. The indexer reads that report directly (`syncTools`), so routing it through here would
+ * be a second channel for an answer it already holds.
  */
-export type QuarantinedResourceType = 'prompt' | 'gate' | 'framework';
+export type QuarantinedResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
 /**
  * One file a loader walked, read, and refused.
@@ -169,11 +174,12 @@ export class ResourceQuarantine implements QuarantineView {
    * A write handle for `(type, root)` that clears NOTHING.
    *
    * For the loaders whose unit of work is a file rather than a root. `PromptLoader` walks a whole
-   * root inside one method, so clear-then-walk describes its disk exactly; `GateDefinitionLoader`
-   * and `RuntimeFrameworkLoader` are called per id, from a registry loop at startup and from a
-   * single-id `reload` afterwards, and clearing a root on either would erase the records for every
-   * OTHER broken file in it. Those two record on refusal and `forget` on success instead, which
-   * converges on the same set without a walk boundary to hang it on.
+   * root inside one method, so clear-then-walk describes its disk exactly; `GateDefinitionLoader`,
+   * `RuntimeFrameworkLoader` and `StyleDefinitionLoader` are called per id, from a registry or
+   * discovery loop at startup and from a single-id reload afterwards, and clearing a root on any of
+   * them would erase the records for every OTHER broken file in it. Those three record on refusal
+   * and `forget` on success instead, which converges on the same set without a walk boundary to
+   * hang it on.
    */
   sinkFor(type: QuarantinedResourceType, root: string): QuarantineSink {
     return {
