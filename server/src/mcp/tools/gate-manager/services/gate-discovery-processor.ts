@@ -22,16 +22,26 @@ export class GateDiscoveryProcessor {
    * collection is built inside the registry's `initialize()`, so a view captured at construction
    * would be the empty stand-in for the process's whole life.
    *
-   * `sourceRoot` is deliberately absent from the served summaries — the gate loader does not stamp
-   * one on a definition, so a finding says "another root" rather than naming a root it would have
-   * to guess. The shadow is still announced; only its origin is unnamed.
+   * `sourceRoot` comes off the loaded definition, where `GateDefinitionLoader` stamped the root it
+   * read the file from (P4.18). Passed through untouched: this processor must not infer which root
+   * serves an id, because a second derivation of a question the loader already answered is how two
+   * answers to it start disagreeing.
+   *
+   * Ids are lowercased on the way in. A quarantine record's id is path-derived from a directory
+   * name, while `gateId` is whatever the file declared — `validateGateSchema` compares those two
+   * case-insensitively, so a `gate.yaml` declaring `id: Shared-Gate` under `shared-gate/` loads
+   * fine and would otherwise never match its own refusal record. `handleInspect` already lowercases
+   * for the same lookup.
    */
   private quarantineFindings(): QuarantineFinding[] {
     const records = this.ctx.gateManager.getQuarantine().list();
     if (records.length === 0) return [];
     return summarizeQuarantine(
       records,
-      this.ctx.gateManager.list(false).map((gate) => ({ id: gate.gateId }))
+      this.ctx.gateManager.list(false).map((gate) => ({
+        id: gate.gateId.toLowerCase(),
+        sourceRoot: gate.getDefinition().sourceRoot,
+      }))
     );
   }
 
@@ -118,7 +128,9 @@ export class GateDiscoveryProcessor {
     // else in this response would tell them. Empty for every healthy gate.
     const shadowedNote = formatShadowedNote(
       this.ctx.gateManager.getQuarantine().byId(gate.gateId.toLowerCase()),
-      undefined
+      // The root serving what the operator is reading — the loader's own stamp, so the claim
+      // "repairing that file will change what this id serves" can be checked before acting on it.
+      gate.getDefinition().sourceRoot
     );
 
     return this.success(

@@ -19,6 +19,11 @@ import { join } from 'node:path';
 
 import { GateDefinitionLoader } from '../../../src/engine/gates/core/gate-definition-loader.js';
 
+// The guide-facing definition interface — the same alias the loader stamps through, and NOT the
+// `z.infer` of the loader schema that shares its name. Reading `sourceRoot` off the zod type would
+// go through its index signature and assert nothing about the declared field.
+import type { GateDefinitionYaml } from '../../../src/engine/gates/types/index.js';
+
 /** A gate.yaml that passes `validateGateSchema`. */
 function validGate(id: string): string {
   return [
@@ -166,5 +171,72 @@ describe('GateDefinitionLoader quarantine (P4.15)', () => {
     expect(loader.getQuarantine().byId('unparseable')).toHaveLength(1);
     // POSITIVE CONTROL for the throwing branch specifically.
     expect(loader.getQuarantine().byId('good-gate')).toHaveLength(0);
+  });
+
+  // ==========================================================================
+  // P4.18 — provenance
+  // ==========================================================================
+
+  /**
+   * The loader stamps the root it READ the file from.
+   *
+   * This is what lets the quarantine report name the root currently serving a shadowed id instead
+   * of saying "another root". It is asserted at the loader and not at the renderer on purpose
+   * (ruling R7): a renderer that worked out which root served an id would be a second derivation
+   * of a question answered here, and the two can disagree.
+   */
+  const served = (loader: GateDefinitionLoader, id: string): GateDefinitionYaml | undefined =>
+    loader.loadGate(id) as GateDefinitionYaml | undefined;
+
+  it('stamps the root a definition was read from, not the root that was asked first', () => {
+    writeGate(primary, 'shared-gate', schemaInvalidGate('shared-gate'));
+    writeGate(overlay, 'shared-gate', validGate('shared-gate'));
+    writeGate(primary, 'primary-gate', validGate('primary-gate'));
+
+    const loader = new GateDefinitionLoader({
+      gatesDir: primary,
+      additionalGatesDirs: [overlay],
+    });
+
+    // The shadow case: `primary` was consulted first and refused, so the root that SERVES is the
+    // one trailing it. The two roots are distinct temp directories, so this distinguishes "names
+    // the serving root" from "names a root".
+    expect(served(loader, 'shared-gate')?.sourceRoot).toBe(overlay);
+
+    // POSITIVE CONTROL, from the same probe: a gate the primary did serve stamps the primary. A
+    // stamp hard-wired to either root, or to the loader's configured directory, fails one of these
+    // two lines.
+    expect(served(loader, 'primary-gate')?.sourceRoot).toBe(primary);
+  });
+
+  it('stamps the serving root while the refusal record keeps the refused root', () => {
+    writeGate(primary, 'shared-gate', schemaInvalidGate('shared-gate'));
+    writeGate(overlay, 'shared-gate', validGate('shared-gate'));
+
+    const loader = new GateDefinitionLoader({
+      gatesDir: primary,
+      additionalGatesDirs: [overlay],
+    });
+
+    // Both halves of what the shadow line renders, from one load: the file to repair lives in one
+    // root and the definition being served comes from the other. Reporting the same root for both
+    // would tell an operator their broken file is the one answering.
+    expect(served(loader, 'shared-gate')?.sourceRoot).toBe(overlay);
+    expect(loader.getQuarantine().byId('shared-gate')[0]?.root).toBe(primary);
+  });
+
+  it('overwrites a sourceRoot the file itself declared', () => {
+    // `sourceRoot` is not in `GateDefinitionSchema`, so the schema's `.passthrough()` carries an
+    // authored one straight onto the definition. The stamp runs after validation for exactly this
+    // reason: a gate file must not be able to claim it was loaded from somewhere it was not.
+    writeGate(
+      primary,
+      'liar-gate',
+      [validGate('liar-gate').trimEnd(), 'sourceRoot: /somewhere/else', ''].join('\n')
+    );
+
+    const loader = new GateDefinitionLoader({ gatesDir: primary });
+
+    expect(served(loader, 'liar-gate')?.sourceRoot).toBe(primary);
   });
 });

@@ -137,6 +137,21 @@ export interface GateDefinitionYaml {
    * Loaded from gate.yaml `evaluation` key.
    */
   evaluation?: JudgeEvaluationConfig;
+
+  // Provenance (stamped by the loader, never authored)
+  /**
+   * Root directory this definition was loaded FROM (P4.18).
+   *
+   * Stamped by `GateDefinitionLoader.loadFromYamlDir`, where the root is the argument, and read
+   * back by the quarantine report so a shadowed id names the root currently serving it instead of
+   * "another root". Mirrors `PromptData.sourceRoot`.
+   *
+   * Deliberately absent from `GateDefinitionSchema`: a key in the loader's zod schema is a key an
+   * operator may author, which `validate:declared-surface` then requires the tool to expose. This
+   * one is written by the loader after validation and overwrites anything a file declared, so it
+   * cannot be used to claim a provenance the file does not have.
+   */
+  sourceRoot?: string;
 }
 
 // ============================================================================

@@ -640,6 +640,11 @@ export class FrameworkManager extends BaseResourceHandler<
         applicableTypes: this.getApplicableTypes(guide),
         priority: this.getFrameworkPriority(guide),
         enabled: true,
+        // Carried, not re-derived (P4.18, ruling R7): the loader stamped the root it read the
+        // definition from, and this projection is the only thing standing between that stamp and
+        // the served catalog. Anything else asking "which root serves this id" would have to
+        // resolve the roots a second time and could disagree with the loader.
+        sourceRoot: guide.sourceRoot,
       };
     } catch (error) {
       this.logger.error(`Failed to generate definition for ${guide.frameworkId}:`, error);

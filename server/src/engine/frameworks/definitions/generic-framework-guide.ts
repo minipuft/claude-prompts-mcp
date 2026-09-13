@@ -47,6 +47,8 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   /** The framework type discriminator */
   readonly type: FrameworkType;
   readonly version: string;
+  /** Root the loader read this definition from — undefined for a guide built in-process. */
+  readonly sourceRoot: string | undefined;
 
   private readonly definition: FrameworkResourceDefinition;
 
@@ -61,6 +63,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
     this.frameworkName = definition.name;
     this.type = definition.type;
     this.version = definition.version || '1.0.0';
+    this.sourceRoot = definition.sourceRoot;
   }
 
   /**

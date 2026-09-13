@@ -108,6 +108,12 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     // the "does not take its id dark" half.
     writeGate(writable, 'shared-gate', gateYaml('shared-gate', { valid: false }));
     writeGate(bundled, 'shared-gate', gateYaml('shared-gate', { valid: true }));
+    // The same shadow, with the id DECLARED in mixed case. `validateGateSchema` compares the
+    // declared id to the directory name case-insensitively, so this file loads and the guide's
+    // `gateId` is `Case-Gate` while its refusal record's id is the directory name `case-gate`.
+    // Pairing the two therefore has to normalize, which is what the `list` surface now does.
+    writeGate(writable, 'case-gate', gateYaml('Case-Gate', { valid: false }));
+    writeGate(bundled, 'case-gate', gateYaml('Case-Gate', { valid: true }));
     // Broken in the writable root ONLY, and never repaired: the subject of the partial-repair
     // refusal below. `shared-gate` cannot serve that role — it IS in the registry, from the other
     // root, so an update on it is an ordinary update and not a repair at all.
@@ -170,6 +176,32 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain(join(writable, 'shared-gate', 'gate.yaml'));
   });
 
+  it('FALSIFIER (P4.18) — the list quarantine section names the serving root by path', async () => {
+    const result = await call({ action: 'list', enabled_only: false });
+
+    // The serving root, by path. `toContain(bundled)` alone would pass on the refused file's own
+    // path too, so the assertion carries the clause that says which root is ANSWERING.
+    expect(result.body).toContain(`is currently served from ${bundled}`);
+    // The unnamed-origin rendering this row removed. Kept as the assertion that fails if the
+    // served summaries stop carrying `sourceRoot` — `formatQuarantineSection` falls back to this
+    // string silently, so nothing else here would notice.
+    expect(result.body).not.toContain('served from another root');
+
+    // POSITIVE CONTROL — `broken-gate` is refused in the SAME root and nothing serves its id, so
+    // it must carry no shadow line at all. A renderer that announced a shadow for every record
+    // would satisfy the two assertions above for free.
+    const brokenEntry = result.body.slice(result.body.indexOf(brokenPath));
+    expect(brokenEntry.split('\n- ')[0]).not.toContain('currently served from');
+
+    // …and the same claim for a gate whose file DECLARES a mixed-case id: served id `Case-Gate`,
+    // record id `case-gate`. Unnormalized, this pair never matches and the shadow goes unannounced
+    // — which is the defect the framework surface had for every framework.
+    const caseEntry = result.body.slice(
+      result.body.indexOf(join(writable, 'case-gate', 'gate.yaml'))
+    );
+    expect(caseEntry.split('\n- ')[0]).toContain(`is currently served from ${bundled}`);
+  });
+
   it('FALSIFIER — a broken file does not take its id dark when another root defines it', async () => {
     const result = await call({ action: 'inspect', id: 'shared-gate' });
 
@@ -179,6 +211,11 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     // …and the shadow is ANNOUNCED rather than silently substituted (owner ruling 2026-09-09).
     expect(result.body).toContain('A nearer file for this id failed to load');
     expect(result.body).toContain(join(writable, 'shared-gate', 'gate.yaml'));
+    // …naming the root that is answering, not just "another root" (P4.18). `bundled` is a
+    // different temp directory from `writable`, so this fails if the note names the refused
+    // file's root instead of the serving one.
+    expect(result.body).toContain(`served from ${bundled}`);
+    expect(result.body).not.toContain('served from another root');
   });
 
   it('FALSIFIER — update repairs the refused file in place and says it now loads', async () => {
@@ -351,6 +388,10 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     // …and the shadow is ANNOUNCED rather than silently substituted (owner ruling 2026-09-09).
     expect(result.body).toContain('A nearer file for this id failed to load');
     expect(result.body).toContain(join(writable, SHADOWED_ID, 'framework.yaml'));
+    // …naming the root that is answering, which for a shadowed SHIPPED framework is the bundled
+    // tree (P4.18). Distinct from `writable`, so this fails if the note names the refused root.
+    expect(result.body).toContain(`served from ${bundled}`);
+    expect(result.body).not.toContain('served from another root');
   });
 
   it('lists the refused files with id, path and error', async () => {
@@ -358,6 +399,21 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
 
     expect(result.body).toContain('Quarantined');
     expect(result.body).toContain(brokenPath);
+  });
+
+  it('FALSIFIER (P4.18) — the list quarantine section names the serving root by path', async () => {
+    const result = await call({ action: 'list', enabled_only: false });
+
+    // Before P4.18 this surface announced NO shadow for a framework at all: served ids are
+    // upper-cased by `generateSingleFrameworkDefinition` while a quarantine record's id is the
+    // lower-cased directory name, so `summarizeQuarantine` never paired them.
+    expect(result.body).toContain(`is currently served from ${bundled}`);
+    expect(result.body).not.toContain('served from another root');
+
+    // POSITIVE CONTROL — `brokenfw` is refused and nothing serves its id, so it carries no shadow
+    // line. A renderer that announced one for every record would pass the two lines above anyway.
+    const brokenEntry = result.body.slice(result.body.indexOf(brokenPath));
+    expect(brokenEntry.split('\n- ')[0]).not.toContain('currently served from');
   });
 
   it('FALSIFIER — update repairs the refused file in place and says it now loads', async () => {

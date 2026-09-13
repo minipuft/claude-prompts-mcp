@@ -327,6 +327,14 @@ export class RuntimeFrameworkLoader {
         console.error(`[RuntimeFrameworkLoader] Loaded: ${definition.name} (${id})`);
       }
 
+      // Stamp provenance HERE, where the root is the argument (P4.18, ruling R7) — see the gate
+      // loader's twin. Every root reaches this method: the primary from `loadFramework`, each
+      // additional one through `loadFromAdditionalDirs`. After validation, so an authored
+      // `sourceRoot:` is overwritten rather than believed. For a GROUPED additional directory this
+      // is `{dir}/{group}` — the same string this walk's sink stamps on a refusal, which keeps the
+      // two sides of a shadow finding comparable.
+      definition.sourceRoot = baseDir;
+
       // The repair side of the record — see the gate loader's twin. This loader is called one id at
       // a time, so a repaired file's record has to be dropped here or it outlives the repair.
       sink.forget(entryPath);

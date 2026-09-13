@@ -33,7 +33,15 @@ import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 /** The served-catalog facts a report needs, without importing the catalog's type. */
 export interface ServedResourceSummary {
   readonly id: string;
-  /** Root the live definition was loaded from, when the loader stamped one. */
+  /**
+   * Root the live definition was loaded from, when the loader stamped one.
+   *
+   * All three loaders stamp it as of P4.18, so the `'another root'` fallback in the two renderers
+   * below is now the in-process case (a guide registered from a definition that never came off
+   * disk) rather than the ordinary one. It stays optional because a caller supplying nothing is
+   * still honest — the alternative is a renderer that guesses, which is the thing this type
+   * exists to prevent.
+   */
   readonly sourceRoot?: string | undefined;
 }
 

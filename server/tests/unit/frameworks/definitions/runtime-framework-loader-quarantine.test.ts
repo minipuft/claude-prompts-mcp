@@ -178,4 +178,61 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
     // POSITIVE CONTROL for the phases branch specifically.
     expect(loader.getQuarantine().byId('goodfw')).toHaveLength(0);
   });
+
+  // ==========================================================================
+  // P4.18 — provenance
+  // ==========================================================================
+
+  /**
+   * The loader stamps the root it READ the file from — the gate loader's twin.
+   *
+   * Asserted at the loader rather than at the renderer (ruling R7): the quarantine report must
+   * carry this value through, never work it out, because resolving the roots a second time is how
+   * two answers to one question start disagreeing.
+   */
+  it('stamps the root a definition was read from, not the root that was asked first', () => {
+    writeFramework(primary, 'sharedfw', schemaInvalidFramework('sharedfw'));
+    writeFramework(overlay, 'sharedfw', validFramework('sharedfw'));
+    writeFramework(primary, 'primaryfw', validFramework('primaryfw'));
+
+    const loader = new RuntimeFrameworkLoader({
+      frameworksDir: primary,
+      additionalFrameworksDirs: [overlay],
+    });
+
+    // The shadow case: `primary` refused, so the root that SERVES is the one trailing it.
+    expect(loader.loadFramework('sharedfw')?.sourceRoot).toBe(overlay);
+    // POSITIVE CONTROL, same probe: a framework the primary did serve stamps the primary.
+    expect(loader.loadFramework('primaryfw')?.sourceRoot).toBe(primary);
+  });
+
+  it('stamps the serving root while the refusal record keeps the refused root', () => {
+    writeFramework(primary, 'sharedfw', schemaInvalidFramework('sharedfw'));
+    writeFramework(overlay, 'sharedfw', validFramework('sharedfw'));
+
+    const loader = new RuntimeFrameworkLoader({
+      frameworksDir: primary,
+      additionalFrameworksDirs: [overlay],
+    });
+
+    // Both halves of the shadow line, from one load: the file to repair is in one root, the
+    // definition being served is from the other.
+    expect(loader.loadFramework('sharedfw')?.sourceRoot).toBe(overlay);
+    expect(loader.getQuarantine().byId('sharedfw')[0]?.root).toBe(primary);
+  });
+
+  it('overwrites a sourceRoot the file itself declared', () => {
+    // `sourceRoot` is not in `FrameworkSchema`, whose `.passthrough()` would otherwise carry an
+    // authored one onto the definition. The stamp runs after validation so a framework file cannot
+    // claim a provenance it does not have.
+    writeFramework(
+      primary,
+      'liarfw',
+      [validFramework('liarfw').trimEnd(), 'sourceRoot: /somewhere/else', ''].join('\n')
+    );
+
+    const loader = new RuntimeFrameworkLoader({ frameworksDir: primary });
+
+    expect(loader.loadFramework('liarfw')?.sourceRoot).toBe(primary);
+  });
 });

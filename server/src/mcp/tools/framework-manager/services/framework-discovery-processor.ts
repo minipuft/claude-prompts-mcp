@@ -27,16 +27,25 @@ export class FrameworkDiscoveryProcessor {
    * the collection is built inside the registry's `initialize()`, so a view captured at
    * construction would be the empty stand-in for the process's whole life.
    *
-   * `sourceRoot` is deliberately absent from the served summaries — the framework loader does not
-   * stamp one on a definition, so a finding says "another root" rather than naming a root it would
-   * have to guess. The shadow is announced either way; only its origin is unnamed.
+   * `sourceRoot` comes off the loaded definition, where `RuntimeFrameworkLoader` stamped the root
+   * it read the file from (P4.18), carried through `FrameworkManager`'s projection. Passed through
+   * untouched: this processor must not infer which root serves an id.
+   *
+   * Ids are lowercased on the way in, and until P4.18 they were not — which made this pairing
+   * dead. `generateSingleFrameworkDefinition` upper-cases every served id while a quarantine
+   * record's id is the lower-cased directory name, so no record ever matched a served framework
+   * and the `list` surface announced no shadow at all. `handleInspect` lowercases already, which
+   * is why the two surfaces disagreed.
    */
   private quarantineFindings(): QuarantineFinding[] {
     const records = this.ctx.frameworkManager.getQuarantine().list();
     if (records.length === 0) return [];
     return summarizeQuarantine(
       records,
-      this.ctx.frameworkManager.listFrameworks(false).map((framework) => ({ id: framework.id }))
+      this.ctx.frameworkManager.listFrameworks(false).map((framework) => ({
+        id: framework.id.toLowerCase(),
+        sourceRoot: framework.sourceRoot,
+      }))
     );
   }
 
@@ -132,7 +141,9 @@ export class FrameworkDiscoveryProcessor {
     // else in this response would tell them. Empty for every healthy framework.
     const shadowedNote = formatShadowedNote(
       this.ctx.frameworkManager.getQuarantine().byId(framework.id.toLowerCase()),
-      undefined
+      // The root serving what the operator is reading — the loader's own stamp, so the claim
+      // "repairing that file will change what this id serves" can be checked before acting on it.
+      framework.sourceRoot
     );
 
     return this.success(
