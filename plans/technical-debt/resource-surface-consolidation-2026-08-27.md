@@ -429,12 +429,13 @@ independence of FILES, and the dispatch table below is sequenced on the second.
 | P4.18 | ☐ (as of 2026-09-11 · flips when a shadowed gate and a shadowed framework each name the root currently serving their id, by path, in `inspect` and in the `list` quarantine section) | **The shadow is announced and its origin is not.** `summarizeQuarantine` pairs each record with the `sourceRoot` of whatever serves that id, and the prompt loader stamps one; the gate and framework loaders do not, so both surfaces render "served from another root" where the prompt surface renders a path. Constraint 3 of the P4.9 ruling holds — the fallback IS announced, so nobody is silently reading a definition they did not edit — but an operator told their repair will change what serves, and not told what is serving, cannot check the claim before acting on it. Found by P4.15 while satisfying the constraint, which is why it is a row and not a defect in that row's ✓ | a gate and a framework each shadowed from a second root have their serving root named by path on both surfaces, and a unit test asserts the loader stamps the root it loaded from |
 | P4.19 | ☐ (as of 2026-09-11 · flips when `create` on a quarantined gate id is refused with a message naming the refused file) | **`update` learned about quarantine and `create` did not, so `create` is now the silent overwrite path.** `GateLifecycleProcessor.handleCreate` guards on `gateManager.has(id)`, which is FALSE for a refused file — so `create` on a quarantined id overwrites the broken file and reports plain success, never mentioning that something was there. Before P4.15 this was merely one of several ways a quarantined gate was unreachable; now that `update` repairs it, `create` is the remaining door and the asymmetry is worse than uniform ignorance, because an operator who reaches for the wrong verb gets no signal. Frameworks are NOT affected: `checkFrameworkExists` consults the directory, not the registry | `create` on a quarantined gate id is refused and names the file plus the `update` verb, while a positive control shows `create` on a genuinely unused id still succeeds |
 | P4.20 | ☐ (as of 2026-09-11 · flips when `history` on a just-repaired resource returns one row) | **A repair writes no version row, so the ledger's first entry for a repaired resource is its SECOND edit.** Both repair paths deliberately skip `recordEditResult`, and the reasoning is sound as far as it goes — a quarantined resource has no prior live snapshot to diff, and the response says so rather than hiding it. The residual is that `version_history` is durable and nothing regenerates it (the premise `validate:mutation-atomicity` exists to protect), so the one edit most worth having a record of is the one that has none. Wants a "no prior state" bridge entry rather than a diff | a repair writes version 1 with an explicit no-prior-state marker, and `history` on a just-repaired gate and framework each return one row |
-| P4.21 | ☐ (as of 2026-09-11 · flips when a single-file `{category}/{id}.yaml` prompt appears in `resource_index`, with a positive control on a directory-form sibling) | **Single-file prompts have never been indexed, and the two consumers do not even walk the same set of files.** `ResourceIndexer.scanResources` skips non-directory entries outright, so a `{category}/{id}.yaml` prompt reaches no `resource_index` row, while `compareResourceBaseline` handles that layout explicitly. Pre-existing and untouched by P4.14 — found while measuring the two walks against each other. Same family as P4.14 (two derivations of one question, disagreeing) but the opposite direction: not a file indexed that should not be, a file NOT indexed that should be. Unmeasured whether any shipped prompt uses the single-file layout, which is the first thing the row should establish | a single-file prompt is present in `resource_index`, and a directory-form prompt in the same category still is |
+| P4.21 | ☐ (as of 2026-09-11 · flips when a single-file `{category}/{id}.yaml` prompt appears in `resource_index`, with a positive control on a directory-form sibling) | **Single-file prompts have never been indexed, and the two consumers do not even walk the same set of files.** `ResourceIndexer.scanResources` skips non-directory entries outright, so a `{category}/{id}.yaml` prompt reaches no `resource_index` row, while `compareResourceBaseline` handles that layout explicitly. Pre-existing and untouched by P4.14 — found while measuring the two walks against each other. Same family as P4.14 (two derivations of one question, disagreeing) but the opposite direction: not a file indexed that should not be, a file NOT indexed that should be. ~~Unmeasured whether any shipped prompt uses the single-file layout, which is the first thing the row should establish~~ **MEASURED 2026-09-13 (R10): zero shipped prompts use it** — one `category.yaml` and five `tool.yaml` are the only non-`prompt.yaml` YAML files under `resources/prompts`. The row does not shrink, because `loader.ts:292-297` accepts the layout, so it is latent for shipped content and live for anything an operator authors | a single-file prompt is present in `resource_index`, and a directory-form prompt in the same category still is |
+| P4.22 | ☐ (as of 2026-09-13 · flips when the startup baseline reports no prompt for `resources/prompts/guidance/category.yaml`, with a positive control on a real single-file prompt in the same category) | **The same walk disagreement running the other way, and this half is live on shipped content today.** Found while measuring P4.21. `compareResourceBaseline`'s single-file branch (`runtime/resource-change-tracking.ts`) reads `entry.name.endsWith('.yaml') && !entry.name.startsWith('_')` and derives `id = entry.name.replace(/\.yaml$/, '')` — and `category.yaml` matches. `resources/prompts/guidance/category.yaml` is on disk in a directory the scan recurses into (it holds no `prompt.yaml`/`gate.yaml` of its own, which is exactly what makes the walk descend), so the baseline reports a prompt with id `category` that no loader ever serves. That is the "logged as `added` for a file that never entered the catalog" defect P4.14 was opened to fix, surviving in the branch P4.14 did not touch — a fix at the sites you found is not a fix of the class. Closes with P4.21 by sharing ONE accept rule between the two walks rather than copying it | the baseline reports no prompt for a `category.yaml`, a `tool.yaml` or a `_`-prefixed file, and still reports one for a genuine single-file prompt |
 
 **Gate P4**: no field is required-but-undeclared, and no shipped resource kind is unauthorable.
-**Status 2026-09-11: PASSED.** Both clauses are closed and each is held by a gate rather than by review. First clause — `validate:declared-surface` reports 36 loader keys across 3 resource types authorable or exempt, and the `gate_type` exemption that stood for the homonym is DELETED because the homonym is gone (P4.10). Second clause — `category` was the last shipped resource kind without a writer, and P4.7 gave it the full surface the owner ruled for, with zero new exemptions. **Sequence**: batch A closed the declaration rows; batch B killed P4.8 and corrected P4.2's premise; batch C (2026-09-07) closed P4.3 and P4.2 and killed P4.6, opening P4.11/P4.12 from the kill's fallout; dispatch batch 1 (2026-09-09) closed P4.11 and opened P4.13; batch 2 (2026-09-11) closed P4.9, P4.10 and P4.12; batch 3 closed P4.7 and P4.13. Batch 4 (2026-09-11) closed P4.14 and P4.15 and opened P4.16 through P4.21. **Thirteen of twenty-one rows are terminal (eleven ✓, two ✗).**
+**Status 2026-09-11: PASSED.** Both clauses are closed and each is held by a gate rather than by review. First clause — `validate:declared-surface` reports 36 loader keys across 3 resource types authorable or exempt, and the `gate_type` exemption that stood for the homonym is DELETED because the homonym is gone (P4.10). Second clause — `category` was the last shipped resource kind without a writer, and P4.7 gave it the full surface the owner ruled for, with zero new exemptions. **Sequence**: batch A closed the declaration rows; batch B killed P4.8 and corrected P4.2's premise; batch C (2026-09-07) closed P4.3 and P4.2 and killed P4.6, opening P4.11/P4.12 from the kill's fallout; dispatch batch 1 (2026-09-09) closed P4.11 and opened P4.13; batch 2 (2026-09-11) closed P4.9, P4.10 and P4.12; batch 3 closed P4.7 and P4.13. Batch 4 (2026-09-11) closed P4.14 and P4.15 and opened P4.16 through P4.21; batch 5 (2026-09-13) is compiling those six and opened P4.22 while measuring P4.21. **Thirteen of twenty-two rows are terminal (eleven ✓, two ✗).**
 
-**Six rows stay open, none bears on the gate's clauses, and the count went UP as the phase closed — which is the honest shape of this work rather than a failure of it.** P4.16 (styles have no refusal record) and P4.17 (a script tool that fails to load keeps its index row and stays published) were named by batch 4's rulings as the channels its two rows do not cover. P4.18, P4.19 and P4.20 were opened BY P4.15 — a shadow whose serving root is unnamed, a `create` verb that still overwrites a quarantined gate now that `update` repairs it, and a repair that writes no version row. P4.21 was opened by P4.14 measuring its two consumers against each other and finding they never walked the same file set. **Every one of the six exists because something was measured, not because something was deferred**, and each carries its own falsifier so none of them depends on this paragraph being re-read. The gate's two clauses — no field required-but-undeclared, no shipped resource kind unauthorable — are held by `validate:declared-surface` and by P4.7's writer, and neither is touched by any open row.
+**Seven rows stay open, none bears on the gate's clauses, and the count went UP as the phase closed — which is the honest shape of this work rather than a failure of it.** (Six as written on 2026-09-11; P4.22 joined them on 2026-09-13, opened by batch 5's re-measurement of P4.21 rather than by any new work — the same walk disagreement running the other way, live on shipped content.) P4.16 (styles have no refusal record) and P4.17 (a script tool that fails to load keeps its index row and stays published) were named by batch 4's rulings as the channels its two rows do not cover. P4.18, P4.19 and P4.20 were opened BY P4.15 — a shadow whose serving root is unnamed, a `create` verb that still overwrites a quarantined gate now that `update` repairs it, and a repair that writes no version row. P4.21 was opened by P4.14 measuring its two consumers against each other and finding they never walked the same file set. **Every one of the six exists because something was measured, not because something was deferred**, and each carries its own falsifier so none of them depends on this paragraph being re-read. The gate's two clauses — no field required-but-undeclared, no shipped resource kind unauthorable — are held by `validate:declared-surface` and by P4.7's writer, and neither is touched by any open row.
 
 ### Findings (P4 batch B)
 
@@ -655,14 +656,17 @@ Sequenced on FILE REGIONS, not on row size — see the preamble. `Agent` is the 
 compiled node carries (`heavy`/`standard`/`fast` become `subagentModel`; `main thread` keeps the row
 in the owning session).
 
-| Row             | Agent       | Batch | Why                                                                                                                |
-| --------------- | ----------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
-| ~~P4.11~~       | standard    | 1 ✓   | DONE 2026-09-09. Exceptions 67 → 50; three anchors were wrong (P4-F12, P4-F13)                                     |
-| ~~P4.9~~        | heavy       | 2 ✓   | DONE 2026-09-11. Loader + registry; all four constraints held, M4 reproduced the predicted availability regression |
-| ~~P4.10+P4.12~~ | heavy       | 2 ✓   | DONE 2026-09-11. One change as predicted; the rename also broke a bundled prompt tool (P4-F17)                     |
-| ~~P4.7~~        | main thread | 3 ✓   | DONE 2026-09-11. Full resource type; two defects fixed because the writer was unobservable without them            |
-| ~~P4.15~~       | heavy       | 4 ✓   | DONE 2026-09-11. Three brief premises wrong; the collection needed a real extension, not two sinks (P4-F21)        |
-| ~~P4.14~~       | heavy       | 4 ✓   | DONE 2026-09-11. Both consumers wired; the wiring needed its own gate, and the join a third commit (P4-F22)        |
+| Row             | Agent       | Batch | Why                                                                                                                  |
+| --------------- | ----------- | ----- | -------------------------------------------------------------------------------------------------------------------- |
+| ~~P4.11~~       | standard    | 1 ✓   | DONE 2026-09-09. Exceptions 67 → 50; three anchors were wrong (P4-F12, P4-F13)                                       |
+| ~~P4.9~~        | heavy       | 2 ✓   | DONE 2026-09-11. Loader + registry; all four constraints held, M4 reproduced the predicted availability regression   |
+| ~~P4.10+P4.12~~ | heavy       | 2 ✓   | DONE 2026-09-11. One change as predicted; the rename also broke a bundled prompt tool (P4-F17)                       |
+| ~~P4.7~~        | main thread | 3 ✓   | DONE 2026-09-11. Full resource type; two defects fixed because the writer was unobservable without them              |
+| ~~P4.15~~       | heavy       | 4 ✓   | DONE 2026-09-11. Three brief premises wrong; the collection needed a real extension, not two sinks (P4-F21)          |
+| ~~P4.14~~       | heavy       | 4 ✓   | DONE 2026-09-11. Both consumers wired; the wiring needed its own gate, and the join a third commit (P4-F22)          |
+| P4.16+17+21+22  | heavy       | 5     | One region: all four edit `resource-indexer.ts` or the accept rule its walk must share with the baseline's           |
+| P4.19+P4.20     | heavy       | 5     | Both edit `gate-lifecycle-processor.ts`; P4.20 also reaches `framework-lifecycle-processor.ts`'s repair path         |
+| P4.18           | heavy       | 5     | The two `engine/` loaders plus both discovery processors — disjoint from the other two nodes, so it runs beside them |
 
 **Batch 1 runs alone**, on purpose: it is the smallest row and it proves this dispatch section
 compiles before any fan-out. **It did, and the run paid for itself in a way size did not predict**
@@ -774,6 +778,55 @@ resource actually enters the catalog, which is what `resource_changes` is suppos
 deliberately excludes `style` (a member no loader writes to would read as coverage the collection
 does not have), and `syncTools()` KEEPS a tool's index row when the tool fails to load. Both are
 the same defect class as P4.14 in channels neither row names. Rows, not remarks — see P4.16/P4.17.
+
+### Ruling — batch 5 dispositions (ruled 2026-09-13, before compiling P4.16–P4.21)
+
+Six rows, three file regions, and the questions each row leaves open — ruled here because a
+delegated executor would otherwise answer them by guessing and the answers are not recoverable from
+the falsifiers. Sequencing is on FILE REGIONS as the preamble requires: P4.16/P4.17/P4.21 all edit
+`infra/database/resource-indexer.ts`, and P4.19/P4.20 both edit `gate-lifecycle-processor.ts`, so
+the six rows are three nodes and not six.
+
+**R5 — P4.16 splits at the repair boundary, and only the index half is in scope.** The row's
+falsifier asks that a refused style be "recorded where the repair surface can reach it". Measured
+2026-09-13: **styles have no `resource_manager` surface at all** — P3.1 (`resource_type: 'style'`,
+~1,160 lines of lifecycle/discovery/versioning) is still ☐, so the clause names a surface that does
+not exist and no work inside P4.16 could satisfy it. Adding `style` to `QuarantinedResourceType`
+and having `StyleDefinitionLoader` fill a sink closes the index half AND removes R4's objection to
+the member (it is no longer a type nobody writes to), which is what gives P3.1 a collection to read
+when it lands. The second clause is rewritten rather than deleted: a row that asks for two rows'
+work fails in a way that reads as under-delivery.
+
+**R6 — P4.17 reuses P4.14's `RefusedResource`, and does not invent a parallel shape.** R2a already
+supplies the third disposition the `seen.add(compositeId)` comment was missing; the tool path gets
+the same one, not a tool-flavoured copy.
+
+**R7 — P4.18 stamps the serving root at the LOADER, never at the report.** The renderer must not
+infer which root served an id. A second derivation of a question the loader already answered is the
+shape this plan has been bitten by twice — `identityOf`'s own comment records that reading `id:`
+instead of the path produced a different key for every nested prompt.
+
+**R8 — P4.19 consults the quarantine only on the `!has(id)` branch.** Mirrors the discipline the
+framework processor already states in its own words, so a registered gate is never redirected by a
+quarantined namesake. The refusal names the refused file path and the `update` verb.
+
+**R9 — P4.20 records the produced snapshot only, and must not reach for `recordEditResult`'s
+bridge.** Read 2026-09-13: `recordEditResult` (`versioning/version-history-service.ts:346`)
+computes `bridged` from `latestSnapshotMatches(...priorLiveSnapshot)` and, on a mismatch, **saves a
+version of the prior live state**. A quarantined file has no prior live state the snapshot contract
+can project — it is by definition the file that failed validation — so handing it one would either
+record the broken bytes as a restorable version or throw inside the mutation. The repair records
+version 1 of what it produced, with a description saying there was no prior loadable state, placed
+as the `commit` step of `ResourceMutationTransaction.run()` and inlined at the call site, because
+`validate:mutation-atomicity` reads the record's position lexically. The gate is not to be relaxed
+to accept a different shape.
+
+**R10 — P4.21 establishes its own first question, and the reverse defect it uncovered is its own
+row.** The row said it was "unmeasured whether any shipped prompt uses the single-file layout".
+**Measured 2026-09-13: zero.** `find server/resources/prompts -name '*.yaml' | grep -v '/prompt.yaml$'`
+returns one `category.yaml` and five `tool.yaml` files, no prompts — while `loader.ts:292-297` DOES
+accept the layout, so the gap is latent for shipped content and live for anything an operator
+authors. Measuring it turned up the same disagreement running the other way, which is P4.22.
 
 ### Ruling — P4.9 quarantine, security constraints (owner-ruled 2026-09-05)
 
