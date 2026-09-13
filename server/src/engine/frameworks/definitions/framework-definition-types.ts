@@ -60,6 +60,20 @@ export interface FrameworkResourceDefinition {
   };
   /** Judge prompt for resource selection */
   judgePrompt?: JudgePromptDefinition;
+
+  /**
+   * Root directory this definition was loaded FROM (P4.18) — stamped by the loader, never authored.
+   *
+   * `RuntimeFrameworkLoader.loadFromDir` writes it where the root is the argument, and the
+   * quarantine report reads it back so a shadowed id names the root currently serving it instead
+   * of "another root". Mirrors `PromptData.sourceRoot` and `GateDefinitionYaml.sourceRoot`.
+   *
+   * Deliberately absent from `FrameworkSchema`: a key in the loader's zod schema is a key an
+   * operator may author, which `validate:declared-surface` then requires the tool to expose. The
+   * stamp runs after validation, so a file declaring one cannot claim a provenance it does not
+   * have.
+   */
+  sourceRoot?: string;
 }
 
 /**

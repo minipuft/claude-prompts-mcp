@@ -25,6 +25,12 @@ import {
   type GateDefinitionYaml,
 } from './gate-schema.js';
 
+// The guide-facing definition type, which is a DIFFERENT declaration from this file's
+// `GateDefinitionYaml` (a `z.infer` of the loader schema) that happens to share its name. Imported
+// under an alias so the provenance stamp below is checked against the interface the guides and the
+// tool layer actually read back, rather than written blind through the zod type's index signature.
+import type { GateDefinitionYaml as GateGuideDefinition } from '../types/index.js';
+
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 import {
   loadYamlFileSync,
@@ -331,6 +337,19 @@ export class GateDefinitionLoader {
       if (this.debug) {
         console.error(`[GateDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
+
+      // Stamp provenance HERE, where the root is in hand (P4.18, ruling R7). One call loads from
+      // exactly one root, and every root reaches this method — primary directly, each additional
+      // one through `loadFromAdditionalDirs`. The renderer must never re-derive which root served
+      // an id: a second derivation of a question the loader already answered is the shape this
+      // plan has been bitten by twice. Mirrors `PromptLoader`'s stamp in `modules/prompts`.
+      //
+      // After validation, so an authored `sourceRoot:` is overwritten rather than believed.
+      //
+      // For a GROUPED additional directory this is `{dir}/{group}`, not the configured root —
+      // the same string `sinkFor` stamps on a refusal from that walk, which is what keeps the two
+      // sides of a shadow finding comparable.
+      (definition as GateGuideDefinition).sourceRoot = root;
 
       // The repair side of the record. This loader is called one id at a time — from the registry's
       // discovery loop at startup and from `reloadGuide` after a write — so a repaired file is only
