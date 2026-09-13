@@ -10,6 +10,7 @@ import {
   GATE_YAML_PROJECTED_KEYS,
   PRESERVED_GATE_YAML_KEYS,
 } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
 import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';
 
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
@@ -79,7 +80,10 @@ describe('GateToolHandler', () => {
   let gatesDir: string;
   let logger: Logger;
   let gateManager: jest.Mocked<
-    Pick<GateManager, 'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get'>
+    Pick<
+      GateManager,
+      'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get' | 'getQuarantine'
+    >
   >;
   let manager: GateToolHandler;
   let onRefresh: jest.Mock<() => Promise<void>>;
@@ -94,6 +98,10 @@ describe('GateToolHandler', () => {
 
     gateManager = {
       has: jest.fn(() => false),
+      // P4.19 — `create` and `update` both consult the quarantine on the branch where `has(id)`
+      // is false. This fixture has no loader and therefore no refused files; the empty view is
+      // the honest answer, and NOT a stored production wiring (see `lazyQuarantineView`).
+      getQuarantine: jest.fn(() => EMPTY_QUARANTINE_VIEW),
       unregister: jest.fn(() => true),
       reload: jest.fn(async () => true),
       list: jest.fn(() => []),
