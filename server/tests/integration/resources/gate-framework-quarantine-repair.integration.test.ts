@@ -231,6 +231,62 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain('description');
     expect(result.body).toContain('guidance');
   });
+  // ==========================================================================
+  // P4.19 — `create` is no longer the silent overwrite path
+  // ==========================================================================
+
+  it('FALSIFIER — create on a quarantined id is refused, naming the refused file and `update`', async () => {
+    const partialPath = join(writable, 'partial-gate', 'gate.yaml');
+    const before = readFileSync(partialPath, 'utf8');
+
+    const result = await call({
+      action: 'create',
+      id: 'partial-gate',
+      name: 'Overwriting Create',
+      description: 'this create must not land',
+      guidance: 'this guidance must not land',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.body).toContain(partialPath);
+    expect(result.body).toContain('update');
+
+    // The refusal is a refusal, not a warning attached to a write that happened anyway.
+    expect(readFileSync(partialPath, 'utf8')).toBe(before);
+    expect(readFileSync(partialPath, 'utf8')).not.toContain('this create must not land');
+  });
+
+  it('POSITIVE CONTROL — create on a genuinely unused id still succeeds', async () => {
+    const result = await call({
+      action: 'create',
+      id: 'fresh-gate',
+      name: 'Fresh Gate',
+      description: 'a gate nothing on disk claimed',
+      guidance: 'fresh guidance body',
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.body).toContain('created successfully');
+    expect(readFileSync(join(writable, 'fresh-gate', 'gate.yaml'), 'utf8')).toContain(
+      'a gate nothing on disk claimed'
+    );
+  });
+
+  it('POSITIVE CONTROL — create on a REGISTERED id still refuses with its own message', async () => {
+    const result = await call({
+      action: 'create',
+      id: 'healthy-gate',
+      name: 'Clobber',
+      description: 'should not land either',
+      guidance: 'should not land either',
+    });
+
+    expect(result.isError).toBe(true);
+    // The registry branch, not the quarantine branch: a registered gate is never redirected by a
+    // quarantined namesake, and its refusal is the pre-existing one word for word.
+    expect(result.body).toContain('already exists. Use update action to modify.');
+    expect(result.body).not.toContain('failed to load');
+  });
 });
 
 // ============================================================================
@@ -400,5 +456,23 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     expect(result.isError).toBe(true);
     expect(result.body).toContain('quarantined');
     expect(result.body).toContain('Missing: name');
+  });
+  // ==========================================================================
+  // P4.19 — the framework premise, pinned rather than assumed
+  // ==========================================================================
+
+  it('PREMISE — create on a quarantined framework already refuses, via the directory check', async () => {
+    // P4.19 changed the GATE path only, on the stated premise that `checkFrameworkExists`
+    // consults the filesystem rather than the registry and therefore already refuses here. A
+    // premise nothing asserts is the kind that quietly stops holding.
+    const partialPath = join(writable, 'partialfw', 'framework.yaml');
+    const before = readFileSync(partialPath, 'utf8');
+
+    const result = await call({ action: 'create', id: 'partialfw', name: 'Overwriting Create' });
+
+    expect(result.isError).toBe(true);
+    expect(result.body).toContain('already exists');
+    expect(result.body).toContain('filesystem');
+    expect(readFileSync(partialPath, 'utf8')).toBe(before);
   });
 });

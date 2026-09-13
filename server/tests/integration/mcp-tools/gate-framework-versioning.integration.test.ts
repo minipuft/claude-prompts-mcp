@@ -107,6 +107,15 @@ class DiskBackedGateRegistry {
     return this.cache.has(id);
   }
 
+  /**
+   * P4.19 — `handleCreate` and `handleUpdate` both consult the quarantine on the branch where
+   * `has(id)` is false. This double reads gate.yaml directly and has no loader that could refuse
+   * one, so the empty view is the honest answer here.
+   */
+  getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+    return EMPTY_QUARANTINE_VIEW;
+  }
+
   get(id: string): GateView | undefined {
     return this.cache.get(id);
   }

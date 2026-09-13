@@ -43,6 +43,28 @@ export class GateLifecycleProcessor {
       return this.error(`Gate '${id}' already exists. Use update action to modify.`);
     }
 
+    // `has(id)` is FALSE for a gate file the loader REFUSED, so without this branch `create` is
+    // the one verb that still overwrites a quarantined file and reports plain success — never
+    // mentioning that anything was there. That was tolerable while a quarantined gate was
+    // unreachable by every verb; once `handleUpdate` learned to repair one, an operator who
+    // reached for `create` instead got no signal at all, which is worse than uniform ignorance.
+    //
+    // Consulted ONLY here, on the branch where the registry has no entry, mirroring the
+    // discipline `handleUpdate` states: a REGISTERED gate is never redirected by a quarantined
+    // namesake in another root. The refusal names the refused file and the verb that repairs it,
+    // because "already exists" alone would send the operator looking for a gate `inspect` cannot
+    // show them.
+    const quarantined = this.resolveRepairTarget(id);
+    if (quarantined !== undefined) {
+      return this.error(
+        `Gate '${id}' already exists on disk, but the file at ${quarantined.path} failed to ` +
+          `load (${quarantined.error}), so the registry has no entry for it.\n\n` +
+          `\`create\` would overwrite that file without acknowledging it was there. Use ` +
+          `\`action: "update"\` with the whole gate body instead — that path repairs the refused ` +
+          `file and reports whether it loads afterwards.`
+      );
+    }
+
     const gateData: GateCreationData = {
       id,
       name,
