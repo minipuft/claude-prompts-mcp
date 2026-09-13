@@ -284,12 +284,22 @@ function reservePort() {
  * NODE_OPTIONS/NODE_ENV/JEST_WORKER_ID are stripped for the same reason the e2e helper strips
  * them: the server skips `main()` when JEST_WORKER_ID is set, and an inherited
  * `--experimental-vm-modules` leaks the parent's flags into a plain node process.
+ *
+ * The path overrides are stripped too — the same four `tests/e2e/helpers/child-env.ts` scrubs.
+ * MCP_WORKSPACE is then set explicitly; MCP_RESOURCES_PATH would override it for resources, so a
+ * shell pointed at a personal library had this check prove the tools answer against a catalog no
+ * installed user has — which is how README commands naming prompts the package did not ship
+ * passed every local check (plans/readme-install-path-2026-09-13.md). MCP_CONFIG_PATH and
+ * MCP_RUNTIME_ROOT would likewise hand the answer to whoever ran the script.
  */
 function spawnServer(port) {
   const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: REPO_ROOT };
   delete env.NODE_OPTIONS;
   delete env.NODE_ENV;
   delete env.JEST_WORKER_ID;
+  delete env.MCP_RESOURCES_PATH;
+  delete env.MCP_RUNTIME_ROOT;
+  delete env.MCP_CONFIG_PATH;
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
     cwd: SERVER_ROOT,

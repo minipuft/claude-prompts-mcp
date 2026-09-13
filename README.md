@@ -170,11 +170,11 @@ Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` 
 
 ## What You Get
 
-Four primitives you author, version, and compose. The bundled set ships 39 prompts across 8 categories — a starting library, not the ceiling: your AI writes new prompts and chains through `resource_manager` as it works, so the set grows around what you actually do. All hot-reloadable, all versioned with rollback.
+Four primitives you author, version, and compose. The bundled set ships 50 prompts across 9 categories — a starting library, not the ceiling: your AI writes new prompts and chains through `resource_manager` as it works, so the set grows around what you actually do. All hot-reloadable, all versioned with rollback.
 
 | Primitive       | Symbol | What it is                                                                                                                                                                                                               | Example                                      |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| Prompt template | `>>`   | Versioned YAML with named arguments; hot-reload on save                                                                                                                                                                  | `>>code_review target:'src/auth/'`           |
+| Prompt template | `>>`   | Versioned YAML with named arguments; hot-reload on save                                                                                                                                                                  | `>>review target:'src/auth/'`                |
 | Gate            | `::`   | Validation criterion the AI checks its own output against; blocking or advisory; can shell-verify                                                                                                                        | `:: 'cite sources'` · `:: verify:"npm test"` |
 | Framework       | `@`    | Reasoning framework that shapes how the AI works through the problem; plug in your own or use built-ins like `@ReACT`, `@5W1H`, or the project's own `@CAGEERF` scaffold ([Frameworks Guide](docs/guides/frameworks.md)) | `@ReACT` · `@your_framework`                 |
 | Style           | `#`    | Output formatting and tone                                                                                                                                                                                               | `#analytical` · `#procedural`                |
@@ -201,6 +201,8 @@ Most users invoke these via `>>` syntax in conversation; hooks construct the act
 
 ### How to write a chain
 
+<!-- illustrative-prompts: security_scan implementation -->
+
 ```
 >>review target:'src/auth/' @ReACT :: 'cite sources'
   --> security_scan :: verify:"npm test"
@@ -214,6 +216,8 @@ Read top-to-bottom:
 - `:: 'cite sources'` adds a gate the AI must satisfy (cite sources, or retry).
 - `--> security_scan :: verify:"npm test"` chains to step 2, which must pass `npm test` before producing output.
 - `==> implementation` hands the final step off to a client-native agent (a subagent in Claude Code).
+
+`review` ships with the server; `security_scan` and `implementation` stand in for prompts you write.
 
 Validation runs between steps, not only at the end. For the full operator grammar and examples, see [MCP Tools Reference](docs/reference/mcp-tools.md).
 
@@ -240,6 +244,8 @@ Two patterns extend the basic syntax. Chains also support context threading betw
 
 ### Verification Loops
 
+<!-- illustrative-prompts: implement-feature -->
+
 Ground-truth validation via shell commands. The AI keeps iterating until tests pass:
 
 ```
@@ -247,6 +253,8 @@ Ground-truth validation via shell commands. The AI keeps iterating until tests p
 ```
 
 Implements, runs the test, reads failures, fixes, retries. Spawns a fresh context after repeated failures to avoid context rot.
+
+`implement-feature` stands for your own prompt: `:: verify` attaches to any of them.
 
 | Preset      | Tries | Timeout | Use Case          |
 | ----------- | ----- | ------- | ----------------- |
@@ -325,7 +333,7 @@ What hooks unlock:
 
 | Hook                                   | Unlocks                                                                                                      |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Auto-routing**                       | `>>analyze topic:'X'` in chat fires the right MCP tool call without you naming it                            |
+| **Auto-routing**                       | `>>research_chain topic:'X'` in chat fires the right MCP tool call without you naming it                     |
 | **Chain continuity across compaction** | Multi-step chains preserve state when context compacts mid-execution; the chain doesn't restart from scratch |
 | **Cross-step verdict tracking**        | Gate pass/fail verdicts thread across all chain steps without the LLM re-deriving them                       |
 | **Native agent handoffs**              | `==>` routes to your client's subagent system automatically; no manual subagent invocation                   |

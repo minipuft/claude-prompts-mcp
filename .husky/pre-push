@@ -91,6 +91,16 @@ if [ "$VALIDATION_SCOPE" = "docs" ]; then
     exit 1
   }
 
+  # README.md classifies as `docs`, so `validate:all` never runs on a README-only push, and the README
+  # gate's shipped-count and prompt-operand checks exist for exactly that push. It imports only `node:`
+  # builtins, and CI runs the identical command on every lightweight route, so this stays a subset.
+  echo ""
+  echo "README charter..."
+  node server/scripts/validate-readme.js --mode=block || {
+    echo "❌ README charter checks failed"
+    exit 1
+  }
+
   # Plan hygiene runs HERE, not only in `validate:all`. A plan-only change classifies as `docs`
   # (`scripts/classify-validation-scope.js`), and the docs route skips the suite entirely — so
   # registering this check only in the suite left it dead on the one kind of push it exists to
@@ -126,6 +136,11 @@ if [ "$VALIDATION_SCOPE" = "hooks" ]; then
   echo ""
   echo "Python hook validation..."
   npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
+  # A README edit riding with a hooks/** change classifies as `hooks` and never reaches the docs
+  # branch, so the README gate runs here too. CI runs the identical command on every lightweight route.
+  echo ""
+  echo "README charter..."
+  node server/scripts/validate-readme.js --mode=block || { echo "❌ README charter checks failed"; exit 1; }
   echo ""
   echo "✅ Hook-only pre-push validation passed."
   exit 0

@@ -166,6 +166,18 @@ jobs:
         working-directory: .
         run: node server/scripts/validate-plan-row-tracking.js
 
+      # README.md classifies as `docs` too, and the README gate carries two checks that exist for
+      # README pull requests: the shipped prompt count, and whether every command names a prompt the
+      # package ships. Registered only in the suite, both were dead on the one kind of pull request
+      # that introduces the defect. It runs on every lightweight route, not `docs` alone: a README
+      # edit riding with a `hooks/**` change classifies as `hooks`, which a docs-only step never
+      # sees. It imports only node: builtins, so it needs no node_modules here, and
+      # `.husky/pre-push` runs the identical command on both lightweight branches.
+      - name: Validate README charter (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: node server/scripts/validate-readme.js --mode=block
+
       # CLAUDE.md, AGENTS.md, and .claude/rules/*.md are documentation paths, so their pull
       # requests intentionally skip validate:all. The full route checks this inside that suite;
       # lightweight routes run the same byte comparison here so a stale projection cannot merge.

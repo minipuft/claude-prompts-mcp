@@ -1,0 +1,72 @@
+id: research_chain
+name: Research & Analysis Chain
+category: analysis
+description: >-
+  Complete research workflow: initial scan, deep investigation with sources,
+  synthesis, and actionable recommendations. Demonstrates blocking citation gate.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    type: string
+    description: The topic to research
+    required: true
+  - name: purpose
+    type: string
+    description: Why you need this research (decision, learning, project, etc.)
+    required: false
+  - name: constraints
+    type: string
+    description: Any constraints (time, scope, specific angle)
+    required: false
+
+gateConfiguration:
+  include:
+    - research-quality
+    - content-structure
+  framework_gates: true
+  inline_gate_definitions:
+    - name: Source Citations
+      type: validation
+      scope: step
+      severity: high
+      description: >-
+        Ensures all claims are backed by cited sources.
+        BLOCKING on Step 2 (Deep Investigation).
+      guidance: |-
+        - Every factual claim must cite a source
+        - Sources must be credible (academic, official, recognized experts)
+        - Distinguish between established facts and interpretations
+      pass_criteria:
+        - All factual claims include source attribution
+        - Source credibility is assessed (High/Medium/Low)
+        - Conflicts between sources are acknowledged
+    - name: Actionable Recommendations
+      type: validation
+      scope: step
+      severity: medium
+      description: >-
+        Ensures the final action plan has concrete, implementable steps.
+        Applied to Step 4.
+      guidance: |-
+        - Recommendations must be specific and numbered
+        - Include realistic timelines
+        - Success metrics must be measurable
+      pass_criteria:
+        - At least 3 specific action items
+        - Each action has a timeline
+        - Success metrics are quantifiable
+
+chainSteps:
+  - promptId: initial_scan
+    stepName: Initial Scan (Step 1 of 4)
+  - promptId: deep_investigation
+    stepName: Deep Investigation (Step 2 of 4)
+    inlineGateIds:
+      - Source Citations
+  - promptId: research_synthesis
+    stepName: Synthesis (Step 3 of 4)
+  - promptId: action_plan
+    stepName: Action Plan (Step 4 of 4)
+    inlineGateIds:
+      - Actionable Recommendations
