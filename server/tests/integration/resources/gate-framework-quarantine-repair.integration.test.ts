@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { SqliteEngine } from '../../../src/infra/database/index.js';
 import {
   getDefaultRuntimeLoader,
   resetDefaultRuntimeLoader,
@@ -46,13 +47,28 @@ const silentLogger = (): Logger =>
     debug: jest.fn(),
   }) as unknown as Logger;
 
-/** The one thing the stub decides: which root a write lands in. */
+/**
+ * The two things the stub decides: which root a write lands in, and whether versioning is on.
+ *
+ * Versioning is ON in both suites below, unlike the P4.15 original. P4.20's falsifier is a ROW
+ * COUNT, so a stub that disabled versioning would have made every assertion about it vacuously
+ * true — the repair would write nothing and `history` would legitimately report nothing.
+ */
 function stubConfig(overrides: Record<string, unknown>): ConfigManager {
   return {
-    getVersioningConfig: () => ({ enabled: false, auto_version: false, max_versions: 10 }),
+    getVersioningConfig: () => ({ enabled: true, auto_version: true, max_versions: 10 }),
     getConfig: () => ({}),
     ...overrides,
   } as unknown as ConfigManager;
+}
+
+/** Row count for one resource's version history — the measurement P4.20's falsifier is about. */
+function countVersionRows(db: SqliteEngine, resourceType: string, resourceId: string): number {
+  const row = db.queryOne<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM version_history WHERE resource_type = ? AND resource_id = ?`,
+    [resourceType, resourceId]
+  );
+  return row?.cnt ?? 0;
 }
 
 function text(result: { content: Array<{ text?: string }> }): string {
@@ -88,6 +104,8 @@ function writeGate(root: string, id: string, body: string): string {
 describe('a gate file the loader refused is reachable and repairable (P4.15)', () => {
   let writable: string;
   let bundled: string;
+  let dbRoot: string;
+  let dbManager: SqliteEngine;
   let handler: GateToolHandler;
   let brokenPath: string;
   let errorSpy: ReturnType<typeof jest.spyOn>;
@@ -101,6 +119,7 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     writable = mkdtempSync(join(tmpdir(), 'gate-repair-writable-'));
     bundled = mkdtempSync(join(tmpdir(), 'gate-repair-bundled-'));
+    dbRoot = mkdtempSync(join(tmpdir(), 'gate-repair-db-'));
 
     writeGate(writable, 'healthy-gate', gateYaml('healthy-gate', { valid: true }));
     brokenPath = writeGate(writable, 'broken-gate', gateYaml('broken-gate', { valid: false }));
@@ -125,14 +144,23 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
       configManager: stubConfig({
         getGatesDirectory: () => writable,
         getBundledResourceDirectory: () => bundled,
+        getServerRoot: () => dbRoot,
       }),
     });
+
+    // A REAL `version_history` table, because P4.20's claim is that a row lands in a durable table
+    // nothing regenerates. A stub store would assert that the code called something.
+    dbManager = await SqliteEngine.getInstance(dbRoot, silentLogger());
+    await dbManager.initialize();
+    handler.setDatabasePort(dbManager);
   }, 30_000);
 
-  afterAll(() => {
+  afterAll(async () => {
+    await dbManager.shutdown();
     errorSpy.mockRestore();
     rmSync(writable, { recursive: true, force: true });
     rmSync(bundled, { recursive: true, force: true });
+    rmSync(dbRoot, { recursive: true, force: true });
   });
 
   it('inspect names the file and the reason instead of "Gate not found"', async () => {
@@ -194,6 +222,11 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain('Repaired');
     expect(result.body).toContain(brokenPath);
 
+    // P4.20 — the response says what was recorded. The old wording said the opposite in so many
+    // words, and a version line is the one place an operator checks before trusting `rollback`.
+    expect(result.body).toContain('**Version 1** recorded');
+    expect(result.body).not.toContain('No version was recorded');
+
     // The write landed on the file that was broken, not beside it.
     const onDisk = readFileSync(brokenPath, 'utf8');
     expect(onDisk).toContain('repaired through the tool');
@@ -231,6 +264,7 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain('description');
     expect(result.body).toContain('guidance');
   });
+
   // ==========================================================================
   // P4.19 — `create` is no longer the silent overwrite path
   // ==========================================================================
@@ -287,6 +321,46 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain('already exists. Use update action to modify.');
     expect(result.body).not.toContain('failed to load');
   });
+
+  // ==========================================================================
+  // P4.20 — a repair writes version 1
+  // ==========================================================================
+
+  it('FALSIFIER — history on the just-repaired gate returns exactly one row', async () => {
+    expect(countVersionRows(dbManager, 'gate', 'broken-gate')).toBe(1);
+
+    const result = await call({ action: 'history', id: 'broken-gate' });
+
+    expect(result.isError).toBe(false);
+    expect(result.body).toContain('(1 versions)');
+    expect(result.body).toContain('| 1 (latest) |');
+    expect(result.body).toContain('Repair of quarantined gate via resource_manager');
+  });
+
+  it('POSITIVE CONTROL — the row count discriminates: a gate nobody repaired has none', async () => {
+    // Without this, `toBe(1)` above is satisfied by a query that returns 1 for everything, and by
+    // a suite whose temp database happens to hold one stray row.
+    expect(countVersionRows(dbManager, 'gate', 'healthy-gate')).toBe(0);
+    expect(countVersionRows(dbManager, 'gate', 'fresh-gate')).toBe(0);
+
+    const result = await call({ action: 'history', id: 'healthy-gate' });
+    expect(result.body).toContain('No version history');
+  });
+
+  it('records the repaired state, so the version is restorable rather than a marker', async () => {
+    const row = dbManager.queryOne<{ snapshot: string }>(
+      `SELECT snapshot FROM version_history WHERE resource_type = ? AND resource_id = ? AND version = ?`,
+      ['gate', 'broken-gate', 1]
+    );
+    const snapshot = JSON.parse(row!.snapshot) as Record<string, unknown>;
+
+    // The snapshot holds the content the repair PRODUCED — not the bytes that failed validation,
+    // and not a blank stand-in for a prior state that never loaded. `recordEditResult`'s bridge
+    // would have written one of those two as an extra row underneath this one.
+    expect(snapshot['description']).toBe('repaired through the tool');
+    expect(snapshot['guidance']).toBe('Repaired guidance body');
+    expect(snapshot['type']).not.toBe('not-a-gate-type');
+  });
 });
 
 // ============================================================================
@@ -321,6 +395,8 @@ function writeFramework(root: string, id: string, body: string): string {
 describe('a framework file the loader refused is reachable and repairable (P4.15)', () => {
   let writable: string;
   let bundled: string;
+  let dbRoot: string;
+  let dbManager: SqliteEngine;
   let handler: FrameworkToolHandler;
   let brokenPath: string;
   let errorSpy: ReturnType<typeof jest.spyOn>;
@@ -365,14 +441,22 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
         getServerRoot: () => writable,
       }),
     });
+
+    // A REAL `version_history` table — see the gate suite's twin for why a stub will not do.
+    dbRoot = mkdtempSync(join(tmpdir(), 'fw-repair-db-'));
+    dbManager = await SqliteEngine.getInstance(dbRoot, silentLogger());
+    await dbManager.initialize();
+    handler.setDatabasePort(dbManager);
   }, 30_000);
 
-  afterAll(() => {
+  afterAll(async () => {
+    await dbManager.shutdown();
     resetDefaultRuntimeLoader();
     errorSpy.mockRestore();
     warnSpy.mockRestore();
-    // Only the temp root is removed. `bundled` is the repository's own resources tree.
+    // Only the temp roots are removed. `bundled` is the repository's own resources tree.
     rmSync(writable, { recursive: true, force: true });
+    rmSync(dbRoot, { recursive: true, force: true });
   });
 
   it('inspect names the file and the reason instead of "Framework not found"', async () => {
@@ -429,6 +513,10 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     expect(result.body).toContain('Repaired');
     expect(result.body).toContain(brokenPath);
 
+    // P4.20 — the response says what was recorded, where it used to say the opposite.
+    expect(result.body).toContain('**Version 1** recorded');
+    expect(result.body).not.toContain('No version was recorded');
+
     const onDisk = readFileSync(brokenPath, 'utf8');
     expect(onDisk).toContain('repaired through the tool');
     expect(onDisk).not.toContain('definitely');
@@ -457,6 +545,7 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     expect(result.body).toContain('quarantined');
     expect(result.body).toContain('Missing: name');
   });
+
   // ==========================================================================
   // P4.19 — the framework premise, pinned rather than assumed
   // ==========================================================================
@@ -474,5 +563,37 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     expect(result.body).toContain('already exists');
     expect(result.body).toContain('filesystem');
     expect(readFileSync(partialPath, 'utf8')).toBe(before);
+  });
+
+  // ==========================================================================
+  // P4.20 — a repair writes version 1
+  // ==========================================================================
+
+  it('FALSIFIER — history on the just-repaired framework returns exactly one row', async () => {
+    expect(countVersionRows(dbManager, 'framework', 'brokenfw')).toBe(1);
+
+    const result = await call({ action: 'history', id: 'brokenfw' });
+
+    expect(result.isError).toBe(false);
+    expect(result.body).toContain('(1 versions)');
+    expect(result.body).toContain('| 1 (latest) |');
+    expect(result.body).toContain('Repair of quarantined framework via resource_manager');
+  });
+
+  it('POSITIVE CONTROL — the row count discriminates: a framework nobody repaired has none', async () => {
+    expect(countVersionRows(dbManager, 'framework', 'healthyfw')).toBe(0);
+  });
+
+  it('records the repaired state, so the version is restorable rather than a marker', async () => {
+    const row = dbManager.queryOne<{ snapshot: string }>(
+      `SELECT snapshot FROM version_history WHERE resource_type = ? AND resource_id = ? AND version = ?`,
+      ['framework', 'brokenfw', 1]
+    );
+    const snapshot = JSON.parse(row!.snapshot) as Record<string, unknown>;
+
+    expect(snapshot['description']).toBe('repaired through the tool');
+    expect(snapshot['systemPromptGuidance'] ?? snapshot['system_prompt_guidance']).toBe(
+      'Repaired guidance body'
+    );
   });
 });

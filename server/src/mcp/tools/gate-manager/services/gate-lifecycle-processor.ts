@@ -280,9 +280,13 @@ export class GateLifecycleProcessor {
    * caller: it is the content that failed validation, and a gate's `guidance` and `description`
    * are instruction delivered to the client LLM (CLAUDE.md §Instruction surface).
    *
-   * No version row is recorded, and the response says so. `recordEditResult` takes a prior LIVE
-   * snapshot, and a quarantined gate has none — passing an empty object would write a version
-   * claiming the gate used to be blank, which is a worse answer than no row.
+   * A version row IS recorded, and it records the produced state only. `recordEditResult` is
+   * deliberately not used: it compares the prior live snapshot against the newest recorded row and
+   * writes a BRIDGE version of that prior state when they differ, and a quarantined gate's prior
+   * state is the content that failed validation — bridging it would either publish the broken
+   * bytes as a restorable version or throw inside the mutation. `saveVersion` with the produced
+   * snapshot alone is the honest record: `version_history` is durable and nothing regenerates it,
+   * so the edit most worth having a row for was the one that had none.
    */
   private async repairQuarantinedGate(
     args: GateManagerInput,
@@ -322,7 +326,41 @@ export class GateLifecycleProcessor {
       gate_type: args.gate_type,
     };
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    // The state this repair will PRODUCE — the only state there is. `gateData` already resolves
+    // every projected field from the caller's body, and there is no merge base by construction.
+    const afterState = projectWriteModel(
+      String(args.id),
+      gateData as unknown as Record<string, unknown>,
+      gateSnapshotContract.projectedFields
+    );
+
+    let versionSaved: number | undefined;
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            // Inlined at the call site for the same reason as `handleUpdate`'s:
+            // `validate:mutation-atomicity` reads the record's position lexically, and a record
+            // one indirection away is indistinguishable from the pre-fix shape.
+            commit: async (): Promise<void> => {
+              const versionResult = await this.ctx.versionHistoryService.saveVersion(
+                'gate',
+                String(args.id),
+                afterState,
+                {
+                  description: 'Repair of quarantined gate via resource_manager',
+                  // Empty, and it means something: there is no prior loadable state to diff
+                  // against, so a `+n/-n` here would be measured against a fiction.
+                  diff_summary: '',
+                }
+              );
+              versionSaved = versionResult.version;
+              this.ctx.logger.debug(`Saved repair version ${versionSaved} for gate ${args.id}`);
+            },
+          }
+        : {};
+
+    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
     if (!result.success) {
       return this.error(`Failed to repair gate: ${result.error}`);
     }
@@ -340,11 +378,21 @@ export class GateLifecycleProcessor {
       'gate.yaml'
     );
 
+    // Says what was recorded and why it carries no diff. The previous wording — "No version was
+    // recorded" — became a lie the moment the record above was added, and a version line is the
+    // one place an operator checks before trusting `rollback`.
+    const versionLine =
+      versionSaved !== undefined
+        ? `📜 **Version ${versionSaved}** recorded — the repaired state, with no diff: a ` +
+          `quarantined gate has no prior loadable state to compare against (use ` +
+          `\`action:"history"\` to view).\n`
+        : `📜 No version was recorded — auto-versioning is off for this server, or ` +
+          `\`skip_version\` was set on this call.\n`;
+
     return this.success(
       `🩺 Repair written for quarantined gate '${target.id}'\n\n` +
         `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
-        `📜 No version was recorded — a quarantined gate has no prior loadable state to diff ` +
-        `against.\n` +
+        versionLine +
         this.formatRepairOutcome(target, writtenPath)
     );
   }

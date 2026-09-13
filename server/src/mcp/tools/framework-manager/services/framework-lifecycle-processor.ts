@@ -264,9 +264,13 @@ export class FrameworkLifecycleProcessor {
    * `judgePrompt` are instruction delivered to the client LLM (CLAUDE.md §Instruction surface),
    * and this is the file whose content has not been checked.
    *
-   * No version row is recorded, and the response says so. `recordEditResult` takes a prior LIVE
-   * snapshot and a quarantined framework has none; an empty one would write a version claiming the
-   * framework used to be blank.
+   * A version row IS recorded, and it records the produced state only. `recordEditResult` is
+   * deliberately not used: it writes a BRIDGE version of the prior live state whenever that state
+   * is not already the newest row, and a quarantined framework's prior state is the content that
+   * failed validation — bridging it would either publish the broken bytes as a restorable version
+   * or throw inside the mutation. `saveVersion` with the produced snapshot alone is the honest
+   * record: `version_history` is durable and nothing regenerates it, so the edit most worth having
+   * a row for was the one that had none.
    */
   private async repairQuarantinedFramework(
     args: FrameworkManagerInput,
@@ -297,7 +301,46 @@ export class FrameworkLifecycleProcessor {
     };
     this.assignOptionalFields(frameworkData, args);
 
-    const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, null);
+    // The state this repair will PRODUCE — the only state there is. No merge base is passed,
+    // unlike `handleUpdate`'s call: there is no loadable prior YAML to merge over, which is what
+    // quarantined means.
+    const afterState = projectWriteModel(
+      id,
+      frameworkData as unknown as Record<string, unknown>,
+      frameworkSnapshotContract.projectedFields
+    );
+
+    let versionSaved: number | undefined;
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            // Inlined at the call site for the same reason as `handleUpdate`'s:
+            // `validate:mutation-atomicity` reads the record's position lexically, so a record one
+            // indirection away reads to the gate exactly like the pre-fix shape.
+            commit: async (): Promise<void> => {
+              const versionResult = await this.ctx.versionHistoryService.saveVersion(
+                'framework',
+                id,
+                afterState,
+                {
+                  description: 'Repair of quarantined framework via resource_manager',
+                  // Empty, and it means something: there is no prior loadable state to diff
+                  // against, so a `+n/-n` here would be measured against a fiction.
+                  diff_summary: '',
+                }
+              );
+              versionSaved = versionResult.version;
+              this.ctx.logger.debug(`Saved repair version ${versionSaved} for framework ${id}`);
+            },
+          }
+        : {};
+
+    const result = await this.ctx.fileService.writeFrameworkFiles(
+      frameworkData,
+      null,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to repair framework: ${result.error}`);
     }
@@ -309,11 +352,21 @@ export class FrameworkLifecycleProcessor {
 
     const writtenPath = path.join(this.ctx.fileService.getFrameworkDir(id), 'framework.yaml');
 
+    // Says what was recorded and why it carries no diff. The previous wording — "No version was
+    // recorded" — became a lie the moment the record above was added, and a version line is the
+    // one place an operator checks before trusting `rollback`.
+    const versionLine =
+      versionSaved !== undefined
+        ? `📜 **Version ${versionSaved}** recorded — the repaired state, with no diff: a ` +
+          `quarantined framework has no prior loadable state to compare against (use ` +
+          `\`action:"history"\` to view).\n`
+        : `📜 No version was recorded — auto-versioning is off for this server, or ` +
+          `\`skip_version\` was set on this call.\n`;
+
     return this.success(
       `Repair written for quarantined framework '${target.id}'\n\n` +
         `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
-        `📜 No version was recorded — a quarantined framework has no prior loadable state to diff ` +
-        `against.\n` +
+        versionLine +
         this.formatRepairOutcome(target, writtenPath)
     );
   }
