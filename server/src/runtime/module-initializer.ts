@@ -354,7 +354,13 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   const inventories = [
     resourceInventoryOf('gates', gateRoots, gateManager.getStats().totalGates),
     resourceInventoryOf('frameworks', frameworkRoots, frameworkLoader.discoverFrameworks().length),
-    resourceInventoryOf('styles', styleRoots, styleLoader.discoverStyles().length),
+    // LOADED styles, not discovered ones. Two things follow from the difference and both are
+    // wanted: the line now reports the count the server can actually serve, and reading every
+    // style is what FILLS the loader's refusal record — `discoverStyles()` only lists directories
+    // holding a `style.yaml` and never opens one, so a quarantine consulted by the indexer further
+    // down would have been empty no matter how broken the tree was. The read is cheap (a handful
+    // of files) and its results are cached, so nothing downstream pays for it twice.
+    resourceInventoryOf('styles', styleRoots, styleLoader.loadAllStyles().size),
   ];
   for (const inventory of inventories) {
     if (inventory !== undefined) logResourceInventory(logger, inventory);
@@ -473,11 +479,23 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         // `prompt_engine`, which rejects an unloadable one. A quarantine MARKER would work only
         // for readers that remember to check it, and some of those readers are not in this repo.
         //
-        // The framework view joins here and NOT in the `quarantine` merge above, because that one
-        // feeds the change tracker, whose `TrackedResourceType` has no framework member. This walk
-        // indexes prompt, gate, framework and style — so three of the four kinds it touches now
-        // have a refusal record, and `style` is the one that does not (P4.16).
-        quarantine: mergeQuarantineViews(quarantine, frameworkLoader.getQuarantine()),
+        // The framework and style views join here and NOT in the `quarantine` merge above, because
+        // that one feeds the change tracker, whose `TrackedResourceType` is exactly
+        // `'prompt' | 'gate'`. This walk indexes all four directory-form kinds, so all four
+        // views are merged and the absent-from-the-index property holds for every one of them
+        // (P4.16 closed `style`, which was the only kind the indexer walked with no refusal
+        // record at all).
+        //
+        // `styleLoader`, not a `StyleManager`: the manager builds its OWN
+        // `StyleDefinitionLoader` from its own config (see `PromptExecutor`), so its collection
+        // describes a different root set than the one `indexerResourceRoots` walks — and
+        // `isRefused` is path-keyed, so a record from the wrong root can never match. The loader
+        // this line reads is the same singleton instance `styleRoots` configured above.
+        quarantine: mergeQuarantineViews(
+          quarantine,
+          frameworkLoader.getQuarantine(),
+          styleLoader.getQuarantine()
+        ),
       });
       const syncResult = await indexer.syncAll();
       reportSyncFindings(syncResult, logger);
