@@ -40,7 +40,6 @@ export const TriggerTypeSchema = z
   .enum(['schema_match', 'explicit', 'always', 'never', 'parameter_match'])
   .transform((val) => {
     if (val === 'parameter_match') {
-      // eslint-disable-next-line no-console -- Intentional deprecation warning
       console.warn(
         "[ScriptSchema] DEPRECATED: 'parameter_match' trigger is deprecated. Use 'schema_match' instead."
       );
@@ -123,7 +122,6 @@ export const ExecutionConfigSchema = z
      */
     mode: ExecutionModeSchema.optional().transform((val) => {
       if (val !== undefined && val !== 'auto') {
-        // eslint-disable-next-line no-console -- Intentional deprecation warning
         console.warn(
           `[ScriptSchema] DEPRECATED: 'mode: ${val}' is deprecated. ` +
             (val === 'manual' ? "Use 'trigger: explicit' instead." : "Use 'confirm: true' instead.")
@@ -142,7 +140,6 @@ export const ExecutionConfigSchema = z
       .optional()
       .transform((val) => {
         if (val !== undefined) {
-          // eslint-disable-next-line no-console -- Intentional deprecation warning
           console.warn(
             '[ScriptSchema] DEPRECATED: numeric confidence is deprecated and ignored. ' +
               "Use 'trigger' and 'strict' for deterministic matching."

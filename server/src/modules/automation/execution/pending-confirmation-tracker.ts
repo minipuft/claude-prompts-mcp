@@ -75,7 +75,6 @@ export class PendingConfirmationTracker {
     this.debug = config.debug ?? false;
 
     if (this.debug) {
-      // eslint-disable-next-line no-console
       console.error('[PendingConfirmationTracker] Initialized with expiration:', this.expirationMs);
     }
   }
@@ -106,7 +105,6 @@ export class PendingConfirmationTracker {
     this.pending.set(key, pending);
 
     if (this.debug) {
-      // eslint-disable-next-line no-console
       console.error(
         `[PendingConfirmationTracker] Recorded pending: ${key} (hash: ${inputsHash.slice(0, 8)}...)`
       );
@@ -137,7 +135,6 @@ export class PendingConfirmationTracker {
 
     if (pending === undefined) {
       if (this.debug) {
-        // eslint-disable-next-line no-console
         console.error(`[PendingConfirmationTracker] No pending found for: ${key}`);
       }
       return false;
@@ -147,7 +144,6 @@ export class PendingConfirmationTracker {
     if (Date.now() > pending.expiresAt) {
       this.pending.delete(key);
       if (this.debug) {
-        // eslint-disable-next-line no-console
         console.error(`[PendingConfirmationTracker] Pending expired for: ${key}`);
       }
       return false;
@@ -157,11 +153,8 @@ export class PendingConfirmationTracker {
     const currentHash = this.hashInputs(inputs);
     if (currentHash !== pending.inputsHash) {
       if (this.debug) {
-        // eslint-disable-next-line no-console
         console.error(`[PendingConfirmationTracker] Hash mismatch for: ${key}`);
-        // eslint-disable-next-line no-console
         console.error(`  Expected: ${pending.inputsHash.slice(0, 8)}...`);
-        // eslint-disable-next-line no-console
         console.error(`  Got: ${currentHash.slice(0, 8)}...`);
       }
       return false;
@@ -170,7 +163,6 @@ export class PendingConfirmationTracker {
     // Match! Clear and return true
     this.pending.delete(key);
     if (this.debug) {
-      // eslint-disable-next-line no-console
       console.error(`[PendingConfirmationTracker] Auto-approved: ${key}`);
     }
     return true;
@@ -201,7 +193,6 @@ export class PendingConfirmationTracker {
   clear(): void {
     this.pending.clear();
     if (this.debug) {
-      // eslint-disable-next-line no-console
       console.error('[PendingConfirmationTracker] Cleared all pending');
     }
   }
@@ -258,7 +249,6 @@ export class PendingConfirmationTracker {
       if (now > pending.expiresAt) {
         this.pending.delete(key);
         if (this.debug) {
-          // eslint-disable-next-line no-console
           console.error(`[PendingConfirmationTracker] Cleaned up expired: ${key}`);
         }
       }

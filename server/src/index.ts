@@ -560,6 +560,7 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
     }
 
     const result = initWorkspace(targetPath);
+    // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
     console.log(result.message);
     return { shouldExit: true, exitCode: result.success ? 0 : 1 };
   }

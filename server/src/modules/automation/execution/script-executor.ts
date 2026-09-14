@@ -426,7 +426,6 @@ export class ScriptExecutor implements ScriptExecutorPort {
     const resolved = resolveExecutable(commands, searchPath);
 
     if (this.debug && resolved !== undefined && resolved !== commands[0]) {
-      // eslint-disable-next-line no-console
       console.error(
         `[ScriptExecutor] Runtime '${runtime}': '${commands[0]}' not on PATH, using '${resolved}'`
       );
