@@ -41,6 +41,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { ConfigSchemaValidationResult } from '../src/infra/config/config-schema-validator.js';
 import { validateConfigAgainstSchema } from '../src/infra/config/config-schema-validator.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -71,10 +72,11 @@ function assert(condition: boolean, message: string): void {
 async function validateFixture(
   fixtureDir: string,
   config: JsonObject
-): Promise<{ valid: boolean; errors: string[] }> {
+): Promise<ConfigSchemaValidationResult> {
   const fixturePath = path.join(fixtureDir, 'config.json');
   writeFileSync(fixturePath, JSON.stringify(config, null, 2), 'utf8');
-  return validateConfigAgainstSchema(config, fixturePath);
+  const fixtureSchemaPath = path.join(fixtureDir, 'config.schema.json');
+  return validateConfigAgainstSchema(config, fixtureSchemaPath);
 }
 
 /** Deep-clones the shipped config and applies one mutation, so each case starts from a valid file. */
@@ -210,6 +212,22 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       );
     },
   },
+  {
+    name: 'UNAVAILABLE — a missing schema path is reported as unavailable, not invalid',
+    run: async (fixtureDir, shipped) => {
+      const missingSchemaPath = path.join(fixtureDir, 'does-not-exist.schema.json');
+      const result = await validateConfigAgainstSchema(shipped, missingSchemaPath);
+      assert(
+        result.status === 'unavailable',
+        `a schema that cannot be read must report 'unavailable', not be conflated with 'invalid'; got status=${result.status}`
+      );
+      assert(!result.valid, 'valid must be false when the schema is unavailable');
+      assert(
+        result.errors.length > 0,
+        'the unreadable-schema error must be reported, not swallowed'
+      );
+    },
+  },
 ];
 
 async function selfTest(): Promise<void> {
@@ -235,8 +253,17 @@ async function selfTest(): Promise<void> {
 
 async function validateShippedConfig(): Promise<void> {
   const config = await readJson(CONFIG_PATH);
-  const result = await validateConfigAgainstSchema(config, CONFIG_PATH);
-  if (!result.valid) {
+  const result = await validateConfigAgainstSchema(config, SCHEMA_PATH);
+
+  if (result.status === 'unavailable') {
+    console.error('Config schema is unavailable — the config was not checked:');
+    for (const error of result.errors) {
+      console.error(`- ${error}`);
+    }
+    process.exit(1);
+  }
+
+  if (result.status === 'invalid') {
     console.error('Config schema validation failed:');
     for (const error of result.errors) {
       console.error(`- ${error}`);

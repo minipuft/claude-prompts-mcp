@@ -1,12 +1,15 @@
 // @lifecycle canonical - Shared JSON schema validator for server config.
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import type { ErrorObject, ValidateFunction } from 'ajv';
 
 type JsonSchema = Record<string, unknown>;
 
 export interface ConfigSchemaValidationResult {
+  /** 'valid' = AJV accepted the config. 'invalid' = AJV rejected it. 'unavailable' = the schema
+   *  itself could not be read, parsed, or compiled — this is NOT a claim about the config. */
+  status: 'valid' | 'invalid' | 'unavailable';
+  /** True only when status is 'valid'. Kept alongside `status` so existing reads keep compiling. */
   valid: boolean;
   errors: string[];
 }
@@ -56,37 +59,38 @@ async function getCompiledValidator(schemaPath: string): Promise<ValidateFunctio
   return validator;
 }
 
-function resolveSchemaPath(config: Record<string, unknown>, configPath: string): string {
-  const schemaRef =
-    typeof config['$schema'] === 'string' ? config['$schema'] : './config.schema.json';
-  if (path.isAbsolute(schemaRef)) {
-    return schemaRef;
-  }
-  return path.resolve(path.dirname(configPath), schemaRef);
-}
-
+/**
+ * Validates `config` against the JSON schema at `schemaPath`. The caller resolves the schema
+ * location — `$schema` inside `config` is an editor hint, not a location this function trusts,
+ * because a config loaded via MCP_CONFIG_PATH can live anywhere while the schema ships beside the
+ * server, and treating `$schema` as authoritative resolves a relative path beside the WRONG file.
+ */
 export async function validateConfigAgainstSchema(
   config: Record<string, unknown>,
-  configPath: string
+  schemaPath: string
 ): Promise<ConfigSchemaValidationResult> {
   try {
-    const schemaPath = resolveSchemaPath(config, configPath);
     const validator = await getCompiledValidator(schemaPath);
     const valid = validator(config);
 
     if (!valid) {
       return {
+        status: 'invalid',
         valid: false,
         errors: formatAjvErrors(validator.errors),
       };
     }
 
     return {
+      status: 'valid',
       valid: true,
       errors: [],
     };
   } catch (error) {
+    // The schema itself could not be read, parsed, or compiled — this says nothing about
+    // whether `config` is valid, and must never be reported as if it did.
     return {
+      status: 'unavailable',
       valid: false,
       errors: [error instanceof Error ? error.message : String(error)],
     };
