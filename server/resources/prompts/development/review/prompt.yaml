@@ -1,0 +1,57 @@
+id: review
+name: Review
+category: development
+description: >-
+  Comprehensive code review that validates modern standards compliance, library
+  best practices, and identifies consolidation opportunities with existing
+  systems
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: target
+    type: string
+    description: File path, function name, or code block to review
+    required: true
+    validation:
+      minLength: 3
+  - name: context
+    type: string
+    description: 'Additional context: PR description, related systems, or specific concerns'
+  - name: stack
+    type: string
+    description: Technology stack/libraries in use (auto-detected if omitted)
+gateConfiguration:
+  include:
+    - code-quality
+    - technical-accuracy
+  framework_gates: true
+  inline_gate_definitions:
+    - name: Lifecycle Safety
+      type: validation
+      scope: execution
+      severity: high
+      description: Verify state ownership is clear and no services race for state
+      guidance: |
+        - Confirm each state file/table has exactly one writer service
+        - Check all state mutations are awaited (no fire-and-forget)
+        - Verify no dual-write or fallback-read patterns exist
+        - Ensure new systems fully replace old (no parallel coexistence)
+        - Flag orphaned references to removed/renamed systems
+      pass_criteria:
+        - State ownership is unambiguous (one writer per resource)
+        - No fire-and-forget persistence calls found
+        - No dual-write or silent fallback patterns
+        - Lifecycle is clean (no orphaned references)
+    - name: Consolidation Check
+      type: validation
+      scope: execution
+      severity: high
+      description: Verify no duplicate systems overlooked
+      guidance: |
+        - Search for existing implementations before approving new code
+        - Identify reusable utilities or services
+        - Flag parallel implementations that should be consolidated
+      pass_criteria:
+        - Codebase search performed for similar functionality
+        - Reuse opportunities documented
+        - Consolidation recommendations provided

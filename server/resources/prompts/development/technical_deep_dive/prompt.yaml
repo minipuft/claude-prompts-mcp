@@ -1,0 +1,22 @@
+id: technical_deep_dive
+name: Technical Deep Dive
+category: development
+description: >-
+  In-depth technical analysis of ONE already-chosen candidate: API design,
+  performance, security, edge cases. Choosing BETWEEN approaches or judging
+  against your baseline is tech_recommendation. Step 2 of the tech evaluation
+  chain. BLOCKING gate requires verified claims.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: library
+    type: string
+    description: The library or framework being evaluated
+    required: true
+  - name: context
+    type: string
+    description: Your project context and requirements
+    required: true
+  - name: concerns
+    type: string
+    description: Specific concerns from the overview step to investigate
+    required: false
