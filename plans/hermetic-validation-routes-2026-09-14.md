@@ -12,7 +12,7 @@ tags: [ci, scripts, config, validation]
 **Created**: 2026-09-14
 **Predecessor**: `plans/readme-install-path-2026-09-13.md` rows 3.7, 3.8 and 3.9, superseded here.
 
-## Now
+## Now (2026-09-14)
 
 Two workers run in parallel on their own branches cut from `fix/hermetic-validation-routes`, which is
 `fix/readme-install-path` with `origin/main` (#275) merged in. The planner merges each handoff into the
