@@ -43,3 +43,31 @@ cross-session message because this session's name changes on every restart.
 ## Deviations
 
 None yet.
+
+## Worker B handoff accepted (2026-09-14)
+
+**Rulings on B's concerns.** The refusal names the workspace `config.json` rather than the packaged default when
+`MCP_WORKSPACE` holds one, because that is what unsetting the explicit path would load — the ruling asked the
+message to say what unsetting does, and the literal "packaged default" would be false there. The help-text hunk of
+`index.ts` rides in the runtime commit; lint-staged re-stages whole files and the split buys nothing. Deleting
+`validatePathCliOptions` stands: zero call sites, and a second, weaker definition of a usable config path.
+
+**B's row 1.7 measurements** (current build, scrubbed env, variable at a missing path, 20 s window):
+
+| Variable             | STDIO                  | HTTP                  | Anything names the missing path? | Path created?            |
+| -------------------- | ---------------------- | --------------------- | -------------------------------- | ------------------------ |
+| `MCP_RESOURCES_PATH` | boots, prompts/list 46 | boots, initialize 200 | no                               | no                       |
+| `MCP_WORKSPACE`      | boots, prompts/list 46 | boots, initialize 200 | no                               | no                       |
+| `MCP_RUNTIME_ROOT`   | boots                  | boots, initialize 200 | no                               | yes, with subdirectories |
+
+B's positive control for the "nothing names it" column: the same log grep does see the path when the variable is
+`MCP_CONFIG_PATH`, and saw it on the base build's `Error loading configuration from …`.
+
+**Pre-change behavior B measured on the base build:** an unusable explicit path logged a stack to stderr, printed
+`Using default configuration` to stdout, and kept serving on both transports (STDIO answered initialize; HTTP loaded
+51 prompts). That stdout line survives on the implicit default path, which is row 1.8.
+
+**Brief defects B reported, for the next dispatch.** `node scripts/sync-project-guidance.js` needs `--write` or
+`--check` and fails bare. `npx prettier --check` run from `server/` against root files ignores the root
+`.prettierignore` and falsely flags `AGENTS.md`; root files check from the root. `buildServerEnv` already scrubs every
+key the brief listed, so naming it as the single source would have saved a check.
