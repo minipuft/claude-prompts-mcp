@@ -35,8 +35,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { once } from 'node:events';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import net from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -292,9 +294,18 @@ function reservePort() {
  * installed user has — which is how README commands naming prompts the package did not ship
  * passed every local check (plans/readme-install-path-2026-09-13.md). MCP_CONFIG_PATH and
  * MCP_RUNTIME_ROOT would likewise hand the answer to whoever ran the script.
+ *
+ * Scrubbing MCP_RUNTIME_ROOT is not enough on its own, so it is then set to a directory this run
+ * creates and removes. Unset, the runtime root falls back to the workspace, whose `state.db`
+ * carries the operator's persisted `system_control` toggles — a gates disable there would reach
+ * this verification too.
  */
-function spawnServer(port) {
-  const env = buildServerEnv({ PORT: String(port), MCP_WORKSPACE: REPO_ROOT });
+function spawnServer(port, runtimeRoot) {
+  const env = buildServerEnv({
+    PORT: String(port),
+    MCP_WORKSPACE: REPO_ROOT,
+    MCP_RUNTIME_ROOT: runtimeRoot,
+  });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
     cwd: SERVER_ROOT,
@@ -799,7 +810,8 @@ async function main() {
   }
 
   const port = await reservePort();
-  const server = spawnServer(port);
+  const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'verify-mcp-runtime-'));
+  const server = spawnServer(port, runtimeRoot);
   const baseUrl = `http://127.0.0.1:${port}`;
 
   let stderr = '';
@@ -817,7 +829,12 @@ async function main() {
   } catch (error) {
     record('surface checks', false, error instanceof Error ? error.message : String(error));
   } finally {
-    server.kill('SIGTERM');
+    // Wait for exit before removing the runtime root: a server still shutting down writes there.
+    if (server.exitCode === null && server.signalCode === null) {
+      server.kill('SIGTERM');
+      await once(server, 'exit');
+    }
+    rmSync(runtimeRoot, { recursive: true, force: true });
   }
 
   checkNoMutation(baseline);

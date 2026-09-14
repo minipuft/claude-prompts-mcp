@@ -221,7 +221,12 @@ export class McpToolRouter {
     this.analyticsService = metricsCollector;
 
     // Initialize gate system manager for runtime gate control
-    this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot());
+    // The launch workspace is the key a toggle with no identity is written under, so it is the
+    // scope a pre-isolation `default` row is adopted into (see `GateStateStore`).
+    const launchWorkspaceId = this.configManager.getConfig().identity?.launchDefaults?.workspaceId;
+    this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot(), {
+      ...(launchWorkspaceId != null ? { defaultScope: { workspaceId: launchWorkspaceId } } : {}),
+    });
     await this.gateStateStore.initialize();
 
     this.logger.info('Content analyzer initialized');
