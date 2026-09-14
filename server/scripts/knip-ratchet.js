@@ -40,18 +40,27 @@
  * dropped since the baseline was recorded, with the regeneration command, whether or not the
  * run otherwise passes.
  *
+ * ORPHANED DECLARATIONS FAIL THE CHECK, naming the file. `knip.json` credits every hand-written
+ * `.d.ts` under `scripts/` and `eslint-rules/` as used, through recursive entry globs, because tsc
+ * resolves a declaration beside the `.js` it describes and knip's graph cannot see that edge. The
+ * glob cannot tell a live declaration from one whose module was deleted, so without this check an
+ * orphan would never be reported by knip or counted here. The roots are read from `knip.json`
+ * itself, so a new glob of that shape is covered without editing this file.
+ *
  * Usage:
  * - Update baseline (intentional): `npm run knip-ratchet:baseline`
  * - Check (default in CI):          `npm run validate:knip-ratchet`
  * - Prove the comparison logic:     `npm run validate:knip-ratchet:self-test`
  */
 
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 
 const BASELINE_PATH = path.resolve(process.cwd(), '.knip-ratchet-baseline.json');
+const KNIP_CONFIG_PATH = path.resolve(process.cwd(), 'knip.json');
 
 function getKnipBinPath() {
   const binName = process.platform === 'win32' ? 'knip.cmd' : 'knip';
@@ -174,6 +183,30 @@ function compareSummaries(baseline, current) {
   return { regressions, vanished, decreases };
 }
 
+/** The root of every `knip.json` entry that credits all `.d.ts` files beneath it. */
+function declarationRootsFromKnipEntries(entries) {
+  return (entries ?? [])
+    .map((pattern) => /^(.+)\/\*\*\/\*\.d\.ts$/.exec(pattern)?.[1])
+    .filter((root) => root !== undefined);
+}
+
+/** Declarations whose sibling `.js` does not exist. `exists` is injected to keep this pure. */
+function findOrphanedDeclarations(declarationFiles, exists) {
+  return declarationFiles.filter((file) => !exists(`${file.slice(0, -'.d.ts'.length)}.js`)).sort();
+}
+
+async function findOrphanedDeclarationsOnDisk() {
+  const config = JSON.parse(await readFile(KNIP_CONFIG_PATH, 'utf8'));
+  const declarations = declarationRootsFromKnipEntries(config.entry).flatMap((root) =>
+    existsSync(root)
+      ? readdirSync(root, { recursive: true })
+          .filter((relative) => relative.endsWith('.d.ts'))
+          .map((relative) => path.join(root, relative))
+      : []
+  );
+  return findOrphanedDeclarations(declarations, existsSync);
+}
+
 async function loadBaselineOrThrow() {
   try {
     return JSON.parse(await readFile(BASELINE_PATH, 'utf8'));
@@ -216,6 +249,7 @@ async function handleCheck() {
   const report = runKnip();
   const current = summarizeKnipReport(report.issues);
   const { regressions, vanished, decreases } = compareSummaries(baseline, current);
+  const orphans = await findOrphanedDeclarationsOnDisk();
 
   const decreaseLines =
     decreases.length === 0
@@ -234,15 +268,24 @@ async function handleCheck() {
             '`npm run knip-ratchet:baseline` to lock these in.',
         ];
 
-  if (regressions.length === 0 && vanished.length === 0) {
+  if (regressions.length === 0 && vanished.length === 0 && orphans.length === 0) {
     console.log(
       `[knip-ratchet] OK: ${current.totals.findings} findings (no regressions)${decreaseLines.join('\n')}`
     );
     return;
   }
 
-  const problems = regressions.length + vanished.length;
-  const lines = [`[knip-ratchet] FAIL: ${problems} category problem(s) detected.`];
+  const problems = regressions.length + vanished.length + orphans.length;
+  const lines = [`[knip-ratchet] FAIL: ${problems} problem(s) detected.`];
+
+  if (orphans.length > 0) {
+    lines.push(
+      '',
+      'Declaration files knip.json credits as used, with no sibling .js (delete the ' +
+        'declaration, or restore its module):',
+      ...orphans.map((file) => `- ${file}`)
+    );
+  }
 
   if (regressions.length > 0) {
     lines.push(
@@ -379,6 +422,32 @@ function runSelfTest() {
     })()
   );
 
+  // --- orphaned declarations --------------------------------------------------------------
+  check(
+    'a recursive .d.ts entry yields its root, and any other entry yields none',
+    (() => {
+      const roots = declarationRootsFromKnipEntries([
+        'scripts/verify-handoff.mjs',
+        'scripts/**/*.d.ts',
+        'eslint-rules/**/*.d.ts',
+      ]);
+      return roots.length === 2 && roots[0] === 'scripts' && roots[1] === 'eslint-rules';
+    })()
+  );
+  const syntheticDisk = new Set(['scripts/lib/paired.js']);
+  const onSyntheticDisk = (file) => syntheticDisk.has(file);
+  check(
+    'a declaration with no sibling .js is an orphan, named by its path',
+    (() => {
+      const orphans = findOrphanedDeclarations(['scripts/zz-orphan.d.ts'], onSyntheticDisk);
+      return orphans.length === 1 && orphans[0] === 'scripts/zz-orphan.d.ts';
+    })()
+  );
+  check(
+    'a declaration beside its .js is not an orphan',
+    findOrphanedDeclarations(['scripts/lib/paired.d.ts'], onSyntheticDisk).length === 0
+  );
+
   if (failures > 0) {
     console.error(`\n❌ self-test: ${failures} case(s) failed`);
     process.exitCode = 1;
@@ -386,7 +455,8 @@ function runSelfTest() {
   }
   console.log(
     '\n✅ self-test: summarize counts per-category correctly (symbol-level, group-level ' +
-      'duplicates, derived categories) and compare distinguishes regressions/decreases/vanished\n'
+      'duplicates, derived categories), compare distinguishes regressions/decreases/vanished, and ' +
+      'an orphaned declaration is named\n'
   );
 }
 
