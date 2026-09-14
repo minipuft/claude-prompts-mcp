@@ -322,7 +322,9 @@ QUICK START:
   Claude can update your prompts via resource_manager - no manual editing needed!
 
 PATH OPTIONS:
-  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/)
+  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/);
+                          the server refuses to start if it is not an existing
+                          directory, or if a config.json there is not a JSON object
   --config=/path          Direct path to config.json; the server refuses to start
                           if it is not a readable JSON file
 
@@ -338,8 +340,10 @@ RUNTIME OPTIONS:
   --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
-  MCP_WORKSPACE            Base workspace directory (same as --workspace)
-  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default)
+  MCP_WORKSPACE            Base workspace directory (same as --workspace); the server
+                           refuses to start if it is not an existing directory
+  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default);
+                           the server refuses to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
   MCP_CONFIG_PATH          Direct path to config.json (same as --config); the server

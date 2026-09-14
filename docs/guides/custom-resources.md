@@ -20,10 +20,10 @@ Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automaticall
 
 ## Environment variables
 
-| Variable             | Effect                                                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `MCP_RESOURCES_PATH` | Sets the base resources directory (replaces the package default).                                                      |
-| `MCP_WORKSPACE`      | Enables overlay — custom resources in your workspace load **alongside** bundled ones. Same-ID resources take priority. |
+| Variable             | Effect                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_RESOURCES_PATH` | Sets the base resources directory (replaces the package default). Must be an existing directory, or startup is refused.                                                      |
+| `MCP_WORKSPACE`      | Enables overlay — custom resources in your workspace load **alongside** bundled ones. Same-ID resources take priority. Must be an existing directory, or startup is refused. |
 
 ## Config examples per client
 
@@ -63,4 +63,4 @@ Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automaticall
 
 For the env vars the server actually reads (`MCP_WORKSPACE`, `MCP_RESOURCES_PATH`, `MCP_CONFIG_PATH`), see [CLI Configuration](../reference/mcp-tools.md#cli-configuration). There are no per-resource-type path overrides.
 
-`MCP_CONFIG_PATH` (and the `--config` flag) must name a readable JSON config file. A missing file, a directory, an unreadable file, or malformed JSON stops the server at startup, on every transport, with a message on stderr naming the value, the resolved path and what is wrong; unset the variable (or drop the flag) to fall back to the default `config.json`, whose path the message names.
+A path you set must be usable, or the server stops at startup instead of quietly serving something else. `MCP_CONFIG_PATH` (and the `--config` flag) must name a readable JSON config file. `MCP_WORKSPACE` (and `--workspace`) and `MCP_RESOURCES_PATH` must name an existing directory, which the server no longer creates for you. A `config.json` inside your workspace, if there is one, must be a readable JSON object. Otherwise the server exits on every transport with a message on stderr naming the setting, its value, the resolved path, what is wrong, and what removing it would fall back to. Without that check, a typo in a path served the bundled prompts in place of yours with nothing to say so. A workspace with no `config.json` uses the packaged one, and an empty value counts as unset.
