@@ -801,7 +801,14 @@ function resolveOutputDir(clientConfig: ClientConfig, scope: 'user' | 'project')
 function resolveProjectRoot(): string {
   const fromWorkspaceEnv = process.env['MCP_WORKSPACE'];
   if (fromWorkspaceEnv) {
-    return path.resolve(fromWorkspaceEnv);
+    // Refused like the server refuses it: a project-scope export resolved against a workspace that
+    // is not there writes skills into a directory tree the operator never named.
+    return path.resolve(
+      assertUsableDirectorySetting(
+        { name: 'MCP_WORKSPACE', value: fromWorkspaceEnv },
+        { verb: 'run' }
+      )
+    );
   }
 
   const serverRoot = getServerRoot();
