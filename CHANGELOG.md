@@ -94,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Script output is now capped, and exceeding the cap fails the render instead of silently truncating it.** The default limit is 50,000 characters, configurable via a script tool's `maxOutputChars`.
 - **A prompt can now document `{{script:...}}` syntax inside a `{% raw %}` block without triggering it.** Previously the script-reference scan ran before Nunjucks and didn't understand raw blocks, so documenting the syntax executed it (or broke the render if the reference wasn't well-formed).
 - **The `{{script:...}}` examples in the template syntax reference documentation now actually work.** They were written with a space (`{{ script:word_count }}`) that the resolver, which matches `{{script:` literally, never recognized.
+- **On STDIO, a server whose default `config.json` cannot be loaded no longer writes to stdout ahead of its JSON-RPC frames.** It used to print `Using default configuration` to stdout, which is the protocol channel, so a client parsing stdout read a line that was not a frame. That line now goes to stderr beside the load error it explains, and stdout carries only protocol frames.
 
 ### Security
 
