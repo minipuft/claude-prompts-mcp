@@ -202,3 +202,26 @@ mutated.
 **Row 1.9 and the PR.** The owner has not ruled on 1.9. Rows 1.5–1.8 already refuse an unusable explicit config and
 keep the fallback line off stdout on their own. 1.9 would extend refusal to other path settings, which is a separate
 breaking-change decision. So this PR carries every other in-class row, and 1.9 ships as its own change once ruled.
+
+## The PR-boundary gate (2026-09-14)
+
+Run once on `ffa50a2a`, logs under `/tmp/hvr-gate/`:
+
+| Step                                                                           | Result                                                             |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `build`, `typecheck`                                                           | pass                                                               |
+| `lint:ratchet`                                                                 | OK, 3092 errors and 898 warnings                                   |
+| `typecheck:tests:ratchet`                                                      | OK, 367                                                            |
+| `test:all`                                                                     | 3068 unit (1 skipped), 819 integration, 197 e2e (2 skipped), 221 s |
+| `validate:all`                                                                 | **1 of 58 failed**: `validate:suite-membership`, new this run      |
+| `verify:mcp`, and again with a missing `MCP_CONFIG_PATH` exported              | 18/18 both                                                         |
+| STDIO and HTTP starts with a missing `MCP_CONFIG_PATH`                         | exit 1, 0 stdout bytes, one refusal line, no runtime root created  |
+| `build:prod`, `start:test`, `verify:package-artifact`, `validate:tool-schemas` | pass; the snapshot is identical for 3 tools                        |
+
+`test:all` ends with Jest's "did not exit one second after the test run" line from the e2e run. It predates this
+branch: `main`'s last green CI run (34232329468) prints it in both the Node 24 and Node 22.13.0 test jobs. The new
+`config-path-refusal.e2e.test.ts`, run alone with `--detectOpenHandles`, passes 4 of 4 and reports no open handle.
+
+**Brief defect, planner-side**: a row that changes what a validator touches — a directory walk, a child process — names
+`validate:suite-membership` in its row check. Rows 1.3 and 1.14 each did, and the registry mismatch was first read at
+the PR boundary.
