@@ -501,3 +501,27 @@ only gate that showed it. Row 2.23 moves the check into `src/shared/utils`.
 **Brief defect, planner-side**: row 2.5's brief said to move the check only "if importing from `runtime/` breaks
 `validate:arch`". That made the path rule the arbiter of a layering question it does not model. A brief that shares code
 between a domain module and the composition root rules the placement by layer, in `shared`, before dispatch.
+
+## Row 2.23 review (2026-09-14)
+
+**G's move is right; the follow-up gives each symbol one import path.** `dfe9342c` moves the directory-setting refusal
+verbatim into `src/shared/utils/path-setting.ts`, and `rg "#runtime/paths" src/modules` is now empty. The same probe on
+`e6658f7d` finds `modules/skills-sync/service.ts:23`. Returned for one more commit:
+
+- `runtime/paths.ts` re-exported `PathSettingError` so its three importers kept their import path.
+  `validate:no-crosslayer-reexport` cannot see this: it checks only files that consist entirely of re-exports, and
+  `paths.ts` also defines code.
+- Two comments described the move rather than the code as it now stands.
+
+**Triaged, not a row: leftover re-exports in files that also define code.** An enumeration of files that re-export a
+name they import found 14 other sites in `server/src`. Positive control: the same enumeration finds `paths.ts:40` on
+`dfe9342c`. Thirteen of the 14 are convenience re-exports, which the handbook permits in a defining file. One is left
+over from a move: `shared/types/chain-session.ts:29`, from the StepState → StepLifecycle migration (2026-07-30).
+✗ KILLED (2026-09-14 · outside this plan, and gating it would narrow the handbook's recorded exemption for defining
+files, which is the owner's decision · revives if a review finds a third move leftover of this kind or the owner
+narrows that exemption)
+
+**Lost completion message.** G finished at 14:06 and sent its completion message to the planner's previous session
+name, `claude-prompts-mcp-d8`. After a compaction the planner is `claude-prompts-mcp-73`, so the message never
+arrived, although the dispatch itself was intact. The handoff file's modification time and `claude agents --json`
+showed that G had finished. The follow-up brief tells G to reply to the `from` address of the dispatch message.

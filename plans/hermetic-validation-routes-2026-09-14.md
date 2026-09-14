@@ -15,9 +15,12 @@ tags: [ci, scripts, config, validation]
 ## Now (2026-09-14)
 
 **Goal**: close rows 1.9, 1.11 and 1.12 in claude-prompts, and keep both downstream extensions working through the
-release that carries R6 (R10). **Current slice**: the PR-boundary gate on `9ed97d91` passed everything except one
-`validate:all` step, the module catalog, which exposed a domain-to-runtime import; worker G owns row 2.23.
-**Next decision**: accept 2.23, re-run `validate:all` on the merged branch, then open the PR with a progress footer.
+release that carries R6 (R10). **Current slice**: row 2.23. G moved the directory-setting refusal to
+`src/shared/utils/path-setting.ts` (`dfe9342c`), which removes the domain-to-runtime import. Review accepted the move
+but returned it for one follow-up commit: `runtime/paths.ts` re-exports `PathSettingError` so that importers need no
+change, and two comments describe the move instead of the current code. G owns that commit.
+**Next decision**: run planner probes on G's follow-up, merge into the initiative branch, re-run `validate:all`, then
+open the PR with a progress footer.
 **Constraint in force**: the downstream branches stay local until the owner pushes them, and the claude-prompts release
 waits on both (2.17); the owner confirms one restored OpenCode entry (2.14).
 
