@@ -346,3 +346,46 @@ handoff. Worker C held uncommitted edits in all six row 2.1 files; worker D held
 `gate-state-store.ts`. Per the resumable-dispatch practice, the planner reads each session's log before choosing, and
 resumes a live session with an instruction to re-read its tree, because a relaunch would redo reading the transcript
 already holds.
+
+## Downstream handoffs and a write to the owner's live config (2026-09-14)
+
+**Incident (row 2.14).** Worker F's first two test runs for row 2.12 wrote to the owner's real
+`~/.config/opencode/opencode.jsonc`. The test set `process.env.HOME` to redirect `GLOBAL_CONFIG_DIR`, a module-level
+`join(homedir(), …)`. jest-environment-node gives each test file a copy of `process.env`, so `node:os` read the real home.
+Damage: `mcp["opencode-prompts"]` replaced (ending with a temp `MCP_WORKSPACE`), and the `plugin` array rewritten, with
+`"opencode-prompts"` appended and two commented lines lost. F restored both nodes from
+`opencode.jsonc.tui-migration.bak` (2026-08-18) and kept the damaged copy in the handoffs directory.
+
+The planner verified the repair:
+
+- Against the damaged copy, only those two nodes differ.
+- The active plugin entries equal the damaged list minus the appended `opencode-prompts`, and equal the backup's.
+- The backup-to-current diff shows the owner's post-08-18 edits (instructions list, `mcp-youtube`, tui/theme block) intact.
+- The only file under `~/.config/opencode` modified today is `opencode.jsonc`, at the restore.
+- F's committed test now mocks `node:os` behind a `beforeAll` guard; the planner re-ran it with the file's sha256 identical
+  before and after.
+- Unprovable: the entry's value just before the test, so the owner confirms it.
+
+**Brief defect, planner-side.** Row 2.12's brief sent global-scope tests at code whose config directory is a module-load
+`homedir()` constant, and said nothing about the owner's live config. A brief for any row whose code writes user-level
+config requires a guard proving where writes land, positive-controlled before the first write. Worker E's brief got that
+guard only after its runs; `~/.gemini` shows no file modified today.
+
+**Row 2.11, worker E.** `c695ce1`: three files, the JSON parses, and the gemini main checkout's uncommitted hook edits are
+untouched. On published claude-prompts 4.0.1, the old env (`MCP_RESOURCES_PATH` into a missing `node_modules`) and the
+new env serve the same 33 prompts by name. The R6 start waits on worker C's build. E installed dev dependencies into its
+own worktree, because the commit hook needs commitlint.
+
+**Row 2.12, worker F.** `3a71b12`: five files, 9 tests; a mutation restoring the relative default fails 4. Rulings on
+its concerns:
+
+- A legacy `mcp["claude-prompts"]` entry of the plugin's old shape would still start a server R6 refuses, so re-install
+  removes it, and warns on one the user changed.
+- F's equivalence read showed the runtime root follows the workspace. With no `MCP_WORKSPACE` it lands in the npx cache,
+  which can be cleared along with `state.db`. The installer therefore writes an absolute per-user `MCP_RUNTIME_ROOT`,
+  matching the Claude Code plugin's use of its data directory.
+- Whole-entry replacement is killed as row 2.13.
+- The CHANGELOG follows the repository's release-please convention.
+
+**Not worker artifacts.** Both downstream worktrees hold an untracked `t3.json`, the T3 app's per-project script file,
+written when a worktree is opened.
