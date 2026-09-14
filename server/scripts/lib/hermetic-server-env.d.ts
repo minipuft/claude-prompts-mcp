@@ -7,6 +7,4 @@
  * Same arrangement as `exception-hygiene.d.ts`.
  */
 
-export declare const SCRUBBED_KEYS: readonly string[];
-
 export declare function buildServerEnv(overrides?: Record<string, string>): NodeJS.ProcessEnv;

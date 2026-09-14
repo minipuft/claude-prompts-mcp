@@ -83,7 +83,7 @@ export class ConfigPathError extends Error {
  *
  * Reads the file: "exists" is not the property that matters, "parses into a config object" is.
  */
-export function describeUnusableConfigFile(resolved: string): string | undefined {
+function describeUnusableConfigFile(resolved: string): string | undefined {
   try {
     if (statSync(resolved).isDirectory()) return 'is a directory, not a file';
   } catch (error) {
@@ -113,7 +113,7 @@ export function describeUnusableConfigFile(resolved: string): string | undefined
 }
 
 /** The refusal an operator reads: what was given, where it resolved, what is wrong, what to do. */
-export function formatConfigPathRefusal(details: {
+function formatConfigPathRefusal(details: {
   name: ExplicitConfigSource['name'];
   value: string;
   resolved: string;

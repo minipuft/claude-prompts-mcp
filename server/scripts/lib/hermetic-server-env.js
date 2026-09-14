@@ -30,7 +30,7 @@
  * Jest markers make the child decline to boot; path overrides make it read the wrong tree. A
  * spawner that wants any of these passes it in `overrides`, which is applied after the scrub.
  */
-export const SCRUBBED_KEYS = Object.freeze([
+const SCRUBBED_KEYS = Object.freeze([
   'NODE_ENV',
   'JEST_WORKER_ID',
   // Jest's `--experimental-vm-modules`, which the child neither needs nor should inherit.
