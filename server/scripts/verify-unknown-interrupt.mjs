@@ -35,6 +35,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildServerEnv } from './lib/hermetic-server-env.js';
+
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(SERVER_ROOT, 'dist', 'index.js');
 const WS = mkdtempSync(path.join(tmpdir(), 'unknown-interrupt-drive-'));
@@ -79,12 +81,10 @@ function reservePort() {
 
 function spawnServer(port) {
   const log = openSync(path.join(WS, `server-${port}.log`), 'w');
-  const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: SERVER_ROOT };
-  // The server skips main() under JEST_WORKER_ID, and an inherited --experimental-vm-modules
-  // leaks the parent's flags into a plain node process.
-  delete env.NODE_OPTIONS;
-  delete env.NODE_ENV;
-  delete env.JEST_WORKER_ID;
+  // The shared scrub (lib/hermetic-server-env.js): jest markers make the child skip main(), and
+  // the ambient MCP_* path overrides would point it at the operator's tree. The workspace is set
+  // on purpose, after the scrub.
+  const env = buildServerEnv({ PORT: String(port), MCP_WORKSPACE: SERVER_ROOT });
   return spawn('node', [DIST, '--transport=streamable-http', '--quiet'], {
     env,
     stdio: ['ignore', log, log],

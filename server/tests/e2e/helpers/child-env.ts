@@ -1,4 +1,4 @@
-// @lifecycle test - The one place a spawned server's environment is constructed.
+// @lifecycle test - The e2e suite's entry point to the one server-environment builder.
 /**
  * The environment for a server this suite spawns.
  *
@@ -16,30 +16,11 @@
  *     about a fixture holding one. Its assertion was `> 1`, so it passed, and the leak stayed
  *     invisible until a stricter case landed beside it.
  *
- * Every spawn in `tests/e2e` goes through here, and `validate:hermetic-child-env` fails a new one
- * that does not. Four sites had grown their own copy, each scrubbing a different subset.
+ * The scrub list and the builder live in `scripts/lib/hermetic-server-env.js`, because the scripts
+ * that spawn the built server (`verify:mcp`, the tool-schema snapshot capture) are plain node and
+ * cannot import TypeScript. Every spawn in `tests/e2e` goes through here, every server spawn in
+ * `scripts` imports that module, and `validate:hermetic-child-env` fails a new one that does
+ * neither.
  */
 
-/**
- * Variables that must never reach a spawned server from the ambient environment.
- *
- * Jest markers make the child decline to boot; path overrides make it read the wrong tree. A test
- * that wants any of these passes it in `overrides`, which is applied after the scrub.
- */
-const SCRUBBED_KEYS = [
-  'NODE_ENV',
-  'JEST_WORKER_ID',
-  // Jest's `--experimental-vm-modules`, which the child neither needs nor should inherit.
-  'NODE_OPTIONS',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_RUNTIME_ROOT',
-  'MCP_CONFIG_PATH',
-] as const;
-
-/** Inherit the ambient environment, scrub what would decide the test's answer, then apply overrides. */
-export function buildServerEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const key of SCRUBBED_KEYS) delete env[key];
-  return { ...env, ...overrides };
-}
+export { buildServerEnv } from '../../../scripts/lib/hermetic-server-env.js';

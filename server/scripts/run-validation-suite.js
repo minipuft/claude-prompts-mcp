@@ -388,7 +388,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
+      'CHECKED — covers tests/e2e (no spread) and server-spawning scripts (must import scripts/lib/hermetic-server-env.js, no spread); the self-test runs each predicate over input that must trip it and input that must not, a run classifying zero spawners fails, and a positive control restoring a spread in capture-tool-schemas.mjs exits 1 naming it. UNCHECKED and known — a server spawned through an entry spelling the classifier does not recognise',
   },
   {
     script: 'validate:shipped-frameworks',
