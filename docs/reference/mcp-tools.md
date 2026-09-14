@@ -1647,6 +1647,11 @@ node dist/index.js --transport stdio \
   --config /path/to/config.json
 ```
 
+`--config` and `MCP_CONFIG_PATH` must name a readable JSON config file. A missing file, a
+directory, an unreadable file, or malformed JSON stops the server before it serves anything, on
+every transport, exiting non-zero with the reason on stderr: the variable or flag, the value, the
+resolved path, what is wrong, and the packaged default that unsetting it would use.
+
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
 `--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
 `MCP_RESOURCES_PATH`) at a directory instead. The full parsed set (17, from `server/src/runtime/cli.ts`) is `--client`, `--config`,
@@ -1669,14 +1674,14 @@ success. The same check applies to `transport` in `config.json`.
 
 ### Environment Variables
 
-| Variable                    | Description                                          |
-| --------------------------- | ---------------------------------------------------- |
-| `MCP_WORKSPACE`             | Workspace root for config resolution                 |
-| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_CONFIG_PATH`           | Override config.json path                            |
-| `MCP_SERVER_ROOT`           | Server package root, used by skills export           |
-| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file      |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file   |
+| Variable                    | Description                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution                                                      |
+| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.)                                      |
+| `MCP_CONFIG_PATH`           | Override config.json path; must name a readable JSON file, or the server refuses to start |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                           |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file                                        |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
