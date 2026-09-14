@@ -4,14 +4,13 @@
  *
  * WHY THIS LIVES IN shared/
  * `runtime/paths.ts` (the server's composition-root `PathResolver`) and
- * `modules/skills-sync/service.ts` (a domain module, Layer 3) both need to refuse the same
- * operator setting -- an `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` that resolves to a path that is
- * not a usable directory -- with byte-identical wording. The module importing straight from
- * `#runtime/paths.js` inverted the dependency direction (`runtime` is Layer 4+ application
- * composition; a domain module importing it is a module depending on the process that assembles
- * it) and was flagged by `validate:module-catalog`. This is the shared, dependency-free home for
- * the check both callers need; `runtime/paths.ts` keeps its own config-file-specific refusal
- * (`describeUnusableConfigFile`) and re-imports the pieces below for the wording they share.
+ * `modules/skills-sync/service.ts` (a domain module, Layer 3) both refuse the same operator
+ * setting -- an `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` that resolves to a path that is not a
+ * usable directory -- with byte-identical wording. `shared/` (Layer 0) is the one layer both a
+ * domain module and the composition root may import, so it is the check's only home that keeps
+ * both callers on the correct side of the module boundary. `runtime/paths.ts` keeps its own
+ * config-file-specific refusal (`describeUnusableConfigFile`) and imports the pieces below for
+ * the wording they share.
  */
 
 import { statSync } from 'fs';

@@ -34,11 +34,6 @@ import {
   type PathSetting,
 } from '#shared/utils/path-setting.js';
 
-// Re-exported so `index.ts` and `runtime/application.ts` keep importing `PathSettingError` from
-// here without change — the definition moved to `#shared/utils/path-setting.js`, this file's
-// config-file refusal still throws it.
-export { PathSettingError };
-
 /**
  * CLI flag values parsed from command line arguments
  */
@@ -81,15 +76,6 @@ type ExplicitConfigSource = PathSetting & { name: '--config' | 'MCP_CONFIG_PATH'
 
 /** A workspace path and the flag or variable that named it. */
 type WorkspaceSource = PathSetting & { name: '--workspace' | 'MCP_WORKSPACE' };
-
-/**
- * `PathSetting`, `PathSettingError`, `resolveSettingPath`, `formatPathSettingRefusal`,
- * `describeRemoval`, and `assertUsableDirectorySetting` live in `#shared/utils/path-setting.js` —
- * `modules/skills-sync/service.ts` (a domain module) needs the same directory-setting refusal this
- * resolver does, and a domain module cannot import `runtime/` (application composition) without
- * inverting the layer boundary `validate:module-catalog` checks. `PathSettingError` is re-exported
- * below so `index.ts` and `runtime/application.ts` keep importing it from here unchanged.
- */
 
 /**
  * Why `resolved` cannot serve as a config file, or `undefined` when it can.

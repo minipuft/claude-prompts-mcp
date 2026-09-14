@@ -12,11 +12,12 @@ import { ConfigLoader } from './infra/config/index.js';
 import { startApplication } from './runtime/application.js';
 import { parseServerCliArgs, type ServerCliArgs } from './runtime/cli.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
-import { PathSettingError } from './runtime/paths.js';
 
 import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
+
+import { PathSettingError } from '#shared/utils/path-setting.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
   healthy: false,
