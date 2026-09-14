@@ -14,12 +14,12 @@ tags: [ci, scripts, config, validation]
 
 ## Now (2026-09-14)
 
-**Goal**: close the plan. #278 merged every row except 1.9, 1.11 and 1.12; the owner ruled 1.9 (R6) and 1.12 (R7),
-and 1.12 revives 1.11 (R8). **Current slice**: Tier 2 on `fix/refusals-and-gate-persistence`. Worker C owns rows 2.1,
-2.5, 2.2 and 2.3; worker D owns rows 2.8–2.10. The downstream probe 2.4 found that R6 breaks the gemini and opencode
-extensions on the next release (rows 2.11, 2.12). **Next decision**: the owner's choice of how the downstream repositories
-move, which decides whether R9 (this PR closes the plan) still holds. **Constraint in force**: nothing is pushed to the
-downstream repositories without the owner.
+**Goal**: close rows 1.9, 1.11 and 1.12 in claude-prompts, and keep both downstream extensions working through the
+release that carries R6 (R10). **Current slice**: Tier 2 on `fix/refusals-and-gate-persistence`. Workers C (rows 2.1,
+2.5, 2.2, 2.3) and D (rows 2.8–2.10) stalled after a session restart with uncommitted edits and no handoff; the
+planner is reading why before resuming or relaunching them. Rows 2.11 and 2.12 get downstream workers once both
+repositories' state is measured. **Next decision**: resume versus relaunch for C and D. **Constraint in force**: nothing
+is pushed to `gemini-prompts` or `opencode-prompts`; the claude-prompts release waits on both (R10).
 
 ## Why this exists
 
@@ -46,7 +46,8 @@ operator's environment instead of the state CI or an installed user has:
 | R6  | **Owner, 2026-09-14: every unusable operator path setting refuses startup (row 1.9).** `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` naming a path that does not exist or is not a directory, and a workspace `config.json` that exists but is unreadable, a directory, malformed JSON or not a JSON object, each refuse on STDIO and Streamable HTTP in R3's form: before serving, non-zero exit, stderr only, naming the setting, the value, the resolved path, what is wrong and what was expected. A workspace with no `config.json` still falls back to the packaged config; `MCP_RUNTIME_ROOT` is still created on demand; an empty value counts as unset. Listed under ⚠ BREAKING CHANGES per R4 |
 | R7  | **Owner, 2026-09-14: a gates toggle survives a restart (row 1.12).** `system_control` disables gates to save tokens, so a freshly started server serving the same workspace and runtime root advertises the `prompt_engine` schema that matches the persisted toggle, on both transports. The scope a toggle writes and the scope the advertised schema reads are one key                                                                                                                                                                                                                                                                                                                         |
 | R8  | **Row 1.11 revives with 1.12, in the same PR.** Once persisted state reaches a fresh server, a developer's toggle could reach the committed schema snapshot and `verify:mcp`, so the capture and verify scripts run on a temp `MCP_RUNTIME_ROOT`. The committed snapshot stays the gates-enabled union shape                                                                                                                                                                                                                                                                                                                                                                                      |
-| R9  | **One PR closes the plan.** Rows 1.9, 1.11 and 1.12 are its last open rows, so the PR that lands them sets a final `status:`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| R9  | **One PR closes the plan.** Rows 1.9, 1.11 and 1.12 are its last open rows, so the PR that lands them sets a final `status:`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | **Superseded by R10 (2026-09-14)** |
+| R10 | **Owner, 2026-09-14: fix downstream first.** R6 would break the gemini and opencode extensions on the next claude-prompts release (rows 2.11, 2.12). The planner prepares both fixes in `gemini-prompts` and `opencode-prompts` on local branches, pushing nothing; the owner reviews and pushes them, and the claude-prompts release waits until both downstream releases are out. The claude-prompts PR still lands Tier 2, but the plan stays `active` until rows 2.11 and 2.12 are terminal, so its PR carries a progress footer rather than closing the plan                                                                                                                                 |
 
 ## Dispatch
 

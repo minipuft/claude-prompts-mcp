@@ -333,3 +333,16 @@ its own bundled resources, which is exactly the behaviour R6 removes.
 
 The local search of the installed Gemini CLI 0.55.1 bundle matched only yargs vendor code, so the "no npm install"
 finding rests on the documentation, not on a code read.
+
+## The owner rules the downstream order; workers stall on a restart (2026-09-14)
+
+**R10.** Asked how the downstream repositories should move, with three options — fix downstream first, ship
+claude-prompts and fix after, or soften R6 for relative paths — the owner chose to fix downstream first. R9 ("one PR
+closes the plan") no longer holds: rows 2.11 and 2.12 land in other repositories, reviewed and pushed by the owner, so
+the claude-prompts PR carries a progress footer and the plan closes when the downstream rows do.
+
+**Stall.** At 13:12, after a session restart, both background workers read `idle` / `blocked` with no commits and no
+handoff. Worker C held uncommitted edits in all six row 2.1 files; worker D held one uncommitted edit, to
+`gate-state-store.ts`. Per the resumable-dispatch practice, the planner reads each session's log before choosing, and
+resumes a live session with an instruction to re-read its tree, because a relaunch would redo reading the transcript
+already holds.
