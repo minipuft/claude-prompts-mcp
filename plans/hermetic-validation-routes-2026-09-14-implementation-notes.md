@@ -247,3 +247,26 @@ reading the SUITE's existing convention for textual matches. A brief that rules 
 registry already carries.
 
 On the merged tree (`555f0aa2`, `d4b7abcc`, `c53e5872`), `validate:all` passes 58 of 58 in 67 s.
+
+## #278 merged; the owner rules the open rows (2026-09-14)
+
+PR #278 merged as `c141a048` with every row except 1.9, 1.11 and 1.12. The owner then ruled:
+
+- **1.9**: "these should also refuse to start". Read as all three settings the planner listed (a malformed workspace
+  `config.json`, `MCP_RESOURCES_PATH` naming a missing directory, `MCP_WORKSPACE` naming a missing directory). The
+  planner's earlier recommendation to only warn for `MCP_WORKSPACE` is overruled. Recorded as R6.
+- **1.12**: "we would need to do this migration; `system_control` needs to disable these features to preserve tokens
+  when needed". Recorded as R7.
+
+**Superseded kill.** Row 1.11 was `✗ KILLED` with the revive condition "a freshly started server's advertised schema
+narrows from a persisted row, which fixing row 1.12 would make true". R7 builds that condition, so 1.11 reopens under R8
+instead of a new row repeating it. The kill text stays quoted in the row.
+
+**Planner sub-rulings inside R6**: an empty value counts as unset; a workspace without `config.json` keeps the packaged
+fallback; `MCP_RUNTIME_ROOT` stays created on demand; the packaged `config.json`'s own fallback is outside R6, because it
+is not an operator setting.
+
+**Dispatch surface for Tier 2**: background `claude --bg --model opus --effort high` sessions, the surface that bound both
+tier and effort in Tier 1 and survived session restarts. Workers return the five-heading handoff to
+`~/.cache/claude-prompts-mcp/handoffs/` and send a one-line completion message, because idle notices fire while a
+worker's shell commands run.
