@@ -439,3 +439,26 @@ The receipt is corrected in place, with the false clause struck and kept, and th
 
 **What would have caught it**: a positive control for the probe — a known `strict-boolean-expressions` violation fed
 through the same stdin path, shown to be counted — or skipping stdin and comparing two real-file runs on two trees.
+
+## Worker D accepted; C's follow-up mostly accepted (2026-09-14)
+
+**D (2.8–2.10).** The planner's own STDIO drive ran four processes on one workspace and runtime root. The disable
+narrowed the next fresh process to no gate parameters, and the enable restored all three on the process after. D's
+e2e covers the same sequence over HTTP and re-ran green. The full real-file lint count equals main's (3092), which is the
+measurement that later caught C's +4.
+
+Rulings on D's concerns:
+
+- No 19th `verify:mcp` check. `validate:tool-schemas` already fails on a narrowed schema, which D's positive control
+  showed.
+- `cleanup()`'s unscoped save is killed as 2.22. An effective-scope save would let a second server revert a peer's toggle.
+- Loading once at startup is what R7 asks for.
+
+Row 2.10's status clause for `verify:mcp` is superseded as unobservable, rather than silently dropped. D's findings
+became rows 2.20 (a header claiming an unmade check) and 2.21 (a test that hangs jest when it fails).
+
+**C's follow-up.** 2.15 and 2.19 are accepted: the README names no removed transport, and `paths.ts` is back to main's
+`strict-boolean-expressions` count. The first 2.16 probe exited 1 for "No skills-sync.yaml found", which fails before
+the new `MCP_WORKSPACE` check can run, so it proved nothing about the row. It is being re-run with a temp server root that
+holds a `skills-sync.yaml`, first without `MCP_WORKSPACE` as the positive control. Same shape as row 1.11's lesson: a
+probe must reach the code it claims to test.
