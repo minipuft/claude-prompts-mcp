@@ -54,22 +54,36 @@ plan_table:
   - A row may name gate ids in its Verify column as `gates: <id>[, <id>]`. Those compile to
     that node's inline gates, so review fires ON the row instead of batching to end-of-tier.
     The tier gate compiles to a run-level gate targeting the tier's LAST node id.
-  - execution_dispatch Agent column vocabulary is `heavy | standard | fast | main thread`.
-    The three model words compile to a per-node model choice; `main thread` compiles to no
-    node field at all and keeps that work in-session.
+  - execution_dispatch declares Tier · Effort · Failure shape · branch_mode per row — no
+    Agent column, no delegate-destination row. Defaults and the tier table (by failure
+    shape, spec exactness deciding): `/claude-code` §Per-row tier declaration. If the
+    compile step still needs a `subagentModel` hint, derive it from Tier (opus → heavy,
+    sonnet → standard, haiku → fast) rather than authoring it as its own column.
 
 new_file_justifications:
   [For each new file: why it can't be added to an existing file]
 
 execution_dispatch:
-  | Work | Agent | Why this tier |
-  |------|-------|----------------|
-  [Assign each tier an executor by failure shape (bounded/mechanical → smaller
-   tier; decision-bearing → larger), or main thread. Always end with the
-   never-delegate row: gate verdicts, tier acceptance, open-question rulings,
-   the final live drive, and the scope check stay with the main thread.
+  | Row | Tier | Effort | Failure shape | branch_mode |
+  |-----|------|--------|---------------|-------------|
+  [One line per task row (same row id as the plan_table above), not per tier.
+   Tier: haiku | sonnet | opus | fable, chosen by the row's failure shape and
+   spec exactness — never by subject matter alone. Effort: low…max; it binds
+   only when the row is dispatched through a Workflow agent() or a pinned
+   agent definition's frontmatter, so an Agent-tool dispatch gets the tier
+   only — read the declaration as tier-only in that case. Failure shape: the
+   one phrase that justifies the tier (wrong output / wrong approach / wrong
+   lookup). branch_mode: own-branch (default — the row commits to
+   <initiative>/<row> and the planner merges on handoff) or shared-tree
+   (disjoint small edits in one repo — the planner commits per concern); name
+   it explicitly, or it reads as a lapse rather than a chosen exception.
+   Defaults for all four columns: `/claude-code` §Per-row tier declaration.
    The final tier's Verify must include a build plus a live drive of the actual
    client flow — not only green gates.]
+
+  The planner takes no row here: it rules the open questions before tasks are
+  cut, accepts each handoff, merges the worker's branch, and owns the PR
+  boundary — once, as its role, not as a dispatch destination.
 
 open_questions:
   [Every decision this plan could not settle from evidence, listed explicitly
