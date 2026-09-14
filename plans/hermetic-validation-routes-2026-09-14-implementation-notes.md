@@ -542,3 +542,41 @@ Run on `78fa8489`, the initiative branch with row 2.23 merged, with `MCP_CONFIG_
 | STDIO restart drive on the final build                                                       | a disable leaves the fresh process advertising no gate parameters     |
 | STDIO and HTTP start with a missing `MCP_WORKSPACE`                                          | exit 1, no stdout, neither the workspace nor the runtime root created |
 | `origin/main`, tree after the run                                                            | no commits ahead of the branch; clean                                 |
+
+## Downstream release (2026-09-14)
+
+**Owner ruling R11**: ship the downstream fixes now and hold claude-prompts 5.0.0. The planner pushes, opens and merges
+the downstream PRs.
+
+**How a claude-prompts release reaches each downstream**, measured from each repository's `main`:
+
+| Downstream         | Path to a new engine                                                                                                              | Affected by R6                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| gemini-prompts     | `gemini-extension.json` launches unpinned `npx claude-prompts`; installs clone `main`, and the repository has no releases or tags | yes, row 2.11                            |
+| opencode-prompts   | the installer writes unpinned `npx claude-prompts` into the user's OpenCode config                                                | yes for the old relative entry, row 2.12 |
+| codex-prompts      | the engine in `node_modules`, refreshed by the auto-merged release sync, which republishes the `dist` branch                      | yes, row 2.24                            |
+| Claude Code plugin | `MCP_WORKSPACE=${CLAUDE_PLUGIN_ROOT}`                                                                                             | no                                       |
+| Desktop extension  | `MCP_RESOURCES_PATH=${__dirname}/server/resources`, which `.mcpbignore` keeps in the bundle                                       | no                                       |
+
+The `^4.0.0` dependency range protects none of the three affected downstreams from a published 5.0.0: two resolve the
+engine through unpinned `npx`, and the third takes it from a sync PR that merges itself.
+
+**Merged**: gemini-prompts #45 (`e084febc`), opencode-prompts #54 (`5954e95b`) then release PR #53 (2.1.0), and
+codex-prompts #3 (`fd9a24bb`, `dist` 0.1.3). Each passed its required checks before merge.
+
+**Session trailers stripped before push.** Both opencode fix commits written by worker F carried a `Claude-Session:`
+trailer with a session URL. The branch was unpushed, so the messages were rewritten, and the tree was byte-identical to
+the old tip.
+
+**Not a row: gemini-prompts release-please fails on every run** ("GitHub Actions is not permitted to create or approve
+pull requests"). The repository has no `RELEASE_PLEASE_TOKEN` secret, so the workflow falls back to `github.token`, and
+the repository setting forbids Actions from creating PRs. ✗ KILLED (2026-09-14 · a repository setting owned by the
+owner, with no effect on users because Gemini installs track `main` · revives if gemini-prompts starts publishing
+releases or tags)
+
+**Not a row: a merge commit adds a duplicate changelog line.** release-please read the PR title in the body of
+opencode-prompts #54's merge commit as a third `Fixed` entry in 2.1.0. Cosmetic.
+
+**Brief defect, planner-side**: row 2.4 enumerated the downstream repositories by recall (`minipuft-plugins`,
+`gemini-prompts`, `opencode-prompts`). The list that decides who receives a release is the `sync-downstream` matrix in
+`.github/workflows/extension-publish.yml`, which names four. A breaking runtime change reads that matrix.
