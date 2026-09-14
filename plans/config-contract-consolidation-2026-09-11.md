@@ -15,7 +15,7 @@ tags: [config, schema, validation, cli, contracts]
 ## Now (2026-09-14)
 
 - **Goal**: one owner for `config.json`'s shape. T1 makes a bad config visible at load without refusing to serve.
-- **Slice**: T1. 1.5 and 1.6 ✓. 1.1 dispatched 2026-09-14 (opus); 1.3 and 1.4 wait on 1.1. Row 0.5's discovery brief runs alongside (haiku, edits nothing).
+- **Slice**: T1. 1.5 and 1.6 ✓. 1.1 running (opus). 1.3, 1.4 and 1.7 wait on 1.1. Row 0.5's discovery is accepted: 0.6 and 0.7 (script type fixes) are cut and go out with 1.3 and 1.4; 0.5 (the gate) follows them.
 - **Next decision**: accept 1.1's handoff, live drive included, then brief 1.3 and 1.4 in parallel on their disjoint files; 1.7 (changelog) follows 1.3. Rule 0.5's mechanism from its discovery measurements. OQ-5 stays open for the owner.
 - **Constraint in force**: shared-tree in `../claude-prompts-mcp-config` — workers edit only their named files and commit nothing. The planner commits source per concern only while no worker is editing, because lint-staged stashes unstaged changes; a plans-only commit takes the docs path, which does not, and may land while a worker is live. Nothing is pushed before the owner reviews.
 
@@ -113,7 +113,10 @@ Row ids compile to node ids (`0.1` → `t0-1`); `Depends` holds row ids within t
 | 0.3 | ✓ 2026-09-11 · `server/config.schema.json` — 27/27 strict                                                                                                                           | `server/config.schema.json`         | Extend | 0.1, 0.2 | Per-section `additionalProperties:false` (S1). NOT `unevaluatedProperties` — proven no-op under draft-07/AJV 8.20                                                                               |
 | 0.4 | ✓ 2026-09-11 · `server/scripts/validate-config-schema.ts` 8/8 · `package.json` self-test script · `scripts/run-validation-suite.js` converse flipped + `reads` corrected (DEV-T0-3) | `scripts/validate-config-schema.ts` | Extend | 0.3      | Self-test with a positive control. Without it 0.3 is an unverified claim                                                                                                                        |
 
-| 0.5 | ☐ (as of 2026-09-11 · flips when a typecheck gate reads `scripts/` and a deliberate type error there fails it) | `tsconfig.json` / `package.json` | Extend | 0.4 | **Found executing 0.4 (notes GAP-1).** `tsconfig.json` is `include: ["src/**/*"]` and `tsconfig.test.json` adds only `tests/**/*`, so NOTHING typechecks `scripts/` — 58 validation scripts CI depends on. `tsx` transpiles without checking, so a green script proves nothing about its types. 0.4 was verified with a substituted tsconfig; that substitution is the workaround, not the fix |
+| 0.5 | ☐ (as of 2026-09-14 · flips when `npm run typecheck:scripts` exits 0 on this branch, fails on a deliberately introduced type error in a script, and `validate:all` runs it) | `server/tsconfig.scripts.json`, `server/package.json`, `server/scripts/run-validation-suite.js` | **Create** + Extend | 0.6, 0.7 | **Rewritten 2026-09-14 from discovery (notes R19).** Authored: "a typecheck gate reads `scripts/`". Measured: `tsconfig.json` includes only `src/**/*` and `tsconfig.test.json` adds only `tests/**/*`; typechecking the 23 `.ts` scripts yields 15 errors in 4 files. A new `tsconfig.scripts.json` follows `tsconfig.test.json`'s one-project-per-target precedent, because `tsconfig.json`'s `rootDir: src` serves the build. A plain zero-error `typecheck:scripts`, not a ratchet — a ratchet absorbs a backlog too large to fix, and 15 is not one. The SUITE entry is what puts it in CI; its `reads` must match what `validate:suite-membership` re-derives |
+| 0.6 | ☐ (as of 2026-09-14 · flips when both files report zero diagnostics under `tsconfig.scripts.json` with their script output unchanged) | `server/scripts/table-contracts-reader.ts`, `server/scripts/validate-prompts.ts` | Edit | — | 7 of the 15 (6 + 1), measured twice: TS2532/TS2345-shaped narrowing. Fix by narrowing, never by casting to silence — each script must still exit and print as before |
+| 0.7 | ☐ (as of 2026-09-14 · flips when both files report zero diagnostics under `tsconfig.scripts.json` with their script output unchanged) | `server/scripts/validate-shipped-frameworks.ts`, `server/scripts/verify-action-inventory.ts` | Edit | — | 8 of the 15 (4 + 4), same shape and same constraint as 0.6 |
+| 0.8 | ✗ KILLED (2026-09-14 · `checkJs` over the 50 `.js`/`.mjs` scripts yields 695 diagnostics, 426 of them implicit-`any` parameters: annotation work on untyped JavaScript, not defects, and not this initiative's concern · revives if a `.js` script is converted to `.ts`, or a defect in one is traced to a type error `checkJs` would have caught) | — | — | — | Typecheck the JavaScript scripts too |
 
 ### T1 — Warn at load, keep serving
 
@@ -131,14 +134,17 @@ Rulings this tier depends on: notes R9–R13. Dispatch surface is the `Agent` to
 
 **Dispatch** — tier · effort · failure shape, per `/claude-code` §Per-row tier declaration:
 
-| Row | Tier   | Effort | Failure shape                                                                                                     | branch_mode | Surface |
-| --- | ------ | ------ | ----------------------------------------------------------------------------------------------------------------- | ----------- | ------- |
-| 1.5 | sonnet | low    | wrong output — two exact edits, content given                                                                     | shared-tree | Agent   |
-| 1.6 | sonnet | high   | wrong output — signature and result shape specified; the self-test must stay green                                | shared-tree | Agent   |
-| 1.1 | opus   | high   | wrong approach — ordering against adoption, warn-once under hot reload, injection rather than a guard that skips  | shared-tree | Agent   |
-| 1.3 | sonnet | high   | wrong output — surface ruled, fallback stated                                                                     | shared-tree | Agent   |
-| 1.4 | sonnet | medium | wrong output — behavior pinned by 1.1, mutations named                                                            | shared-tree | Agent   |
-| 1.7 | sonnet | medium | wrong output — the behaviors are enumerated in the row; the risk is session vocabulary leaking into release notes | shared-tree | Agent   |
+| Row | Tier   | Effort | Failure shape                                                                                                                                  | branch_mode | Surface |
+| --- | ------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------- |
+| 1.5 | sonnet | low    | wrong output — two exact edits, content given                                                                                                  | shared-tree | Agent   |
+| 1.6 | sonnet | high   | wrong output — signature and result shape specified; the self-test must stay green                                                             | shared-tree | Agent   |
+| 1.1 | opus   | high   | wrong approach — ordering against adoption, warn-once under hot reload, injection rather than a guard that skips                               | shared-tree | Agent   |
+| 1.3 | sonnet | high   | wrong output — surface ruled, fallback stated                                                                                                  | shared-tree | Agent   |
+| 1.4 | sonnet | medium | wrong output — behavior pinned by 1.1, mutations named                                                                                         | shared-tree | Agent   |
+| 1.7 | sonnet | medium | wrong output — the behaviors are enumerated in the row; the risk is session vocabulary leaking into release notes                              | shared-tree | Agent   |
+| 0.6 | sonnet | medium | wrong output — each diagnostic is located and named; the risk is changing a script's behavior while silencing its types                        | shared-tree | Agent   |
+| 0.7 | sonnet | medium | wrong output — same shape as 0.6                                                                                                               | shared-tree | Agent   |
+| 0.5 | sonnet | high   | wrong output — a new project file plus a SUITE entry whose `reads` substrate is re-derived and has already failed once in this plan (DEV-T0-3) | shared-tree | Agent   |
 
 ### T2 — Reconcile the CLI against the schema (23 keys)
 
