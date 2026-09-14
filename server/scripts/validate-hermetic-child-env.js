@@ -151,11 +151,7 @@ function main() {
 /** Each case is `[label, actual, expected]`. */
 function selfTestCases() {
   const joinEntry = "const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');";
-  // `scripts/lib/substrate.js` derives what a step reads from signal tokens in its source, string
-  // literals included, so spelling the synchronous spawn call out here would record this read-only
-  // gate as a spawner. Composing it at runtime tests the same call spelling without that claim.
-  const syncSpawn = ['spawn', 'Sync'].join('');
-  const binEntry = `${syncSpawn}(process.execPath, [join(root, pkg.bin['claude-prompts']), '--help'])`;
+  const binEntry = "spawnSync(process.execPath, [join(root, pkg.bin['claude-prompts']), '--help'])";
   return [
     ['a real `...process.env` spread', SPREAD.test('  env: { ...process.env, PORT: port },'), true],
     ['a buildServerEnv call', SPREAD.test('  env: buildServerEnv({ PORT: port }),'), false],
@@ -166,9 +162,9 @@ function selfTestCases() {
       isServerSpawner(`${joinEntry}\nspawn('node', [DIST_ENTRY]);`),
       true,
     ],
-    ['the installed bin + a synchronous spawn', isServerSpawner(binEntry), true],
+    ['the installed bin + spawnSync', isServerSpawner(binEntry), true],
     ['an entry that is only read', isServerSpawner(`readFileSync(${joinEntry.slice(20)})`), false],
-    ['a spawn of tsc', isServerSpawner(`${syncSpawn}(tsc, ['--noEmit'])`), false],
+    ['a spawn of tsc', isServerSpawner("spawnSync(tsc, ['--noEmit'])"), false],
     [
       'an import of the builder',
       SHARED_IMPORT.test("import { buildServerEnv } from './lib/hermetic-server-env.js';"),
