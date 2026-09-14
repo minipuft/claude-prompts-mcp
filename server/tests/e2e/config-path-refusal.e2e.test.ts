@@ -1,6 +1,7 @@
 /**
- * An explicit config path the server cannot use stops it before it serves anything, and an unusable
- * implicit default falls back without writing to stdout, the STDIO protocol channel.
+ * A path setting the server cannot use — an explicit config path, a workspace, a resources path, or
+ * a workspace config.json — stops it before it serves anything, and an unusable PACKAGED config
+ * still falls back to built-in defaults without writing to stdout, the STDIO protocol channel.
  *
  * Measured 2026-09-14 against `dist/index.js` before the refusal: with `MCP_CONFIG_PATH` naming a
  * missing file, a directory, or malformed JSON, the server logged the read error, printed "Using
@@ -16,7 +17,7 @@
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,7 +90,7 @@ async function runServer(
   });
 }
 
-describe('an explicit config path that cannot be used refuses startup', () => {
+describe('a path setting that cannot be used refuses startup', () => {
   let dir: string;
 
   beforeAll(async () => {
@@ -177,17 +178,96 @@ describe('an explicit config path that cannot be used refuses startup', () => {
     expect(existsSync(path.join(runtimeRoot, 'logs', 'mcp-server.log'))).toBe(false);
   }, 30_000);
 
-  it('STDIO: an unusable default config falls back with stdout carrying only protocol frames', async () => {
-    // The implicit default is not refused (that policy is separate); what this pins is the channel.
-    // Before the fix, ConfigLoader wrote "Using default configuration" to stdout ahead of the
-    // initialize response, so a client parsing stdout as JSON-RPC read a non-frame first.
+  it('STDIO: a malformed workspace config.json exits 1 before writing a byte to stdout', async () => {
+    // Before this refusal the same workspace booted on built-in defaults and served.
     const workspace = path.join(dir, 'malformed-workspace');
     await mkdir(workspace, { recursive: true });
-    await writeFile(path.join(workspace, 'config.json'), '{ not json');
+    const config = path.join(workspace, 'config.json');
+    await writeFile(config, '{ not json');
 
     const run = await runServer(
       ['--transport=stdio'],
-      { MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: path.join(dir, 'fallback-runtime') },
+      { MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: path.join(dir, 'workspace-config-runtime') },
+      { stdin: 'pipe' }
+    );
+
+    expect(run.timedOut).toBe(false);
+    expect(run.exitCode).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain(
+      `Refusing to start: the MCP_WORKSPACE environment variable is set to "${workspace}", which resolves to ${workspace}, and its config file ${config} is not valid JSON (`
+    );
+    expect(run.stderr).toContain(
+      `or move it out of the workspace to use the packaged default at ${PACKAGED_DEFAULT}.`
+    );
+    expect(run.stderr).not.toContain('Using default configuration');
+    expect(run.stderr.split('Refusing to start').length - 1).toBe(1);
+  }, 30_000);
+
+  it('STDIO: a missing MCP_WORKSPACE exits 1 and is not created', async () => {
+    // Before this refusal the logs mkdir under the default runtime root created the workspace.
+    const missing = path.join(dir, 'missing-workspace');
+
+    const run = await runServer(
+      ['--transport=stdio'],
+      { MCP_WORKSPACE: missing },
+      { stdin: 'pipe' }
+    );
+
+    expect(run.timedOut).toBe(false);
+    expect(run.exitCode).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain(
+      `Refusing to start: the MCP_WORKSPACE environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
+    );
+    expect(run.stderr).toContain(
+      `Expected an existing directory at that path, or unset MCP_WORKSPACE to use the package root at ${SERVER_ROOT}.`
+    );
+    expect(run.stderr.split('Refusing to start').length - 1).toBe(1);
+    expect(existsSync(missing)).toBe(false);
+  }, 30_000);
+
+  it('Streamable HTTP: a missing MCP_RESOURCES_PATH exits 1 without serving or creating the runtime root', async () => {
+    const missing = path.join(dir, 'missing-resources');
+    const runtimeRoot = path.join(dir, 'resources-http-runtime');
+    const port = await getAvailablePort();
+
+    const run = await runServer(
+      ['--transport=streamable-http'],
+      { PORT: String(port), MCP_RESOURCES_PATH: missing, MCP_RUNTIME_ROOT: runtimeRoot },
+      { stdin: 'ignore' }
+    );
+
+    expect(run.timedOut).toBe(false);
+    expect(run.exitCode).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain(
+      `Refusing to start: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
+    );
+    // No workspace is set, so the fallback is the packaged tree, not a "workspace" one.
+    expect(run.stderr).toContain(
+      `Expected an existing directory at that path, or unset MCP_RESOURCES_PATH to use the packaged resources at ${path.join(SERVER_ROOT, 'resources')}.`
+    );
+    expect(run.stderr.split('Refusing to start').length - 1).toBe(1);
+    expect(existsSync(missing)).toBe(false);
+    expect(existsSync(runtimeRoot)).toBe(false);
+  }, 30_000);
+
+  it('STDIO: an unusable packaged config falls back with stdout carrying only protocol frames', async () => {
+    // The packaged config is the one fallback left, so this is where the channel is pinned. Before
+    // the fix, ConfigLoader wrote "Using default configuration" to stdout ahead of the initialize
+    // response, so a client parsing stdout as JSON-RPC read a non-frame first. `--server-root`
+    // names a package root whose config.json is malformed, without touching the real one.
+    const packageRoot = path.join(dir, 'malformed-package');
+    await mkdir(packageRoot, { recursive: true });
+    await copyFile(path.join(SERVER_ROOT, 'package.json'), path.join(packageRoot, 'package.json'));
+    await symlink(path.join(SERVER_ROOT, 'resources'), path.join(packageRoot, 'resources'), 'dir');
+    const packagedConfig = path.join(packageRoot, 'config.json');
+    await writeFile(packagedConfig, '{ not json');
+
+    const run = await runServer(
+      ['--transport=stdio', `--server-root=${packageRoot}`],
+      { MCP_RUNTIME_ROOT: path.join(dir, 'fallback-runtime') },
       {
         stdin: 'pipe',
         stdinFrames: [
@@ -219,10 +299,9 @@ describe('an explicit config path that cannot be used refuses startup', () => {
     expect(lines.map((line) => JSON.parse(line) as { id?: number })).toContainEqual(
       expect.objectContaining({ id: 1, result: expect.anything() })
     );
-    // The fallback path really ran against the workspace file.
-    expect(run.stderr).toContain(
-      `Error loading configuration from ${path.join(workspace, 'config.json')}`
-    );
+    // The fallback path really ran against the packaged file.
+    expect(run.stderr).toContain(`Error loading configuration from ${packagedConfig}`);
+    expect(run.stderr).not.toContain('Refusing to start');
     expect(run.stderr).toContain('Using default configuration');
   }, 30_000);
 });

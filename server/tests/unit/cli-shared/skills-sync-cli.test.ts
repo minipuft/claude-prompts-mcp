@@ -99,6 +99,34 @@ describe('skills-sync CLI option handling', () => {
     }
   });
 
+  it('refuses a missing MCP_RESOURCES_PATH by name instead of falling through to another tree', async () => {
+    // Before this refusal, a missing directory fell through to the checkout's own server root, so
+    // a diff or sync ran against a tree the operator never named.
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-missing-'));
+    const missing = path.join(tempRoot, 'no-such-resources');
+    const previousResourcesPath = process.env['MCP_RESOURCES_PATH'];
+
+    try {
+      process.env['MCP_RESOURCES_PATH'] = missing;
+      await expect(
+        runSkillsSyncCommand(
+          parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff']),
+          output
+        )
+      ).rejects.toThrow(
+        `Refusing to run: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
+      );
+      expect(existsSync(missing)).toBe(false);
+    } finally {
+      if (previousResourcesPath === undefined) {
+        delete process.env['MCP_RESOURCES_PATH'];
+      } else {
+        process.env['MCP_RESOURCES_PATH'] = previousResourcesPath;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('rolls back clone writes when companion gate validation fails', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-'));
     const previousServerRoot = process.env['MCP_SERVER_ROOT'];
