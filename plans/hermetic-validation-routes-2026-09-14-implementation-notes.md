@@ -477,3 +477,27 @@ repository's own `server/resources`, which always exists, and CI runs only its s
 
 **Worker branches merged**: C (`476df361`…`d37d136e`) and D (`eaad2d05`…`7578a3a7`). Downstream branches, local and
 unpushed: `gemini-prompts` `c695ce1`, `opencode-prompts` `3a71b12` and `64afb3d`.
+
+## The Tier 2 PR-boundary gate (2026-09-14)
+
+Run once on `9ed97d91`, logs under `/tmp/hvr2-gate/`:
+
+| Step                                                                                         | Result                                                             |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `build`, `typecheck`                                                                         | pass                                                               |
+| `lint:ratchet`                                                                               | OK, 3092 errors; the real-file per-rule diff against main is empty |
+| `typecheck:tests:ratchet`                                                                    | OK, 367                                                            |
+| `test:all`                                                                                   | 3080 unit (1 skipped), 819 integration, 202 e2e (2 skipped)        |
+| `validate:all`                                                                               | **1 of 58 failed**: `validate:module-catalog`, new this run        |
+| `build:prod`, `start:test`, `verify:package-artifact`, `validate:tool-schemas`, `verify:mcp` | pass; 18/18                                                        |
+| STDIO restart drive on the final build                                                       | a disable leaves the fresh process advertising no gate parameters  |
+| STDIO and HTTP start with a missing `MCP_WORKSPACE`                                          | exit 1, no stdout, nothing created                                 |
+
+**The catalog drift is a layering finding, not a stale file.** Regenerating it adds one edge, `skills-sync → runtime`,
+from rows 2.5 and 2.16 importing `assertUsableDirectorySetting` from `#runtime/paths.js`. `validate:arch` expresses
+boundaries as path rules and allows the import. The catalog, which exists to surface module edges for review, is the
+only gate that showed it. Row 2.23 moves the check into `src/shared/utils`.
+
+**Brief defect, planner-side**: row 2.5's brief said to move the check only "if importing from `runtime/` breaks
+`validate:arch`". That made the path rule the arbiter of a layering question it does not model. A brief that shares code
+between a domain module and the composition root rules the placement by layer, in `shared`, before dispatch.
