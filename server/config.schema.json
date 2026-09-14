@@ -300,6 +300,15 @@
           "default": 50,
           "minimum": 1,
           "description": "Maximum versions to retain per prompt"
+        },
+        "max_versions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "DEPRECATED — the spelling `cpm config set` writes today; read as `maxVersions`. Scheduled for removal when the CLI writes camelCase (plan row 2.2)."
+        },
+        "auto_version": {
+          "type": "boolean",
+          "description": "DEPRECATED — the spelling `cpm config set` writes today; read as `autoVersion`. Scheduled for removal when the CLI writes camelCase (plan row 2.2)."
         }
       }
     },
