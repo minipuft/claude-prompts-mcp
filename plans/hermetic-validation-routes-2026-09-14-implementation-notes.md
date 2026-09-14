@@ -71,3 +71,30 @@ B's positive control for the "nothing names it" column: the same log grep does s
 `--check` and fails bare. `npx prettier --check` run from `server/` against root files ignores the root
 `.prettierignore` and falsely flags `AGENTS.md`; root files check from the root. `buildServerEnv` already scrubs every
 key the brief listed, so naming it as the single source would have saved a check.
+
+## Worker A handoff (2026-09-14)
+
+**Accepted on planner probes:** row 1.1 (four documentation steps on `!= 'full'`, classifier, projection check) and
+row 1.4 (measured, nothing to commit). The gate itself passes with a 10-case self-test, and a planner mutant that
+replaces `buildServerEnv` in `capture-tool-schemas.mjs` with a `process.env` spread fails it naming that file.
+`typecheck:tests:ratchet` holds at 367, and `verify:mcp` with the personal library, a sentinel runtime root and a missing
+config path exported serves the bundled 51 and creates nothing.
+
+**Held open:** rows 1.2 and 1.3. The planner's broader enumeration also matched `prepare-release-artifacts.js` and
+`validate-extension-artifact.js`, which import no shared list and which the handoff does not classify. If either starts
+the server under a spelling the gate's classifier does not recognise, "every server-spawning script" is false.
+
+**Rulings on A's concerns.** The gate checks per file, not per spawn call — accepted as a documented limit, the
+narrow-gate-with-stated-blind-spot shape. The snapshot's dependence on persisted state becomes row 1.11, assigned to A,
+because a committed artifact must not read the author's `state.db` any more than the author's environment.
+`SCRUBBED_KEYS` exported with only a declaration consumer goes to the knip check at the PR boundary.
+
+**Findings recorded.** The gates-toggle scope mismatch is row 1.12 for the owner. `scripts/hook-harness.mjs` sets
+`MCP_RESOURCES_PATH` deliberately for a child Claude Code builds itself — intended, not a site.
+`server/scripts/validate-contributing.js:21` describes the docs route only, now incomplete; folded into A's follow-up.
+
+**Brief defects A reported, for the next dispatch.** "Diff against `git show HEAD:<file>`" collides with "commit each row
+as soon as its check passes": after the first commit, HEAD is the new script, and four runs compared new against new
+before A caught it — name the base commit, never HEAD. And row 1.4 stated a mechanism as fact ("a config with gates
+disabled changes prompt_engine's advertised parameters") that was false; a brief should offer a lever as a hypothesis the
+worker must first show can move the measurement.
