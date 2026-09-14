@@ -225,3 +225,25 @@ branch: `main`'s last green CI run (34232329468) prints it in both the Node 24 a
 **Brief defect, planner-side**: a row that changes what a validator touches — a directory walk, a child process — names
 `validate:suite-membership` in its row check. Rows 1.3 and 1.14 each did, and the registry mismatch was first read at
 the PR boundary.
+
+## After the gate: main merged, the CHANGELOG entry, and row 1.15 half overruled (2026-09-14)
+
+`origin/main` gained #277 (`aaecac4e`), which touched `CHANGELOG.md` and one prompt file. It merged cleanly as
+`555f0aa2`, with both `[Unreleased]` entries kept. Reading the merged CHANGELOG showed row 1.8's STDIO fix had no
+entry, though a consumer observes it. Worker B added one under `### Fixed` (`d4b7abcc`, fast-forwarded), and B's
+session was stopped with every row it owned accepted.
+
+**1.15.** `validate:suite-membership` re-derives each step's substrate from its source, textually: it strips comments
+and regex literals but not string literals. Worker A found knip-ratchet's `walk` real (row 1.14's `readdirSync`) and
+declared it. For the hermetic gate, which starts no process, the `spawn` came from three `spawnSync` strings in its
+self-test fixtures. A composed the name at runtime so the detector would not see it. The planner overruled that half.
+The `validate:contributing` SUITE entry already settles the case: its `spawn` is a textual match on a literal, and its
+comment says it is "declared rather than worked around, because the detector is textual by design and omitting a
+matched substrate fails". A's concern, that any fixture spelling a signal token trips the detector, is therefore that
+precedent's documented design, not an open defect.
+
+**Brief defect, planner-side**: the 1.15 ruling said to prefer "a change that keeps the detector honest" without
+reading the SUITE's existing convention for textual matches. A brief that rules on a registry cites the precedent the
+registry already carries.
+
+On the merged tree (`555f0aa2`, `d4b7abcc`, `c53e5872`), `validate:all` passes 58 of 58 in 67 s.
