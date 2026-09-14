@@ -19,7 +19,7 @@
  * - The directory should contain subdirs: prompts/, gates/, frameworks/, etc.
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { join, resolve, isAbsolute } from 'path';
 
 import type { ServerCliArgs } from './cli.js';
@@ -59,6 +59,76 @@ export interface ResolvedPaths {
   scripts: string;
   styles: string;
   logs: string;
+}
+
+/** An operator-named config path and the flag or variable that named it. */
+interface ExplicitConfigSource {
+  name: '--config' | 'MCP_CONFIG_PATH';
+  value: string;
+}
+
+/**
+ * An explicitly named config path that cannot be used. Startup stops on it rather than serving
+ * with defaults the operator did not ask for; the message is the whole explanation.
+ */
+export class ConfigPathError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigPathError';
+  }
+}
+
+/**
+ * Why `resolved` cannot serve as a config file, or `undefined` when it can.
+ *
+ * Reads the file: "exists" is not the property that matters, "parses into a config object" is.
+ */
+export function describeUnusableConfigFile(resolved: string): string | undefined {
+  try {
+    if (statSync(resolved).isDirectory()) return 'is a directory, not a file';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return 'does not exist';
+    return `cannot be read (${code ?? String(error)})`;
+  }
+
+  let content: string;
+  try {
+    content = readFileSync(resolved, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return `cannot be read (${code ?? String(error)})`;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    return `is not valid JSON (${error instanceof Error ? error.message : String(error)})`;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return 'is valid JSON but not a JSON object';
+  }
+  return undefined;
+}
+
+/** The refusal an operator reads: what was given, where it resolved, what is wrong, what to do. */
+export function formatConfigPathRefusal(details: {
+  name: ExplicitConfigSource['name'];
+  value: string;
+  resolved: string;
+  problem: string;
+  fallback: { resolved: string; source: string };
+}): string {
+  const { name, value, resolved, problem, fallback } = details;
+  const setter = name === '--config' ? '--config' : 'the MCP_CONFIG_PATH environment variable';
+  const removal = name === '--config' ? 'remove --config' : 'unset MCP_CONFIG_PATH';
+  const fallbackLabel =
+    fallback.source === 'workspace config.json' ? 'the workspace config' : 'the packaged default';
+  return [
+    `Refusing to start: ${setter} is set to "${value}", which resolves to ${resolved}, and that path ${problem}.`,
+    `Expected a readable JSON config file at that path, or ${removal} to use ${fallbackLabel} at ${fallback.resolved}.`,
+  ].join('\n');
 }
 
 /**
@@ -205,41 +275,59 @@ export class PathResolver {
    *   2. MCP_CONFIG_PATH environment variable
    *   3. ${workspace}/config.json (if workspace differs from package and file exists)
    *   4. ${packageRoot}/config.json (default)
+   *
+   * An explicit path (1 or 2) that is not a readable JSON config file throws `ConfigPathError`.
+   * `ConfigLoader.loadConfig` answers an unreadable file with the built-in defaults, which is a
+   * sensible floor for the package's own file and the wrong answer for a path an operator named:
+   * the server booted, served the bundled catalog, and never used the settings asked for.
    */
   getConfigPath(): string {
     if (this.cache.config) return this.cache.config;
 
     let resolved: string;
     let source: string;
+    const explicit = this.readExplicitConfigSource();
 
-    // 1. CLI flag (highest priority)
-    if (this.config.cli.config) {
-      resolved = this.resolvePath(this.config.cli.config);
-      source = 'CLI flag --config';
-    }
-    // 2. Environment variable
-    else if (process.env['MCP_CONFIG_PATH']) {
-      resolved = this.resolvePath(process.env['MCP_CONFIG_PATH']);
-      source = 'MCP_CONFIG_PATH env var';
-    }
-    // 3. Workspace config.json (if different from package and exists)
-    else {
-      const workspace = this.getWorkspace();
-      const workspaceConfig = join(workspace, 'config.json');
-
-      if (workspace !== this.config.packageRoot && existsSync(workspaceConfig)) {
-        resolved = workspaceConfig;
-        source = 'workspace config.json';
-      } else {
-        // 4. Package default
-        resolved = join(this.config.packageRoot, 'config.json');
-        source = 'package config.json (default)';
+    if (explicit !== undefined) {
+      resolved = this.resolvePath(explicit.value);
+      source = explicit.name === '--config' ? 'CLI flag --config' : 'MCP_CONFIG_PATH env var';
+      const problem = describeUnusableConfigFile(resolved);
+      if (problem !== undefined) {
+        const fallback = this.resolveDefaultConfigPath();
+        throw new ConfigPathError(
+          formatConfigPathRefusal({ ...explicit, resolved, problem, fallback })
+        );
       }
+    } else {
+      ({ resolved, source } = this.resolveDefaultConfigPath());
     }
 
     this.cache.config = resolved;
     this.logResolution('config', resolved, source);
     return resolved;
+  }
+
+  /** The explicit config path, flag before variable; an empty value counts as unset. */
+  private readExplicitConfigSource(): ExplicitConfigSource | undefined {
+    const fromFlag = this.config.cli.config;
+    if (fromFlag !== undefined && fromFlag !== '') return { name: '--config', value: fromFlag };
+    const fromEnv = process.env['MCP_CONFIG_PATH'];
+    if (fromEnv !== undefined && fromEnv !== '') return { name: 'MCP_CONFIG_PATH', value: fromEnv };
+    return undefined;
+  }
+
+  /** Where config resolves when nothing names a path: the workspace file if present, else the package's. */
+  private resolveDefaultConfigPath(): { resolved: string; source: string } {
+    const workspace = this.getWorkspace();
+    const workspaceConfig = join(workspace, 'config.json');
+
+    if (workspace !== this.config.packageRoot && existsSync(workspaceConfig)) {
+      return { resolved: workspaceConfig, source: 'workspace config.json' };
+    }
+    return {
+      resolved: join(this.config.packageRoot, 'config.json'),
+      source: 'package config.json (default)',
+    };
   }
 
   /**
@@ -481,26 +569,6 @@ export function parsePathCliOptions(cliArgs: ServerCliArgs): PathResolverCliOpti
     workspace: cliArgs.workspace,
     config: cliArgs.config,
   };
-}
-
-/**
- * Validate path CLI options
- *
- * @param options - Parsed CLI options
- * @returns Array of validation error messages (empty if valid)
- */
-export function validatePathCliOptions(options: PathResolverCliOptions): string[] {
-  const errors: string[] = [];
-
-  if (options.workspace && !existsSync(options.workspace)) {
-    errors.push(`Workspace directory does not exist: ${options.workspace}`);
-  }
-
-  if (options.config && !existsSync(options.config)) {
-    errors.push(`Config file does not exist: ${options.config}`);
-  }
-
-  return errors;
 }
 
 // ============================================================================

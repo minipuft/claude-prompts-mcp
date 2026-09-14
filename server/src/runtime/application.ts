@@ -24,6 +24,7 @@ import {
 } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import { ConfigPathError } from './paths.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
 import { indexerResourceRoots } from './resource-roots.js';
@@ -152,6 +153,8 @@ export class Application {
 
       this.logger.info('Application startup completed successfully');
     } catch (error) {
+      // The entry point prints a config-path refusal once; logging it here too repeats it with a stack.
+      if (error instanceof ConfigPathError) throw error;
       if (this.logger) {
         this.logger.error('Error during application startup:', error);
       } else {
