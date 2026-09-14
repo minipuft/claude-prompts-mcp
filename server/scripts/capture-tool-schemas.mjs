@@ -31,8 +31,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -70,9 +72,20 @@ function reservePort() {
  * `--experimental-vm-modules` leaks the parent's flags, and the ambient MCP_* path overrides
  * would let the operator's config, library and runtime state decide a snapshot that is
  * committed. MCP_WORKSPACE is then set on purpose.
+ *
+ * MCP_RUNTIME_ROOT is set too, to a directory this run creates and removes. Scrubbing the
+ * variable is not enough: without it the runtime root falls back to the workspace, whose
+ * `state.db` holds the operator's persisted toggles. A `system_control gates disable` there
+ * narrows `prompt_engine` for every later server on that workspace, so the capture would record
+ * a schema missing `gates`, `gate_verdict` and `gate_action` — measured 2026-09-14, an 8-change
+ * diff. The committed snapshot is the gates-enabled shape, which only a fresh `state.db` serves.
  */
-function spawnServer(port) {
-  const env = buildServerEnv({ PORT: String(port), MCP_WORKSPACE: REPO_ROOT });
+function spawnServer(port, runtimeRoot) {
+  const env = buildServerEnv({
+    PORT: String(port),
+    MCP_WORKSPACE: REPO_ROOT,
+    MCP_RUNTIME_ROOT: runtimeRoot,
+  });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
     cwd: SERVER_ROOT,
@@ -281,7 +294,8 @@ async function main() {
 
   const port = await reservePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawnServer(port);
+  const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'capture-tool-schemas-runtime-'));
+  const server = spawnServer(port, runtimeRoot);
   let stderr = '';
   server.stderr.on('data', (chunk) => {
     stderr += chunk.toString();
@@ -309,7 +323,8 @@ async function main() {
 
     if (!existsSync(snapshotPath)) {
       console.error(`No snapshot at ${snapshotPath} — run without --check first`);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const baseline = JSON.parse(readFileSync(snapshotPath, 'utf-8'));
@@ -333,9 +348,14 @@ async function main() {
       }
     }
     console.error('\nThis diff decides the version: it is the published MCP tool surface.');
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
-    server.kill('SIGTERM');
+    // Wait for exit before removing the runtime root: a server still shutting down writes there.
+    if (server.exitCode === null && server.signalCode === null) {
+      server.kill('SIGTERM');
+      await once(server, 'exit');
+    }
+    rmSync(runtimeRoot, { recursive: true, force: true });
   }
 }
 

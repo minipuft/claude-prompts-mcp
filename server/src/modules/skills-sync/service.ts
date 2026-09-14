@@ -20,6 +20,7 @@ import { createTwoFilesPatch } from 'diff';
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
+import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import {
@@ -48,8 +49,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveServerRoot(): string {
   const fromResourcesEnv = process.env['MCP_RESOURCES_PATH'];
-  if (fromResourcesEnv && existsSync(fromResourcesEnv)) {
-    const normalizedResources = path.resolve(fromResourcesEnv);
+  if (fromResourcesEnv) {
+    // The server refuses an MCP_RESOURCES_PATH that names no directory, and so does this: falling
+    // through to the roots below would export or sync some other tree under the operator's name.
+    const normalizedResources = path.resolve(
+      assertUsableDirectorySetting(
+        { name: 'MCP_RESOURCES_PATH', value: fromResourcesEnv },
+        { verb: 'run' }
+      )
+    );
     if (path.basename(normalizedResources) === 'resources') {
       return path.dirname(normalizedResources);
     }
@@ -793,7 +801,14 @@ function resolveOutputDir(clientConfig: ClientConfig, scope: 'user' | 'project')
 function resolveProjectRoot(): string {
   const fromWorkspaceEnv = process.env['MCP_WORKSPACE'];
   if (fromWorkspaceEnv) {
-    return path.resolve(fromWorkspaceEnv);
+    // Refused like the server refuses it: a project-scope export resolved against a workspace that
+    // is not there writes skills into a directory tree the operator never named.
+    return path.resolve(
+      assertUsableDirectorySetting(
+        { name: 'MCP_WORKSPACE', value: fromWorkspaceEnv },
+        { verb: 'run' }
+      )
+    );
   }
 
   const serverRoot = getServerRoot();

@@ -99,6 +99,94 @@ describe('skills-sync CLI option handling', () => {
     }
   });
 
+  it('refuses a missing MCP_RESOURCES_PATH by name instead of falling through to another tree', async () => {
+    // Before this refusal, a missing directory fell through to the checkout's own server root, so
+    // a diff or sync ran against a tree the operator never named.
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-missing-'));
+    const missing = path.join(tempRoot, 'no-such-resources');
+    const previousResourcesPath = process.env['MCP_RESOURCES_PATH'];
+
+    try {
+      process.env['MCP_RESOURCES_PATH'] = missing;
+      await expect(
+        runSkillsSyncCommand(
+          parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff']),
+          output
+        )
+      ).rejects.toThrow(
+        `Refusing to run: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
+      );
+      expect(existsSync(missing)).toBe(false);
+    } finally {
+      if (previousResourcesPath === undefined) {
+        delete process.env['MCP_RESOURCES_PATH'];
+      } else {
+        process.env['MCP_RESOURCES_PATH'] = previousResourcesPath;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a missing MCP_WORKSPACE before resolving a project-scope output dir, and treats an empty one as unset', async () => {
+    // Before this refusal, the project root was path.resolve(MCP_WORKSPACE) with no check, so a
+    // project-scope export resolved into a directory tree the operator never named.
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-workspace-'));
+    const missing = path.join(tempRoot, 'no-such-workspace');
+    const saved = new Map(
+      ['MCP_SERVER_ROOT', 'MCP_RESOURCES_PATH', 'MCP_WORKSPACE'].map((key) => [
+        key,
+        process.env[key],
+      ])
+    );
+    // Only a registered project-scope client reaches the project root.
+    const demo = path.join(tempRoot, 'resources', 'prompts', 'examples', 'demo');
+    await mkdir(demo, { recursive: true });
+    await writeFile(
+      path.join(demo, 'prompt.yaml'),
+      'id: demo\nname: Demo\ndescription: Fixture prompt.\nuserMessageTemplateFile: user-message.md\n',
+      'utf-8'
+    );
+    await writeFile(path.join(demo, 'user-message.md'), 'Say hello.\n', 'utf-8');
+    await writeFile(
+      path.join(tempRoot, 'skills-sync.yaml'),
+      'registrations:\n  agent-plugins:\n    project:\n      - prompt:examples/demo\n',
+      'utf-8'
+    );
+    const projectDiff = () =>
+      runSkillsSyncCommand(
+        parseSkillsSyncArgs([
+          'node',
+          'scripts/skills-sync.ts',
+          'diff',
+          '--client',
+          'agent-plugins',
+          '--scope',
+          'project',
+        ]),
+        output
+      );
+
+    try {
+      process.env['MCP_SERVER_ROOT'] = tempRoot;
+      delete process.env['MCP_RESOURCES_PATH'];
+
+      process.env['MCP_WORKSPACE'] = missing;
+      await expect(projectDiff()).rejects.toThrow(
+        `Refusing to run: the MCP_WORKSPACE environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
+      );
+      expect(existsSync(missing)).toBe(false);
+
+      process.env['MCP_WORKSPACE'] = '';
+      await expect(projectDiff()).resolves.toBeDefined();
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('rolls back clone writes when companion gate validation fails', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-'));
     const previousServerRoot = process.env['MCP_SERVER_ROOT'];

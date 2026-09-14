@@ -12,11 +12,12 @@ import { ConfigLoader } from './infra/config/index.js';
 import { startApplication } from './runtime/application.js';
 import { parseServerCliArgs, type ServerCliArgs } from './runtime/cli.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
-import { ConfigPathError } from './runtime/paths.js';
 
 import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
+
+import { PathSettingError } from '#shared/utils/path-setting.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
   healthy: false,
@@ -322,7 +323,9 @@ QUICK START:
   Claude can update your prompts via resource_manager - no manual editing needed!
 
 PATH OPTIONS:
-  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/)
+  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/);
+                          the server refuses to start if it is not an existing
+                          directory, or if a config.json there is not a JSON object
   --config=/path          Direct path to config.json; the server refuses to start
                           if it is not a readable JSON file
 
@@ -338,8 +341,10 @@ RUNTIME OPTIONS:
   --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
-  MCP_WORKSPACE            Base workspace directory (same as --workspace)
-  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default)
+  MCP_WORKSPACE            Base workspace directory (same as --workspace); the server
+                           refuses to start if it is not an existing directory
+  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default);
+                           the server refuses to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
   MCP_CONFIG_PATH          Direct path to config.json (same as --config); the server
@@ -757,9 +762,9 @@ async function main(): Promise<void> {
     // Log successful complete initialization
     activeLogger.info('✅ Application initialization completed - all systems operational');
   } catch (error) {
-    // A refused config path is an operator error with a complete explanation, thrown before
+    // A refused path setting is an operator error with a complete explanation, thrown before
     // anything starts: print it once, without a stack, and leave nothing to roll back.
-    if (error instanceof ConfigPathError) {
+    if (error instanceof PathSettingError) {
       console.error(error.message);
       process.exit(1);
     }

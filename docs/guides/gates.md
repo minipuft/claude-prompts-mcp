@@ -435,6 +435,20 @@ A decision table for picking the right `pass_criteria.type` for the check you ac
 - **Mixing `shell_stdin_source: agent_response` with commands that don't read stdin** — the response is discarded silently and the gate becomes a plain exit-code check with extra overhead. The receiving script must `readFileSync(0)` (or equivalent) to consume the response.
 - **Trusting `llm_self_check`** — the runner is reserved but not implemented, and it no longer reads any configuration, so there is no setting that turns it on. A gate that declares `type: llm_self_check` auto-passes with a skip message. Use one of the four other types, or [`%judge`](./judge-mode.md) / `gates.evaluation.defaultMode` when you want a model to grade the output — that path runs in the client's own subagent and returns through `gate_verdict`.
 
+## Turning the Gate System Off
+
+`system_control(action:"gates", operation:"disable")` turns the gate system off, and `operation:"enable"` turns it back on. While it is off, gate guidance and validation are skipped, and `prompt_engine` stops advertising its `gates`, `gate_verdict` and `gate_action` parameters. A client that never uses gates stops paying tokens for those three parameter descriptions on every tool listing, which is why the switch exists.
+
+**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in `config.json`, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads it back at startup and advertises the same schema, on STDIO and Streamable HTTP alike. This matters because the narrowing is the point: a restart that silently restored the three parameters would spend the tokens the toggle was saving, and nothing would say so.
+
+What that does not cover:
+
+- **Servers already running.** Saved toggles are read at startup, so another process on the same `state.db` sees a toggle only after it restarts.
+- **A schema upgrade.** `kv_state` is dropped and recreated when the database schema version changes, and every workspace returns to gates enabled.
+- **`config.json`.** A toggle does not edit it unless the call passes `persist: true`.
+
+A toggle saved before workspace isolation (2026-08-27) was written under no workspace. It is adopted into the launch workspace the first time a server starts there, provided that workspace has no toggle of its own.
+
 ## Best Practices
 
 1. **Use shell verification for objective criteria** (tests, linting, builds)

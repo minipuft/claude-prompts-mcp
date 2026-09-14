@@ -247,3 +247,298 @@ reading the SUITE's existing convention for textual matches. A brief that rules 
 registry already carries.
 
 On the merged tree (`555f0aa2`, `d4b7abcc`, `c53e5872`), `validate:all` passes 58 of 58 in 67 s.
+
+## #278 merged; the owner rules the open rows (2026-09-14)
+
+PR #278 merged as `c141a048` with every row except 1.9, 1.11 and 1.12. The owner then ruled:
+
+- **1.9**: "these should also refuse to start". Read as all three settings the planner listed (a malformed workspace
+  `config.json`, `MCP_RESOURCES_PATH` naming a missing directory, `MCP_WORKSPACE` naming a missing directory). The
+  planner's earlier recommendation to only warn for `MCP_WORKSPACE` is overruled. Recorded as R6.
+- **1.12**: "we would need to do this migration; `system_control` needs to disable these features to preserve tokens
+  when needed". Recorded as R7.
+
+**Superseded kill.** Row 1.11 was `✗ KILLED` with the revive condition "a freshly started server's advertised schema
+narrows from a persisted row, which fixing row 1.12 would make true". R7 builds that condition, so 1.11 reopens under R8
+instead of a new row repeating it. The kill text stays quoted in the row.
+
+**Planner sub-rulings inside R6**: an empty value counts as unset; a workspace without `config.json` keeps the packaged
+fallback; `MCP_RUNTIME_ROOT` stays created on demand; the packaged `config.json`'s own fallback is outside R6, because it
+is not an operator setting.
+
+**Dispatch surface for Tier 2**: background `claude --bg --model opus --effort high` sessions, the surface that bound both
+tier and effort in Tier 1 and survived session restarts. Workers return the five-heading handoff to
+`~/.cache/claude-prompts-mcp/handoffs/` and send a one-line completion message, because idle notices fire while a
+worker's shell commands run.
+
+## Tier 2 cut for row 1.9 (2026-09-14)
+
+A read-only trace on `c141a048` mapped the refusal surface. What it changed about the design:
+
+- The check cannot live beside the explicit config check alone by accident of order. `MCP_RESOURCES_PATH` is first
+  resolved after the transport is chosen, and a missing workspace is currently CREATED by the logs `mkdir`, because
+  the runtime root defaults to the workspace. So the check must run before `determineTransport` and before any
+  `mkdir`, which is also what keeps both transports in parity.
+- Two release-job smoke steps depend on the fallback (`extension-publish.yml:227, 648`), so R6 would have failed the
+  next release rather than any PR check. Row 2.2.
+- Three more readers carry the same silent fallback. The skills-sync CLI's is kept as row 2.5, because a typo there
+  writes the wrong set into client skill directories. The hooks' and `cpm enable-disable`'s are killed (2.6, 2.7) with
+  reasons: the server refusal already surfaces the misconfiguration, and neither is the ruled surface.
+
+**Routing deviation from the planner prompt.** Public documentation normally routes through `>>documentation_change`.
+Row 2.3 stays a worker row, as row 1.6 did: it states an existing behaviour change in existing sections, not a new public
+surface.
+
+**Planner rulings in the brief**: one refusal error type generalized from `ConfigPathError`, not a parallel type
+`application.ts` and `index.ts` must each learn; the check stays out of the path getters, whose unit tests use made-up
+paths; the CHANGELOG extends the existing BREAKING entry.
+
+## Tier 2 cut for rows 1.12 and 1.11 (2026-09-14)
+
+A second read-only trace on `c141a048` falsified row 1.12's recorded mechanism. The row said a toggle persists under the
+`server` scope while a fresh server reads the `default` row. In fact both read and write the launch workspace id. The
+defect is `GateStateStore`: `initialize` loads only key `default`, and `getOrCreateScopedState` creates an enabled state
+for any other key without reading SQLite. That also explains row 1.11's null result without a second cause. The seeded
+`default` row loaded into memory under `default`, while the schema asked for `server`. The row's text is kept, with the
+correction appended.
+
+**Rulings for worker D.**
+
+- Load every persisted `gates` row at initialize. A per-request lazy load cannot fit behind the synchronous
+  `isGateSystemEnabled`, and the framework store's single-scope load would leave HTTP identities other than the launch
+  scope unfixed. The launch-scope pattern is the named fallback.
+- Adopt a legacy `default` row, as `FrameworkStateStore` does. That is the owner's "migration".
+- No `SCHEMA_VERSION` bump, since a bump drops the very state being fixed.
+- The scripts pin a runtime root each, not the shared builder (worker A's consumer map in row 1.11).
+
+**Finding, not a row**: `buildServerEnv` leaves `CLAUDE_PROJECT_DIR` inherited, so a caller's Claude Code session decides
+the scope key a script's server resolves. With a temp runtime root that key reads an empty store, so it cannot leak state.
+Nothing else here depends on it.
+
+## Row 2.4: R6 breaks two downstream extensions (2026-09-14)
+
+Read-only probe of the sibling repositories:
+
+| Repository         | Setting                                                                                                                               | Resolves to                                                               | Under R6                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `minipuft-plugins` | none                                                                                                                                  | —                                                                         | unaffected                                           |
+| `gemini-prompts`   | `MCP_WORKSPACE=${extensionPath}`; `MCP_RESOURCES_PATH=${extensionPath}/node_modules/claude-prompts/resources`                         | the extension directory exists; its `node_modules` does not after install | refuses on `MCP_RESOURCES_PATH`                      |
+| `opencode-prompts` | `MCP_WORKSPACE=./node_modules/claude-prompts`, with the command `npx claude-prompts --transport=stdio`, in project and global configs | relative to the server's working directory                                | refuses wherever that directory has no local install |
+
+`gemini extensions install` clones or copies the extension and does not run `npm install`, per the Gemini CLI extension
+docs and the command's tracking issue (google-gemini/gemini-cli#5990). `gemini-prompts` gitignores `node_modules/` and
+depends on `claude-prompts ^3.0.0`. Its start command is `npx claude-prompts`, so with no local install it fetches the
+newest server, and that server will carry R6. Today both extensions work only because the server silently falls back to
+its own bundled resources, which is exactly the behaviour R6 removes.
+
+The local search of the installed Gemini CLI 0.55.1 bundle matched only yargs vendor code, so the "no npm install"
+finding rests on the documentation, not on a code read.
+
+## The owner rules the downstream order; workers stall on a restart (2026-09-14)
+
+**R10.** Asked how the downstream repositories should move, with three options — fix downstream first, ship
+claude-prompts and fix after, or soften R6 for relative paths — the owner chose to fix downstream first. R9 ("one PR
+closes the plan") no longer holds: rows 2.11 and 2.12 land in other repositories, reviewed and pushed by the owner, so
+the claude-prompts PR carries a progress footer and the plan closes when the downstream rows do.
+
+**Stall.** At 13:12, after a session restart, both background workers read `idle` / `blocked` with no commits and no
+handoff. Worker C held uncommitted edits in all six row 2.1 files; worker D held one uncommitted edit, to
+`gate-state-store.ts`. Per the resumable-dispatch practice, the planner reads each session's log before choosing, and
+resumes a live session with an instruction to re-read its tree, because a relaunch would redo reading the transcript
+already holds.
+
+## Downstream handoffs and a write to the owner's live config (2026-09-14)
+
+**Incident (row 2.14).** Worker F's first two test runs for row 2.12 wrote to the owner's real
+`~/.config/opencode/opencode.jsonc`. The test set `process.env.HOME` to redirect `GLOBAL_CONFIG_DIR`, a module-level
+`join(homedir(), …)`. jest-environment-node gives each test file a copy of `process.env`, so `node:os` read the real home.
+Damage: `mcp["opencode-prompts"]` replaced (ending with a temp `MCP_WORKSPACE`), and the `plugin` array rewritten, with
+`"opencode-prompts"` appended and two commented lines lost. F restored both nodes from
+`opencode.jsonc.tui-migration.bak` (2026-08-18) and kept the damaged copy in the handoffs directory.
+
+The planner verified the repair:
+
+- Against the damaged copy, only those two nodes differ.
+- The active plugin entries equal the damaged list minus the appended `opencode-prompts`, and equal the backup's.
+- The backup-to-current diff shows the owner's post-08-18 edits (instructions list, `mcp-youtube`, tui/theme block) intact.
+- The only file under `~/.config/opencode` modified today is `opencode.jsonc`, at the restore.
+- F's committed test now mocks `node:os` behind a `beforeAll` guard; the planner re-ran it with the file's sha256 identical
+  before and after.
+- Unprovable: the entry's value just before the test, so the owner confirms it.
+
+**Brief defect, planner-side.** Row 2.12's brief sent global-scope tests at code whose config directory is a module-load
+`homedir()` constant, and said nothing about the owner's live config. A brief for any row whose code writes user-level
+config requires a guard proving where writes land, positive-controlled before the first write. Worker E's brief got that
+guard only after its runs; `~/.gemini` shows no file modified today.
+
+**Row 2.11, worker E.** `c695ce1`: three files, the JSON parses, and the gemini main checkout's uncommitted hook edits are
+untouched. On published claude-prompts 4.0.1, the old env (`MCP_RESOURCES_PATH` into a missing `node_modules`) and the
+new env serve the same 33 prompts by name. The R6 start waits on worker C's build. E installed dev dependencies into its
+own worktree, because the commit hook needs commitlint.
+
+**Row 2.12, worker F.** `3a71b12`: five files, 9 tests; a mutation restoring the relative default fails 4. Rulings on
+its concerns:
+
+- A legacy `mcp["claude-prompts"]` entry of the plugin's old shape would still start a server R6 refuses, so re-install
+  removes it, and warns on one the user changed.
+- F's equivalence read showed the runtime root follows the workspace. With no `MCP_WORKSPACE` it lands in the npx cache,
+  which can be cleared along with `state.db`. The installer therefore writes an absolute per-user `MCP_RUNTIME_ROOT`,
+  matching the Claude Code plugin's use of its data directory.
+- Whole-entry replacement is killed as row 2.13.
+- The CHANGELOG follows the repository's release-please convention.
+
+**Not worker artifacts.** Both downstream worktrees hold an untracked `t3.json`, the T3 app's per-project script file,
+written when a worktree is opened.
+
+## Worker C accepted; both downstream rows verified against the R6 build (2026-09-14)
+
+Planner probes on C's branch, all on one fresh build: the refusals, the boots and the skills-sync CLI as recorded in rows
+2.1 and 2.5. The same build ran both downstream configs from fresh checkouts. Each old config refuses, which proves R6
+would have broken it; each new config boots and serves 46 prompts. So rows 2.11 and 2.12 hold against the server they
+exist for, not only against today's release.
+
+**Rulings on C's concerns.**
+
+- The refusal also covers a directory that cannot be read. Kept: it mirrors the shipped config check, and an unreadable
+  directory is unusable.
+- The commitlint "and" warning on `34b8a589` is resolved by the squash title.
+- The label fix without a mutation is settled by the planner's own mutant, which fails its e2e case.
+- `test:all`, and `hook-harness.mjs` setting these variables, belong to the PR-boundary gate.
+
+**C's findings.** The README's `--transport sse` is row 2.15. The skills-sync `resolveProjectRoot` fallback is row 2.16,
+the same class as 2.5. `ConfigLoader`'s catch-all is killed as 2.18, with a revive condition.
+
+**Rulings on F's follow-up concerns.**
+
+- `MCP_RUNTIME_ROOT` is written for custom workspaces too. That keeps state out of a user's resource library, the reason
+  the variable exists.
+- Existing runtime state is not migrated: the old locations sat under a local install or under setups R6 refuses.
+- F's reading of a relative `XDG_DATA_HOME` (ignored, per the XDG spec) and of a legacy entry with an extra key (kept,
+  with a warning) stand.
+
+**Lint count.** `lint:ratchet` reports 3096 errors on C's branch against the 3092 measured at `ffa50a2a`. The per-rule
+error delta over C's five touched source files is +0, so the four came from elsewhere, already on `main`. A planner
+probe traces them.
+
+**Downstream rows need a release gate, not only a fix.** Accepting 2.11 and 2.12 does not make the release safe: R10
+orders the releases, which happen outside this repository. Row 2.17 holds that order, so the plan stays `active` after
+the claude-prompts PR.
+
+## A lint probe that could not see the rule it cleared (2026-09-14)
+
+Row 2.1's receipt said "no new lint error in the five touched source files". The planner measured that by linting each
+file's base version through `eslint --stdin --stdin-filename` and the head version as a real file, then diffing the
+per-rule counts. The probe reported +0.
+
+A full real-file run over `src`, `scripts` and `eslint-rules` then gave 3092 errors on main and 3096 on the merged
+initiative branch. The whole delta is +4 `@typescript-eslint/strict-boolean-expressions` in `src/runtime/paths.ts`.
+Linting through stdin does not reach that type-aware rule. Worker B found the same stdin blind spot for `no-console`
+in row 1.10, so this is the second sighting.
+
+The receipt is corrected in place, with the false clause struck and kept, and the fix is row 2.19, assigned to C.
+
+**What would have caught it**: a positive control for the probe — a known `strict-boolean-expressions` violation fed
+through the same stdin path, shown to be counted — or skipping stdin and comparing two real-file runs on two trees.
+
+## Worker D accepted; C's follow-up mostly accepted (2026-09-14)
+
+**D (2.8–2.10).** The planner's own STDIO drive ran four processes on one workspace and runtime root. The disable
+narrowed the next fresh process to no gate parameters, and the enable restored all three on the process after. D's
+e2e covers the same sequence over HTTP and re-ran green. The full real-file lint count equals main's (3092), which is the
+measurement that later caught C's +4.
+
+Rulings on D's concerns:
+
+- No 19th `verify:mcp` check. `validate:tool-schemas` already fails on a narrowed schema, which D's positive control
+  showed.
+- `cleanup()`'s unscoped save is killed as 2.22. An effective-scope save would let a second server revert a peer's toggle.
+- Loading once at startup is what R7 asks for.
+
+Row 2.10's status clause for `verify:mcp` is superseded as unobservable, rather than silently dropped. D's findings
+became rows 2.20 (a header claiming an unmade check) and 2.21 (a test that hangs jest when it fails).
+
+**C's follow-up.** 2.15 and 2.19 are accepted: the README names no removed transport, and `paths.ts` is back to main's
+`strict-boolean-expressions` count. The first 2.16 probe exited 1 for "No skills-sync.yaml found", which fails before
+the new `MCP_WORKSPACE` check can run, so it proved nothing about the row. It is being re-run with a temp server root that
+holds a `skills-sync.yaml`, first without `MCP_WORKSPACE` as the positive control. Same shape as row 1.11's lesson: a
+probe must reach the code it claims to test.
+
+## The last claude-prompts rows close; the gate runs (2026-09-14)
+
+**D's follow-up.** 2.20: `verify-mcp-surface.mjs`'s header now claims only `checkNoMutation`'s resources check.
+2.21: the persistence test cleans every store it creates. A planner mutant with a failing assertion exits in 1 s;
+worker D measured the old file hanging until a 97 s timeout.
+
+**Parents.** Rows 1.9, 1.11 and 1.12 close with the Tier 2 rows that implement them. The PR body's plan footer needs
+those parents: the Tier 2 rows did not exist at the merge base, so only a row open there can count as progress.
+
+**Not a row.** C asked whether `scripts/hook-harness.mjs` could now refuse. It sets `MCP_RESOURCES_PATH` to the
+repository's own `server/resources`, which always exists, and CI runs only its self-test, which starts no server.
+
+**Worker branches merged**: C (`476df361`…`d37d136e`) and D (`eaad2d05`…`7578a3a7`). Downstream branches, local and
+unpushed: `gemini-prompts` `c695ce1`, `opencode-prompts` `3a71b12` and `64afb3d`.
+
+## The Tier 2 PR-boundary gate (2026-09-14)
+
+Run once on `9ed97d91`, logs under `/tmp/hvr2-gate/`:
+
+| Step                                                                                         | Result                                                             |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `build`, `typecheck`                                                                         | pass                                                               |
+| `lint:ratchet`                                                                               | OK, 3092 errors; the real-file per-rule diff against main is empty |
+| `typecheck:tests:ratchet`                                                                    | OK, 367                                                            |
+| `test:all`                                                                                   | 3080 unit (1 skipped), 819 integration, 202 e2e (2 skipped)        |
+| `validate:all`                                                                               | **1 of 58 failed**: `validate:module-catalog`, new this run        |
+| `build:prod`, `start:test`, `verify:package-artifact`, `validate:tool-schemas`, `verify:mcp` | pass; 18/18                                                        |
+| STDIO restart drive on the final build                                                       | a disable leaves the fresh process advertising no gate parameters  |
+| STDIO and HTTP start with a missing `MCP_WORKSPACE`                                          | exit 1, no stdout, nothing created                                 |
+
+**The catalog drift is a layering finding, not a stale file.** Regenerating it adds one edge, `skills-sync → runtime`,
+from rows 2.5 and 2.16 importing `assertUsableDirectorySetting` from `#runtime/paths.js`. `validate:arch` expresses
+boundaries as path rules and allows the import. The catalog, which exists to surface module edges for review, is the
+only gate that showed it. Row 2.23 moves the check into `src/shared/utils`.
+
+**Brief defect, planner-side**: row 2.5's brief said to move the check only "if importing from `runtime/` breaks
+`validate:arch`". That made the path rule the arbiter of a layering question it does not model. A brief that shares code
+between a domain module and the composition root rules the placement by layer, in `shared`, before dispatch.
+
+## Row 2.23 review (2026-09-14)
+
+**G's move is right; the follow-up gives each symbol one import path.** `dfe9342c` moves the directory-setting refusal
+verbatim into `src/shared/utils/path-setting.ts`, and `rg "#runtime/paths" src/modules` is now empty. The same probe on
+`e6658f7d` finds `modules/skills-sync/service.ts:23`. Returned for one more commit:
+
+- `runtime/paths.ts` re-exported `PathSettingError` so its three importers kept their import path.
+  `validate:no-crosslayer-reexport` cannot see this: it checks only files that consist entirely of re-exports, and
+  `paths.ts` also defines code.
+- Two comments described the move rather than the code as it now stands.
+
+**Triaged, not a row: leftover re-exports in files that also define code.** An enumeration of files that re-export a
+name they import found 14 other sites in `server/src`. Positive control: the same enumeration finds `paths.ts:40` on
+`dfe9342c`. Thirteen of the 14 are convenience re-exports, which the handbook permits in a defining file. One is left
+over from a move: `shared/types/chain-session.ts:29`, from the StepState → StepLifecycle migration (2026-07-30).
+✗ KILLED (2026-09-14 · outside this plan, and gating it would narrow the handbook's recorded exemption for defining
+files, which is the owner's decision · revives if a review finds a third move leftover of this kind or the owner
+narrows that exemption)
+
+**Lost completion message.** G finished at 14:06 and sent its completion message to the planner's previous session
+name, `claude-prompts-mcp-d8`. After a compaction the planner is `claude-prompts-mcp-73`, so the message never
+arrived, although the dispatch itself was intact. The handoff file's modification time and `claude agents --json`
+showed that G had finished. The follow-up brief tells G to reply to the `from` address of the dispatch message.
+
+## The Tier 2 PR-boundary gate, second run (2026-09-14)
+
+Run on `78fa8489`, the initiative branch with row 2.23 merged, with `MCP_CONFIG_PATH`, `MCP_RESOURCES_PATH` and
+`MCP_WORKSPACE` unset as in CI. Logs are under `/tmp/hvr2-gate2/`.
+
+| Step                                                                                         | Result                                                                |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `build`, `typecheck`                                                                         | pass                                                                  |
+| `lint:ratchet`                                                                               | OK, 3092 errors; the real-file per-rule diff against main is empty    |
+| `typecheck:tests:ratchet`                                                                    | OK, 367                                                               |
+| `test:all`                                                                                   | 3080 unit (1 skipped), 819 integration, 202 e2e (2 skipped)           |
+| `validate:all`                                                                               | all 58 steps pass                                                     |
+| `build:prod`, `start:test`, `verify:package-artifact`, `validate:tool-schemas`, `verify:mcp` | pass; 18/18                                                           |
+| STDIO restart drive on the final build                                                       | a disable leaves the fresh process advertising no gate parameters     |
+| STDIO and HTTP start with a missing `MCP_WORKSPACE`                                          | exit 1, no stdout, neither the workspace nor the runtime root created |
+| `origin/main`, tree after the run                                                            | no commits ahead of the branch; clean                                 |
