@@ -8,7 +8,7 @@
 2. **Contract ownership** -- Hand-written schemas under `src/mcp/tools/schemas/` own runtime validation; `tooling/contracts/*.json` own descriptions and parameter metadata generated into `src/mcp/contracts/schemas/_generated/`. Run `npm run generate:contracts`, never edit `_generated/`.
 3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
-5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:all` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran. **`test:all`, not `test:ci`**: `test:ci` is an alias for `test:unit` and runs neither `tests/integration` nor `tests/e2e`, while CI runs both as separate jobs -- so its name promises the opposite of what it does. Measured 2026-08-27: a default-deny control landed with the unit suite green, and 20 integration plus 17 e2e failures went unseen for five commits because every local check stopped at `test:ci`. `pre-push` runs integration and is what finally caught it; `test:all` is how you find out before then.
+5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:all` minimum. Add `validate:arch` for module boundaries. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. Omitting it locally means CI fails on work that passed every gate you ran. **`test:all`, not `test:ci`**: `test:ci` is an alias for `test:unit` and runs neither `tests/integration` nor `tests/e2e`, while CI runs both as separate jobs -- so its name promises the opposite of what it does. Measured 2026-08-27: a default-deny control landed with the unit suite green, and 20 integration plus 17 e2e failures went unseen for five commits because every local check stopped at `test:ci`. `pre-push` does not run integration or e2e tests -- CI runs them at the PR boundary. `test:all` is the only way to catch this locally before a push.
 
 ## Node.js Support Boundaries
 
@@ -33,11 +33,16 @@ push. That wrapper was deleted once the subset relation made it redundant.
 It recognizes two narrow safe scopes and sends every empty, mixed, executable,
 configuration, dependency, deleted-unknown, or unrecognized change to `full`.
 
-| Scope   | Trigger                                                                                 | Pre-push                                                                                              | CI                                                                                               |
-| ------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | changed-line hygiene + Prettier on existing changed files                                             | classifier hygiene; four protected jobs report intentional lightweight passes                    |
-| `hooks` | only `hooks/**` plus optional docs                                                      | docs checks + `validate:python`                                                                       | pinned Ruff/Pyrefly/Pytest/PyYAML; other protected jobs report intentional lightweight passes    |
-| `full`  | everything else; empty/unknown input                                                    | typecheck · lint ratchet · format · conditional Python · unit tests · architecture · versions · build | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E |
+| Scope   | Trigger                                                                                 | CI                                                                                                |
+| ------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene; four protected jobs report intentional lightweight passes                      |
+| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML; other protected jobs report intentional lightweight passes       |
+| `full`  | everything else; empty/unknown input                                                    | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E   |
+
+`.husky/pre-push` does not branch by scope: every push runs `typecheck` and `lint:ratchet`
+only -- a deletion-only push (`git push --delete`) skips even that. CI stays scope-routed and
+owns the rest -- format, lockfile-sync, architecture, versions, Python hooks, unit/integration/
+E2E, build, and post-build schema gates -- once, at the PR boundary.
 
 The CI workflow remains unconditional. Do not add workflow-level `paths` or
 `paths-ignore`: a required workflow skipped before jobs exist leaves its context
@@ -65,10 +70,9 @@ yours. Coverage is unchanged: `pre-push` runs it and CI runs it. Pre-commit floo
 
 **Adding a step to a hook that CI does not run breaks the contract** -- add it to
 `validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
-\* conditional on `hooks/` changes.
 
-Formatting is covered by `validate:format` in the full route. `pre-push` checks existing
-repo-level JSON/MD/YAML files in the push range. Anything a generator owns belongs in
+Formatting is covered by `validate:format` in the full CI route and by `pre-commit`'s
+staged-file check; `pre-push` does not check formatting. Anything a generator owns belongs in
 `.prettierignore` with a reason -- otherwise the generator and Prettier disagree.
 
 **Every formatting gate CHECKS; none of them writes** (since 2026-08-25). `pre-commit` and

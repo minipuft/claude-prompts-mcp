@@ -514,10 +514,14 @@ file — the table `>>implementation_plan` emits — one tier per submission:
 | `gates: <id>` in a row's Verify | That node's `inlineGateIds`, so review fires ON the row                   |
 | The tier's gate criterion       | A run-level gate whose `target_step_id` is the tier's LAST node id        |
 | `execution_dispatch` Agent cell | `subagentModel` (`heavy`/`standard`/`fast`); `main thread` emits no field |
+| A delegated row                 | A node whose `promptId` is `strategic_worker` — the worker brief          |
 
 A row with no Depends keeps its declared place, which is what the linearization does with it
 anyway. Rows already marked ✓ are skipped. Gate verdicts, tier acceptance, open-question rulings,
-and the scope check are never compiled into a node — they stay with the calling session.
+handoff acceptance, branch merges, and the scope check are never compiled into a node — they stay
+with the calling planner session, which dispatches rows rather than editing source. `subagentModel`
+is a hint and binds nothing; the `Agent` tool binds a model per spawn and `Workflow` `agent()` binds
+model plus effort.
 
 ### Shell Verification Gates (Ralph Mode)
 

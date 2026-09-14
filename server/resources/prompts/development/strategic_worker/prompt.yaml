@@ -1,0 +1,48 @@
+id: strategic_worker
+name: Strategic Worker
+description: >-
+  Worker brief (single-shot): one task row owned end to end under a planner
+  session. Sibling search, then the probed pre-flight trio (domain, defined,
+  contracts), then the implementation, then the row's own artifact check — the
+  check reads what the row wrote, never the full suite, because green is
+  required once at the planner's PR boundary. Commits the row's files to its own
+  branch, or nothing at all under the shared-tree mode, and returns exactly five
+  headings — done, concerns, deviations, findings, feedback — as the whole of the
+  channel back, since the planner cannot read a worker's transcript. Edits only
+  the files the row names, moves no git refs, and leaves no TODO behind.
+  Dispatched by >>strategicImplement; a compiled delegated node carries this id.
+category: development
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: task
+    type: string
+    description: >-
+      The row's Change text — what to do, stated exactly enough to be re-issued
+      verbatim if this worker is killed mid-row.
+    required: true
+  - name: plan_path
+    type: string
+    description: >-
+      Path to the governing plan file, for context only. The planner writes rows
+      back; a worker reports status in its handoff and edits no plan file.
+    required: false
+  - name: row_id
+    type: string
+    description: The plan row this brief owns (e.g. 1.4), echoed in the handoff.
+    required: false
+  - name: files
+    type: string
+    description: >-
+      The files this row may edit, by name. Anything outside this list is a
+      finding, not an edit; an empty list makes the row discovery-only.
+    required: false
+  - name: branch_mode
+    type: string
+    description: >-
+      own-branch (default) — commit the row's files to <initiative>/<row> and the
+      planner merges; shared-tree — commit nothing, leave edits in the planner's
+      worktree for it to commit per concern.
+    required: false
+gateConfiguration:
+  framework_gates: false
