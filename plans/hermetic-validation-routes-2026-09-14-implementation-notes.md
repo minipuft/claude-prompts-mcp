@@ -525,3 +525,20 @@ narrows that exemption)
 name, `claude-prompts-mcp-d8`. After a compaction the planner is `claude-prompts-mcp-73`, so the message never
 arrived, although the dispatch itself was intact. The handoff file's modification time and `claude agents --json`
 showed that G had finished. The follow-up brief tells G to reply to the `from` address of the dispatch message.
+
+## The Tier 2 PR-boundary gate, second run (2026-09-14)
+
+Run on `78fa8489`, the initiative branch with row 2.23 merged, with `MCP_CONFIG_PATH`, `MCP_RESOURCES_PATH` and
+`MCP_WORKSPACE` unset as in CI. Logs are under `/tmp/hvr2-gate2/`.
+
+| Step                                                                                         | Result                                                                |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `build`, `typecheck`                                                                         | pass                                                                  |
+| `lint:ratchet`                                                                               | OK, 3092 errors; the real-file per-rule diff against main is empty    |
+| `typecheck:tests:ratchet`                                                                    | OK, 367                                                               |
+| `test:all`                                                                                   | 3080 unit (1 skipped), 819 integration, 202 e2e (2 skipped)           |
+| `validate:all`                                                                               | all 58 steps pass                                                     |
+| `build:prod`, `start:test`, `verify:package-artifact`, `validate:tool-schemas`, `verify:mcp` | pass; 18/18                                                           |
+| STDIO restart drive on the final build                                                       | a disable leaves the fresh process advertising no gate parameters     |
+| STDIO and HTTP start with a missing `MCP_WORKSPACE`                                          | exit 1, no stdout, neither the workspace nor the runtime root created |
+| `origin/main`, tree after the run                                                            | no commits ahead of the branch; clean                                 |
