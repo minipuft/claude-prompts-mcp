@@ -169,3 +169,36 @@ sound for that branch alone; only the merged tree could show the slack. That is 
 **Finding, recorded as evidence rather than work:** the knip ratchet prints a request on any decrease and exits 0, so
 a missed tightening never fails CI. That is the mechanism behind every ceiling slack this plan met, and it bears on
 the ratchet-slack pattern rather than on this plan's class.
+
+## Rows 1.10 and 1.14 accepted; the PR boundary goes ahead without 1.9 (2026-09-14)
+
+**1.10.** Worker B's `f086189c` took the widened ruling. The file-wide exemption block is gone: measured under the new
+rule, `startup.ts` and `logging/index.ts` held no stdout write, and `index.ts` held one, the `--init` early exit, now
+exempt on its own line with the reason. The real-file probe disproved part of the planner's hypothesis:
+`no-restricted-properties` catches `process.stdout`, destructuring and computed access, but not
+`import { stdout } from 'node:process'`, so `no-restricted-imports` joins it. On the merged tree one planner mutant
+holding every spelling failed the ratchet on all three rules. B's three limits are recorded here, each with what
+reopens it:
+
+- Flat config replaces a rule's options rather than merging them. Reopens if any other block in `eslint.config.js`
+  sets `no-restricted-imports` or `no-restricted-properties` for server source, since that block would silently drop
+  the stdout entry for its files.
+- A stream handle reached another way (`globalThis.process.stdout`, `require('process').stdout`,
+  `fs.writeSync(1, …)`) is not refused. Reopens if an rg for any of those spellings finds a site in `server/src`;
+  today it finds none.
+- The lint baseline's `totals` block is stale (3200/1020 against 3092/898). `check` never reads it, so nothing depends
+  on it.
+
+**1.14.** Worker A's `a9f80614` refuses a declaration that knip's `entry` credits when no sibling `.js` exists, reading
+the roots from `knip.json` rather than a list. It deletes the unimported `plugin-test-helpers.ts` and tightens once, last.
+Both mutants fail on the merged tree. A's own limits: only `<root>/**/*.d.ts` entry globs are enumerated, and a
+declaration beside a `.mjs` or `.cjs` would read as an orphan, which is loud rather than silent.
+
+**Finding, A's statement of the class:** a baseline taken on a worker branch is looser than the merged tree whenever
+another branch deletes debt, because a positive control proves only the tree it ran on. A mutant adding exactly one
+finding is sharp only at `current == baseline`, so the ratchet is re-measured and tightened after each merge, then
+mutated.
+
+**Row 1.9 and the PR.** The owner has not ruled on 1.9. Rows 1.5–1.8 already refuse an unusable explicit config and
+keep the fallback line off stdout on their own. 1.9 would extend refusal to other path settings, which is a separate
+breaking-change decision. So this PR carries every other in-class row, and 1.9 ships as its own change once ruled.
