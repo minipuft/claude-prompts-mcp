@@ -1,5 +1,6 @@
 /**
- * An explicit config path the server cannot use stops it before it serves anything.
+ * An explicit config path the server cannot use stops it before it serves anything, and an unusable
+ * implicit default falls back without writing to stdout, the STDIO protocol channel.
  *
  * Measured 2026-09-14 against `dist/index.js` before the refusal: with `MCP_CONFIG_PATH` naming a
  * missing file, a directory, or malformed JSON, the server logged the read error, printed "Using
@@ -43,13 +44,23 @@ interface Run {
 async function runServer(
   args: string[],
   env: Record<string, string>,
-  options: { stdin: 'pipe' | 'ignore'; settled?: () => boolean; deadlineMs?: number }
+  options: {
+    stdin: 'pipe' | 'ignore';
+    settled?: (run: { stdout: string; stderr: string }) => boolean;
+    deadlineMs?: number;
+    /** Newline-delimited JSON-RPC frames written to a piped stdin right after spawn. */
+    stdinFrames?: object[];
+  }
 ): Promise<Run> {
   const proc = spawn('node', [DIST_ENTRY, ...args], {
     cwd: SERVER_ROOT,
     env: buildServerEnv(env),
     stdio: [options.stdin, 'pipe', 'pipe'],
   });
+
+  for (const frame of options.stdinFrames ?? []) {
+    proc.stdin?.write(`${JSON.stringify(frame)}\n`);
+  }
 
   let stdout = '';
   let stderr = '';
@@ -66,7 +77,7 @@ async function runServer(
     const started = Date.now();
     const poll = setInterval(() => {
       const elapsed = Date.now() - started;
-      if (options.settled?.() === true || elapsed > deadlineMs) {
+      if (options.settled?.({ stdout, stderr }) === true || elapsed > deadlineMs) {
         timedOut = elapsed > deadlineMs;
         proc.kill();
       }
@@ -164,5 +175,54 @@ describe('an explicit config path that cannot be used refuses startup', () => {
     expect(run.stderr).not.toContain('Refusing to start');
     expect(existsSync(customLog)).toBe(true);
     expect(existsSync(path.join(runtimeRoot, 'logs', 'mcp-server.log'))).toBe(false);
+  }, 30_000);
+
+  it('STDIO: an unusable default config falls back with stdout carrying only protocol frames', async () => {
+    // The implicit default is not refused (that policy is separate); what this pins is the channel.
+    // Before the fix, ConfigLoader wrote "Using default configuration" to stdout ahead of the
+    // initialize response, so a client parsing stdout as JSON-RPC read a non-frame first.
+    const workspace = path.join(dir, 'malformed-workspace');
+    await mkdir(workspace, { recursive: true });
+    await writeFile(path.join(workspace, 'config.json'), '{ not json');
+
+    const run = await runServer(
+      ['--transport=stdio'],
+      { MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: path.join(dir, 'fallback-runtime') },
+      {
+        stdin: 'pipe',
+        stdinFrames: [
+          {
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+              protocolVersion: '2025-06-18',
+              capabilities: {},
+              clientInfo: { name: 'config-fallback-e2e', version: '0' },
+            },
+          },
+        ],
+        settled: ({ stdout }) => stdout.includes('"id":1'),
+      }
+    );
+
+    expect(run.timedOut).toBe(false);
+    const lines = run.stdout.split('\n').filter((line) => line.trim() !== '');
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      let frame: unknown;
+      expect(() => {
+        frame = JSON.parse(line);
+      }).not.toThrow();
+      expect(frame).toMatchObject({ jsonrpc: '2.0' });
+    }
+    expect(lines.map((line) => JSON.parse(line) as { id?: number })).toContainEqual(
+      expect.objectContaining({ id: 1, result: expect.anything() })
+    );
+    // The fallback path really ran against the workspace file.
+    expect(run.stderr).toContain(
+      `Error loading configuration from ${path.join(workspace, 'config.json')}`
+    );
+    expect(run.stderr).toContain('Using default configuration');
   }, 30_000);
 });
