@@ -423,3 +423,19 @@ probe traces them.
 **Downstream rows need a release gate, not only a fix.** Accepting 2.11 and 2.12 does not make the release safe: R10
 orders the releases, which happen outside this repository. Row 2.17 holds that order, so the plan stays `active` after
 the claude-prompts PR.
+
+## A lint probe that could not see the rule it cleared (2026-09-14)
+
+Row 2.1's receipt said "no new lint error in the five touched source files". The planner measured that by linting each
+file's base version through `eslint --stdin --stdin-filename` and the head version as a real file, then diffing the
+per-rule counts. The probe reported +0.
+
+A full real-file run over `src`, `scripts` and `eslint-rules` then gave 3092 errors on main and 3096 on the merged
+initiative branch. The whole delta is +4 `@typescript-eslint/strict-boolean-expressions` in `src/runtime/paths.ts`.
+Linting through stdin does not reach that type-aware rule. Worker B found the same stdin blind spot for `no-console`
+in row 1.10, so this is the second sighting.
+
+The receipt is corrected in place, with the false clause struck and kept, and the fix is row 2.19, assigned to C.
+
+**What would have caught it**: a positive control for the probe — a known `strict-boolean-expressions` violation fed
+through the same stdin path, shown to be counted — or skipping stdin and comparing two real-file runs on two trees.
