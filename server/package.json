@@ -29,6 +29,7 @@
     "dist/index.js",
     "dist/cpm.js",
     "config.json",
+    "config.schema.json",
     "resources",
     "hooks",
     "README.md",
