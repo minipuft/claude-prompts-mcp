@@ -126,3 +126,30 @@ Ruling: one worker owns the count across both workers' files, because it is one 
 fixing it concurrently would each read the other's half-done number. The declaration file goes out as a hypothesis
 (tsc needs it; knip does not credit a declaration beside a `.js` import) that A measures before choosing between
 deleting it and teaching knip about it.
+
+## Row 1.11 killed; row 1.10's ruling amended (2026-09-14)
+
+**1.11.** Worker A front-loaded the positive control and stopped when it did not move. A seeded the existing
+`default` gates row to disabled with a distinct reason. The capture re-saved that row, since `updated_at` moved and
+the reason survived, so the capture demonstrably read it, yet it still advertised `gate_action`, `gate_verdict` and
+`gates`, byte-identical to the committed snapshot. The earlier `server`-scope toggle had behaved the same. The scripts
+do write the checkout's `state.db`, but they write back what they read, and no output changes. Killed, with its
+revival tied to row 1.12, whose fix must carry the runtime-root pin.
+
+**1.10.** Worker B committed rulings 1 and 3 (`8ac0f676`, 4 files) and returned ruling 2 against the 6-file bound. The
+rule turns 22 `eslint-disable no-console` directives into unused ones, which moves the ratchet's `__unknown__` count
+from 5 to 27. The planner's enumeration then found the concern B raised about `src/index.ts` covers two more files:
+the file-wide `no-console: 'off'` block also names `src/runtime/startup.ts` and `src/infra/logging/index.ts`, both of
+which run in the serving process. B's 73-warning count was taken under that override, so it could not see them. The
+same enumeration found no `process.stdout` code in `src` (positive control: 21 `process.stderr` code lines), which
+`no-console` would not catch anyway.
+
+**Brief defects, planner-side.**
+
+- `git rebase <initiative branch>` assumed git would drop commits already applied by cherry-pick. The squash-merged
+  history beneath them conflicts first. The exact command when a branch holds nothing new is
+  `git rebase --onto <base> <last own commit>`.
+- "Seed under the scope a fresh capture reads" assumed the database reveals that scope. Ask instead for the row a
+  fresh capture re-saves.
+- A severity change to a lint rule is sized by two counts taken before dispatch: the directives naming that rule, and
+  the files an override exempts from it. A count taken under an override cannot see the override's files.
