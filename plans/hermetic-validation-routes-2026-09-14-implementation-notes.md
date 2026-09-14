@@ -314,3 +314,22 @@ correction appended.
 **Finding, not a row**: `buildServerEnv` leaves `CLAUDE_PROJECT_DIR` inherited, so a caller's Claude Code session decides
 the scope key a script's server resolves. With a temp runtime root that key reads an empty store, so it cannot leak state.
 Nothing else here depends on it.
+
+## Row 2.4: R6 breaks two downstream extensions (2026-09-14)
+
+Read-only probe of the sibling repositories:
+
+| Repository         | Setting                                                                                                                               | Resolves to                                                               | Under R6                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `minipuft-plugins` | none                                                                                                                                  | —                                                                         | unaffected                                           |
+| `gemini-prompts`   | `MCP_WORKSPACE=${extensionPath}`; `MCP_RESOURCES_PATH=${extensionPath}/node_modules/claude-prompts/resources`                         | the extension directory exists; its `node_modules` does not after install | refuses on `MCP_RESOURCES_PATH`                      |
+| `opencode-prompts` | `MCP_WORKSPACE=./node_modules/claude-prompts`, with the command `npx claude-prompts --transport=stdio`, in project and global configs | relative to the server's working directory                                | refuses wherever that directory has no local install |
+
+`gemini extensions install` clones or copies the extension and does not run `npm install`, per the Gemini CLI extension
+docs and the command's tracking issue (google-gemini/gemini-cli#5990). `gemini-prompts` gitignores `node_modules/` and
+depends on `claude-prompts ^3.0.0`. Its start command is `npx claude-prompts`, so with no local install it fetches the
+newest server, and that server will carry R6. Today both extensions work only because the server silently falls back to
+its own bundled resources, which is exactly the behaviour R6 removes.
+
+The local search of the installed Gemini CLI 0.55.1 bundle matched only yargs vendor code, so the "no npm install"
+finding rests on the documentation, not on a code read.
