@@ -108,6 +108,7 @@
     "generate:schemas": "tsx scripts/generate-framework-schemas.ts",
     "validate:schemas": "tsx scripts/generate-framework-schemas.ts --check",
     "validate:config-schema": "tsx scripts/validate-config-schema.ts",
+    "validate:config-schema:self-test": "tsx scripts/validate-config-schema.ts --self-test",
     "generate:gate-index": "node scripts/generate-gate-index.js",
     "validate:gate-index": "node scripts/generate-gate-index.js --check",
     "validate:frameworks": "tsx scripts/validate-frameworks.ts",
