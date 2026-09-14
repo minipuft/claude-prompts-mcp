@@ -292,3 +292,25 @@ surface.
 **Planner rulings in the brief**: one refusal error type generalized from `ConfigPathError`, not a parallel type
 `application.ts` and `index.ts` must each learn; the check stays out of the path getters, whose unit tests use made-up
 paths; the CHANGELOG extends the existing BREAKING entry.
+
+## Tier 2 cut for rows 1.12 and 1.11 (2026-09-14)
+
+A second read-only trace on `c141a048` falsified row 1.12's recorded mechanism. The row said a toggle persists under the
+`server` scope while a fresh server reads the `default` row. In fact both read and write the launch workspace id. The
+defect is `GateStateStore`: `initialize` loads only key `default`, and `getOrCreateScopedState` creates an enabled state
+for any other key without reading SQLite. That also explains row 1.11's null result without a second cause. The seeded
+`default` row loaded into memory under `default`, while the schema asked for `server`. The row's text is kept, with the
+correction appended.
+
+**Rulings for worker D.**
+
+- Load every persisted `gates` row at initialize. A per-request lazy load cannot fit behind the synchronous
+  `isGateSystemEnabled`, and the framework store's single-scope load would leave HTTP identities other than the launch
+  scope unfixed. The launch-scope pattern is the named fallback.
+- Adopt a legacy `default` row, as `FrameworkStateStore` does. That is the owner's "migration".
+- No `SCHEMA_VERSION` bump, since a bump drops the very state being fixed.
+- The scripts pin a runtime root each, not the shared builder (worker A's consumer map in row 1.11).
+
+**Finding, not a row**: `buildServerEnv` leaves `CLAUDE_PROJECT_DIR` inherited, so a caller's Claude Code session decides
+the scope key a script's server resolves. With a temp runtime root that key reads an empty store, so it cannot leak state.
+Nothing else here depends on it.
