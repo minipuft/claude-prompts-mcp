@@ -270,3 +270,25 @@ is not an operator setting.
 tier and effort in Tier 1 and survived session restarts. Workers return the five-heading handoff to
 `~/.cache/claude-prompts-mcp/handoffs/` and send a one-line completion message, because idle notices fire while a
 worker's shell commands run.
+
+## Tier 2 cut for row 1.9 (2026-09-14)
+
+A read-only trace on `c141a048` mapped the refusal surface. What it changed about the design:
+
+- The check cannot live beside the explicit config check alone by accident of order. `MCP_RESOURCES_PATH` is first
+  resolved after the transport is chosen, and a missing workspace is currently CREATED by the logs `mkdir`, because
+  the runtime root defaults to the workspace. So the check must run before `determineTransport` and before any
+  `mkdir`, which is also what keeps both transports in parity.
+- Two release-job smoke steps depend on the fallback (`extension-publish.yml:227, 648`), so R6 would have failed the
+  next release rather than any PR check. Row 2.2.
+- Three more readers carry the same silent fallback. The skills-sync CLI's is kept as row 2.5, because a typo there
+  writes the wrong set into client skill directories. The hooks' and `cpm enable-disable`'s are killed (2.6, 2.7) with
+  reasons: the server refusal already surfaces the misconfiguration, and neither is the ruled surface.
+
+**Routing deviation from the planner prompt.** Public documentation normally routes through `>>documentation_change`.
+Row 2.3 stays a worker row, as row 1.6 did: it states an existing behaviour change in existing sections, not a new public
+surface.
+
+**Planner rulings in the brief**: one refusal error type generalized from `ConfigPathError`, not a parallel type
+`application.ts` and `index.ts` must each learn; the check stays out of the path getters, whose unit tests use made-up
+paths; the CHANGELOG extends the existing BREAKING entry.
