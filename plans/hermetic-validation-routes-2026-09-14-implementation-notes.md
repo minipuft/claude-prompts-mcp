@@ -462,3 +462,18 @@ became rows 2.20 (a header claiming an unmade check) and 2.21 (a test that hangs
 the new `MCP_WORKSPACE` check can run, so it proved nothing about the row. It is being re-run with a temp server root that
 holds a `skills-sync.yaml`, first without `MCP_WORKSPACE` as the positive control. Same shape as row 1.11's lesson: a
 probe must reach the code it claims to test.
+
+## The last claude-prompts rows close; the gate runs (2026-09-14)
+
+**D's follow-up.** 2.20: `verify-mcp-surface.mjs`'s header now claims only `checkNoMutation`'s resources check.
+2.21: the persistence test cleans every store it creates. A planner mutant with a failing assertion exits in 1 s;
+worker D measured the old file hanging until a 97 s timeout.
+
+**Parents.** Rows 1.9, 1.11 and 1.12 close with the Tier 2 rows that implement them. The PR body's plan footer needs
+those parents: the Tier 2 rows did not exist at the merge base, so only a row open there can count as progress.
+
+**Not a row.** C asked whether `scripts/hook-harness.mjs` could now refuse. It sets `MCP_RESOURCES_PATH` to the
+repository's own `server/resources`, which always exists, and CI runs only its self-test, which starts no server.
+
+**Worker branches merged**: C (`476df361`…`d37d136e`) and D (`eaad2d05`…`7578a3a7`). Downstream branches, local and
+unpushed: `gemini-prompts` `c695ce1`, `opencode-prompts` `3a71b12` and `64afb3d`.
