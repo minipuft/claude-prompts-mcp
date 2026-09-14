@@ -148,21 +148,23 @@ jobs:
         working-directory: .
         run: npm --prefix server run validate:python
 
-      # CONTRIBUTING.md classifies as `docs` (scripts/classify-validation-scope.js), and the
-      # docs route skips `validate:all` entirely. Registering this check only in the suite would
-      # leave it dead on the one kind of pull request it exists to police. It runs with no
-      # node_modules on this route, which is why the script imports nothing but node: builtins.
-      - name: Validate CONTRIBUTING commands (docs route)
-        if: needs.classify.outputs.scope == 'docs'
+      # CONTRIBUTING.md classifies as documentation (scripts/classify-validation-scope.js), and
+      # both lightweight routes skip `validate:all` entirely. Registering this check only in the
+      # suite would leave it dead on the one kind of pull request it exists to police. It runs on
+      # every lightweight route, not `docs` alone: a CONTRIBUTING edit riding with a `hooks/**`
+      # change classifies as `hooks`. It runs with no node_modules here, which is why the script
+      # imports nothing but node: builtins.
+      - name: Validate CONTRIBUTING commands (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
         working-directory: .
         run: node server/scripts/validate-contributing.js
 
       # Same reasoning as the CONTRIBUTING check above: a plan-only change classifies as `docs`,
-      # the docs route skips `validate:all`, and registering plan-row tracking only in the suite
-      # left it dead on plan pushes. It imports only node: builtins, so it needs no node_modules
-      # on this route. `.husky/pre-push` runs the identical command, keeping local a subset.
-      - name: Validate plan row tracking (docs route)
-        if: needs.classify.outputs.scope == 'docs'
+      # a plan edit riding with a `hooks/**` change classifies as `hooks`, both skip
+      # `validate:all`, and registering plan-row tracking only in the suite left it dead on plan
+      # pushes. It imports only node: builtins, so it needs no node_modules on either route.
+      - name: Validate plan row tracking (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
         working-directory: .
         run: node server/scripts/validate-plan-row-tracking.js
 
@@ -171,8 +173,7 @@ jobs:
       # package ships. Registered only in the suite, both were dead on the one kind of pull request
       # that introduces the defect. It runs on every lightweight route, not `docs` alone: a README
       # edit riding with a `hooks/**` change classifies as `hooks`, which a docs-only step never
-      # sees. It imports only node: builtins, so it needs no node_modules here, and
-      # `.husky/pre-push` runs the identical command on both lightweight branches.
+      # sees. It imports only node: builtins, so it needs no node_modules here.
       - name: Validate README charter (lightweight routes)
         if: needs.classify.outputs.scope != 'full'
         working-directory: .

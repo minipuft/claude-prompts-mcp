@@ -36,6 +36,8 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildServerEnv } from './lib/hermetic-server-env.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -63,15 +65,14 @@ function reservePort() {
 /**
  * Spawn the built server on streamable-http.
  *
- * NODE_OPTIONS/NODE_ENV/JEST_WORKER_ID are stripped for the same reason
- * `verify-mcp-surface.mjs` strips them: the server skips `main()` under JEST_WORKER_ID,
- * and an inherited `--experimental-vm-modules` leaks the parent's flags.
+ * The environment comes from `lib/hermetic-server-env.js`, the list `verify:mcp` and the e2e
+ * suite scrub too: the server skips `main()` under JEST_WORKER_ID, an inherited
+ * `--experimental-vm-modules` leaks the parent's flags, and the ambient MCP_* path overrides
+ * would let the operator's config, library and runtime state decide a snapshot that is
+ * committed. MCP_WORKSPACE is then set on purpose.
  */
 function spawnServer(port) {
-  const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: REPO_ROOT };
-  delete env.NODE_OPTIONS;
-  delete env.NODE_ENV;
-  delete env.JEST_WORKER_ID;
+  const env = buildServerEnv({ PORT: String(port), MCP_WORKSPACE: REPO_ROOT });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
     cwd: SERVER_ROOT,

@@ -433,20 +433,6 @@ export function createSimpleLogger(transport: string = 'stdio'): Logger {
 }
 
 /**
- * Setup console redirection for STDIO transport
- * This prevents log messages from interfering with JSON MCP messages
- */
-export function setupConsoleRedirection(logger: Logger): void {
-  console.log = (...args) => {
-    logger.debug('CONSOLE: ' + args.join(' '));
-  };
-
-  console.error = (...args) => {
-    logger.error('CONSOLE_ERROR: ' + args.join(' '));
-  };
-}
-
-/**
  * Create a no-op logger for tests and cases where logging isn't needed.
  * All methods are empty functions that discard log messages.
  */

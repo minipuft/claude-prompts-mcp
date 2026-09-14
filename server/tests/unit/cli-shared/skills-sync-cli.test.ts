@@ -18,6 +18,29 @@ describe('skills-sync CLI option handling', () => {
     error: jest.fn(),
   };
 
+  it('writes the help banner through the output it was given, not the process console', async () => {
+    // The service runs inside the server, where stdout is the STDIO protocol channel; only the CLI
+    // wrapper in scripts/skills-sync.ts may bind output to the console.
+    const logged: string[] = [];
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await runSkillsSyncCommand(
+        { command: 'help' },
+        {
+          log: (...args: unknown[]) => logged.push(args.join(' ')),
+          warn: jest.fn(),
+          error: jest.fn(),
+        }
+      );
+    } finally {
+      consoleLog.mockRestore();
+    }
+
+    expect(consoleLog).not.toHaveBeenCalled();
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('skills-sync — Export canonical resources');
+  });
+
   it('parses --json for machine-readable output', () => {
     const opts = parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff', '--json']);
 

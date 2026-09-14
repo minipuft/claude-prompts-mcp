@@ -1,5 +1,6 @@
 // @lifecycle canonical - Exports canonical YAML resources to client-native skill packages.
 /* eslint-disable -- Lifted from CLI implementation; follow-up decomposition tracked in migration plan. */
+/* eslint-enable no-console -- this module runs inside the server, where stdout is the STDIO protocol channel; the console-backed CLI output lives in scripts/skills-sync.ts. */
 /**
  * Skills Sync CLI
  *
@@ -516,12 +517,6 @@ export interface SkillsSyncOutput {
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
 }
-
-const DEFAULT_OUTPUT: SkillsSyncOutput = {
-  log: (...args) => console.log(...args),
-  warn: (...args) => console.warn(...args),
-  error: (...args) => console.error(...args),
-};
 
 const VALID_COMMANDS = new Set(['export', 'sync', 'diff', 'patch', 'pull', 'clone', 'help']);
 const VALID_SCOPES = new Set(['user', 'project']);
@@ -4423,8 +4418,8 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
   };
 }
 
-export function printSkillsSyncHelp(): void {
-  DEFAULT_OUTPUT.log(`
+export function printSkillsSyncHelp(output: SkillsSyncOutput): void {
+  output.log(`
 skills-sync — Export canonical resources to client skill packages
 
 Usage:
@@ -4456,7 +4451,7 @@ Options:
 
 export async function runSkillsSyncCommand(
   opts: SkillsSyncOptions,
-  output: SkillsSyncOutput = DEFAULT_OUTPUT
+  output: SkillsSyncOutput
 ): Promise<SkillsSyncRunReport> {
   validateSkillsSyncOptions(opts);
 
@@ -4494,7 +4489,7 @@ export async function runSkillsSyncCommand(
       await cloneCommand(opts, commandOutput, report);
       break;
     case 'help':
-      if (!opts.json) printSkillsSyncHelp();
+      if (!opts.json) printSkillsSyncHelp(commandOutput);
       break;
     default:
       throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
@@ -4507,8 +4502,11 @@ export async function runSkillsSyncCommand(
   return report;
 }
 
-export async function runSkillsSyncFromArgv(argv: string[]): Promise<void> {
-  await runSkillsSyncCommand(parseSkillsSyncArgs(argv));
+export async function runSkillsSyncFromArgv(
+  argv: string[],
+  output: SkillsSyncOutput
+): Promise<void> {
+  await runSkillsSyncCommand(parseSkillsSyncArgs(argv), output);
 }
 
 export function listSupportedSkillsSyncClients(): string[] {

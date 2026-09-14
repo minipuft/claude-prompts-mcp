@@ -367,12 +367,12 @@ Supported presets:
 
 ### Environment Variables
 
-| Variable             | Purpose                                                      | Example                          |
-| -------------------- | ------------------------------------------------------------ | -------------------------------- |
-| `MCP_WORKSPACE`      | Base directory containing prompts/, config.json              | `/home/user/my-prompts`          |
-| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts) | `/path/to/resources`             |
-| `MCP_CONFIG_PATH`    | Custom server config.json                                    | `/path/to/config.json`           |
-| `LOG_LEVEL`          | Logging verbosity                                            | `debug`, `info`, `warn`, `error` |
+| Variable             | Purpose                                                                        | Example                          |
+| -------------------- | ------------------------------------------------------------------------------ | -------------------------------- |
+| `MCP_WORKSPACE`      | Base directory containing prompts/, config.json                                | `/home/user/my-prompts`          |
+| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts)                   | `/path/to/resources`             |
+| `MCP_CONFIG_PATH`    | Custom server config.json; must be a readable JSON file, or startup is refused | `/path/to/config.json`           |
+| `LOG_LEVEL`          | Logging verbosity                                                              | `debug`, `info`, `warn`, `error` |
 
 Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
 `MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
@@ -414,7 +414,7 @@ npx claude-prompts --startup-test --verbose
 | `-h`, `--help`            | Show help and exit                                                               |
 | `--init /path`            | Initialize a new workspace with starters                                         |
 | `--workspace /path`       | Base directory for all user assets                                               |
-| `--config /path`          | Custom server config.json                                                        |
+| `--config /path`          | Custom server config.json; must be a readable JSON file, or startup is refused   |
 | `--workspace-id VALUE`    | Launch default workspace scope                                                   |
 | `--organization-id VALUE` | Launch default organization scope                                                |
 | `--identity-mode VALUE`   | Identity policy: `permissive` or `locked`                                        |

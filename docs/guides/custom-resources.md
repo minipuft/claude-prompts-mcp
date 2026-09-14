@@ -62,3 +62,5 @@ Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automaticall
 ## Reference
 
 For the env vars the server actually reads (`MCP_WORKSPACE`, `MCP_RESOURCES_PATH`, `MCP_CONFIG_PATH`), see [CLI Configuration](../reference/mcp-tools.md#cli-configuration). There are no per-resource-type path overrides.
+
+`MCP_CONFIG_PATH` (and the `--config` flag) must name a readable JSON config file. A missing file, a directory, an unreadable file, or malformed JSON stops the server at startup, on every transport, with a message on stderr naming the value, the resolved path and what is wrong; unset the variable (or drop the flag) to fall back to the default `config.json`, whose path the message names.

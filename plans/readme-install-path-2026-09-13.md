@@ -7,7 +7,7 @@ tags: [docs, readme, resources, adoption]
 
 # README Install Path
 
-**Status**: ACTIVE — Tiers 1–4 executed 2026-09-13 on `fix/readme-install-path`; rows 3.5–3.6 open, 3.7–3.9 moved to the successor plan; PR pending
+**Status**: ACTIVE — merged 2026-09-14 as `c68205bd` (#276); rows 3.5–3.6 open, 3.7–3.9 moved to the successor plan
 **Owner**: minipuft
 **Created**: 2026-09-13
 **Rebaselines**: `plans/adoption-conversion-2026-09-07.md` Tier 1 and Tier 2.

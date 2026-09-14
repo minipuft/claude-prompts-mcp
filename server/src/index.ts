@@ -12,6 +12,7 @@ import { ConfigLoader } from './infra/config/index.js';
 import { startApplication } from './runtime/application.js';
 import { parseServerCliArgs, type ServerCliArgs } from './runtime/cli.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
+import { ConfigPathError } from './runtime/paths.js';
 
 import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
@@ -322,7 +323,8 @@ QUICK START:
 
 PATH OPTIONS:
   --workspace=/path       Base directory for all assets (resources/, config.json, hooks/)
-  --config=/path          Direct path to config.json
+  --config=/path          Direct path to config.json; the server refuses to start
+                          if it is not a readable JSON file
 
 RUNTIME OPTIONS:
   --init=/path            Create a new workspace with starter prompts at the specified path
@@ -340,7 +342,8 @@ ENVIRONMENT VARIABLES:
   MCP_RESOURCES_PATH       Custom resources base directory (replaces package default)
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
-  MCP_CONFIG_PATH          Direct path to config.json (same as --config)
+  MCP_CONFIG_PATH          Direct path to config.json (same as --config); the server
+                           refuses to start if it is not a readable JSON file
   LOG_LEVEL                Override log level (debug, info, warn, error)
 
 PRIORITY ORDER:
@@ -557,6 +560,7 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
     }
 
     const result = initWorkspace(targetPath);
+    // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
     console.log(result.message);
     return { shouldExit: true, exitCode: result.success ? 0 : 1 };
   }
@@ -753,6 +757,13 @@ async function main(): Promise<void> {
     // Log successful complete initialization
     activeLogger.info('✅ Application initialization completed - all systems operational');
   } catch (error) {
+    // A refused config path is an operator error with a complete explanation, thrown before
+    // anything starts: print it once, without a stack, and leave nothing to roll back.
+    if (error instanceof ConfigPathError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+
     // Comprehensive error handling with rollback
     console.error('❌ Failed to start MCP Claude Prompts Server:', error);
 
