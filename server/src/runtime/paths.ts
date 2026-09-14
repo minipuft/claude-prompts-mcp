@@ -61,21 +61,57 @@ export interface ResolvedPaths {
   logs: string;
 }
 
-/** An operator-named config path and the flag or variable that named it. */
-interface ExplicitConfigSource {
-  name: '--config' | 'MCP_CONFIG_PATH';
+/** An operator path setting: the flag or environment variable, and the value it was given. */
+export interface PathSetting {
+  name: '--config' | 'MCP_CONFIG_PATH' | '--workspace' | 'MCP_WORKSPACE' | 'MCP_RESOURCES_PATH';
   value: string;
 }
 
+/** An operator-named config path and the flag or variable that named it. */
+type ExplicitConfigSource = PathSetting & { name: '--config' | 'MCP_CONFIG_PATH' };
+
+/** A workspace path and the flag or variable that named it. */
+type WorkspaceSource = PathSetting & { name: '--workspace' | 'MCP_WORKSPACE' };
+
+/** What the process would use instead if the operator removed the setting. */
+interface PathFallback {
+  label: string;
+  resolved: string;
+  /** Set when the fallback is itself unusable, so the advice does not send the operator into a second refusal unwarned. */
+  caveat?: string;
+}
+
 /**
- * An explicitly named config path that cannot be used. Startup stops on it rather than serving
- * with defaults the operator did not ask for; the message is the whole explanation.
+ * An operator path setting that cannot be used: a config file that is not a readable JSON object,
+ * or a workspace or resources directory that is not there. Startup stops on it rather than serving
+ * from defaults the operator did not ask for; the message is the whole explanation.
  */
-export class ConfigPathError extends Error {
+export class PathSettingError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ConfigPathError';
+    this.name = 'PathSettingError';
   }
+}
+
+/** Absolute form of a path setting's value; a relative value resolves against the working directory. */
+function resolveSettingPath(value: string): string {
+  return isAbsolute(value) ? value : resolve(process.cwd(), value);
+}
+
+/**
+ * Why `resolved` cannot serve as a directory setting, or `undefined` when it can.
+ *
+ * Checked with `stat`, not `existsSync`: a file at that path "exists" and is still no workspace.
+ */
+function describeUnusableDirectory(resolved: string): string | undefined {
+  try {
+    if (!statSync(resolved).isDirectory()) return 'is not a directory';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return 'does not exist';
+    return `cannot be read (${code ?? String(error)})`;
+  }
+  return undefined;
 }
 
 /**
@@ -112,23 +148,67 @@ function describeUnusableConfigFile(resolved: string): string | undefined {
   return undefined;
 }
 
-/** The refusal an operator reads: what was given, where it resolved, what is wrong, what to do. */
-function formatConfigPathRefusal(details: {
-  name: ExplicitConfigSource['name'];
-  value: string;
+/**
+ * The refusal an operator reads: what was given, where it resolved, what is wrong, what to do.
+ *
+ * `subject` is the path that failed when it is not the setting's own value — a workspace's
+ * config.json is found through `MCP_WORKSPACE` but is not the directory it names.
+ */
+function formatPathSettingRefusal(details: {
+  setting: PathSetting;
   resolved: string;
   problem: string;
-  fallback: { resolved: string; source: string };
+  expected: string;
+  remedy: string;
+  subject?: string;
+  verb?: 'start' | 'run';
 }): string {
-  const { name, value, resolved, problem, fallback } = details;
-  const setter = name === '--config' ? '--config' : 'the MCP_CONFIG_PATH environment variable';
-  const removal = name === '--config' ? 'remove --config' : 'unset MCP_CONFIG_PATH';
-  const fallbackLabel =
-    fallback.source === 'workspace config.json' ? 'the workspace config' : 'the packaged default';
+  const { setting, resolved, problem, expected, remedy, subject, verb = 'start' } = details;
+  const setter = setting.name.startsWith('--')
+    ? setting.name
+    : `the ${setting.name} environment variable`;
+  const failed = subject === undefined ? 'that path' : `its ${subject}`;
   return [
-    `Refusing to start: ${setter} is set to "${value}", which resolves to ${resolved}, and that path ${problem}.`,
-    `Expected a readable JSON config file at that path, or ${removal} to use ${fallbackLabel} at ${fallback.resolved}.`,
+    `Refusing to ${verb}: ${setter} is set to "${setting.value}", which resolves to ${resolved}, and ${failed} ${problem}.`,
+    `Expected ${expected} at that path, or ${remedy}.`,
   ].join('\n');
+}
+
+/** How to stop naming the setting, and what the process falls back to once it does. */
+function describeRemoval(setting: PathSetting, fallback: PathFallback | undefined): string {
+  const removal = setting.name.startsWith('--')
+    ? `remove ${setting.name}`
+    : `unset ${setting.name}`;
+  if (fallback === undefined) return removal;
+  const caveat = fallback.caveat === undefined ? '' : ` (which ${fallback.caveat} too)`;
+  return `${removal} to use ${fallback.label} at ${fallback.resolved}${caveat}`;
+}
+
+/**
+ * Refuse a directory setting that names no directory; return its resolved path when it does.
+ *
+ * Exported for tools outside the server's startup that read the same variables, so an operator
+ * sees one refusal whichever entry point reads the setting first.
+ */
+export function assertUsableDirectorySetting(
+  setting: PathSetting,
+  options: { fallback?: PathFallback; verb?: 'start' | 'run' } = {}
+): string {
+  const resolved = resolveSettingPath(setting.value);
+  const problem = describeUnusableDirectory(resolved);
+  if (problem !== undefined) {
+    throw new PathSettingError(
+      formatPathSettingRefusal({
+        setting,
+        resolved,
+        problem,
+        expected: 'an existing directory',
+        remedy: describeRemoval(setting, options.fallback),
+        ...(options.verb !== undefined && { verb: options.verb }),
+      })
+    );
+  }
+  return resolved;
 }
 
 /**
@@ -247,24 +327,104 @@ export class PathResolver {
       resolved = this.resolvePath(process.env['MCP_RESOURCES_PATH']);
       source = 'MCP_RESOURCES_PATH env var';
     }
-    // 2. Workspace resources directory
+    // 2. Workspace resources directory, else 3. package default
     else {
-      const workspace = this.getWorkspace();
-      const workspaceResources = join(workspace, 'resources');
-
-      if (existsSync(workspaceResources)) {
-        resolved = workspaceResources;
-        source = 'workspace resources/';
-      } else {
-        // 3. Package default
-        resolved = join(this.config.packageRoot, 'resources');
-        source = 'package resources/ (default)';
-      }
+      ({ resolved, source } = this.resolveDefaultResourcesPath());
     }
 
     this.cache.resources = resolved;
     this.logResolution('resources', resolved, source);
     return resolved;
+  }
+
+  /** Where resources resolve when `MCP_RESOURCES_PATH` names nothing: the workspace's, else the package's. */
+  private resolveDefaultResourcesPath(): { resolved: string; source: string } {
+    const workspaceResources = join(this.getWorkspace(), 'resources');
+    if (existsSync(workspaceResources)) {
+      return { resolved: workspaceResources, source: 'workspace resources/' };
+    }
+    return {
+      resolved: join(this.config.packageRoot, 'resources'),
+      source: 'package resources/ (default)',
+    };
+  }
+
+  /**
+   * Refuse startup on an operator path setting the server cannot use, before anything reads,
+   * watches or creates a path beneath it. Throws `PathSettingError`.
+   *
+   * Checked once here rather than inside the getters: a getter answers "where would this resolve",
+   * which tests and tooling ask of paths that need not exist, while this answers "can the server
+   * start on what it was given". Before it, none of the three failed loudly: the logs `mkdir`
+   * created a missing workspace, a missing resources path fell through to the bundled catalog one
+   * subfolder at a time, and a malformed workspace config.json booted on built-in defaults.
+   *
+   * The workspace goes first because it decides both the resources fallback and the default config.
+   * An empty value counts as unset, as it does in the getters, and a workspace with no config.json
+   * still uses the packaged one.
+   */
+  assertUsablePathSettings(): void {
+    const workspace = this.readWorkspaceSource();
+    if (workspace !== undefined) {
+      assertUsableDirectorySetting(workspace, {
+        fallback: this.describeWorkspaceFallback(workspace),
+      });
+    }
+
+    const resources = process.env['MCP_RESOURCES_PATH'];
+    if (resources) {
+      const { resolved, source } = this.resolveDefaultResourcesPath();
+      // With no custom workspace the "workspace" resources ARE the package's, so say so.
+      const label =
+        source === 'workspace resources/' && this.isUsingCustomWorkspace()
+          ? 'the workspace resources'
+          : 'the packaged resources';
+      assertUsableDirectorySetting(
+        { name: 'MCP_RESOURCES_PATH', value: resources },
+        { fallback: { label, resolved } }
+      );
+    }
+
+    this.getConfigPath();
+    if (workspace !== undefined && this.readExplicitConfigSource() === undefined) {
+      this.assertUsableWorkspaceConfig(workspace);
+    }
+  }
+
+  /** The workspace path, flag before variable; an empty value counts as unset. */
+  private readWorkspaceSource(): WorkspaceSource | undefined {
+    const fromFlag = this.config.cli.workspace;
+    if (fromFlag) return { name: '--workspace', value: fromFlag };
+    const fromEnv = process.env['MCP_WORKSPACE'];
+    if (fromEnv) return { name: 'MCP_WORKSPACE', value: fromEnv };
+    return undefined;
+  }
+
+  /** What removing a workspace setting falls back to: the variable behind the flag, else the package root. */
+  private describeWorkspaceFallback(workspace: WorkspaceSource): PathFallback {
+    const fromEnv = process.env['MCP_WORKSPACE'];
+    if (workspace.name === '--workspace' && fromEnv) {
+      return { label: 'the MCP_WORKSPACE workspace', resolved: resolveSettingPath(fromEnv) };
+    }
+    return { label: 'the package root', resolved: this.config.packageRoot };
+  }
+
+  /** A config.json the workspace holds must be usable; one it does not hold falls back to the packaged config. */
+  private assertUsableWorkspaceConfig(workspace: WorkspaceSource): void {
+    const { resolved, source } = this.resolveDefaultConfigPath();
+    if (source !== 'workspace config.json') return;
+    const problem = describeUnusableConfigFile(resolved);
+    if (problem === undefined) return;
+    throw new PathSettingError(
+      formatPathSettingRefusal({
+        setting: workspace,
+        resolved: this.getWorkspace(),
+        problem,
+        subject: `config file ${resolved}`,
+        expected: 'a readable JSON config file',
+        remedy: `move it out of the workspace to use the packaged default at ${join(this.config.packageRoot, 'config.json')}`,
+      })
+    );
   }
 
   /**
@@ -276,7 +436,7 @@ export class PathResolver {
    *   3. ${workspace}/config.json (if workspace differs from package and file exists)
    *   4. ${packageRoot}/config.json (default)
    *
-   * An explicit path (1 or 2) that is not a readable JSON config file throws `ConfigPathError`.
+   * An explicit path (1 or 2) that is not a readable JSON config file throws `PathSettingError`.
    * `ConfigLoader.loadConfig` answers an unreadable file with the built-in defaults, which is a
    * sensible floor for the package's own file and the wrong answer for a path an operator named:
    * the server booted, served the bundled catalog, and never used the settings asked for.
@@ -293,9 +453,14 @@ export class PathResolver {
       source = explicit.name === '--config' ? 'CLI flag --config' : 'MCP_CONFIG_PATH env var';
       const problem = describeUnusableConfigFile(resolved);
       if (problem !== undefined) {
-        const fallback = this.resolveDefaultConfigPath();
-        throw new ConfigPathError(
-          formatConfigPathRefusal({ ...explicit, resolved, problem, fallback })
+        throw new PathSettingError(
+          formatPathSettingRefusal({
+            setting: explicit,
+            resolved,
+            problem,
+            expected: 'a readable JSON config file',
+            remedy: describeRemoval(explicit, this.describeDefaultConfigFallback()),
+          })
         );
       }
     } else {
@@ -314,6 +479,14 @@ export class PathResolver {
     const fromEnv = process.env['MCP_CONFIG_PATH'];
     if (fromEnv !== undefined && fromEnv !== '') return { name: 'MCP_CONFIG_PATH', value: fromEnv };
     return undefined;
+  }
+
+  /** The config an explicit path's removal falls back to, with a caveat when that file is unusable too. */
+  private describeDefaultConfigFallback(): PathFallback {
+    const { resolved, source } = this.resolveDefaultConfigPath();
+    if (source !== 'workspace config.json') return { label: 'the packaged default', resolved };
+    const caveat = describeUnusableConfigFile(resolved);
+    return { label: 'the workspace config', resolved, ...(caveat !== undefined && { caveat }) };
   }
 
   /** Where config resolves when nothing names a path: the workspace file if present, else the package's. */
@@ -510,11 +683,7 @@ export class PathResolver {
    * Resolve a path to absolute, handling relative paths
    */
   private resolvePath(inputPath: string): string {
-    if (isAbsolute(inputPath)) {
-      return inputPath;
-    }
-    // Resolve relative to current working directory
-    return resolve(process.cwd(), inputPath);
+    return resolveSettingPath(inputPath);
   }
 
   /**
