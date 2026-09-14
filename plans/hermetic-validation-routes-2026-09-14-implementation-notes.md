@@ -32,6 +32,14 @@ a resume brief that names the existing worktree, forbids `worktree:create` and r
 per row as soon as its check passes. Before relaunching, this branch was rebased onto `c68205bd`; the worker
 branches keep their pre-squash base, which is content-identical, and their commits cherry-pick here.
 
+The third dispatch (2026-09-14) left `Workflow`. The second run's journal recorded both agents as `failed`
+with no error text — consistent with the parent session's teardown, not an API limit — and any in-session
+runner dies the same way. Both workers were relaunched as background sessions (`claude --bg`, `--model opus
+--effort high`, `--permission-mode bypassPermissions` to match the planner's class), in their existing
+worktrees, with the resume brief plus three rules: nobody answers questions, commit each row the moment its
+check passes, and write the five-heading handoff to a file before stopping. A handoff file replaces a
+cross-session message because this session's name changes on every restart.
+
 ## Deviations
 
 None yet.

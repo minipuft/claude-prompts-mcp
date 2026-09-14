@@ -14,11 +14,12 @@ tags: [ci, scripts, config, validation]
 
 ## Now (2026-09-14)
 
-The README install-path PR merged as `c68205bd` (#276), and this branch was rebased onto it, so it now carries
-only this plan. The first worker run died with its session before either worker committed or reported; both
-were relaunched against the uncommitted drafts they left (worker A 13 paths, worker B 10), told to verify the
-draft, finish, and commit row by row. **Next planner decision**: accept or re-cut each handoff, cherry-pick the
-worker commits onto this branch, then run the PR-boundary gate once.
+The README install-path PR merged as `c68205bd` (#276) and this branch carries only this plan on top of it.
+Two worker runs through `Workflow` died with their parent session before either worker committed; the drafts
+survived in the worker worktrees. Both workers now run as background Claude Code sessions, which outlive this
+one: `hvr-worker-a` (`6d134ae9`) and `hvr-worker-b` (`5ec28631`), opus at effort high, each writing its handoff
+to `~/.cache/claude-prompts-mcp/handoffs/`. **Next planner decision**: read each handoff, accept or re-cut it,
+cherry-pick the worker commits onto this branch, then run the PR-boundary gate once.
 
 ## Why this exists
 
