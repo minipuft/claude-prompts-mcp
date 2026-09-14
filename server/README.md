@@ -401,7 +401,7 @@ npx claude-prompts --workspace /path/to/workspace
 npx claude-prompts --workspace /path/to/workspace --config /path/to/config.json
 
 # Select transport
-npx claude-prompts --transport sse
+npx claude-prompts --transport streamable-http
 
 # Client-aware handoff routing at launch
 npx claude-prompts --client codex
@@ -425,7 +425,7 @@ npx claude-prompts --startup-test --verbose
 | `--organization-id VALUE` | Launch default organization scope                                                |
 | `--identity-mode VALUE`   | Identity policy: `permissive` or `locked`                                        |
 | `--client VALUE`          | Client preset: `claude-code`, `codex`, `gemini`, `opencode`, `cursor`, `unknown` |
-| `--transport MODE`        | Transport: `stdio`, `sse`, `streamable-http`                                     |
+| `--transport MODE`        | Transport: `stdio` (default), `streamable-http`, or `both`                       |
 | `--log-level LEVEL`       | Log level: `debug`, `info`, `warn`, `error`                                      |
 | `--verbose`               | Detailed logging                                                                 |
 | `--quiet`                 | Suppress non-error output                                                        |

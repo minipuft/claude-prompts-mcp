@@ -372,7 +372,7 @@ export class PathResolver {
     }
 
     const resources = process.env['MCP_RESOURCES_PATH'];
-    if (resources) {
+    if (resources !== undefined && resources !== '') {
       const { resolved, source } = this.resolveDefaultResourcesPath();
       // With no custom workspace the "workspace" resources ARE the package's, so say so.
       const label =
@@ -394,16 +394,16 @@ export class PathResolver {
   /** The workspace path, flag before variable; an empty value counts as unset. */
   private readWorkspaceSource(): WorkspaceSource | undefined {
     const fromFlag = this.config.cli.workspace;
-    if (fromFlag) return { name: '--workspace', value: fromFlag };
+    if (fromFlag !== undefined && fromFlag !== '') return { name: '--workspace', value: fromFlag };
     const fromEnv = process.env['MCP_WORKSPACE'];
-    if (fromEnv) return { name: 'MCP_WORKSPACE', value: fromEnv };
+    if (fromEnv !== undefined && fromEnv !== '') return { name: 'MCP_WORKSPACE', value: fromEnv };
     return undefined;
   }
 
   /** What removing a workspace setting falls back to: the variable behind the flag, else the package root. */
   private describeWorkspaceFallback(workspace: WorkspaceSource): PathFallback {
     const fromEnv = process.env['MCP_WORKSPACE'];
-    if (workspace.name === '--workspace' && fromEnv) {
+    if (workspace.name === '--workspace' && fromEnv !== undefined && fromEnv !== '') {
       return { label: 'the MCP_WORKSPACE workspace', resolved: resolveSettingPath(fromEnv) };
     }
     return { label: 'the package root', resolved: this.config.packageRoot };
