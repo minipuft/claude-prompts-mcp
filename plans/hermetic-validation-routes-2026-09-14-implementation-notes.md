@@ -98,3 +98,14 @@ as soon as its check passes": after the first commit, HEAD is the new script, an
 before A caught it — name the base commit, never HEAD. And row 1.4 stated a mechanism as fact ("a config with gates
 disabled changes prompt_engine's advertised parameters") that was false; a brief should offer a lever as a hypothesis the
 worker must first show can move the measurement.
+
+## Rows 1.2 and 1.3 accepted (2026-09-14)
+
+The two scripts the planner's wider enumeration matched are outside the class. `prepare-release-artifacts.js`
+spawns `dist/cpm.js --version` and `tar`: the CLI bundle holds no `MCP_CONFIG_PATH` reference, and `cpm --version`
+printed `4.0.1` and exited 0 both with no override and with a missing config path exported. The server under that
+same environment refused with exit 1 and zero stdout bytes, which is the positive control that the exported value
+was live. `validate-extension-artifact.js` spawns only `stage-server-runtime.sh`, inside its self-test.
+
+Row 1.11 went to A at base `3e56bb8a` and carries both brief defects A reported: the comparison base is a named
+commit, and the shared-builder lever is offered as a hypothesis whose seeded-row positive control must move first.
