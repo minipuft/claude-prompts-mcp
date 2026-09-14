@@ -379,15 +379,20 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       'they ride the same getRunTelemetry object both terminal writers spread, so neither ' +
       'writer can bind the v21 group and miss these. They are the surviving audit of adaptive ' +
       'mutation once chain_run_nodes (ephemeral, PID-deleted at cleanup) is gone. ' +
-      'S8 (v24) added delegation_skipped, bound by a THIRD row type: the capture-time ' +
-      '`completed` step row StepCaptureService appends when a chain resume captures real step ' +
-      'output. It is 1 when a delegated+gated step was captured without the contracted ' +
-      "'Proposed Gate Review:' block (resolveDelegationSkipped, delegation/acknowledgment.ts), " +
-      '0 when the block is present, and NULL wherever the fact does not exist — non-delegated ' +
-      'steps, delegated steps with no gate text, and every render/terminal row. Same partial- ' +
-      'population-BY-ROW-TYPE reading as the v21/v23 groups; record-only (R-4 — enforcement ' +
-      'stays advisory, the server records what it cannot prevent), read back by the ' +
-      'execution_history action. ' +
+      'handoff_evidence (v28, replacing the v24 acknowledgment boolean) is bound by a THIRD ' +
+      'row type: the capture-time `completed` step row StepCaptureService appends when a chain ' +
+      'resume captures real step output. It is bound for EVERY delegated step, in both evidence ' +
+      'modes, and carries the REASON the resume was or was not acceptable — ' +
+      "'ok' | 'trailer' | 'node-line' | 'node-mismatch', the enumeration " +
+      'HANDOFF_EVIDENCE_REASONS owns and the column CHECK repeats ' +
+      '(resolveHandoffEvidenceReason in delegation/handoff-contract.ts; the vocabulary in ' +
+      'shared/types/handoff-evidence.ts). NULL means exactly one ' +
+      'thing: the step was not delegated (plus every render/terminal row, which describes no ' +
+      'capture). That is the difference from the boolean it replaces, which could only be bound ' +
+      'for a delegated step that ALSO carried gate text, so "no gates" and "not delegated" ' +
+      'shared the NULL spelling. Same partial-population-BY-ROW-TYPE reading as the v21/v23 ' +
+      'groups; read back by the execution_history action, and by stage 16 never — the refusal ' +
+      'under evidence mode `required` reads the reply, not this column. ' +
       'D-8 (v26) added interrupts_raised and remainders_accepted on the v21/v23 terms exactly: ' +
       'terminal rows only, riding the same getRunTelemetry object both terminal writers spread. ' +
       'They are the surviving audit of the mid-chain blocking-unknown interrupt once the ' +

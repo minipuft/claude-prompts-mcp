@@ -1,7 +1,7 @@
 // @lifecycle canonical - Client-specific delegation rendering strategies.
 import type { DelegationProfile } from '#shared/types/core-config.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
-import type { DelegationPayload } from './types.js';
+import type { DelegationMode, DelegationPayload } from './types.js';
 
 /** Client-specific rendering strategy for delegation CTAs. */
 export interface DelegationStrategy {
@@ -13,9 +13,15 @@ export interface DelegationStrategy {
   /**
    * Format the tool invocation block (tool name + parameters). `agentType` is undefined when
    * the author declared none; the strategy substitutes its host's default agent or omits the
-   * line so the client's own default applies.
+   * line so the client's own default applies. `mode` distinguishes a `blocking` node (the
+   * parent waits) from a `detached` one; only `ClaudeCodeStrategy` renders anything different
+   * for it today.
    */
-  formatToolCall(agentType: string | undefined, model: string | undefined): string;
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string;
 
   /** Format enforcement constraints shown after instructions. */
   formatConstraints(): string;
@@ -93,12 +99,15 @@ export const CLAUDE_CODE_DEFAULT_AGENT_TYPE = 'general-purpose';
  * Handoff block for hosts whose spawn call has a default agent of its own. The `agent_type`
  * line renders only when the author named one, so an undeclared agent leaves the choice to the
  * client; with no parameters at all the `Parameters:` header is dropped rather than left empty.
+ * `_mode` is accepted for interface parity with `ClaudeCodeStrategy` but unused here: none of
+ * these five hosts spawn in the background by default, so there is nothing to pin.
  */
 function formatHandoffBlock(
   header: string,
   agentType: string | undefined,
   model: string | undefined,
-  modelKey: 'model' | 'model_hint'
+  modelKey: 'model' | 'model_hint',
+  _mode: DelegationMode
 ): string {
   const params = [
     ...(agentType === undefined ? [] : [`  • agent_type: "${agentType}"`]),
@@ -128,14 +137,23 @@ export class ClaudeCodeStrategy implements DelegationStrategy {
    * Agent names pass through as written. A bare name is the host catalog (built-ins and
    * user-level agents carry no namespace); a plugin agent is written `plugin:agent` by its
    * author. The server cannot see the host registry, so it never rewrites the name.
+   *
+   * Claude Code spawns subagents in the BACKGROUND by default (`run_in_background` defaults to
+   * true) \u2014 a `blocking` node needs the parent to wait for the worker's result before resuming,
+   * so this is the one strategy that pins it explicitly rather than trusting the host default.
    */
-  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string {
     const lines = [
       '\u2192 Tool: Task',
       '\u2192 Parameters:',
       `  \u2022 subagent_type: "${agentType ?? CLAUDE_CODE_DEFAULT_AGENT_TYPE}"`,
     ];
     if (model != null) lines.push(`  \u2022 model: "${model}"`);
+    if (mode === 'blocking') lines.push('  \u2022 run_in_background: false');
     return lines.join('\n');
   }
 
@@ -161,8 +179,12 @@ export class CodexStrategy implements DelegationStrategy {
     return 'codex-standard';
   }
 
-  formatToolCall(agentType: string | undefined, model: string | undefined): string {
-    return formatHandoffBlock('→ Tool: spawn_agent (preferred)', agentType, model, 'model');
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string {
+    return formatHandoffBlock('→ Tool: spawn_agent (preferred)', agentType, model, 'model', mode);
   }
 
   formatConstraints(): string {
@@ -182,12 +204,17 @@ export class GeminiStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string {
     return formatHandoffBlock(
       "→ Handoff: Use Gemini's sub-agent/handoff capability",
       agentType,
       model,
-      'model_hint'
+      'model_hint',
+      mode
     );
   }
 
@@ -207,12 +234,17 @@ export class OpenCodeStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string {
     return formatHandoffBlock(
       "→ Handoff: Use OpenCode's agent/sub-agent capability",
       agentType,
       model,
-      'model_hint'
+      'model_hint',
+      mode
     );
   }
 
@@ -232,12 +264,17 @@ export class CursorStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string {
     return formatHandoffBlock(
       "→ Handoff (experimental/testing): Use Cursor's agent/sub-agent capability",
       agentType,
       model,
-      'model_hint'
+      'model_hint',
+      mode
     );
   }
 
@@ -258,12 +295,17 @@ export class NeutralStrategy implements DelegationStrategy {
     return undefined;
   }
 
-  formatToolCall(agentType: string | undefined, model: string | undefined): string {
+  formatToolCall(
+    agentType: string | undefined,
+    model: string | undefined,
+    mode: DelegationMode
+  ): string {
     return formatHandoffBlock(
       "→ Handoff: Use your client's sub-agent/handoff capability",
       agentType,
       model,
-      'model_hint'
+      'model_hint',
+      mode
     );
   }
 

@@ -55,6 +55,9 @@ describe('ResponseCaptureStage Hook Emission', () => {
       updateSessionState: jest.fn(),
       completeStep: jest.fn(),
       getStepState: jest.fn(),
+      // Tier 2 row 2.9: the stage asks whether the node already holds a real captured output
+      // before exempting an empty reply; these steps are not delegated, so the answer is moot.
+      isStepComplete: jest.fn(() => false),
       getChainContext: jest.fn(),
     } as unknown as jest.Mocked<ChainSessionService>;
 
@@ -287,6 +290,9 @@ describe('gate events reach a port-only collaborator', () => {
       updateSessionState: jest.fn(),
       completeStep: jest.fn(),
       getStepState: jest.fn(),
+      // Tier 2 row 2.9: the stage asks whether the node already holds a real captured output
+      // before exempting an empty reply; these steps are not delegated, so the answer is moot.
+      isStepComplete: jest.fn(() => false),
       getChainContext: jest.fn(),
     } as unknown as jest.Mocked<ChainSessionService>;
 

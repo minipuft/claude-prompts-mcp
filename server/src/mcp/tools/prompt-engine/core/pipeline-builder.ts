@@ -21,6 +21,7 @@ import type { PipelineDependencies } from './pipeline-dependencies.js';
 import { RemainderProcessor } from '#engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '#engine/execution/capture/unknown-observation-processor.js';
+import { resolveHandoffEvidenceMode } from '#engine/execution/delegation/handoff-contract.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
 import {
   ChainBlueprintResolver,
@@ -333,7 +334,17 @@ export class PipelineBuilder {
       // P5-F6: post-advance review re-evaluation reuses the SAME GateEnhancementService instance
       // stage 11 uses — its `temporaryGateRegistry`/`runStepViewProvider` wiring is what the
       // step-target lookup needs, and nothing about it is per-call state.
-      { gateEnhancementService, remainderProcessor }
+      {
+        gateEnhancementService,
+        remainderProcessor,
+        // A getter, not a resolved value: `config.json` hot-reloads, and the identity stage
+        // above reads its config the same way for the same reason. Resolving once here would
+        // pin the mode to whatever was on disk when this pipeline was built.
+        handoffEvidenceMode: () =>
+          resolveHandoffEvidenceMode(
+            deps.configManager.getConfig().execution?.delegation?.evidence
+          ),
+      }
     );
 
     // Shell verification stage

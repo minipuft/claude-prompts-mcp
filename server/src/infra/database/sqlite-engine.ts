@@ -46,6 +46,29 @@ import type { Logger } from '../logging/index.js';
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v28: replaces the v24 delegation-acknowledgment boolean on `execution_records` with
+ * `handoff_evidence TEXT` (delegation handoff contract, Tier 2 / R1).
+ *
+ * The boolean was a PROJECTION of a four-valued fact and lost the other three. It could only be
+ * bound for a delegated step that also carried gate text — the `Proposed Gate Review:` token was
+ * the only thing it could look for — so an ungated delegated step recorded NULL, which is the
+ * same spelling as "not delegated". The text column records the REASON the resume was or was not
+ * acceptable (`ok` · `trailer` · `node-line` · `node-mismatch`, the exact values
+ * `HANDOFF_EVIDENCE_REASONS` enumerates), for EVERY delegated step and in both evidence modes.
+ * NULL now means one thing: the step was not delegated.
+ *
+ * A CHECK constraint bounds the column rather than a comment, because the value is a closed set
+ * a resolver owns: a writer that drifts to a fifth spelling fails at the INSERT instead of
+ * silently widening the vocabulary a reader has to handle. Still no DDL DEFAULT, for the reason
+ * `origin` has none — a default hides a dropped writer from `validate:no-phantom-columns`.
+ *
+ * Replacement, not addition: there was no dual-write window and none was needed. Nothing outside
+ * this repo read the retired boolean (grep across `minipuft-plugins`, `gemini-prompts` and
+ * `opencode-prompts` at the v20 rename found no reader of any `execution_records` column, and no
+ * hook opens it), and `execution_records` is `ephemeral`, so this bump drops its rows and no old
+ * row can reach v28 to be interpreted under the new name. `DROPPED_ON_THIS_BUMP` stays empty and
+ * `DROPPED_AT_VERSION` does not move.
+ *
  * v27: adds `delegated` and `args_json` to `chain_run_nodes` (row A.5, remainder node fields).
  *
  * A node the caller CONTRIBUTED mid-run has no entry in `parsedCommand.steps`, so the renderer
@@ -85,7 +108,8 @@ import type { Logger } from '../logging/index.js';
  * columns to a reader-less view is how this table produced value-dead columns twice.
  *
  * v24: adds `declared_sections_json` to `chain_run_nodes` (phase-guard declaration contract)
- * and `delegation_skipped` to `execution_records` (S8 delegation acknowledgment, R-4). Both are
+ * and a delegation-acknowledgment boolean to `execution_records` (S8, R-4; replaced by
+ * `handoff_evidence` at v28 above). Both are
  * nullable with no DDL DEFAULT — rationale at each column's DDL comment. Both tables are
  * `ephemeral`, so the bump is free of the durable snapshot/restore path: `DROPPED_ON_THIS_BUMP`
  * stays empty and `DROPPED_AT_VERSION` does not move.
@@ -233,7 +257,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 27;
+const SCHEMA_VERSION = 28;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -860,16 +884,24 @@ export class SqliteEngine implements DatabasePort {
         -- statements never outlives the process at all.
         interrupts_raised INTEGER,
         remainders_accepted INTEGER,
-        -- S8 (v24): delegation acknowledgment audit (R-4 — enforcement stays advisory; the
-        -- server records what it cannot prevent). Bound at capture time by StepCaptureService:
-        -- 1 when a delegated+gated step's captured output lacks the contracted
-        -- 'Proposed Gate Review:' block, 0 when it is present, NULL when the fact does not
-        -- exist (non-delegated step, delegated step with no gates, render/terminal rows).
-        -- Partial population BY ROW TYPE, same reading as the five v21 columns above. No DDL
+        -- Delegation handoff evidence (v28, replacing the v24 acknowledgment boolean).
+        -- Bound at capture time by StepCaptureService for EVERY delegated step, in both
+        -- evidence modes: the REASON the resume was or was not acceptable, as
+        -- resolveHandoffEvidenceReason returned it. 'ok' — the HANDOFF RESULT trailer named
+        -- this node; 'trailer' — no trailer at all; 'node-line' — a trailer with no node: line;
+        -- 'node-mismatch' — a node: line naming some other node. NULL means exactly one thing:
+        -- the step was not delegated (plus every render/terminal row, which describe no step
+        -- capture). Partial population BY ROW TYPE, same reading as the v21/v23 columns above.
+        -- The CHECK is the enumeration: HANDOFF_EVIDENCE_REASONS in
+        -- shared/types/handoff-evidence.ts is its one source, and a writer that
+        -- drifts to a fifth spelling fails here rather than widening the column silently. No DDL
         -- DEFAULT deliberately, for the same reason chain_run_nodes.origin has none:
         -- validate:no-phantom-columns exempts defaulted columns, and a default would hide a
         -- dropped writer from the one gate built to notice it.
-        delegation_skipped INTEGER,
+        handoff_evidence TEXT CHECK (
+          handoff_evidence IS NULL
+          OR handoff_evidence IN ('ok', 'trailer', 'node-line', 'node-mismatch')
+        ),
         created_at TEXT DEFAULT (datetime('now'))
       );
 

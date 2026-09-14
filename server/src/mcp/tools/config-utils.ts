@@ -19,6 +19,7 @@ export const CONFIG_VALID_KEYS = [
   'gates.enabled',
   'gates.frameworkGates',
   'execution.judge',
+  'execution.delegation.evidence',
   'frameworks.enabled',
   'frameworks.dynamicToolDescriptions',
   'frameworks.systemPromptFrequency',
@@ -78,6 +79,17 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         return {
           valid: false,
           error: "Transport mode must be 'stdio', 'streamable-http', or 'both'",
+        };
+      }
+      return { valid: true, convertedValue: normalized, valueType: 'string' };
+    }
+
+    case 'execution.delegation.evidence': {
+      const normalized = value.trim().toLowerCase();
+      if (!['advisory', 'required'].includes(normalized)) {
+        return {
+          valid: false,
+          error: "Delegation evidence mode must be 'advisory' or 'required'",
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };

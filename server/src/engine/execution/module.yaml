@@ -7,6 +7,8 @@ children: internal
 owns:
   - capability: Gate enforcement mode
     symbol: resolveEnforcementMode
+  - capability: Delegation handoff evidence
+    symbol: resolveHandoffEvidence
   - capability: Command parsing
     symbol: UnifiedCommandParser
   - capability: Step capture

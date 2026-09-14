@@ -441,3 +441,47 @@ describe('legacy config key migration', () => {
     });
   });
 });
+
+/**
+ * `execution.delegation.evidence` — the delegation handoff evidence knob (Tier 2 row 2.1).
+ *
+ * Lives in this file rather than beside the validator because this file is where the validator's
+ * accepted-key set is already asserted, and because the failure it guards is the same one the
+ * whole file exists for: a key the runtime reads but the setter surface rejects is a knob nobody
+ * can turn, which is indistinguishable from a knob that does not exist until someone tries.
+ */
+describe('execution.delegation.evidence (delegation handoff evidence mode)', () => {
+  it('accepts both modes and rejects anything else, naming the two it takes', async () => {
+    const { CONFIG_VALID_KEYS, validateConfigInput } =
+      await import('../../../../src/cli-shared/config-input-validator.js');
+
+    expect(CONFIG_VALID_KEYS).toContain('execution.delegation.evidence');
+    expect(validateConfigInput('execution.delegation.evidence', 'advisory')).toMatchObject({
+      valid: true,
+      convertedValue: 'advisory',
+    });
+    expect(validateConfigInput('execution.delegation.evidence', 'required')).toMatchObject({
+      valid: true,
+      convertedValue: 'required',
+    });
+
+    const refused = validateConfigInput('execution.delegation.evidence', 'maybe');
+    expect(refused.valid).toBe(false);
+    // The message has to name the alternatives — a bare "invalid value" leaves the caller
+    // guessing at a two-member set.
+    expect(refused.error).toContain('advisory');
+    expect(refused.error).toContain('required');
+  });
+
+  it('is written into the config under the path the runtime reads', async () => {
+    // The write path assigns dot-keys verbatim, so the accepted key and the shape ConfigManager
+    // exposes must agree — this is the pairing that `gates.mode` failed for nine keys.
+    const { config, cleanup } = await loadConfigFrom({
+      execution: { delegation: { evidence: 'advisory' } },
+    });
+
+    expect(config.execution?.delegation?.evidence).toBe('advisory');
+
+    await cleanup();
+  });
+});

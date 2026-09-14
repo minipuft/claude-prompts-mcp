@@ -7,6 +7,11 @@
  * to shared/ to respect the dependency direction: shared → engine → modules → mcp.
  */
 
+// The handoff evidence reason's ONE definition lives with the contract that produces it, so the
+// record shape and the resolver cannot drift. Type-only, like `execution.ts`'s
+// `#modules/workflow-ir` import — no value crosses the layer.
+import type { HandoffEvidenceReason } from './handoff-evidence.js';
+
 /**
  * What just happened to a step. Call sites report a milestone; {@link StepMetadata} derives the
  * sticky {@link StepLifecycle} from it and stamps the matching substate timestamp.
@@ -222,14 +227,14 @@ export interface ExecutionRecord {
   interruptsRaised?: number;
   remaindersAccepted?: number;
   /**
-   * S8 delegation-acknowledgment audit, populated ONLY on capture-time `completed` step rows
-   * for a step that was BOTH delegated and gated — the one row type where the fact exists
-   * (`resolveDelegationSkipped`). `true`: the captured output lacks the contracted
-   * `Proposed Gate Review:` block, so the parent likely answered inline instead of spawning.
-   * `false`: the block is present. Undefined everywhere else — non-delegated steps, delegated
-   * steps with no gates (acknowledgment structurally unobservable), render/terminal rows.
+   * Delegation handoff evidence (v28), populated on capture-time `completed` step rows for
+   * EVERY delegated step, in both evidence modes: the reason the resume was or was not
+   * acceptable (`resolveHandoffEvidenceReason`). `ok` — the `HANDOFF RESULT` trailer named this
+   * node; `trailer` / `node-line` / `node-mismatch` — what it carried instead. Undefined
+   * everywhere else, which now means exactly one thing: the step was not delegated (and every
+   * render/terminal row, which describes no capture).
    */
-  delegationSkipped?: boolean;
+  handoffEvidence?: HandoffEvidenceReason;
 }
 
 /**

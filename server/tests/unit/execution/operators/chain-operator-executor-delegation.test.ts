@@ -279,6 +279,78 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
     expect(result.callToAction).not.toContain('is delegated');
   });
 
+  test('a gate-review render whose TARGET step is delegated carries that step’s brief', async () => {
+    const executor = new ChainOperatorExecutor(mockLogger, prompts);
+    const stepPrompts = [
+      { stepNumber: 1, promptId: 'step1', args: {} },
+      {
+        stepNumber: 2,
+        promptId: 'step2',
+        args: {},
+        delegated: true,
+        metadata: { gateInstructions: 'GATE-B: check step two output' },
+      },
+    ];
+
+    // `current_step: 2` is how stage 20 addresses the reviewed step when the pending review
+    // carries no step index of its own — which is every phase-guard review
+    // (19-phase-guard-verification-stage.ts:210 writes source/failedPhases/mode and nothing else).
+    const result = await executor.renderStep({
+      executionType: 'gate_review',
+      stepPrompts,
+      chainContext: { current_step: 2, step_results: { '1': 'step one result' } },
+      pendingGateReview: {
+        combinedPrompt: 'Review the output',
+        gateIds: ['__phase_guard__'],
+        prompts: [],
+        createdAt: Date.now(),
+        attemptCount: 0,
+        maxAttempts: 3,
+      },
+      additionalGateIds: ['__phase_guard__'],
+    });
+
+    expect(result.content).toContain(BRIEF_START);
+    expect(result.content).toContain('HANDOFF RESULT');
+    expect(result.content).toContain('node: n2');
+    expect(result.content).toContain('run_in_background: false');
+    // The reviewed step's task is INSIDE the brief — it is what the worker is being handed.
+    const briefBody = result.content.slice(
+      result.content.indexOf(BRIEF_START),
+      result.content.indexOf(BRIEF_END)
+    );
+    expect(briefBody).toContain('Original Task Instructions');
+    expect(briefBody).toContain('GATE-B: check step two output');
+  });
+
+  test('a gate-review RETRY of the same delegated step renders no brief', async () => {
+    const executor = new ChainOperatorExecutor(mockLogger, prompts);
+    const stepPrompts = [
+      { stepNumber: 1, promptId: 'step1', args: {} },
+      { stepNumber: 2, promptId: 'step2', args: {}, delegated: true },
+    ];
+
+    const result = await executor.renderStep({
+      executionType: 'gate_review',
+      stepPrompts,
+      chainContext: { current_step: 2, step_results: { '1': 'step one result' } },
+      pendingGateReview: {
+        combinedPrompt: 'Review the output',
+        gateIds: ['__phase_guard__'],
+        prompts: [],
+        createdAt: Date.now(),
+        // attemptCount > 0 abbreviates the task body to "review the original task above", so a
+        // brief here would hand the worker a task the retry is not asking anyone to redo.
+        attemptCount: 1,
+        maxAttempts: 3,
+      },
+      additionalGateIds: ['__phase_guard__'],
+    });
+
+    expect(result.content).not.toContain(BRIEF_START);
+    expect(result.content).not.toContain('HANDOFF RESULT');
+  });
+
   test('R-2: result contract labels the worker verdict PROPOSED', async () => {
     const executor = new ChainOperatorExecutor(mockLogger, prompts);
     const stepPrompts = [

@@ -1,5 +1,6 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
+import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
@@ -455,6 +456,10 @@ export class ResponseAssembler {
       ...(subagentModel != null ? { subagentModel } : {}),
       gateCount,
       hasGates: gateCount > 0,
+      // Same fallback both payload construction sites use: nodeId when the parsed step carries
+      // one, else `n<stepNumber>` for a legacy chain — handoffNodeToken is the one derivation.
+      nodeToken: handoffNodeToken({ nodeId: parsedNext?.nodeId, stepNumber }),
+      mode: 'blocking',
     };
     return renderer.renderNextStepAdvisory(payload);
   }
