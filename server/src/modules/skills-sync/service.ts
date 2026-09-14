@@ -20,7 +20,7 @@ import { createTwoFilesPatch } from 'diff';
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
-import { assertUsableDirectorySetting } from '#runtime/paths.js';
+import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import {
