@@ -389,3 +389,37 @@ its concerns:
 
 **Not worker artifacts.** Both downstream worktrees hold an untracked `t3.json`, the T3 app's per-project script file,
 written when a worktree is opened.
+
+## Worker C accepted; both downstream rows verified against the R6 build (2026-09-14)
+
+Planner probes on C's branch, all on one fresh build: the refusals, the boots and the skills-sync CLI as recorded in rows
+2.1 and 2.5. The same build ran both downstream configs from fresh checkouts. Each old config refuses, which proves R6
+would have broken it; each new config boots and serves 46 prompts. So rows 2.11 and 2.12 hold against the server they
+exist for, not only against today's release.
+
+**Rulings on C's concerns.**
+
+- The refusal also covers a directory that cannot be read. Kept: it mirrors the shipped config check, and an unreadable
+  directory is unusable.
+- The commitlint "and" warning on `34b8a589` is resolved by the squash title.
+- The label fix without a mutation is settled by the planner's own mutant, which fails its e2e case.
+- `test:all`, and `hook-harness.mjs` setting these variables, belong to the PR-boundary gate.
+
+**C's findings.** The README's `--transport sse` is row 2.15. The skills-sync `resolveProjectRoot` fallback is row 2.16,
+the same class as 2.5. `ConfigLoader`'s catch-all is killed as 2.18, with a revive condition.
+
+**Rulings on F's follow-up concerns.**
+
+- `MCP_RUNTIME_ROOT` is written for custom workspaces too. That keeps state out of a user's resource library, the reason
+  the variable exists.
+- Existing runtime state is not migrated: the old locations sat under a local install or under setups R6 refuses.
+- F's reading of a relative `XDG_DATA_HOME` (ignored, per the XDG spec) and of a legacy entry with an extra key (kept,
+  with a warning) stand.
+
+**Lint count.** `lint:ratchet` reports 3096 errors on C's branch against the 3092 measured at `ffa50a2a`. The per-rule
+error delta over C's five touched source files is +0, so the four came from elsewhere, already on `main`. A planner
+probe traces them.
+
+**Downstream rows need a release gate, not only a fix.** Accepting 2.11 and 2.12 does not make the release safe: R10
+orders the releases, which happen outside this repository. Row 2.17 holds that order, so the plan stays `active` after
+the claude-prompts PR.
