@@ -109,3 +109,20 @@ was live. `validate-extension-artifact.js` spawns only `stage-server-runtime.sh`
 
 Row 1.11 went to A at base `3e56bb8a` and carries both brief defects A reported: the comparison base is a named
 commit, and the shared-builder lever is offered as a hypothesis whose seeded-row positive control must move first.
+
+## A knip ratchet regression found before the PR boundary (2026-09-14)
+
+The planner ran knip early, because worker A's handoff flagged an export with only a declaration consumer.
+`node scripts/knip-ratchet.js check` exits 1 at `dbd65433`: exports 492 to 493, files 16 to 17. Knip names four
+additions, each referenced only inside its own module: the whole `scripts/lib/hermetic-server-env.d.ts`,
+`SCRUBBED_KEYS`, and `describeUnusableConfigFile` and `formatConfigPathRefusal` in `src/runtime/paths.ts`.
+`createPathResolver` shares the knip line but dates from `13901297` and is not this branch's.
+
+Rows 1.2 and 1.5 stay accepted: their flip conditions held. But neither row's check read the ratchet, and both
+rows added exports. **Brief defect, planner-side**: a dispatch row that adds or removes an export names
+`validate:knip-ratchet` as part of its row check, since that count is otherwise first read in CI.
+
+Ruling: one worker owns the count across both workers' files, because it is one measurement and two actors
+fixing it concurrently would each read the other's half-done number. The declaration file goes out as a hypothesis
+(tsc needs it; knip does not credit a declaration beside a `.js` import) that A measures before choosing between
+deleting it and teaching knip about it.
