@@ -84,7 +84,7 @@ export const SUITE = [
   {
     script: 'validate:knip-ratchet',
     io: 'read',
-    reads: ['file', 'spawn'],
+    reads: ['file', 'spawn', 'walk'],
     converse: 'unexamined',
   },
   {
