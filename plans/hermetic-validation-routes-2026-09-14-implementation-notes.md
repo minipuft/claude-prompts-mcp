@@ -153,3 +153,19 @@ same enumeration found no `process.stdout` code in `src` (positive control: 21 `
   fresh capture re-saves.
 - A severity change to a lint rule is sized by two counts taken before dispatch: the directives naming that rule, and
   the files an override exempts from it. A count taken under an override cannot see the override's files.
+
+## Row 1.13 accepted; the merge loosened the ceiling it restored (2026-09-14)
+
+Worker A's `847cc3d2` passes on the merged tree (`d51fad80`): the ratchet reports OK at 1195 findings, knip names
+none of the four findings, `typecheck` passes, `typecheck:tests:ratchet` holds at 367, and the hermetic gate and its
+self-test are green. The tightening was the ratchet's own request. A's `dc4783a0`, the `validate-contributing.js`
+comment naming both lightweight routes, is cherry-picked with it.
+
+The planner's mutant did not fail. Re-exporting `formatConfigPathRefusal` on the merged tree left the ratchet at
+exit 0, because B's `8ac0f676` had deleted the exported `setupConsoleRedirection`, leaving 489 exports under a 490
+ceiling. A's identical mutation failed on A's branch, which lacked B's deletion. Each branch's positive control was
+sound for that branch alone; only the merged tree could show the slack. That is row 1.14.
+
+**Finding, recorded as evidence rather than work:** the knip ratchet prints a request on any decrease and exits 0, so
+a missed tightening never fails CI. That is the mechanism behind every ceiling slack this plan met, and it bears on
+the ratchet-slack pattern rather than on this plan's class.
