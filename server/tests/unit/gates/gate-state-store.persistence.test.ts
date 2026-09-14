@@ -153,4 +153,72 @@ describe('GateStateStore (persistence)', () => {
 
     await manager.cleanup();
   });
+
+  /**
+   * A toggle has to be read back by the NEXT process, not only by the instance that wrote it.
+   * The case above never restarts, and the unscoped restart case above only covers `default` —
+   * which is exactly the one scope that was already loaded at startup, so neither could see a
+   * workspace-scoped disable come back enabled after a restart.
+   */
+  test('a workspace-scoped toggle survives a restart on the same database', async () => {
+    const logger = createLogger();
+    const project = { workspaceId: 'restart-project' };
+
+    const first = new GateStateStore(logger, createStateStore(dbManager, logger), {
+      defaultScope: project,
+    });
+    await first.initialize();
+    await first.disableGateSystem('first-run', project);
+    await first.cleanup();
+
+    const second = new GateStateStore(logger, createStateStore(dbManager, logger), {
+      defaultScope: project,
+    });
+    await second.initialize();
+    expect(second.isGateSystemEnabled(project)).toBe(false);
+    // Loaded per scope, so an HTTP identity other than the launch scope is read back too.
+    expect(second.isGateSystemEnabled({ workspaceId: 'never-toggled' })).toBe(true);
+
+    await second.enableGateSystem('second-run', project);
+    await second.cleanup();
+
+    const third = new GateStateStore(logger, createStateStore(dbManager, logger));
+    await third.initialize();
+    expect(third.isGateSystemEnabled(project)).toBe(true);
+    await third.cleanup();
+  });
+
+  test('adopts a pre-isolation default row into the launch scope once', async () => {
+    const logger = createLogger();
+    const store = createStateStore(dbManager, logger);
+    const legacyDisabled: PersistedGateSystemState = {
+      enabled: false,
+      enabledAt: new Date().toISOString(),
+      enableReason: 'Disabled: before workspace isolation',
+      validationMetrics: {
+        totalValidations: 0,
+        successfulValidations: 0,
+        averageValidationTime: 0,
+        lastValidationTime: null,
+      },
+    };
+    // Written unscoped, the way every toggle was before 2026-08-27.
+    await store.save(legacyDisabled);
+
+    const adopting = { workspaceId: 'adopting-project' };
+    const manager = new GateStateStore(logger, store, { defaultScope: adopting });
+    await manager.initialize();
+    expect(manager.isGateSystemEnabled(adopting)).toBe(false);
+    expect(await store.exists(adopting)).toBe(true);
+    expect((await store.load(adopting)).enabled).toBe(false);
+    await manager.cleanup();
+
+    // A launch scope that already has its own row keeps it: adoption is not a re-sync.
+    const owning = { workspaceId: 'owning-project' };
+    await store.save({ ...legacyDisabled, enabled: true, enableReason: 'own row' }, owning);
+    const owner = new GateStateStore(logger, store, { defaultScope: owning });
+    await owner.initialize();
+    expect(owner.isGateSystemEnabled(owning)).toBe(true);
+    await owner.cleanup();
+  });
 });
