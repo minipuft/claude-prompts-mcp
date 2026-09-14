@@ -35,8 +35,8 @@ configuration, dependency, deleted-unknown, or unrecognized change to `full`.
 
 | Scope   | Trigger                                                                                 | CI                                                                                                |
 | ------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene; four protected jobs report intentional lightweight passes                      |
-| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML; other protected jobs report intentional lightweight passes       |
+| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene · CONTRIBUTING commands · plan row tracking · README charter · guidance projection; four protected jobs report intentional lightweight passes |
+| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML · the same four documentation checks as `docs`; other protected jobs report intentional lightweight passes |
 | `full`  | everything else; empty/unknown input                                                    | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E   |
 
 `.husky/pre-push` does not branch by scope: every push runs `typecheck` and `lint:ratchet`
