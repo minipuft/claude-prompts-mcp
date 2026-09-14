@@ -112,7 +112,13 @@ export async function createRuntimeFoundation(
 
   // PathResolver is passed in so prompt WRITES resolve through the same chain reads do. Without
   // it, `MCP_RESOURCES_PATH` moved reads only and edits landed back in the package (T1.1/D7).
-  const configManager = dependencies.configManager ?? new ConfigLoader(configPath, pathResolver);
+  // The schema is the PACKAGE's own, never the config's `$schema`: that is an editor hint, and a
+  // config loaded via `--config`/`MCP_CONFIG_PATH` can sit anywhere while the schema ships here.
+  const configManager =
+    dependencies.configManager ??
+    new ConfigLoader(configPath, pathResolver, {
+      schemaPath: path.join(serverRoot, 'config.schema.json'),
+    });
   await configManager.loadConfig();
   const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 

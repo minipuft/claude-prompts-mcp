@@ -21,15 +21,26 @@ interface CachedValidator {
 
 const validatorCache = new Map<string, CachedValidator>();
 
+/**
+ * AJV reports an undeclared key as "must NOT have additional properties" and names the key only in
+ * `params.additionalProperty`, so the message alone tells a reader which section is wrong but not
+ * which key — for a typo, the key is the whole finding.
+ */
+function undeclaredKeySuffix(error: ErrorObject): string {
+  const key: unknown = error.params['additionalProperty'];
+  return error.keyword === 'additionalProperties' && typeof key === 'string' ? ` (${key})` : '';
+}
+
 function formatAjvErrors(errors: ErrorObject[] | null | undefined): string[] {
   if (!errors || errors.length === 0) {
     return [];
   }
 
+  // Keep the `<path>: <message>` shape: consumers match on the path prefix.
   return errors.map((error) => {
     const dataPath = error.instancePath || '(root)';
     const message = error.message || 'Validation failed';
-    return `${dataPath}: ${message}`;
+    return `${dataPath}: ${message}${undeclaredKeySuffix(error)}`;
   });
 }
 
