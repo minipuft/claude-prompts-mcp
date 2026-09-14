@@ -14,11 +14,11 @@ tags: [ci, scripts, config, validation]
 
 ## Now (2026-09-14)
 
-Two workers run in parallel on their own branches cut from `fix/hermetic-validation-routes`, which is
-`fix/readme-install-path` with `origin/main` (#275) merged in. The planner merges each handoff into the
-initiative branch, runs the full suite and the live drives once, and opens one PR. This PR stacks on the
-README install-path PR: after that PR squash-merges, the initiative branch is rebased onto `main` before
-its own PR opens.
+The README install-path PR merged as `c68205bd` (#276), and this branch was rebased onto it, so it now carries
+only this plan. The first worker run died with its session before either worker committed or reported; both
+were relaunched against the uncommitted drafts they left (worker A 13 paths, worker B 10), told to verify the
+draft, finish, and commit row by row. **Next planner decision**: accept or re-cut each handoff, cherry-pick the
+worker commits onto this branch, then run the PR-boundary gate once.
 
 ## Why this exists
 
