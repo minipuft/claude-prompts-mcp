@@ -10,7 +10,7 @@ remains in `server/.dependency-cruiser.cjs`.
 
 | Module | Source path | Kind | Lifecycle | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | infra-config<br>infra-logging<br>runtime | — |
+| `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
 | `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-utils<br>versioning | skills-sync |
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
@@ -45,7 +45,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `shared` | `src/shared` | layer | canonical | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates |
 | `shared-types` | `src/shared/types` | shared | canonical | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>semantic<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
-| `shared-utils` | `src/shared/utils` | shared | canonical | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>shared-core<br>skills-sync<br>text-references<br>versioning |
+| `shared-utils` | `src/shared/utils` | shared | canonical | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning |
 
 ## Domain ownership
 
@@ -231,6 +231,7 @@ flowchart LR
   module_server_source --> module_infra_config
   module_server_source -. type .-> module_infra_logging
   module_server_source --> module_runtime
+  module_server_source --> module_shared_utils
   module_shared_core -. type .-> module_shared_types
   module_shared_core -. type .-> module_shared_utils
   module_shared_types -. type .-> module_workflow_ir

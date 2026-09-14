@@ -24,6 +24,16 @@ import { join, resolve, isAbsolute } from 'path';
 
 import type { ServerCliArgs } from './cli.js';
 
+import {
+  assertUsableDirectorySetting,
+  describeRemoval,
+  formatPathSettingRefusal,
+  PathSettingError,
+  resolveSettingPath,
+  type PathFallback,
+  type PathSetting,
+} from '#shared/utils/path-setting.js';
+
 /**
  * CLI flag values parsed from command line arguments
  */
@@ -61,58 +71,11 @@ export interface ResolvedPaths {
   logs: string;
 }
 
-/** An operator path setting: the flag or environment variable, and the value it was given. */
-export interface PathSetting {
-  name: '--config' | 'MCP_CONFIG_PATH' | '--workspace' | 'MCP_WORKSPACE' | 'MCP_RESOURCES_PATH';
-  value: string;
-}
-
 /** An operator-named config path and the flag or variable that named it. */
 type ExplicitConfigSource = PathSetting & { name: '--config' | 'MCP_CONFIG_PATH' };
 
 /** A workspace path and the flag or variable that named it. */
 type WorkspaceSource = PathSetting & { name: '--workspace' | 'MCP_WORKSPACE' };
-
-/** What the process would use instead if the operator removed the setting. */
-interface PathFallback {
-  label: string;
-  resolved: string;
-  /** Set when the fallback is itself unusable, so the advice does not send the operator into a second refusal unwarned. */
-  caveat?: string;
-}
-
-/**
- * An operator path setting that cannot be used: a config file that is not a readable JSON object,
- * or a workspace or resources directory that is not there. Startup stops on it rather than serving
- * from defaults the operator did not ask for; the message is the whole explanation.
- */
-export class PathSettingError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PathSettingError';
-  }
-}
-
-/** Absolute form of a path setting's value; a relative value resolves against the working directory. */
-function resolveSettingPath(value: string): string {
-  return isAbsolute(value) ? value : resolve(process.cwd(), value);
-}
-
-/**
- * Why `resolved` cannot serve as a directory setting, or `undefined` when it can.
- *
- * Checked with `stat`, not `existsSync`: a file at that path "exists" and is still no workspace.
- */
-function describeUnusableDirectory(resolved: string): string | undefined {
-  try {
-    if (!statSync(resolved).isDirectory()) return 'is not a directory';
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return 'does not exist';
-    return `cannot be read (${code ?? String(error)})`;
-  }
-  return undefined;
-}
 
 /**
  * Why `resolved` cannot serve as a config file, or `undefined` when it can.
@@ -146,69 +109,6 @@ function describeUnusableConfigFile(resolved: string): string | undefined {
     return 'is valid JSON but not a JSON object';
   }
   return undefined;
-}
-
-/**
- * The refusal an operator reads: what was given, where it resolved, what is wrong, what to do.
- *
- * `subject` is the path that failed when it is not the setting's own value — a workspace's
- * config.json is found through `MCP_WORKSPACE` but is not the directory it names.
- */
-function formatPathSettingRefusal(details: {
-  setting: PathSetting;
-  resolved: string;
-  problem: string;
-  expected: string;
-  remedy: string;
-  subject?: string;
-  verb?: 'start' | 'run';
-}): string {
-  const { setting, resolved, problem, expected, remedy, subject, verb = 'start' } = details;
-  const setter = setting.name.startsWith('--')
-    ? setting.name
-    : `the ${setting.name} environment variable`;
-  const failed = subject === undefined ? 'that path' : `its ${subject}`;
-  return [
-    `Refusing to ${verb}: ${setter} is set to "${setting.value}", which resolves to ${resolved}, and ${failed} ${problem}.`,
-    `Expected ${expected} at that path, or ${remedy}.`,
-  ].join('\n');
-}
-
-/** How to stop naming the setting, and what the process falls back to once it does. */
-function describeRemoval(setting: PathSetting, fallback: PathFallback | undefined): string {
-  const removal = setting.name.startsWith('--')
-    ? `remove ${setting.name}`
-    : `unset ${setting.name}`;
-  if (fallback === undefined) return removal;
-  const caveat = fallback.caveat === undefined ? '' : ` (which ${fallback.caveat} too)`;
-  return `${removal} to use ${fallback.label} at ${fallback.resolved}${caveat}`;
-}
-
-/**
- * Refuse a directory setting that names no directory; return its resolved path when it does.
- *
- * Exported for tools outside the server's startup that read the same variables, so an operator
- * sees one refusal whichever entry point reads the setting first.
- */
-export function assertUsableDirectorySetting(
-  setting: PathSetting,
-  options: { fallback?: PathFallback; verb?: 'start' | 'run' } = {}
-): string {
-  const resolved = resolveSettingPath(setting.value);
-  const problem = describeUnusableDirectory(resolved);
-  if (problem !== undefined) {
-    throw new PathSettingError(
-      formatPathSettingRefusal({
-        setting,
-        resolved,
-        problem,
-        expected: 'an existing directory',
-        remedy: describeRemoval(setting, options.fallback),
-        ...(options.verb !== undefined && { verb: options.verb }),
-      })
-    );
-  }
-  return resolved;
 }
 
 /**

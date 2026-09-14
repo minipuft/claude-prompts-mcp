@@ -3,11 +3,11 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { PathResolver } from '../../../src/runtime/paths.js';
 import {
   assertUsableDirectorySetting,
-  PathResolver,
   PathSettingError,
-} from '../../../src/runtime/paths.js';
+} from '../../../src/shared/utils/path-setting.js';
 
 /**
  * Every path override `PathResolver` honors, neutralized for the duration of this file.
