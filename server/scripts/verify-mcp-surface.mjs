@@ -29,7 +29,9 @@
  * the measured history above is kept so nobody re-derives the SSE hang as a live constraint.
  *
  * SAFETY: every call is read-only. Nothing here creates, updates or deletes a resource, and the
- * run asserts afterwards that `state.db` and the workspace resources were left alone.
+ * run asserts afterwards that `server/resources` was left alone (`checkNoMutation`). The checkout's
+ * `state.db` is not asserted on because it is never opened: the spawned server runs on a temp
+ * runtime root this run creates and removes (`spawnServer`), so it is untouched by construction.
  *
  * Exit 0 when every check passes; exit 1 with the failing lines otherwise.
  */
