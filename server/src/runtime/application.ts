@@ -918,6 +918,22 @@ export class Application {
           mcpToolsManager: this.mcpToolsManager,
         });
 
+        // Resolve the exported-prompt set from the reloaded content BEFORE publishing
+        // anything a per-request shell reads. `createMcpServerFactory` builds a fresh
+        // `McpServer` per HTTP request and registers straight from `_convertedPrompts` plus
+        // whatever export set is current at that moment; an `await` sitting between those two
+        // writes let a request land in between and filter fresh content against the export
+        // set the PREVIOUS reload left behind. `loadPromptData` (startup, and the manual
+        // `fullServerRefresh` path) never had this gap, because it resolves the export set
+        // before returning and the caller only publishes afterward — this path publishes and
+        // resolves in the opposite order, which is the defect. Every write below runs
+        // synchronously once the export set is known, closing the window.
+        const exportedPromptIds = await loadSkillsSyncExports(
+          this.pathResolver,
+          this.logger,
+          result.convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
+        );
+
         this._promptsData = result.promptsData;
         this._convertedPrompts = result.convertedPrompts;
         this._categories = result.categories;
@@ -927,18 +943,6 @@ export class Application {
           this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
         }
 
-        // Recompute the exported-prompt set from the resolved skills-sync.yaml on every
-        // reload, not just at startup. `loadPromptData` (startup, and the manual
-        // `fullServerRefresh` path) already does this; this filesystem-watch path used to
-        // publish fresh prompt content without ever touching it, so a prompt newly
-        // registered for export stayed in `prompts/list` until a restart, and one
-        // unregistered stayed hidden. Set unconditionally, the same as `loadPromptData`: a
-        // reload that removes the last registration must clear the previous set too.
-        const exportedPromptIds = await loadSkillsSyncExports(
-          this.pathResolver,
-          this.logger,
-          this._convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
-        );
         this.promptManager.setExportedPromptIds(exportedPromptIds);
 
         // Content refresh alone updates every already-bound handler, on every
