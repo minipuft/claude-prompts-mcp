@@ -45,14 +45,12 @@ function mutate(config: JsonObject, apply: (_clone: any) => void): JsonObject {
 describe('config schema validation warnings', () => {
   let warnSpy: jest.SpiedFunction<typeof console.warn>;
   let errorSpy: jest.SpiedFunction<typeof console.error>;
-  let infoSpy: jest.SpiedFunction<typeof console.info>;
   let tempDir: string;
   let configPath: string;
 
   beforeEach(async () => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
     tempDir = await mkdtemp(path.join(tmpdir(), 'cfg-schema-warning-'));
     configPath = path.join(tempDir, 'config.json');
   });
@@ -60,7 +58,6 @@ describe('config schema validation warnings', () => {
   afterEach(async () => {
     warnSpy.mockRestore();
     errorSpy.mockRestore();
-    infoSpy.mockRestore();
     await rm(tempDir, { recursive: true, force: true });
   });
 
@@ -150,7 +147,8 @@ describe('config schema validation warnings', () => {
 
     // Step 6: broken JSON — the load fails before the schema is ever consulted: 0 schema
     // warnings, and getSchemaValidation() reports undefined (whatever the last check said
-    // describes a file this load did not serve).
+    // describes a file this load did not serve). The fallback pins its own line on
+    // console.error (not console.info — stdout is the STDIO protocol channel).
     warnSpy.mockClear();
     await writeFile(configPath, '{ not valid json', 'utf8');
     await manager.loadConfig();
@@ -158,7 +156,9 @@ describe('config schema validation warnings', () => {
     expect(schemaWarnings()).toHaveLength(0);
     expect(manager.getSchemaValidation()).toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalled();
+    expect(errorSpy.mock.calls.some((call) => call[0] === 'Using default configuration')).toBe(
+      true
+    );
 
     // Step 7: no schemaPath injected — a fresh manager over the same (now-broken) file path
     // reset to a clean config, with no schema option: 0 warnings, undefined validation.
