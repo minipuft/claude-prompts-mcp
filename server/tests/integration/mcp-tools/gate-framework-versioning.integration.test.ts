@@ -923,6 +923,147 @@ describe('Framework versioning through the real write path', () => {
   });
 });
 
+/**
+ * B.26 — a framework error message names the directory the framework actually resolves from.
+ *
+ * `getServerRoot()` is where the PACKAGE lives; `getFrameworksDirectory()` is where a framework
+ * actually reads from and writes to (the workspace or personal-library root when one is
+ * configured, which is the common case this suite otherwise runs with `getServerRoot() ===
+ * getFrameworksDirectory()` and so cannot distinguish). `packageRoot` below is deliberately a
+ * directory that holds no framework, mirroring an installed package tree with a separate
+ * workspace configured — the shape that made the pre-fix message point at a directory the
+ * framework never occupied.
+ */
+describe('Framework lifecycle error messages name the resolved directory (B.26)', () => {
+  const FRAMEWORK_ID = 'error-path-probe';
+
+  let tempDir: string;
+  let packageRoot: string;
+  let workspaceFrameworksDir: string;
+  let fileService: FrameworkFileWriter;
+  let mockLogger: MockLogger;
+
+  function baseCtx(
+    frameworkManager: FrameworkResourceContext['frameworkManager']
+  ): FrameworkResourceContext {
+    return {
+      logger: mockLogger as unknown as Logger,
+      frameworkManager,
+      configManager: {
+        getServerRoot: () => packageRoot,
+        getFrameworksDirectory: () => workspaceFrameworksDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager,
+      fileService,
+      textDiffService: new ObjectDiffGenerator(),
+      versionHistoryService: {} as unknown as VersionHistoryService,
+    };
+  }
+
+  beforeEach(async () => {
+    mockLogger = new MockLogger();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'framework-error-path-test-'));
+    packageRoot = path.join(tempDir, 'package-install');
+    workspaceFrameworksDir = path.join(tempDir, 'workspace', 'resources', 'frameworks');
+    await fs.mkdir(workspaceFrameworksDir, { recursive: true });
+
+    fileService = new FrameworkFileWriter({
+      logger: mockLogger as unknown as Logger,
+      configManager: {
+        getServerRoot: () => packageRoot,
+        getFrameworksDirectory: () => workspaceFrameworksDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager,
+    });
+
+    // Seed the framework directly at the workspace root, bypassing handleCreate.
+    await fileService.writeFrameworkFiles({
+      id: FRAMEWORK_ID,
+      name: 'Probe',
+      type: 'PROBE',
+      system_prompt_guidance: 'guidance',
+      enabled: true,
+    });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('a failed reload names the workspace directory the framework loads from, not the package root', async () => {
+    const ctx = baseCtx({
+      getFrameworkRegistry: () => ({
+        getRuntimeLoader: () => ({ clearCache: () => {} }),
+      }),
+      // Force `reregisterFramework` to fail, driving `handleReload`'s failure branch.
+      registerFramework: async () => false,
+    } as unknown as FrameworkResourceContext['frameworkManager']);
+
+    const lifecycle = new FrameworkLifecycleProcessor(
+      ctx,
+      {} as unknown as FrameworkDraftValidator
+    );
+
+    const response = await lifecycle.handleReload({
+      action: 'reload',
+      id: FRAMEWORK_ID,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(true);
+    const text = (response.content[0] as { text: string }).text;
+    expect(text).toContain(path.join(workspaceFrameworksDir, FRAMEWORK_ID, 'framework.yaml'));
+    expect(text).not.toContain(packageRoot);
+  });
+
+  it('a failed create rollback names the write target it could not clean up, not the package root', async () => {
+    const registryDouble = {
+      hasGuide: () => false,
+      getRuntimeLoader: () => ({ clearCache: () => {} }),
+      loadAndRegisterById: async () => true, // registry step succeeds
+      unregisterGuide: () => true,
+    };
+    const ctx = baseCtx({
+      getFramework: () => undefined,
+      getFrameworkRegistry: () => registryDouble,
+      // Force the framework-manager step to fail, entering the rollback branch.
+      registerFramework: async () => false,
+    } as unknown as FrameworkResourceContext['frameworkManager']);
+
+    // Force the rollback's file removal to fail without disturbing the real write path.
+    const deleteSpy = jest.spyOn(fileService, 'deleteFramework').mockResolvedValue(false);
+
+    const lifecycle = new FrameworkLifecycleProcessor(ctx, new FrameworkDraftValidator());
+
+    const response = await lifecycle.handleCreate({
+      action: 'create',
+      id: 'second-probe',
+      name: 'Second Probe',
+      system_prompt_guidance: 'guidance',
+      phases: [
+        { id: 'p1', name: 'Phase 1', description: 'First' },
+        { id: 'p2', name: 'Phase 2', description: 'Second' },
+      ],
+      framework_gates: [
+        {
+          id: 'g1',
+          name: 'Gate 1',
+          description: 'Test gate',
+          frameworkArea: 'Phase 1',
+          priority: 'high',
+          validationCriteria: ['Check'],
+        },
+      ],
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(true);
+    const text = (response.content[0] as { text: string }).text;
+    expect(text).toContain(path.join(workspaceFrameworksDir, 'second-probe'));
+    expect(text).not.toContain(packageRoot);
+
+    deleteSpy.mockRestore();
+  });
+});
+
 describe('Prompt rollback refusal writes no version rows', () => {
   const PROMPT_ID = 'refusal_probe';
   const CATEGORY = 'general';
