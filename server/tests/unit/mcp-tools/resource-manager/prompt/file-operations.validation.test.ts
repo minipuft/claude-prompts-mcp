@@ -184,7 +184,7 @@ describe('FileOperations canonical prompt writes', () => {
   });
 
   /**
-   * P7-F2: `createOrUpdateYamlPrompt` built values for 10 of the 17 fields `PromptYamlSchema`
+   * P7-F2: the prompt.yaml builder emitted values for 10 of the 17 fields `PromptYamlSchema`
    * accepts and emitted nothing for the rest, so every update through `resource_manager` deleted
    * them. `subagentModel` and `agentType` govern `==>` delegation, so the loss was behavioural.
    *
@@ -557,7 +557,7 @@ describe('FileOperations canonical prompt writes', () => {
    * file the case declares untouched, not merely as a stale value that happens to match.
    *
    * FALSIFICATION: comment out the `writesYaml`/`writesUserMessage`/`writesSystemMessage` gates
-   * in `createOrUpdateYamlPrompt` (always write) and the first three rows go red — every file
+   * in `planPromptFiles` (always write) and the first three rows go red — every file
    * changes regardless of scope. Comment out the `suppliedKeys ?? ALL_PROMPT_DATA_KEYS` default
    * fallback and the fourth (rollback/create) row goes red instead.
    */
@@ -707,7 +707,7 @@ describe('FileOperations canonical prompt writes', () => {
       expect(existsSync(join(newDir, 'user-message.md'))).toBe(true);
       expect(existsSync(join(newDir, 'system-message.md'))).toBe(true);
       // Physically relocated via the directory copy, not regenerated — `tools:[]` was supplied
-      // on this call, so `createOrUpdateTools` never ran.
+      // on this call, so `planToolFiles` never ran.
       expect(existsSync(join(newDir, 'tools', 'move_tool', 'tool.yaml'))).toBe(true);
       expect(existsSync(join(newDir, 'tools', 'move_tool', 'script.py'))).toBe(true);
 
