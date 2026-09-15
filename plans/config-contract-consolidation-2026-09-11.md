@@ -14,12 +14,12 @@ tags: [config, schema, validation, cli, contracts]
 **Owner**: minipuft
 **Created**: 2026-09-11
 
-## Now (2026-09-14)
+## Now (2026-09-15)
 
 - **Goal**: one owner for `config.json`'s shape. T1 makes a bad config visible at load without refusing to serve.
-- **Slice**: T0 ✓ and T1 ✓ except 1.8 (waits on OQ-6). PR boundary passed 2026-09-15 on 66b635ef — full suite green and a before/after live drive over MCP. The owner ruled publication (`publish: push+merge`) and a public tracking Issue (#287). Publishing now: bring in `main` again if it moved, push, open the PR as part of #287, squash-merge when CI is green.
+- **Slice**: T0 ✓ except 0.9, T1 ✓ except 1.8 (waits on OQ-6). PR #288 is open with every check green but BEHIND `main`, which gained #286. Merging `main` in (1c51bfcf, unpushed) kept the diff at 21 in-slice files and typecheck and both ratchets green, and turned the new scripts typecheck red on #286's code — row 0.9 (DEV-T0-5). After 0.9: re-verify the merged tree, push, squash-merge #288 when CI is green and it is not BEHIND.
 - **Next decision**: after the merge, T2 — reconcile `cpm config set` with the schema (2.1–2.4), make `server.transport` take effect (2.6, needs OQ-7), and declare the `system_control` config inputs (2.5, needs OQ-5). 1.8 needs OQ-6. The three questions are also stated in #287 for the owner.
-- **Constraint in force**: shared-tree in `../claude-prompts-mcp-config` — workers edit only their named files and commit nothing. The planner commits source per concern only while no worker is editing, because lint-staged stashes unstaged changes; a plans-only commit takes the docs path, which does not, and may land while a worker is live. Nothing is pushed before the owner reviews.
+- **Constraint in force**: shared-tree in `../claude-prompts-mcp-config` — workers edit only their named files and commit nothing. The planner commits source per concern only while no worker is editing, because lint-staged stashes unstaged changes; a plans-only commit takes the docs path, which does not, and may land while a worker is live. Publication is ruled (`publish: push+merge`); a force push or an out-of-slice diff still stops it. Until #288 merges, every merge from `main` re-runs `typecheck:scripts` before a push.
 
 ## Why this exists
 
@@ -119,6 +119,7 @@ Row ids compile to node ids (`0.1` → `t0-1`); `Depends` holds row ids within t
 | 0.6 | ✓ 2026-09-15 · `server/scripts/table-contracts-reader.ts`, `server/scripts/validate-prompts.ts` (commit 947915bc). Planner re-ran `validate:table-contracts`, `validate:no-phantom-columns`, `validate:prompts` and their self-tests, all exit 0; scripts typecheck reports 0 under `scripts/` · worker sonnet, shared-tree | `server/scripts/table-contracts-reader.ts`, `server/scripts/validate-prompts.ts` | Edit | — | 7 of the 15 (6 + 1), measured twice: TS2532/TS2345-shaped narrowing. Fix by narrowing, never by casting to silence — each script must still exit and print as before |
 | 0.7 | ✓ 2026-09-15 · `server/scripts/validate-shipped-frameworks.ts`, `server/scripts/verify-action-inventory.ts` (commit 947915bc). Planner re-ran `validate:shipped-frameworks`, its self-test and `verify:action-metadata`, all exit 0; scripts typecheck reports 0 under `scripts/` · worker sonnet, shared-tree | `server/scripts/validate-shipped-frameworks.ts`, `server/scripts/verify-action-inventory.ts` | Edit | — | 8 of the 15 (4 + 4), same shape and same constraint as 0.6 |
 | 0.8 | ✗ KILLED (2026-09-14 · `checkJs` over the 50 `.js`/`.mjs` scripts yields 695 diagnostics, 426 of them implicit-`any` parameters: annotation work on untyped JavaScript, not defects, and not this initiative's concern · revives if a `.js` script is converted to `.ts`, or a defect in one is traced to a type error `checkJs` would have caught) | — | — | — | Typecheck the JavaScript scripts too |
+| 0.9 | ☐ (as of 2026-09-15 · flips when `typecheck:scripts` exits 0 on the merged tree, `validate:prompts` and its self-test print what they printed before, and reverting the narrowing fails the new self-test case) | `server/scripts/validate-prompts.ts` | Edit | — | **Found re-verifying the second `main` merge (DEV-T0-5).** `main` (b3e8df31) added `collectIncludedGateIds`, which casts `gateConfiguration.include` and a chain step's `inlineGateIds` to `unknown` and iterates `x ?? []`. That expression types as `{}`, so the merged tree's scripts typecheck reports TS2488 at lines 238 and 242. `main`'s CI never saw it, because this gate is not on `main` yet. The same cast asserts `chainSteps` is an array, which YAML does not guarantee: a mapping there throws `not iterable` and aborts the whole run. Narrow all three with `Array.isArray` and skip a non-array. `validateFile` runs `validatePromptYaml` over the same files, and the schema declares all three as arrays (`prompt-schema.ts:205`, `:351`; `workflow-ir/node-schema.ts:160`), so a malformed shape is already reported by name — and an include that goes uncounted makes its gate report as ORPHAN, loud rather than silent. Pin it with a self-test case: a prompt whose `include` is a mapping must not throw. |
 
 ### T1 — Warn at load, keep serving
 
@@ -158,6 +159,7 @@ Rulings this tier depends on: notes R9–R13. Dispatch surface is the `Agent` to
 | 0.6  | sonnet | medium | wrong output — each diagnostic is located and named; the risk is changing a script's behavior while silencing its types                        | shared-tree | Agent   |
 | 0.7  | sonnet | medium | wrong output — same shape as 0.6                                                                                                               | shared-tree | Agent   |
 | 0.5  | sonnet | high   | wrong output — a new project file plus a SUITE entry whose `reads` substrate is re-derived and has already failed once in this plan (DEV-T0-3) | shared-tree | Agent   |
+| 0.9  | sonnet | medium | wrong output — fix and skip-not-throw ruling are given; the risk is changed script output, or a self-test case that cannot fail                | shared-tree | Agent   |
 
 ### T2 — Reconcile the CLI against the schema (23 keys)
 
