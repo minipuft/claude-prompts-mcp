@@ -3,12 +3,14 @@
  * Validates `server/config.json` against `server/config.schema.json`.
  *
  * WHY THIS EXISTS
- * `config.json` carries `"$schema": "./config.schema.json"`, which buys editor validation and
- * nothing else — no runtime path calls `validateConfigAgainstSchema`, so a hand-edited config
- * that violates the schema is caught by whichever editor the author happened to be using, or by
- * nobody. This script is the programmatic reader that makes the declared `$schema` mean
- * something in CI. Until it was wired into `validate:all` it was itself unreferenced, which is
- * the same shape it exists to prevent: a declaration with no check standing behind it.
+ * `config.json` carries `"$schema": "./config.schema.json"`, which buys editor validation.
+ * `ConfigLoader.loadConfig` also calls `validateConfigAgainstSchema` at startup, with the
+ * package schema injected from `runtime/context.ts` — but that path reports drift as a
+ * `console.warn`, not a rejection, so a hand-edited `config.json` still loads and still starts
+ * the server. This script is the CI check that makes a schema violation in the SHIPPED
+ * `config.json` fail the build outright, rather than surface only as a runtime warning. Until it
+ * was wired into `validate:all` it was itself unreferenced, which is the same shape it exists to
+ * prevent: a declaration with no check standing behind it.
  *
  * WHY THE SELF-TEST EXISTS
  * Running clean proved almost nothing until 2026-09-11. `additionalProperties: false` sat at the
