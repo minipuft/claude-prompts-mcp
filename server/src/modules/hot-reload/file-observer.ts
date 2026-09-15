@@ -153,6 +153,9 @@ const DEFAULT_CONFIG: FileObserverConfig = {
   pollingInterval: 300,
 };
 
+/** How often a directory that does not exist yet is checked for, until it does. */
+const PENDING_DIRECTORY_POLL_MS = 1000;
+
 /**
  * FileObserver class
  * Provides robust file system watching with event-driven architecture
@@ -166,6 +169,10 @@ export class FileObserver extends EventEmitter {
   private isStarted: boolean = false;
   private startTime: number = 0;
   private retryCount: number = 0;
+  /** Directories registered before they exist, each with the timer waiting for it. */
+  private pendingDirectories: Map<string, NodeJS.Timeout> = new Map();
+  /** Directories that appeared after they were registered, whose existing files are reported. */
+  private directoriesCreatedLate: Set<string> = new Set();
   private configManager: ConfigManager | undefined;
   private auxiliaryDirectories: string[] = [];
   private sigintHandler: (() => void) | undefined;
@@ -265,6 +272,11 @@ export class FileObserver extends EventEmitter {
     }
     this.debounceTimers.clear();
 
+    for (const timer of this.pendingDirectories.values()) {
+      clearInterval(timer);
+    }
+    this.pendingDirectories.clear();
+
     // Close all watchers (chokidar close() returns a Promise)
     const closePromises = Array.from(this.watchers.entries()).map(async ([watchPath, watcher]) => {
       try {
@@ -300,7 +312,7 @@ export class FileObserver extends EventEmitter {
       throw new Error('FileObserver must be started before adding watchers');
     }
 
-    if (this.watchers.has(directoryPath)) {
+    if (this.watchers.has(directoryPath) || this.pendingDirectories.has(directoryPath)) {
       this.logger.debug(`Directory already being watched: ${directoryPath}`);
       return;
     }
@@ -315,7 +327,10 @@ export class FileObserver extends EventEmitter {
       // Configure chokidar options
       const watchOptions: ChokidarOptions = {
         persistent: true,
-        ignoreInitial: true,
+        // A directory created after startup may already hold files written, or edited, before its
+        // watcher armed; the poll can trail the write by a second. Reporting them lets that edit
+        // reload instead of being absorbed into the watcher's starting snapshot.
+        ignoreInitial: !this.directoriesCreatedLate.has(directoryPath),
         followSymlinks: true,
         depth: this.config.recursive ? undefined : 0,
         ignored: this.config.ignoredPatterns,
@@ -354,6 +369,10 @@ export class FileObserver extends EventEmitter {
         }${this.shouldUsePolling ? ' (polling)' : ''}`
       );
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.watchOnceCreated(directoryPath, category);
+        return;
+      }
       this.logger.error(`Failed to watch directory ${directoryPath}:`, error);
       if (this.retryCount < this.config.maxRetries) {
         this.retryCount++;
@@ -366,6 +385,32 @@ export class FileObserver extends EventEmitter {
         throw error;
       }
     }
+  }
+
+  /**
+   * Start watching a directory once it exists.
+   *
+   * A custom workspace's `resources/<type>/` is created by its first write, after the watchers
+   * were registered at startup. Retrying three times and then throwing left every later edit in
+   * that directory unobserved until a restart. Polled rather than watched through a parent: the
+   * nearest existing parent is usually the workspace, which can also be the runtime root the
+   * server writes its logs under.
+   */
+  private watchOnceCreated(directoryPath: string, category?: string): void {
+    this.logger.info(
+      `👁️ FileObserver: ${directoryPath} does not exist yet; watching it once it is created`
+    );
+    const timer = setInterval(() => {
+      if (!fs.existsSync(directoryPath)) return;
+      clearInterval(timer);
+      this.pendingDirectories.delete(directoryPath);
+      this.directoriesCreatedLate.add(directoryPath);
+      this.watchDirectory(directoryPath, category).catch((error: unknown) => {
+        this.logger.error(`Failed to watch created directory ${directoryPath}:`, error);
+      });
+    }, PENDING_DIRECTORY_POLL_MS);
+    timer.unref();
+    this.pendingDirectories.set(directoryPath, timer);
   }
 
   /**
@@ -396,6 +441,13 @@ export class FileObserver extends EventEmitter {
    * Remove a directory from watching
    */
   async unwatchDirectory(directoryPath: string): Promise<void> {
+    const pending = this.pendingDirectories.get(directoryPath);
+    if (pending !== undefined) {
+      clearInterval(pending);
+      this.pendingDirectories.delete(directoryPath);
+      return;
+    }
+
     const watcher = this.watchers.get(directoryPath);
     if (!watcher) {
       this.logger.debug(`Directory not being watched: ${directoryPath}`);

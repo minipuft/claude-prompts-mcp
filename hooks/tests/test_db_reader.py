@@ -147,7 +147,7 @@ def state_db(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MCP_WORKSPACE", str(workspace))
     # Any of these would out-rank a stale value from the developer's own shell.
-    for leaked in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
+    for leaked in ("CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
         monkeypatch.delenv(leaked, raising=False)
 
     yield conn
@@ -160,7 +160,7 @@ def no_state_db(tmp_path, monkeypatch):
     workspace = tmp_path / "empty-workspace"
     (workspace / "server" / "runtime-state").mkdir(parents=True)
     monkeypatch.setenv("MCP_WORKSPACE", str(workspace))
-    for leaked in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
+    for leaked in ("CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
         monkeypatch.delenv(leaked, raising=False)
     return workspace
 
@@ -605,6 +605,7 @@ class TestStateDbPathResolution:
         for leaked in (
             "MCP_RUNTIME_ROOT",
             "CLAUDE_PLUGIN_ROOT",
+            "CLAUDE_PLUGIN_DATA",
             "PLUGIN_ROOT",
             "GEMINI_EXTENSION_PATH",
             "extensionPath",
@@ -624,6 +625,7 @@ class TestStateDbPathResolution:
         for leaked in (
             "MCP_RUNTIME_ROOT",
             "CLAUDE_PLUGIN_ROOT",
+            "CLAUDE_PLUGIN_DATA",
             "PLUGIN_ROOT",
             "GEMINI_EXTENSION_PATH",
             "extensionPath",
@@ -643,7 +645,70 @@ class TestStateDbPathResolution:
         (rt / "runtime-state" / "state.db").touch()
         monkeypatch.setenv("MCP_WORKSPACE", str(ws))
         monkeypatch.setenv("MCP_RUNTIME_ROOT", str(rt))
-        for leaked in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
+        for leaked in (
+            "CLAUDE_PLUGIN_ROOT",
+            "CLAUDE_PLUGIN_DATA",
+            "PLUGIN_ROOT",
+            "GEMINI_EXTENSION_PATH",
+            "extensionPath",
+        ):
             monkeypatch.delenv(leaked, raising=False)
 
         assert workspace.get_state_db_path() == rt / "runtime-state" / "state.db"
+
+
+class TestClaudePluginDataStateDb:
+    """The Claude Code plugin runs its server with MCP_RUNTIME_ROOT=${CLAUDE_PLUGIN_DATA},
+    so state.db lives in the plugin data directory. Hooks do not inherit that setting;
+    they receive CLAUDE_PLUGIN_DATA and CLAUDE_PLUGIN_ROOT from Claude Code. Without the
+    data candidate a hook finds nothing, or a state.db an earlier plugin version left
+    in the install directory.
+    """
+
+    OTHER_ROOTS = ("MCP_WORKSPACE", "MCP_RUNTIME_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath")
+
+    @staticmethod
+    def _seed(root):
+        (root / "runtime-state").mkdir(parents=True)
+        db_path = root / "runtime-state" / "state.db"
+        db_path.touch()
+        return db_path
+
+    def test_the_plugin_data_state_db_outranks_the_install_directory(self, tmp_path, monkeypatch):
+        import workspace
+
+        self._seed(tmp_path / "install")
+        data_db = self._seed(tmp_path / "data")
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "install"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+        for leaked in self.OTHER_ROOTS:
+            monkeypatch.delenv(leaked, raising=False)
+
+        assert workspace.get_state_db_path() == data_db
+
+    @pytest.mark.parametrize("value", [None, "", "   "], ids=["unset", "empty", "blank"])
+    def test_unset_or_blank_plugin_data_adds_no_candidate(self, tmp_path, monkeypatch, value):
+        import workspace
+
+        install_db = self._seed(tmp_path / "install")
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "install"))
+        if value is None:
+            monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
+        else:
+            monkeypatch.setenv("CLAUDE_PLUGIN_DATA", value)
+        for leaked in self.OTHER_ROOTS:
+            monkeypatch.delenv(leaked, raising=False)
+
+        assert workspace.get_state_db_path() == install_db
+
+    def test_mcp_runtime_root_outranks_plugin_data(self, tmp_path, monkeypatch):
+        import workspace
+
+        runtime_db = self._seed(tmp_path / "rt")
+        self._seed(tmp_path / "data")
+        monkeypatch.setenv("MCP_RUNTIME_ROOT", str(tmp_path / "rt"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+        for leaked in ("MCP_WORKSPACE", "CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath"):
+            monkeypatch.delenv(leaked, raising=False)
+
+        assert workspace.get_state_db_path() == runtime_db

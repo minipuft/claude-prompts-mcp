@@ -367,12 +367,12 @@ Supported presets:
 
 ### Environment Variables
 
-| Variable             | Purpose                                                                                         | Example                          |
-| -------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------- |
-| `MCP_WORKSPACE`      | Base directory containing prompts/, config.json; must exist, or startup is refused              | `/home/user/my-prompts`          |
-| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts); must exist, or startup is refused | `/path/to/resources`             |
-| `MCP_CONFIG_PATH`    | Custom server config.json; must be a readable JSON file, or startup is refused                  | `/path/to/config.json`           |
-| `LOG_LEVEL`          | Logging verbosity                                                                               | `debug`, `info`, `warn`, `error` |
+| Variable             | Purpose                                                                                                                                                                        | Example                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| `MCP_WORKSPACE`      | Base directory for `resources/` and `config.json`; must exist, or startup is refused. Resources you create are saved under its `resources/<type>/`, created on the first write | `/home/user/my-prompts`          |
+| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts); must exist, or startup is refused                                                                                | `/path/to/resources`             |
+| `MCP_CONFIG_PATH`    | Custom server config.json; must be a readable JSON file, or startup is refused                                                                                                 | `/path/to/config.json`           |
+| `LOG_LEVEL`          | Logging verbosity                                                                                                                                                              | `debug`, `info`, `warn`, `error` |
 
 Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
 `MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
@@ -438,7 +438,7 @@ npx claude-prompts --startup-test --verbose
 
 **"No prompts found"**
 
-- Check `MCP_WORKSPACE` points to a directory containing `resources/prompts/` (a workspace that does not exist at all refuses startup, with the resolved path on stderr)
+- Check `MCP_WORKSPACE` points to your workspace. Prompts you create are saved under its `resources/prompts/`, created on the first write, and a workspace that does not exist at all refuses startup, with the resolved path on stderr
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
 **"Framework not found"**

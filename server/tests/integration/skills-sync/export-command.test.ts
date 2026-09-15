@@ -17,10 +17,11 @@
  * Only the I/O location is redirected, via MCP_SERVER_ROOT + an outputDir override.
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { mkdir, readFile, writeFile, rm, access, symlink } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, access, symlink, cp } from 'node:fs/promises';
 import { mkdtempSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 
 import {
@@ -28,6 +29,11 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+
+// The real `server/` root, computed rather than hardcoded so a directory move does not
+// silently stop this file from finding the resources it copies fixtures from below.
+const REAL_SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const REAL_RESOURCES = path.join(REAL_SERVER_ROOT, 'resources');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1070,6 +1076,56 @@ describe('Export Command Integration', () => {
       const skill = await promptWithScriptTool('tooled', clientId);
       expect(skill).toContain('Word Counter');
       expect(skill).toContain('tools/word_count/script.py');
+    });
+  });
+
+  // ── strategic_worker excludes its category's auto-gates ────────────────────
+
+  describe('strategic_worker export (real prompt.yaml, real gates)', () => {
+    // Copies the PRODUCTION resource, not a synthetic fixture: `gateConfiguration.exclude`
+    // in the real prompt.yaml lists every gate that auto-activates for the `development`
+    // category, and a maintainer emptying that list should turn this test red — a fixture
+    // with its own copy of the exclude array would not observe that mutation.
+    async function exportRealStrategicWorker() {
+      await cp(path.join(REAL_RESOURCES, 'gates'), path.join(serverRoot, 'resources', 'gates'), {
+        recursive: true,
+      });
+      const promptDir = path.join(
+        serverRoot,
+        'resources',
+        'prompts',
+        'development',
+        'strategic_worker'
+      );
+      await mkdir(promptDir, { recursive: true });
+      await cp(path.join(REAL_RESOURCES, 'prompts', 'development', 'strategic_worker'), promptDir, {
+        recursive: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+    }
+
+    it('registers zero gate refs, so the Quality Gates section is absent', async () => {
+      await exportRealStrategicWorker();
+
+      const skill = await readFile(path.join(outputDir, 'strategic_worker', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('## Quality Gates');
+    });
+
+    it('renders no hooks: frontmatter', async () => {
+      await exportRealStrategicWorker();
+
+      const skill = await readFile(path.join(outputDir, 'strategic_worker', 'SKILL.md'), 'utf-8');
+      expect(frontmatterOf(skill)['hooks']).toBeUndefined();
+    });
+
+    it('writes neither hooks/gate-review.py nor a gates/ directory', async () => {
+      await exportRealStrategicWorker();
+
+      expect(
+        await exists(path.join(outputDir, 'strategic_worker', 'hooks', 'gate-review.py'))
+      ).toBe(false);
+      expect(await exists(path.join(outputDir, 'strategic_worker', 'gates'))).toBe(false);
     });
   });
 });
