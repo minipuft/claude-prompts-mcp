@@ -210,7 +210,7 @@ hooks/
 
 ## Data Access
 
-Hooks read prompt/gate metadata from the server's `state.db` (SQLite, read-only via `db_reader.py`), resolved the same way the server resolves its write path: `{MCP_RUNTIME_ROOT || MCP_WORKSPACE}/runtime-state/state.db`, with the legacy `{workspace}/server/runtime-state/` layout probed as a fallback. Hook-owned session state is stored in `server/runtime-state/hooks-state.db` (SQLite, read-write via `hook_state_store.py`).
+Hooks read prompt/gate metadata from the server's `state.db` (SQLite, read-only via `db_reader.py`), resolved the same way the server resolves its write path: `{MCP_RUNTIME_ROOT || MCP_WORKSPACE}/runtime-state/state.db`. Hooks do not inherit the server's environment, so `${CLAUDE_PLUGIN_DATA}/runtime-state/state.db` is probed after `MCP_RUNTIME_ROOT` and before the workspace: the Claude Code plugin runs its server with `MCP_RUNTIME_ROOT=${CLAUDE_PLUGIN_DATA}`, and Claude Code gives hooks that variable. The legacy `{workspace}/server/runtime-state/` layout is probed last. Hook-owned session state is stored in `server/runtime-state/hooks-state.db` under the hook's workspace (SQLite, read-write via `hook_state_store.py`); on a Claude Code plugin install that is the plugin root, which a plugin update replaces.
 
 ## Other Platforms
 
