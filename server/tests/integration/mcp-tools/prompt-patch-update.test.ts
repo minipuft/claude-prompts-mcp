@@ -143,6 +143,9 @@ function createHarness(workspaceDir: string): Harness {
       isAutoVersionEnabled: () => true,
       loadHistory: jest.fn(async () => ({ current_version: 3 })),
       recordEditResult,
+      // The create-path writer: no prior state to bridge, so `createPrompt` calls this
+      // directly rather than through `recordEditResult`.
+      saveVersion: jest.fn(async () => ({ success: true, version: 1 })),
       rollback,
       // Bridge the test-configured `rollback` double into the two-phase contract the processor
       // now calls (resolveRollbackTarget → commitEdit → write). Tests keep configuring

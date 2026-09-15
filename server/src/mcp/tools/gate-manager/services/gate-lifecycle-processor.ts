@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { ensureTrailingNewline } from './gate-file-writer.js';
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
@@ -53,7 +54,43 @@ export class GateLifecycleProcessor {
       enforcementMode,
     };
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
+    // numbering every edit uses, which a fresh id resolves to 1 on its own. No bridge: a create
+    // has no prior live state to carry across, unlike an edit of an unrecorded gate. Runs as the
+    // writer's `commit` step (P4.2 / SF-3 contract, matching `handleUpdate` below) so a
+    // persistence failure aborts the create with nothing written.
+    //
+    // `guidance` is normalized through the SAME `ensureTrailingNewline` the writer applies to
+    // `guidance.md` — measured: recording the raw, un-normalized value here recorded a snapshot
+    // that a disk read-back never matches, so the first update bridged every single create.
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              await this.ctx.versionHistoryService.saveVersion(
+                'gate',
+                id,
+                projectWriteModel(
+                  id,
+                  { ...gateData, guidance: ensureTrailingNewline(gateData.guidance) },
+                  gateSnapshotContract.projectedFields
+                ),
+                { description: 'Created via resource_manager', diff_summary: '' }
+              );
+            },
+          }
+        : {};
+
+    // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
+    // against — so `suppliedKeys` is left at the writer's own default (every gate-data key)
+    // rather than computing one, the same convention `updatePromptImplementation`'s create
+    // caller uses in `prompt-lifecycle-processor.ts`.
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      undefined,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to create gate: ${result.error}`);
     }
