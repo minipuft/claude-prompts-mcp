@@ -1786,6 +1786,11 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
       return hadDefinition || hadGuide;
     }
 
+    /** Mirrors `FrameworkManager.removeFramework`; this double holds no selection to move. */
+    removeFramework(id: string): Promise<boolean> {
+      return Promise.resolve(this.unregister(id));
+    }
+
     /** Test-only drift: forget the framework while leaving its files on disk. */
     forget(id: string): void {
       this.unregister(id);
@@ -1811,6 +1816,8 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
       getServerRoot: () => tempDir,
       getFrameworksDirectory: () => path.join(tempDir, 'resources', 'frameworks'),
       getBundledResourceDirectory: () => undefined,
+      // Delete refuses the configured default; this suite deletes a framework that is not it.
+      getFrameworksConfig: () => ({ defaultFramework: 'cageerf' }),
     } as unknown as ConfigManager;
     fileService = new FrameworkFileWriter({
       logger: mockLogger as unknown as Logger,
