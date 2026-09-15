@@ -85,8 +85,12 @@ yours. Coverage is unchanged: `pre-push` runs it and CI runs it. Pre-commit floo
 `validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
 
 Formatting is covered by `validate:format` in the full CI route and by `pre-commit`'s
-staged-file check; `pre-push` does not check formatting. Anything a generator owns belongs in
-`.prettierignore` with a reason -- otherwise the generator and Prettier disagree.
+staged-file check; `pre-push` does not check formatting. `validate:format` checks every tracked
+`*.json`/`*.md`/`*.yml`/`*.yaml` in the repo, in two passes: repo-level files outside `server/**`
+against the root Prettier config, and every tracked file under `server/**` (including
+`resources/**` and `tests/**`) against `server/.prettierrc.json` and `server/.prettierignore`.
+Anything a generator owns belongs in `.prettierignore` with a reason -- otherwise the generator
+and Prettier disagree.
 
 **Every formatting gate CHECKS; none of them writes** (since 2026-08-25). `pre-commit` and
 `lint-staged` used to `prettier --write` the staged paths and re-`git add` them, so the bytes
@@ -97,7 +101,9 @@ it. It also broke anchored editing: a rewrite between a read and the next fixed-
 makes that edit miss **silently**, which cost real work here on 2026-08-25. `--check` is also
 a strict subset of CI, which only ever checks -- the old `--write` was a local step CI does
 not run, which this section otherwise forbids. Fix with `npm --prefix server run format`
-(repo-level, same file set `validate:format` reads) or `format:server` (server sources).
+(same combined file set `validate:format` reads) or `format:server` (server TS/JS sources plus
+the top-level `server/` config files -- narrower than `format`, since it does not recurse into
+`resources/**` or `tests/**`).
 
 **Format at authoring time; the gate is a backstop, not the boundary.** A gate you routinely
 fail is a gate in the wrong place -- so format on save (editors) or as part of the edit itself
