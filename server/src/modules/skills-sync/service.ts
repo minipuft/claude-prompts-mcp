@@ -4075,7 +4075,15 @@ async function pullCommand(
           continue;
         }
 
-        const sourcePath = ir.sourcePaths[0] ?? '';
+        // Every loader records the file it read, so this should not fire; without the check an edit
+        // would resolve its target against the working directory instead of the resource.
+        const sourcePath = ir.sourcePaths[0];
+        if (sourcePath === undefined) {
+          const reason = `Refusing to pull ${ir.resourceType} ${ir.id}: it has no source file to write the edit back to.`;
+          output.warn(reason);
+          report.failures.push({ id: ir.id, reason });
+          continue;
+        }
         const targetFiles = [
           ...new Set(
             changes.map((change) =>
@@ -4098,8 +4106,7 @@ async function pullCommand(
         }
 
         // Write changes to canonical YAML files
-        const resourceDir = path.dirname(ir.sourcePaths[0] ?? '');
-        if (!resourceDir) continue;
+        const resourceDir = path.dirname(sourcePath);
 
         // Map section names to canonical IR fields for Nunjucks detection
         const sectionToCanonical: Record<string, string | null> = {
@@ -4124,8 +4131,7 @@ async function pullCommand(
 
           if (change.section === 'name' || change.section === 'description') {
             // Update prompt.yaml field
-            const yamlPath = ir.sourcePaths[0] ?? '';
-            if (!yamlPath) continue;
+            const yamlPath = sourcePath;
             const yamlContent = await readOptionalFile(yamlPath);
             if (!yamlContent) continue;
             const doc = yaml.load(yamlContent) as Record<string, unknown>;
