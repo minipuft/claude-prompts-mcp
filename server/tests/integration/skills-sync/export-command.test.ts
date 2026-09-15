@@ -818,6 +818,113 @@ describe('Export Command Integration', () => {
     });
   });
 
+  // ── Removal warnings: re-exporting over a managed SKILL.md ──────────────────
+
+  describe('warns before a re-export removes something the on-disk skill has', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality');
+    });
+
+    it('warns when the hooks block would be dropped', async () => {
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport(); // first export: SKILL.md carries the frontmatter hooks block
+
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        // enforceGateHooks dropped — the second export would lose the block silently.
+      });
+      const out = await runExport();
+
+      expect(
+        out.warns.some((w) => w.includes('reexported') && w.includes('enforceGateHooks'))
+      ).toBe(true);
+    });
+
+    it('does not warn when the hooks block is kept', async () => {
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true, // still opted in — nothing is taken away
+      });
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('enforceGateHooks'))).toBe(false);
+    });
+
+    it('warns when a section present on disk is absent from the new content', async () => {
+      await writePrompt('general', 'extra_section');
+      await writeConfig('claude-code');
+
+      // Hand-written on-disk state, same pattern as the foreign-alias fixture above: a prior
+      // managed export that carried a section this run's compiled content does not produce.
+      const skillDir = path.join(outputDir, 'extra_section');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        [
+          '---',
+          'name: extra_section',
+          'description: extra_section description',
+          'managed-by: claude-prompts-skills-sync',
+          'managed-client: claude-code',
+          'managed-scope: user',
+          'managed-resource-key: prompt:general/extra_section',
+          '---',
+          '',
+          '## Instructions',
+          '',
+          'Old content.',
+          '',
+          '## Extra',
+          '',
+          'Old content this export does not produce.',
+          '',
+        ].join('\n')
+      );
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('extra_section') && w.includes('## Extra'))).toBe(
+        true
+      );
+    });
+
+    it('does not warn about a hand-written SKILL.md with no managed-by marker', async () => {
+      await writePrompt('general', 'handwritten');
+      await writeConfig('claude-code');
+
+      const skillDir = path.join(outputDir, 'handwritten');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        '---\nname: handwritten\ndescription: hand-written\n---\n\n## Extra\n\nHand-written.\n'
+      );
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('handwritten'))).toBe(false);
+    });
+
+    it('does not warn on a first export with nothing on disk yet', async () => {
+      await writePrompt('general', 'fresh');
+      await writeConfig('claude-code');
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('export removes'))).toBe(false);
+    });
+  });
+
   // ── F3 + F4: template fidelity reporting (Wave 2) ──────────────────────────
 
   describe('template fidelity warnings', () => {

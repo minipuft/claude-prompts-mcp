@@ -2123,6 +2123,50 @@ function parseSkillMd(content: string): ParsedSkillMd {
   };
 }
 
+/**
+ * Names what a re-export would take away from a SKILL.md already on disk.
+ *
+ * `enforceGateHooks` moved from always-on to opt-in with no other signal: a skill that had a
+ * frontmatter `hooks` block loses it on the next export unless the prompt YAML opts back in, and
+ * the diff reads as a break rather than a config change. Reports removals only — an added or
+ * reworded section is ordinary sync output, not a warning.
+ */
+function describeSkillRemovals(existing: string, next: string): string[] {
+  const warnings: string[] = [];
+
+  const existingFrontmatter = parseSkillMd(existing).frontmatter;
+  const nextFrontmatter = parseSkillMd(next).frontmatter;
+  if ('hooks' in existingFrontmatter && !('hooks' in nextFrontmatter)) {
+    warnings.push(
+      'export removes the frontmatter hooks block; set enforceGateHooks: true in the prompt YAML to keep it'
+    );
+  }
+
+  // Headings, not `parseSkillMd`'s `sections` map: that map only records the fixed KNOWN section
+  // names (Instructions, Guidance, Arguments, ...), so a hand-added `## Extra` heading would never
+  // surface through it. This reads every `## ` heading in the body, known or not.
+  const headingsOf = (content: string): string[] => {
+    const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
+    const body = fmMatch ? content.slice(fmMatch[0].length) : content;
+    const headings: string[] = [];
+    const headingRegex = /^## (.+)$/gm;
+    let headingMatch;
+    while ((headingMatch = headingRegex.exec(body)) !== null) {
+      headings.push(`## ${headingMatch[1]!.trim()}`);
+    }
+    return headings;
+  };
+
+  const nextHeadings = new Set(headingsOf(next));
+  for (const heading of headingsOf(existing)) {
+    if (!nextHeadings.has(heading)) {
+      warnings.push(`export removes section "${heading}"`);
+    }
+  }
+
+  return warnings;
+}
+
 // ─── Section 3b: Gate & Chain Section Builders ──────────────────────────────
 
 /** Where an exported skill will live, needed to write a cwd-independent hook command. */
@@ -3320,6 +3364,19 @@ async function exportCommand(
           // traversing id would place a skill file outside the directory the operator pointed the
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
+
+          // Warn before overwriting a SKILL.md this tool manages: a hand-written file being
+          // overwritten is a different, pre-existing behaviour (unmarked, never warned about
+          // here) — this only compares against what the tool itself last wrote.
+          if (file.relativePath.endsWith('/SKILL.md')) {
+            const existingSkillMd = await readOptionalFile(fullPath);
+            if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
+              for (const removal of describeSkillRemovals(existingSkillMd, file.content)) {
+                output.warn(`  ${ir.id}: ${removal}`);
+              }
+            }
+          }
+
           if (opts.preview) {
             output.log(`  [preview] ${file.relativePath}`);
           } else {

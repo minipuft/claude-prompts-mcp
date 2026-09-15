@@ -262,6 +262,12 @@ branches all have fallbacks.
 Run `npm run skills:export` and read the warnings: they name every placeholder that stayed literal,
 per prompt, before you ship it.
 
+**A re-export that would take something away says so, too.** Before overwriting a SKILL.md this
+tool already manages, export compares it against what it is about to write and warns on anything
+the new version drops — a frontmatter `hooks` block (for example, a prompt that lost its
+`enforceGateHooks: true`) or a `## ` section present on disk and absent from the new content. Only
+removals are reported; an added or reworded section is ordinary sync output.
+
 ## Which Gates an Exported Skill Carries
 
 A skill does not bundle every gate in the registry, and it does not bundle only the ones a prompt
