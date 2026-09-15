@@ -300,10 +300,10 @@ export class FrameworkStateStore extends EventEmitter {
     try {
       // `load()` synthesizes a valid-looking default when no row exists, so it cannot answer
       // "has this scope ever been written?". Only `exists()` can, and that answer is what
-      // decides between using this scope's state and adopting the pre-scoping global row.
-      const persistedState = (await this.stateStore.exists(effective))
-        ? await this.stateStore.load(effective)
-        : undefined;
+      // decides between using this scope's state and adopting the pre-scoping global row —
+      // and, below, between an absent row (expected, quiet) and a corrupt one (a real warning).
+      const stateExists = await this.stateStore.exists(effective);
+      const persistedState = stateExists ? await this.stateStore.load(effective) : undefined;
 
       if (persistedState != null && this.isValidPersistedState(persistedState)) {
         currentState.frameworkSystemEnabled = persistedState.frameworkSystemEnabled;
@@ -319,7 +319,14 @@ export class FrameworkStateStore extends EventEmitter {
         return;
       }
 
-      this.logger.warn('⚠️ Invalid framework state, falling back to defaults');
+      // No row for this scope is the common, expected case on a fresh runtime root — not a
+      // warning-worthy condition. Only a row that exists and still failed validation above is
+      // actually corrupt.
+      if (!stateExists) {
+        this.logger.debug('No saved framework state found; using defaults');
+      } else {
+        this.logger.warn('⚠️ Invalid framework state, falling back to defaults');
+      }
     } catch (error) {
       this.logger.warn(
         `⚠️ Failed to load framework state: ${
