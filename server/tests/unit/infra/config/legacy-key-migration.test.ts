@@ -521,3 +521,74 @@ describe('reminder guidance config (gates.harnessCovers, gates.reminderTokenBudg
     }
   });
 });
+
+// Row 2.2 (gate-checks-and-reminders): `gates.executeInlineGateDefinitions` is the opt-in the
+// release notes already tell operators to set. It resolved through no fold at all until this row —
+// the knob existed only on the engine-side type, so a config.json that set it was refused by the
+// schema and read by nobody. These pin the fold, the default, and both settable-key surfaces.
+describe('inline gate execution opt-in (gates.executeInlineGateDefinitions)', () => {
+  it('resolves an explicit opt-in', async () => {
+    const { manager, cleanup } = await loadConfigFrom({
+      gates: { enabled: true, executeInlineGateDefinitions: true },
+    });
+
+    expect(manager.getGatesConfig().executeInlineGateDefinitions).toBe(true);
+
+    await cleanup();
+  });
+
+  it('defaults to false when the key is absent', async () => {
+    const { manager, cleanup } = await loadConfigFrom({ gates: {} });
+
+    // False, not undefined: stage 11 reads `=== true`, so an unset key must resolve to the
+    // release's stated default rather than to the absence of one.
+    expect(manager.getGatesConfig().executeInlineGateDefinitions).toBe(false);
+
+    await cleanup();
+  });
+
+  it('passes schema validation, where an unknown gates key does not', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'cfg-inline-gates-'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const validate = async (gates: Record<string, unknown>) => {
+      const configPath = path.join(dir, `${Object.keys(gates).join('-')}.json`);
+      await writeFile(configPath, JSON.stringify({ gates }), 'utf8');
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      return manager.getSchemaValidation();
+    };
+
+    expect(await validate({ enabled: true, executeInlineGateDefinitions: true })).toMatchObject({
+      status: 'valid',
+      valid: true,
+    });
+
+    // POSITIVE CONTROL: the check above is only evidence if the same probe rejects a key the
+    // schema does not declare — otherwise it would pass against a schema that accepts anything.
+    const nonsense = await validate({ enabled: true, nonsenseKey: true });
+    expect(nonsense).toMatchObject({ status: 'invalid', valid: false });
+    expect(nonsense?.errors.some((line) => line.includes('nonsenseKey'))).toBe(true);
+
+    warnSpy.mockRestore();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('is settable on both surfaces (cli-shared and mcp/tools), unlike an unknown key', async () => {
+    const cli = await import('../../../../src/cli-shared/config-input-validator.js');
+    const mcp = await import('../../../../src/mcp/tools/config-utils.js');
+
+    for (const surface of [cli, mcp]) {
+      expect(surface.CONFIG_VALID_KEYS).toContain('gates.executeInlineGateDefinitions');
+      expect(
+        surface.validateConfigInput('gates.executeInlineGateDefinitions', 'true')
+      ).toMatchObject({ valid: true, convertedValue: true });
+
+      // POSITIVE CONTROL for the same two calls.
+      expect(surface.CONFIG_VALID_KEYS).not.toContain('gates.nonsenseKey');
+      expect(surface.validateConfigInput('gates.nonsenseKey', 'true')).toMatchObject({
+        valid: false,
+      });
+    }
+  });
+});

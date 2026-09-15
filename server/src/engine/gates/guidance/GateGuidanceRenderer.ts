@@ -18,7 +18,7 @@ import type { GateActivationContext, LightweightGateDefinition } from '../types.
 import { DEFAULT_GATES_CONFIG } from '#shared/types/core-config.js';
 
 /**
- * The slice of `gates` config this renderer reads. Narrower than `ResolvedGateSettings` on purpose:
+ * The slice of `gates` config this renderer reads. Narrower than `GateSystemSettings` on purpose:
  * `ConfigManager.getGatesConfig()` satisfies it structurally, and a test can supply a literal.
  */
 export interface GateGuidanceConfig {
