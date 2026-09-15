@@ -143,19 +143,6 @@ function adoptInertSpellings(root: Record<string, unknown>): void {
 }
 
 /**
- * Writes a schema warning to stderr directly.
- *
- * Not `logger.warn`: the module logger is built for the STDIO transport, and under STDIO it writes
- * to the console only when `CI` or `NODE_ENV=test` is set — measured 2026-09-14, a STDIO logger's
- * `warn` printed nothing to stderr. A config mistake reported only into a temp-dir log file is not
- * reported. `console.warn` is stderr, which the STDIO transport leaves free (it owns stdout), and
- * `setupConsoleRedirection` does not replace it.
- */
-function writeSchemaWarning(message: string): void {
-  console.warn(message);
-}
-
-/**
  * Default configuration values
  */
 const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
@@ -937,7 +924,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     this.lastWarnedSchemaSignature = signature;
 
     if (result.status === 'unavailable') {
-      writeSchemaWarning(
+      logger.warn(
         `[CONFIG] Could not read the config schema at ${schemaPath}, so ${this.configPath} was not ` +
           `checked against it (${result.errors.join('; ')}). The server keeps running.`
       );
@@ -945,7 +932,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     }
 
     for (const error of result.errors) {
-      writeSchemaWarning(
+      logger.warn(
         `[CONFIG] ${this.configPath} does not match its schema: ${error} — the server keeps ` +
           'running, but this setting may not take effect as written.'
       );
