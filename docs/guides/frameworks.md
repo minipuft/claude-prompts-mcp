@@ -74,6 +74,11 @@ Use the `@` operator to apply a specific framework to a single prompt without ch
 prompt_engine(command: "@REACT >>my_prompt")
 ```
 
+`@` recognizes the frameworks that exist when the command runs. A framework created with
+`resource_manager` applies through `@<id>` straight away, without a restart, and once it is deleted
+`@<id>` is left as literal text. A word that names no framework is also left as literal text, which
+is what keeps `@docs/` or `@mention` in a command from being read as an operator.
+
 ### Disable for a Single Request
 
 Use modifiers to suppress framework injection:
