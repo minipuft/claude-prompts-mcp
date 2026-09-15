@@ -15,7 +15,11 @@
 import { tokenizeCommand } from './command-tokenizer.js';
 import { RESERVED_OPERATORS } from './operator-patterns.js';
 import { normalizeSymbolicPrefixes } from './parser-utils.js';
-import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
+import {
+  SymbolicCommandParser,
+  createSymbolicCommandParser,
+  type FrameworkIdLookup,
+} from './symbolic-operator-parser.js';
 import scoringContract from '../../../../tooling/contracts/registries/suggestion-scoring.json' with { type: 'json' };
 
 import type { TokenizedCommand } from './command-tokenizer.js';
@@ -91,7 +95,6 @@ export class UnifiedCommandParser {
   private logger: Logger;
   private strategies: ParsingStrategy[];
   private symbolicParser: SymbolicCommandParser;
-  private registeredFrameworkIds: Set<string>;
 
   // Parsing statistics for monitoring
   // TODO: Wire stats to MetricsCollector for telemetry dashboard
@@ -106,32 +109,15 @@ export class UnifiedCommandParser {
 
   /**
    * @param logger - Logger instance
-   * @param registeredFrameworkIds - Optional set of registered framework IDs (uppercase).
-   *   When provided, only @framework operators matching registered IDs are detected.
-   *   Unregistered @word patterns are silently skipped (treated as literal text).
+   * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
+   *   @framework operators it accepts are detected; any other @word stays literal text.
    */
-  constructor(logger: Logger, registeredFrameworkIds?: Set<string>) {
+  constructor(logger: Logger, isRegisteredFramework?: FrameworkIdLookup) {
     this.logger = logger;
-    this.registeredFrameworkIds = registeredFrameworkIds ?? new Set();
-    this.symbolicParser = createSymbolicCommandParser(logger, this.registeredFrameworkIds);
+    this.symbolicParser = createSymbolicCommandParser(logger, isRegisteredFramework);
     this.strategies = this.initializeStrategies();
     this.logger.debug(
       `UnifiedCommandParser initialized with ${this.strategies.length} parsing strategies`
-    );
-  }
-
-  /**
-   * Update the set of registered framework IDs.
-   * This allows late binding when FrameworkManager becomes available after construction.
-   * @param frameworkIds Set of framework IDs (will be normalized to uppercase)
-   */
-  updateRegisteredFrameworkIds(frameworkIds: Set<string>): void {
-    // Normalize to uppercase for consistent matching
-    this.registeredFrameworkIds = new Set(Array.from(frameworkIds).map((id) => id.toUpperCase()));
-    // Recreate symbolic parser with updated framework IDs
-    this.symbolicParser = createSymbolicCommandParser(this.logger, this.registeredFrameworkIds);
-    this.logger.debug(
-      `[UnifiedCommandParser] Updated registered framework IDs: ${Array.from(this.registeredFrameworkIds).join(', ')}`
     );
   }
 
@@ -744,12 +730,12 @@ export class UnifiedCommandParser {
 /**
  * Factory function to create unified command parser
  * @param logger - Logger instance
- * @param registeredFrameworkIds - Optional set of registered framework IDs (uppercase).
- *   When provided, only @framework operators matching registered IDs are detected.
+ * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
+ *   @framework operators it accepts are detected.
  */
 export function createUnifiedCommandParser(
   logger: Logger,
-  registeredFrameworkIds?: Set<string>
+  isRegisteredFramework?: FrameworkIdLookup
 ): UnifiedCommandParser {
-  return new UnifiedCommandParser(logger, registeredFrameworkIds);
+  return new UnifiedCommandParser(logger, isRegisteredFramework);
 }

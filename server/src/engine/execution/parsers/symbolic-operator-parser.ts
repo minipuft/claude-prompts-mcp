@@ -26,6 +26,17 @@ import { ValidationError } from '#shared/utils/index.js';
 import { mintSequentialIds } from '#shared/utils/node-order.js';
 
 /**
+ * Answers whether an uppercase framework id names a registered framework at the moment of the
+ * call.
+ *
+ * A function rather than a set of ids, because the framework set changes while the server runs:
+ * `resource_manager` creates, updates and deletes frameworks, and hot reload follows their
+ * folders. A set copied when the parser was built kept every one of those changes out of `@id`
+ * detection until restart, while the rest of the server already saw them.
+ */
+export type FrameworkIdLookup = (normalizedId: string) => boolean;
+
+/**
  * Parser responsible for detecting and structuring symbolic command operators.
  *
  * The parser keeps regex-based detection isolated from the unified parser so that
@@ -34,10 +45,10 @@ import { mintSequentialIds } from '#shared/utils/node-order.js';
 export class SymbolicCommandParser {
   private readonly logger: Logger;
   /**
-   * Set of registered framework IDs (normalized to uppercase).
-   * Used to validate @framework operators - unregistered IDs are skipped.
+   * Validates `@framework` operators: an id the lookup rejects is left as literal text.
+   * Absent means no framework knowledge, and every `@word` is treated as a framework operator.
    */
-  private readonly registeredFrameworkIds: Set<string>;
+  private readonly isRegisteredFramework: FrameworkIdLookup | undefined;
 
   /**
    * Operator patterns derived from SSOT registry.
@@ -57,13 +68,12 @@ export class SymbolicCommandParser {
 
   /**
    * @param logger - Logger instance
-   * @param registeredFrameworkIds - Optional set of registered framework IDs (uppercase).
-   *   When provided, only @framework operators matching registered IDs are detected.
-   *   Unregistered @word patterns are silently skipped (treated as literal text).
+   * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
+   *   @framework operators it accepts are detected; any other @word stays literal text.
    */
-  constructor(logger: Logger, registeredFrameworkIds?: Set<string>) {
+  constructor(logger: Logger, isRegisteredFramework?: FrameworkIdLookup) {
     this.logger = logger;
-    this.registeredFrameworkIds = registeredFrameworkIds ?? new Set();
+    this.isRegisteredFramework = isRegisteredFramework;
   }
 
   /**
@@ -266,7 +276,7 @@ export class SymbolicCommandParser {
 
       // Only treat as framework operator if it's a registered framework
       // This allows @docs/, @mention, etc. to pass through as literal text
-      if (this.registeredFrameworkIds.size === 0 || this.registeredFrameworkIds.has(normalizedId)) {
+      if (this.isRegisteredFramework === undefined || this.isRegisteredFramework(normalizedId)) {
         operatorTypes.push('framework');
         operators.push({
           type: 'framework',
@@ -886,7 +896,7 @@ export class SymbolicCommandParser {
 
 export function createSymbolicCommandParser(
   logger: Logger,
-  registeredFrameworkIds?: Set<string>
+  isRegisteredFramework?: FrameworkIdLookup
 ): SymbolicCommandParser {
-  return new SymbolicCommandParser(logger, registeredFrameworkIds);
+  return new SymbolicCommandParser(logger, isRegisteredFramework);
 }
