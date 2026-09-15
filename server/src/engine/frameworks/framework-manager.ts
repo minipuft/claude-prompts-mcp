@@ -17,7 +17,6 @@ import { substituteTemplateVariables } from './prompt-guidance/template-variable
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkSelection,
   FrameworkSelectionCriteria,
   FrameworkGuide,
 } from './types/index.js';
@@ -52,8 +51,12 @@ interface FrameworkStateAccessor {
  * Configuration for FrameworkManager
  */
 export interface FrameworkManagerConfig {
-  /** Default framework to use when none specified */
-  defaultFramework?: string;
+  /**
+   * Reads the default framework each time one is needed, so a change to
+   * `frameworks.defaultFramework` while the server runs reaches the fallback without a restart.
+   * Absent means {@link DEFAULT_FRAMEWORK_ID}.
+   */
+  defaultFramework?: () => string;
   /** Enable debug logging */
   debug?: boolean;
 }
@@ -107,14 +110,12 @@ export class FrameworkManager extends BaseResourceHandler<
 > {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
   private frameworkRegistry: FrameworkRegistry | null = null;
-  private defaultFramework: string = DEFAULT_FRAMEWORK_ID;
+  private readonly readDefaultFramework: () => string;
   private frameworkStateStore?: FrameworkStateAccessor;
 
   constructor(logger: Logger, config: FrameworkManagerConfig = {}) {
     super(logger, config);
-    if (config.defaultFramework) {
-      this.defaultFramework = config.defaultFramework;
-    }
+    this.readDefaultFramework = config.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID);
   }
 
   // ============================================================================
@@ -139,7 +140,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected applyDefaultConfig(config: FrameworkManagerConfig): FrameworkManagerConfig {
     return {
-      defaultFramework: config.defaultFramework ?? DEFAULT_FRAMEWORK_ID,
+      defaultFramework: config.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID),
       debug: config.debug ?? false,
     };
   }
@@ -384,9 +385,10 @@ export class FrameworkManager extends BaseResourceHandler<
     }
 
     // Fallback to default framework
-    const defaultFw = this.getFramework(this.defaultFramework);
+    const defaultFrameworkId = this.readDefaultFramework();
+    const defaultFw = this.getFramework(defaultFrameworkId);
     if (!defaultFw) {
-      throw new Error(`Default framework ${this.defaultFramework} not found`);
+      throw new Error(`Default framework ${defaultFrameworkId} not found`);
     }
 
     this.logger.debug(`Framework selected: ${defaultFw.name} (default fallback)`);
@@ -543,18 +545,6 @@ export class FrameworkManager extends BaseResourceHandler<
       throw new Error('Framework registry not initialized');
     }
     return this.frameworkRegistry;
-  }
-
-  /**
-   * Set default framework
-   */
-  setDefaultFramework(framework: FrameworkSelection): void {
-    if (this.hasResource(framework)) {
-      this.defaultFramework = framework;
-      this.logger.info(`Default framework set to: ${framework}`);
-    } else {
-      throw new Error(`Framework ${framework} not found`);
-    }
   }
 
   /**

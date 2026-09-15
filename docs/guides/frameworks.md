@@ -72,6 +72,10 @@ setting names another framework. If neither the saved selection nor `defaultFram
 registered framework when the server starts, the server refuses to start, and the error names
 `frameworks.defaultFramework`; it does not pick another framework in its place.
 
+The server reads `defaultFramework` each time it needs it, and reloads `config.json` when the file
+changes, so an edit to the setting applies to this fallback and to the delete refusal without a
+restart.
+
 Isolation depends on each project resolving a distinct scope id. Confirm it in the startup log:
 
 ```

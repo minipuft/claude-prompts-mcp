@@ -46,8 +46,13 @@ export interface PersistedFrameworkState {
 export interface FrameworkStateStoreOptions {
   /** Pre-built store; supply to inject a test double or share an engine. */
   stateStore?: SqliteStateStore<PersistedFrameworkState>;
-  /** Framework for scopes with no persisted row. Defaults to {@link DEFAULT_FRAMEWORK_ID}. */
-  defaultFramework?: string;
+  /**
+   * Reads the configured default framework each time it is needed: for scopes with no persisted
+   * row, and as the fallback when the selected framework is missing or removed. A function rather
+   * than a value, so a change to `frameworks.defaultFramework` while the server runs applies
+   * without a restart. Absent means {@link DEFAULT_FRAMEWORK_ID}.
+   */
+  defaultFramework?: () => string;
   /** Scope applied when a caller supplies none — the project this process serves. */
   defaultScope?: StateStoreOptions;
 }
@@ -127,7 +132,7 @@ export class FrameworkStateStore extends EventEmitter {
   };
   private isInitialized: boolean = false;
   private readonly serverRoot: string;
-  private readonly defaultFramework: string;
+  private readonly readDefaultFramework: () => string;
   private readonly defaultScope?: StateStoreOptions;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
 
@@ -135,7 +140,7 @@ export class FrameworkStateStore extends EventEmitter {
     super();
     this.logger = logger;
     this.serverRoot = serverRoot;
-    this.defaultFramework = options.defaultFramework ?? DEFAULT_FRAMEWORK_ID;
+    this.readDefaultFramework = options.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID);
     this.defaultScope = options.defaultScope;
 
     if (options.stateStore) {
@@ -147,7 +152,7 @@ export class FrameworkStateStore extends EventEmitter {
     const defaultKey = resolveContinuityScopeId(this.defaultScope);
     this.scopedStates.set(
       defaultKey,
-      FrameworkStateStore.createDefaultState(this.defaultFramework)
+      FrameworkStateStore.createDefaultState(this.readDefaultFramework())
     );
     this.scopesByKey.set(defaultKey, this.defaultScope);
   }
@@ -187,7 +192,7 @@ export class FrameworkStateStore extends EventEmitter {
     const key = this.resolveStateKey(scope);
     let state = this.scopedStates.get(key);
     if (!state) {
-      state = FrameworkStateStore.createDefaultState(this.defaultFramework);
+      state = FrameworkStateStore.createDefaultState(this.readDefaultFramework());
       this.scopedStates.set(key, state);
       this.scopesByKey.set(key, this.effectiveScope(scope));
     }
@@ -212,8 +217,9 @@ export class FrameworkStateStore extends EventEmitter {
       // The one framework manager the server uses: the tools adopt it, and `resource_manager` and
       // hot reload change the frameworks it holds. Its registry reads the framework loader as it is
       // now, so the loader must already be configured with the workspace directories.
+      // Given the same reader, so its own fallback answers the value this store falls back to.
       const frameworkManager = await createFrameworkManager(this.logger, {
-        defaultFramework: this.defaultFramework,
+        defaultFramework: this.readDefaultFramework,
       });
       this.frameworkManager = frameworkManager;
 
@@ -267,7 +273,7 @@ export class FrameworkStateStore extends EventEmitter {
           defaultState: () => ({
             version: '1.0.0',
             frameworkSystemEnabled: false,
-            activeFramework: this.defaultFramework,
+            activeFramework: this.readDefaultFramework(),
             lastSwitchedAt: new Date().toISOString(),
             switchReason: 'Initial framework selection',
           }),
@@ -473,34 +479,36 @@ export class FrameworkStateStore extends EventEmitter {
    *
    * The one recovery for a selection naming a framework the manager does not have, whether it was
    * missing at startup or removed while the server ran. It selects `frameworks.defaultFramework`,
-   * the framework an operator declared, rather than whichever framework is listed first. Memory is
-   * updated first, and a failed persist propagates to the caller.
+   * the framework an operator declared, rather than whichever framework is listed first, and reads
+   * it now rather than at startup. Memory is updated first, and a failed persist propagates to the
+   * caller.
    */
   private async selectConfiguredDefault(
     manager: FrameworkManager,
     scope: StateStoreOptions | undefined,
     reason: string
   ): Promise<void> {
-    if (manager.getFramework(this.defaultFramework) === undefined) {
+    const defaultFramework = this.readDefaultFramework();
+    if (manager.getFramework(defaultFramework) === undefined) {
       throw new Error(
-        `${reason}, and the configured default framework '${this.defaultFramework}' is not ` +
+        `${reason}, and the configured default framework '${defaultFramework}' is not ` +
           `registered either. Set frameworks.defaultFramework to a registered framework.`
       );
     }
 
     const state = this.getOrCreateScopedState(scope);
     const previous = state.activeFramework;
-    const switchReason = `${reason}; selected the configured default framework '${this.defaultFramework}'`;
+    const switchReason = `${reason}; selected the configured default framework '${defaultFramework}'`;
     this.scopedStates.set(this.resolveStateKey(scope), {
       ...state,
-      activeFramework: this.defaultFramework,
+      activeFramework: defaultFramework,
       previousFramework: previous,
       switchedAt: new Date(),
       switchReason,
     });
     this.switchHistory.push({
       from: previous,
-      to: this.defaultFramework,
+      to: defaultFramework,
       timestamp: new Date(),
       reason: switchReason,
     });
@@ -508,7 +516,7 @@ export class FrameworkStateStore extends EventEmitter {
     await this.saveStateToFile(scope);
 
     this.logger.warn(switchReason);
-    this.emit('framework-switched', previous, this.defaultFramework, switchReason);
+    this.emit('framework-switched', previous, defaultFramework, switchReason);
   }
 
   /**

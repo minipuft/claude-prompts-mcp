@@ -60,7 +60,9 @@ describe('FrameworkStateStore (persistence)', () => {
   // with no reset, so a second temp root would silently reuse this suite's first database.
   test('a scope with no persisted row resolves to the configured default framework', async () => {
     const logger = createLogger();
-    const mgr = await createFrameworkStateStore(logger, tmpRoot, { defaultFramework: 'radiant' });
+    const mgr = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultFramework: () => 'radiant',
+    });
 
     // Without the config wiring this reported the built-in CAGEERF fallback.
     const unseen = { workspaceId: 'workspace-with-no-persisted-framework' };
@@ -91,7 +93,7 @@ describe('FrameworkStateStore (persistence)', () => {
     // The suite's first test wrote 'react' under the unscoped 'default' row, standing in
     // for state written before scope ids existed.
     const migrated = await createFrameworkStateStore(logger, tmpRoot, {
-      defaultFramework: 'radiant',
+      defaultFramework: () => 'radiant',
       defaultScope: { workspaceId: 'project-upgrading' },
     });
 
@@ -104,7 +106,9 @@ describe('FrameworkStateStore (persistence)', () => {
   test('the configured default does not override a scope that already persisted a switch', async () => {
     const logger = createLogger();
     // tmpRoot still holds the 'react' row written by the restoration test above.
-    const mgr = await createFrameworkStateStore(logger, tmpRoot, { defaultFramework: 'radiant' });
+    const mgr = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultFramework: () => 'radiant',
+    });
 
     expect(mgr.getCurrentState().activeFramework.toLowerCase()).toBe('react');
 
@@ -120,7 +124,7 @@ describe('FrameworkStateStore (persistence)', () => {
     await before.shutdown();
 
     const after = await createFrameworkStateStore(logger, tmpRoot, {
-      defaultFramework: 'radiant',
+      defaultFramework: () => 'radiant',
       defaultScope: scope,
     });
     // Not the first framework available, which is what the recovery used to pick.
@@ -140,7 +144,7 @@ describe('FrameworkStateStore (persistence)', () => {
     // operator's declared default without saying so.
     await expect(
       createFrameworkStateStore(logger, tmpRoot, {
-        defaultFramework: 'framework-nobody-registered',
+        defaultFramework: () => 'framework-nobody-registered',
         defaultScope: scope,
       })
     ).rejects.toThrow(/frameworks\.defaultFramework/);
@@ -149,7 +153,7 @@ describe('FrameworkStateStore (persistence)', () => {
   test('removing the selected framework selects the configured default and persists it', async () => {
     const logger = createLogger();
     const scope = { workspaceId: 'project-removing-its-framework' };
-    const options = { defaultFramework: 'radiant', defaultScope: scope };
+    const options = { defaultFramework: () => 'radiant', defaultScope: scope };
     const store = await createFrameworkStateStore(logger, tmpRoot, options);
     await store.switchFramework({ targetFramework: 'react' });
 
@@ -165,6 +169,24 @@ describe('FrameworkStateStore (persistence)', () => {
     await restarted.shutdown();
   });
 
+  test('the fallback selects the configured default as it is when the framework is removed', async () => {
+    const logger = createLogger();
+    let configuredDefault = 'radiant';
+    const store = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultFramework: () => configuredDefault,
+      defaultScope: { workspaceId: 'project-whose-default-changes' },
+    });
+    await store.switchFramework({ targetFramework: 'react' });
+
+    // The operator edits `frameworks.defaultFramework` after the store was built.
+    configuredDefault = 'focus';
+    await store.getFrameworkManager()!.removeFramework('react');
+
+    expect(store.getCurrentState().activeFramework.toLowerCase()).toBe('focus');
+    expect(store.getActiveFramework().id.toLowerCase()).toBe('focus');
+    await store.shutdown();
+  });
+
   test('a selection moved off a removed framework that fails to persist rejects', async () => {
     const logger = createLogger();
     let failSaves = false;
@@ -176,7 +198,7 @@ describe('FrameworkStateStore (persistence)', () => {
       },
     } as unknown as SqliteStateStore<PersistedFrameworkState>;
     const store = await createFrameworkStateStore(logger, tmpRoot, {
-      defaultFramework: 'radiant',
+      defaultFramework: () => 'radiant',
       defaultScope: { workspaceId: 'project-with-a-read-only-database' },
       stateStore,
     });

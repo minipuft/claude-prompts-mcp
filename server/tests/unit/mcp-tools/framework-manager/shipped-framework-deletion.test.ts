@@ -147,4 +147,22 @@ describe('framework deletion refuses what the server ships', () => {
     expect(JSON.stringify(result)).toMatch(/frameworks\.defaultFramework/);
     expect(JSON.stringify(result)).not.toMatch(/Preview/);
   });
+
+  it('follows a change to the configured default made after the processor was built', async () => {
+    const oldDefaultDir = makeFrameworkDir('team-a');
+    const newDefaultDir = makeFrameworkDir('team-b');
+    configuredDefault = 'team-a';
+    const processor = new FrameworkLifecycleProcessor(ctx, validator);
+
+    configuredDefault = 'team-b';
+
+    const refused = await processor.handleDelete(del('team-b'));
+    expect(JSON.stringify(refused)).toMatch(/frameworks\.defaultFramework/);
+    expect(existsSync(newDefaultDir)).toBe(true);
+
+    const allowed = await processor.handleDelete(del('team-a'));
+    expect(JSON.stringify(allowed)).not.toMatch(/frameworks\.defaultFramework/);
+    expect(existsSync(oldDefaultDir)).toBe(false);
+    expect(removeFramework).toHaveBeenCalledWith('team-a');
+  });
 });

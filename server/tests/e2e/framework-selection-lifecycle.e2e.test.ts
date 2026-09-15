@@ -39,6 +39,27 @@ const PROMPT_BODY = 'framework selection probe body';
 const FRAMEWORK_ID = 'selection_probe_fw';
 const FRAMEWORK_GUIDANCE = 'SELECTION-PROBE-FRAMEWORK-GUIDANCE';
 
+interface FrameworkSpec {
+  id: string;
+  name: string;
+  guidance: string;
+  gateId: string;
+}
+
+const FIRST_FRAMEWORK: FrameworkSpec = {
+  id: FRAMEWORK_ID,
+  name: 'Selection probe framework',
+  guidance: FRAMEWORK_GUIDANCE,
+  gateId: 'selection-probe-gate',
+};
+
+const SECOND_FRAMEWORK: FrameworkSpec = {
+  id: 'selection_probe_fw_second',
+  name: 'Second selection probe framework',
+  guidance: 'SECOND-SELECTION-PROBE-FRAMEWORK-GUIDANCE',
+  gateId: 'second-selection-probe-gate',
+};
+
 interface ToolOutcome {
   isError: boolean;
   text: string;
@@ -212,17 +233,21 @@ async function createPromptAndFramework(session: McpSession): Promise<void> {
   });
   expect(prompt.isError).toBe(false);
 
+  await createFramework(session, FIRST_FRAMEWORK);
+}
+
+async function createFramework(session: McpSession, spec: FrameworkSpec): Promise<void> {
   const framework = await session.callTool('resource_manager', {
     resource_type: 'framework',
     action: 'create',
-    id: FRAMEWORK_ID,
-    name: 'Selection probe framework',
+    id: spec.id,
+    name: spec.name,
     description: 'Created while the server runs',
-    system_prompt_guidance: FRAMEWORK_GUIDANCE,
+    system_prompt_guidance: spec.guidance,
     phases: [{ id: 'probe', name: 'Probe', description: 'The only phase' }],
     framework_gates: [
       {
-        id: 'selection-probe-gate',
+        id: spec.gateId,
         name: 'Probe gate',
         description: 'Validates the probe phase',
         frameworkArea: 'probe',
@@ -292,6 +317,56 @@ describe.each([
     expect(await session.countTools()).toBe(3);
     expect(await activeFramework(session)).toBe(FRAMEWORK_ID);
   }, 90000);
+
+  it('a change to frameworks.defaultFramework while the server runs is what deletion falls back to', async () => {
+    const workspace = await newWorkspace();
+    const seed = await starter(workspace.env);
+    try {
+      await createPromptAndFramework(seed);
+      await createFramework(seed, SECOND_FRAMEWORK);
+    } finally {
+      await seed.stop();
+    }
+    await workspace.setConfiguredDefault(FIRST_FRAMEWORK.id);
+    const session = await start(starter, workspace);
+
+    // Edit the config file under the running server. The delete refusal reads the setting when it
+    // runs, so a refused preview of the new default shows the server has reloaded the file.
+    await workspace.setConfiguredDefault(SECOND_FRAMEWORK.id);
+    const previewDeletingNewDefault = (): Promise<ToolOutcome> =>
+      session.callTool('resource_manager', {
+        resource_type: 'framework',
+        action: 'preview',
+        preview_action: 'delete',
+        id: SECOND_FRAMEWORK.id,
+      });
+    let preview = await previewDeletingNewDefault();
+    const deadline = Date.now() + 20000;
+    while (!preview.text.includes('frameworks.defaultFramework') && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      preview = await previewDeletingNewDefault();
+    }
+    expect(preview.isError).toBe(true);
+    expect(preview.text).toContain('frameworks.defaultFramework');
+
+    // The old default is now an ordinary framework: selecting it and deleting it must move the
+    // selection to the new default, not to the default the server started with.
+    await switchTo(session, FIRST_FRAMEWORK.id);
+    const deleted = await session.callTool('resource_manager', {
+      resource_type: 'framework',
+      action: 'delete',
+      id: FIRST_FRAMEWORK.id,
+      confirm: true,
+    });
+    expect(deleted.text).not.toContain('frameworks.defaultFramework');
+    expect(deleted.isError).toBe(false);
+
+    expect(await activeFramework(session)).toBe(SECOND_FRAMEWORK.id);
+    const rendered = await render(session);
+    expect(rendered.isError).toBe(false);
+    expect(rendered.text).toContain(SECOND_FRAMEWORK.guidance);
+    expect(await session.countTools()).toBe(3);
+  }, 150000);
 });
 
 describe('framework selection when the selected framework goes away (Streamable HTTP)', () => {

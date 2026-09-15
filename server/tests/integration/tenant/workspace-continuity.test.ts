@@ -165,7 +165,7 @@ describe('Shared Workspace Continuity', () => {
     // would report the config default and silently discard the switch above.
     const second = await createFrameworkStateStore(logger, tmpDir, {
       stateStore: makeStore(),
-      defaultFramework: 'cageerf',
+      defaultFramework: () => 'cageerf',
       defaultScope: project,
     });
     expect(second.getCurrentState().activeFramework.toLowerCase()).toBe('react');
@@ -191,7 +191,7 @@ describe('Shared Workspace Continuity', () => {
     );
     const stateStore = await createFrameworkStateStore(logger, tmpDir, {
       stateStore: frameworkStore,
-      defaultFramework: 'radiant',
+      defaultFramework: () => 'radiant',
     });
 
     const busy = SHARED_WORKSPACE_CLIENTS[0]!;

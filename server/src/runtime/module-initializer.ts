@@ -305,7 +305,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // so supplying it afterwards would leave the seed on the built-in fallback.
   const workspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
   const frameworkStateStore = await createFrameworkStateStore(logger, frameworkStateRoot, {
-    defaultFramework: currentFrameworkConfig.defaultFramework,
+    // Read through the config manager each time, not copied now: it reloads `config.json` when
+    // the file changes, so the fallback follows an edited `frameworks.defaultFramework` exactly as
+    // the delete refusal in `resource_manager` does, without a restart.
+    defaultFramework: () => configManager.getFrameworksConfig().defaultFramework,
     // Every unscoped read and write in this process now resolves to this project.
     ...(workspaceId != null ? { defaultScope: { workspaceId } } : {}),
   });
