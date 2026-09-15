@@ -136,6 +136,13 @@ export class PromptExecutor {
    * than holding the instance.
    */
   private scriptToolRuntime?: ScriptToolRuntime;
+  /**
+   * Same instance as `scriptToolRuntime.loader`, held separately and concretely typed:
+   * `scriptToolRuntime.loader` is a `ScriptLoader` port (deliberately minimal, crossing the
+   * `engine/` boundary), so it carries no `clearCache()`. Script hot reload needs one to
+   * invalidate a workspace-tier script edit between reloads.
+   */
+  private workspaceScriptLoader?: WorkspaceScriptLoader;
   /** Hook registry for pipeline event emissions */
   private hookRegistry?: HookRegistryPort;
   /** Notification emitter for MCP client notifications */
@@ -281,6 +288,7 @@ export class PromptExecutor {
     const scriptLoader = new WorkspaceScriptLoader({
       workspaceScriptsPath: this.configManager.getScriptsDirectory(),
     });
+    this.workspaceScriptLoader = scriptLoader;
     const scriptExecutor = createScriptExecutor({ debug: false });
     this.scriptReferenceResolver = new ScriptReferenceResolver(
       this.logger,
@@ -976,6 +984,17 @@ export class PromptExecutor {
   async resolveStyleManager(): Promise<StyleManager | undefined> {
     await this.styleManagerReady;
     return this.styleManager;
+  }
+
+  /**
+   * Clear cached script-tool definitions — prompt-local and workspace alike — on the
+   * `WorkspaceScriptLoader` instance `{{script:id}}` resolution currently reads. Rebuilt fresh
+   * on every `updateData()`, so this only matters between reloads: a workspace script edit that
+   * reaches hot reload (`runtime/script-hot-reload.ts`) without also touching the prompts tree
+   * would otherwise keep serving whatever this instance already cached.
+   */
+  clearScriptToolCache(): void {
+    this.workspaceScriptLoader?.clearCache();
   }
 
   /**

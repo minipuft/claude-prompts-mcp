@@ -267,7 +267,11 @@ export function createFrameworkHotReloadRegistration(
   const coordinator = new FrameworkHotReloadCoordinator(logger, registry, runtimeLoader, config);
 
   return {
-    directories: [runtimeLoader.getFrameworksDir()],
+    // Primary directory plus every additional overlay directory the loader was configured with
+    // (`getWatchDirectories()`) — mirrors `GateDefinitionLoader` and `StyleDefinitionLoader`'s
+    // registrations. `runtimeLoader.getFrameworksDir()` alone would miss a workspace overlay
+    // directory entirely.
+    directories: runtimeLoader.getWatchDirectories(),
     handler: (event: HotReloadEvent) => coordinator.handleFrameworkChange(event),
     coordinator,
   };

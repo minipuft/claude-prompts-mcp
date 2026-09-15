@@ -706,6 +706,16 @@ export class McpToolRouter {
   }
 
   /**
+   * Clear the script-tool cache the pipeline currently resolves `{{script:id}}` against.
+   * Delegates to PromptExecutor, which owns the canonical `WorkspaceScriptLoader` instance —
+   * runtime integrations that watch the workspace scripts folder call this, the same shape
+   * `resolveStyleManager()` above gives style hot reload.
+   */
+  clearScriptToolCache(): void {
+    this.promptExecutor.clearScriptToolCache();
+  }
+
+  /**
    * Get metrics collector for MCP resource access.
    */
   getMetricsCollector(): MetricsCollector {

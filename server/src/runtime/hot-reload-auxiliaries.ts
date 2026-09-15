@@ -38,7 +38,10 @@ export async function buildHotReloadAuxiliaryConfigs(
 
   const scriptAux =
     promptsDir !== undefined && scriptLoader !== undefined
-      ? buildScriptAuxiliaryReloadConfig(logger, scriptLoader, promptsDir)
+      ? buildScriptAuxiliaryReloadConfig(logger, scriptLoader, promptsDir, {
+          directory: configManager.getScriptsDirectory(),
+          clearWorkspaceCache: () => mcpToolsManager?.clearScriptToolCache(),
+        })
       : undefined;
 
   const configs = [
