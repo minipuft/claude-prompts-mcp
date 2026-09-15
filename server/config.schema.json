@@ -12,12 +12,18 @@
 
     "server": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Server identity and transport settings",
       "properties": {
         "name": {
           "type": "string",
           "default": "claude-prompts",
           "description": "Server name reported to MCP clients"
+        },
+        "version": {
+          "type": "string",
+          "default": "1.0.0",
+          "description": "DEPRECATED — settable via `cpm config set server.version` and reported by GET /health, but unrelated to the package version. Scheduled for removal (plan OQ-2); read the package version instead."
         },
         "transport": {
           "type": "string",
@@ -35,6 +41,7 @@
 
     "prompts": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Prompt loading and registration",
       "properties": {
         "directory": {
@@ -52,6 +59,7 @@
 
     "identity": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Identity and client-profile resolution for scope isolation and delegation routing",
       "properties": {
         "mode": {
@@ -67,6 +75,7 @@
         },
         "launchDefaults": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Launch-time defaults used when request identity/profile metadata is missing",
           "properties": {
             "organizationId": {
@@ -116,6 +125,7 @@
 
     "frameworks": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Frameworks (CAGEERF, ReACT, etc.) that guide LLM behavior. Controls three injection types: system-prompt (framework phases), gate-guidance (quality criteria), and style-guidance (response formatting).",
       "properties": {
         "enabled": {
@@ -179,6 +189,7 @@
 
     "gates": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Quality gates for validating LLM outputs",
       "properties": {
         "enabled": {
@@ -196,8 +207,13 @@
           "default": true,
           "description": "Apply framework-specific quality gates"
         },
+        "enforcePendingVerdict": {
+          "type": "boolean",
+          "description": "DEPRECATED — accepted by `cpm config set` but read by no runtime path. Scheduled for removal (plan OQ-3)."
+        },
         "evaluation": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Judge evaluation defaults. Gates with evaluation.mode 'judge' use context-isolated review via delegation.",
           "properties": {
             "defaultMode": {
@@ -222,6 +238,7 @@
 
     "verification": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Ralph Loops: autonomous verification via shell commands",
       "properties": {
         "inContextAttempts": {
@@ -232,6 +249,7 @@
         },
         "isolation": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Context isolation spawns a fresh Claude CLI to fix issues",
           "properties": {
             "enabled": {
@@ -264,6 +282,7 @@
 
     "versioning": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Prompt version control",
       "properties": {
         "enabled": {
@@ -281,12 +300,22 @@
           "default": 50,
           "minimum": 1,
           "description": "Maximum versions to retain per prompt"
+        },
+        "max_versions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "DEPRECATED — the spelling `cpm config set` writes today; read as `maxVersions`. Scheduled for removal when the CLI writes camelCase (plan row 2.2)."
+        },
+        "auto_version": {
+          "type": "boolean",
+          "description": "DEPRECATED — the spelling `cpm config set` writes today; read as `autoVersion`. Scheduled for removal when the CLI writes camelCase (plan row 2.2)."
         }
       }
     },
 
     "phaseGuards": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Phase guards: deterministic structural validation of LLM output against framework phase definitions (zero LLM cost)",
       "properties": {
         "mode": {
@@ -307,6 +336,7 @@
 
     "execution": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Prompt execution behavior",
       "properties": {
         "judge": {
@@ -319,6 +349,7 @@
 
     "hooks": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Claude Code hook behavior (affects prompt-suggest.py output)",
       "properties": {
         "expandedOutput": {
@@ -331,6 +362,7 @@
 
     "telemetry": {
       "type": "object",
+      "additionalProperties": false,
       "description": "OpenTelemetry observability: tracing, metrics, and attribute policy. Separate from resources.observability (MCP resource toggles).",
       "properties": {
         "enabled": {
@@ -358,6 +390,7 @@
         },
         "attributePolicy": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Controls which attributes are included in trace spans and events for data safety.",
           "properties": {
             "businessContext": {
@@ -387,14 +420,17 @@
 
     "analysis": {
       "type": "object",
+      "additionalProperties": false,
       "deprecated": true,
       "description": "DEPRECATED - no runtime path reads this section. It is still parsed so an existing config.json keeps loading, and is scheduled for removal in the next major. The gate service that consumed it and the LLM side client behind it were both deleted; for model-graded gate evaluation use the '%judge' modifier or gates.evaluation.defaultMode. ConfigManager.getAnalysisConfig() still returns the parsed value and ConfigManager warns once at load when the section is present.",
       "properties": {
         "semanticAnalysis": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "llmIntegration": {
               "type": "object",
+              "additionalProperties": false,
               "deprecated": true,
               "description": "DEPRECATED with its parent section - every member is parsed and defaulted, and none is consulted. Modelled on LLMIntegrationConfig in src/shared/types/core-config.ts. There is deliberately no 'mode' member: the CLI used to accept a 'mode' of 'on'|'off' here that no reader consulted. That spelling is gone from both tool surfaces, and ConfigManager still adopts it into 'enabled' for configs already carrying one so the deprecation notice names a single spelling.",
               "properties": {
@@ -439,6 +475,7 @@
 
     "logging": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Server logging configuration",
       "properties": {
         "level": {
@@ -457,6 +494,7 @@
 
     "resources": {
       "type": "object",
+      "additionalProperties": false,
       "description": "MCP resources configuration. Master switch must be enabled for any resources to register.",
       "properties": {
         "registerWithMcp": {
@@ -466,17 +504,23 @@
         },
         "prompts": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Prompt resources (resource://prompt/...)",
           "properties": {
             "enabled": {
               "type": "boolean",
               "default": true,
               "description": "Enable prompt resources"
+            },
+            "defaultRegistration": {
+              "type": "boolean",
+              "description": "DEPRECATED — accepted by `cpm config set` but read by no runtime path. Scheduled for removal (plan OQ-3)."
             }
           }
         },
         "gates": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Gate resources (resource://gate/...)",
           "properties": {
             "enabled": {
@@ -488,6 +532,7 @@
         },
         "frameworks": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Framework resources (resource://framework/...)",
           "properties": {
             "enabled": {
@@ -499,6 +544,7 @@
         },
         "observability": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Observability resources (sessions and metrics)",
           "properties": {
             "enabled": {
@@ -520,6 +566,7 @@
         },
         "logs": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Logs resource for debugging and observability",
           "properties": {
             "enabled": {
@@ -547,10 +594,12 @@
 
     "advanced": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Internal settings (most users won't need to change)",
       "properties": {
         "sessions": {
           "type": "object",
+          "additionalProperties": false,
           "description": "Chain session lifecycle management",
           "properties": {
             "timeoutMinutes": {
