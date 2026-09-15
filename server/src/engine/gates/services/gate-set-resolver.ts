@@ -9,6 +9,8 @@ import type { ConvertedPrompt, ExecutionModifiers } from '../../execution/types.
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
+import type { GateSelectionContext } from '../types/index.js';
+import type { ArtifactKind } from '../utils/artifact-kinds.js';
 
 /**
  * Inputs to one gate-set resolution. Stateless: every field arrives per request.
@@ -72,6 +74,13 @@ export interface GateResolutionInput {
    * read; omitting them makes the resolver load its own.
    */
   readonly knownFrameworkGateIds?: readonly string[] | undefined;
+  /**
+   * Artifact kinds this run declares (ruling B13), derived by the caller from the prompt's
+   * `artifacts` block and the parsed arguments (`resolveDeclaredArtifacts`). Forwarded verbatim
+   * into the registry's selection query at rank 20; absent means the caller could not say, which
+   * leaves every artifact-gated gate off and every category gate unchanged.
+   */
+  readonly declaredArtifacts?: readonly ArtifactKind[] | undefined;
 }
 
 /** One accepted gate and the source it is attributed to. */
@@ -279,12 +288,18 @@ export class GateSetResolver {
     }
 
     const promptCategory = input.category.length > 0 ? input.category.toLowerCase() : 'general';
-    const selectionContext: { enabledOnly: boolean; promptCategory: string; framework?: string } = {
+    const selectionContext: GateSelectionContext & {
+      enabledOnly: boolean;
+      promptCategory: string;
+    } = {
       enabledOnly: true,
       promptCategory,
     };
     if (input.frameworkId !== undefined && input.frameworkId.length > 0) {
       selectionContext.framework = input.frameworkId;
+    }
+    if (input.declaredArtifacts !== undefined && input.declaredArtifacts.length > 0) {
+      selectionContext.declaredArtifacts = input.declaredArtifacts;
     }
 
     try {
@@ -292,6 +307,7 @@ export class GateSetResolver {
       this.logger.debug('[GateSetResolver] Registry gate selection', {
         category: promptCategory,
         framework: selectionContext.framework,
+        declaredArtifacts: selectionContext.declaredArtifacts,
         selectedCount: result.selectedIds.length,
         skippedCount: result.skippedIds.length,
       });

@@ -14,6 +14,7 @@
 
 import { z } from 'zod/v4';
 
+import { ARTIFACT_KINDS } from '#engine/gates/utils/artifact-kinds.js';
 import { linearize } from '#modules/workflow-ir/linearizer.js';
 import {
   EXPORTER_ONLY_STEP_KEYS,
@@ -110,6 +111,58 @@ function validateComposerInputArgument(
       code: 'custom',
       path: ['composer', 'inputArgument'],
       message: `Composer inputArgument '${inputArgument}' must reference a string argument`,
+    });
+  }
+}
+
+/**
+ * Schema for a prompt's top-level `artifacts:` declaration (ruling B13).
+ *
+ * This is how a run tells the gate system what it is about to touch, and it is the ONLY such
+ * channel: no engine request parameter carries artifacts, deliberately — the prompt author
+ * declares the shape, the invocation supplies the paths.
+ *
+ * Two halves, both optional and freely combined:
+ * - `produces` names kinds this prompt always yields, whatever it is invoked with.
+ * - `fromArgument` names one declared argument whose value is a path list; the engine classifies
+ *   each path through `classifyArtifactPath` and unions the result with `produces`.
+ *
+ * `.strict()` because a misspelled key here fails silently in the worst way: the gate the author
+ * was aiming at simply never attaches, and nothing says so.
+ */
+export const PromptArtifactsSchema = z
+  .object({
+    /** Artifact kinds this prompt always produces. */
+    produces: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
+    /** Name of a declared argument carrying the paths this run touches. */
+    fromArgument: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type PromptArtifactsYaml = z.infer<typeof PromptArtifactsSchema>;
+
+/**
+ * `artifacts.fromArgument` must name an argument this prompt actually declares.
+ *
+ * Same failure shape `validateComposerInputArgument` above closes, and the same reason it is a
+ * schema error rather than a runtime warning: an argument name that matches nothing resolves to
+ * no paths, which resolves to no artifacts, which silently drops every artifact-scoped gate.
+ */
+function validateArtifactFromArgument(
+  data: {
+    arguments: PromptArgumentYaml[];
+    artifacts?: PromptArtifactsYaml;
+  },
+  ctx: z.RefinementCtx
+): void {
+  const fromArgument = data.artifacts?.fromArgument;
+  if (fromArgument === undefined) return;
+
+  if (!data.arguments.some((candidate) => candidate.name === fromArgument)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['artifacts', 'fromArgument'],
+      message: `artifacts.fromArgument names \`${fromArgument}\`, which is not one of this prompt's arguments`,
     });
   }
 }
@@ -464,6 +517,14 @@ export const PromptYamlSchema = z
     /** Gate configuration for validation */
     gateConfiguration: PromptGateConfigurationSchema.optional(),
 
+    // Artifact declaration (ruling B13)
+    /**
+     * What this run touches, in the fixed `ArtifactKind` vocabulary. Read by the execution
+     * planner, which unions `produces` with the kinds classified out of `fromArgument`'s value
+     * and hands the result to gate activation.
+     */
+    artifacts: PromptArtifactsSchema.optional(),
+
     // Injection control
     /** Prompt-level injection control (resolved between step and chain config) */
     injection: PromptInjectionConfigSchema.optional(),
@@ -521,7 +582,8 @@ export const PromptYamlSchema = z
         'Prompt must have userMessageTemplate/userMessageTemplateFile, chainSteps, or systemMessage defined',
     }
   )
-  .superRefine(validateComposerInputArgument);
+  .superRefine(validateComposerInputArgument)
+  .superRefine(validateArtifactFromArgument);
 
 export type PromptYaml = z.infer<typeof PromptYamlSchema>;
 

@@ -14,6 +14,7 @@
 
 import type { GateEnforcementMode, GatePassCriteria, GateSeverity } from './gate-primitives.js';
 import type { JudgeEvaluationConfig } from '../judge/types.js';
+import type { ArtifactKind } from '../utils/artifact-kinds.js';
 
 // ============================================================================
 // Gate Activation Types
@@ -30,6 +31,11 @@ export interface GateActivationRules {
   explicit_request?: boolean;
   /** Framework contexts that trigger this gate (e.g., ['CAGEERF', 'ReACT']) */
   framework_context?: string[];
+  /**
+   * Artifact kinds this gate checks (ruling B13). When present, artifacts decide activation and
+   * `prompt_categories` is ignored — categories stay the fallback for gates naming no artifact.
+   */
+  artifacts?: ArtifactKind[];
 }
 
 /**
@@ -45,6 +51,12 @@ export interface GateActivationContext {
   explicitRequest?: boolean;
   /** Prompt ID for context-specific activation */
   promptId?: string;
+  /**
+   * Artifact kinds this run declares (ruling B13), from the prompt's `artifacts.produces` unioned
+   * with the kinds classified out of the argument its `artifacts.fromArgument` names. Empty or
+   * absent means the run declared nothing, so every artifact-gated gate stays off.
+   */
+  artifacts?: readonly ArtifactKind[];
 }
 
 // ============================================================================
@@ -329,6 +341,11 @@ export interface GateSelectionContext {
   explicitGateIds?: readonly string[];
   /** Whether to include only enabled gates */
   enabledOnly?: boolean;
+  /**
+   * Artifact kinds this run declares (B13), forwarded onto the activation context `selectGates`
+   * builds. Absent means the caller could not say — never "no artifacts of any kind exist".
+   */
+  declaredArtifacts?: readonly ArtifactKind[];
 }
 
 /**

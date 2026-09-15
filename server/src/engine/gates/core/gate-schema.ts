@@ -40,6 +40,8 @@
 
 import { z } from 'zod/v4';
 
+import { ARTIFACT_KINDS } from '../utils/artifact-kinds.js';
+
 // ============================================
 // Pass Criteria Schema
 // ============================================
@@ -224,6 +226,18 @@ export const GateActivationSchema = z
     explicit_request: z.boolean().optional(),
     /** Framework contexts that trigger this gate */
     framework_context: z.array(z.string()).optional(),
+    /**
+     * Artifact kinds this gate checks (ruling B13).
+     *
+     * When present, ARTIFACTS DECIDE: the gate attaches iff the run declares one of these kinds,
+     * and `prompt_categories` is ignored entirely. Categories remain the fallback only for gates
+     * that name no artifact — a gate that names both is stating what it checks twice, and the
+     * artifact statement is the specific one.
+     *
+     * The vocabulary's only home is `engine/gates/utils/artifact-kinds.ts`, which also owns the
+     * path table that classifies a run's files into these kinds.
+     */
+    artifacts: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
   })
   .partial();
 

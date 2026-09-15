@@ -355,6 +355,11 @@ export class GateGuidanceRenderer {
     if (context.framework) {
       activationContext.framework = context.framework;
     }
+    // B13: activation here must ask the same question the resolver asked, or an artifact-scoped
+    // gate is selected at rank 20 and then silently dropped at render.
+    if (context.artifacts !== undefined && context.artifacts.length > 0) {
+      activationContext.artifacts = context.artifacts;
+    }
     return this.gateLoader.isGateActive(gate, activationContext);
   }
 

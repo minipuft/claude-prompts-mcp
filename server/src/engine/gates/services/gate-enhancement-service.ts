@@ -1,6 +1,7 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { applicableFrameworkVetoes, GateSetResolver } from './gate-set-resolver.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
+import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
@@ -186,6 +187,15 @@ export class GateEnhancementService {
       promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
     });
 
+    // B13: the same derivation the execution planner runs, from the same two inputs. Derived
+    // rather than threaded because `resolveDeclaredArtifacts` is pure and both call sites already
+    // hold the prompt and the parsed arguments — a field on the plan would add a hop that can go
+    // stale without adding an answer.
+    const declaredArtifacts = resolveDeclaredArtifacts(
+      prompt.artifacts,
+      context.parsedCommand?.promptArgs
+    );
+
     await this.resolveIntoAccumulator(context, {
       prompt,
       category: prompt.category ?? '',
@@ -199,6 +209,7 @@ export class GateEnhancementService {
       plannedGateIds: executionPlan.gates,
       frameworkGateIds: registeredGates.canonicalGateIds,
       inlineDefinitionGateIds,
+      declaredArtifacts,
     });
 
     let gateIds = [...context.gates.getAll()];
@@ -245,6 +256,10 @@ export class GateEnhancementService {
       if (executionPlan.category !== undefined) {
         gateCtx.category = executionPlan.category;
       }
+      // Assigned unconditionally: an empty list and an absent one mean the same thing to
+      // `isGateActiveForContext` ("this run declared nothing"), so a guard here would buy a
+      // branch and no behaviour.
+      gateCtx.artifacts = declaredArtifacts;
 
       const result = await gateService.enhancePrompt(prompt, gateIds, gateCtx);
 

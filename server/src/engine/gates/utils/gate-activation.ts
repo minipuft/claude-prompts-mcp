@@ -10,6 +10,7 @@
  * - Framework gates (gate_type: 'framework') use AND logic: require BOTH
  *   category AND framework to match when both are defined
  * - Regular gates use blocking logic: each rule blocks independently if not satisfied
+ * - A gate naming `activation.artifacts` is decided by artifacts alone (ruling B13)
  */
 
 import type { GateActivationRules, GateActivationContext } from '../types/index.js';
@@ -51,6 +52,24 @@ export function isGateActiveForContext(
     return false;
   }
 
+  // Ruling B13: when a gate names the artifacts it checks, those artifacts DECIDE. The gate
+  // attaches iff the run declared one of them, and `prompt_categories` is not consulted at all —
+  // falling through to the category check would re-attach an artifact-scoped gate on every run in
+  // its category, which is the guessing B13 replaced.
+  //
+  // Framework gates are the one exception, and only because they carry a second, orthogonal
+  // requirement: no registry gate declares both today, but if one did, artifacts AND framework
+  // must both match — the artifact says what it checks, the framework says whether scoring
+  // against that framework is coherent at all, and neither answers the other's question.
+  const artifactRules = activation.artifacts;
+  if (artifactRules !== undefined && artifactRules.length > 0) {
+    const artifactMatch = declaresAnyArtifact(artifactRules, context.artifacts);
+    if (gateType === 'framework') {
+      return artifactMatch && checkFrameworkContext(activation, context);
+    }
+    return artifactMatch;
+  }
+
   // Framework gates use AND logic: require BOTH category AND framework match
   if (gateType === 'framework') {
     return checkFrameworkGateActivation(activation, context);
@@ -58,6 +77,21 @@ export function isGateActiveForContext(
 
   // Regular gates: each rule blocks independently if not satisfied
   return checkRegularGateActivation(activation, context);
+}
+
+/**
+ * Whether the run's declared artifacts intersect the gate's. Case-exact on both sides: both come
+ * from the same closed `ArtifactKind` vocabulary (`artifact-kinds.ts`), validated by the gate
+ * schema and by the prompt schema, so a case fold here would only hide a vocabulary drift.
+ */
+function declaresAnyArtifact(
+  required: readonly string[],
+  declared: readonly string[] | undefined
+): boolean {
+  if (declared === undefined || declared.length === 0) {
+    return false;
+  }
+  return required.some((kind) => declared.includes(kind));
 }
 
 /**
@@ -69,9 +103,7 @@ function checkFrameworkGateActivation(
   context: GateActivationContext
 ): boolean {
   const categoryRules = activation.prompt_categories;
-  const frameworkRules = activation.framework_context;
   const hasCategoryRules = categoryRules !== undefined && categoryRules.length > 0;
-  const hasFrameworkRules = frameworkRules !== undefined && frameworkRules.length > 0;
 
   // If category rules exist, check them
   let categoryMatch = true;
@@ -87,22 +119,29 @@ function checkFrameworkGateActivation(
     }
   }
 
-  // If framework rules exist, check them
-  let frameworkMatch = true;
-  if (hasFrameworkRules) {
-    const framework = context.framework;
-    if (framework === undefined || framework.length === 0) {
-      // No framework in context but rules require one - don't activate
-      frameworkMatch = false;
-    } else {
-      const normalizedFramework = framework.toUpperCase();
-      const normalizedContexts = frameworkRules.map((f) => f.toUpperCase());
-      frameworkMatch = normalizedContexts.includes(normalizedFramework);
-    }
-  }
-
   // AND logic: both must pass
-  return categoryMatch && frameworkMatch;
+  return categoryMatch && checkFrameworkContext(activation, context);
+}
+
+/**
+ * The framework half of a framework gate's AND: absent rules impose nothing, declared rules
+ * require a matching framework in the context. Case-insensitive to handle CAGEERF vs cageerf.
+ */
+function checkFrameworkContext(
+  activation: GateActivationRules,
+  context: GateActivationContext
+): boolean {
+  const frameworkRules = activation.framework_context;
+  if (frameworkRules === undefined || frameworkRules.length === 0) {
+    return true;
+  }
+  const framework = context.framework;
+  if (framework === undefined || framework.length === 0) {
+    // No framework in context but rules require one - don't activate
+    return false;
+  }
+  const normalizedFramework = framework.toUpperCase();
+  return frameworkRules.map((f) => f.toUpperCase()).includes(normalizedFramework);
 }
 
 /**
