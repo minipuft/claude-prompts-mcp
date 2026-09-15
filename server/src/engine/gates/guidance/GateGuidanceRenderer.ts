@@ -6,9 +6,8 @@
  */
 
 import { REMINDER_CHARS_PER_TOKEN } from '../constants.js';
-import { deriveGateTier } from '../core/gate-tier.js';
-
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
+import { deriveGateTier } from '../core/gate-tier.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';

@@ -157,7 +157,7 @@ describe('GateReviewStage — recording check evidence on the pending review', (
     };
     const store = createStore(review);
     const stage = new GateReviewStage(
-      { renderStep: jest.fn().mockResolvedValue(createExecutionResult()) } as any,
+      { renderStep: jest.fn().mockResolvedValue(createExecutionResult() as never) } as any,
       store as any,
       { loadGates: jest.fn().mockResolvedValue([failingGate, reminderGate] as never) } as any,
       logger(),

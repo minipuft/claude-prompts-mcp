@@ -93,6 +93,7 @@ function createStageWithGates(
         maxAttempts: 3,
       }),
       getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
+      setPendingGateReview: jest.fn().mockResolvedValue(undefined),
       clearPendingGateReview: jest.fn().mockResolvedValue(undefined),
       // The review body resolves against the RUN's node list now (P4 row 3.4). `undefined` is a
       // real answer for a judge-wiring harness that never creates a run, and it exercises the
