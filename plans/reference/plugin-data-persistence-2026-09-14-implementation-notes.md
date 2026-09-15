@@ -1,11 +1,11 @@
 ---
 title: "Plugin data persistence — implementation notes"
 date: 2026-09-14
-status: active
+status: reference
 tags: [runtime, hooks, distribution, plugin]
 ---
 
-# Implementation Notes — `plans/plugin-data-persistence-2026-09-14.md`
+# Implementation Notes — `plans/reference/plugin-data-persistence-2026-09-14.md`
 
 Session voice. Reader-facing text belongs in the commit subject, the CHANGELOG or the docs.
 

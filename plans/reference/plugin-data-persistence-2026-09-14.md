@@ -1,13 +1,13 @@
 ---
 title: "Plugin data persistence — a prompt written through the Claude Code plugin survives a plugin update"
 date: 2026-09-14
-status: active
+status: reference
 tags: [runtime, hooks, distribution, plugin]
 ---
 
 # Plugin Data Persistence
 
-**Status**: ACTIVE — rows 0.1, 1.1, 1.2 and 1.4 done; a created prompt still lands in the install directory until row 1.5 (ruled R5, dispatched to W2)
+**Status**: COMPLETE — every row is ✓; a prompt created through the Claude Code plugin, and the plugin's saved state, survive a plugin update. Kept as reference because `plans/tutorial-rework-2026-09-11.md` row B.7 cites it
 **Owner**: minipuft
 **Created**: 2026-09-14
 **Blocks**: `plans/tutorial-rework-2026-09-11.md` row B.7, since the tutorial's first step is writing a prompt
@@ -15,8 +15,8 @@ tags: [runtime, hooks, distribution, plugin]
 ## Now (2026-09-14)
 
 **Goal**: a prompt a reader writes through the Claude Code plugin, and the plugin's runtime state, survive a plugin
-update. **Current slice**: the PR boundary. Rows 1.1–1.7 are merged; row 1.8 is a README sentence.
-**Next decision**: the PR-boundary suite on the merged branch, then open the PR and merge once CI is green.
+update. **Current slice**: none — every row is ✓ and the PR-boundary suite ran on the merged branch.
+**Next decision**: none in this plan; `plans/tutorial-rework-2026-09-11.md` row B.7 now states where a prompt is saved.
 **Constraint in force**: the canonical Agent Plugins `mcp.json` does not change; Codex measured
 `PLUGIN_DATA` unset inside the MCP server process.
 
@@ -77,7 +77,7 @@ update. **Current slice**: the PR boundary. Rows 1.1–1.7 are merged; row 1.8 i
 
 ## Open questions
 
-| #    | Question                                                                                           | Default                                                                                                                                                                                                          |
-| ---- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-1 | Migrate prompts already written into a current install directory?                                  | No. They are already lost on the next update today; the CHANGELOG says where they were and how to move them with `resource_manager`                                                                              |
-| OQ-2 | Does the workspace move to the data directory, or only the runtime root plus a resources override? | **RULED 2026-09-14 — the workspace moves (R4).** Workspace resources overlay the bundled tree, which stays loaded underneath, and writes go to the workspace; a resources path alone does not enable the overlay |
+| #    | Question                                                                                           | Default                                                                                                                                                                                                                                                                        |
+| ---- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OQ-1 | Migrate prompts already written into a current install directory?                                  | **RULED 2026-09-14 — no migration (default stands).** They are already lost on the next update today; the CHANGELOG Fixed entry names that version's `server/resources/prompts/` folder and says creating the prompt again with `resource_manager` saves it in the data folder |
+| OQ-2 | Does the workspace move to the data directory, or only the runtime root plus a resources override? | **RULED 2026-09-14 — the workspace moves (R4).** Workspace resources overlay the bundled tree, which stays loaded underneath, and writes go to the workspace; a resources path alone does not enable the overlay                                                               |
