@@ -4,7 +4,7 @@
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
     "errors": 3200,
-    "warnings": 1021
+    "warnings": 1020
   },
   "byRule": {
     "@typescript-eslint/no-explicit-any": {
@@ -101,7 +101,7 @@
     },
     "max-lines": {
       "errors": 0,
-      "warnings": 2
+      "warnings": 1
     },
     "import-x/no-duplicates": {
       "errors": 2,
