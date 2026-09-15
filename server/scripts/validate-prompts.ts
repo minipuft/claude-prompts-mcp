@@ -233,14 +233,30 @@ function collectIncludedGateIds(promptFiles: string[]): Set<string> {
     }
     const doc = parsed as {
       gateConfiguration?: { include?: unknown };
-      chainSteps?: Array<{ inlineGateIds?: unknown }>;
+      chainSteps?: unknown;
     };
-    for (const id of doc.gateConfiguration?.include ?? []) {
-      if (typeof id === 'string') included.add(id);
-    }
-    for (const step of doc.chainSteps ?? []) {
-      for (const id of step.inlineGateIds ?? []) {
+
+    // YAML gives no guarantee `include` is an array — a mapping or scalar here is already
+    // reported as a schema problem by `validateFile`; skip it rather than throw.
+    const include = doc.gateConfiguration?.include;
+    if (Array.isArray(include)) {
+      for (const id of include) {
         if (typeof id === 'string') included.add(id);
+      }
+    }
+
+    // Same guarantee gap for `chainSteps`, and for each step in turn — a step that is `null` or
+    // a scalar is likewise the schema validator's concern, not this one.
+    const steps = doc.chainSteps;
+    if (Array.isArray(steps)) {
+      for (const step of steps) {
+        if (typeof step !== 'object' || step === null) continue;
+        const inlineGateIds = (step as { inlineGateIds?: unknown }).inlineGateIds;
+        if (Array.isArray(inlineGateIds)) {
+          for (const id of inlineGateIds) {
+            if (typeof id === 'string') included.add(id);
+          }
+        }
       }
     }
   }
@@ -438,8 +454,32 @@ if (SELF_TEST) {
       '',
     ].join('\n')
   );
+  // `gateConfiguration.include` as a mapping rather than a list — YAML gives no guarantee of
+  // shape, and this is already reported elsewhere as a schema error; the orphan check must skip
+  // it, not throw.
+  writePrompt(
+    'general/malformed_include',
+    [
+      'id: malformed_include',
+      'name: Malformed Include',
+      'category: general',
+      'description: gateConfiguration.include is a mapping, not an array.',
+      'userMessageTemplateFile: user-message.md',
+      'gateConfiguration:',
+      '  include:',
+      '    not: an-array',
+      '',
+    ].join('\n')
+  );
 
-  const orphanFound = findOrphanGates(promptsRoot, findPromptFiles(promptsRoot));
+  let orphanFound: Problem[] = [];
+  try {
+    orphanFound = findOrphanGates(promptsRoot, findPromptFiles(promptsRoot));
+  } catch (error) {
+    failures.push(
+      `findOrphanGates threw on a non-array gateConfiguration.include: ${String(error)}`
+    );
+  }
   rmSync(gateDir, { recursive: true, force: true });
 
   const flaggedOrphan = orphanFound.some((p) => p.file.includes('orphan-gate'));
