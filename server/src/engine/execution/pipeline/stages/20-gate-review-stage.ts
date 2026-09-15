@@ -1,4 +1,5 @@
 // @lifecycle canonical - Runs post-execution gate review workflows.
+import { deriveGateTier } from '../../../gates/core/gate-tier.js';
 import { resolveJudgeGates, composeJudgeReviewPrompt } from '../../../gates/core/review-utils.js';
 import {
   formatGateScriptToolSection,
@@ -12,15 +13,59 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type {
+  GateCheckResult,
+  PendingGateReview,
+  PendingGateTier,
+} from '#shared/types/chain-execution.js';
 import type { GatesConfig } from '#shared/types/core-config.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
+import type { GateScriptToolResult } from '../../../gates/services/gate-script-tool-runner.js';
 import type { ScriptToolRuntimeProvider } from '../../../gates/services/script-tool-criterion-runner.js';
 import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-executor.js';
+import type { GateShellVerifyResult } from '../../../gates/shell/shell-verify-message-formatter.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
+
+/** One line, capped, so a recorded result stays readable in a refusal sentence. */
+const CHECK_SUMMARY_MAX_CHARS = 200;
+
+/** Collapse to a single line and cap — a summary is quoted back to the submitter verbatim. */
+function toSummaryLine(text: string): string {
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  return oneLine.length > CHECK_SUMMARY_MAX_CHARS
+    ? `${oneLine.slice(0, CHECK_SUMMARY_MAX_CHARS - 1)}…`
+    : oneLine;
+}
+
+/**
+ * Flatten both runner result shapes into the one thing the verdict processor needs: which gate,
+ * did it pass, and one line naming what ran.
+ *
+ * Mechanism-agnostic on purpose, exactly as `resolveGroundTruthCoverage` beside it is: the
+ * processor's refusal does not care whether an exit code or a script verdict produced the
+ * failure, only that the engine recorded one.
+ */
+function toCheckResults(
+  shellResults: readonly GateShellVerifyResult[],
+  scriptResults: readonly GateScriptToolResult[]
+): GateCheckResult[] {
+  return [
+    ...shellResults.map((result) => ({
+      gateId: result.gateId,
+      passed: result.passed,
+      summary: toSummaryLine(`${result.command} exit ${result.exitCode}`),
+    })),
+    ...scriptResults.map((result) => ({
+      gateId: result.gateId,
+      passed: result.passed,
+      summary: toSummaryLine(`${result.toolId ?? 'script_tool'}: ${result.reason}`),
+    })),
+  ];
+}
 
 /** Optional collaborators for {@link GateReviewStage}. */
 export interface GateReviewCollaborators {
@@ -138,6 +183,69 @@ export class GateReviewStage extends BasePipelineStage {
     });
   }
 
+  /**
+   * Write this call's ground-truth evidence onto the pending review and return the stored shape.
+   *
+   * Two fields, one write:
+   *
+   * - `checkResults` — what the runners just produced. Omitted entirely when nothing ran, so a
+   *   review whose gates are all reminders records nothing and the processor has nothing to
+   *   refuse on, which is the intended reading of ruling B4.
+   * - `gateTiers` — each gate's tier by `deriveGateTier`. The formatting layer needs it and has
+   *   no synchronous reach to gate definitions (`ResponseAssembler` takes no gate provider), and
+   *   this stage is already the one holding the provider. Recorded even when NO check ran,
+   *   because that is precisely the all-reminder review whose verdict template must carry no
+   *   `per_gate` block at all.
+   *
+   * Everything else on the review is carried through untouched: the store persists what it is
+   * handed, so a field dropped here is a field deleted from the session.
+   */
+  private async recordReviewEvidence(
+    sessionId: string,
+    review: PendingGateReview,
+    checkResults: GateCheckResult[]
+  ): Promise<PendingGateReview> {
+    const gateTiers = await this.deriveGateTiers(review.gateIds);
+
+    if (checkResults.length === 0 && Object.keys(gateTiers).length === 0) {
+      return review;
+    }
+
+    const enriched: PendingGateReview = {
+      ...review,
+      ...(checkResults.length > 0 ? { checkResults } : {}),
+      ...(Object.keys(gateTiers).length > 0 ? { gateTiers } : {}),
+    };
+    await this.chainSessionStore.setPendingGateReview(sessionId, enriched);
+    return enriched;
+  }
+
+  /**
+   * Tier per gate id, from the same derivation the gate index prints (`deriveGateTier`).
+   *
+   * A gate the provider cannot load contributes no entry rather than a guessed one — readers
+   * treat a missing id as `check`, which keeps an unloadable gate attestable instead of
+   * silently demoting it to a reminder nobody grades.
+   */
+  private async deriveGateTiers(gateIds: string[]): Promise<Record<string, PendingGateTier>> {
+    if (!this.gateDefinitionProvider || gateIds.length === 0) return {};
+
+    try {
+      const definitions = await this.gateDefinitionProvider.loadGates(gateIds);
+      const tiers: Record<string, PendingGateTier> = {};
+      for (const definition of definitions) {
+        tiers[definition.id] = deriveGateTier(definition);
+      }
+      return tiers;
+    } catch (error) {
+      this.logger.warn('[GateReview] Failed to derive gate tiers for pending review', {
+        gateIds,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
@@ -165,6 +273,11 @@ export class GateReviewStage extends BasePipelineStage {
           pendingReview,
         }
       : context.sessionContext;
+
+    // The review handed to the renderer below. Reassigned once, when this stage records check
+    // results onto it (ruling B4) — the store copy and the context copy must be the same object
+    // or the assembler renders a template built from stale evidence in the very same call.
+    let reviewForRender: PendingGateReview = pendingReview;
 
     try {
       // Run shell_verify criteria from gates to enrich review with real command output.
@@ -242,6 +355,19 @@ export class GateReviewStage extends BasePipelineStage {
           sessionId,
           reason: coverage.reason,
         });
+
+        // Coverage did NOT clear the review, so the model gets a verdict to submit — and from
+        // here on the engine's own results are the only thing that can outrank it. Recorded on
+        // the review rather than left in this call's context: the verdict arrives on a LATER
+        // request, where this context no longer exists (ruling B4).
+        reviewForRender = await this.recordReviewEvidence(
+          sessionId,
+          pendingReview,
+          toCheckResults(shellResults, scriptResults)
+        );
+        if (context.sessionContext !== undefined) {
+          context.sessionContext = { ...context.sessionContext, pendingReview: reviewForRender };
+        }
       }
 
       const chainContext = this.chainSessionStore.getChainContext(
@@ -265,8 +391,8 @@ export class GateReviewStage extends BasePipelineStage {
         executionType: 'gate_review',
         stepPrompts: reviewSteps,
         chainContext,
-        pendingGateReview: pendingReview,
-        additionalGateIds: pendingReview.gateIds,
+        pendingGateReview: reviewForRender,
+        additionalGateIds: reviewForRender.gateIds,
       });
 
       // Resolve judge gates and compose context-isolated prompt if any gates use judge mode

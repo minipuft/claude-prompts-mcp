@@ -276,3 +276,66 @@ describe('prompt composer input mapping', () => {
     }
   );
 });
+
+/**
+ * B13: `artifacts:` is how a prompt tells gate activation what the run touches. Both failure
+ * modes it can have are silent at runtime — a misspelled key resolves to no artifacts, a
+ * `fromArgument` naming nothing resolves to no paths — and both end the same way: the gate the
+ * author was aiming at never attaches and nothing says so. So both are schema errors.
+ */
+describe('PromptYamlSchema.artifacts (ruling B13)', () => {
+  const withArtifacts = (artifacts: unknown, args: Array<Record<string, unknown>> = []) => ({
+    id: 'artifact_demo',
+    name: 'Artifact Demo',
+    description: 'A prompt declaring what it touches',
+    userMessageTemplate: 'do the thing',
+    arguments: args,
+    artifacts,
+  });
+
+  it('accepts produces alone, fromArgument alone, and both together', () => {
+    expect(validatePromptYaml(withArtifacts({ produces: ['plan'] })).valid).toBe(true);
+    expect(
+      validatePromptYaml(
+        withArtifacts({ fromArgument: 'files' }, [{ name: 'files', type: 'string' }])
+      ).valid
+    ).toBe(true);
+    const both = validatePromptYaml(
+      withArtifacts({ produces: ['plan', 'pr-body'], fromArgument: 'files' }, [
+        { name: 'files', type: 'string' },
+      ])
+    );
+    expect(both.valid).toBe(true);
+    expect(both.data?.artifacts).toEqual({ produces: ['plan', 'pr-body'], fromArgument: 'files' });
+  });
+
+  it('rejects fromArgument naming an argument the prompt does not declare', () => {
+    const result = validatePromptYaml(
+      withArtifacts({ fromArgument: 'nope' }, [{ name: 'files', type: 'string' }])
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.join('\n')).toContain(
+      "artifacts.fromArgument names `nope`, which is not one of this prompt's arguments"
+    );
+  });
+
+  it('rejects a kind outside the fixed vocabulary', () => {
+    expect(validatePromptYaml(withArtifacts({ produces: ['screenshot'] })).valid).toBe(false);
+  });
+
+  it('rejects an unknown key inside the artifacts block', () => {
+    expect(validatePromptYaml(withArtifacts({ produce: ['plan'] })).valid).toBe(false);
+  });
+
+  it('a prompt with no artifacts block still loads', () => {
+    const result = validatePromptYaml({
+      id: 'no_artifacts',
+      name: 'No Artifacts',
+      description: 'Unchanged by B13',
+      userMessageTemplate: 'do the thing',
+      arguments: [],
+    });
+    expect(result.valid).toBe(true);
+    expect(result.data?.artifacts).toBeUndefined();
+  });
+});

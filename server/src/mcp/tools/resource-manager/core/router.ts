@@ -216,8 +216,10 @@ export class ResourceManagerRouter {
       mcp_prompt_mode: args.mcp_prompt_mode,
       subagent_model: args.subagent_model,
       agent_type: args.agent_type,
-      is_chain: args.is_chain,
       full_restart: args.full_restart,
+      // Read by `guide`. Forwarded under the caller's names like every field above.
+      goal: args.goal,
+      include_legacy: args.include_legacy,
       execution_hint: args.execution_hint,
       filter: args.filter,
       format: args.format,
@@ -263,16 +265,19 @@ export class ResourceManagerRouter {
     // lands here rather than diverging the published name from the file it writes.
     if (args.enforcement_mode) gateArgs.enforcementMode = args.enforcement_mode;
     if (args.description) gateArgs.description = args.description;
+    if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;
     if (args.pass_criteria !== undefined) {
+      // A bare string only ever existed to populate `required_patterns`, which is gone
+      // (B9: never had an evaluator). The MCP schema now rejects bare strings at the
+      // boundary (`gatePassCriteriaSchema`, resource-manager.schema.ts), so this filter is
+      // type-level safety only — it should never drop a value a validated caller sent.
       const normalizedPassCriteria: NonNullable<GateManagerInput['pass_criteria']> = (
         args.pass_criteria ?? []
-      ).map((criteria) => {
-        if (typeof criteria === 'string') {
-          return { required_patterns: [criteria] };
-        }
-        return criteria;
-      });
+      ).filter(
+        (criteria): criteria is NonNullable<GateManagerInput['pass_criteria']>[number] =>
+          typeof criteria !== 'string'
+      );
       gateArgs.pass_criteria = normalizedPassCriteria;
     }
     if (args.activation) {

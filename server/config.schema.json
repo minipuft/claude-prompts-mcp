@@ -232,6 +232,21 @@
               "description": "Default strict mode: use failure-first framing for judge evaluation"
             }
           }
+        },
+        "harnessCovers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "default": [],
+          "description": "Reminder subjects this installation's harness already covers (its own rules or hooks). A reminder gate whose `subject` is listed is not rendered; checks are never suppressed. Copy spellings from the Subject column of resources/gates/_index.md."
+        },
+        "reminderTokenBudget": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 800,
+          "description": "Estimated tokens of reminder guidance rendered per dispatch. Reminders over the budget render as one line each, in priority order; nothing is dropped. Checks are outside the budget."
         }
       }
     },

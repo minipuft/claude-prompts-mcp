@@ -15,7 +15,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
-| `engine-gates` | `src/engine/gates` | domain | canonical | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>formatting<br>mcp-tools<br>resources<br>runtime<br>skills-sync |
+| `engine-gates` | `src/engine/gates` | domain | canonical | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>formatting<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync |
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
 | `infrastructure` | `src/infra` | layer | canonical | Configuration, persistence, transport support, logging, and observability infrastructure. | — | — | — | — |
 | `infra-config` | `src/infra/config` | domain | canonical | Loads and resolves server configuration. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | infra-http<br>runtime<br>server-source |
@@ -25,23 +25,23 @@ remains in `server/.dependency-cruiser.cjs`.
 | `infra-logging` | `src/infra/logging` | shared | canonical | Provides structured logging primitives and configuration. | — | `index.ts` | shared-types | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-config<br>infra-database<br>infra-http<br>infra-observability<br>runtime<br>server-source |
 | `infra-observability` | `src/infra/observability` | domain | canonical | Provides tracing and operational telemetry infrastructure. | — | — | infra-database<br>infra-hooks<br>infra-logging<br>shared-types<br>shared-utils | runtime |
 | `mcp-boundary` | `src/mcp` | layer | canonical | Model Context Protocol contracts, transports, metadata, and tool adapters. | — | — | — | — |
-| `mcp-contracts` | `src/mcp/contracts` | protocol | canonical | Defines runtime-facing MCP contract metadata and generated schemas. | — | — | mcp-metadata | mcp-metadata |
+| `mcp-contracts` | `src/mcp/contracts` | protocol | canonical | Defines runtime-facing MCP contract metadata and generated schemas. | — | — | mcp-metadata | mcp-metadata<br>mcp-tools |
 | `mcp-http` | `src/mcp/http` | protocol | canonical | Implements the Streamable HTTP MCP transport boundary. | — | — | engine-execution<br>mcp-tools<br>prompts<br>shared-types<br>shared-utils | runtime |
 | `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | mcp-contracts<br>mcp-tools |
-| `mcp-tools` | `src/mcp/tools` | protocol | canonical | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-metadata<br>prompts<br>resources<br>runtime<br>semantic<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
+| `mcp-tools` | `src/mcp/tools` | protocol | canonical | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-contracts<br>mcp-metadata<br>prompts<br>resources<br>runtime<br>semantic<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
 | `application-modules` | `src/modules` | layer | canonical | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
 | `automation` | `src/modules/automation` | domain | canonical | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
 | `chains` | `src/modules/chains` | domain | canonical | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
 | `formatting` | `src/modules/formatting` | domain | canonical | Owns response styles and output formatting behavior. | — | `index.ts` | engine-gates<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
 | `hot-reload` | `src/modules/hot-reload` | domain | canonical | Coordinates file observation and registry refresh behavior. | — | — | shared-types | automation<br>prompts<br>runtime |
-| `prompts` | `src/modules/prompts` | domain | canonical | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime |
+| `prompts` | `src/modules/prompts` | domain | canonical | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>engine-gates<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime |
 | `resources` | `src/modules/resources` | domain | canonical | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync |
 | `semantic` | `src/modules/semantic` | domain | canonical | Owns semantic indexing and related retrieval behavior. | — | — | engine-execution<br>shared-types | mcp-tools |
-| `skills-sync` | `src/modules/skills-sync` | domain | canonical | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools |
+| `skills-sync` | `src/modules/skills-sync` | domain | canonical | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
 | `text-references` | `src/modules/text-refs` | domain | canonical | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
 | `versioning` | `src/modules/versioning` | domain | canonical | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools |
 | `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types | engine-execution<br>mcp-tools<br>prompts<br>shared-types |
-| `runtime` | `src/runtime` | runtime | canonical | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-types<br>shared-utils<br>text-references | mcp-tools<br>server-source |
+| `runtime` | `src/runtime` | runtime | canonical | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-types<br>shared-utils<br>skills-sync<br>text-references | mcp-tools<br>server-source |
 | `shared` | `src/shared` | layer | canonical | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates |
 | `shared-types` | `src/shared/types` | shared | canonical | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>semantic<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
@@ -182,6 +182,7 @@ flowchart LR
   module_mcp_tools --> module_engine_frameworks
   module_mcp_tools --> module_engine_gates
   module_mcp_tools --> module_formatting
+  module_mcp_tools --> module_mcp_contracts
   module_mcp_tools --> module_mcp_metadata
   module_mcp_tools --> module_prompts
   module_mcp_tools --> module_resources
@@ -195,6 +196,7 @@ flowchart LR
   module_mcp_tools --> module_workflow_ir
   module_prompts --> module_automation
   module_prompts -. type .-> module_engine_execution
+  module_prompts --> module_engine_gates
   module_prompts --> module_hot_reload
   module_prompts --> module_shared_types
   module_prompts --> module_shared_utils
@@ -225,6 +227,7 @@ flowchart LR
   module_runtime --> module_resources
   module_runtime --> module_shared_types
   module_runtime --> module_shared_utils
+  module_runtime --> module_skills_sync
   module_runtime --> module_text_references
   module_semantic --> module_engine_execution
   module_semantic -. type .-> module_shared_types

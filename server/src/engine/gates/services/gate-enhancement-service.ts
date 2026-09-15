@@ -1,6 +1,7 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { applicableFrameworkVetoes, GateSetResolver } from './gate-set-resolver.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
+import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
@@ -19,7 +20,7 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
-import type { GatesConfig } from '../types.js';
+import type { ResolvedGateSettings } from '../types.js';
 
 /**
  * Every prompt in this execution that may carry inline gate definitions.
@@ -162,7 +163,7 @@ export class GateEnhancementService {
     gateContext: SinglePromptGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: GatesConfig | undefined,
+    gatesConfig: ResolvedGateSettings | undefined,
     frameworkGateIds: Set<string>,
     /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
     inlineDefinitionGateIds: readonly string[] = []
@@ -186,6 +187,15 @@ export class GateEnhancementService {
       promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
     });
 
+    // B13: the same derivation the execution planner runs, from the same two inputs. Derived
+    // rather than threaded because `resolveDeclaredArtifacts` is pure and both call sites already
+    // hold the prompt and the parsed arguments — a field on the plan would add a hop that can go
+    // stale without adding an answer.
+    const declaredArtifacts = resolveDeclaredArtifacts(
+      prompt.artifacts,
+      context.parsedCommand?.promptArgs
+    );
+
     await this.resolveIntoAccumulator(context, {
       prompt,
       category: prompt.category ?? '',
@@ -199,6 +209,7 @@ export class GateEnhancementService {
       plannedGateIds: executionPlan.gates,
       frameworkGateIds: registeredGates.canonicalGateIds,
       inlineDefinitionGateIds,
+      declaredArtifacts,
     });
 
     let gateIds = [...context.gates.getAll()];
@@ -245,6 +256,10 @@ export class GateEnhancementService {
       if (executionPlan.category !== undefined) {
         gateCtx.category = executionPlan.category;
       }
+      // Assigned unconditionally: an empty list and an absent one mean the same thing to
+      // `isGateActiveForContext` ("this run declared nothing"), so a guard here would buy a
+      // branch and no behaviour.
+      gateCtx.artifacts = declaredArtifacts;
 
       const result = await gateService.enhancePrompt(prompt, gateIds, gateCtx);
 
@@ -278,7 +293,7 @@ export class GateEnhancementService {
     gateContext: ChainStepGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: GatesConfig | undefined,
+    gatesConfig: ResolvedGateSettings | undefined,
     frameworkGateIds: Set<string>,
     /**
      * Canonical ids for every step's inline definitions, registered up front by the caller.
@@ -867,7 +882,7 @@ export class GateEnhancementService {
    */
   private ensureDefaultFrameworkGate(
     gateIds: string[],
-    gatesConfig: GatesConfig | undefined,
+    gatesConfig: ResolvedGateSettings | undefined,
     activeFrameworkId: string | undefined,
     frameworkGateIds: Set<string>,
     frameworkVetoes: readonly FrameworkVeto[]

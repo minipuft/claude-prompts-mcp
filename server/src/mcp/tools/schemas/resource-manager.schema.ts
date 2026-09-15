@@ -116,6 +116,51 @@ const executionStepSchema = z.object({
 });
 
 /**
+ * Mirrors `GatePassCriteriaSchema` (gate-schema.ts) field for field, minus the six
+ * pattern/length fields (`min_length`, `max_length`, `required_patterns`,
+ * `forbidden_patterns`, `regex_patterns`, `keyword_count`) — they never had an evaluator
+ * (B9) and `validateGateSchema` refuses them at load, so this write surface no longer
+ * offers them either. A bare string is no longer accepted here: it only ever existed to
+ * populate `required_patterns`. Author a reminder sentence into `guidance` instead, or use
+ * `shell_verify`/`script_tool` for a real check.
+ */
+const gatePassCriteriaSchema = z.object({
+  type: z
+    .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
+    .optional(),
+
+  // Framework compliance options
+  framework: z.string().optional(),
+  min_compliance_score: z.number().min(0).max(1).optional(),
+  severity: z.enum(['warn', 'fail']).optional(),
+  quality_indicators: z
+    .record(
+      z.string(),
+      z.object({
+        keywords: z.array(z.string()).optional(),
+        patterns: z.array(z.string()).optional(),
+      })
+    )
+    .optional(),
+
+  // Shell verification options (ground-truth validation via exit code)
+  shell_command: z.array(z.string()).nonempty().optional(),
+  shell_timeout: z.number().int().positive().optional(),
+  shell_working_dir: z.string().optional(),
+  shell_env: z.record(z.string(), z.string()).optional(),
+  shell_max_attempts: z.number().int().positive().optional(),
+  shell_preset: z.enum(['fast', 'full', 'extended']).optional(),
+  shell_stdin_source: z.enum(['agent_response']).optional(),
+  shell_response_env_var: z.string().optional(),
+
+  // Script tool verification options (structured JSON pass/fail)
+  script_tool_id: z.string().optional(),
+  script_tool_input: z.record(z.string(), z.unknown()).optional(),
+  script_tool_timeout: z.number().int().positive().optional(),
+  script_tool_working_dir: z.string().optional(),
+});
+
+/**
  * Resource Manager input schema.
  *
  * Unlike prompt_engine/system_control, resource_manager descriptions come from
@@ -160,6 +205,12 @@ export const resourceManagerInputSchema = z
     confirm: z.boolean().optional(),
     /** Audit reason for reload/delete/switch operations. */
     reason: z.string().trim().optional(),
+    /** [Prompt] reload, create, update and delete restart the server instead of hot-reloading. */
+    full_restart: z.boolean().optional(),
+    /** [Prompt guide] What the caller is trying to do; ranks the suggested actions. */
+    goal: z.string().optional(),
+    /** [Prompt guide] Include full details for actions that are not marked working. */
+    include_legacy: z.boolean().optional(),
 
     // ── Prompt parameters ────────────────────────────────────────────────
     /** [Prompt] Category tag for the prompt. */
@@ -368,6 +419,18 @@ export const resourceManagerInputSchema = z
      */
     gate_type: z.enum(['validation', 'guidance']).optional(),
     /**
+     * [Gate] Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`).
+     * An installation's `gates.harnessCovers` (config.json) suppresses reminders whose
+     * subject it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
+     */
+    subject: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        'subject must be kebab-case: lowercase letters, digits, and hyphens only, e.g. "code-quality"'
+      )
+      .optional(),
+    /**
      * [Gate] Severity for prioritization. Omitting it leaves an existing gate's value
      * untouched; a new gate takes the loader default `medium`.
      */
@@ -379,8 +442,8 @@ export const resourceManagerInputSchema = z
     enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional(),
-    /** [Gate] Structured pass criteria definitions. */
-    pass_criteria: z.array(z.unknown()).optional(),
+    /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
+    pass_criteria: z.array(gatePassCriteriaSchema).optional(),
     /** [Gate] Activation rules. */
     activation: z.record(z.string(), z.unknown()).optional(),
     /** [Gate] Retry configuration. */

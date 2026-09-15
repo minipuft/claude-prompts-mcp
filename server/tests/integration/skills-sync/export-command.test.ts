@@ -29,6 +29,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 // The real `server/` root, computed rather than hardcoded so a directory move does not
 // silently stop this file from finding the resources it copies fixtures from below.
@@ -150,7 +151,8 @@ describe('Export Command Integration', () => {
     const out = silentOutput();
     await runSkillsSyncCommand(
       { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
     return out;
   }
@@ -177,7 +179,8 @@ describe('Export Command Integration', () => {
       const out = silentOutput();
       const report = await runSkillsSyncCommand(
         { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // The foreign render is untouched — the whole point.
@@ -445,7 +448,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       const degraded = report.failures.filter((f) => f.id === 'dropped_owner/beta-widget');
@@ -467,7 +471,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // Without this the previous test also passes for a fix that warns about
@@ -490,7 +495,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           json: true,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // An export normally logs a banner, a per-file `wrote ...` line and a
@@ -530,7 +536,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           json: true,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       expect(report.failures.some((f) => f.reason.includes('manifest not saved'))).toBe(true);
@@ -993,22 +1000,17 @@ describe('Export Command Integration', () => {
 
     it('renders an inline_guidance criterion as prose with no JSON object', async () => {
       // The section is a checklist a model self-reviews against. A serialized config
-      // blob is not a reviewable instruction.
+      // blob is not a reviewable instruction. required_patterns/min_length are no longer
+      // a legal criterion shape (B9: rejected at load), so framework/min_compliance_score
+      // stand in as the still-valid multi-field case.
       const skill = await gateSkillWithCriteria('prose-gate', [
-        {
-          type: 'inline_guidance',
-          min_length: 100,
-          required_patterns: ['States the work type'],
-          forbidden_patterns: ['TODO'],
-        },
+        { type: 'inline_guidance', framework: 'CAGEERF', min_compliance_score: 0.8 },
       ]);
       const section = passCriteriaSection(skill);
 
-      expect(section).toContain('States the work type');
-      expect(section).toContain('100 characters');
-      expect(section).toContain('TODO');
+      expect(section).toContain('Complies with the CAGEERF framework');
+      expect(section).toContain('0.8');
       expect(section).not.toContain('{"');
-      expect(section).not.toContain('min_length');
       expect(section).not.toContain('[inline_guidance]');
     });
 
@@ -1028,32 +1030,36 @@ describe('Export Command Integration', () => {
 
     it('names an unrecognized criterion by its keys rather than serializing it', async () => {
       // GatePassCriteria is a passthrough schema, so unknown keys reach the exporter.
-      // The fallback must stay lossy-but-readable — never a JSON dump.
+      // The fallback must stay lossy-but-readable — never a JSON dump. keyword_count is
+      // no longer an example of this: it is now a rejected-at-load field (B9), not merely
+      // an unrecognized one, so a genuinely unknown key stands in instead.
       const section = passCriteriaSection(
         await gateSkillWithCriteria('odd-gate', [
-          { type: 'inline_guidance', keyword_count: { evidence: 2 } },
+          { type: 'inline_guidance', confidence_threshold: 0.9 },
         ])
       );
 
-      expect(section).toContain('keyword_count');
+      expect(section).toContain('confidence_threshold');
       expect(section).not.toContain('{"');
-      expect(section).not.toContain('evidence');
+      expect(section).not.toContain('0.9');
     });
 
     it('renders prose for the generic adapter too, not just claude-code', async () => {
       // The defect existed as byte-identical copies in BOTH exporters. Breaking only
       // the generic one left the whole 74-test suite green (mutation M-K), so a
-      // claude-code-only assertion cannot close this row.
+      // claude-code-only assertion cannot close this row. required_patterns/min_length
+      // are no longer a legal criterion shape (B9), so framework/min_compliance_score
+      // stand in, same as the claude-code case above.
       const section = passCriteriaSection(
         await gateSkillWithCriteria(
           'generic-gate',
-          [{ type: 'inline_guidance', min_length: 100, required_patterns: ['Cites evidence'] }],
+          [{ type: 'inline_guidance', framework: 'CAGEERF', min_compliance_score: 0.8 }],
           'codex'
         )
       );
 
-      expect(section).toContain('Cites evidence');
-      expect(section).toContain('100 characters');
+      expect(section).toContain('Complies with the CAGEERF framework');
+      expect(section).toContain('0.8');
       expect(section).not.toContain('{"');
       expect(section).not.toContain('min_length');
     });
@@ -1191,6 +1197,71 @@ describe('Export Command Integration', () => {
         await exists(path.join(outputDir, 'strategic_worker', 'hooks', 'gate-review.py'))
       ).toBe(false);
       expect(await exists(path.join(outputDir, 'strategic_worker', 'gates'))).toBe(false);
+    });
+  });
+
+  // ── B2 / row 1.4: check-tier gates render as commands, reminders keep the
+  // criteria table, and gates.harnessCovers suppresses a reminder whose subject the
+  // installation's harness already covers ──────────────────────────────────────
+
+  describe('check/reminder tiers and gates.harnessCovers (ruling B2, row 1.4)', () => {
+    /** `config.json`'s `gates.harnessCovers` — a plain JSON write, the shape the exporter reads. */
+    async function writeServerConfig(harnessCovers: string[]): Promise<void> {
+      await writeFile(
+        path.join(serverRoot, 'config.json'),
+        JSON.stringify({ gates: { harnessCovers } }, null, 2)
+      );
+    }
+
+    beforeEach(async () => {
+      // Real shapes, not synthetic ones: mirrors resources/gates/test-suite,
+      // security-awareness, code-quality — one shell_verify check, two subject-tagged
+      // reminders.
+      await writeGate('test-suite', 'Test Suite Verification', {
+        subject: 'testing',
+        pass_criteria: [{ type: 'shell_verify', shell_command: ['npm', 'test'] }],
+      });
+      await writeGate('security-awareness', 'Security Best Practices', {
+        subject: 'security',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+      await writeGate('code-quality', 'Code Quality Standards', {
+        subject: 'code-quality',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+      await writePrompt('general', 'tiered', {
+        gateConfiguration: { include: ['test-suite', 'security-awareness', 'code-quality'] },
+      });
+    });
+
+    it('renders the check under ### Checks, keeps code-quality under ### Reminders, and omits the harness-covered reminder', async () => {
+      await writeServerConfig(['security']);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+      const checksSection = /### Checks\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
+      const remindersSection = /### Reminders\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
+
+      expect(checksSection).toContain('Passes `npm test`');
+      expect(remindersSection).toContain('code-quality');
+      expect(skill).not.toContain('security-awareness');
+      expect(skill).toContain(
+        "Omitted 1 reminder(s) this installation's harness covers: security."
+      );
+    });
+
+    it('keeps every gate and emits no omission line when harnessCovers is empty', async () => {
+      await writeServerConfig([]);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+
+      expect(skill).toContain('Passes `npm test`');
+      expect(skill).toContain('security-awareness');
+      expect(skill).toContain('code-quality');
+      expect(skill).not.toContain('Omitted');
     });
   });
 });

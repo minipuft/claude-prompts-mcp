@@ -101,7 +101,11 @@ export type {
   TelemetryAttributePolicy,
   TelemetryConfig,
 } from './core-config.js';
-export { DEFAULT_VERSIONING_CONFIG, DEFAULT_TELEMETRY_CONFIG } from './core-config.js';
+export {
+  DEFAULT_VERSIONING_CONFIG,
+  DEFAULT_TELEMETRY_CONFIG,
+  DEFAULT_GATES_CONFIG,
+} from './core-config.js';
 
 // Request identity types (workspace/organization scoping)
 export type {

@@ -4,19 +4,12 @@ type: validation
 severity: medium
 enforcementMode: advisory
 description: Flags performance concerns without blocking. Warns but allows merge.
+subject: performance
 guidanceFile: guidance.md
 gate_type: category
 
 pass_criteria:
   - type: inline_guidance
-    forbidden_patterns:
-      - 'console.log'
-      - 'debugger'
-  - type: inline_guidance
-    regex_patterns:
-      - memo|useMemo|useCallback
-      - async|await|Promise
-      - cache|memoize
 
 retry_config:
   max_attempts: 1
@@ -24,6 +17,8 @@ retry_config:
   preserve_context: true
 
 activation:
+  artifacts:
+    - source
   prompt_categories:
     - pr-review
   explicit_request: true

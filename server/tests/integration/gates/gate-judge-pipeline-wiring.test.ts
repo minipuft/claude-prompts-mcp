@@ -22,7 +22,7 @@ const baseGate: LightweightGateDefinition = {
   type: 'validation',
   description: 'Validates code quality',
   guidance: 'Check for proper error handling.',
-  pass_criteria: [{ type: 'inline_guidance', min_length: 100, required_patterns: ['function'] }],
+  pass_criteria: [{ type: 'inline_guidance' }],
 };
 
 function createMockLoader(
@@ -93,6 +93,7 @@ function createStageWithGates(
         maxAttempts: 3,
       }),
       getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
+      setPendingGateReview: jest.fn().mockResolvedValue(undefined as never),
       clearPendingGateReview: jest.fn().mockResolvedValue(undefined),
       // The review body resolves against the RUN's node list now (P4 row 3.4). `undefined` is a
       // real answer for a judge-wiring harness that never creates a run, and it exercises the
@@ -163,11 +164,15 @@ describe('Judge Gate Pipeline Wiring', () => {
   });
 
   test('judge prompt contains criteria from gate definition', async () => {
+    // min_length/required_patterns used to render into the judge prompt via
+    // formatCriteria; they never had an evaluator (B9), are refused at load, and
+    // formatCriteria no longer reads them — `guidance` is the only criteria text an
+    // inline_guidance-only gate contributes to the judge prompt now.
     const judgeGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'criteria-gate',
       guidance: 'Follow clean code principles',
-      pass_criteria: [{ type: 'inline_guidance', min_length: 200, required_patterns: ['export'] }],
+      pass_criteria: [{ type: 'inline_guidance' }],
       evaluation: { mode: 'judge' },
     };
 
@@ -175,8 +180,6 @@ describe('Judge Gate Pipeline Wiring', () => {
     await stage.execute(context);
 
     const metadata = context.executionResults?.metadata as any;
-    expect(metadata.judge.judgePrompt).toContain('at least 200 characters');
-    expect(metadata.judge.judgePrompt).toContain('export');
     expect(metadata.judge.judgePrompt).toContain('Follow clean code principles');
   });
 
@@ -239,7 +242,7 @@ describe('Shell Verify Auto-Pass', () => {
     const nonShellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'content-gate',
-      pass_criteria: [{ type: 'inline_guidance', min_length: 100 }],
+      pass_criteria: [{ type: 'inline_guidance' }],
     };
 
     const { stage, context, chainOperatorExecutor } = createStageWithGates({
@@ -284,7 +287,7 @@ describe('Shell Verify Auto-Pass', () => {
     const nonShellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'code-review',
-      pass_criteria: [{ type: 'inline_guidance', min_length: 100 }],
+      pass_criteria: [{ type: 'inline_guidance' }],
     };
 
     const { stage, context, chainOperatorExecutor } = createStageWithGates({
@@ -305,7 +308,7 @@ describe('Shell Verify Auto-Pass', () => {
     const nonShellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'test-suite',
-      pass_criteria: [{ type: 'inline_guidance', min_length: 100 }],
+      pass_criteria: [{ type: 'inline_guidance' }],
     };
 
     const { stage, context, chainOperatorExecutor } = createStageWithGates({

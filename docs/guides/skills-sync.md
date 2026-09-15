@@ -87,6 +87,28 @@ exports:
 #       user: ~/custom/claude-skills
 ```
 
+### Where Sources and Config Are Read From
+
+Skills Sync reads the resources the server serves. The package's bundled `server/resources/`
+always contributes. A workspace set with `MCP_WORKSPACE` layers its `resources/` over it, and a
+workspace entry replaces a bundled one with the same identity: `{category}/{id}` for a prompt, the
+id for a gate, framework or style. `MCP_RESOURCES_PATH` names a resources directory and takes
+precedence over the workspace, as it does for the server.
+
+`skills-sync.yaml` is read from the workspace when the workspace holds one, and from the package
+otherwise. Registrations an export adds are written back to the file that was read. Neither file is
+created for you.
+
+Writes follow the same roots:
+
+- `clone` creates the resource under the workspace's `resources/` when a workspace is set, and under
+  the package's otherwise.
+- `pull` writes an edit back to the resource's own source files. It refuses a resource whose source
+  is in the bundled package tree while a workspace or `MCP_RESOURCES_PATH` is set, because a package
+  update replaces that tree. Copy the resource into your workspace and pull again.
+- `patch` writes to `runtime-state/patches` under `MCP_RUNTIME_ROOT` when it is set, and under the
+  workspace otherwise.
+
 ### Export Format
 
 Only prompts are exported as standalone skills. Format is `prompt:{category}/{id}`:
@@ -97,7 +119,7 @@ exports:
   - prompt:development/review # → resources/prompts/development/review/
 ```
 
-**Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` criteria table in the SKILL.md.
+**Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` section in the SKILL.md split into `### Checks` and `### Reminders` — see [Which Gates an Exported Skill Carries](#which-gates-an-exported-skill-carries) for how each tier renders.
 
 **Doc bundling**: Prompts with a `docs/` subdirectory get all `.md` files bundled into `docs/` in the exported skill directory. Use this for templates, reference material, and supporting documentation that supplements the main SKILL.md. Doc files are included in the content hash for drift detection.
 
@@ -121,7 +143,7 @@ Override any output directory via the `overrides` key in `skills-sync.yaml`.
 
 ## Auto-Deregistration
 
-A prompt exported as a skill is served by that client's native harness, so listing it again under MCP `prompts/list` offers the same prompt twice. The server reads `skills-sync.yaml` during prompt registration and skips any prompt whose `{category}/{id}` is registered for export.
+A prompt exported as a skill is served by that client's native harness, so listing it again under MCP `prompts/list` offers the same prompt twice. The server reads `skills-sync.yaml` during prompt registration and skips any prompt whose `{category}/{id}` is registered for export. It reads the same `skills-sync.yaml` Skills Sync does: the workspace's when the workspace holds one, else the package's.
 
 ```
 skills-sync.yaml registrations → data-loader reads at startup → registry skips prompts/list registration
@@ -254,6 +276,20 @@ The last row is the one that differs from runtime. The engine reads an absent fr
 _unconstrained_, which is right for a live execution where a framework may yet be selected, but
 wrong for a static artifact: an exported skill has no framework, so a gate that only makes sense
 under one would ship guidance the reader cannot act on.
+
+**How a carried gate renders.** Once a gate is included, export splits it the same way the runtime
+does: a **check** (a gate with a `shell_verify` or `script_tool` pass criterion) renders under
+`### Checks` as a single command or tool line — for example, a line naming `npm test` — never its
+guidance, since a check is settled by rerunning that command rather than by the reader
+self-attesting it. Every other gate is a **reminder**, and renders under `### Reminders` as the
+criteria table, same as before. An installation's `gates.harnessCovers`, read from the
+`config.json` the server reads (the workspace's when it holds one, else the package's), shapes the
+export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
+out of the exported skill entirely, and the SKILL.md notes how many were omitted and which
+subjects covered them. Checks are never suppressed. See
+[gate-configuration.md](../reference/gate-configuration.md#tiers) for the full tier and
+`harnessCovers` reference — this export path reads the same config field, just once per run
+instead of once per dispatch.
 
 ## Drift Detection
 

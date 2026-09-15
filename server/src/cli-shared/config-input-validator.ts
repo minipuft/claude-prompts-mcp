@@ -53,6 +53,8 @@ export const CONFIG_VALID_KEYS = [
   'prompts.directory',
   'gates.directory',
   'gates.enforcePendingVerdict',
+  'gates.harnessCovers',
+  'gates.reminderTokenBudget',
   'hooks.expandedOutput',
   'phaseGuards.mode',
   'phaseGuards.maxRetries',
@@ -98,7 +100,10 @@ export interface ConfigInputValidationResult {
   valid: boolean;
   error?: string;
   convertedValue?: any;
-  valueType?: 'string' | 'number' | 'boolean';
+  // 'array' added for `gates.harnessCovers` — the first array-typed settable key in this file.
+  // No case before it parsed a comma-separated value into string[]; nothing here reads valueType
+  // downstream (checked: no consumer references `.valueType`), so widening the union is additive.
+  valueType?: 'string' | 'number' | 'boolean' | 'array';
 }
 
 export function validateConfigInput(key: string, value: string): ConfigInputValidationResult {
@@ -343,6 +348,33 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         };
       }
       return { valid: true, convertedValue: trimmed, valueType: 'string' };
+    }
+
+    case 'gates.harnessCovers': {
+      const subjects = value
+        .split(',')
+        .map((subject) => subject.trim())
+        .filter((subject) => subject.length > 0);
+      const pattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+      const invalid = subjects.filter((subject) => !pattern.test(subject));
+      if (invalid.length > 0) {
+        return {
+          valid: false,
+          error: `Harness covers must be comma-separated lowercase-hyphenated subjects (invalid: ${invalid.join(', ')})`,
+        };
+      }
+      return { valid: true, convertedValue: subjects, valueType: 'array' };
+    }
+
+    case 'gates.reminderTokenBudget': {
+      const budget = parseInt(value, 10);
+      if (isNaN(budget) || budget < 0) {
+        return {
+          valid: false,
+          error: 'reminderTokenBudget must be a whole number >= 0',
+        };
+      }
+      return { valid: true, convertedValue: budget, valueType: 'number' };
     }
 
     case 'phaseGuards.mode': {

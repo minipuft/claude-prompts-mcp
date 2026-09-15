@@ -8,6 +8,7 @@ import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
+import type { ResourceWriteCommitOptions } from '#modules/resources/services/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
@@ -87,8 +88,32 @@ export class FrameworkLifecycleProcessor {
       return this.validationService.createErrorResponse(id, validation);
     }
 
+    // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
+    // numbering every edit uses, which a fresh id resolves to 1 on its own. No bridge: a create
+    // has no prior live state to carry across, unlike an edit of an unrecorded framework. Runs as
+    // the writer's `commit` step (P4.2 / SF-3 contract, matching `handleUpdate` below) so a
+    // persistence failure aborts the create with nothing written.
+    const skipVersion = args.skip_version === true;
+    const commitOptions: ResourceWriteCommitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              await this.ctx.versionHistoryService.saveVersion(
+                'framework',
+                id,
+                projectWriteModel(
+                  id,
+                  frameworkData as unknown as Record<string, unknown>,
+                  frameworkSnapshotContract.projectedFields
+                ),
+                { description: 'Created via resource_manager', diff_summary: '' }
+              );
+            },
+          }
+        : {};
+
     // Atomic create with rollback on failure
-    const result = await this.createFrameworkAtomic(id, frameworkData);
+    const result = await this.createFrameworkAtomic(id, frameworkData, commitOptions);
     if (!result.success) {
       return this.error(`Failed to create framework: ${result.error}`);
     }
@@ -117,7 +142,7 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Failed to load framework files for '${id}'. Files may be corrupted.`);
     }
 
-    // Capture before state for diff generation and versioning
+    // Capture before state for versioning
     const beforeState = frameworkSnapshotContract.project(id, existingData);
 
     // Build update data with ONLY the fields provided in the request
@@ -146,6 +171,13 @@ export class FrameworkLifecycleProcessor {
       beforeState
     );
 
+    // One projection of the write serves the version's diff summary and the update's own diff. It
+    // is resolved from the plan the writer applies, with the arguments the writer is handed below,
+    // so both name the files the write lands in and the lines that change in them.
+    const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
+      await this.ctx.fileService.projectFrameworkWrite(frameworkData, existingData)
+    );
+
     // Auto-versioning — go-forward: version N holds the state edit N produced, matching prompts
     // and gates. `recordEditResult` bridges the prior live state when it is not already the newest
     // row, which carries pre-existing framework rows across the era boundary without a migration.
@@ -165,11 +197,6 @@ export class FrameworkLifecycleProcessor {
             // gate exactly like the pre-fix shape — and a gate that cannot see the property is
             // not guarding it.
             commit: async (): Promise<void> => {
-              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-                beforeState,
-                afterState,
-                `${id}/framework.yaml`
-              );
               const versionResult = await this.ctx.versionHistoryService.recordEditResult(
                 'framework',
                 id,
@@ -177,7 +204,7 @@ export class FrameworkLifecycleProcessor {
                 afterState,
                 {
                   description: 'Update via resource_manager',
-                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
               versionSaved = versionResult.version;
@@ -210,13 +237,6 @@ export class FrameworkLifecycleProcessor {
     // Still runs, and is still not what makes the edit visible. Kept because dependent systems
     // outside the framework registry subscribe to it.
     await this.ctx.onRefresh?.();
-
-    // Generate diff view
-    const diffResult = this.ctx.textDiffService.generateObjectDiff(
-      beforeState,
-      afterState,
-      `${id}/framework.yaml`
-    );
 
     let response =
       `${registered ? `✅ Framework '${id}' updated successfully` : `⚠️ Framework '${id}' was written to disk but the edit is NOT live in this process`}\n\n` +
@@ -392,11 +412,19 @@ export class FrameworkLifecycleProcessor {
       // uninitialized manager, an unavailable registry, a guide that loads but cannot be
       // retrieved, a definition that fails to generate, or a thrown error — only one of which is
       // "the file is missing". The previous text sent operators to check a file that exists.
+      //
+      // Resolved through the same roots the loader itself reads (`resolveExistingFrameworkDir`
+      // checks the writable root first, then the bundled root — matching
+      // `RuntimeFrameworkLoader`'s primary-then-additional-dirs order). Falls back to the write
+      // target (`getFrameworkDir`) when the id resolves nowhere, since that is where an operator
+      // would place the file.
+      const frameworkDir =
+        this.ctx.fileService.resolveExistingFrameworkDir(id) ??
+        this.ctx.fileService.getFrameworkDir(id);
       return this.error(
         `Failed to reload framework '${id}' — it could not be registered from disk. Check the ` +
           `server log for the reason, then verify that ` +
-          `${path.join(this.ctx.configManager.getServerRoot(), 'resources', 'frameworks', id.toLowerCase(), 'framework.yaml')} ` +
-          `exists and parses.`
+          `${path.join(frameworkDir, 'framework.yaml')} exists and parses.`
       );
     }
 
@@ -480,15 +508,6 @@ export class FrameworkLifecycleProcessor {
    * surface and does the whole job: `loadAndRegisterById` (guide) → `generateSingleFrameworkDefinition`
    * → set in the framework map. It returns false rather than throwing when nothing loads.
    */
-  private frameworkDir(id: string): string {
-    return path.join(
-      this.ctx.configManager.getServerRoot(),
-      'resources',
-      'frameworks',
-      id.toLowerCase()
-    );
-  }
-
   private async reregister(id: string): Promise<boolean> {
     return await reregisterFramework(this.ctx, id);
   }
@@ -530,13 +549,18 @@ export class FrameworkLifecycleProcessor {
    */
   private async createFrameworkAtomic(
     id: string,
-    frameworkData: FrameworkCreationData
+    frameworkData: FrameworkCreationData,
+    commitOptions: ResourceWriteCommitOptions = {}
   ): Promise<{ success: boolean; error?: string; paths?: string[] }> {
     const normalizedId = id.toLowerCase();
     const registry = this.ctx.frameworkManager.getFrameworkRegistry();
 
     // Step 1: Write files to disk
-    const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, null);
+    const writeResult = await this.ctx.fileService.writeFrameworkFiles(
+      frameworkData,
+      null,
+      commitOptions
+    );
     if (!writeResult.success) {
       return { success: false, error: `File write failed: ${writeResult.error}` };
     }
@@ -558,7 +582,7 @@ export class FrameworkLifecycleProcessor {
         success: false,
         error: removed
           ? 'Registry registration failed - files rolled back'
-          : `Registry registration failed, AND the files could not be removed — ${this.frameworkDir(normalizedId)} may still exist. Delete it before retrying.`,
+          : `Registry registration failed, AND the files could not be removed — ${this.ctx.fileService.getFrameworkDir(normalizedId)} may still exist. Delete it before retrying.`,
       };
     }
 
@@ -572,7 +596,7 @@ export class FrameworkLifecycleProcessor {
         error:
           unregistered && removed
             ? 'Framework registration failed - registry and files rolled back'
-            : `Framework registration failed, and rollback was incomplete: ${unregistered ? 'guide unregistered' : 'guide NOT unregistered'}, ${removed ? 'files removed' : `files NOT removed (${this.frameworkDir(normalizedId)} may still exist)`}.`,
+            : `Framework registration failed, and rollback was incomplete: ${unregistered ? 'guide unregistered' : 'guide NOT unregistered'}, ${removed ? 'files removed' : `files NOT removed (${this.ctx.fileService.getFrameworkDir(normalizedId)} may still exist)`}.`,
       };
     }
 

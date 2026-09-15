@@ -384,3 +384,119 @@ describe('P7 acceptance — driven run against a real engine', () => {
     }
   });
 });
+
+/**
+ * A create records the created state as version 1, and the first update after it saves version 2
+ * with no bridge row. Real `PromptLifecycleProcessor`, real `FileOperations`, real
+ * `VersionHistoryService` over a real `SqliteEngine`, and a real load-convert refresh — the same
+ * engine `runDrive` above exercises, but through `createPrompt` instead of a direct file seed.
+ */
+describe('P7 acceptance — create records version 1', () => {
+  const CREATED_ID = 'created_version_probe';
+  let workspaceDir: string;
+  let engine: SqliteEngine;
+
+  afterEach(async () => {
+    await engine.shutdown();
+    rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  async function createLifecycle(): Promise<{
+    lifecycle: PromptLifecycleProcessor;
+    history: VersionHistoryService;
+  }> {
+    workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-p7-create-'));
+    const promptsDir = join(workspaceDir, 'prompts');
+    const logger = createLogger();
+    let convertedPrompts: Record<string, unknown>[] = [];
+    const configManager = {
+      getConfigPath: () => join(workspaceDir, 'config.yaml'),
+      getServerRoot: () => workspaceDir,
+      getResolvedPromptsDirectory: () => promptsDir,
+    } as unknown as ConfigManager;
+    const dependencies = {
+      logger,
+      configManager,
+      semanticAnalyzer: new ContentAnalyzer(createLogger()),
+      onRefresh: jest.fn(async () => {
+        const promptLoader = new PromptLoader(logger);
+        const { promptsData } = await promptLoader.loadFromDirectories(promptsDir);
+        const converter = new PromptConverter(logger, promptLoader);
+        const converted = await converter.convertMarkdownPromptsToJson(promptsData, promptsDir);
+        convertedPrompts = converted as unknown as Record<string, unknown>[];
+      }),
+      onRestart: jest.fn(async () => {}),
+    };
+    const fileOperations = new FileOperations({ logger, configManager });
+
+    await SqliteEngine.shutdownInstance();
+    engine = await SqliteEngine.getInstance(workspaceDir, logger);
+    await engine.initialize();
+    const history = new VersionHistoryService({
+      logger,
+      configManager: {
+        getVersioningConfig: () => ({ enabled: true, max_versions: 25, auto_version: true }),
+        getServerRoot: () => workspaceDir,
+      } as never,
+      dbManager: engine,
+    });
+
+    const context = {
+      dependencies,
+      promptAnalyzer: new PromptAnalyzer(dependencies),
+      gateAnalyzer: new GateAnalyzer(dependencies as never),
+      fileOperations,
+      getData: () => ({ convertedPrompts }),
+      versionHistoryService: history,
+      textDiffService: new ObjectDiffGenerator(),
+      comparisonEngine: new ComparisonEngine(logger),
+    } as unknown as PromptResourceContext;
+
+    return { lifecycle: new PromptLifecycleProcessor(context), history };
+  }
+
+  test('create records version 1 with a create description', async () => {
+    const { lifecycle, history } = await createLifecycle();
+
+    const response = await lifecycle.createPrompt({
+      id: CREATED_ID,
+      name: 'B25 Created Prompt',
+      description: 'A prompt created to exercise create-path versioning',
+      user_message_template: 'Do {{input}}',
+      arguments: [{ name: 'input', required: true }],
+    } as never);
+
+    expect(response.isError).toBe(false);
+    const record = await history.loadHistory('prompt', CREATED_ID);
+    expect(record?.current_version).toBe(1);
+    expect(record?.versions).toHaveLength(1);
+    expect(record?.versions[0]?.description).not.toContain('Bridge:');
+    expect(record?.versions[0]?.snapshot['description']).toBe(
+      'A prompt created to exercise create-path versioning'
+    );
+  });
+
+  test('create + update saves versions 1 and 2 with no bridge row', async () => {
+    const { lifecycle, history } = await createLifecycle();
+
+    const created = await lifecycle.createPrompt({
+      id: CREATED_ID,
+      name: 'B25 Created Prompt',
+      description: 'A prompt created to exercise create-path versioning',
+      user_message_template: 'Do {{input}}',
+      arguments: [{ name: 'input', required: true }],
+    } as never);
+    expect(created.isError).toBe(false);
+
+    const updated = await lifecycle.updatePrompt({
+      id: CREATED_ID,
+      description: 'Updated description',
+    } as never);
+    expect(updated.isError).toBe(false);
+
+    const record = await history.loadHistory('prompt', CREATED_ID);
+    expect(record?.current_version).toBe(2);
+    expect(record?.versions.map((v) => v.version).sort()).toEqual([1, 2]);
+    expect(record?.versions.some((v) => v.description.startsWith('Bridge:'))).toBe(false);
+  });
+});

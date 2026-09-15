@@ -4,4 +4,9 @@ type: validation
 description: >-
   Blocks public documentation that misstates the boundary between the AI client
   and Claude Prompts.
+subject: positioning
 guidanceFile: guidance.md
+activation:
+  artifacts:
+    - docs
+    - readme

@@ -10,6 +10,7 @@ import {
   runSkillsSyncCommand,
   SkillsSyncCommandError,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 describe('skills-sync CLI option handling', () => {
   const output = {
@@ -30,7 +31,8 @@ describe('skills-sync CLI option handling', () => {
           log: (...args: unknown[]) => logged.push(args.join(' ')),
           warn: jest.fn(),
           error: jest.fn(),
-        }
+        },
+        resolveSkillsSyncPaths()
       );
     } finally {
       consoleLog.mockRestore();
@@ -64,7 +66,11 @@ describe('skills-sync CLI option handling', () => {
       error: jest.fn(),
     };
 
-    const report = await runSkillsSyncCommand({ command: 'help', json: true }, jsonOutput);
+    const report = await runSkillsSyncCommand(
+      { command: 'help', json: true },
+      jsonOutput,
+      resolveSkillsSyncPaths()
+    );
 
     // Exactly one stdout write, and it round-trips as JSON — the help banner
     // that `help` normally prints would corrupt it.
@@ -75,7 +81,9 @@ describe('skills-sync CLI option handling', () => {
   });
 
   it('rejects clone without --file as usage error', async () => {
-    await expect(runSkillsSyncCommand({ command: 'clone' }, output)).rejects.toMatchObject({
+    await expect(
+      runSkillsSyncCommand({ command: 'clone' }, output, resolveSkillsSyncPaths())
+    ).rejects.toMatchObject({
       name: 'SkillsSyncCommandError',
       exitCode: 2,
       message: 'clone requires --file <path> to a SKILL.md',
@@ -83,7 +91,9 @@ describe('skills-sync CLI option handling', () => {
   });
 
   it('rejects invalid command as usage error', async () => {
-    await expect(runSkillsSyncCommand({ command: 'bogus' }, output)).rejects.toMatchObject({
+    await expect(
+      runSkillsSyncCommand({ command: 'bogus' }, output, resolveSkillsSyncPaths())
+    ).rejects.toMatchObject({
       name: 'SkillsSyncCommandError',
       exitCode: 2,
     });
@@ -91,7 +101,11 @@ describe('skills-sync CLI option handling', () => {
 
   it('uses typed command errors for usage failures', async () => {
     try {
-      await runSkillsSyncCommand({ command: 'diff', scope: 'bad' as never }, output);
+      await runSkillsSyncCommand(
+        { command: 'diff', scope: 'bad' as never },
+        output,
+        resolveSkillsSyncPaths()
+      );
       throw new Error('Expected command to fail');
     } catch (error) {
       expect(error).toBeInstanceOf(SkillsSyncCommandError);
@@ -111,7 +125,8 @@ describe('skills-sync CLI option handling', () => {
       await expect(
         runSkillsSyncCommand(
           parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff']),
-          output
+          output,
+          resolveSkillsSyncPaths()
         )
       ).rejects.toThrow(
         `Refusing to run: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
@@ -163,7 +178,8 @@ describe('skills-sync CLI option handling', () => {
           '--scope',
           'project',
         ]),
-        output
+        output,
+        resolveSkillsSyncPaths()
       );
 
     try {
@@ -233,7 +249,8 @@ name: Broken Gate
             resourceType: 'prompt',
             force: true,
           },
-          output
+          output,
+          resolveSkillsSyncPaths()
         )
       ).rejects.toThrow('Clone validation failed');
 

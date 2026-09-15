@@ -2,6 +2,7 @@
 
 import { PromptDraftService, type PromptDraftInput } from './prompt-draft-service.js';
 import {
+  normalizeReloadShape,
   PromptMutationReceiptService,
   type PromptMutationReceipt,
 } from './prompt-mutation-receipt-service.js';
@@ -139,13 +140,70 @@ export class PromptLifecycleProcessor {
     const displayName = String(promptData['name']);
     const description = String(promptData['description']);
 
+    // The created state is recorded as version 1 — the same `saveVersion` numbering every edit
+    // uses (MAX(existing)+1), which a resource with no rows yet resolves to 1 on its own. No
+    // bridge: a create has no prior live state to carry across, unlike an edit of an unrecorded
+    // resource. Runs as the writer transaction's `commit` step (P4.2 / SF-3 contract, matching
+    // `updatePrompt` below) so a persistence failure aborts the create with nothing written.
+    //
+    // Recorded through `canonicalPromptSnapshot` + `normalizeReloadShape` — the SAME projection
+    // and loader-default normalization `PromptMutationReceiptService` applies to the "expected"
+    // side of its own post-refresh comparison. Measured: recording the raw draft `promptData`
+    // carried keys the loader never produces (`isChain`, `tools`) and omitted `systemMessage`'s
+    // loader default, so the first update's prior-state check never matched and always bridged.
+    let versionFailure: string | undefined;
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.context.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              try {
+                await this.context.versionHistoryService.saveVersion(
+                  'prompt',
+                  canonicalId,
+                  normalizeReloadShape(canonicalPromptSnapshot(canonicalId, promptData)),
+                  { description: 'Created via resource_manager', diff_summary: '' }
+                );
+              } catch (error) {
+                versionFailure = error instanceof Error ? error.message : String(error);
+                throw error;
+              }
+            },
+          }
+        : {};
+
     // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
     // against — so it passes the full key set rather than computing one (Fix B, tier-b-
     // settability-proposal §2 / §5 increment 3).
-    const writeResult = await this.fileOperations.updatePromptImplementation(
-      promptData,
-      ALL_PROMPT_DATA_KEYS
-    );
+    let writeResult;
+    try {
+      writeResult = await this.fileOperations.updatePromptImplementation(
+        promptData,
+        ALL_PROMPT_DATA_KEYS,
+        undefined,
+        NO_WRITE_INTENT,
+        commitOptions
+      );
+    } catch (error) {
+      if (versionFailure === undefined) throw error;
+
+      this.context.dependencies.logger.error(
+        `Aborting creation of prompt ${canonicalId}: ${versionFailure}`
+      );
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `❌ **Prompt creation aborted**: the version snapshot could not be saved.\n\n` +
+              `${versionFailure}\n\n` +
+              `💡 Nothing was written for '${canonicalId}'. Retry, or pass ` +
+              `\`skip_version: true\` to create without recording a version.`,
+          },
+        ],
+        isError: true,
+      };
+    }
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     // The headline is composed at the END, once verification has run — see `mutationHeadline`.

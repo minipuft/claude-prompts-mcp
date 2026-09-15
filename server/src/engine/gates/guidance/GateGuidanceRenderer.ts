@@ -5,7 +5,9 @@
  * Single responsibility: Generate and format gate guidance for users.
  */
 
+import { REMINDER_CHARS_PER_TOKEN } from '../constants.js';
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
+import { deriveGateTier } from '../core/gate-tier.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';
@@ -13,10 +15,61 @@ import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateActivationContext, LightweightGateDefinition } from '../types.js';
 
+import { DEFAULT_GATES_CONFIG } from '#shared/types/core-config.js';
+
+/**
+ * The slice of `gates` config this renderer reads. Narrower than `ResolvedGateSettings` on purpose:
+ * `ConfigManager.getGatesConfig()` satisfies it structurally, and a test can supply a literal.
+ */
+export interface GateGuidanceConfig {
+  harnessCovers?: readonly string[];
+  reminderTokenBudget?: number;
+}
+
+/**
+ * Closing attestation line shared by every gate-guidance render path — the canonical renderer
+ * here and the fallback in chain-operator-executor.ts. Exported so the fallback imports this
+ * literal instead of carrying its own copy that can drift (row 0.9, gate-checks-and-reminders).
+ */
+export const GATE_ATTESTATION_LINE =
+  "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.";
+
 export interface GateGuidanceRendererOptions {
   gateLoader: GateDefinitionProvider;
   temporaryGateRegistry?: TemporaryGateRegistry;
   frameworkIdentifierProvider?: () => readonly string[] | undefined;
+  /**
+   * Reads the live `gates` config. A provider, not a snapshot: `system_control` can change
+   * `gates.harnessCovers` / `gates.reminderTokenBudget` at runtime, and a value captured at
+   * construction would pin the renderer to the config that existed at server start. Same shape
+   * as `frameworkIdentifierProvider` above and as `GatesConfigProvider` in the pipeline stages.
+   */
+  gatesConfigProvider?: () => GateGuidanceConfig | undefined;
+}
+
+/** Severity ordering weights, most severe first. */
+const SEVERITY_ORDER: Record<NonNullable<LightweightGateDefinition['severity']>, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+/** A reminder gate that survived harnessCovers suppression, ready to be budgeted. */
+interface ReminderEntry {
+  gate: LightweightGateDefinition;
+  explicit: boolean;
+  /** Full rendered section (`### Name` + guidance) — what a non-degraded reminder emits. */
+  rendered: string;
+  /** Coarse token estimate of `rendered`; the budget is a ceiling, not a measurement. */
+  tokens: number;
+  /** Position in the caller's `gateIds`, the final tiebreak so ordering stays stable. */
+  inputOrder: number;
+}
+
+/** Ordering weight for a reminder's severity; an unset severity sorts as `medium`. */
+function severityWeight(severity: LightweightGateDefinition['severity']): number {
+  return SEVERITY_ORDER[severity ?? 'medium'];
 }
 
 /**
@@ -27,6 +80,7 @@ export class GateGuidanceRenderer {
   private readonly gateLoader: GateDefinitionProvider;
   private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
   private readonly frameworkIdentifierProvider: (() => readonly string[] | undefined) | undefined;
+  private readonly gatesConfigProvider: (() => GateGuidanceConfig | undefined) | undefined;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
     if (!options?.gateLoader) {
@@ -37,6 +91,7 @@ export class GateGuidanceRenderer {
     this.gateLoader = options.gateLoader;
     this.temporaryGateRegistry = options.temporaryGateRegistry;
     this.frameworkIdentifierProvider = options.frameworkIdentifierProvider;
+    this.gatesConfigProvider = options.gatesConfigProvider;
 
     if (this.temporaryGateRegistry) {
       this.logger.debug('[GATE GUIDANCE RENDERER] Temporary gate registry enabled');
@@ -63,11 +118,13 @@ export class GateGuidanceRenderer {
       return '';
     }
 
-    const inlineGuidance: string[] = [];
-    const frameworkGuidance: string[] = [];
+    const { harnessCovers, reminderTokenBudget } = this.resolveGuidanceConfig();
+    const checkLines: string[] = [];
+    const reminders: ReminderEntry[] = [];
     const explicitSet = new Set(context.explicitGateIds ?? []);
+    let suppressedCount = 0;
 
-    for (const gateId of gateIds) {
+    for (const [inputOrder, gateId] of gateIds.entries()) {
       try {
         const gate = await this.loadGateDefinition(gateId);
         if (!gate) {
@@ -83,56 +140,165 @@ export class GateGuidanceRenderer {
           continue;
         }
 
-        const formatted = this.formatGateGuidance(gate, context);
-        if (inline) {
-          inlineGuidance.push(formatted);
-        } else {
-          frameworkGuidance.push(formatted);
+        // A check has a runtime evaluator, so the engine records its verdict from the run.
+        // Emitting its guidance would ask the agent to self-attest something already measured,
+        // so a check contributes exactly one line naming what it runs — and is never suppressed
+        // and never budgeted.
+        if (deriveGateTier(gate) === 'check') {
+          checkLines.push(this.formatCheckLine(gate));
+          this.logger.debug('[GATE GUIDANCE RENDERER] Added check line for gate:', gateId);
+          continue;
         }
+
+        // harnessCovers suppresses reminders only, and it outranks the prompt author: a gate
+        // named explicitly in the command is still dropped when the operator's config says the
+        // harness already covers its subject (ruling B2). A reminder with no `subject` names no
+        // coverable topic, so it is never suppressed.
+        if (gate.subject && harnessCovers.includes(gate.subject)) {
+          suppressedCount += 1;
+          this.logger.debug(
+            '[GATE GUIDANCE RENDERER] Suppressed reminder covered by harness:',
+            gateId,
+            gate.subject
+          );
+          continue;
+        }
+
+        const rendered = this.formatGateGuidance(gate, context);
+        reminders.push({
+          gate,
+          explicit: isExplicit,
+          rendered,
+          tokens: Math.ceil(rendered.length / REMINDER_CHARS_PER_TOKEN),
+          inputOrder,
+        });
         this.logger.debug('[GATE GUIDANCE RENDERER] Added guidance for gate:', gateId);
       } catch (error) {
         this.logger.warn('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId, error);
       }
     }
 
-    if (inlineGuidance.length === 0 && frameworkGuidance.length === 0) {
+    if (checkLines.length === 0 && reminders.length === 0) {
       this.logger.debug(
         '[GATE GUIDANCE RENDERER] No applicable gates found, returning empty guidance'
       );
       return '';
     }
 
+    const {
+      lines: reminderLines,
+      fullCount,
+      degradedCount,
+    } = this.budgetReminders(reminders, reminderTokenBudget);
+
     const sections: string[] = ['\n\n---\n\n## Inline Gates'];
 
-    // Add inline guidance first (task-specific)
-    if (inlineGuidance.length > 0) {
-      sections.push('\n');
-      sections.push([...new Set(inlineGuidance)].join('\n\n'));
+    // Checks first: they state ground truth the agent cannot argue with.
+    if (checkLines.length > 0) {
+      sections.push('\n\n### Checks\n\n');
+      sections.push([...new Set(checkLines)].join('\n'));
     }
 
-    // Add framework guidance second (universal standards)
-    if (frameworkGuidance.length > 0) {
-      sections.push('\n\n');
-      sections.push(frameworkGuidance.join('\n\n'));
+    if (reminderLines.length > 0) {
+      sections.push('\n\n### Reminders\n\n');
+      sections.push([...new Set(reminderLines)].join('\n\n'));
     }
 
-    // Add post-execution review LAST (final reminder)
-    sections.push('\n\n**Post-Execution Review Guidelines:**');
-    sections.push(
-      'Review your output against these quality standards before finalizing your response.'
-    );
+    sections.push('\n\n' + GATE_ATTESTATION_LINE);
 
     sections.push('\n\n---');
 
     const supplementalGuidance = sections.join('');
 
     this.logger.debug('[GATE GUIDANCE RENDERER] Generated supplemental guidance:', {
-      inlineGateCount: inlineGuidance.length,
-      frameworkGateCount: frameworkGuidance.length,
+      checkCount: checkLines.length,
+      reminderFullCount: fullCount,
+      reminderDegradedCount: degradedCount,
+      reminderSuppressedCount: suppressedCount,
       guidanceLength: supplementalGuidance.length,
     });
 
     return supplementalGuidance;
+  }
+
+  /**
+   * Resolve the `gates` settings this renderer reads, calling the provider on every render so a
+   * runtime `system_control` config change takes effect without rebuilding the renderer.
+   */
+  private resolveGuidanceConfig(): {
+    harnessCovers: readonly string[];
+    reminderTokenBudget: number;
+  } {
+    const gatesConfig = this.gatesConfigProvider?.();
+    // No provider means no wiring, not a second opinion about what the defaults are:
+    // `DEFAULT_GATES_CONFIG` is the same object `ConfigManager` folds into `getGatesConfig()`,
+    // so an unwired renderer and a wired one with an empty config.json render identically.
+    return {
+      harnessCovers: gatesConfig?.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
+      reminderTokenBudget:
+        gatesConfig?.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
+    };
+  }
+
+  /**
+   * One line per check naming the command or tool that produces its verdict — never its guidance.
+   */
+  private formatCheckLine(gate: LightweightGateDefinition): string {
+    const criterion = (gate.pass_criteria ?? []).find(
+      (entry) => entry.type === 'shell_verify' || entry.type === 'script_tool'
+    );
+
+    if (criterion?.type === 'shell_verify' && criterion.shell_command?.length) {
+      return `- **${gate.name}** — check: runs \`${criterion.shell_command.join(' ')}\``;
+    }
+    if (criterion?.type === 'script_tool' && criterion.script_tool_id) {
+      return `- **${gate.name}** — check: runs tool \`${criterion.script_tool_id}\``;
+    }
+    // A check whose criterion names neither a command nor a tool id cannot run; still list it,
+    // so an operator sees the gate rather than silently losing it.
+    return `- **${gate.name}** — check`;
+  }
+
+  /**
+   * Fit reminders into `reminderTokenBudget` by DEGRADING, never dropping (ruling B10): once the
+   * next reminder would push the running total past the budget, it and every later reminder
+   * collapse to a one-line name + description. Ordering decides who keeps full guidance —
+   * explicitly requested first, then severity descending, then the caller's own order.
+   */
+  private budgetReminders(
+    reminders: ReminderEntry[],
+    reminderTokenBudget: number
+  ): { lines: string[]; fullCount: number; degradedCount: number } {
+    const ordered = [...reminders].sort((a, b) => {
+      if (a.explicit !== b.explicit) {
+        return a.explicit ? -1 : 1;
+      }
+      const severityDelta = severityWeight(a.gate.severity) - severityWeight(b.gate.severity);
+      if (severityDelta !== 0) {
+        return severityDelta;
+      }
+      return a.inputOrder - b.inputOrder;
+    });
+
+    const lines: string[] = [];
+    let usedTokens = 0;
+    let degrading = false;
+    let fullCount = 0;
+
+    for (const entry of ordered) {
+      const fits =
+        !degrading && reminderTokenBudget > 0 && usedTokens + entry.tokens <= reminderTokenBudget;
+      if (fits) {
+        usedTokens += entry.tokens;
+        fullCount += 1;
+        lines.push(entry.rendered);
+        continue;
+      }
+      degrading = true;
+      lines.push(`- **${entry.gate.name}** — ${entry.gate.description ?? ''}`.trimEnd());
+    }
+
+    return { lines, fullCount, degradedCount: ordered.length - fullCount };
   }
 
   private isInlineGate(gateId: string, gate: LightweightGateDefinition): boolean {
@@ -185,6 +351,11 @@ export class GateGuidanceRenderer {
     }
     if (context.framework) {
       activationContext.framework = context.framework;
+    }
+    // B13: activation here must ask the same question the resolver asked, or an artifact-scoped
+    // gate is selected at rank 20 and then silently dropped at render.
+    if (context.artifacts !== undefined && context.artifacts.length > 0) {
+      activationContext.artifacts = context.artifacts;
     }
     return this.gateLoader.isGateActive(gate, activationContext);
   }

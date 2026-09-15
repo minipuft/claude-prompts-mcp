@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { ensureTrailingNewline } from './gate-file-writer.js';
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
@@ -29,6 +30,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      subject,
     } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
@@ -51,9 +53,46 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      subject,
     };
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
+    // numbering every edit uses, which a fresh id resolves to 1 on its own. No bridge: a create
+    // has no prior live state to carry across, unlike an edit of an unrecorded gate. Runs as the
+    // writer's `commit` step (P4.2 / SF-3 contract, matching `handleUpdate` below) so a
+    // persistence failure aborts the create with nothing written.
+    //
+    // `guidance` is normalized through the SAME `ensureTrailingNewline` the writer applies to
+    // `guidance.md` — measured: recording the raw, un-normalized value here recorded a snapshot
+    // that a disk read-back never matches, so the first update bridged every single create.
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              await this.ctx.versionHistoryService.saveVersion(
+                'gate',
+                id,
+                projectWriteModel(
+                  id,
+                  { ...gateData, guidance: ensureTrailingNewline(gateData.guidance) },
+                  gateSnapshotContract.projectedFields
+                ),
+                { description: 'Created via resource_manager', diff_summary: '' }
+              );
+            },
+          }
+        : {};
+
+    // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
+    // against — so `suppliedKeys` is left at the writer's own default (every gate-data key)
+    // rather than computing one, the same convention `updatePromptImplementation`'s create
+    // caller uses in `prompt-lifecycle-processor.ts`.
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      undefined,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to create gate: ${result.error}`);
     }
@@ -106,6 +145,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      subject,
     } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
@@ -146,7 +186,32 @@ export class GateLifecycleProcessor {
       // definition reports `medium` for a file that declares nothing.
       severity,
       enforcementMode,
+      subject,
     };
+
+    // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
+    // already carries every field merged with its existing value, so it cannot itself say which
+    // were caller-supplied and which were only carried forward. `GateFileWriter` uses this to
+    // narrow which files a write touches: a key absent here leaves the corresponding file
+    // untouched (byte-identical) rather than re-serialized from `gateData`'s already-merged
+    // values. Mirrors `suppliedKeys` in `prompt-lifecycle-processor.ts` (Fix B write-scope
+    // narrowing).
+    const suppliedKeys = new Set(
+      Object.entries({
+        name,
+        type,
+        description,
+        guidance,
+        pass_criteria,
+        activation,
+        retry_config,
+        severity,
+        enforcementMode,
+        subject,
+      })
+        .filter(([, value]) => value !== undefined)
+        .map(([key]) => key)
+    );
 
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —
     // supplied value, else the existing one — so it needs no merge base.
@@ -154,6 +219,13 @@ export class GateLifecycleProcessor {
       id,
       gateData as unknown as Record<string, unknown>,
       gateSnapshotContract.projectedFields
+    );
+
+    // One projection of the write serves the version's diff summary and the update's own diff. It
+    // is resolved from the plan the writer applies, with the payload and scope the writer is
+    // handed below, so both name exactly the files the write lands in and the lines that change.
+    const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
+      await this.ctx.gateFileService.projectGateWrite(gateData, suppliedKeys)
     );
 
     // Auto-versioning — go-forward: version N holds the state edit N produced, so the newest
@@ -173,11 +245,6 @@ export class GateLifecycleProcessor {
             // `framework-lifecycle-processor.ts`: `validate:mutation-atomicity` reads the record's
             // position lexically, and a gate that cannot see the property is not guarding it.
             commit: async (): Promise<void> => {
-              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-                beforeState,
-                afterState,
-                `${id}/gate.yaml`
-              );
               const versionResult = await this.ctx.versionHistoryService.recordEditResult(
                 'gate',
                 id,
@@ -185,7 +252,7 @@ export class GateLifecycleProcessor {
                 afterState,
                 {
                   description: 'Update via resource_manager',
-                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
               versionSaved = versionResult.version;
@@ -194,7 +261,11 @@ export class GateLifecycleProcessor {
           }
         : {};
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      suppliedKeys,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to update gate: ${result.error}`);
     }
@@ -204,12 +275,6 @@ export class GateLifecycleProcessor {
     // branches on twelve lines up.
     const reloaded = await this.ctx.gateManager.reload(id);
     this.trackChange('modified', id);
-
-    const diffResult = this.ctx.textDiffService.generateObjectDiff(
-      beforeState,
-      afterState,
-      `${id}/gate.yaml`
-    );
 
     let response =
       `✅ Gate '${id}' updated successfully\n\n` +

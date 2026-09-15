@@ -77,6 +77,50 @@
                 "minLength": 1,
                 "pattern": "^[^\\r\\n]+$",
                 "type": "string"
+              },
+              "reminders": {
+                "properties": {
+                  "not_applicable": {
+                    "default": [],
+                    "items": {
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "pattern": "^[^\\s,;()]+$",
+                          "type": "string"
+                        },
+                        "reason": {
+                          "allOf": [
+                            {
+                              "pattern": "^[^\\r\\n]+$"
+                            },
+                            {
+                              "pattern": "^[^;)]+$"
+                            }
+                          ],
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "reason"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "satisfied": {
+                    "default": [],
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[^\\s,;()]+$",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
               }
             },
             "required": [
@@ -1462,6 +1506,9 @@
       "from_version": {
         "type": "number"
       },
+      "full_restart": {
+        "type": "boolean"
+      },
       "gate_configuration": {
         "additionalProperties": {},
         "propertyNames": {
@@ -1483,11 +1530,17 @@
         },
         "type": "object"
       },
+      "goal": {
+        "type": "string"
+      },
       "guidance": {
         "type": "string"
       },
       "id": {
         "type": "string"
+      },
+      "include_legacy": {
+        "type": "boolean"
       },
       "injection": {
         "additionalProperties": false,
@@ -1626,7 +1679,122 @@
         "type": "string"
       },
       "pass_criteria": {
-        "items": {},
+        "items": {
+          "properties": {
+            "framework": {
+              "type": "string"
+            },
+            "min_compliance_score": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "quality_indicators": {
+              "additionalProperties": {
+                "properties": {
+                  "keywords": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "patterns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "script_tool_id": {
+              "type": "string"
+            },
+            "script_tool_input": {
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "script_tool_timeout": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "script_tool_working_dir": {
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "fail"
+              ],
+              "type": "string"
+            },
+            "shell_command": {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "shell_env": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "shell_max_attempts": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "shell_preset": {
+              "enum": [
+                "fast",
+                "full",
+                "extended"
+              ],
+              "type": "string"
+            },
+            "shell_response_env_var": {
+              "type": "string"
+            },
+            "shell_stdin_source": {
+              "enum": [
+                "agent_response"
+              ],
+              "type": "string"
+            },
+            "shell_timeout": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "shell_working_dir": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "inline_guidance",
+                "framework_compliance",
+                "shell_verify",
+                "script_tool"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
         "type": "array"
       },
       "patch": {
@@ -1815,6 +1983,10 @@
         ],
         "type": "string"
       },
+      "subject": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "type": "string"
+      },
       "system_message": {
         "type": "string"
       },
@@ -1943,7 +2115,70 @@
         "description": "<present>",
         "type": "string"
       },
+      "backup_path": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "category": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "client": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "config": {
+        "description": "<present>",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "get",
+              "set",
+              "list",
+              "validate"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "confirm": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "enabled": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "expires_in_ms": {
+        "description": "<present>",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer"
+      },
+      "file": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "force": {
+        "description": "<present>",
+        "type": "boolean"
+      },
       "framework": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "id": {
         "description": "<present>",
         "type": "string"
       },
@@ -1955,7 +2190,21 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "include_planned": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "<present>",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer"
+      },
       "operation": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "output": {
         "description": "<present>",
         "type": "string"
       },
@@ -1963,7 +2212,48 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "preview": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "preview_detail": {
+        "description": "<present>",
+        "enum": [
+          "summary",
+          "diff"
+        ],
+        "type": "string"
+      },
+      "prune": {
+        "description": "<present>",
+        "type": "boolean"
+      },
       "reason": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "resource_type": {
+        "description": "<present>",
+        "enum": [
+          "prompt",
+          "gate",
+          "framework",
+          "style"
+        ],
+        "type": "string"
+      },
+      "scope": {
+        "description": "<present>",
+        "enum": [
+          "user",
+          "project",
+          "session",
+          "chain",
+          "step"
+        ],
+        "type": "string"
+      },
+      "scope_id": {
         "description": "<present>",
         "type": "string"
       },
@@ -1979,8 +2269,30 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "since": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "source": {
+        "description": "<present>",
+        "enum": [
+          "filesystem",
+          "mcp-tool",
+          "external"
+        ],
+        "type": "string"
+      },
       "topic": {
         "description": "<present>",
+        "type": "string"
+      },
+      "type": {
+        "description": "<present>",
+        "enum": [
+          "system-prompt",
+          "gate-guidance",
+          "style-guidance"
+        ],
         "type": "string"
       }
     },

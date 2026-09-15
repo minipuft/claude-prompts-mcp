@@ -46,13 +46,7 @@ const baseGate: LightweightGateDefinition = {
   type: 'validation',
   description: 'Validates code quality',
   guidance: 'Check for proper error handling and clean code.',
-  pass_criteria: [
-    {
-      type: 'inline_guidance',
-      min_length: 100,
-      required_patterns: ['function', 'return'],
-    },
-  ],
+  pass_criteria: [{ type: 'inline_guidance' }],
 };
 
 describe('resolveJudgeGates', () => {
@@ -138,7 +132,10 @@ describe('composeJudgeReviewPrompt', () => {
     expect(result.judgePrompt).toContain(GATE_VERDICT_REQUIRED_FORMAT);
   });
 
-  it('includes formatted pass_criteria in judge prompt', () => {
+  it('does not render structured pass_criteria fields into the judge prompt', () => {
+    // min_length/required_patterns/etc. never had an evaluator (B9), are refused at
+    // load, and formatCriteria no longer reads them — guidance text is the only
+    // criteria source left (covered by the next test).
     const judgeGate: LightweightGateDefinition = {
       ...baseGate,
       evaluation: { mode: 'judge' },
@@ -146,9 +143,8 @@ describe('composeJudgeReviewPrompt', () => {
 
     const result = composeJudgeReviewPrompt([judgeGate], 'test output');
 
-    // Should contain formatted criterion text from structured pass_criteria
-    expect(result.judgePrompt).toContain('at least 100 characters');
-    expect(result.judgePrompt).toContain('function, return');
+    expect(result.judgePrompt).not.toContain('characters');
+    expect(result.judgePrompt).toContain(baseGate.guidance as string);
   });
 
   it('includes guidance text as criteria', () => {

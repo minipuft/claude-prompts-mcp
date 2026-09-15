@@ -4,12 +4,11 @@ Gates are quality validation mechanisms that ensure Claude's outputs meet specif
 
 ## Enforcement Modes
 
-Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `type:` field selects the enforcement mode. Five modes exist, and they differ in **what the runtime actually does** when the gate fires — not all are equally enforced.
+Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `type:` field selects the enforcement mode. Four modes exist, and they differ in **what the runtime actually does** when the gate fires — not all are equally enforced. A gate is a `check` when at least one criterion is `shell_verify` or `script_tool`; every other gate, `llm_self_check`'s would-be slot included, is a `reminder` (see [Gate Configuration Reference § Tiers](../reference/gate-configuration.md#tiers)).
 
 | `type:`                | What runs at execution time                                                                                                                                                                                                                                                                                             | Enforcement strength          | Use for                                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
 | `inline_guidance`      | Renders a checklist into the chain response for agent self-assessment. No runtime check.                                                                                                                                                                                                                                | Display only                  | Conventions, style hints, self-evaluation prompts                                                |
-| `llm_self_check`       | _Reserved._ No runner. Contributes no ground-truth result, so it can never clear a review on its own — the gate falls through to normal model review.                                                                                                                                                                   | Not enforced                  | (none — use `inline_guidance`, or [`%judge`](./judge-mode.md) for model-graded review)           |
 | `framework_compliance` | Nothing. No criteria runner handles this type. Stage 19 does inspect the response against the active framework's `phases.yaml` (section headers, `min_length`, `forbidden_terms`) — but it triggers on `phases.yaml` guards, not on this value.                                                                         | Declarative only              | Documenting intent. To actually enforce sections, define guards in the framework's `phases.yaml` |
 | `shell_verify`         | Spawns the configured shell command and checks its exit code (0 = pass). Optional response injection pipes the agent response to stdin.                                                                                                                                                                                 | Hard ground-truth enforcement | Tests, linting, builds, response-content verification                                            |
 | `script_tool`          | Resolves `script_tool_id` against the registered script tools and runs THAT tool with JSON stdin, expecting `{ passed, reason?, details? }` back. Runs beside `shell_verify` during gate review; a gate may declare both. Fails closed when it cannot run, and a criterion with no `script_tool_id` is refused at load. | Hard structured enforcement   | Checks needing typed arguments and an explained verdict, not just an exit code                   |
@@ -371,6 +370,63 @@ prompt_engine(chain_id:"chain-abc", gate_action:"retry")
 command, or pass `force_restart`. To end a run that is not sitting at a gate, use
 `prompt_engine(chain_id:"...", cancel:true)`.
 
+## Verdicts and reminders
+
+A check-tier gate (`shell_verify` / `script_tool`) has already run by the time a review reaches
+the model: the engine recorded its pass/fail from the actual criterion, not from a self-report.
+A `PASS` verdict that walks past a recorded failure is refused, by gate id, rather than accepted:
+
+```
+Gate verdict refused: <gate-id[, gate-id...]> recorded a failing check (<summary[; summary...]>).
+Fix the cause and resubmit; the check re-runs on the next review.
+```
+
+The structured verdict's `per_gate` field carries one entry per check-tier gate under review —
+never one for a reminder, since a reminder has no recorded result to enter. Reminder-tier gates
+are instead attested once for the whole review, through the `reminders` field:
+
+```json
+{
+  "satisfied": ["code-quality"],
+  "not_applicable": [
+    { "id": "security-awareness", "reason": "no network code touched" }
+  ]
+}
+```
+
+The legacy string form carries the same attestation as one `REMINDERS:` line, directly after the
+verdict line:
+
+```
+REMINDERS: satisfied=code-quality; n/a=security-awareness(no network code touched)
+```
+
+or, when the review advertised reminders but nothing is being attested or excused:
+
+```
+REMINDERS: none
+```
+
+### Evidence for delegated work
+
+A delegated step reports back in prose, and prose is easy to write and hard to check. The
+convention that makes it checkable is one line under the handoff's `done` heading:
+
+```
+done — artifacts: src/engine/gates/core/gate-schema.ts, tests/unit/gates/core/gate-schema.test.ts
+```
+
+The `handoff-artifacts` gate reads that line and confirms every path on it exists. It is a
+check-tier gate, so a review cannot walk past its failure with a `PASS`.
+
+It is opt-in: its `activation` block is `explicit_request: true`, the same form `math-fidelity`
+uses, so it never auto-attaches by category and attaches only where you name it — in a prompt's
+`gateConfiguration.include`, or in a chain step's `inlineGateIds`. Two things have to be true for
+it to run. The operator's `MCP_SHELL_VERIFY_ALLOWLIST` has to include `node`, or the executor
+refuses the command and records a failure. And the paths have to exist relative to the server's
+working directory — for a server installed somewhere other than the repository under review, they
+will not, so leave the gate off there rather than reading its failures as missing work.
+
 ## Combining Gates
 
 Gates can be combined with other operators:
@@ -433,7 +489,7 @@ A decision table for picking the right `pass_criteria.type` for the check you ac
 - **Using `inline_guidance` for a check the runtime could verify cheaply** — the checklist is display-only, and `GATE_REVIEW: PASS` from a fabricated self-assessment is indistinguishable from a real one. If a 3-line shell script can confirm the claim, prefer `shell_verify`.
 - **Using `shell_verify` for section-structure enforcement** — phase guards in `phases.yaml` are faster (no subprocess), produce clearer per-section feedback, and integrate with the phase-guards UI. Reserve `shell_verify` for checks that genuinely need to run a command.
 - **Mixing `shell_stdin_source: agent_response` with commands that don't read stdin** — the response is discarded silently and the gate becomes a plain exit-code check with extra overhead. The receiving script must `readFileSync(0)` (or equivalent) to consume the response.
-- **Trusting `llm_self_check`** — the runner is reserved but not implemented, and it no longer reads any configuration, so there is no setting that turns it on. A gate that declares `type: llm_self_check` auto-passes with a skip message. Use one of the four other types, or [`%judge`](./judge-mode.md) / `gates.evaluation.defaultMode` when you want a model to grade the output — that path runs in the client's own subagent and returns through `gate_verdict`.
+- **Declaring `type: llm_self_check`** — it is not a valid `type` and never had a runner. Schema validation rejects it at load, naming the replacement: `inline_guidance` (reminder) or `shell_verify` / `script_tool` (check). Use [`%judge`](./judge-mode.md) / `gates.evaluation.defaultMode` when you want a model to grade the output instead — that path runs in the client's own subagent and returns through `gate_verdict`.
 
 ## Turning the Gate System Off
 

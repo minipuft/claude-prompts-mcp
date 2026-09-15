@@ -199,6 +199,13 @@ export interface LightweightGateDefinition {
   type: 'validation' | 'guidance';
   /** Description of what this gate checks/guides */
   description: string;
+  /**
+   * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
+   * installation's `gates.harnessCovers` (config.json) suppresses reminders whose subject
+   * it lists; checks (`shell_verify`/`script_tool`) are never suppressed. Surfaced by the
+   * generated gate index.
+   */
+  subject?: string;
   /** Severity level for prioritization (defaults to 'medium') */
   severity?: 'critical' | 'high' | 'medium' | 'low';
   /** Enforcement mode override (defaults to severity-based mapping) */
@@ -244,10 +251,17 @@ export interface LightweightGateDefinition {
 }
 
 /**
- * Unified gate configuration settings.
- * Consolidates all gate-related config.
+ * The gate settings the engine reads, after `ConfigManager` has folded config.json's keys and
+ * defaults together — hence `Resolved`, and hence `enabled` being required here while it is
+ * optional on the wire.
+ *
+ * Deliberately NOT named `GatesConfig`: that name belongs to config.json's own shape
+ * (`shared/types/core-config.ts`), and a third type carried it here, so `import type
+ * { GatesConfig }` meant two different objects depending on the path it resolved through.
+ * `20-gate-review-stage.ts` reads the wire shape and `11-gate-enhancement-stage.ts` reads this
+ * one; before the rename, both spelled their provider type `GatesConfigProvider`.
  */
-export interface GatesConfig {
+export interface ResolvedGateSettings {
   /** Enable/disable the gate subsystem entirely */
   enabled: boolean;
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */

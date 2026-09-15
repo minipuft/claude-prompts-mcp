@@ -188,7 +188,38 @@ export interface GateSystemSettings {
   definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
   enableFrameworkGates?: boolean;
+  /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
+  harnessCovers?: string[];
+  /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
+  reminderTokenBudget?: number;
 }
+
+/**
+ * The gate settings every reader gets when config.json says nothing.
+ *
+ * Lives here, in Layer 0, rather than inside `ConfigManager`, because two layers read it:
+ * `infra/config` folds it into `getGatesConfig()`, and `GateGuidanceRenderer` (engine) needs the
+ * same values when it is constructed without a config provider — a test harness, or a render path
+ * that predates wiring. While this was module-private to `ConfigManager`, the renderer carried its
+ * own literals, and the only guarantee that they still matched these was a comment saying they
+ * did. Same placement and same reason as `DEFAULT_VERSIONING_CONFIG` and
+ * `DEFAULT_TELEMETRY_CONFIG` below.
+ *
+ * `satisfies` rather than an annotation: it checks the shape against the contract while keeping
+ * `harnessCovers` and `reminderTokenBudget` known-present at each use site, so a consumer reading
+ * them gets a value instead of `T | undefined`.
+ *
+ * These values are also declared in `server/config.schema.json`, which is what an operator's
+ * editor reads; the schema file cannot import TypeScript, so that pair stays two spellings of one
+ * default and the schema is the one an operator sees.
+ */
+export const DEFAULT_GATES_CONFIG = {
+  enabled: true,
+  definitionsDirectory: 'gates',
+  enableFrameworkGates: true,
+  harnessCovers: [] as string[],
+  reminderTokenBudget: 800,
+} satisfies GateSystemSettings;
 
 /**
  * Configuration for gates subsystem (top-level config.json shape)
@@ -213,6 +244,10 @@ export interface GatesConfig {
     defaultModel?: string;
     strict?: boolean;
   };
+  /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
+  harnessCovers?: string[];
+  /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
+  reminderTokenBudget?: number;
 }
 
 /**

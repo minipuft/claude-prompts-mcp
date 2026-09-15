@@ -13,7 +13,8 @@
  */
 
 import type { GateEnforcementMode, GatePassCriteria, GateSeverity } from './gate-primitives.js';
-import type { JudgeEvaluationConfig } from '../judge/types.js';
+import type { GateDefinitionYaml } from '../core/gate-schema.js';
+import type { ArtifactKind } from '../utils/artifact-kinds.js';
 
 // ============================================================================
 // Gate Activation Types
@@ -30,6 +31,11 @@ export interface GateActivationRules {
   explicit_request?: boolean;
   /** Framework contexts that trigger this gate (e.g., ['CAGEERF', 'ReACT']) */
   framework_context?: string[];
+  /**
+   * Artifact kinds this gate checks (ruling B13). When present, artifacts decide activation and
+   * `prompt_categories` is ignored — categories stay the fallback for gates naming no artifact.
+   */
+  artifacts?: ArtifactKind[];
 }
 
 /**
@@ -45,6 +51,12 @@ export interface GateActivationContext {
   explicitRequest?: boolean;
   /** Prompt ID for context-specific activation */
   promptId?: string;
+  /**
+   * Artifact kinds this run declares (ruling B13), from the prompt's `artifacts.produces` unioned
+   * with the kinds classified out of the argument its `artifacts.fromArgument` names. Empty or
+   * absent means the run declared nothing, so every artifact-gated gate stays off.
+   */
+  artifacts?: readonly ArtifactKind[];
 }
 
 // ============================================================================
@@ -65,79 +77,20 @@ export interface GateRetryConfig {
 }
 
 /**
- * YAML-based gate definition structure.
- * This is the schema for gate.yaml files in /server/gates/{id}/
+ * YAML-based gate definition structure — the shape of a `gate.yaml` in `resources/gates/{id}/`.
  *
- * @example
- * ```yaml
- * id: code-quality
- * name: Code Quality Standards
- * type: validation
- * description: Ensures generated code follows best practices
- * severity: medium
- * gate_type: category
- * guidanceFile: guidance.md
+ * Re-exported, not re-declared. `GateDefinitionSchema` (`../core/gate-schema.js`) is the one
+ * source: it is what the loader validates against and what the gate-manager's key derivation
+ * walks, so a second hand-written interface here could only ever agree with it by hand — and
+ * twice already did not, until `subject` (row 0.2) and the six pattern/length fields (row 1.5)
+ * were each edited in both places. The import path stays `../types.js` for every consumer.
  *
- * pass_criteria:
- *   - type: inline_guidance
- *     min_length: 100
- *
- * activation:
- *   prompt_categories: [code, development]
- * ```
+ * It is the schema's INPUT side (`z.input`), which is what a consumer holds: the loader returns
+ * the raw YAML object and validates beside it, so zod's defaults have not been applied. A key the
+ * schema does not declare is `unknown` and reachable only via `definition['key']`, which is the
+ * pressure that keeps a runtime-read key declared in the schema.
  */
-export interface GateDefinitionYaml {
-  /** Unique identifier for the gate (must match directory name) */
-  id: string;
-  /** Human-readable name */
-  name: string;
-  /** Gate type: 'validation' runs checks, 'guidance' only provides instructional text */
-  type: 'validation' | 'guidance';
-  /** Description of what this gate checks/guides */
-  description: string;
-  /** Severity level for prioritization */
-  severity?: GateSeverity;
-  /** Enforcement mode override (defaults to severity-based mapping) */
-  enforcementMode?: GateEnforcementMode;
-  /**
-   * Gate type classification for dynamic identification.
-   * - 'framework': Framework-related gates, filtered when frameworks disabled
-   * - 'category': Category-based gates (code, documentation, etc.)
-   * - 'custom': User-defined custom gates
-   */
-  gate_type?: 'framework' | 'category' | 'custom';
-
-  /**
-   * When true, gate failure (FAIL verdict) will suppress the execution response content.
-   * Only the gate review instructions will be returned, not the actual output.
-   * Useful for critical gates where invalid output should not be exposed to the user.
-   * @default false
-   */
-  blockResponseOnFail?: boolean;
-
-  // File references (inlined by loader)
-  /** Reference to guidance.md file (inlined into guidance field) */
-  guidanceFile?: string;
-  /** Guidance text (either directly specified or inlined from guidanceFile) */
-  guidance?: string;
-
-  // Validation configuration
-  /** Pass/fail criteria for validation gates */
-  pass_criteria?: GatePassCriteria[];
-  /** Retry configuration for failed validations */
-  retry_config?: GateRetryConfig;
-
-  // Activation rules
-  /** Rules determining when this gate should be activated */
-  activation?: GateActivationRules;
-
-  /**
-   * Judge evaluation configuration.
-   * When mode is 'judge', gate review is delegated to a context-isolated sub-agent.
-   * Loaded from gate.yaml `evaluation` key.
-   */
-  evaluation?: JudgeEvaluationConfig;
-}
+export type { GateDefinitionYaml };
 
 // ============================================================================
 // GateGuide Interface
@@ -323,6 +276,11 @@ export interface GateSelectionContext {
   explicitGateIds?: readonly string[];
   /** Whether to include only enabled gates */
   enabledOnly?: boolean;
+  /**
+   * Artifact kinds this run declares (B13), forwarded onto the activation context `selectGates`
+   * builds. Absent means the caller could not say — never "no artifacts of any kind exist".
+   */
+  declaredArtifacts?: readonly ArtifactKind[];
 }
 
 /**

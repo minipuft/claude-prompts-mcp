@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-03T00:06:30.998Z",
+  "lastUpdated": "2026-09-15T17:58:05.766Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -11,7 +11,7 @@
         "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
         "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command — with ONE exception: a command whose first token is '-->' appends steps to this run (see `command`).",
         "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
-        "gate_verdict": "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
+        "gate_verdict": "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. reminders: {satisfied:[ids], not_applicable:[{id, reason}]} attests reminder-tier gates in one field; per_gate carries only check-tier gates. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
         "gate_action": "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets the attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
         "gates": {
           "type": "array",
@@ -59,44 +59,44 @@
         "disabled": "🗂️ RESOURCE MANAGER: Standard resource lifecycle operations."
       }
     },
-    "skills_sync": {
-      "description": "🧩 SKILLS SYNC: Keep client skills aligned with canonical resources.\n\nACTIONS: status | export | sync | diff | pull | clone\n\nUse for status checks, reconciliation, drift reporting, and round-trip edits.",
-      "shortDescription": "Sync client skills",
-      "category": "management",
-      "parameters": {
-        "action": "Operation: status (inspect config/manifests), export (write skills), sync (reconcile to registrations with optional prune), diff (show drift and optional .patch output), pull (merge exported prose edits back to canonical YAML), clone (create canonical resources from SKILL.md).",
-        "client": "Target client id. Use one of: claude-code, cursor, codex, opencode, or all.",
-        "scope": "Output scope for client directories. Default: user.",
-        "resource_type": "Optional resource type filter.",
-        "id": "Optional resource id filter.",
-        "prune": "For sync: when true (default), remove stale managed skills not present in current registrations.",
-        "preview": "For export/sync/pull/clone: report every file, prune and registration change the run would make, and make none of them.",
-        "output": "For diff: write .patch files to this directory instead of stdout only.",
-        "file": "For clone: path to the source SKILL.md file. Required for clone action.",
-        "category": "For clone: target category for prompt resources. Default: general.",
-        "preview_detail": "How much `preview` shows: `summary` (default) lists the planned changes; `diff` adds unified diffs and is valid for `pull` only, the one command that computes prose changes. Requires `preview: true` — on its own it would not be read, so it is refused by name.",
-        "force": "For clone: overwrite existing resource directory."
-      },
-      "frameworkAware": {
-        "enabled": "🧩 SKILLS SYNC [FRAMEWORK]: Skill sync actions with active framework context available in surrounding workflow.",
-        "disabled": "🧩 SKILLS SYNC: Skill sync actions without framework context."
-      }
-    },
     "system_control": {
-      "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide | session\n\nReturns: Current state, configurations, or operation confirmations.",
+      "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide | injection | session | changes | execution_history | skills_sync\n\nReturns: Current state, configurations, or operation confirmations.",
       "shortDescription": "System administration",
       "category": "system",
       "parameters": {
-        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).",
-        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect; skills_sync status/export/sync/diff/pull/clone).",
+        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), injection (session overrides for injected guidance), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config restore/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).",
         "session_id": "Target session ID or chain ID for session operations.",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
         "persist": "When true, gate/framework enable/disable changes are also written to config.json.",
         "show_details": "Include detailed output (status/analytics/framework/gate reports).",
         "include_history": "Include recorded history where supported.",
+        "include_metrics": "Include detailed metrics output (where supported).",
         "topic": "Guide topic when requesting guidance.",
-        "search_query": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action."
+        "include_planned": "For guide: set false to leave out operations marked planned. Default: true.",
+        "search_query": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action.",
+        "confirm": "Required `true` for operations that replace or discard state: config restore, analytics reset and maintenance restart. Each refuses without it.",
+        "limit": "Maximum entries to return, for analytics history, changes list and execution_history list.",
+        "config": "For config: `{ key, value?, operation }`, where `operation` is get, set, list or validate and `value` is the string to set or check. Omit it to list the configuration.",
+        "backup_path": "For config restore: path of the backup file to restore. Requires `confirm: true`.",
+        "type": "For injection override: the injection type to override.",
+        "enabled": "For injection override: `true` turns the injection on, `false` turns it off. Required.",
+        "scope": "Read by two actions with different values. skills_sync: `user` (default) or `project` client directories. injection override: `session` (default), `chain` or `step`. Each action refuses the other's values.",
+        "scope_id": "For injection override: the chain or step id a `chain` or `step` scoped override applies to.",
+        "expires_in_ms": "For injection override: milliseconds until the override expires. Omit it to keep the override until reset.",
+        "source": "For changes list: only changes from this source — filesystem (a file edit hot reload detected), mcp-tool (a resource_manager write) or external (a change made while the server was down).",
+        "since": "For changes list: only changes recorded since this ISO 8601 timestamp.",
+        "resource_type": "Resource type filter. skills_sync accepts prompt, gate, framework or style; changes list records prompt and gate only.",
+        "client": "For skills_sync: target client id. Use one of: claude-code, cursor, codex, opencode, or all.",
+        "id": "For skills_sync: resource id filter, or for clone the id of the resource to create.",
+        "prune": "For skills_sync sync: when true (default), remove stale managed skills not present in current registrations.",
+        "preview": "For skills_sync export/sync/pull/clone: report every file, prune and registration change the run would make, and make none of them.",
+        "preview_detail": "For skills_sync: how much `preview` shows. `summary` (default) lists the planned changes; `diff` adds unified diffs and is valid for `pull` only, the one command that computes prose changes. Requires `preview: true` — on its own it would not be read, so it is refused by name.",
+        "output": "For skills_sync diff: write .patch files to this directory instead of stdout only.",
+        "file": "For skills_sync clone: path to the source SKILL.md file. Required for clone.",
+        "category": "For skills_sync clone: target category for prompt resources. Default: general.",
+        "force": "For skills_sync clone: overwrite an existing resource directory."
       },
       "frameworkAware": {
         "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active framework context. Guide reflects current framework.",

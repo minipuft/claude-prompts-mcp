@@ -2,21 +2,11 @@ id: content-structure
 name: Content Structure Guidelines
 type: validation
 description: Ensures well-organized, readable content with clear structure
+subject: content-structure
 guidanceFile: guidance.md
 
 pass_criteria:
   - type: inline_guidance
-    min_length: 200
-    required_patterns:
-      - '##'
-      - '-'
-      - example
-  - type: inline_guidance
-    keyword_count:
-      '##': 2
-    regex_patterns:
-      - '^##\s+.+$'
-      - '^\s*[-*]\s+.+'
 
 retry_config:
   max_attempts: 2
