@@ -1743,15 +1743,16 @@ falling through to the package defaults, which would serve the bundled catalog u
 
 ## Reference
 
-| Component          | Location                                                  |
-| ------------------ | --------------------------------------------------------- |
-| Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
-| Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
-| Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
-| Frameworks         | `server/resources/frameworks/{id}/framework.yaml`         |
-| Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
-| Resource changes   | `runtime-state/resource-changes.jsonl`                    |
-| Server config      | `server/config.json`                                      |
+| Component               | Location                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt definitions      | `server/resources/prompts/{category}/{id}/prompt.yaml`                                                                                                               |
+| Gate definitions        | `server/resources/gates/{id}/gate.yaml`                                                                                                                              |
+| Style definitions       | `server/resources/styles/{id}/style.yaml` (package default; a workspace `resources/styles/{id}/` overlays it, same as prompts/gates/frameworks)                      |
+| Script tool definitions | `server/resources/scripts/{id}/tool.yaml` (workspace `resources/scripts/{id}/` when a custom workspace is configured; see [Script Tools](../guides/script-tools.md)) |
+| Frameworks              | `server/resources/frameworks/{id}/framework.yaml`                                                                                                                    |
+| Chain sessions          | SQLite (`runtime-state/state.db`, table `chain_sessions`)                                                                                                            |
+| Resource changes        | `runtime-state/resource-changes.jsonl`                                                                                                                               |
+| Server config           | `server/config.json`                                                                                                                                                 |
 
 **Related docs:**
 
