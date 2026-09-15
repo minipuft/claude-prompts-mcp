@@ -6,3 +6,7 @@ description: >-
   direct technical voice.
 subject: prose
 guidanceFile: guidance.md
+activation:
+  artifacts:
+    - docs
+    - readme

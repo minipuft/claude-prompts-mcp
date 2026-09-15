@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 
-import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
+import { validatePromptYaml, type PromptArtifactsYaml, type PromptYaml } from './prompt-schema.js';
 
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
@@ -54,6 +54,14 @@ export interface LoadedPromptFile {
     }>;
   };
   injection?: PromptInjectionConfig;
+  /**
+   * The prompt's `artifacts:` declaration (ruling B13), carried verbatim from YAML.
+   *
+   * Carried here as well as on `PromptData` because the CONVERTER reads the loaded file, not
+   * `PromptData` — the same reason `gateConfiguration` and `injection` sit on both. A declaration
+   * carried at fewer than both is silently dead by the time gate activation asks for it.
+   */
+  artifacts?: PromptArtifactsYaml;
   chainSteps?: Array<{
     promptId: string;
     stepName: string;
@@ -796,6 +804,10 @@ export function loadYamlPrompt(
   }
 
   applyInjectionConfig(loadedContent, yamlData.injection);
+
+  if (yamlData.artifacts !== undefined) {
+    loadedContent.artifacts = yamlData.artifacts;
+  }
 
   const normalizedChainSteps = normalizeChainSteps(yamlData.chainSteps, yamlData.edges);
   if (normalizedChainSteps) {

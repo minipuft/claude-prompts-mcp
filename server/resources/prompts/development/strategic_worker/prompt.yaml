@@ -44,23 +44,10 @@ arguments:
       planner merges; shared-tree — commit nothing, leave edits in the planner's
       worktree for it to commit per concern.
     required: false
-# exclude names the development category's auto-gates plus the framework-context gate: five gates
-# (api-documentation, code-quality, plan-quality, security-awareness, test-coverage) whose
-# `activation.prompt_categories` includes `development`, plus `creed-fidelity`, which attaches only
-# under an active framework context (confirmed live via the `>>strategic_worker` positive control).
-# `framework_gates: false` alone does not stop any of them: it only vetoes a framework's OWN gate
-# set. `exclude` binds up to rank 60 (`prompt-config`, gate-set-resolver.ts), above the rank-20
-# registry-auto tier every gate here activates through, so it drops them at runtime once rebuilt,
-# and it drops them from the exported skill the same way (skills-sync/service.ts
-# `resolveActiveGateRefs`, which also excludes `creed-fidelity` independently via its framework
-# dependency). They stay excluded until the activation rework (artifact-based) retires category
-# auto-attachment. No `enforceGateHooks` key, so the export carries no Stop hook.
+artifacts:
+  fromArgument: files
 gateConfiguration:
-  exclude:
-    - api-documentation
-    - code-quality
-    - creed-fidelity
-    - plan-quality
-    - security-awareness
-    - test-coverage
   framework_gates: false
+  # Row 1.2 dropped the exclusion list, so the RADIANT creed gate re-attaches on category
+  # `development` under an active framework — and the worker brief is not a visual surface.
+  exclude: [creed-fidelity]

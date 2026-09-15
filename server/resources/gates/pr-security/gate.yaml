@@ -17,6 +17,8 @@ retry_config:
   preserve_context: true
 
 activation:
+  artifacts:
+    - source
   prompt_categories:
     - pr-review
   explicit_request: true

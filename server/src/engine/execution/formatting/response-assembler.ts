@@ -19,7 +19,14 @@ import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
-/** Max gates to list in the GATE_VERDICTS template */
+/**
+ * Max check-tier gates given a `per_gate` slot in the verdict template.
+ *
+ * Bounds the collected CHECK entries only — reminder-tier gates never count against this cap,
+ * since they render once in the `reminders` field rather than one `per_gate` entry each. The full
+ * `gateIds` list is still walked in original order so a run of leading reminders cannot push a
+ * later check off the template before it is even considered.
+ */
 const MAX_GATE_VERDICT_ENTRIES = 10;
 
 /**
@@ -875,18 +882,25 @@ export class ResponseAssembler {
     checkResults: ReadonlyMap<string, GateCheckResult>
   ): string {
     const promptMap = this.buildPromptLookup(prompts);
-    const listed = gateIds.slice(0, MAX_GATE_VERDICT_ENTRIES);
 
     const entries: string[] = [];
     const reminderIds: string[] = [];
 
-    listed.forEach((gateId, position) => {
+    // Walk the FULL advertised list, not a pre-sliced prefix: slicing before the walk let a run
+    // of leading reminders push a later check off the template before it was ever considered.
+    // The cap binds only the collected check entries (below); reminders are never counted against
+    // it because they render once in the `reminders` field rather than one `per_gate` slot each.
+    gateIds.forEach((gateId, position) => {
       // The index is the gate's place in the ORIGINAL list, not its place among the entries:
       // `parseGateVerdicts` matches `[n]` back to the advertised gate list, so renumbering the
-      // survivors after reminders are dropped would point every verdict at the wrong gate.
+      // survivors after reminders are dropped (or a check is capped out) would point every
+      // verdict at the wrong gate.
       const index = position + 1;
       if ((tiers.get(gateId) ?? 'check') === 'reminder') {
         reminderIds.push(gateId);
+        return;
+      }
+      if (entries.length >= MAX_GATE_VERDICT_ENTRIES) {
         return;
       }
 

@@ -39,6 +39,7 @@ import {
   TelemetryConfig,
   DEFAULT_VERSIONING_CONFIG,
   DEFAULT_TELEMETRY_CONFIG,
+  DEFAULT_GATES_CONFIG,
   DEFAULT_INJECTION_CONFIG,
   type InjectionConfig,
   type ConfigManager,
@@ -180,14 +181,6 @@ const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
     gateGuidance: { frequency: 0, target: 'both' },
     styleGuidance: { enabled: true, frequency: 0, target: 'steps' },
   },
-};
-
-const DEFAULT_GATES_CONFIG: GatesConfig = {
-  enabled: true,
-  definitionsDirectory: 'gates',
-  enableFrameworkGates: true,
-  harnessCovers: [],
-  reminderTokenBudget: 800,
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {

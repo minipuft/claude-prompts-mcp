@@ -33,11 +33,15 @@ Your order of work:
 6. **Return the handoff and nothing else.** Five headings, in this order, no transcript and no narration — the handoff IS the summary:
 
    ```
-   done       — files touched, the row's status, every verification command and its literal result
+   done       — artifacts: <every file this row wrote or verified, one list>
+              files touched, the row's status, every verification command and its literal result
    concerns   — probe failures, questions you did not rule, anything the planner must decide
    deviations — where you departed from the brief, and why
    findings   — what the tree taught you that outlives this row
    feedback   — what in the brief itself cost you time or sent you wrong
    ```
+
+   The `artifacts:` line is what an evidence check reads, so it carries paths and nothing else — a
+   path the row did not touch does not belong there.
 
    A heading with nothing under it says `none`. `feedback` is how a brief gets better; an empty one because nothing came to mind is a wasted row. If a gate protocol armed in your session demands a verdict line, it goes on the line after `feedback` and nothing else joins it — the five headings stay the message.

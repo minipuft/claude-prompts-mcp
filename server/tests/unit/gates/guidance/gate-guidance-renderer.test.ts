@@ -518,3 +518,60 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
     );
   });
 });
+
+/**
+ * B13, the render half. The renderer re-runs activation per gate, so an artifact-scoped gate the
+ * resolver selected at rank 20 would be dropped here if the render context did not carry the same
+ * artifact list — the gate would attach to the run and render nothing, which is the silent
+ * failure shape B13 exists to remove.
+ */
+describe('GateGuidanceRenderer — B13 artifacts reach the activation check', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const artifactGate = {
+    id: 'test-coverage',
+    name: 'Test Coverage Gate',
+    type: 'guidance',
+    description: '',
+    guidance: '- Cover the new branch',
+    activation: { artifacts: ['test'] },
+  };
+
+  test('the declared artifacts are forwarded onto the activation context, and the gate renders', async () => {
+    const loader = createMockLoader();
+    (loader.loadGate as jest.Mock).mockResolvedValue(artifactGate as never);
+    (loader.isGateActive as jest.Mock).mockImplementation((_gate: unknown, context: any) =>
+      (context.artifacts ?? []).includes('test')
+    );
+
+    const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+    const guidance = await renderer.renderGuidance(['test-coverage'], {
+      category: 'development',
+      artifacts: ['test', 'readme'],
+    });
+
+    expect((loader.isGateActive as jest.Mock).mock.calls[0]?.[1]).toMatchObject({
+      promptCategory: 'development',
+      artifacts: ['test', 'readme'],
+    });
+    expect(guidance).toContain('Test Coverage Gate');
+  });
+
+  test('positive control: the same gate with no artifacts in the render context renders nothing', async () => {
+    const loader = createMockLoader();
+    (loader.loadGate as jest.Mock).mockResolvedValue(artifactGate as never);
+    (loader.isGateActive as jest.Mock).mockImplementation((_gate: unknown, context: any) =>
+      (context.artifacts ?? []).includes('test')
+    );
+
+    const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+    const guidance = await renderer.renderGuidance(['test-coverage'], {
+      category: 'development',
+    });
+
+    expect((loader.isGateActive as jest.Mock).mock.calls[0]?.[1]).not.toHaveProperty('artifacts');
+    expect(guidance).not.toContain('Test Coverage Gate');
+  });
+});

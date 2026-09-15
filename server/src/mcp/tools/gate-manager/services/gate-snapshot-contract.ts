@@ -81,9 +81,7 @@ export const gateSnapshotContract: SnapshotContract<GateGuide, GateCreationData>
       guidance: live.getGuidance(),
     };
 
-    copyPresentFields(snapshot, definition as unknown as Record<string, unknown>, [
-      ...GATE_OPTIONAL_SNAPSHOT_FIELDS,
-    ]);
+    copyPresentFields(snapshot, definition, [...GATE_OPTIONAL_SNAPSHOT_FIELDS]);
 
     // Declared key order, always — `latestSnapshotMatches` is JSON.stringify equality (F18).
     return canonicalizeSnapshot(snapshot, GATE_SNAPSHOT_PROJECTED_KEYS);

@@ -7,9 +7,11 @@
  * verdict from a registered tool). Every other gate is a `reminder`, including a gate with
  * no `pass_criteria` at all, and a gate whose `pass_criteria` only sets pattern/length
  * fields (`required_patterns`, `regex_patterns`, `keyword_count`, `min_length`,
- * `max_length`, `forbidden_patterns`) — those fields feed renderers and normalizers only
- * and have no evaluator that flips a verdict (ruling B9,
- * ~/.claude/plans/gate-checks-and-reminders.md).
+ * `max_length`, `forbidden_patterns`) — those fields never had an evaluator that flips a
+ * verdict, and since row 1.5 they are refused at load rather than accepted and ignored
+ * (ruling B9, ~/.claude/plans/gate-checks-and-reminders.md). They are still named here
+ * because a gate.yaml predating that rejection is what someone reading this will be
+ * holding.
  *
  * `server/scripts/generate-gate-index.js` carries a JS copy of this same rule so the
  * generated `_index.md` Tier column can be produced without a TS build step. The two

@@ -46,6 +46,9 @@ arguments:
       worker_cap frontmatter wins when present); hard max 8. A slice that wants
       more opens a subplanner session instead of widening fan-out.
     required: false
+artifacts:
+  produces:
+    - plan
 gateConfiguration:
   include:
     - workflow-preflight

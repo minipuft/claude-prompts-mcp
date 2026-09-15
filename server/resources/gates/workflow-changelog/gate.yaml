@@ -16,6 +16,8 @@ retry_config:
   preserve_context: true
 
 activation:
+  artifacts:
+    - changelog
   prompt_categories:
     - workflow
     - implementation

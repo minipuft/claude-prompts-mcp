@@ -98,9 +98,22 @@ function severityBadge(gate) {
 }
 
 function activationSummary(gate) {
+  // Ruling B13: when a gate names `activation.artifacts`, artifacts alone decide — the
+  // runtime (`isGateActiveForContext`) never consults `prompt_categories` once this is set, so
+  // printing them beside it would claim a say they no longer have.
+  const artifacts = gate.activation?.artifacts ?? [];
+  const explicit = gate.activation?.explicit_request;
+  if (artifacts.length > 0) {
+    // `explicit_request` still applies on this branch: artifacts decide WHICH surfaces the gate
+    // is eligible for, `explicit_request: true` decides that it never auto-attaches to any of
+    // them. Dropping the suffix here printed `pr-security` and `pr-performance` as if they
+    // attached to every source change.
+    const summary = `artifacts: ${artifacts.join(', ')}`;
+    return explicit === true ? `${summary} · explicit only` : summary;
+  }
+
   const parts = [];
   const cats = gate.activation?.prompt_categories ?? [];
-  const explicit = gate.activation?.explicit_request;
   const frameworks = gate.activation?.framework_context ?? [];
 
   if (cats.length > 0) parts.push(cats.join(', '));
@@ -109,7 +122,7 @@ function activationSummary(gate) {
   if (parts.length === 0) {
     // Mirrors isGateActiveForContext (server/src/engine/gates/utils/gate-activation.ts):
     // a MISSING activation block never auto-activates (opt-in only, since claude-prompts-mcp
-    // #286); an activation block with no restrictions still auto-attaches (always).
+    // #286); an activation block with no restricting rule still auto-attaches (always).
     return gate.activation === undefined ? 'opt-in' : 'always';
   }
   return parts.join(' · ');

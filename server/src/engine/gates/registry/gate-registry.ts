@@ -389,7 +389,7 @@ export class GateRegistry {
 
     for (const gateId of gateIds) {
       const startTime = performance.now();
-      const definition = this.loader.loadGate(gateId) as GateDefinitionYaml | undefined;
+      const definition = this.loader.loadGate(gateId);
 
       if (!definition) {
         this.logger.warn(`Failed to load gate definition: ${gateId}`);

@@ -6,3 +6,7 @@ description: >-
   and Claude Prompts.
 subject: positioning
 guidanceFile: guidance.md
+activation:
+  artifacts:
+    - docs
+    - readme

@@ -7,7 +7,7 @@
  * The unit cases below pin the rule itself. The registry cross-check is the only thing that
  * fails when the JS and TS copies drift: it loads every gate's `gate.yaml` under
  * `server/resources/gates`, parses the generated `_index.md`'s Tier column, and asserts
- * `deriveGateTier` agrees with what the generator already wrote for all 25 gates. If someone
+ * `deriveGateTier` agrees with what the generator already wrote for all 26 gates. If someone
  * edits the JS rule (or the TS rule) without updating the other, this test — and only this
  * test — goes red.
  *
@@ -90,8 +90,11 @@ describe('deriveGateTier — registry cross-check against generated _index.md', 
       .filter((e) => e.isDirectory() && e.name !== 'config')
       .map((e) => e.name);
 
-    expect(gateDirs.length).toBe(25);
-    expect(tierByIdFromIndex.size).toBe(25);
+    // Guards the enumeration itself, the way `gate-definition-loader.test.ts` does for the
+    // schema sweep: a per-gate comparison that silently found zero gates would still pass.
+    // 26 = the 25 registry gates plus `handoff-artifacts` (row 1.3).
+    expect(gateDirs.length).toBe(26);
+    expect(tierByIdFromIndex.size).toBe(26);
 
     for (const dirName of gateDirs) {
       const yamlPath = path.join(GATES_DIR, dirName, 'gate.yaml');
