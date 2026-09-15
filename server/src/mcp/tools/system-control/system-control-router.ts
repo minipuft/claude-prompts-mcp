@@ -24,6 +24,7 @@ import { ResponseFormatter } from '../prompt-engine/processors/response-formatte
 import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/index.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
 
@@ -69,6 +70,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   chainSessionStore?: ChainSessionService;
   executionRecordStore?: ExecutionRecordStore;
   databasePort?: DatabasePort;
+  skillsSyncPaths?: () => SkillsSyncPaths;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
@@ -148,6 +150,10 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   setDatabasePort(databasePort: DatabasePort): void {
     this.databasePort = databasePort;
+  }
+
+  setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
+    this.skillsSyncPaths = provider;
   }
 
   setChainSessionStore(chainSessionStore: ChainSessionService): void {
