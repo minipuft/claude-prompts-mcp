@@ -18,7 +18,7 @@ tags: [config, schema, validation, cli, contracts]
 
 - **Goal**: one owner for `config.json`'s shape. T0 and T1 made a bad config visible at load without refusing to serve; T2 makes the CLI, the MCP tool and the runtime agree with the schema.
 - **Slice**: T0 and T1 merged as #288 (`e84bf394`). The owner interview on 2026-09-15 ruled OQ-4 (notes R31), OQ-5 (R27), OQ-6 (R28), OQ-7 (R30) and OQ-8 (R29): every remaining row, T5 included, lands before 5.0.0, and its release PR #232 stays unmerged until then. Nothing is cut yet.
-- **Next decision**: the owner confirms the ruling summary and the proposed delivery order (notes §Proposed delivery order). Then re-cut T2–T5 into rows in that order; 2.1–2.4 close as absorbed by the generated authority, and 2.6 as replaced by R30.
+- **Next decision**: the owner confirms how `cpm` and `system_control` config align (notes F-T2-8) and the delivery order (notes §Proposed delivery order). Then re-cut T2–T5 into rows in that order; 2.1–2.4 close as absorbed by the generated authority, and 2.6 as replaced by R30.
 - **Constraint in force**: the worktree `../claude-prompts-mcp-config` is on `feat/config-contract-t2`, cut from `main` at `53bed1fa`, with no upstream, so a bare push cannot reach `main`. Shared-tree: workers edit only their named files and commit nothing; the planner commits source only while no worker is editing. `publish: push+merge` still covers each tier's PR under #287; a force push or an out-of-slice diff still stops it.
 
 ## Why this exists
