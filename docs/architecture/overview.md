@@ -844,7 +844,8 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 ### Styles (`src/modules/formatting/`)
 
 - **Manager**: Orchestrates style lifecycle
-- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`
+- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`, overlaid by a
+  workspace `resources/styles/{id}/` the same way prompts, gates and frameworks are
 - **Loader**: YAML + MD parsing with schema validation
 
 ### Execution (`src/engine/execution/`)
