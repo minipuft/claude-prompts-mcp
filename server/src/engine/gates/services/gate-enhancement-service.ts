@@ -4,6 +4,7 @@ import { isFrameworkInjected } from '../../execution/pipeline/decisions/injectio
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { GateSystemSettings } from '#shared/types/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
 import type { FrameworkVeto, GateResolutionInput } from './gate-set-resolver.js';
@@ -20,7 +21,6 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
-import type { ResolvedGateSettings } from '../types.js';
 
 /**
  * Every prompt in this execution that may carry inline gate definitions.
@@ -163,7 +163,7 @@ export class GateEnhancementService {
     gateContext: SinglePromptGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: ResolvedGateSettings | undefined,
+    gatesConfig: GateSystemSettings | undefined,
     frameworkGateIds: Set<string>,
     /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
     inlineDefinitionGateIds: readonly string[] = []
@@ -293,7 +293,7 @@ export class GateEnhancementService {
     gateContext: ChainStepGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: ResolvedGateSettings | undefined,
+    gatesConfig: GateSystemSettings | undefined,
     frameworkGateIds: Set<string>,
     /**
      * Canonical ids for every step's inline definitions, registered up front by the caller.
@@ -882,7 +882,7 @@ export class GateEnhancementService {
    */
   private ensureDefaultFrameworkGate(
     gateIds: string[],
-    gatesConfig: ResolvedGateSettings | undefined,
+    gatesConfig: GateSystemSettings | undefined,
     activeFrameworkId: string | undefined,
     frameworkGateIds: Set<string>,
     frameworkVetoes: readonly FrameworkVeto[]
