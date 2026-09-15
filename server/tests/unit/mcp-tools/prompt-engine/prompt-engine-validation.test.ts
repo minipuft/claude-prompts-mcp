@@ -31,6 +31,7 @@ const mockConfigManager: ConfigManager = {
   getFrameworksConfig: jest.fn().mockReturnValue({}),
   getChainSessionConfig: jest.fn().mockReturnValue(undefined),
   getServerRoot: jest.fn().mockReturnValue(process.cwd()),
+  getSchemaValidation: () => undefined,
   on: jest.fn(),
   off: jest.fn(),
 } as any;
