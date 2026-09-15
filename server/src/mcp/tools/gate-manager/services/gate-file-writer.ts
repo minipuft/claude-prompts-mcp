@@ -97,7 +97,7 @@ export { GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS };
  * addresses the gate rather than describing an editable field, and `guidanceFile` is a constant
  * the writer derives, never something a caller supplies.
  */
-export const GATE_YAML_RESIDENT_KEYS: readonly string[] = [
+const GATE_YAML_RESIDENT_KEYS: readonly string[] = [
   ...GATE_YAML_PROJECTED_KEYS.filter((key) => key !== 'id' && key !== 'guidanceFile'),
   ...PRESERVED_GATE_YAML_KEYS,
 ];
@@ -108,10 +108,7 @@ export const GATE_YAML_RESIDENT_KEYS: readonly string[] = [
  * the WHOLE state being written, not an edit to a subset of it, so neither has a narrower scope to
  * compute (mirrors `ALL_PROMPT_DATA_KEYS`'s role for prompts).
  */
-export const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([
-  ...GATE_YAML_RESIDENT_KEYS,
-  'guidance',
-]);
+const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([...GATE_YAML_RESIDENT_KEYS, 'guidance']);
 
 /**
  * Decide what each preserved key should carry into the rewritten YAML: an explicitly supplied
