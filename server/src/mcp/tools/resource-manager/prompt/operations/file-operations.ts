@@ -211,6 +211,14 @@ interface PromptWritePlan {
   promptDir: string;
   /** The prompt's directory under another category, relocated to `promptDir` first. */
   moveSource: string | null;
+  /**
+   * The prompt's prior single-file location (`{category}/{id}.yaml`, any category), deleted as
+   * part of converting it to directory layout in this same write (B.21) — which also relocates it
+   * when this file's category differs from `effectiveCategory`, the same way `moveSource` relocates
+   * a directory. Mutually exclusive with `moveSource` and `copyOnWriteSource`: the prior state is
+   * either a directory, a flat file, or neither, never two of the three.
+   */
+  fileSource: string | null;
   /** The prompt's directory under the root it was loaded from, copied to `promptDir` first. */
   copyOnWriteSource: string | null;
   /** Where the prompt's files are before this write; null when it has none. */
@@ -272,7 +280,8 @@ export class FileOperations {
     // below applies the plan and decides nothing of its own. `projectPromptWrite` reads a
     // preview's diff off the same plan, which is what keeps the two from naming different files.
     const plan = await this.planPromptWrite(promptData, suppliedKeys, sourceRoot, writeIntent);
-    const { promptsDir, effectiveCategory, promptDir, moveSource, copyOnWriteSource } = plan;
+    const { promptsDir, effectiveCategory, promptDir, moveSource, fileSource, copyOnWriteSource } =
+      plan;
     const yamlPath = path.join(promptDir, 'prompt.yaml');
     // Nested chain steps carry a path-qualified id ("implementation_plan/verification"): the
     // directory needs the full path, but the YAML `id` field and its validation take the
@@ -290,6 +299,11 @@ export class FileOperations {
       // location — the two-target restore `ResourceMutationTransaction` already provides for any
       // target set, snapshot-then-mutate-then-validate-or-restore-all.
       targets.push({ path: moveSource, kind: 'directory' });
+    }
+    if (fileSource !== null) {
+      // Same reasoning as the move target above: a failure after the file is deleted but before
+      // the new directory validates must put the file back, not leave the prompt undefined.
+      targets.push({ path: fileSource, kind: 'file' });
     }
 
     const txResult = await this.mutationTransaction.run({
@@ -316,6 +330,12 @@ export class FileOperations {
           );
         }
 
+        if (fileSource !== null) {
+          messages.push(
+            ...(await this.convertPromptFileToDirectory(fileSource, promptId, effectiveCategory))
+          );
+        }
+
         if (copyOnWriteSource !== null) {
           // Before the content write, so everything below operates on the full prior state.
           await fs.cp(copyOnWriteSource, promptDir, { recursive: true });
@@ -328,8 +348,10 @@ export class FileOperations {
           );
         }
 
-        const promptExists = plan.priorDir !== null;
-        affectedFiles.push(...(await this.createOrUpdateYamlPrompt(plan, promptId)));
+        // `fileSource` is a prior state too — `priorDir` alone would call this a `Created` prompt
+        // for what is, from the caller's side, an update of the flat file it just converted.
+        const promptExists = plan.priorDir !== null || fileSource !== null;
+        affectedFiles.push(...(await this.createOrUpdateYamlPrompt(plan, promptId, promptExists)));
         messages.push(`${promptExists ? 'Updated' : 'Created'} prompt: ${promptData.id}`);
 
         // Scaffold chain step directories for nested sub-prompts
@@ -423,6 +445,20 @@ export class FileOperations {
         after,
       });
     }
+
+    // `fileSource` sits outside `promptDir` (a sibling `{id}.yaml`, not a file under it), so it
+    // cannot share `targetPrefix`/`priorPrefix` with the loop above — named at its own path on
+    // both sides, deleted (B.21).
+    if (plan.fileSource !== null) {
+      const fileSourcePath = toPosixPath(path.relative(plan.promptsDir, plan.fileSource));
+      changes.push({
+        path: fileSourcePath,
+        previousPath: fileSourcePath,
+        before: existsSync(plan.fileSource) ? await fs.readFile(plan.fileSource, 'utf8') : null,
+        after: null,
+      });
+    }
+
     return changes;
   }
 
@@ -465,6 +501,21 @@ export class FileOperations {
         ? this.findExistingPromptDirectory(promptsDir, promptId, promptDir)
         : null;
 
+    // B.21 — single-file → directory conversion, in the SAME write, including across a category
+    // change. `findExistingPromptDirectory` above deliberately excludes `format: 'file'` matches,
+    // so an update of a `{category}/{id}.yaml` prompt reached this point with `moveSource === null`
+    // and then wrote a fresh `{id}/` directory beside the untouched file — the prompt defined
+    // twice, one copy going stale from the moment of the first update. Scans every category, the
+    // same way `moveSource`'s directory-format search does, because the flat file being converted
+    // may not live under the write's own TARGET category — a category-changing update of a
+    // single-file prompt is exactly that: measured live, `general/one_file_note.yaml` updated with
+    // `category: "docs"` left BOTH `general/one_file_note.yaml` and `docs/one_file_note/` on disk,
+    // served twice, before this scan was widened from the target category alone.
+    const fileSource =
+      !isNestedId && moveSource === null && !existsSync(promptDir)
+        ? this.findExistingPromptFile(promptsDir, promptId)
+        : null;
+
     // A move relocates the WHOLE prior state — composes with Fix B as a forced full scope. The
     // caller (the processor) cannot have supplied the right narrower scope for a move: it has no
     // visibility into whether a category change is a move until THIS layer resolves it against
@@ -492,7 +543,10 @@ export class FileOperations {
     // Whole-subtree rather than a list of known file kinds: a list can only preserve what someone
     // remembered to enumerate, and the two losses above were exactly the kinds nobody had.
     const copyOnWriteSource =
-      moveSource === null && !existsSync(promptDir) && sourceRoot !== undefined
+      moveSource === null &&
+      fileSource === null &&
+      !existsSync(promptDir) &&
+      sourceRoot !== undefined
         ? this.resolveCopyOnWriteSource(sourceRoot, promptsDir, promptId, promptDir)
         : null;
 
@@ -502,10 +556,16 @@ export class FileOperations {
     const priorDir = existsSync(promptDir) ? promptDir : (moveSource ?? copyOnWriteSource);
     const priorRoot =
       copyOnWriteSource !== null && sourceRoot !== undefined ? sourceRoot : promptsDir;
+    // `fileSource` has no `prompt.yaml` inside it — it IS the yaml, at its own path — so field
+    // preservation (`buildPromptYamlData`'s `existingYaml`) reads it directly rather than through
+    // `priorDir`, which stays null here on purpose: `isFreshDirectory` below still needs to be
+    // true, because there is no prior DIRECTORY whose untouched files this write can leave alone.
+    const priorYamlPath = priorDir !== null ? path.join(priorDir, 'prompt.yaml') : fileSource;
 
     const { files: promptFiles, removesSystemMessage } = await this.planPromptFiles(
       promptData,
       priorDir,
+      priorYamlPath,
       suppliedKeysForWrite,
       writeIntent
     );
@@ -515,6 +575,7 @@ export class FileOperations {
       effectiveCategory,
       promptDir,
       moveSource,
+      fileSource,
       copyOnWriteSource,
       priorDir,
       priorRoot,
@@ -558,9 +619,9 @@ export class FileOperations {
    * category-changing update can find where the prompt currently lives (Part 2 — category move).
    * Returns `null` when no OTHER directory declares this id, which is the ordinary "brand new
    * prompt" case, not a move. Excludes flat single-file prompts (`{category}/{id}.yaml`,
-   * `format: 'file'`) — this writer only ever produces directory-format prompts, and relocating a
-   * single file into a directory tree is a different operation this method does not attempt; a
-   * category change against a flat-file prompt falls through to an ordinary create at the target.
+   * `format: 'file'`) — this writer only ever produces directory-format prompts, so a flat-file
+   * match is not a directory to relocate. The sibling single-file case, including a category
+   * change, is `findExistingPromptFile`, below (B.21).
    */
   /**
    * The directory to copy from when a prompt is being edited into a root it does not yet live in.
@@ -619,6 +680,53 @@ export class FileOperations {
     await fs.cp(sourceDir, targetDir, { recursive: true });
     await fs.rm(sourceDir, { recursive: true, force: true });
     return [`Moved prompt '${promptId}' from '${path.basename(sourceDir)}' to '${targetCategory}'`];
+  }
+
+  /**
+   * Locate `promptId` at its single-file location (`{category}/{id}.yaml`) across every category
+   * — used only when no directory-format match exists (`moveSource === null`) and the write's own
+   * TARGET directory does not yet exist, so an update of a single-file prompt can convert it to
+   * directory layout in the same write (B.21) instead of leaving it in place and creating `{id}/`
+   * beside it. Scans every category the same way `findExistingPromptDirectory` does, rather than
+   * only the write's target category: a category-changing update of a single-file prompt is the
+   * ordinary case this needs to find, not an exception to it — the flat file being converted lives
+   * under whatever category it was authored in, which the caller is in the middle of changing.
+   */
+  private findExistingPromptFile(promptsDir: string, promptId: string): string | null {
+    for (const categoryDir of this.discoverCategoryDirectories(promptsDir)) {
+      const found = findYamlPromptInCategory(categoryDir, promptId);
+      if (found !== null && found.format === 'file') {
+        return found.path;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Delete the prompt's prior single-file location as part of converting it to directory layout
+   * (B.21) — the same write relocates it too when `targetCategory` names a different category than
+   * the flat file lived under, since `findExistingPromptFile` now finds it regardless of category.
+   * The directory's own files are written separately by `createOrUpdateYamlPrompt`, from
+   * `plan.promptFiles` — which already carries the flat file's content forward via
+   * `priorYamlPath`-based field preservation, so this method's only job is removing the file the
+   * conversion (and possible relocation) supersedes. Placed in `mutate()` the same way
+   * `relocatePromptDirectory` is: before the content write, and covered by the same transaction
+   * target for rollback.
+   */
+  private async convertPromptFileToDirectory(
+    fileSource: string,
+    promptId: string,
+    targetCategory: string
+  ): Promise<string[]> {
+    const sourceCategory = path.basename(path.dirname(fileSource));
+    await fs.rm(fileSource, { force: true });
+    const relocation =
+      sourceCategory === targetCategory
+        ? ''
+        : ` and moved from '${sourceCategory}' to '${targetCategory}'`;
+    return [
+      `Converted prompt '${promptId}' from single-file layout (${path.basename(fileSource)}) to directory layout${relocation}`,
+    ];
   }
 
   /**
@@ -776,7 +884,8 @@ export class FileOperations {
    */
   private async createOrUpdateYamlPrompt(
     plan: PromptWritePlan,
-    promptId: string
+    promptId: string,
+    promptExists: boolean
   ): Promise<string[]> {
     await fs.mkdir(plan.promptDir, { recursive: true });
     const paths = [
@@ -792,7 +901,7 @@ export class FileOperations {
       paths.push(systemMessagePath);
     }
 
-    this.logger.info(`${plan.priorDir !== null ? 'Updated' : 'Created'} YAML prompt: ${promptId}`);
+    this.logger.info(`${promptExists ? 'Updated' : 'Created'} YAML prompt: ${promptId}`);
     return paths;
   }
 
@@ -807,6 +916,7 @@ export class FileOperations {
   private async planPromptFiles(
     promptData: any,
     priorDir: string | null,
+    priorYamlPath: string | null,
     suppliedKeys: ReadonlySet<string>,
     writeIntent: PromptWriteIntent
   ): Promise<{ files: PlannedPromptFile[]; removesSystemMessage: boolean }> {
@@ -846,9 +956,7 @@ export class FileOperations {
     const files: PlannedPromptFile[] = [];
     if (writesYaml) {
       const existingYaml =
-        priorDir !== null
-          ? await this.readExistingPromptYaml(path.join(priorDir, 'prompt.yaml'))
-          : undefined;
+        priorYamlPath !== null ? await this.readExistingPromptYaml(priorYamlPath) : undefined;
       const promptYamlData = this.buildPromptYamlData(
         promptData as Record<string, unknown>,
         existingYaml,
