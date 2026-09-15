@@ -153,10 +153,6 @@ export interface PromptArgument {
   };
 }
 
-// GatesConfig (shared-layer) re-exported from core-config as GateSystemSettings.
-// Aliased here for backward compatibility.
-export { type GateSystemSettings as GatesConfig } from './core-config.js';
-
 // ContentAnalysisResult is now exported from ./core-config.js above.
 
 // VersioningConfig and DEFAULT_VERSIONING_CONFIG are now exported from ./core-config.js above.

@@ -3,6 +3,7 @@
  * Gate Manager Types
  */
 
+import type { GatePassCriteriaYaml } from '#engine/gates/core/gate-schema.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 
@@ -46,13 +47,10 @@ export interface GateManagerInput {
   subject?: string;
   guidance?: string;
   /**
-   * min_length/required_patterns/keyword_count/regex_patterns are deliberately not
-   * declared — they never had an evaluator (B9) and are refused at load; a `shell_verify`
-   * or `script_tool` criterion, or a reminder line in `guidance`, is what enforces instead.
+   * The gate schema's write-side shape — what a caller supplies when building a criterion.
+   * min_length/required_patterns/keyword_count/regex_patterns are absent because the loader refuses them at load.
    */
-  pass_criteria?: Array<{
-    type?: string;
-  }>;
+  pass_criteria?: GatePassCriteriaYaml[];
   activation?: {
     prompt_categories?: string[];
     frameworks?: string[];

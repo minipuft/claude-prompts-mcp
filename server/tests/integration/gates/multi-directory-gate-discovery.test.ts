@@ -84,7 +84,6 @@ describe('Multi-Directory Gate Discovery', () => {
   test('discovers gates from primary directory only (regression)', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
-      validateOnLoad: false,
     });
 
     const ids = loader.discoverGates();
@@ -95,7 +94,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const ids = loader.discoverGates();
@@ -112,7 +110,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const gate = loader.loadGate('pre-flight-completion');
@@ -125,7 +122,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const gate = loader.loadGate('pre-flight-completion');
@@ -144,7 +140,6 @@ describe('Multi-Directory Gate Discovery', () => {
       const loader = new GateDefinitionLoader({
         gatesDir: primaryDir,
         additionalGatesDirs: [conflictDir],
-        validateOnLoad: false,
       });
 
       const gate = loader.loadGate('code-quality');
@@ -160,7 +155,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: ['/no/such/path'],
-      validateOnLoad: false,
     });
 
     // Should not throw, should work with primary only
@@ -172,7 +166,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const dirs = loader.getWatchDirectories();
@@ -183,7 +176,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     // Primary gate
@@ -200,7 +192,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const stats = loader.getStats();
@@ -212,7 +203,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const gate = loader.loadGate('standalone');

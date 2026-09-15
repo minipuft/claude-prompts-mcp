@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { load as loadYaml } from 'js-yaml';
+
 import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-definition-loader.js';
 import { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
 import { validateGateSchema } from '../../../../src/engine/gates/core/gate-schema.js';
@@ -205,7 +207,6 @@ describe('every registry gate.yaml satisfies GateDefinitionSchema', () => {
   const registryGatesDir = join(__dirname, '../../../../resources/gates');
   const registryLoader = new GateDefinitionLoader({
     gatesDir: registryGatesDir,
-    validateOnLoad: false,
     enableCache: false,
   });
   const gateIds = readdirSync(registryGatesDir, { withFileTypes: true })
@@ -230,5 +231,77 @@ describe('every registry gate.yaml satisfies GateDefinitionSchema', () => {
     expect(result.errors).toEqual([]);
     expect(result.data?.subject).toBeDefined();
     expect(result.data?.subject).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+  });
+});
+
+// Ruling B17 — the loader parses instead of casting, so the schema's `.default()` values reach
+// the object a consumer holds. Before this, `loadGate` returned the raw YAML and threw away
+// `validateGateSchema`'s `result.data`, which left every default decorative and made six
+// hand-written `?? 'medium'` / `?? 'custom'` guards do the schema's job at each read site.
+describe('GateDefinitionLoader applies schema defaults to what it returns', () => {
+  let workspaceDir: string;
+  let gatesDir: string;
+  let gateYamlText: string;
+
+  beforeEach(() => {
+    workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-gate-defaults-'));
+    gatesDir = join(workspaceDir, 'gates');
+    const gateDir = join(gatesDir, 'defaults-gate');
+    mkdirSync(gateDir, { recursive: true });
+    // No `severity`, no `gate_type`. `retry_config` is present but empty: zod applies a nested
+    // object's field defaults only when the object itself is present, because
+    // `GateRetryConfigSchema` is `.optional()` on the parent.
+    gateYamlText = [
+      'id: defaults-gate',
+      'name: Defaults Gate',
+      'type: validation',
+      'description: Exercises schema defaults on load',
+      'retry_config: {}',
+      'pass_criteria:',
+      '  - type: inline_guidance',
+      '',
+    ].join('\n');
+    writeFileSync(join(gateDir, 'gate.yaml'), gateYamlText, 'utf8');
+  });
+
+  afterEach(() => {
+    rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  test('severity, gate_type and retry_config.max_attempts come back defaulted', () => {
+    // POSITIVE CONTROL: the file itself declares none of these. Without this the assertions
+    // below would pass just as well against a loader that returned the raw YAML of a fixture
+    // that happened to spell the defaults out.
+    const onDisk = loadYaml(gateYamlText) as Record<string, unknown>;
+    expect(onDisk['severity']).toBeUndefined();
+    expect(onDisk['gate_type']).toBeUndefined();
+    expect(onDisk['retry_config']).toEqual({});
+
+    const loader = new GateDefinitionLoader({ gatesDir });
+    const definition = loader.loadGate('defaults-gate');
+
+    expect(definition).toBeDefined();
+    // MUTATION KILLED: making `loadFromYamlDir` return the raw object again instead of
+    // `validation.data` turns each of these into `undefined` — confirmed by applying the
+    // mutation, re-running this file (red), and reverting.
+    expect(definition?.severity).toBe('medium');
+    expect(definition?.gate_type).toBe('custom');
+    expect(definition?.retry_config?.max_attempts).toBe(2);
+  });
+
+  test('guidance.md is still inlined, and guidanceFile is gone, now that inlining happens pre-parse', () => {
+    const gateDir = join(gatesDir, 'defaults-gate');
+    writeFileSync(
+      join(gateDir, 'gate.yaml'),
+      gateYamlText.replace('retry_config: {}', 'guidanceFile: guidance.md'),
+      'utf8'
+    );
+    writeFileSync(join(gateDir, 'guidance.md'), 'Inlined before the parse.\n', 'utf8');
+
+    const loader = new GateDefinitionLoader({ gatesDir });
+    const definition = loader.loadGate('defaults-gate');
+
+    expect(definition?.guidance).toBe('Inlined before the parse.\n');
+    expect(definition?.guidanceFile).toBeUndefined();
   });
 });
