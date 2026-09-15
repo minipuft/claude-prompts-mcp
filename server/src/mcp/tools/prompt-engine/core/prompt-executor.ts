@@ -29,7 +29,7 @@ import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
-import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
+import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
@@ -162,7 +162,8 @@ export class PromptExecutor {
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager,
     mcpToolsManager?: any,
-    promptGuidanceService?: PromptGuidanceService
+    promptGuidanceService?: PromptGuidanceService,
+    databasePort?: DatabasePort
   ) {
     this.logger = logger;
     this.promptManager = promptManager;
@@ -213,6 +214,9 @@ export class PromptExecutor {
           }
         : {}),
       ...(workspaceScope !== undefined ? { defaultScope: workspaceScope } : {}),
+      // Given at construction because the store begins initializing in its constructor: a port
+      // that arrives only through `setDatabasePort` leaves it warning "persistence disabled" first.
+      ...(databasePort !== undefined ? { databasePort } : {}),
     };
 
     this.argumentHistoryTracker = new ArgumentHistoryTracker(logger, 50);
@@ -342,6 +346,10 @@ export class PromptExecutor {
         'PromptExecutor.setDatabasePort called without an argument-history store; argument history will not persist.'
       );
     }
+    // Still forwarded: an executor constructed without a port (tests, and any composition that
+    // opens the database late) gets its chain persistence here. When the store was constructed
+    // with this same port the call is inert — its re-arm is guarded by `!runRegistry`, and the
+    // chained step re-checks after `initPromise` settles — so no second registry or load occurs.
     if ('setDatabasePort' in this.chainSessionStore) {
       (this.chainSessionStore as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
     }
@@ -1149,7 +1157,8 @@ export function createPromptExecutor(
   textReferenceStore: TextReferenceStore,
   gateManager: GateManager,
   mcpToolsManager?: any,
-  promptGuidanceService?: PromptGuidanceService
+  promptGuidanceService?: PromptGuidanceService,
+  databasePort?: DatabasePort
 ): PromptExecutor {
   return new PromptExecutor(
     logger,
@@ -1159,7 +1168,8 @@ export function createPromptExecutor(
     textReferenceStore,
     gateManager,
     mcpToolsManager,
-    promptGuidanceService
+    promptGuidanceService,
+    databasePort
   );
 }
 

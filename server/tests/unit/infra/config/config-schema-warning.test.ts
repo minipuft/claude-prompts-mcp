@@ -2,11 +2,10 @@
  * Schema validation warnings on load.
  *
  * `ConfigLoader.loadConfig` checks the raw parsed config against the package's
- * `config.schema.json` when a schema path is injected, and reports drift through `console.warn`
- * directly — not the module logger, which is silent on stderr under STDIO outside CI (see
- * `writeSchemaWarning` in `src/infra/config/index.ts`). Warnings are suppressed per SET: a
- * reload warns again only when status + the sorted error list differ from the last one warned,
- * and a valid load clears that memory.
+ * `config.schema.json` when a schema path is injected, and reports drift through the module
+ * logger's `warn` (`src/infra/config/index.ts`), which reaches stderr under STDIO on every
+ * process, CI or not. Warnings are suppressed per SET: a reload warns again only when status +
+ * the sorted error list differ from the last one warned, and a valid load clears that memory.
  *
  * `tsc` cannot see any of this — the shape is only bound at load time — so these tests pin the
  * exact warning text and `getSchemaValidation()` across a sequence of loads on ONE loader
@@ -61,12 +60,18 @@ describe('config schema validation warnings', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  /** Only the `[CONFIG] ... schema ...` lines — isolates the schema warning from any other. */
+  /**
+   * Only the `[CONFIG] ... schema ...` lines — isolates the schema warning from any other. Also
+   * requires the module logger's `[WARN] ` prefix on the first argument: a route that fell back
+   * to a bare `console.warn(message)` produces a line with no prefix, so this filter would drop
+   * it and every length assertion below would see zero instead of the expected count.
+   */
   const schemaWarnings = (): string[] =>
     warnSpy.mock.calls
       .map((call) => String(call[0]))
       .filter(
         (line) =>
+          line.startsWith('[WARN] ') &&
           line.includes('[CONFIG]') &&
           (line.includes('does not match its schema') ||
             line.includes('Could not read the config schema'))

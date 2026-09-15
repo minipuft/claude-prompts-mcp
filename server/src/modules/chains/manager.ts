@@ -182,6 +182,16 @@ export interface ChainSessionStoreOptions {
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
   /**
+   * Database the store persists through, supplied at construction.
+   *
+   * The constructor starts `initialize()` immediately, so a port that arrives only through
+   * `setDatabasePort()` leaves the store observable without persistence until the setter runs —
+   * and every start warned "persistence disabled" for a store that went on to persist. Supplying
+   * it here makes the first initialization the real one. A `DatabasePort` passed as the positional
+   * fourth argument takes precedence; that slot is the tests' injection point.
+   */
+  databasePort?: DatabasePort;
+  /**
    * Workspace scope stamped on the `chain_sessions` hook projection.
    *
    * Distinct from `pidScope`: `chain_sessions.run_owner_pid` is the server PID, which isolates one
@@ -256,6 +266,9 @@ export class ChainSessionStore implements ChainSessionService {
     } else if (dbEngineOrTracker !== undefined) {
       this.injectedDbEngine = dbEngineOrTracker;
     }
+    // Read by `initialize()` below. Production passes the tracker positionally, so the port has
+    // to travel in the options object rather than in the shared fourth slot.
+    this.injectedDbEngine ??= options.databasePort;
 
     this.defaultSessionTimeoutMs = options.defaultSessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
     this.reviewSessionTimeoutMs =
