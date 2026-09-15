@@ -25,6 +25,14 @@ export interface GateGuidanceConfig {
   reminderTokenBudget?: number;
 }
 
+/**
+ * Closing attestation line shared by every gate-guidance render path — the canonical renderer
+ * here and the fallback in chain-operator-executor.ts. Exported so the fallback imports this
+ * literal instead of carrying its own copy that can drift (row 0.9, gate-checks-and-reminders).
+ */
+export const GATE_ATTESTATION_LINE =
+  "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.";
+
 export interface GateGuidanceRendererOptions {
   gateLoader: GateDefinitionProvider;
   temporaryGateRegistry?: TemporaryGateRegistry;
@@ -204,9 +212,7 @@ export class GateGuidanceRenderer {
       sections.push([...new Set(reminderLines)].join('\n\n'));
     }
 
-    sections.push(
-      "\n\nAttest reminders in the verdict's `reminders` field; checks are recorded by the engine."
-    );
+    sections.push('\n\n' + GATE_ATTESTATION_LINE);
 
     sections.push('\n\n---');
 
