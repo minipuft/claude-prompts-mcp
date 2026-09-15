@@ -13,14 +13,25 @@ import { describe, expect, it } from '@jest/globals';
 import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import { GateDiscoveryProcessor } from '../../../../src/mcp/tools/gate-manager/services/index.js';
 
-import type { GateDefinitionYaml } from '../../../../src/engine/gates/types/index.js';
+import type {
+  GateDefinitionYaml,
+  LoadedGateDefinition,
+} from '../../../../src/engine/gates/types/index.js';
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
 import type { GateResourceContext } from '../../../../src/mcp/tools/gate-manager/core/context.js';
 import type { GateManagerInput } from '../../../../src/mcp/tools/gate-manager/core/types.js';
 
 function buildProcessor(definitions: Map<string, GateDefinitionYaml>): GateDiscoveryProcessor {
   const guides = new Map(
-    Array.from(definitions.entries()).map(([id, def]) => [id, new GenericGateGuide(def)])
+    // These fixtures are the WRITE side (`GateDefinitionYaml`) on purpose: the point of the
+    // cases below is a definition with `severity`/`enforcementMode` absent, which the read side
+    // (`LoadedGateDefinition`, what `GateDefinitionLoader` now returns) cannot express for
+    // `severity`. The guide only reads the fields, so the widening is safe here and confined to
+    // the double.
+    Array.from(definitions.entries()).map(([id, def]) => [
+      id,
+      new GenericGateGuide(def as LoadedGateDefinition),
+    ])
   );
   const gateManager = {
     get: (id: string) => guides.get(id),

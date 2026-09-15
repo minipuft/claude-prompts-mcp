@@ -26,6 +26,7 @@ export type {
   GateActivationRules,
   GateActivationContext,
   GateDefinitionYaml,
+  LoadedGateDefinition,
   GateRetryConfig,
   // Registry types
   GateSource,
