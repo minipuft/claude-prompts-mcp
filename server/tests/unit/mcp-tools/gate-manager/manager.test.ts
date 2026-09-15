@@ -418,8 +418,9 @@ describe('GateToolHandler', () => {
     // must be classified into GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS, or
     // PRESERVED_GATE_YAML_KEYS — silently falling through either bucket re-opens the data-loss
     // hole this describe block exists to close. Does NOT catch a new passthrough-ONLY field
-    // (one never added to the Zod object shape) — see the `evaluation`/`blockResponseOnFail`
-    // note on `PRESERVED_GATE_YAML_KEYS` in gate-file-writer.ts for that residual gap.
+    // (one never added to the Zod object shape at all) — a load-bearing key read at runtime but
+    // never declared on the schema is invisible to `Object.keys(GateDefinitionSchema.shape)` and
+    // so to this test too.
     test('projected + excluded + preserved keys cover every declared gate.yaml schema key', () => {
       const schemaKeys = Object.keys(GateDefinitionSchema.shape);
       const covered = new Set<string>([

@@ -480,7 +480,9 @@ describe('Gate versioning through the real write path', () => {
       // projected key, and the key-order divergence F18 describes only appears once at least one
       // optional key is present — with none, both projections emit the same five required keys in
       // the same order and the test cannot fail. A fixture inside the bound proves nothing.
-      pass_criteria: [{ type: 'inline_guidance', min_length: 10, required_patterns: ['ALPHA'] }],
+      // `type` alone is sufficient: `min_length`/`required_patterns` are refused at load (B9)
+      // and are not part of `GateManagerInput['pass_criteria']`.
+      pass_criteria: [{ type: 'inline_guidance' }],
     } as GateManagerInput);
 
     const afterCreate = countVersionRows();

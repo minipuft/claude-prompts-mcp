@@ -91,6 +91,24 @@ const EXEMPTIONS: Readonly<Record<string, readonly Exemption[]>> = {
         return describesValidationGuidance(shape['gate_type']);
       },
     },
+    {
+      key: 'blockResponseOnFail',
+      reason:
+        'Real, load-bearing (`gate-loader.ts` toLightweightGate) and carried forward on update ' +
+        'via PRESERVED_GATE_YAML_KEYS, but neither this nor `evaluation` has a tool parameter ' +
+        'yet — declaring both on GateDefinitionSchema (rather than leaving them ' +
+        '`.passthrough()`-only) made this check see them for the first time. Authoring either ' +
+        'today still requires hand-editing gate.yaml; exposing them on the tool surface is a ' +
+        'follow-up, not yet done.',
+      // Flips the moment a tool parameter for this key exists — remove the exemption and
+      // declare the field instead of re-adding it here.
+      stillExempt: () => !('block_response_on_fail' in resourceManagerInputSchema.shape),
+    },
+    {
+      key: 'evaluation',
+      reason: 'Same gap as `blockResponseOnFail` above, same fix, same follow-up.',
+      stillExempt: () => !('evaluation' in resourceManagerInputSchema.shape),
+    },
   ],
   framework: [
     {

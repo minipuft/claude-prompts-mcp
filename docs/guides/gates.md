@@ -419,7 +419,8 @@ done — artifacts: src/engine/gates/core/gate-schema.ts, tests/unit/gates/core/
 The `handoff-artifacts` gate reads that line and confirms every path on it exists. It is a
 check-tier gate, so a review cannot walk past its failure with a `PASS`.
 
-It is opt-in: it has no `activation` block, so it attaches only where you name it — in a prompt's
+It is opt-in: its `activation` block is `explicit_request: true`, the same form `math-fidelity`
+uses, so it never auto-attaches by category and attaches only where you name it — in a prompt's
 `gateConfiguration.include`, or in a chain step's `inlineGateIds`. Two things have to be true for
 it to run. The operator's `MCP_SHELL_VERIFY_ALLOWLIST` has to include `node`, or the executor
 refuses the command and records a failure. And the paths have to exist relative to the server's

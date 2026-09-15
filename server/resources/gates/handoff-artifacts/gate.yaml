@@ -17,9 +17,8 @@ retry_config:
   max_attempts: 2
   improvement_hints: true
   preserve_context: true
-# No `activation` block — opt-in by ruling B14. An installed server's working directory is
-# the server root, not the worker's repository, so every path in a handoff would resolve
-# against the wrong tree; and `node` must be on the operator's MCP_SHELL_VERIFY_ALLOWLIST or
-# the executor refuses. A refused or unrunnable check records `passed: false`, which blocks
-# the review — so this gate attaches only where someone asked for it by id
-# (`gateConfiguration.include` or a chain step's `inlineGateIds`).
+
+# opt-in: attaches only when a prompt or step names it; a refused shell_verify on an
+# installation without the allowlist would otherwise block every review.
+activation:
+  explicit_request: true

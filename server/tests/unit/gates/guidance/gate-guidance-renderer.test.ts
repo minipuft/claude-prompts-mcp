@@ -541,7 +541,7 @@ describe('GateGuidanceRenderer — B13 artifacts reach the activation check', ()
 
   test('the declared artifacts are forwarded onto the activation context, and the gate renders', async () => {
     const loader = createMockLoader();
-    (loader.loadGate as jest.Mock).mockResolvedValue(artifactGate);
+    (loader.loadGate as jest.Mock).mockResolvedValue(artifactGate as never);
     (loader.isGateActive as jest.Mock).mockImplementation((_gate: unknown, context: any) =>
       (context.artifacts ?? []).includes('test')
     );
@@ -561,7 +561,7 @@ describe('GateGuidanceRenderer — B13 artifacts reach the activation check', ()
 
   test('positive control: the same gate with no artifacts in the render context renders nothing', async () => {
     const loader = createMockLoader();
-    (loader.loadGate as jest.Mock).mockResolvedValue(artifactGate);
+    (loader.loadGate as jest.Mock).mockResolvedValue(artifactGate as never);
     (loader.isGateActive as jest.Mock).mockImplementation((_gate: unknown, context: any) =>
       (context.artifacts ?? []).includes('test')
     );
