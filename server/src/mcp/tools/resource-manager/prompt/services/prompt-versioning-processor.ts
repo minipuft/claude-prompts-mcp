@@ -273,12 +273,12 @@ export class PromptVersioningProcessor {
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither the file nor the
-    // table moves.
+    // table moves. The diff is projected from the same write the rollback below performs — same
+    // payload, same scope — so it names the files that write lands in rather than the snapshot's
+    // fields rendered as one YAML document.
     if (isPreviewRequest(args)) {
-      const diff = this.textDiffService.generateObjectDiff(
-        currentState,
-        snapshot,
-        `${id}/prompt.yaml`
+      const diff = this.textDiffService.generateFileChangeDiff(
+        await this.fileOperations.projectPromptWrite(restore.promptData, ALL_PROMPT_DATA_KEYS)
       );
       return {
         content: [

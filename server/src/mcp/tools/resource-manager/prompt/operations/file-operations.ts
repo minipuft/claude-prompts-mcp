@@ -17,6 +17,7 @@ import type {
 } from '#modules/resources/services/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
+import type { FileContentChange } from '../analysis/object-diff-generator.js';
 
 import {
   findYamlPromptInCategory,
@@ -190,6 +191,48 @@ export const NO_WRITE_INTENT: PromptWriteIntent = {
   removedToolIds: [],
 };
 
+/** A file a prompt write produces, addressed relative to the prompt's own directory. */
+interface PlannedPromptFile {
+  relativePath: string;
+  content: string;
+}
+
+/**
+ * Everything one prompt write does, resolved before anything is written.
+ *
+ * `updatePromptImplementation` applies it and `projectPromptWrite` reports it. A preview built any
+ * other way — the prompt's fields rendered as one YAML document, say — names a file the write never
+ * touches and misses the ones it does, which is how a directory prompt's preview once showed a
+ * rewrapped `{id}.yaml` for an update that changed one line of `user-message.md`.
+ */
+interface PromptWritePlan {
+  promptsDir: string;
+  effectiveCategory: string;
+  promptDir: string;
+  /** The prompt's directory under another category, relocated to `promptDir` first. */
+  moveSource: string | null;
+  /** The prompt's directory under the root it was loaded from, copied to `promptDir` first. */
+  copyOnWriteSource: string | null;
+  /** Where the prompt's files are before this write; null when it has none. */
+  priorDir: string | null;
+  /** The resources root `priorDir` sits under. */
+  priorRoot: string;
+  /** `prompt.yaml` and the message files this call's scope rewrites. */
+  promptFiles: PlannedPromptFile[];
+  removesSystemMessage: boolean;
+  /** Stub files for nested chain steps that have no directory yet. */
+  scaffoldFiles: PlannedPromptFile[];
+  /** Script tool files, grouped so the writer can report each tool it created. */
+  toolFiles: Array<{ id: string; files: PlannedPromptFile[] }>;
+  /** Tools whose `tools/{id}/` directory this write deletes. */
+  removedToolIds: readonly string[];
+}
+
+/** A relative filesystem path in the `/`-separated form a diff header uses. */
+function toPosixPath(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
 /**
  * File system operations for prompt management
  */
@@ -225,17 +268,11 @@ export class FileOperations {
     writeIntent: PromptWriteIntent = NO_WRITE_INTENT,
     options: ResourceWriteCommitOptions = {}
   ): Promise<OperationResult> {
-    // `writeIntent` passes through whole to `createOrUpdateYamlPrompt`, which owns the yaml-side
-    // clearing; only the tool-directory removals are this method's own work.
-    const { removedToolIds } = writeIntent;
-    const promptsDir = this.configManager.getResolvedPromptsDirectory();
-    const effectiveCategory = slugifyCategoryDirectory(promptData.category);
-    // `category` reaches this line straight from the tool payload. Validated here because
-    // `validateCategoryName` had no call site at all — a category of `../../x` walked out of the
-    // resources root and wrote there, measured 2026-08-30 and reported as `✅ Prompt Created`.
-    // Both checks run before any directory is created, so a refusal writes nothing.
-    validateCategoryName(effectiveCategory);
-    const promptDir = resolveContainedPath(promptsDir, effectiveCategory, promptData.id);
+    // Everything this write does is resolved here, before the transaction opens, and the mutation
+    // below applies the plan and decides nothing of its own. `projectPromptWrite` reads a
+    // preview's diff off the same plan, which is what keeps the two from naming different files.
+    const plan = await this.planPromptWrite(promptData, suppliedKeys, sourceRoot, writeIntent);
+    const { promptsDir, effectiveCategory, promptDir, moveSource, copyOnWriteSource } = plan;
     const yamlPath = path.join(promptDir, 'prompt.yaml');
     // Nested chain steps carry a path-qualified id ("implementation_plan/verification"): the
     // directory needs the full path, but the YAML `id` field and its validation take the
@@ -243,53 +280,7 @@ export class FileOperations {
     // the path and validates the file against the last segment) — writing the qualified form
     // fails the id regex, and the prompt is dropped at load with only a log line.
     const yamlId = toYamlPromptId(promptData.id);
-
-    // Part 2 — category MOVE (owner ruling 2026-08-16, tier-b-settability-proposal §Open
-    // Decision 3, overriding the proposal's original "refuse" recommendation): a caller-supplied
-    // `category` that slugs to a directory other than the one the prompt currently lives under
-    // relocates the whole directory tree. Detected only when the TARGET directory does not
-    // already exist, so the ordinary "no move" case (the overwhelming majority of calls) costs
-    // nothing beyond the `existsSync` this method already needed. Nested chain-step ids ('/' in
-    // the id) are excluded: they scaffold under their PARENT's own directory
-    // (`scaffoldChainStepDirectories`), not under a category, so "category move" has no referent.
     const promptId = (promptData as { id: string }).id;
-    const isNestedId = promptId.includes('/');
-    const moveSource =
-      !isNestedId && !existsSync(promptDir)
-        ? this.findExistingPromptDirectory(promptsDir, promptId, promptDir)
-        : null;
-
-    // A move relocates the WHOLE prior state — composes with Fix B as a forced full scope. The
-    // caller (the processor) cannot have supplied the right narrower scope for a move: it has no
-    // visibility into whether a category change is a move until THIS layer resolves it against
-    // disk, since the on-disk directory layout is exactly what the processor's in-memory model
-    // does not track.
-    const suppliedKeysForWrite =
-      moveSource !== null ? ALL_PROMPT_DATA_KEYS : (suppliedKeys ?? ALL_PROMPT_DATA_KEYS);
-
-    // P1.2 — copy-on-write from the root the prompt was LOADED from.
-    //
-    // A prompt served from the bundled fallback has no directory under the writable root, so an
-    // update landed on a fresh directory and re-materialised the prompt from the in-memory model.
-    // That model holds the prompt's own fields and nothing about its subtree, so everything on
-    // disk that is not a field was LOST — silently, under `✅ Prompt Updated`. Measured
-    // 2026-08-30 on `planning/implementation_plan`: editing `description` alone replaced all five
-    // chain steps with 42–55 byte scaffold stubs (`discovery/user-message.md`, 3852B → 50B) and
-    // the served catalog then returned the stub. On `examples/create_framework` the four files
-    // under `tools/framework_builder/` simply vanished.
-    //
-    // Copying the source subtree FIRST turns the fresh-directory case back into the ordinary one:
-    // `createOrUpdateYamlPrompt` then sees an existing prompt and honours `suppliedKeys`, and
-    // `scaffoldChainStepDirectories` skips step directories that already exist. The fix is
-    // therefore a copy, not new preservation logic — the preservation logic was already correct
-    // and was being handed an empty directory.
-    //
-    // Whole-subtree rather than a list of known file kinds: a list can only preserve what someone
-    // remembered to enumerate, and the two losses above were exactly the kinds nobody had.
-    const copyOnWriteSource =
-      moveSource === null && !existsSync(promptDir) && sourceRoot !== undefined
-        ? this.resolveCopyOnWriteSource(sourceRoot, promptsDir, promptId, promptDir)
-        : null;
 
     const targets: ResourceMutationTarget[] = [{ path: promptDir, kind: 'directory' }];
     if (moveSource !== null) {
@@ -337,46 +328,30 @@ export class FileOperations {
           );
         }
 
-        // Create/update YAML prompt
-        const { exists: promptExists, paths } = await this.createOrUpdateYamlPrompt(
-          promptData,
-          effectiveCategory,
-          promptsDir,
-          suppliedKeysForWrite,
-          writeIntent
-        );
-
+        const promptExists = plan.priorDir !== null;
+        affectedFiles.push(...(await this.createOrUpdateYamlPrompt(plan, promptId)));
         messages.push(`${promptExists ? 'Updated' : 'Created'} prompt: ${promptData.id}`);
-        affectedFiles.push(...paths);
 
         // Scaffold chain step directories for nested sub-prompts
-        if (Array.isArray(promptData.chainSteps) && promptData.chainSteps.length > 0) {
-          const scaffolded = await this.scaffoldChainStepDirectories(
-            promptDir,
-            promptData.id,
-            promptData.chainSteps
-          );
-          if (scaffolded.length > 0) {
-            messages.push(`Scaffolded sub-prompt directories (${scaffolded.length} files)`);
-            affectedFiles.push(...scaffolded);
-          }
+        if (plan.scaffoldFiles.length > 0) {
+          const scaffolded = await this.writePlannedFiles(promptDir, plan.scaffoldFiles);
+          this.logger.info(`Scaffolded sub-prompt directories for '${promptId}'`);
+          messages.push(`Scaffolded sub-prompt directories (${scaffolded.length} files)`);
+          affectedFiles.push(...scaffolded);
         }
 
-        // Create/update tools if provided
-        if (Array.isArray(promptData.tools) && promptData.tools.length > 0) {
-          const toolResult = await this.createOrUpdateTools(
-            promptDir,
-            promptData.tools,
-            promptData.id
-          );
-          messages.push(...toolResult.messages);
-          affectedFiles.push(...toolResult.paths);
+        for (const tool of plan.toolFiles) {
+          const toolDir = path.join(promptDir, 'tools', tool.id);
+          await fs.mkdir(toolDir, { recursive: true });
+          affectedFiles.push(toolDir, ...(await this.writePlannedFiles(promptDir, tool.files)));
+          messages.push(`✅ Created tool '${tool.id}' in ${toolDir}`);
+          this.logger.info(`Created script tool '${tool.id}' for prompt '${promptId}'`);
         }
 
         // P2.3. Inside the transaction, so a failed write rolls the deletions back with
         // everything else — a tool directory removed against a prompt.yaml that never landed
         // would leave the binding pointing at files that are gone.
-        for (const toolId of removedToolIds) {
+        for (const toolId of plan.removedToolIds) {
           const toolDir = resolveContainedPath(promptDir, 'tools', toolId);
           await fs.rm(toolDir, { recursive: true, force: true });
           messages.push(`Removed tool '${toolId}' and deleted ${toolDir}`);
@@ -401,6 +376,180 @@ export class FileOperations {
       message: result.messages.join('\n'),
       affectedFiles: result.affectedFiles,
     };
+  }
+
+  /**
+   * What a write of `promptData` would change on disk, file by file, without writing anything.
+   *
+   * Takes the arguments `updatePromptImplementation` takes and resolves the plan that method
+   * applies, so a caller holding one call's arguments gets exactly that call's files and contents.
+   * Paths are relative to the resources root on each side: a prompt copied up from the bundled
+   * tree, or moved between categories, is read from one place and lands in another.
+   */
+  async projectPromptWrite(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
+    promptData: any,
+    suppliedKeys?: ReadonlySet<string>,
+    sourceRoot?: string,
+    writeIntent: PromptWriteIntent = NO_WRITE_INTENT
+  ): Promise<FileContentChange[]> {
+    const plan = await this.planPromptWrite(promptData, suppliedKeys, sourceRoot, writeIntent);
+
+    // Keyed by path in the order the writer applies them, so a file one plan touches twice shows
+    // once, with the content that is left on disk — a later write or a deletion wins there too.
+    const planned = new Map<string, string | null>();
+    const writtenFiles = [
+      ...plan.promptFiles,
+      ...plan.scaffoldFiles,
+      ...plan.toolFiles.flatMap((tool) => tool.files),
+    ];
+    for (const file of writtenFiles) planned.set(file.relativePath, file.content);
+    if (plan.removesSystemMessage) planned.set('system-message.md', null);
+    for (const toolId of plan.removedToolIds) {
+      for (const relativePath of await this.listPriorFiles(plan.priorDir, 'tools', toolId)) {
+        planned.set(relativePath, null);
+      }
+    }
+
+    const targetPrefix = path.relative(plan.promptsDir, plan.promptDir);
+    const priorPrefix =
+      plan.priorDir !== null ? path.relative(plan.priorRoot, plan.priorDir) : targetPrefix;
+    const changes: FileContentChange[] = [];
+    for (const [relativePath, after] of planned) {
+      changes.push({
+        path: toPosixPath(path.join(targetPrefix, relativePath)),
+        previousPath: toPosixPath(path.join(priorPrefix, relativePath)),
+        before: await this.readPriorFile(plan.priorDir, relativePath),
+        after,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * Resolve everything one prompt write will do, reading the disk but writing nothing.
+   *
+   * The single place a write's decisions are made: where it lands, whether it moves or copies a
+   * prior tree first, which files it rewrites and with what, what it scaffolds and deletes.
+   * `updatePromptImplementation` applies the result and `projectPromptWrite` reports it, so there
+   * is no second derivation of any of those answers to drift from the first.
+   */
+  private async planPromptWrite(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    promptData: any,
+    suppliedKeys: ReadonlySet<string> | undefined,
+    sourceRoot: string | undefined,
+    writeIntent: PromptWriteIntent
+  ): Promise<PromptWritePlan> {
+    const promptsDir = this.configManager.getResolvedPromptsDirectory();
+    const effectiveCategory = slugifyCategoryDirectory(promptData.category);
+    // `category` reaches this line straight from the tool payload. Validated here because
+    // `validateCategoryName` had no call site at all — a category of `../../x` walked out of the
+    // resources root and wrote there, measured 2026-08-30 and reported as `✅ Prompt Created`.
+    // Both checks run before any directory is created, so a refusal writes nothing.
+    validateCategoryName(effectiveCategory);
+    const promptDir = resolveContainedPath(promptsDir, effectiveCategory, promptData.id);
+
+    // Part 2 — category MOVE (owner ruling 2026-08-16, tier-b-settability-proposal §Open
+    // Decision 3, overriding the proposal's original "refuse" recommendation): a caller-supplied
+    // `category` that slugs to a directory other than the one the prompt currently lives under
+    // relocates the whole directory tree. Detected only when the TARGET directory does not
+    // already exist, so the ordinary "no move" case (the overwhelming majority of calls) costs
+    // nothing beyond the `existsSync` this method already needed. Nested chain-step ids ('/' in
+    // the id) are excluded: they scaffold under their PARENT's own directory
+    // (`planChainStepScaffolds`), not under a category, so "category move" has no referent.
+    const promptId = (promptData as { id: string }).id;
+    const isNestedId = promptId.includes('/');
+    const moveSource =
+      !isNestedId && !existsSync(promptDir)
+        ? this.findExistingPromptDirectory(promptsDir, promptId, promptDir)
+        : null;
+
+    // A move relocates the WHOLE prior state — composes with Fix B as a forced full scope. The
+    // caller (the processor) cannot have supplied the right narrower scope for a move: it has no
+    // visibility into whether a category change is a move until THIS layer resolves it against
+    // disk, since the on-disk directory layout is exactly what the processor's in-memory model
+    // does not track.
+    const suppliedKeysForWrite =
+      moveSource !== null ? ALL_PROMPT_DATA_KEYS : (suppliedKeys ?? ALL_PROMPT_DATA_KEYS);
+
+    // P1.2 — copy-on-write from the root the prompt was LOADED from.
+    //
+    // A prompt served from the bundled fallback has no directory under the writable root, so an
+    // update landed on a fresh directory and re-materialised the prompt from the in-memory model.
+    // That model holds the prompt's own fields and nothing about its subtree, so everything on
+    // disk that is not a field was LOST — silently, under `✅ Prompt Updated`. Measured
+    // 2026-08-30 on `planning/implementation_plan`: editing `description` alone replaced all five
+    // chain steps with 42–55 byte scaffold stubs (`discovery/user-message.md`, 3852B → 50B) and
+    // the served catalog then returned the stub. On `examples/create_framework` the four files
+    // under `tools/framework_builder/` simply vanished.
+    //
+    // Copying the source subtree FIRST turns the fresh-directory case back into the ordinary one:
+    // the plan then sees an existing prompt and honours `suppliedKeys`, and step directories that
+    // already exist are not scaffolded. The fix is therefore a copy, not new preservation logic —
+    // the preservation logic was already correct and was being handed an empty directory.
+    //
+    // Whole-subtree rather than a list of known file kinds: a list can only preserve what someone
+    // remembered to enumerate, and the two losses above were exactly the kinds nobody had.
+    const copyOnWriteSource =
+      moveSource === null && !existsSync(promptDir) && sourceRoot !== undefined
+        ? this.resolveCopyOnWriteSource(sourceRoot, promptsDir, promptId, promptDir)
+        : null;
+
+    // A move or a copy puts the prior tree at `promptDir` before any content is written, so every
+    // "does this already exist" question is asked of the tree where it sits NOW — which is the
+    // same tree, byte for byte, that the content write will then find at `promptDir`.
+    const priorDir = existsSync(promptDir) ? promptDir : (moveSource ?? copyOnWriteSource);
+    const priorRoot =
+      copyOnWriteSource !== null && sourceRoot !== undefined ? sourceRoot : promptsDir;
+
+    const { files: promptFiles, removesSystemMessage } = await this.planPromptFiles(
+      promptData,
+      priorDir,
+      suppliedKeysForWrite,
+      writeIntent
+    );
+
+    return {
+      promptsDir,
+      effectiveCategory,
+      promptDir,
+      moveSource,
+      copyOnWriteSource,
+      priorDir,
+      priorRoot,
+      promptFiles,
+      removesSystemMessage,
+      scaffoldFiles: Array.isArray(promptData.chainSteps)
+        ? this.planChainStepScaffolds(priorDir, promptId, promptData.chainSteps)
+        : [],
+      toolFiles: Array.isArray(promptData.tools) ? this.planToolFiles(promptData.tools) : [],
+      removedToolIds: writeIntent.removedToolIds,
+    };
+  }
+
+  /** A prior file's current content, or null when this write has no prior tree or no such file. */
+  private async readPriorFile(
+    priorDir: string | null,
+    relativePath: string
+  ): Promise<string | null> {
+    if (priorDir === null) return null;
+    const priorPath = path.join(priorDir, relativePath);
+    return existsSync(priorPath) ? await fs.readFile(priorPath, 'utf8') : null;
+  }
+
+  /**
+   * Every file under a directory of the prior tree, relative to that tree. Contained the way the
+   * writer's own removal is, so an id that escapes is refused here before it is read.
+   */
+  private async listPriorFiles(priorDir: string | null, ...segments: string[]): Promise<string[]> {
+    if (priorDir === null) return [];
+    const dir = resolveContainedPath(priorDir, ...segments);
+    if (!existsSync(dir)) return [];
+    const entries = await fs.readdir(dir, { recursive: true, withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.relative(priorDir, path.join(entry.parentPath, entry.name)));
   }
 
   /**
@@ -450,11 +599,11 @@ export class FileOperations {
 
   /**
    * Relocate the whole prompt directory tree — `tools/`, scaffolded chain-step sub-dirs,
-   * everything — from `sourceDir` to `targetDir`, BEFORE any content write. Doing this first
-   * means `createOrUpdateYamlPrompt`'s existing-yaml read (scoped to `targetDir`) sees the full
-   * prior state at the NEW location, so Fix A's preservation (tools ids, authored
-   * category-if-caller-omitted) has something to read without this method needing to know
-   * anything about preservation itself.
+   * everything — from `sourceDir` to `targetDir`, BEFORE any content write. The plan has already
+   * read the prior state at `sourceDir` for Fix A's preservation (tools ids, authored
+   * category-if-caller-omitted), and moving first means every file the plan does not rewrite
+   * arrives at the NEW location intact, without this method needing to know anything about
+   * preservation itself.
    *
    * `cp` + `rm` rather than `rename`: `ResourceMutationTransaction`'s own snapshot lives under a
    * separate `mkdtemp` root that may be a different filesystem, and `rename` throws `EXDEV`
@@ -622,37 +771,53 @@ export class FileOperations {
   }
 
   /**
-   * Create or update YAML prompt directory structure
-   *
-   * Creates/updates:
-   * - {category}/{id}/prompt.yaml - Metadata (id, name, category, description, arguments, gates)
-   * - {category}/{id}/user-message.md - User message template (required)
-   * - {category}/{id}/system-message.md - System message (optional)
+   * Write the prompt's own files — `prompt.yaml` and its message files — as the plan resolved
+   * them, and delete `system-message.md` when the plan clears it.
    */
-  /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unsafe-member-access */
-  async createOrUpdateYamlPrompt(
-    promptData: any,
-    effectiveCategory: string,
-    promptsDir: string,
-    suppliedKeys: ReadonlySet<string> = ALL_PROMPT_DATA_KEYS,
-    writeIntent: PromptWriteIntent = NO_WRITE_INTENT
-  ): Promise<{ exists: boolean; paths: string[] }> {
-    const { unsetKeys } = writeIntent;
-    // Same containment as the caller's join — this method is also reached directly (create,
-    // rollback), so it cannot rely on `updatePromptImplementation` having checked first.
-    const promptDir = resolveContainedPath(promptsDir, effectiveCategory, promptData.id);
-    const paths: string[] = [];
+  private async createOrUpdateYamlPrompt(
+    plan: PromptWritePlan,
+    promptId: string
+  ): Promise<string[]> {
+    await fs.mkdir(plan.promptDir, { recursive: true });
+    const paths = [
+      plan.promptDir,
+      ...(await this.writePlannedFiles(plan.promptDir, plan.promptFiles)),
+    ];
 
-    // Check if prompt directory already exists
-    const existsBefore = existsSync(promptDir);
+    if (plan.removesSystemMessage) {
+      // `force` because an `unset` on a prompt that never had a system message is a valid, and
+      // successful, no-op — the caller asked for a state, not for a deletion event.
+      const systemMessagePath = path.join(plan.promptDir, 'system-message.md');
+      await fs.rm(systemMessagePath, { force: true });
+      paths.push(systemMessagePath);
+    }
+
+    this.logger.info(`${plan.priorDir !== null ? 'Updated' : 'Created'} YAML prompt: ${promptId}`);
+    return paths;
+  }
+
+  /**
+   * Decide which of the prompt's own files this write rewrites, and build what lands in each.
+   *
+   * - `prompt.yaml` - Metadata (id, name, category, description, arguments, gates)
+   * - `user-message.md` - User message template (required)
+   * - `system-message.md` - System message (optional)
+   */
+  /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unsafe-member-access */
+  private async planPromptFiles(
+    promptData: any,
+    priorDir: string | null,
+    suppliedKeys: ReadonlySet<string>,
+    writeIntent: PromptWriteIntent
+  ): Promise<{ files: PlannedPromptFile[]; removesSystemMessage: boolean }> {
+    const { unsetKeys } = writeIntent;
 
     // Fix B write-scope narrowing (tier-b-settability-proposal §2): a directory with no prior
     // `prompt.yaml` needs its baseline files regardless of what the caller's `suppliedKeys`
-    // narrowed to — an update landing on a brand-new, or just-relocated (Part 2 category move),
-    // directory must not skip the write that makes it a valid prompt. `suppliedKeys` narrows an
-    // EXISTING prompt's edit surface; it does not narrow what a fresh directory needs to become
-    // one.
-    const isFreshDirectory = !existsBefore;
+    // narrowed to — an update landing on a brand-new directory must not skip the write that makes
+    // it a valid prompt. `suppliedKeys` narrows an EXISTING prompt's edit surface; it does not
+    // narrow what a fresh directory needs to become one.
+    const isFreshDirectory = priorDir === null;
     // P2.1: any `unset` forces the `prompt.yaml` rewrite, including `systemMessage` — which is
     // NOT a `PROMPT_YAML_RESIDENT_KEYS` member (its text lives in its own file) but still owns a
     // key IN the yaml, `systemMessageFile`. Without this clause, clearing it narrowed the write
@@ -666,71 +831,54 @@ export class FileOperations {
     // P2.1. `systemMessage` is the one unsettable field with a FILE behind it, so clearing it is
     // two operations, not one: `buildPromptYamlData` drops `systemMessageFile` (its guard is
     // already truthiness-based, and the key is gone from `promptData` by now), and the `.md` has
-    // to be removed here. Dropping only the key would leave an orphan `system-message.md` that no
-    // loader reads and every `git status` shows — a removal that half happened.
+    // to be removed as well. Dropping only the key would leave an orphan `system-message.md` that
+    // no loader reads and every `git status` shows — a removal that half happened.
     const removesSystemMessage = unsetKeys.has('systemMessage');
     const writesSystemMessage =
       Boolean(promptData.systemMessage) &&
       !removesSystemMessage &&
       (isFreshDirectory || suppliedKeys.has('systemMessage'));
 
-    // Read BEFORE the directory is (re)created, and only when `prompt.yaml` is actually going to
-    // be rewritten — field preservation feeds ONLY that write, and reading it otherwise is I/O a
-    // scoped-out update has no use for. This is also the acceptance mechanism for byte-identity:
-    // when `writesYaml` is false, `prompt.yaml` is never opened by this call at all.
-    const existingYaml = writesYaml
-      ? await this.readExistingPromptYaml(path.join(promptDir, 'prompt.yaml'))
-      : undefined;
-
-    // Create prompt directory
-    await fs.mkdir(promptDir, { recursive: true });
-    paths.push(promptDir);
-
+    // Read only when `prompt.yaml` is actually going to be rewritten — field preservation feeds
+    // ONLY that write, and reading it otherwise is I/O a scoped-out update has no use for. This is
+    // also the acceptance mechanism for byte-identity: when `writesYaml` is false, `prompt.yaml`
+    // is never opened by this call at all.
+    const files: PlannedPromptFile[] = [];
     if (writesYaml) {
+      const existingYaml =
+        priorDir !== null
+          ? await this.readExistingPromptYaml(path.join(priorDir, 'prompt.yaml'))
+          : undefined;
       const promptYamlData = this.buildPromptYamlData(
         promptData as Record<string, unknown>,
         existingYaml,
         suppliedKeys,
         writeIntent
       );
-      const promptYamlPath = path.join(promptDir, 'prompt.yaml');
-      const yamlContent = serializeYaml(promptYamlData, { sortKeys: false });
-      await safeWriteFile(promptYamlPath, yamlContent, 'utf8');
-      paths.push(promptYamlPath);
+      files.push({
+        relativePath: 'prompt.yaml',
+        content: serializeYaml(promptYamlData, { sortKeys: false }),
+      });
     }
 
     if (writesUserMessage) {
-      const userMessagePath = path.join(promptDir, 'user-message.md');
-      await safeWriteFile(userMessagePath, promptData.userMessageTemplate ?? '', 'utf8');
-      paths.push(userMessagePath);
+      files.push({
+        relativePath: 'user-message.md',
+        content: promptData.userMessageTemplate ?? '',
+      });
     }
 
     if (writesSystemMessage) {
-      const systemMessagePath = path.join(promptDir, 'system-message.md');
-      await safeWriteFile(systemMessagePath, promptData.systemMessage, 'utf8');
-      paths.push(systemMessagePath);
+      files.push({ relativePath: 'system-message.md', content: promptData.systemMessage });
     }
 
-    if (removesSystemMessage) {
-      // `force` because an `unset` on a prompt that never had a system message is a valid, and
-      // successful, no-op — the caller asked for a state, not for a deletion event.
-      const systemMessagePath = path.join(promptDir, 'system-message.md');
-      await fs.rm(systemMessagePath, { force: true });
-      paths.push(systemMessagePath);
-    }
-
-    this.logger.info(`${existsBefore ? 'Updated' : 'Created'} YAML prompt: ${promptData.id}`);
-
-    return {
-      exists: existsBefore,
-      paths,
-    };
+    return { files, removesSystemMessage };
   }
 
   /**
    * Build the `prompt.yaml` document for a write that IS touching the file. Pure — no I/O.
    * Isolates the category/tools/preserved-field precedence rules from the file-scope orchestration
-   * in `createOrUpdateYamlPrompt`, which keeps that method's branching to "which files does this
+   * in `planPromptFiles`, which keeps that method's branching to "which files does this
    * call touch" rather than "what does each file contain" (cognitive-complexity boundary).
    */
   private buildPromptYamlData(
@@ -785,7 +933,7 @@ export class FileOperations {
 
     // Tools reference (just tool IDs, not full definitions). Full definitions supplied → write
     // the id list derived from them (the file bodies themselves are written separately, by
-    // `createOrUpdateTools`). Otherwise preserve the on-disk id list.
+    // `planToolFiles`). Otherwise preserve the on-disk id list.
     // `ConvertedPrompt` has no `tools` field (P7-F8) — the in-memory snapshot this writer's
     // caller builds can never carry it forward, so every metadata-only edit (description,
     // template patch, ...) would otherwise silently drop the binding on write, orphaning the
@@ -827,7 +975,7 @@ export class FileOperations {
 
     return promptYamlData;
   }
-  /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unsafe-member-access */
+  /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unsafe-member-access */
 
   /**
    * Read the prompt.yaml already on disk, for field preservation only.
@@ -864,36 +1012,23 @@ export class FileOperations {
   }
 
   /**
-   * Create or update script tools for a prompt
+   * Build the files each script tool gets. Pure — the writer applies them.
    *
-   * Creates:
-   * - {promptDir}/tools/{toolId}/tool.yaml - Tool configuration
-   * - {promptDir}/tools/{toolId}/schema.json - Input schema (if provided)
-   * - {promptDir}/tools/{toolId}/script.{ext} - Script file
+   * - `tools/{toolId}/tool.yaml` - Tool configuration
+   * - `tools/{toolId}/schema.json` - Input schema (if provided)
+   * - `tools/{toolId}/script.{ext}` - Script file
    */
-  async createOrUpdateTools(
-    promptDir: string,
-    tools: ToolDefinitionInput[],
-    promptId: string
-  ): Promise<{ messages: string[]; paths: string[] }> {
-    const messages: string[] = [];
-    const paths: string[] = [];
-
-    const toolsDir = path.join(promptDir, 'tools');
-
-    for (const tool of tools) {
-      const toolDir = path.join(toolsDir, tool.id);
-
-      // Create tool directory
-      await fs.mkdir(toolDir, { recursive: true });
-      paths.push(toolDir);
-
-      // Build tool.yaml configuration
+  private planToolFiles(
+    tools: readonly ToolDefinitionInput[]
+  ): Array<{ id: string; files: PlannedPromptFile[] }> {
+    return tools.map((tool) => {
+      const toolDir = `tools/${tool.id}`;
+      const scriptFilename = this.getScriptFilename(tool.runtime);
       const toolYaml: Record<string, unknown> = {
         id: tool.id,
         name: tool.name,
         description: tool.description ?? '',
-        script: this.getScriptFilename(tool.runtime),
+        script: scriptFilename,
         runtime: tool.runtime ?? 'auto',
         timeout: tool.timeout ?? 30000,
         enabled: true,
@@ -904,48 +1039,39 @@ export class FileOperations {
         },
       };
 
-      // Write tool.yaml
-      const toolYamlPath = path.join(toolDir, 'tool.yaml');
-      const yamlContent = serializeYaml(toolYaml, { sortKeys: false });
-      await safeWriteFile(toolYamlPath, yamlContent, 'utf8');
-      paths.push(toolYamlPath);
-
-      // Write schema.json if provided
+      const files: PlannedPromptFile[] = [
+        {
+          relativePath: `${toolDir}/tool.yaml`,
+          content: serializeYaml(toolYaml, { sortKeys: false }),
+        },
+      ];
       if (tool.schema !== undefined) {
-        const schemaPath = path.join(toolDir, 'schema.json');
-        const schemaContent = JSON.stringify(tool.schema, null, 2);
-        await safeWriteFile(schemaPath, schemaContent, 'utf8');
-        paths.push(schemaPath);
+        files.push({
+          relativePath: `${toolDir}/schema.json`,
+          content: JSON.stringify(tool.schema, null, 2),
+        });
       }
-
-      // Write script file
-      const scriptFilename = this.getScriptFilename(tool.runtime);
-      const scriptPath = path.join(toolDir, scriptFilename);
-      await safeWriteFile(scriptPath, tool.script, 'utf8');
-      paths.push(scriptPath);
-
-      messages.push(`✅ Created tool '${tool.id}' in ${toolDir}`);
-      this.logger.info(`Created script tool '${tool.id}' for prompt '${promptId}'`);
-    }
-
-    return { messages, paths };
+      files.push({ relativePath: `${toolDir}/${scriptFilename}`, content: tool.script });
+      return { id: tool.id, files };
+    });
   }
 
   /**
-   * Scaffold sub-prompt directories for nested chain steps.
+   * Build stub files for nested chain steps that have no directory yet.
    *
-   * Only scaffolds steps whose promptId follows the nested pattern (parentId/stepName).
-   * External references (plain promptId without '/') are skipped.
-   * Already-existing directories are skipped.
+   * Only steps whose promptId follows the nested pattern (parentId/stepName) are scaffolded.
+   * External references (plain promptId without '/') are skipped, and so is a step whose
+   * directory already exists in the prior tree or that an earlier step in the same list named.
    *
-   * Creates: {parentDir}/{stepDirName}/prompt.yaml + user-message.md
+   * Produces, relative to the parent's directory: {stepDirName}/prompt.yaml + user-message.md
    */
-  async scaffoldChainStepDirectories(
-    parentDir: string,
+  private planChainStepScaffolds(
+    priorDir: string | null,
     parentId: string,
     steps: unknown[]
-  ): Promise<string[]> {
-    const scaffoldedPaths: string[] = [];
+  ): PlannedPromptFile[] {
+    const files: PlannedPromptFile[] = [];
+    const planned = new Set<string>();
     const prefix = `${parentId}/`;
 
     for (const rawStep of steps) {
@@ -960,12 +1086,13 @@ export class FileOperations {
         continue; // Empty or deeply nested — skip
       }
 
-      const stepDir = path.join(parentDir, stepDirName);
-      if (existsSync(stepDir)) {
-        continue; // Already exists — skip
+      const alreadyExists =
+        planned.has(stepDirName) ||
+        (priorDir !== null && existsSync(path.join(priorDir, stepDirName)));
+      if (alreadyExists) {
+        continue;
       }
-
-      await fs.mkdir(stepDir, { recursive: true });
+      planned.add(stepDirName);
 
       const stepName = typeof step['stepName'] === 'string' ? step['stepName'] : stepDirName;
       const yamlData = {
@@ -974,18 +1101,34 @@ export class FileOperations {
         description: `Step: ${stepName}`,
         userMessageTemplateFile: 'user-message.md',
       };
-      const yamlPath = path.join(stepDir, 'prompt.yaml');
-      await safeWriteFile(yamlPath, serializeYaml(yamlData, { sortKeys: false }), 'utf8');
-      scaffoldedPaths.push(yamlPath);
-
-      const userMessagePath = path.join(stepDir, 'user-message.md');
-      await safeWriteFile(userMessagePath, `# ${stepName}\n\nExecute this step.\n`, 'utf8');
-      scaffoldedPaths.push(userMessagePath);
-
-      this.logger.info(`Scaffolded sub-prompt directory: ${stepDirName}`);
+      files.push(
+        {
+          relativePath: `${stepDirName}/prompt.yaml`,
+          content: serializeYaml(yamlData, { sortKeys: false }),
+        },
+        {
+          relativePath: `${stepDirName}/user-message.md`,
+          content: `# ${stepName}\n\nExecute this step.\n`,
+        }
+      );
     }
 
-    return scaffoldedPaths;
+    return files;
+  }
+
+  /** Write planned files beneath `baseDir`, creating their directories; returns the paths written. */
+  private async writePlannedFiles(
+    baseDir: string,
+    files: readonly PlannedPromptFile[]
+  ): Promise<string[]> {
+    const paths: string[] = [];
+    for (const file of files) {
+      const target = path.join(baseDir, file.relativePath);
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await safeWriteFile(target, file.content, 'utf8');
+      paths.push(target);
+    }
+    return paths;
   }
 
   /**

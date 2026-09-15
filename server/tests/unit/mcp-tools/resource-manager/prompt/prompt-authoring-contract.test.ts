@@ -109,7 +109,7 @@ function createHarness(
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     comparisonEngine: new ComparisonEngine(logger),
     textDiffService: new ObjectDiffGenerator(),
-    fileOperations: { updatePromptImplementation },
+    fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
     versionHistoryService: {
       isAutoVersionEnabled: () => true,
       loadHistory,

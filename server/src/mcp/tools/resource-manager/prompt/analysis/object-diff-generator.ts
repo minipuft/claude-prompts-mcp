@@ -1,8 +1,6 @@
-// @lifecycle canonical - Generates unified text diffs for prompt updates.
+// @lifecycle canonical - Generates unified text diffs for resource writes and version comparisons.
 
-import { createPatch, structuredPatch } from 'diff';
-
-import type { ConvertedPrompt } from '#engine/execution/types.js';
+import { createPatch, formatPatch, structuredPatch } from 'diff';
 
 import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
@@ -42,6 +40,33 @@ export interface DiffResult {
   hasChanges: boolean;
   /** Formatted output ready for MCP response (includes markdown) */
   formatted: string;
+}
+
+/**
+ * One file a write changes, as its content before and after.
+ *
+ * Paths use `/` and are relative to the resources root on each side. `previousPath` differs from
+ * `path` only when a write reads a resource from one place and lands it in another — a category
+ * move, or a copy up from the bundled tree into the writable root.
+ */
+export interface FileContentChange {
+  /** Where the write lands, relative to the root it writes into. */
+  path: string;
+  /** Where the current content is read from, relative to the root it lives in. */
+  previousPath: string;
+  /** Current content, or null when the file does not exist before the write. */
+  before: string | null;
+  /** Content the write leaves, or null when the write deletes the file. */
+  after: string | null;
+}
+
+function noChanges(): DiffResult {
+  return {
+    diff: '',
+    stats: { additions: 0, deletions: 0, hunks: 0, truncated: false },
+    hasChanges: false,
+    formatted: '',
+  };
 }
 
 /**
@@ -87,12 +112,7 @@ export class ObjectDiffGenerator {
       );
 
       if (patch.hunks.length === 0) {
-        return {
-          diff: '',
-          stats: { additions: 0, deletions: 0, hunks: 0, truncated: false },
-          hasChanges: false,
-          formatted: '',
-        };
+        return noChanges();
       }
 
       const stats = this.calculateStats(patch.hunks);
@@ -106,129 +126,71 @@ export class ObjectDiffGenerator {
         totalLines,
       } = this.truncateDiff(diffString, maxLines);
 
+      const fullStats = { ...stats, truncated, totalLines: truncated ? totalLines : undefined };
       return {
         diff: truncatedDiff,
-        stats: { ...stats, truncated, totalLines: truncated ? totalLines : undefined },
+        stats: fullStats,
         hasChanges: true,
-        formatted: this.formatForResponse(truncatedDiff, {
-          ...stats,
-          truncated,
-          totalLines: truncated ? totalLines : undefined,
-        }),
+        formatted: this.formatForResponse(truncatedDiff, fullStats, maxLines),
       };
     } catch (_error) {
       // On serialization/diff errors, return empty result (update still succeeds)
-      return {
-        diff: '',
-        stats: { additions: 0, deletions: 0, hunks: 0, truncated: false },
-        hasChanges: false,
-        formatted: '',
-      };
+      return noChanges();
     }
   }
 
   /**
-   * Generate a unified diff between two prompt versions.
+   * Generate one unified diff across the files a write changes.
    *
-   * @param before - Previous prompt state (null for new prompts)
-   * @param after - New prompt state
-   * @param config - Optional diff configuration
-   * @returns Complete diff result with stats and formatted output
+   * Each file is diffed as the bytes it holds, so the result reads as the write itself: a created
+   * file is diffed from `/dev/null`, a deleted one to it, and a file the write leaves
+   * byte-identical is omitted. Nothing is re-serialized, which is what lets a reader apply the
+   * diff to the files as they are and get the files as they will be.
+   *
+   * No catch: the inputs are strings, so a failure here is a defect, and a preview that swallowed
+   * it would report "no changes" for a write that has some.
    */
-  generatePromptDiff(
-    before: ConvertedPrompt | null,
-    after: Partial<ConvertedPrompt>,
-    config?: DiffConfig
-  ): DiffResult {
+  generateFileChangeDiff(changes: readonly FileContentChange[], config?: DiffConfig): DiffResult {
     const context = config?.context ?? ObjectDiffGenerator.DEFAULT_CONTEXT;
     const maxLines = config?.maxLines ?? ObjectDiffGenerator.DEFAULT_MAX_LINES;
 
-    try {
-      const beforeContent = before !== null ? this.serializePromptContent(before) : '';
-      const afterContent = this.serializePromptContent(after);
-
-      const promptId = after.id ?? 'prompt';
+    const patches: string[] = [];
+    const totals = { additions: 0, deletions: 0, hunks: 0 };
+    for (const change of changes) {
       const patch = structuredPatch(
-        `a/${promptId}.yaml`,
-        `b/${promptId}.yaml`,
-        beforeContent,
-        afterContent,
-        'before',
-        'after',
+        change.before === null ? '/dev/null' : `a/${change.previousPath}`,
+        change.after === null ? '/dev/null' : `b/${change.path}`,
+        change.before ?? '',
+        change.after ?? '',
+        undefined,
+        undefined,
         { context }
       );
-
-      if (patch.hunks.length === 0) {
-        return {
-          diff: '',
-          stats: { additions: 0, deletions: 0, hunks: 0, truncated: false },
-          hasChanges: false,
-          formatted: '',
-        };
-      }
+      if (patch.hunks.length === 0) continue;
 
       const stats = this.calculateStats(patch.hunks);
-      const diffString = createPatch(
-        `${promptId}.yaml`,
-        beforeContent,
-        afterContent,
-        'before',
-        'after',
-        { context }
-      );
-
-      const {
-        result: truncatedDiff,
-        truncated,
-        totalLines,
-      } = this.truncateDiff(diffString, maxLines);
-
-      return {
-        diff: truncatedDiff,
-        stats: { ...stats, truncated, totalLines: truncated ? totalLines : undefined },
-        hasChanges: true,
-        formatted: this.formatForResponse(truncatedDiff, {
-          ...stats,
-          truncated,
-          totalLines: truncated ? totalLines : undefined,
-        }),
-      };
-    } catch (_error) {
-      // On serialization/diff errors, return empty result (update still succeeds)
-      return {
-        diff: '',
-        stats: { additions: 0, deletions: 0, hunks: 0, truncated: false },
-        hasChanges: false,
-        formatted: '',
-      };
+      totals.additions += stats.additions;
+      totals.deletions += stats.deletions;
+      totals.hunks += stats.hunks;
+      patches.push(formatPatch(patch));
     }
-  }
 
-  /**
-   * Serialize prompt content to canonical YAML for consistent diffing.
-   */
-  private serializePromptContent(prompt: Partial<ConvertedPrompt>): string {
-    const content: Record<string, unknown> = {};
+    if (patches.length === 0) {
+      return noChanges();
+    }
 
-    // Order fields consistently for readable diffs (bracket notation for index signature)
-    // Use explicit checks per strict-boolean-expressions rule
-    if (prompt.name !== undefined && prompt.name !== '') content['name'] = prompt.name;
-    if (prompt.category !== undefined && prompt.category !== '')
-      content['category'] = prompt.category;
-    if (prompt.description !== undefined && prompt.description !== '')
-      content['description'] = prompt.description;
-    if (prompt.systemMessage !== undefined && prompt.systemMessage !== '')
-      content['systemMessage'] = prompt.systemMessage;
-    if (prompt.userMessageTemplate !== undefined && prompt.userMessageTemplate !== '')
-      content['userMessageTemplate'] = prompt.userMessageTemplate;
-    if (prompt.arguments !== undefined && prompt.arguments.length > 0)
-      content['arguments'] = prompt.arguments;
-    if (prompt.gateConfiguration !== undefined)
-      content['gateConfiguration'] = prompt.gateConfiguration;
-    if (prompt.chainSteps !== undefined && prompt.chainSteps.length > 0)
-      content['chainSteps'] = prompt.chainSteps;
-
-    return serializeYaml(content, { sortKeys: false, lineWidth: 100 });
+    const { result: diff, truncated, totalLines } = this.truncateDiff(patches.join(''), maxLines);
+    const stats: DiffStats = {
+      ...totals,
+      truncated,
+      totalLines: truncated ? totalLines : undefined,
+    };
+    return {
+      diff,
+      stats,
+      hasChanges: true,
+      formatted: this.formatForResponse(diff, stats, maxLines),
+    };
   }
 
   /**
@@ -275,15 +237,13 @@ export class ObjectDiffGenerator {
   /**
    * Format diff for MCP response with markdown.
    */
-  private formatForResponse(diff: string, stats: DiffStats): string {
+  private formatForResponse(diff: string, stats: DiffStats, maxLines: number): string {
     const parts: string[] = [];
 
     parts.push(`**Changes**: +${stats.additions} additions, -${stats.deletions} deletions`);
 
     if (stats.truncated && stats.totalLines !== undefined && stats.totalLines > 0) {
-      parts.push(
-        `*(Showing ${ObjectDiffGenerator.DEFAULT_MAX_LINES} of ${stats.totalLines} lines)*`
-      );
+      parts.push(`*(Showing ${maxLines} of ${stats.totalLines} lines)*`);
     }
 
     parts.push('');
