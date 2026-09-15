@@ -14,7 +14,15 @@
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { applyPatch, parsePatch } from 'diff';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 
@@ -350,11 +358,11 @@ describe('a preview names the files and lines its write changes', () => {
   });
 
   /**
-   * The writer only produces the directory layout, so an update to a `{category}/{id}.yaml`
-   * prompt writes a new directory beside the file. Whether it should is a separate question; the
-   * preview has to say what it does.
+   * B.21 — an update of a single-file prompt converts it to directory layout in the same write:
+   * the preview names the deleted `{id}.yaml` alongside the new directory's files, and the update
+   * leaves exactly one on-disk definition (never `{id}.yaml` and `{id}/prompt.yaml` together).
    */
-  test('single-file layout: the preview names the directory files the update writes', async () => {
+  test('single-file layout: the preview names the deleted flat file and the new directory files', async () => {
     const promptsDir = tempRoot();
     mkdirSync(join(promptsDir, CATEGORY), { recursive: true });
     writeFileSync(
@@ -379,9 +387,17 @@ describe('a preview names the files and lines its write changes', () => {
     );
 
     expect(expectDiffReproducesWrite(preview.diff, before, after)).toEqual([
+      'general/flat_prompt.yaml',
       'general/flat_prompt/prompt.yaml',
       'general/flat_prompt/user-message.md',
     ]);
+    // Exactly one definition survives the update — the flat file is gone, not left stale beside
+    // the new directory.
+    expect(existsSync(join(promptsDir, CATEGORY, 'flat_prompt.yaml'))).toBe(false);
+    expect(existsSync(join(promptsDir, CATEGORY, 'flat_prompt', 'prompt.yaml'))).toBe(true);
+    expect(harness.live('flat_prompt')?.['userMessageTemplate']).toContain(
+      'Answer in bullet points.'
+    );
   });
 
   test('copy-on-write: a bundled prompt is previewed from its bundled files into the writable root', async () => {

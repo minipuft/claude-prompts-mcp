@@ -26,6 +26,7 @@ import {
   diagnosePromptWrite,
   validatePromptId,
 } from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { discoverYamlPromptsInCategory } from '../../../../../src/modules/prompts/category-maintenance.js';
 import { normalizePromptId } from '../../../../../src/shared/utils/resource-ids.js';
 
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
@@ -765,6 +766,98 @@ describe('FileOperations canonical prompt writes', () => {
           join(promptsDir, 'target-category-3', 'origin-category', 'nested_step', 'prompt.yaml')
         )
       ).toBe(true);
+    });
+  });
+
+  /**
+   * B.21 — an update of a single-file prompt (`{category}/{id}.yaml`) converts it to directory
+   * layout in the SAME write, rather than leaving the file in place and writing `{id}/` beside it.
+   * The writer never produces the single-file layout itself, so these tests seed it by hand, the
+   * way an author or an older `create` call would have.
+   */
+  describe('single-file → directory conversion (B.21)', () => {
+    function seedFlatPrompt(id: string, category: string, overrides: string[] = []): void {
+      mkdirSync(join(promptsDir, category), { recursive: true });
+      writeFileSync(
+        join(promptsDir, category, `${id}.yaml`),
+        [
+          `id: ${id}`,
+          `name: ${id}`,
+          `category: ${category}`,
+          'description: A single-file prompt',
+          'userMessageTemplate: |',
+          '  Use {{tool}}',
+          ...overrides,
+          '',
+        ].join('\n')
+      );
+    }
+
+    it('deletes the flat file and writes exactly one on-disk definition', async () => {
+      seedFlatPrompt('flat_prompt', 'general', ['subagentModel: heavy']);
+      const flatFile = join(promptsDir, 'general', 'flat_prompt.yaml');
+      const newDir = join(promptsDir, 'general', 'flat_prompt');
+      expect(existsSync(flatFile)).toBe(true);
+
+      const operations = new FileOperations({ logger, configManager });
+      const result = await operations.updatePromptImplementation({
+        id: 'flat_prompt',
+        name: 'Flat Prompt',
+        category: 'general',
+        description: 'An updated description',
+        userMessageTemplate: 'Use {{tool}}',
+        arguments: [],
+        tools: [],
+      });
+
+      // FALSIFICATION: comment out the `fs.rm(fileSource, ...)` call in
+      // `convertPromptFileToDirectory` and this line goes red — the flat file survives alongside
+      // the new directory, the prompt defined twice.
+      expect(existsSync(flatFile)).toBe(false);
+      expect(existsSync(join(newDir, 'prompt.yaml'))).toBe(true);
+      expect(existsSync(join(newDir, 'user-message.md'))).toBe(true);
+
+      // FALSIFICATION: comment out the `findExistingPromptFile` lookup in `planPromptWrite`
+      // (force `fileSource` to `null`) and this count goes to 2 — the loader's own
+      // `discoverYamlPromptsInCategory` dedup only wins by directory-entry ordering, which this
+      // fix does not rely on.
+      const discovered = discoverYamlPromptsInCategory(join(promptsDir, 'general'));
+      expect(discovered.filter((p) => p.id === 'flat_prompt')).toHaveLength(1);
+      expect(discovered.find((p) => p.id === 'flat_prompt')?.format).toBe('directory');
+
+      const written = readPromptYaml('general', 'flat_prompt');
+      expect(written['description']).toBe('An updated description');
+      // Preserved key — not in `promptData` at all, carried forward from the flat file's own
+      // declaration the same way a directory prompt's `prompt.yaml` would be.
+      expect(written['subagentModel']).toBe('heavy');
+      expect(result.message).toMatch(/Updated prompt: flat_prompt/);
+    });
+
+    it('a mid-conversion failure restores the flat file and leaves no partial directory', async () => {
+      seedFlatPrompt('flat_prompt_2', 'general');
+      const flatFile = join(promptsDir, 'general', 'flat_prompt_2.yaml');
+      const newDir = join(promptsDir, 'general', 'flat_prompt_2');
+
+      const operations = new FileOperations({ logger, configManager });
+      // An empty `description` fails `PromptYamlSchema`'s `min(1)`, reached only after the
+      // conversion's delete has already run — exercising the transaction's restore path for a
+      // failure that occurs MID-conversion rather than before it starts.
+      await expect(
+        operations.updatePromptImplementation({
+          id: 'flat_prompt_2',
+          name: 'Flat Prompt 2',
+          category: 'general',
+          description: '',
+          userMessageTemplate: 'Use {{tool}}',
+          arguments: [],
+          tools: [],
+        })
+      ).rejects.toThrow(/rolled back/);
+
+      // FALSIFICATION: comment out the `{ path: fileSource, kind: 'file' }` transaction target in
+      // `updatePromptImplementation` and this restore never happens — the flat file stays deleted.
+      expect(existsSync(flatFile)).toBe(true);
+      expect(existsSync(newDir)).toBe(false);
     });
   });
 });
