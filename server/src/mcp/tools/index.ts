@@ -49,6 +49,7 @@ import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ChainSessionStore } from '#modules/chains/manager.js';
 import type { StyleManager } from '#modules/formatting/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type {
   StateStoreOptions,
@@ -375,6 +376,17 @@ export class McpToolRouter {
     // here is what turns `export` from "writes skills, drops every manifest row"
     // into an export that `diff` and `prune` can subsequently see.
     this.systemControl.setDatabasePort(db);
+  }
+
+  /**
+   * Give `system_control`'s skills-sync handler the server's own path resolution, so a
+   * `--workspace` flag (or `MCP_WORKSPACE`) resolves the same sources and `skills-sync.yaml`
+   * a running server reads and writes elsewhere. Independent of `setDatabasePort`: path
+   * resolution does not need persistence, so this is wired regardless of whether a database
+   * is configured for this run.
+   */
+  setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
+    this.systemControl.setSkillsSyncPathsProvider(provider);
   }
 
   /**

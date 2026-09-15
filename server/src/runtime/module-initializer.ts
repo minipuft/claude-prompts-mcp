@@ -20,6 +20,7 @@ import {
   resolveResourceRoots,
   type ResourceRoots,
 } from './resource-roots.js';
+import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
@@ -370,6 +371,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   if (isVerbose) logger.info('🔄 Updating MCP tools manager data...');
   mcpToolsManager.updateData(promptsData, convertedPrompts, categories);
+
+  // Wired unconditionally, ahead of any request: `resolveSkillsSyncPaths` reads this same
+  // `pathResolver`, so `system_control`'s `skills_sync` action resolves `--workspace` and
+  // `MCP_WORKSPACE` the way the rest of the server does, instead of re-deriving them from
+  // the environment the way the standalone CLI wrapper does.
+  mcpToolsManager.setSkillsSyncPathsProvider(() => resolveSkillsSyncPaths(pathResolver));
 
   // Wire DatabasePort early so sub-handlers have it before first use
   if (toolsDatabase !== undefined) {

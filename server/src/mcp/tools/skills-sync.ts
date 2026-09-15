@@ -12,8 +12,8 @@ import {
   runSkillsSyncCommand,
   type ResourceType,
   type SkillsSyncOutput,
+  type SkillsSyncPaths,
 } from '#modules/skills-sync/service.js';
-import { resolveSkillsSyncPaths } from '#runtime/skills-sync-paths.js';
 
 export const SKILLS_SYNC_OPERATIONS = [
   'status',
@@ -84,6 +84,11 @@ function createStructuredResponse(
 export class ConsolidatedSkillsSync {
   constructor(
     private readonly logger: Logger,
+    // Resolved by the caller, once per request, through the server's own `PathResolver` --
+    // this class runs only inside `system_control` (see `skills-sync-action-handler.ts`), so
+    // it takes the already-resolved directories rather than re-deriving them from the
+    // environment the way the standalone CLI wrapper does.
+    private readonly paths: SkillsSyncPaths,
     private readonly dbManager?: DatabasePort
   ) {}
 
@@ -106,7 +111,7 @@ export class ConsolidatedSkillsSync {
   }
 
   private async getStatus(): Promise<ToolResponse> {
-    const configPath = getSkillsSyncConfigPath(resolveSkillsSyncPaths());
+    const configPath = getSkillsSyncConfigPath(this.paths);
     // No initializer: the try assigns true, the catch assigns false.
     let configExists: boolean;
     let selectionSource: SkillsSyncStatus['selectionSource'] = 'none';
@@ -267,7 +272,7 @@ export class ConsolidatedSkillsSync {
           dbManager: this.dbManager,
         },
         output,
-        resolveSkillsSyncPaths()
+        this.paths
       );
 
       const text = logs.length > 0 ? logs.join('\n') : `skills_sync ${operation} completed.`;
@@ -294,7 +299,8 @@ export class ConsolidatedSkillsSync {
 
 export function createConsolidatedSkillsSync(
   logger: Logger,
+  paths: SkillsSyncPaths,
   dbManager?: DatabasePort
 ): ConsolidatedSkillsSync {
-  return new ConsolidatedSkillsSync(logger, dbManager);
+  return new ConsolidatedSkillsSync(logger, paths, dbManager);
 }
