@@ -725,6 +725,12 @@ Successful prompt writes return a machine-readable receipt with `config_path`, `
 loaded after refresh, and the current version. A write whose refreshed registry does not match the
 produced prompt is reported as an error, even when the filesystem transaction itself succeeded.
 
+Any `resource_manager` result that carries both readable `content` text and `structuredContent` —
+`validate`, `create`, `preview`, `update`, and `inspect` all do — also carries the same text in
+`structuredContent.message`. Some MCP clients hand the model only `structuredContent` when a
+result carries both, so a client reading solely the JSON half still receives the write receipt,
+preview notice, or validation outcome. A result with `content` text only is unaffected.
+
 Maintain an existing prompt through one bounded sequence:
 
 ```text

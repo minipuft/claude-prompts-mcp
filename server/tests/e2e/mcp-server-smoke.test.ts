@@ -591,11 +591,13 @@ describe('MCP Server Smoke Tests', () => {
         1
       )) as {
         isError: boolean;
+        content?: Array<{ type: string; text: string }>;
         structuredContent?: {
           action?: string;
           id?: string;
           resource_root?: string;
           current_version?: number;
+          message?: string;
         };
       };
 
@@ -606,6 +608,12 @@ describe('MCP Server Smoke Tests', () => {
       });
       expect(result.structuredContent?.resource_root).toContain('resources/prompts');
       expect(typeof result.structuredContent?.current_version).toBe('number');
+
+      // Claude Code 2.1.272 hands the model only `structuredContent` when a result carries both
+      // channels (anthropics/claude-code#9962, #55677, #15412, #64316) — so the readable `content`
+      // text this result also carries must be mirrored into `structuredContent.message`, or it
+      // never reaches the model.
+      expect(result.structuredContent?.message).toBe(result.content?.[0]?.text);
     }, 25000);
 
     it('rejects a request whose headers omit the method', async () => {
