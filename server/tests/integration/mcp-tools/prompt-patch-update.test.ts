@@ -592,7 +592,7 @@ describe('write-scope byte-identity and category move (Fix B + Part 2)', () => {
    * re-serialization. `system-message.md` is asserted untouched the same way.
    *
    * FALSIFICATION: neuter the scope table (make `writesYaml` always `true` in
-   * `createOrUpdateYamlPrompt`) and `rawAfter` no longer equals `rawBefore` — the comment and key
+   * `planPromptFiles`) and `rawAfter` no longer equals `rawBefore` — the comment and key
    * order are lost to `serializeYaml`, which has no comment model.
    */
   test('a patch-only edit leaves prompt.yaml byte-identical, system-message.md untouched', async () => {

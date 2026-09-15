@@ -4,12 +4,12 @@
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 369
+    "errors": 368
   },
   "byCode": {
     "TS18046": 3,
     "TS18048": 2,
-    "TS2305": 26,
+    "TS2305": 25,
     "TS2307": 5,
     "TS2322": 51,
     "TS2339": 39,
@@ -93,7 +93,6 @@
     "tests/unit/mcp-tools/prompt-engine/prompt-engine-validation.test.ts": 5,
     "tests/unit/mcp-tools/prompt-engine/request-validator.test.ts": 2,
     "tests/unit/mcp-tools/prompt-engine/response-formatter.test.ts": 1,
-    "tests/unit/mcp-tools/resource-manager/prompt/analysis/text-diff-service.test.ts": 1,
     "tests/unit/mcp-tools/resource-manager/prompt/guide-action.test.ts": 1,
     "tests/unit/mcp-tools/system-control/framework-action.test.ts": 1,
     "tests/unit/mcp-tools/system-control/gate-action.test.ts": 1,
