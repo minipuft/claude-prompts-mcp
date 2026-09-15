@@ -43,7 +43,6 @@ import {
   isAdoptableSkillMarkdown,
   parseManagedSkillMarker,
   type ManagedSkillDirMap,
-  type ManagedSkillMarker,
 } from './sync-engine.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -3615,24 +3614,6 @@ async function findAdoptableSkillDirs(baseDir: string): Promise<string[]> {
   return adoptable.sort();
 }
 
-/**
- * The managed marker, or null when the frontmatter will not parse.
- *
- * `parseManagedSkillMarker` lets js-yaml throw, which is the right posture when the input is a
- * file this tool wrote. Scanning an output directory feeds it every skill sitting there,
- * hand-written ones included — and a `description:` holding an unquoted colon is not valid YAML.
- * Measured 2026-09-15 against a real `~/.claude/skills`: two of them, enough to abort a whole
- * read-only scan. Frontmatter that will not parse is a definite "not written by this tool", so it
- * is an answer rather than a failure.
- */
-function readManagedSkillMarker(skillMarkdown: string): ManagedSkillMarker | null {
-  try {
-    return parseManagedSkillMarker(skillMarkdown);
-  } catch {
-    return null;
-  }
-}
-
 async function collectManagedSkillDirsFromMarkers(
   baseDir: string,
   clientId: string,
@@ -3648,7 +3629,7 @@ async function collectManagedSkillDirsFromMarkers(
     if (!entry.isDirectory()) continue;
     const skillContent = await readOptionalFile(path.join(baseDir, entry.name, 'SKILL.md'));
     if (!skillContent) continue;
-    const marker = readManagedSkillMarker(skillContent);
+    const marker = parseManagedSkillMarker(skillContent);
     if (!marker) continue;
     if (marker.clientId !== clientId || marker.scope !== scope) continue;
 

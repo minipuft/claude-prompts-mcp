@@ -68,6 +68,41 @@ Test
     expect(plan.pruneSkillDirs).toEqual(['analysis-deep_analysis', 'examples-deep_analysis']);
   });
 
+  it('returns null instead of throwing when frontmatter is not valid YAML', () => {
+    // Hand-written frontmatter this tool never wrote is a fact to skip, not a reason to abort —
+    // measured against a real skills tree where a `description:` held an unquoted colon.
+    const badFrontmatter = `---
+name: Bad Skill
+description: a thing: with a colon
+---
+
+## Instructions
+Test
+`;
+    expect(() => parseManagedSkillMarker(badFrontmatter)).not.toThrow();
+    expect(parseManagedSkillMarker(badFrontmatter)).toBeNull();
+  });
+
+  it('leaves frontmatter unchanged instead of throwing when it is not valid YAML', () => {
+    const badFrontmatter = `---
+name: Bad Skill
+description: a thing: with a colon
+---
+
+## Instructions
+Test
+`;
+    const inject = () =>
+      injectManagedSkillMarker(badFrontmatter, {
+        clientId: 'claude-code',
+        scope: 'user',
+        resourceKey: 'prompt:workflow/triage',
+      });
+
+    expect(inject).not.toThrow();
+    expect(inject()).toBe(badFrontmatter);
+  });
+
   it('injects managed marker fields into SKILL frontmatter', () => {
     const updated = injectManagedSkillMarker(
       `---

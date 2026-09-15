@@ -175,6 +175,24 @@ describe('sync and diff commands end to end (F11)', () => {
     expect(untouched).not.toContain('managed-by');
   });
 
+  it('sync completes past a neighbouring hand-written skill whose frontmatter is not valid YAML', async () => {
+    // Same defect as the diff case below ("survives a neighbouring skill whose frontmatter is
+    // not valid YAML"), on the write path: findAdoptableSkillDirs scans every directory in the
+    // output dir, hand-written ones included, and a `description:` holding an unquoted colon is
+    // not valid YAML — measured against a real ~/.claude/skills (2026-09-15).
+    await writePrompt('kept_prompt');
+    const handWrittenContent =
+      '---\nname: hand_written\ndescription: Use when: a colon appears unquoted.\n---\n\nBody.\n';
+    const handWritten = path.join(outputDir, 'hand_written');
+    await mkdir(handWritten, { recursive: true });
+    await writeFile(path.join(handWritten, 'SKILL.md'), handWrittenContent);
+
+    const { report } = await run({ command: 'sync' });
+
+    expect(report.written).toBeGreaterThan(0);
+    expect(await readFile(path.join(handWritten, 'SKILL.md'), 'utf-8')).toBe(handWrittenContent);
+  });
+
   it('sync does not adopt on a preview', async () => {
     await writePrompt('kept_prompt');
     await writeUnmarkedSkillDir('legacy_export', '## Instructions');
