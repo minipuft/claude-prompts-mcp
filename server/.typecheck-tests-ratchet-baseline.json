@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-19T10:13:41.476Z",
+  "generatedAt": "2026-09-15T07:36:46.733Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 368
+    "errors": 366
   },
   "byCode": {
     "TS18046": 3,
     "TS18048": 2,
-    "TS2305": 25,
+    "TS2305": 24,
     "TS2307": 5,
-    "TS2322": 51,
+    "TS2322": 50,
     "TS2339": 39,
     "TS2345": 91,
     "TS2353": 41,
@@ -60,7 +60,7 @@
     "tests/unit/execution/parsers/verify-parsing.test.ts": 1,
     "tests/unit/execution/parsers/xml-encoding-workaround.test.ts": 1,
     "tests/unit/execution/parsing-system.test.ts": 2,
-    "tests/unit/execution/pipeline/command-parsing-stage.test.ts": 18,
+    "tests/unit/execution/pipeline/command-parsing-stage.test.ts": 16,
     "tests/unit/execution/pipeline/framework-stage.test.ts": 20,
     "tests/unit/execution/pipeline/gate-enhancement-stage.test.ts": 12,
     "tests/unit/execution/pipeline/gate-review-stage.test.ts": 2,
