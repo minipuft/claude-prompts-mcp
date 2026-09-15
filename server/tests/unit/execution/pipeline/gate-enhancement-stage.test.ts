@@ -2,14 +2,17 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
+import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
+import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 
 import type { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
 import type { GateService } from '../../../../src/engine/gates/services/gate-service-interface.js';
+import type { GateGuide } from '../../../../src/engine/gates/types/gate-guide-types.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
@@ -42,8 +45,12 @@ const createMockGateLoader = (
  * Creates a mock GateManager that returns gates based on category.
  * The mapping below is fixed test data, not a mirror of any production table — real activation
  * is YAML-declared and covered by tests/integration/gates/gate-category-selection.test.ts.
+ *
+ * @param registryGuides - `gate id -> GateGuide` the mock registry's `getGuide` looks up. Omitted
+ * (the default) keeps `getGateRegistry()` returning `undefined`, same as before this parameter
+ * existed, so every caller that does not pass it is unaffected.
  */
-const createMockGateManager = (): GateManager => {
+const createMockGateManager = (registryGuides?: Record<string, GateGuide>): GateManager => {
   const categoryGateMapping: Record<string, string[]> = {
     analysis: ['research-quality', 'technical-accuracy'],
     research: ['research-quality', 'technical-accuracy'],
@@ -70,7 +77,11 @@ const createMockGateManager = (): GateManager => {
     getActiveGates: jest.fn().mockReturnValue([]),
     setGateEnabled: jest.fn(),
     reloadGate: jest.fn(),
-    getGateRegistry: jest.fn(),
+    getGateRegistry: jest
+      .fn()
+      .mockReturnValue(
+        registryGuides ? { getGuide: (gateId: string) => registryGuides[gateId] } : undefined
+      ),
     getRegistryStats: jest.fn().mockReturnValue({ totalGates: 0 }),
     getStatus: jest.fn(),
     isGateSystemEnabled: jest.fn().mockReturnValue(true),
@@ -766,5 +777,125 @@ describe('GateEnhancementStage', () => {
     expect(sourceCounts['prompt-config']).toBeGreaterThanOrEqual(1);
     // registry-auto source: gates selected from GateManager.selectGates() activation rules
     expect(sourceCounts['registry-auto']).toBeGreaterThanOrEqual(1);
+  });
+
+  /**
+   * A registry-auto gate's `retry_config.max_attempts` and `blockResponseOnFail` are read off
+   * the registry guide and written into the accumulator by
+   * `GateEnhancementService.addRegistryGatesWithRetryConfig` — a step no other test in this file
+   * drives, since `createMockGateManager()` previously left `getGateRegistry()` returning
+   * `undefined` (no guide, neutral config). These two tests supply real guides (parsed through
+   * `GateDefinitionSchema`, same as the production loader) via the `registryGuides` param added
+   * above, and pin both effects through the accumulator's own public readers.
+   */
+  test("a registry gate's retry_config.max_attempts reaches the accumulator as retryLimit metadata", async () => {
+    const gateService = createGateService();
+    const temporaryRegistry = {
+      createTemporaryGate: jest.fn().mockReturnValue('temp_custom'),
+    } as unknown as TemporaryGateRegistry;
+
+    const withRetryConfig = new GenericGateGuide(
+      GateDefinitionSchema.parse({
+        id: 'code-quality',
+        name: 'Code Quality',
+        type: 'validation',
+        description: 'Checks code quality',
+        retry_config: { max_attempts: 3 },
+      })
+    );
+    const withoutRetryConfig = new GenericGateGuide(
+      GateDefinitionSchema.parse({
+        id: 'technical-accuracy',
+        name: 'Technical Accuracy',
+        type: 'validation',
+        description: 'Checks technical accuracy',
+      })
+    );
+    const mockGateManager = createMockGateManager({
+      'code-quality': withRetryConfig,
+      'technical-accuracy': withoutRetryConfig,
+    });
+
+    const stage = createStage({
+      gateService,
+      temporaryRegistry,
+      gatesConfigProvider: () => baseGatesConfig,
+      gateManagerProvider: () => mockGateManager,
+    });
+
+    const context = new ExecutionContext({ command: '>>demo' });
+    context.executionPlan = {
+      strategy: 'single',
+      gates: [],
+      requiresFramework: false,
+      requiresSession: false,
+      category: 'development', // selects code-quality + technical-accuracy via registry-auto
+    } as any;
+    context.parsedCommand = {
+      commandType: 'single',
+      convertedPrompt: { ...samplePrompt, category: 'development' },
+      inlineGateIds: [],
+    } as any;
+
+    await stage.execute(context);
+
+    expect(context.gates.getEntry('code-quality')?.metadata?.['retryLimit']).toBe(3);
+    expect(context.gates.getEntry('technical-accuracy')?.metadata?.['retryLimit']).toBeUndefined();
+  });
+
+  test('a registry gate with blockResponseOnFail: true is registered as a blocking gate', async () => {
+    const gateService = createGateService();
+    const temporaryRegistry = {
+      createTemporaryGate: jest.fn().mockReturnValue('temp_custom'),
+    } as unknown as TemporaryGateRegistry;
+
+    const blocking = new GenericGateGuide(
+      GateDefinitionSchema.parse({
+        id: 'code-quality',
+        name: 'Code Quality',
+        type: 'validation',
+        description: 'Checks code quality',
+        blockResponseOnFail: true,
+      })
+    );
+    const nonBlocking = new GenericGateGuide(
+      GateDefinitionSchema.parse({
+        id: 'technical-accuracy',
+        name: 'Technical Accuracy',
+        type: 'validation',
+        description: 'Checks technical accuracy',
+        blockResponseOnFail: false,
+      })
+    );
+    const mockGateManager = createMockGateManager({
+      'code-quality': blocking,
+      'technical-accuracy': nonBlocking,
+    });
+
+    const stage = createStage({
+      gateService,
+      temporaryRegistry,
+      gatesConfigProvider: () => baseGatesConfig,
+      gateManagerProvider: () => mockGateManager,
+    });
+
+    const context = new ExecutionContext({ command: '>>demo' });
+    context.executionPlan = {
+      strategy: 'single',
+      gates: [],
+      requiresFramework: false,
+      requiresSession: false,
+      category: 'development', // selects code-quality + technical-accuracy via registry-auto
+    } as any;
+    context.parsedCommand = {
+      commandType: 'single',
+      convertedPrompt: { ...samplePrompt, category: 'development' },
+      inlineGateIds: [],
+    } as any;
+
+    await stage.execute(context);
+
+    expect(context.gates.getBlockingGateIds()).toContain('code-quality');
+    expect(context.gates.getBlockingGateIds()).not.toContain('technical-accuracy');
   });
 });

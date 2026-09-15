@@ -18,7 +18,7 @@ import * as yaml from 'js-yaml';
 import { createTwoFilesPatch } from 'diff';
 
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
-import { deriveGateTier } from '#engine/gates/core/gate-tier.js';
+import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/core/gate-tier.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
@@ -2255,63 +2255,44 @@ if __name__ == "__main__":
 `;
 }
 
-/**
- * One exported check's command line — the export-time counterpart to
- * `GateGuidanceRenderer.formatCheckLine` (ruling B2/B9, gate-checks-and-reminders). A check
- * states ground truth the engine (or whoever reruns the command) can verify directly, so it
- * names what runs and never the gate's guidance — the runtime renderer applies the same rule
- * for the same reason: asking the agent to self-attest something already measured is redundant.
- */
-function formatExportedCheckLine(name: string, passCriteria: unknown[]): string {
-  const criteria = passCriteria.map((entry) => (entry ?? {}) as Record<string, unknown>);
-  const criterion = criteria.find(
-    (entry) => entry['type'] === 'shell_verify' || entry['type'] === 'script_tool'
-  );
+/** A registered gate ref, parsed once: its yaml-derived tier and reminder subject. */
+interface TieredGateRef {
+  ref: IRGateRef;
+  passCriteria: unknown[];
+  tier: GateTier;
+  subject: string | undefined;
+}
 
-  const shellCommand = criterion?.['shell_command'];
-  if (criterion?.['type'] === 'shell_verify') {
-    if (Array.isArray(shellCommand) && shellCommand.length > 0) {
-      return `- **${name}** — Passes \`${shellCommand.join(' ')}\``;
-    }
-    if (typeof shellCommand === 'string' && shellCommand.length > 0) {
-      return `- **${name}** — Passes \`${shellCommand}\``;
-    }
-  }
-
-  const scriptToolId = criterion?.['script_tool_id'];
-  if (criterion?.['type'] === 'script_tool' && typeof scriptToolId === 'string') {
-    return `- **${name}** — Runs tool \`${scriptToolId}\``;
-  }
-
-  // A check whose criterion names neither a command nor a tool id cannot run; still list it, so
-  // an operator sees the gate rather than silently losing it (mirrors the runtime fallback).
-  return `- **${name}** — check`;
+/** Registered refs split by tier and harness coverage, plus inline refs untouched. */
+interface PartitionedGateRefs {
+  checks: TieredGateRef[];
+  reminders: TieredGateRef[];
+  /** Reminders suppressed because `harnessCovers` already covers their subject (ruling B2). */
+  omitted: TieredGateRef[];
+  /** `inline` / `inline_definition` refs — never tiered, never suppressed. */
+  passthrough: IRGateRef[];
 }
 
 /**
- * Builds the Quality Gates markdown section for SKILL.md.
+ * Parses each `registered` gate ref's yaml once and splits the result into checks,
+ * live reminders, and reminders this installation's harness already covers.
  *
- * Registered gates split into `### Checks` (a command/tool line, never guidance) and
- * `### Reminders` (the criteria table, as before) by `deriveGateTier` — mirroring
- * `GateGuidanceRenderer.renderGuidance`'s runtime split, so an exported skill reads like a live
- * dispatch. `harnessCovers` suppresses a reminder whose `subject` this installation's harness
- * already covers; checks are never suppressed (ruling B2).
+ * Single source for BOTH `buildQualityGatesSection` (what an exported skill's SKILL.md
+ * describes) and `emitGateFiles` (what actually ships under `gates/`) — computed once per
+ * skill build and handed to both, so a suppressed reminder is consistently absent from
+ * both instead of disagreeing between the two (plan row 2.3).
  */
-function buildQualityGatesSection(
+function partitionGateRefs(
   gateRefs: IRGateRef[],
-  hookEnforced: boolean,
   harnessCovers: readonly string[]
-): string {
-  if (gateRefs.length === 0) return '';
-
+): PartitionedGateRefs {
   const registered = gateRefs.filter((g) => g.source === 'registered');
-  const inlineCriteria = gateRefs.filter((g) => g.source === 'inline');
-  const inlineDefs = gateRefs.filter((g) => g.source === 'inline_definition');
+  const passthrough = gateRefs.filter((g) => g.source !== 'registered');
 
   // The exporter has no loaded `LightweightGateDefinition` (that's a runtime-only shape) — only
   // the raw yaml text each registered ref already carries — so this constructs the minimal
   // `{ pass_criteria }` structure `deriveGateTier` actually reads.
-  const tiered = registered.map((ref) => {
+  const tiered: TieredGateRef[] = registered.map((ref) => {
     let parsed: GateYaml | null = null;
     try {
       parsed = ref.gateYamlContent ? (yaml.load(ref.gateYamlContent) as GateYaml) : null;
@@ -2328,15 +2309,41 @@ function buildQualityGatesSection(
   });
 
   const checks = tiered.filter((t) => t.tier === 'check');
-  const omittedSubjects: string[] = [];
+  const omitted: TieredGateRef[] = [];
   const reminders = tiered.filter((t) => {
     if (t.tier !== 'reminder') return false;
     if (t.subject && harnessCovers.includes(t.subject)) {
-      omittedSubjects.push(t.subject);
+      omitted.push(t);
       return false;
     }
     return true;
   });
+
+  return { checks, reminders, omitted, passthrough };
+}
+
+/**
+ * Builds the Quality Gates markdown section for SKILL.md.
+ *
+ * Registered gates split into `### Checks` (a command/tool line, never guidance) and
+ * `### Reminders` (the criteria table, as before) by `deriveGateTier` — mirroring
+ * `GateGuidanceRenderer.renderGuidance`'s runtime split, so an exported skill reads like a live
+ * dispatch. `partition` already excludes a reminder whose `subject` this installation's harness
+ * covers; checks are never suppressed (ruling B2).
+ */
+function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: boolean): string {
+  const { checks, reminders, omitted, passthrough } = partition;
+  if (
+    checks.length === 0 &&
+    reminders.length === 0 &&
+    omitted.length === 0 &&
+    passthrough.length === 0
+  ) {
+    return '';
+  }
+
+  const inlineCriteria = passthrough.filter((g) => g.source === 'inline');
+  const inlineDefs = passthrough.filter((g) => g.source === 'inline_definition');
 
   let section = `## Quality Gates\n\n`;
 
@@ -2344,7 +2351,9 @@ function buildQualityGatesSection(
   if (checks.length > 0) {
     section += `### Checks\n\n`;
     for (const { ref, passCriteria } of checks) {
-      section += `${formatExportedCheckLine(ref.name ?? ref.id, passCriteria)}\n`;
+      // `passCriteria` comes off a raw parsed `gate.yaml` as `unknown[]`; cast once here, at
+      // the boundary, rather than inside the shared formatter.
+      section += `${formatCheckLine(ref.name ?? ref.id, passCriteria as Array<Record<string, unknown>>)}\n`;
     }
     section += '\n';
   }
@@ -2361,8 +2370,9 @@ function buildQualityGatesSection(
     section += `\nSee \`gates/{gateId}/guidance.md\` for detailed criteria.\n\n`;
   }
 
-  if (omittedSubjects.length > 0) {
-    section += `Omitted ${omittedSubjects.length} reminder(s) this installation's harness covers: ${omittedSubjects.join(', ')}.\n\n`;
+  if (omitted.length > 0) {
+    const omittedList = omitted.map((t) => `${t.ref.id} (${t.subject})`).join(', ');
+    section += `Omitted ${omitted.length} reminder(s) this installation's harness covers: ${omittedList}.\n\n`;
   }
 
   // Inline definitions
@@ -2609,6 +2619,20 @@ function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean }
 }
 
 /**
+ * The refs a skill build's `emitGateFiles` call should see: every registered ref
+ * `partitionGateRefs` kept (checks + live reminders) plus inline/inline_definition refs
+ * untouched — but never an `omitted` reminder, so its `gates/<id>/` files and manifest entry
+ * are absent the same way its SKILL.md line is (plan row 2.3).
+ */
+function gateRefsForEmit(partition: PartitionedGateRefs): IRGateRef[] {
+  return [
+    ...partition.checks.map((t) => t.ref),
+    ...partition.reminders.map((t) => t.ref),
+    ...partition.passthrough,
+  ];
+}
+
+/**
  * Emits gate output files (gate.yaml + guidance.md) for registered gates.
  */
 export function emitGateFiles(
@@ -2711,6 +2735,7 @@ function buildClaudeCodeSkill(
     config.capabilities.skillFrontmatterHooks &&
     ir.gateRefs.length > 0 &&
     ir.enforceGateHooks === true;
+  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers);
 
   // Frontmatter
   const fm: Record<string, unknown> = { name: ir.name, description: ir.description };
@@ -2742,7 +2767,7 @@ function buildClaudeCodeSkill(
   }
 
   // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(ir.gateRefs, hookEnforced, harnessCovers);
+  body += buildQualityGatesSection(gatePartition, hookEnforced);
 
   // Usage / user message template (compiled)
   if (ir.userMessage) {
@@ -2830,8 +2855,9 @@ function buildClaudeCodeSkill(
     }
   }
 
-  // Gate files (gate.yaml + guidance.md)
-  files.push(...emitGateFiles(ir.gateRefs, subDir, ir.id));
+  // Gate files (gate.yaml + guidance.md) — same partition the section above rendered from, so
+  // a reminder this harness covers ships neither the SKILL.md line nor its gates/<id>/ files.
+  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id));
 
   // Doc files (docs/*.md bundled from source prompt)
   files.push(...emitDocFiles(ir.docFiles, subDir));
@@ -2853,6 +2879,7 @@ function buildAgentSkillsSkill(
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
   const variant = config.variant ?? 'codex';
+  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers);
 
   // Core Agent Skills frontmatter
   const fm: Record<string, unknown> = {
@@ -2899,7 +2926,7 @@ function buildAgentSkillsSkill(
   }
 
   // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(ir.gateRefs, false, harnessCovers);
+  body += buildQualityGatesSection(gatePartition, false);
 
   if (ir.userMessage) {
     body += `## Usage\n\n${compileTemplateToPlaintext(ir.userMessage.trim(), ir.arguments)}\n`;
@@ -2997,8 +3024,9 @@ function buildAgentSkillsSkill(
     }
   }
 
-  // Gate files (gate.yaml + guidance.md)
-  files.push(...emitGateFiles(ir.gateRefs, subDir, ir.id));
+  // Gate files (gate.yaml + guidance.md) — same partition the section above rendered from, so
+  // a reminder this harness covers ships neither the SKILL.md line nor its gates/<id>/ files.
+  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id));
 
   // Doc files (behind assets capability)
   if (config.capabilities.assets) {

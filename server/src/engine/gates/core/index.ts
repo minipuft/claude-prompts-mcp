@@ -52,6 +52,7 @@ export {
   validateGateSchema,
   isValidGateDefinition,
   type GateDefinitionYaml as GateDefinitionYamlSchema,
+  type LoadedGateDefinition,
   type GatePassCriteriaYaml,
   type GateActivationYaml,
   type GateRetryConfigYaml,

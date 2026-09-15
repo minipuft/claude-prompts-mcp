@@ -205,13 +205,14 @@ function isBlank(value: string | undefined): boolean {
 }
 
 /**
- * The shape of one `pass_criteria` entry as written in a `gate.yaml`.
+ * The shape of one `pass_criteria` entry as written in a `gate.yaml` — the WRITE side.
  *
- * `z.input`, not `z.infer`: this names the file's shape, which is the parser's INPUT side, and
- * `GateDefinitionLoader` hands consumers the raw parsed YAML rather than zod's output — it
- * validates with `validateGateSchema` and discards `result.data`. Typing consumers with the
- * output side would tell them a defaulted field is always present on an object that never went
- * through `parse`, which is how a real `?? 'medium'` guard reads as dead code.
+ * `z.input`, not `z.infer`: this names the file's shape, which is the parser's INPUT side, so it
+ * is what a caller holds while BUILDING a criterion to write back to disk, where a field the
+ * schema defaults is legitimately absent. A criterion READ back from `GateDefinitionLoader`
+ * arrives inside `LoadedGateDefinition`, the parser's output side, with those defaults already
+ * applied. Naming the two sides apart is what keeps a `?? fallback` from being written against
+ * an object that cannot be missing the field.
  */
 export type GatePassCriteriaYaml = z.input<typeof GatePassCriteriaSchema>;
 
@@ -406,17 +407,29 @@ export const GateDefinitionSchema = z
  * length fields (row 1.5) each had to be edited in two places.
  *
  * Two consequences of deriving rather than declaring, both deliberate:
- * - `z.input`, not `z.infer`. A gate.yaml is the parser's INPUT, and that is what consumers
- *   actually hold: `GateDefinitionLoader` returns the raw YAML object and validates it beside,
- *   discarding `result.data`, so zod's `.default()` for `severity` and `gate_type` has NOT been
- *   applied to the object a consumer reads. On the output side both fields are required, which
- *   would mark every real `?? 'medium'` fallback as dead code and invite deleting it.
+ * - Two names for the two sides of one schema. `GateDefinitionYaml` is `z.input`: the WRITE
+ *   side, the shape of the text a caller authors into a `gate.yaml`, where `severity` and
+ *   `gate_type` may legitimately be absent because the schema supplies them. `LoadedGateDefinition`
+ *   (below) is `z.output`: the READ side, what `GateDefinitionLoader` hands back after parsing,
+ *   where those defaults have been applied and both fields are present. Hold the input side to
+ *   build yaml; hold the output side to read a loaded gate, where a `?? 'medium'` fallback is
+ *   dead code the compiler can point at rather than a guard anyone still needs.
  * - `.passthrough()` puts an `unknown` index signature on the type, so a key this schema does
  *   not declare is reachable only as `definition['key']` and only as `unknown`. That is the
  *   pressure that keeps a load-bearing key declared here: `evaluation` and `blockResponseOnFail`
  *   were passthrough-only and read at runtime anyway, which is exactly the gap this SSOT closes.
  */
 export type GateDefinitionYaml = z.input<typeof GateDefinitionSchema>;
+
+/**
+ * A gate definition as `GateDefinitionLoader` hands it back — the READ side.
+ *
+ * `z.output`: the loader parses every `gate.yaml` through `GateDefinitionSchema` and returns the
+ * parse result, so `severity`, `gate_type` and the `retry_config` fields carry their schema
+ * defaults by the time any consumer sees them. Anything holding a LOADED definition takes this
+ * type; anything BUILDING one to write to disk takes `GateDefinitionYaml` above.
+ */
+export type LoadedGateDefinition = z.output<typeof GateDefinitionSchema>;
 
 // ============================================
 // Validation Utilities
@@ -432,8 +445,8 @@ export interface GateSchemaValidationResult {
   errors: string[];
   /** Validation warnings (non-blocking issues) */
   warnings: string[];
-  /** Parsed data if validation passed */
-  data?: GateDefinitionYaml;
+  /** Parsed data if validation passed — zod's output, with schema defaults applied */
+  data?: LoadedGateDefinition;
 }
 
 /**

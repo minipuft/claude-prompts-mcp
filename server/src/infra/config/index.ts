@@ -43,7 +43,7 @@ import {
   DEFAULT_INJECTION_CONFIG,
   type InjectionConfig,
   type ConfigManager,
-  type GatesConfig,
+  type GateSystemSettings,
 } from '#shared/types/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
@@ -445,12 +445,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Get gates configuration (unified gate settings)
    * Reads from gates config section with new property names
    */
-  getGatesConfig(): GatesConfig {
+  getGatesConfig(): GateSystemSettings {
     const gatesConfig = this.config.gates ?? {};
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
       enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
+      executeInlineGateDefinitions:
+        gatesConfig.executeInlineGateDefinitions ??
+        DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
       harnessCovers: gatesConfig.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
       reminderTokenBudget:
         gatesConfig.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,

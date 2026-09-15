@@ -12,6 +12,7 @@ export type {
   GateActivationRules,
   GateActivationContext,
   GateDefinitionYaml,
+  LoadedGateDefinition,
   GateRetryConfig,
 } from './gate-guide-types.js';
 
