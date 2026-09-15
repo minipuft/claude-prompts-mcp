@@ -387,11 +387,19 @@ export class FrameworkLifecycleProcessor {
       // uninitialized manager, an unavailable registry, a guide that loads but cannot be
       // retrieved, a definition that fails to generate, or a thrown error — only one of which is
       // "the file is missing". The previous text sent operators to check a file that exists.
+      //
+      // Resolved through the same roots the loader itself reads (`resolveExistingFrameworkDir`
+      // checks the writable root first, then the bundled root — matching
+      // `RuntimeFrameworkLoader`'s primary-then-additional-dirs order). Falls back to the write
+      // target (`getFrameworkDir`) when the id resolves nowhere, since that is where an operator
+      // would place the file.
+      const frameworkDir =
+        this.ctx.fileService.resolveExistingFrameworkDir(id) ??
+        this.ctx.fileService.getFrameworkDir(id);
       return this.error(
         `Failed to reload framework '${id}' — it could not be registered from disk. Check the ` +
           `server log for the reason, then verify that ` +
-          `${path.join(this.ctx.configManager.getServerRoot(), 'resources', 'frameworks', id.toLowerCase(), 'framework.yaml')} ` +
-          `exists and parses.`
+          `${path.join(frameworkDir, 'framework.yaml')} exists and parses.`
       );
     }
 
@@ -475,15 +483,6 @@ export class FrameworkLifecycleProcessor {
    * surface and does the whole job: `loadAndRegisterById` (guide) → `generateSingleFrameworkDefinition`
    * → set in the framework map. It returns false rather than throwing when nothing loads.
    */
-  private frameworkDir(id: string): string {
-    return path.join(
-      this.ctx.configManager.getServerRoot(),
-      'resources',
-      'frameworks',
-      id.toLowerCase()
-    );
-  }
-
   private async reregister(id: string): Promise<boolean> {
     return await reregisterFramework(this.ctx, id);
   }
@@ -553,7 +552,7 @@ export class FrameworkLifecycleProcessor {
         success: false,
         error: removed
           ? 'Registry registration failed - files rolled back'
-          : `Registry registration failed, AND the files could not be removed — ${this.frameworkDir(normalizedId)} may still exist. Delete it before retrying.`,
+          : `Registry registration failed, AND the files could not be removed — ${this.ctx.fileService.getFrameworkDir(normalizedId)} may still exist. Delete it before retrying.`,
       };
     }
 
@@ -567,7 +566,7 @@ export class FrameworkLifecycleProcessor {
         error:
           unregistered && removed
             ? 'Framework registration failed - registry and files rolled back'
-            : `Framework registration failed, and rollback was incomplete: ${unregistered ? 'guide unregistered' : 'guide NOT unregistered'}, ${removed ? 'files removed' : `files NOT removed (${this.frameworkDir(normalizedId)} may still exist)`}.`,
+            : `Framework registration failed, and rollback was incomplete: ${unregistered ? 'guide unregistered' : 'guide NOT unregistered'}, ${removed ? 'files removed' : `files NOT removed (${this.ctx.fileService.getFrameworkDir(normalizedId)} may still exist)`}.`,
       };
     }
 
