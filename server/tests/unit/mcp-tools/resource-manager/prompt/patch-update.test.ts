@@ -111,7 +111,20 @@ function createProcessor(
     dependencies,
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
-    fileOperations: { updatePromptImplementation },
+    // The diff is read off the writer's projection. This double projects the one file these edits
+    // land in, from the state the write double last left, so a version row's diff summary counts
+    // the change the update makes.
+    fileOperations: {
+      updatePromptImplementation,
+      projectPromptWrite: jest.fn(async (promptData: Record<string, unknown>) => [
+        {
+          path: 'general/review_code/user-message.md',
+          previousPath: 'general/review_code/user-message.md',
+          before: String(currentPrompt['userMessageTemplate'] ?? ''),
+          after: String(promptData['userMessageTemplate'] ?? ''),
+        },
+      ]),
+    },
     getData: () => ({ convertedPrompts: [currentPrompt] }),
     versionHistoryService: {
       isAutoVersionEnabled: () => true,
