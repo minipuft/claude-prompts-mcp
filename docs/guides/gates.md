@@ -407,6 +407,25 @@ or, when the review advertised reminders but nothing is being attested or excuse
 REMINDERS: none
 ```
 
+### Evidence for delegated work
+
+A delegated step reports back in prose, and prose is easy to write and hard to check. The
+convention that makes it checkable is one line under the handoff's `done` heading:
+
+```
+done — artifacts: src/engine/gates/core/gate-schema.ts, tests/unit/gates/core/gate-schema.test.ts
+```
+
+The `handoff-artifacts` gate reads that line and confirms every path on it exists. It is a
+check-tier gate, so a review cannot walk past its failure with a `PASS`.
+
+It is opt-in: it has no `activation` block, so it attaches only where you name it — in a prompt's
+`gateConfiguration.include`, or in a chain step's `inlineGateIds`. Two things have to be true for
+it to run. The operator's `MCP_SHELL_VERIFY_ALLOWLIST` has to include `node`, or the executor
+refuses the command and records a failure. And the paths have to exist relative to the server's
+working directory — for a server installed somewhere other than the repository under review, they
+will not, so leave the gate off there rather than reading its failures as missing work.
+
 ## Combining Gates
 
 Gates can be combined with other operators:

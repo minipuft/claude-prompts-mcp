@@ -2,7 +2,7 @@
 
 # Gate Index
 
-25 gates across 7 groups.
+26 gates across 7 groups.
 
 For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
 
@@ -16,6 +16,7 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
+| `handoff-artifacts` | check | high | opt-in | evidence | 122 | Fails a delegated step whose handoff names no artifacts, or names one that does not exist where the check runs |
 | `math-fidelity` | reminder | high | explicit only | math | 627 | New shader/GL math must ship as a complete derivation card: optical model naming the finest visible feature, continuous math with range contracts, MEASURED discretization (regime classified from probed numbers, never eyeballed), a LOCK/identity contract, an offline harness, and a live probe with a numeric threshold. |
 | `workflow-diagnosis` | reminder | high | workflow, refactoring | diagnosis | 233 | Validates that the Diagnosis Card synthesizes collected signals into a named pattern before implementation. Required when pre-flight has 2+ failures, multiple skills flag the same area, or multi-file changes are planned. |
 | `workflow-integration` | reminder | high | workflow, implementation | integration | 219 | Validates that replaced systems are fully removed, integration points are tested, and no orphaned references remain. Ensures clean state before marking work complete. |
@@ -62,8 +63,8 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
-| `pr-security` | reminder | critical (blocking) | artifacts: source | security | 345 | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
-| `pr-performance` | reminder | medium (advisory) | artifacts: source | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
+| `pr-security` | reminder | critical (blocking) | artifacts: source · explicit only | security | 345 | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
+| `pr-performance` | reminder | medium (advisory) | artifacts: source · explicit only | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
 
 ## Framework
 

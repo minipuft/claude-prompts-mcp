@@ -102,13 +102,18 @@ function activationSummary(gate) {
   // runtime (`isGateActiveForContext`) never consults `prompt_categories` once this is set, so
   // printing them beside it would claim a say they no longer have.
   const artifacts = gate.activation?.artifacts ?? [];
+  const explicit = gate.activation?.explicit_request;
   if (artifacts.length > 0) {
-    return `artifacts: ${artifacts.join(', ')}`;
+    // `explicit_request` still applies on this branch: artifacts decide WHICH surfaces the gate
+    // is eligible for, `explicit_request: true` decides that it never auto-attaches to any of
+    // them. Dropping the suffix here printed `pr-security` and `pr-performance` as if they
+    // attached to every source change.
+    const summary = `artifacts: ${artifacts.join(', ')}`;
+    return explicit === true ? `${summary} · explicit only` : summary;
   }
 
   const parts = [];
   const cats = gate.activation?.prompt_categories ?? [];
-  const explicit = gate.activation?.explicit_request;
   const frameworks = gate.activation?.framework_context ?? [];
 
   if (cats.length > 0) parts.push(cats.join(', '));

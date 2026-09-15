@@ -48,3 +48,6 @@ artifacts:
   fromArgument: files
 gateConfiguration:
   framework_gates: false
+  # Row 1.2 dropped the exclusion list, so the RADIANT creed gate re-attaches on category
+  # `development` under an active framework — and the worker brief is not a visual surface.
+  exclude: [creed-fidelity]

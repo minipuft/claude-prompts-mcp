@@ -195,7 +195,7 @@ describe('subject propagates from gate.yaml to the loaded definition', () => {
   });
 });
 
-// Row 0.6 measured that nothing ran the 25 registry gate.yaml files through
+// Row 0.6 measured that nothing ran the 26 registry gate.yaml files through
 // GateDefinitionSchema, so a malformed `subject:` there (or any other schema violation)
 // passed silently — a per-instance fix (row 0.6's own edits) does not close a per-CLASS
 // gap. This closes the class: every registry gate is validated, not just the ones a test
@@ -214,8 +214,9 @@ describe('every registry gate.yaml satisfies GateDefinitionSchema', () => {
 
   test('the registry has not silently lost or gained gates', () => {
     // Guards the fixture itself: a count assertion below only means something if this
-    // enumeration still finds all 25 directories row 0.6 authored `subject:` into.
-    expect(gateIds.length).toBe(25);
+    // enumeration still finds all 26 directories carrying a `subject:` (25 from row 0.6,
+    // plus `handoff-artifacts`).
+    expect(gateIds.length).toBe(26);
   });
 
   test.each(gateIds)('%s: valid against the schema, with a kebab-case subject', (gateId) => {
