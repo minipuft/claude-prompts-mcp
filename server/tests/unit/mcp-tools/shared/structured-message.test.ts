@@ -7,7 +7,7 @@
  * `structuredContent.message`, or that text never reaches the model.
  */
 
-import { deriveStructuredMessage } from '../../../../src/mcp/tools/shared/structured-response-builder.js';
+import { deriveStructuredMessage } from '../../../../src/mcp/tools/shared/structured-message.js';
 
 import type { ToolResponse } from '../../../../src/shared/types/index.js';
 

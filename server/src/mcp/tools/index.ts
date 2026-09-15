@@ -37,7 +37,7 @@ import {
   type ToolSurfaceState,
   type ResourceManagerInput as ResourceManagerSchemaInput,
 } from './schemas/index.js';
-import { deriveStructuredMessage } from './shared/structured-response-builder.js';
+import { deriveStructuredMessage } from './shared/structured-message.js';
 import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
