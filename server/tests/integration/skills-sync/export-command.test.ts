@@ -1193,4 +1193,69 @@ describe('Export Command Integration', () => {
       expect(await exists(path.join(outputDir, 'strategic_worker', 'gates'))).toBe(false);
     });
   });
+
+  // ── B2 / row 1.4: check-tier gates render as commands, reminders keep the
+  // criteria table, and gates.harnessCovers suppresses a reminder whose subject the
+  // installation's harness already covers ──────────────────────────────────────
+
+  describe('check/reminder tiers and gates.harnessCovers (ruling B2, row 1.4)', () => {
+    /** `config.json`'s `gates.harnessCovers` — a plain JSON write, the shape the exporter reads. */
+    async function writeServerConfig(harnessCovers: string[]): Promise<void> {
+      await writeFile(
+        path.join(serverRoot, 'config.json'),
+        JSON.stringify({ gates: { harnessCovers } }, null, 2)
+      );
+    }
+
+    beforeEach(async () => {
+      // Real shapes, not synthetic ones: mirrors resources/gates/test-suite,
+      // security-awareness, code-quality — one shell_verify check, two subject-tagged
+      // reminders.
+      await writeGate('test-suite', 'Test Suite Verification', {
+        subject: 'testing',
+        pass_criteria: [{ type: 'shell_verify', shell_command: ['npm', 'test'] }],
+      });
+      await writeGate('security-awareness', 'Security Best Practices', {
+        subject: 'security',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+      await writeGate('code-quality', 'Code Quality Standards', {
+        subject: 'code-quality',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+      await writePrompt('general', 'tiered', {
+        gateConfiguration: { include: ['test-suite', 'security-awareness', 'code-quality'] },
+      });
+    });
+
+    it('renders the check under ### Checks, keeps code-quality under ### Reminders, and omits the harness-covered reminder', async () => {
+      await writeServerConfig(['security']);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+      const checksSection = /### Checks\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
+      const remindersSection = /### Reminders\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
+
+      expect(checksSection).toContain('Passes `npm test`');
+      expect(remindersSection).toContain('code-quality');
+      expect(skill).not.toContain('security-awareness');
+      expect(skill).toContain(
+        "Omitted 1 reminder(s) this installation's harness covers: security."
+      );
+    });
+
+    it('keeps every gate and emits no omission line when harnessCovers is empty', async () => {
+      await writeServerConfig([]);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+
+      expect(skill).toContain('Passes `npm test`');
+      expect(skill).toContain('security-awareness');
+      expect(skill).toContain('code-quality');
+      expect(skill).not.toContain('Omitted');
+    });
+  });
 });
