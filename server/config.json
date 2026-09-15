@@ -20,15 +20,14 @@
     "evaluation": {
       "defaultMode": "self"
     },
-    "frameworkGates": true,
-    "mode": "on"
+    "frameworkGates": true
   },
   "hooks": {
     "expandedOutput": true
   },
   "logging": {
     "directory": "./logs",
-    "level": "debug"
+    "level": "info"
   },
   "frameworks": {
     "dynamicToolDescriptions": true,
