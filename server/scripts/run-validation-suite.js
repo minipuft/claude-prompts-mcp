@@ -76,6 +76,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'typecheck:scripts',
+    io: 'read',
+    reads: ['spawn'],
+    converse:
+      "CHECKED — a planted type error in a new scripts/*.ts file (scripts/_planted_row05.ts, `const x: number = 'not a number'`) is reported by file name and the run exits non-zero; deleting the file returns the run to exit 0",
+  },
+  {
     script: 'typecheck:tests:ratchet',
     io: 'read',
     reads: ['file', 'spawn'],

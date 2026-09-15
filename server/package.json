@@ -45,6 +45,7 @@
     "build:tsc:watch": "tsc --project tsconfig.json --watch",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "typecheck:tests": "tsc --noEmit --project tsconfig.test.json",
+    "typecheck:scripts": "tsc --noEmit --project tsconfig.scripts.json",
     "typecheck:tests:ratchet": "node scripts/typecheck-tests-ratchet.js check",
     "typecheck:tests:ratchet:baseline": "node scripts/typecheck-tests-ratchet.js update-baseline",
     "lint": "eslint .",
