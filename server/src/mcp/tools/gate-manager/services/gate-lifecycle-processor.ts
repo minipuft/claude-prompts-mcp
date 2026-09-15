@@ -148,6 +148,29 @@ export class GateLifecycleProcessor {
       enforcementMode,
     };
 
+    // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
+    // already carries every field merged with its existing value, so it cannot itself say which
+    // were caller-supplied and which were only carried forward. `GateFileWriter` uses this to
+    // narrow which files a write touches: a key absent here leaves the corresponding file
+    // untouched (byte-identical) rather than re-serialized from `gateData`'s already-merged
+    // values. Mirrors `suppliedKeys` in `prompt-lifecycle-processor.ts` (Fix B write-scope
+    // narrowing).
+    const suppliedKeys = new Set(
+      Object.entries({
+        name,
+        type,
+        description,
+        guidance,
+        pass_criteria,
+        activation,
+        retry_config,
+        severity,
+        enforcementMode,
+      })
+        .filter(([, value]) => value !== undefined)
+        .map(([key]) => key)
+    );
+
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —
     // supplied value, else the existing one — so it needs no merge base.
     const afterState = projectWriteModel(
@@ -157,11 +180,10 @@ export class GateLifecycleProcessor {
     );
 
     // One projection of the write serves the version's diff summary and the update's own diff. It
-    // is resolved from the plan the writer applies, with the payload the writer is handed below, so
-    // both name the files the write lands in (`gate.yaml` and `guidance.md`) and the lines that
-    // change in them.
+    // is resolved from the plan the writer applies, with the payload and scope the writer is
+    // handed below, so both name exactly the files the write lands in and the lines that change.
     const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
-      await this.ctx.gateFileService.projectGateWrite(gateData)
+      await this.ctx.gateFileService.projectGateWrite(gateData, suppliedKeys)
     );
 
     // Auto-versioning — go-forward: version N holds the state edit N produced, so the newest
@@ -197,7 +219,11 @@ export class GateLifecycleProcessor {
           }
         : {};
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      suppliedKeys,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to update gate: ${result.error}`);
     }

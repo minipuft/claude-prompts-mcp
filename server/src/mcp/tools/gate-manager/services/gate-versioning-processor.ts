@@ -95,23 +95,30 @@ export class GateVersioningProcessor {
     let restoredVersion: number | undefined;
     let recordFailure: string | undefined;
 
-    const writeResult = await this.ctx.gateFileService.writeGateFiles(restore.writeModel, {
-      commit: async (): Promise<void> => {
-        try {
-          const saveResult = await this.ctx.versionHistoryService.commitEdit(
-            'gate',
-            id,
-            currentState,
-            snapshot,
-            { description: `Rollback to v${version}`, diff_summary: '' }
-          );
-          restoredVersion = saveResult.version;
-        } catch (error) {
-          recordFailure = error instanceof Error ? error.message : String(error);
-          throw error;
-        }
-      },
-    });
+    // Rollback restores the WHOLE snapshot — no `suppliedKeys` narrowing (the `undefined` below
+    // takes `GateFileWriter`'s "write everything" default), same as `handleCreate`: both own the
+    // complete state being written rather than an edit to a subset of it.
+    const writeResult = await this.ctx.gateFileService.writeGateFiles(
+      restore.writeModel,
+      undefined,
+      {
+        commit: async (): Promise<void> => {
+          try {
+            const saveResult = await this.ctx.versionHistoryService.commitEdit(
+              'gate',
+              id,
+              currentState,
+              snapshot,
+              { description: `Rollback to v${version}`, diff_summary: '' }
+            );
+            restoredVersion = saveResult.version;
+          } catch (error) {
+            recordFailure = error instanceof Error ? error.message : String(error);
+            throw error;
+          }
+        },
+      }
+    );
 
     if (!writeResult.success) {
       return recordFailure !== undefined
