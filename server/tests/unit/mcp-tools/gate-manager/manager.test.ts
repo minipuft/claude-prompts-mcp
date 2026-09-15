@@ -10,8 +10,10 @@ import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-
 import {
   GATE_YAML_EXCLUDED_KEYS,
   GATE_YAML_PROJECTED_KEYS,
+  GateFileWriter,
   PRESERVED_GATE_YAML_KEYS,
 } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+import { gateSnapshotContract } from '../../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';
 
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
@@ -134,6 +136,8 @@ describe('GateToolHandler', () => {
         id: 'new-gate',
         name: 'New Gate',
         description: 'Gate description',
+        // No trailing newline on purpose: `GateFileWriter` appends exactly one for content that
+        // lacks it (owner ruling (a)(2)), so this doubles as the "create" case of that contract.
         guidance: 'Gate guidance',
       },
       {}
@@ -143,7 +147,9 @@ describe('GateToolHandler', () => {
     expect(result.isError).toBe(false);
     expect(existsSync(join(gateDir, 'gate.yaml'))).toBe(true);
     expect(existsSync(join(gateDir, 'guidance.md'))).toBe(true);
-    expect(readFileSync(join(gateDir, 'guidance.md'), 'utf8')).toBe('Gate guidance');
+    // MUTATION KILLED: reverting `ensureTrailingNewline` to a no-op makes this fail — the file
+    // would stay `'Gate guidance'` with no trailing `\n`.
+    expect(readFileSync(join(gateDir, 'guidance.md'), 'utf8')).toBe('Gate guidance\n');
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect((result.content[0] as { text: string }).text).toContain('created successfully');
   });
@@ -504,6 +510,84 @@ describe('GateToolHandler', () => {
       expect(result.isError).toBe(false);
       const rewritten = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
       expect(rewritten).toBe('New guidance.\n');
+    });
+  });
+
+  /**
+   * Owner ruling on resource-manager-gate-newline-2026-09-14 (a)(2): a `version_history` snapshot
+   * recorded BEFORE the guidance.md verbatim-load fix holds `.trim()`'d guidance — lossy, and not
+   * invertible, since `.trim()` cannot say whether the original had zero, one, or more trailing
+   * newlines. Every shipped, Prettier-formatted `guidance.md` ends in exactly one, so restoring
+   * with one is the faithful reconstruction. Fixed once in `GateFileWriter.writeGateFiles` (via
+   * `ensureTrailingNewline`), the single write path create, update, AND rollback all pass through
+   * — tested here directly against the writer, the same way `gate-file-service.test.ts` does,
+   * rather than through the full `GateVersioningProcessor.handleRollback` (which needs a
+   * SQLite-backed `VersionHistoryService` this file's `configManager` stub deliberately disables).
+   */
+  describe('GateFileWriter appends exactly one trailing newline to unterminated guidance (owner ruling (a)(2))', () => {
+    function gateFileWriterConfigManager(): ConfigManager {
+      return {
+        getGatesDirectory: () => gatesDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager;
+    }
+
+    test('rollback/restore of a pre-fix snapshot (no trailing newline) writes guidance.md ending with exactly one \\n', async () => {
+      const gateId = 'rollback-newline-gate';
+      mkdirSync(join(gatesDir, gateId), { recursive: true });
+
+      // The pre-fix shape: `gateSnapshotContract.project()` recorded `.trim()`'d guidance before
+      // this fix existed. `restore` is what `handleRollback` calls on a resolved version row.
+      const preFixSnapshot = {
+        id: gateId,
+        name: 'Newline Gate',
+        type: 'validation',
+        description: 'Existing description',
+        guidance: 'Check the thing.', // no trailing \n — the pre-fix, lossy, recorded value
+      };
+      const restore = gateSnapshotContract.restore(gateId, preFixSnapshot);
+      expect(restore.ok).toBe(true);
+      if (!restore.ok) return;
+
+      const writer = new GateFileWriter({ logger, configManager: gateFileWriterConfigManager() });
+      const writeResult = await writer.writeGateFiles(restore.writeModel);
+      expect(writeResult.success).toBe(true);
+
+      // MUTATION KILLED: reverting `ensureTrailingNewline` to `return guidance;` unconditionally
+      // makes this fail — the restored file would stay `'Check the thing.'` with no `\n`.
+      // Confirmed by applying that mutation, re-running this file (red), and reverting.
+      const written = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
+      expect(written).toBe('Check the thing.\n');
+    });
+
+    test('create with guidance lacking a trailing newline writes exactly one', async () => {
+      const writer = new GateFileWriter({ logger, configManager: gateFileWriterConfigManager() });
+      const writeResult = await writer.writeGateFiles({
+        id: 'create-newline-gate',
+        name: 'Create Newline Gate',
+        type: 'validation',
+        description: 'Existing description',
+        guidance: 'No newline yet',
+      });
+
+      expect(writeResult.success).toBe(true);
+      const written = readFileSync(join(gatesDir, 'create-newline-gate', 'guidance.md'), 'utf8');
+      expect(written).toBe('No newline yet\n');
+    });
+
+    test('content already ending in a newline is written unchanged — no collapsing of extra trailing newlines', async () => {
+      const writer = new GateFileWriter({ logger, configManager: gateFileWriterConfigManager() });
+      const writeResult = await writer.writeGateFiles({
+        id: 'multi-newline-gate',
+        name: 'Multi Newline Gate',
+        type: 'validation',
+        description: 'Existing description',
+        guidance: 'Already terminated.\n\n\n',
+      });
+
+      expect(writeResult.success).toBe(true);
+      const written = readFileSync(join(gatesDir, 'multi-newline-gate', 'guidance.md'), 'utf8');
+      expect(written).toBe('Already terminated.\n\n\n');
     });
   });
 });

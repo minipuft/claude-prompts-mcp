@@ -109,6 +109,27 @@ export function resolvePreservedGateYamlFields(
   return preserved;
 }
 
+/**
+ * The one place guidance content becomes `guidance.md`'s bytes — create, update, and rollback
+ * (`gate-versioning-processor.ts` `handleRollback`) all pass their `guidance` through
+ * `writeGateFiles`, so fixing it here closes every write path in one place rather than N call
+ * sites (owner ruling, resource-manager-gate-newline-2026-09-14 (a)(2)).
+ *
+ * Non-empty content that does not already end in `\n` gets exactly one appended: every shipped,
+ * Prettier-formatted `guidance.md` ends that way, so a pre-fix `version_history` snapshot — whose
+ * guidance was `.trim()`'d on load before this fix existed and can never recover its original
+ * trailing whitespace — restores to the faithful reconstruction on rollback. Content that already
+ * ends in `\n` is returned UNCHANGED: this must not collapse multiple trailing newlines to one,
+ * or an update that changes only an unrelated field on an already-correct file would rewrite it
+ * anyway, reopening the byte-identity this writer exists to hold.
+ */
+function ensureTrailingNewline(guidance: string): string {
+  if (guidance === '' || guidance.endsWith('\n')) {
+    return guidance;
+  }
+  return `${guidance}\n`;
+}
+
 export interface GateFileWriterDependencies {
   logger: Logger;
   configManager: ConfigManager;
@@ -165,7 +186,7 @@ export class GateFileWriter {
         await writeFile(yamlPath, yamlContent, 'utf8');
         paths.push(yamlPath);
 
-        await writeFile(guidancePath, data.guidance, 'utf8');
+        await writeFile(guidancePath, ensureTrailingNewline(data.guidance), 'utf8');
         paths.push(guidancePath);
 
         return { paths };
