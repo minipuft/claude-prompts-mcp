@@ -392,9 +392,7 @@ export class FrameworkLifecycleProcessor {
       // checks the writable root first, then the bundled root — matching
       // `RuntimeFrameworkLoader`'s primary-then-additional-dirs order). Falls back to the write
       // target (`getFrameworkDir`) when the id resolves nowhere, since that is where an operator
-      // would place the file. This built the path from `getServerRoot()` directly until B.26,
-      // hardcoding the package tree and pointing at the wrong directory whenever a workspace or
-      // personal library was configured — the same defect class fixed for delete in `9e229e1e`.
+      // would place the file.
       const frameworkDir =
         this.ctx.fileService.resolveExistingFrameworkDir(id) ??
         this.ctx.fileService.getFrameworkDir(id);
