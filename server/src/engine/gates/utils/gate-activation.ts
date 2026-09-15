@@ -20,7 +20,7 @@ import type { GateActivationRules, GateActivationContext } from '../types/index.
  * This is the canonical implementation of gate activation logic.
  * Use this function instead of implementing activation checks inline.
  *
- * @param activation - The gate's activation rules (or undefined for always-active)
+ * @param activation - The gate's activation rules (or undefined for opt-in only)
  * @param context - The context to check against
  * @param gateType - Optional gate type for special handling ('framework' gates use AND logic)
  * @returns true if the gate should be active
@@ -39,9 +39,11 @@ export function isGateActiveForContext(
   context: GateActivationContext,
   gateType?: 'framework' | 'category' | 'custom'
 ): boolean {
-  // No activation rules means always active
+  // No activation rules means opt-in: this gate is registry-auto-activated for nobody. It
+  // still attaches when a prompt or chain step names it explicitly (`gateConfiguration.include`,
+  // `inlineGateIds`) — those paths never call this function, they add the id directly.
   if (activation === undefined) {
-    return true;
+    return false;
   }
 
   // Check explicit request requirement (applies to all gate types)
