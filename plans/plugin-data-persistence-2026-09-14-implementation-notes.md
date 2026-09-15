@@ -52,3 +52,34 @@ reached hooks but not the MCP child. The two clients differ, which is why R2 kee
 - `extension-publish.yml`'s render check;
 - CLAUDE.md §Environment (paths) and its `AGENTS.md` projection;
 - any doc that says the Claude Code plugin's workspace is the plugin root.
+
+## Worker W accepted in part (2026-09-14)
+
+Rows 1.1, 1.2 and 1.4 merged. Planner probes re-ran the render check, its self-test and the new hook cases. Row 1.3's
+drive found the gap that row 1.5 now owns: a workspace resolves resource directories by existence, and an empty data
+directory has none.
+
+**Owner's `--plugin-dir` dev setup, read from the code by W:**
+
+- **Moves:** `state.db` goes from the checkout's `runtime-state/` (1.9 MB, live) to
+  `~/.claude/plugins/data/claude-prompts-inline/runtime-state/`, starting empty. Gate toggles, framework selection,
+  argument history and version history start over, and logs move too.
+- **Stays:** resources, because the shell's `MCP_RESOURCES_PATH` still wins; the packaged config; and hook-owned
+  `hooks-state.db` / `verify-state.db` in `server/runtime-state`.
+- **Hooks:** until the new server writes its first `state.db`, the hooks fall back to the checkout's stale one. To keep
+  history, copy the old `state.db` into the data directory once. That is the owner's call.
+
+**Closed, not rows:**
+
+- **Project-scope skills-sync export** resolves a relative `outputDir.project` against `MCP_WORKSPACE`
+  (`skills-sync/service.ts` near 784). The plugin server's value moves from the plugin root to the data directory, and
+  neither is the user's project. ✗ KILLED (2026-09-14 · no plugin user runs a project-scope export from the plugin
+  server's workspace, and the old base was not the project either · revives if a user reports an export landing in
+  the plugin data directory)
+- **Codex hooks and `CLAUDE_PLUGIN_DATA`**: unmeasured. If Codex sets the variable, its hooks check a directory the
+  Codex server never writes. ✗ KILLED (2026-09-14 · harmless unless a `state.db` exists there, and codex-prompts runs
+  its own launcher · revives if a Codex hook reads a `state.db` its server did not write)
+- **`docs/guides/gates.md` near 317** shows the plugin with `MCP_WORKSPACE=~/.claude/`, which the plugin's own env
+  overrides. ✗ KILLED (2026-09-14 · wrong before this change, and the file is mid-edit in the `claude-prompts-mcp-findings`
+  worktree · revives when that worktree's changes merge, as a row of its own)
+- **`AGENTS.md` sits 575 bytes under its budget** after row 1.4. Recorded for the next guidance edit.
