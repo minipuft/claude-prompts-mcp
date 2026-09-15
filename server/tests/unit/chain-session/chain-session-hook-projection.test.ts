@@ -372,6 +372,82 @@ describe('chain_sessions hook projection — byte parity', () => {
   });
 });
 
+/**
+ * A port supplied at construction, with no `setDatabasePort` call.
+ *
+ * The runtime used to build the store portless and late-bind the port, so every start warned
+ * "persistence disabled" for a store that went on to persist. These pin the construction path the
+ * runtime now takes: the first `initialize()` is the real one, and the executor's later forwarding
+ * of the same port stays inert.
+ */
+describe('chain session store — DatabasePort at construction', () => {
+  const NO_PORT_WARNING = 'ChainSessionStore: no DatabasePort provided, persistence disabled';
+  let store: ChainSessionStore | undefined;
+  let schedulerSpy: ReturnType<typeof jest.spyOn>;
+  let loadSpy: ReturnType<typeof jest.spyOn>;
+
+  const internals = (
+    s: ChainSessionStore
+  ): { initPromise: Promise<void>; runRegistry: ChainRunRegistry | undefined } =>
+    s as unknown as { initPromise: Promise<void>; runRegistry: ChainRunRegistry | undefined };
+
+  const constructWithPort = (port: DatabasePort, logger: Logger): ChainSessionStore =>
+    new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
+      serverRoot: '/tmp/test-construction-port',
+      cleanupIntervalMs: 1000,
+      databasePort: port,
+    });
+
+  beforeEach(() => {
+    schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+    loadSpy = jest.spyOn(ChainSessionStore.prototype as any, 'loadSessions');
+  });
+
+  afterEach(async () => {
+    if (store) {
+      await store.cleanup();
+      store = undefined;
+    }
+    loadSpy.mockRestore();
+    schedulerSpy.mockRestore();
+  });
+
+  test('persists without setDatabasePort and never warns that persistence is disabled', async () => {
+    const port = new RecordingDatabasePort();
+    const logger = createLogger();
+    store = constructWithPort(port, logger);
+    await internals(store).initPromise;
+
+    expect(logger.warn).not.toHaveBeenCalledWith(NO_PORT_WARNING);
+    expect(internals(store).runRegistry).toBeDefined();
+
+    // Held is not live: the first session has to reach the port, both the run rows and the
+    // hook projection.
+    await store.createSession('s1', 'chain-a', 3);
+    expect(port.statements.some((s) => s.sql.includes('INSERT INTO chain_runs'))).toBe(true);
+    expect(countHookRows(port)).toBeGreaterThan(0);
+  });
+
+  test('forwarding the same port again adds no second registry and no second load', async () => {
+    const port = new RecordingDatabasePort();
+    store = constructWithPort(port, createLogger());
+
+    // Once before `initPromise` settles — the earliest the executor could forward it — and once
+    // after, which is the order the runtime composition actually produces.
+    store.setDatabasePort(port);
+    await internals(store).initPromise;
+    const registry = internals(store).runRegistry;
+    store.setDatabasePort(port);
+    await internals(store).initPromise;
+
+    expect(registry).toBeDefined();
+    expect(internals(store).runRegistry).toBe(registry);
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 // The 'position-keyed session upgrade' suite was deleted at v22 with the compat shim it pinned.
 // It loaded a verbatim pre-node-identity blob and asserted the upgraded projection was
 // byte-identical. There is no longer a blob to load: chain runs persist as chain_runs +

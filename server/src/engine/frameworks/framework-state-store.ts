@@ -46,8 +46,13 @@ export interface PersistedFrameworkState {
 export interface FrameworkStateStoreOptions {
   /** Pre-built store; supply to inject a test double or share an engine. */
   stateStore?: SqliteStateStore<PersistedFrameworkState>;
-  /** Framework for scopes with no persisted row. Defaults to {@link DEFAULT_FRAMEWORK_ID}. */
-  defaultFramework?: string;
+  /**
+   * Reads the configured default framework each time it is needed: for scopes with no persisted
+   * row, and as the fallback when the selected framework is missing or removed. A function rather
+   * than a value, so a change to `frameworks.defaultFramework` while the server runs applies
+   * without a restart. Absent means {@link DEFAULT_FRAMEWORK_ID}.
+   */
+  defaultFramework?: () => string;
   /** Scope applied when a caller supplies none — the project this process serves. */
   defaultScope?: StateStoreOptions;
 }
@@ -115,6 +120,8 @@ export class FrameworkStateStore extends EventEmitter {
   private logger: Logger;
   private frameworkManager: FrameworkManager | null = null;
   private scopedStates: Map<string, FrameworkState> = new Map();
+  /** The scope each `scopedStates` key was resolved from, so the state under a key can be saved. */
+  private scopesByKey: Map<string, StateStoreOptions | undefined> = new Map();
   private switchHistory: Array<{ from: string; to: string; timestamp: Date; reason: string }> = [];
   private switchingMetrics = {
     totalSwitches: 0,
@@ -125,7 +132,7 @@ export class FrameworkStateStore extends EventEmitter {
   };
   private isInitialized: boolean = false;
   private readonly serverRoot: string;
-  private readonly defaultFramework: string;
+  private readonly readDefaultFramework: () => string;
   private readonly defaultScope?: StateStoreOptions;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
 
@@ -133,7 +140,7 @@ export class FrameworkStateStore extends EventEmitter {
     super();
     this.logger = logger;
     this.serverRoot = serverRoot;
-    this.defaultFramework = options.defaultFramework ?? DEFAULT_FRAMEWORK_ID;
+    this.readDefaultFramework = options.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID);
     this.defaultScope = options.defaultScope;
 
     if (options.stateStore) {
@@ -142,10 +149,12 @@ export class FrameworkStateStore extends EventEmitter {
 
     // Seed the process's own scope, not the literal 'default' bucket — otherwise the
     // first read would miss it and re-seed under the real key.
+    const defaultKey = resolveContinuityScopeId(this.defaultScope);
     this.scopedStates.set(
-      resolveContinuityScopeId(this.defaultScope),
-      FrameworkStateStore.createDefaultState(this.defaultFramework)
+      defaultKey,
+      FrameworkStateStore.createDefaultState(this.readDefaultFramework())
     );
+    this.scopesByKey.set(defaultKey, this.defaultScope);
   }
 
   /**
@@ -183,8 +192,9 @@ export class FrameworkStateStore extends EventEmitter {
     const key = this.resolveStateKey(scope);
     let state = this.scopedStates.get(key);
     if (!state) {
-      state = FrameworkStateStore.createDefaultState(this.defaultFramework);
+      state = FrameworkStateStore.createDefaultState(this.readDefaultFramework());
       this.scopedStates.set(key, state);
+      this.scopesByKey.set(key, this.effectiveScope(scope));
     }
     return state;
   }
@@ -204,48 +214,30 @@ export class FrameworkStateStore extends EventEmitter {
     this.logger.info('Initializing Framework State Manager...');
 
     try {
-      // Initialize framework manager
-      this.frameworkManager = await createFrameworkManager(this.logger, {
-        defaultFramework: this.defaultFramework,
+      // The one framework manager the server uses: the tools adopt it, and `resource_manager` and
+      // hot reload change the frameworks it holds. Its registry reads the framework loader as it is
+      // now, so the loader must already be configured with the workspace directories.
+      // Given the same reader, so its own fallback answers the value this store falls back to.
+      const frameworkManager = await createFrameworkManager(this.logger, {
+        defaultFramework: this.readDefaultFramework,
       });
+      this.frameworkManager = frameworkManager;
 
-      const defaultState = this.getOrCreateScopedState();
-
-      // Validate persisted framework exists, fallback to default if not
-      const persistedFramework = defaultState.activeFramework;
-      let validatedFramework = this.frameworkManager.getFramework(persistedFramework);
-
-      if (!validatedFramework) {
-        // Persisted framework no longer exists - fallback to first available
-        const availableFrameworks = this.frameworkManager.listFrameworks().map((f) => f.id);
-        const fallbackId = availableFrameworks[0];
-
-        if (!fallbackId) {
-          throw new Error('No frameworks available - cannot initialize');
-        }
-
-        this.logger.warn(
-          `Persisted framework '${persistedFramework}' not found, falling back to '${fallbackId}'`
+      // Validated against the frameworks the server actually has, workspace ones included.
+      const persistedFramework = this.getOrCreateScopedState().activeFramework;
+      if (frameworkManager.getFramework(persistedFramework) === undefined) {
+        await this.selectConfiguredDefault(
+          frameworkManager,
+          undefined,
+          `Persisted framework '${persistedFramework}' not found`
         );
-
-        // Update state with valid framework
-        defaultState.activeFramework = fallbackId;
-        defaultState.switchReason = `Auto-recovered from missing framework '${persistedFramework}'`;
-        defaultState.switchedAt = new Date();
-
-        // Persist the corrected state
-        await this.saveStateToFile();
-
-        validatedFramework = this.frameworkManager.getFramework(fallbackId);
-      }
-
-      if (!validatedFramework) {
-        throw new Error(`Failed to validate framework after fallback`);
       }
 
       this.isInitialized = true;
+      // Linked once initialized, so removing a framework moves the selections held here.
+      frameworkManager.setFrameworkStateStore(this);
       this.logger.info(
-        `Framework State Manager initialized with active framework: ${defaultState.activeFramework}`
+        `Framework State Manager initialized with active framework: ${this.getOrCreateScopedState().activeFramework}`
       );
 
       // Emit initial health status
@@ -281,7 +273,7 @@ export class FrameworkStateStore extends EventEmitter {
           defaultState: () => ({
             version: '1.0.0',
             frameworkSystemEnabled: false,
-            activeFramework: this.defaultFramework,
+            activeFramework: this.readDefaultFramework(),
             lastSwitchedAt: new Date().toISOString(),
             switchReason: 'Initial framework selection',
           }),
@@ -300,10 +292,10 @@ export class FrameworkStateStore extends EventEmitter {
     try {
       // `load()` synthesizes a valid-looking default when no row exists, so it cannot answer
       // "has this scope ever been written?". Only `exists()` can, and that answer is what
-      // decides between using this scope's state and adopting the pre-scoping global row.
-      const persistedState = (await this.stateStore.exists(effective))
-        ? await this.stateStore.load(effective)
-        : undefined;
+      // decides between using this scope's state and adopting the pre-scoping global row —
+      // and, below, between an absent row (expected, quiet) and a corrupt one (a real warning).
+      const stateExists = await this.stateStore.exists(effective);
+      const persistedState = stateExists ? await this.stateStore.load(effective) : undefined;
 
       if (persistedState != null && this.isValidPersistedState(persistedState)) {
         currentState.frameworkSystemEnabled = persistedState.frameworkSystemEnabled;
@@ -319,7 +311,14 @@ export class FrameworkStateStore extends EventEmitter {
         return;
       }
 
-      this.logger.warn('⚠️ Invalid framework state, falling back to defaults');
+      // No row for this scope is the common, expected case on a fresh runtime root — not a
+      // warning-worthy condition. Only a row that exists and still failed validation above is
+      // actually corrupt.
+      if (!stateExists) {
+        this.logger.debug('No saved framework state found; using defaults');
+      } else {
+        this.logger.warn('⚠️ Invalid framework state, falling back to defaults');
+      }
     } catch (error) {
       this.logger.warn(
         `⚠️ Failed to load framework state: ${
@@ -452,6 +451,72 @@ export class FrameworkStateStore extends EventEmitter {
    */
   getFrameworkManager(): FrameworkManager | null {
     return this.frameworkManager;
+  }
+
+  /**
+   * Move every selection naming a framework the manager no longer has to the configured default.
+   *
+   * `FrameworkManager.removeFramework` calls this after a framework is removed. Each move is
+   * persisted before this returns, and `framework-switched` is emitted so tool descriptions follow.
+   *
+   * @throws when a move fails to persist, or the configured default framework is not registered.
+   */
+  async selectDefaultForRemovedFrameworks(): Promise<void> {
+    const manager = this.ensureInitialized();
+    for (const [key, state] of [...this.scopedStates]) {
+      if (!manager.has(state.activeFramework)) {
+        await this.selectConfiguredDefault(
+          manager,
+          this.scopesByKey.get(key),
+          `Active framework '${state.activeFramework}' was removed`
+        );
+      }
+    }
+  }
+
+  /**
+   * Point one scope's selection at the configured default framework and persist it.
+   *
+   * The one recovery for a selection naming a framework the manager does not have, whether it was
+   * missing at startup or removed while the server ran. It selects `frameworks.defaultFramework`,
+   * the framework an operator declared, rather than whichever framework is listed first, and reads
+   * it now rather than at startup. Memory is updated first, and a failed persist propagates to the
+   * caller.
+   */
+  private async selectConfiguredDefault(
+    manager: FrameworkManager,
+    scope: StateStoreOptions | undefined,
+    reason: string
+  ): Promise<void> {
+    const defaultFramework = this.readDefaultFramework();
+    if (manager.getFramework(defaultFramework) === undefined) {
+      throw new Error(
+        `${reason}, and the configured default framework '${defaultFramework}' is not ` +
+          `registered either. Set frameworks.defaultFramework to a registered framework.`
+      );
+    }
+
+    const state = this.getOrCreateScopedState(scope);
+    const previous = state.activeFramework;
+    const switchReason = `${reason}; selected the configured default framework '${defaultFramework}'`;
+    this.scopedStates.set(this.resolveStateKey(scope), {
+      ...state,
+      activeFramework: defaultFramework,
+      previousFramework: previous,
+      switchedAt: new Date(),
+      switchReason,
+    });
+    this.switchHistory.push({
+      from: previous,
+      to: defaultFramework,
+      timestamp: new Date(),
+      reason: switchReason,
+    });
+
+    await this.saveStateToFile(scope);
+
+    this.logger.warn(switchReason);
+    this.emit('framework-switched', previous, defaultFramework, switchReason);
   }
 
   /**
@@ -712,10 +777,12 @@ export class FrameworkStateStore extends EventEmitter {
 
   // Private helper methods
 
-  private ensureInitialized(): void {
+  /** @returns the framework manager, which exists once the store is initialized. */
+  private ensureInitialized(): FrameworkManager {
     if (!this.isInitialized || !this.frameworkManager) {
       throw new Error('FrameworkStateStore not initialized. Call initialize() first.');
     }
+    return this.frameworkManager;
   }
 
   private updateSwitchingMetrics(responseTime: number, success: boolean): void {

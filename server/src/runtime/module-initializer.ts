@@ -34,6 +34,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -104,9 +105,9 @@ export interface ModuleInitResult {
  * PathResolver-derived path. Claiming it here makes that an invariant rather than an ordering
  * accident; the divergence guard in `SqliteEngine.getInstance` names any later disagreement.
  *
- * Extracted rather than inlined: `initializeModules` is already at cognitive complexity 63, and
+ * Extracted rather than inlined: `initializeModules` is already at cognitive complexity 53, and
  * the lint ratchet counts violations, not the number inside one — an inline `if` would have
- * pushed it to 64 with every gate still green.
+ * pushed it to 54 with every gate still green.
  */
 async function claimStateDatabase(
   runtimeDbPath: string | undefined,
@@ -116,6 +117,50 @@ async function claimStateDatabase(
   if (runtimeDbPath === undefined) return;
   const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
   await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+}
+
+/**
+ * Open the state database the MCP tools persist through, or `undefined` when no server root is
+ * configured — the one composition in which persistence is genuinely off.
+ *
+ * Opened BEFORE the tools are built, so `PromptExecutor` hands the port to its chain session store
+ * at construction. That store starts initializing in its constructor; when the port arrived later
+ * through `setDatabasePort`, every start warned "persistence disabled" for a store that went on to
+ * persist. Takes the same `runtimeDbPath` that `claimStateDatabase` claimed the singleton with and
+ * supplies it to `getInstance` here too, so this call opens the same singleton at the same path
+ * rather than merely relying on it already being open.
+ */
+async function openToolsDatabase(
+  runtimeDbPath: string | undefined,
+  serverRoot: string | undefined,
+  logger: Logger
+): Promise<DatabasePort | undefined> {
+  if (serverRoot === undefined || serverRoot === '') return undefined;
+  try {
+    const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+    const dbManager = await SqliteEngine.getInstance(serverRoot, logger, {
+      dbPath: runtimeDbPath,
+    });
+    await dbManager.initialize();
+    return dbManager;
+  } catch (error) {
+    throw toolsDatabaseWiringError(serverRoot, error);
+  }
+}
+
+/**
+ * The startup failure for the tools' database wiring, shared by the open and the wiring step.
+ *
+ * This wiring owns argument history and version history. A swallow here left the rollback feature
+ * silently inert — `resource_manager` would report no versions rather than report that it could not
+ * reach them.
+ */
+function toolsDatabaseWiringError(serverRoot: string | undefined, error: unknown): Error {
+  const msg = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `Failed to wire DatabasePort to MCP tools (serverRoot ${String(serverRoot)}): ${msg}`,
+    { cause: error }
+  );
 }
 
 /**
@@ -232,6 +277,24 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     }
   }
 
+  // Initialize the framework loader with PathResolver-resolved dirs.
+  // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
+  // Must happen before the framework state store is built, and before any pipeline/tool code calls
+  // getDefaultRuntimeLoader(): the store builds the one framework manager the server uses, and that
+  // manager's registry keeps the loader it finds at construction. Configured afterwards, the
+  // manager would read only the package's frameworks and never a workspace one.
+  // Without the bundled tree trailing the search list, a workspace holding a single framework made
+  // the server throw `FATAL: Framework 'cageerf' not found` at startup — `resolveResourceSubdir`
+  // had made that workspace dir the only frameworks root (see `PathResolver.getBundledResourceDir`).
+  const frameworkRoots = resolveResourceRoots(
+    pathResolver,
+    'frameworks',
+    pathResolver?.getFrameworksPath()
+  );
+  const frameworkLoader = getDefaultRuntimeLoader(
+    loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
+  );
+
   if (isVerbose) logger.info('🔄 Initializing Framework State Manager...');
   const frameworkStateRoot =
     typeof configManager.getServerRoot === 'function'
@@ -242,7 +305,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // so supplying it afterwards would leave the seed on the built-in fallback.
   const workspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
   const frameworkStateStore = await createFrameworkStateStore(logger, frameworkStateRoot, {
-    defaultFramework: currentFrameworkConfig.defaultFramework,
+    // Read through the config manager each time, not copied now: it reloads `config.json` when
+    // the file changes, so the fallback follows an edited `frameworks.defaultFramework` exactly as
+    // the delete refusal in `resource_manager` does, without a restart.
+    defaultFramework: () => configManager.getFrameworksConfig().defaultFramework,
     // Every unscoped read and write in this process now resolves to this project.
     ...(workspaceId != null ? { defaultScope: { workspaceId } } : {}),
   });
@@ -269,21 +335,8 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     logger.info(`✅ GateManager initialized with ${gateManager.getStats().totalGates} gates`);
   }
 
-  // Initialize framework + style loaders with PathResolver-resolved dirs
-  // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
-  // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
-  // Without the bundled tree trailing the search list, a workspace holding a single framework made
-  // the server throw `FATAL: Framework 'cageerf' not found` at startup — `resolveResourceSubdir`
-  // had made that workspace dir the only frameworks root (see `PathResolver.getBundledResourceDir`).
-  const frameworkRoots = resolveResourceRoots(
-    pathResolver,
-    'frameworks',
-    pathResolver?.getFrameworksPath()
-  );
-  const frameworkLoader = getDefaultRuntimeLoader(
-    loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
-  );
-
+  // Initialize the style loader with PathResolver-resolved dirs, for the same reason as the
+  // framework loader above: PathResolver is the SSOT for directory resolution and enables overlays.
   const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver?.getStylesPath());
   const styleLoader = getDefaultStyleDefinitionLoader(
     loaderDirsConfig(styleRoots, 'stylesDir', 'additionalStylesDirs')
@@ -310,6 +363,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   if (isVerbose) logger.info('🔄 Initializing MCP tools manager...');
   const metricsCollector = createMetricsCollector(logger);
+  const toolsDatabase = await openToolsDatabase(runtimeDbPath, serverRoot, logger);
   const mcpToolsManager = await createMcpToolsManager(
     logger,
     mcpServer,
@@ -319,7 +373,8 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     callbacks.fullServerRefresh,
     callbacks.restartServer,
     gateManager,
-    metricsCollector
+    metricsCollector,
+    toolsDatabase
   );
 
   if (isVerbose) logger.info('🔄 Updating MCP tools manager data...');
@@ -332,12 +387,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   mcpToolsManager.setSkillsSyncPathsProvider(() => resolveSkillsSyncPaths(pathResolver));
 
   // Wire DatabasePort early so sub-handlers have it before first use
-  if (serverRoot !== undefined && serverRoot !== '') {
+  if (toolsDatabase !== undefined) {
     try {
-      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
       const { SqliteStateStore } = await import('#infra/database/stores/sqlite-store.js');
-      const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
-      await dbManager.initialize();
       // Built here, not in the tracker or in mcp/: `modules-no-infra-static` and
       // `mcp-no-infra-static` both bar those layers from naming a concrete infra store, so the
       // composition root is the only place allowed to construct one. It is handed down as the
@@ -345,7 +397,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       // `INSERT ... kv_state ... 'default'`, which made it a second writer to a table
       // `sqlite-store.ts` owns and pinned all argument history to one shared scope.
       const argHistoryStore = new SqliteStateStore<PersistedArgumentHistory>(
-        dbManager,
+        toolsDatabase,
         {
           tableName: 'kv_state',
           key: 'arg_history',
@@ -361,16 +413,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       // Same launch workspace the tracker and chain stores use, so version_history rows land
       // under the project that produced them instead of one shared 'default' tenant.
       const versionHistoryScope = workspaceId != null ? { workspaceId } : undefined;
-      mcpToolsManager.setDatabasePort(dbManager, argHistoryStore, versionHistoryScope);
+      mcpToolsManager.setDatabasePort(toolsDatabase, argHistoryStore, versionHistoryScope);
     } catch (error) {
-      // This wiring owns argument history and version history. A swallow here left the
-      // rollback feature silently inert — `resource_manager` would report no versions
-      // rather than report that it could not reach them.
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to wire DatabasePort to MCP tools (serverRoot ${serverRoot}): ${msg}`,
-        { cause: error }
-      );
+      throw toolsDatabaseWiringError(serverRoot, error);
     }
   }
 
@@ -378,7 +423,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   mcpToolsManager.setFrameworkStateStore(frameworkStateStore);
 
   if (isVerbose) logger.info('🔄 Initializing Framework Manager...');
-  await mcpToolsManager.setFrameworkManager();
+  mcpToolsManager.setFrameworkManager();
 
   if (isVerbose) logger.info('🔄 Initializing Tool Description Manager...');
   const toolDescriptionLoader = createToolDescriptionLoader(logger, configManager);

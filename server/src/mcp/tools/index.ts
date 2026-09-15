@@ -63,7 +63,7 @@ import type { FrameworkManagerDependencies } from './framework-manager/core/type
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';
 
-import { FrameworkManager, createFrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import {
   isValidGateVerdict,
@@ -215,7 +215,10 @@ export class McpToolRouter {
   async initialize(
     onRefresh: () => Promise<void>,
     onRestart: (reason: string) => Promise<void>,
-    metricsCollector: MetricsCollector
+    metricsCollector: MetricsCollector,
+    // Undefined only when the composition root opened no database; `setDatabasePort` still wires
+    // the remaining handlers afterwards.
+    databasePort?: import('#shared/types/persistence.js').DatabasePort
   ): Promise<void> {
     // Store callback references
     this.onRestart = onRestart;
@@ -243,8 +246,11 @@ export class McpToolRouter {
       this.semanticAnalyzer,
       this.textReferenceStore,
       this.gateManager,
-      this // Pass manager reference for analytics data flow
-      // Removed executionCoordinator - chains now use LLM-driven execution
+      this, // Pass manager reference for analytics data flow
+      undefined, // promptGuidanceService
+      // The chain session store is built inside the executor's constructor, so its port has to
+      // arrive here rather than through the later `setDatabasePort` cascade.
+      databasePort
     );
 
     // Set gate system manager in prompt engine
@@ -606,22 +612,21 @@ export class McpToolRouter {
   }
 
   /**
-   * Initialize and set framework manager (called after framework state manager)
+   * Adopt the framework manager the framework state store built (call setFrameworkStateStore first).
+   *
+   * One manager serves the tools and the state store: `resource_manager` and hot reload change the
+   * frameworks it holds, and the state store resolves the active framework against that same set.
+   * A manager of the router's own would hold frameworks the state store cannot resolve.
    */
-  async setFrameworkManager(existingFrameworkManager?: FrameworkManager): Promise<void> {
+  setFrameworkManager(): void {
     if (this.frameworkManager == null) {
-      // Use provided framework manager or create a new one
-      this.frameworkManager =
-        existingFrameworkManager ??
-        (await createFrameworkManager(this.logger, {
-          defaultFramework: this.configManager.getFrameworksConfig().defaultFramework,
-        }));
-
-      // FIX: Connect frameworkStateStore if it was set before frameworkManager was created
-      // This handles the startup order where setFrameworkStateStore() is called first
-      if (this.frameworkStateStore != null) {
-        this.frameworkManager.setFrameworkStateStore(this.frameworkStateStore);
+      const frameworkManager = this.frameworkStateStore?.getFrameworkManager();
+      if (frameworkManager == null) {
+        throw new Error(
+          'setFrameworkManager() needs an initialized framework state store: call setFrameworkStateStore() first'
+        );
       }
+      this.frameworkManager = frameworkManager;
 
       this.promptExecutor.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
@@ -684,11 +689,7 @@ export class McpToolRouter {
 
       // REMOVED: ChainOrchestrator initialization - modular chain system removed
 
-      if (existingFrameworkManager != null) {
-        this.logger.info('Framework manager integrated with MCP tools (shared instance)');
-      } else {
-        this.logger.info('Framework manager initialized and integrated with MCP tools');
-      }
+      this.logger.info('Framework manager integrated with MCP tools (shared with framework state)');
     }
   }
 
@@ -1322,7 +1323,8 @@ export async function createMcpToolRouter(
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>,
   gateManager: GateManager,
-  metricsCollector: MetricsCollector
+  metricsCollector: MetricsCollector,
+  databasePort?: import('#shared/types/persistence.js').DatabasePort
 ): Promise<McpToolRouter> {
   const manager = new McpToolRouter(
     logger,
@@ -1333,7 +1335,7 @@ export async function createMcpToolRouter(
     gateManager
   );
 
-  await manager.initialize(onRefresh, onRestart, metricsCollector);
+  await manager.initialize(onRefresh, onRestart, metricsCollector, databasePort);
   return manager;
 }
 
