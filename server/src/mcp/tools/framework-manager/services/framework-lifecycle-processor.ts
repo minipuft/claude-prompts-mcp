@@ -117,7 +117,7 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Failed to load framework files for '${id}'. Files may be corrupted.`);
     }
 
-    // Capture before state for diff generation and versioning
+    // Capture before state for versioning
     const beforeState = frameworkSnapshotContract.project(id, existingData);
 
     // Build update data with ONLY the fields provided in the request
@@ -146,6 +146,13 @@ export class FrameworkLifecycleProcessor {
       beforeState
     );
 
+    // One projection of the write serves the version's diff summary and the update's own diff. It
+    // is resolved from the plan the writer applies, with the arguments the writer is handed below,
+    // so both name the files the write lands in and the lines that change in them.
+    const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
+      await this.ctx.fileService.projectFrameworkWrite(frameworkData, existingData)
+    );
+
     // Auto-versioning — go-forward: version N holds the state edit N produced, matching prompts
     // and gates. `recordEditResult` bridges the prior live state when it is not already the newest
     // row, which carries pre-existing framework rows across the era boundary without a migration.
@@ -165,11 +172,6 @@ export class FrameworkLifecycleProcessor {
             // gate exactly like the pre-fix shape — and a gate that cannot see the property is
             // not guarding it.
             commit: async (): Promise<void> => {
-              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-                beforeState,
-                afterState,
-                `${id}/framework.yaml`
-              );
               const versionResult = await this.ctx.versionHistoryService.recordEditResult(
                 'framework',
                 id,
@@ -177,7 +179,7 @@ export class FrameworkLifecycleProcessor {
                 afterState,
                 {
                   description: 'Update via resource_manager',
-                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
               versionSaved = versionResult.version;
@@ -210,13 +212,6 @@ export class FrameworkLifecycleProcessor {
     // Still runs, and is still not what makes the edit visible. Kept because dependent systems
     // outside the framework registry subscribe to it.
     await this.ctx.onRefresh?.();
-
-    // Generate diff view
-    const diffResult = this.ctx.textDiffService.generateObjectDiff(
-      beforeState,
-      afterState,
-      `${id}/framework.yaml`
-    );
 
     let response =
       `${registered ? `✅ Framework '${id}' updated successfully` : `⚠️ Framework '${id}' was written to disk but the edit is NOT live in this process`}\n\n` +
