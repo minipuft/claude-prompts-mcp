@@ -1,18 +1,14 @@
 // @lifecycle canonical - Shared JSON schema validator for server config.
 import { readFile } from 'node:fs/promises';
 
+import type { ConfigSchemaValidationResult } from '#shared/types/config-manager.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 
-type JsonSchema = Record<string, unknown>;
+// Re-exported (not just imported): infra/config/index.ts imports this type from this module,
+// and ConfigSchemaValidationResult's single definition lives in shared/types/config-manager.ts.
+export type { ConfigSchemaValidationResult };
 
-export interface ConfigSchemaValidationResult {
-  /** 'valid' = AJV accepted the config. 'invalid' = AJV rejected it. 'unavailable' = the schema
-   *  itself could not be read, parsed, or compiled — this is NOT a claim about the config. */
-  status: 'valid' | 'invalid' | 'unavailable';
-  /** True only when status is 'valid'. Kept alongside `status` so existing reads keep compiling. */
-  valid: boolean;
-  errors: string[];
-}
+type JsonSchema = Record<string, unknown>;
 
 interface CachedValidator {
   validator: ValidateFunction;

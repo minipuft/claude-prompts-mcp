@@ -21,6 +21,15 @@ import type {
 } from './core-config.js';
 import type { InjectionConfig } from './injection.js';
 
+export interface ConfigSchemaValidationResult {
+  /** 'valid' = AJV accepted the config. 'invalid' = AJV rejected it. 'unavailable' = the schema
+   *  itself could not be read, parsed, or compiled — this is NOT a claim about the config. */
+  status: 'valid' | 'invalid' | 'unavailable';
+  /** True only when status is 'valid'. Kept alongside `status` so existing reads keep compiling. */
+  valid: boolean;
+  errors: string[];
+}
+
 /**
  * Read-only configuration access + event subscription for hot-reload.
  *
@@ -35,6 +44,12 @@ export interface ConfigManager {
   getPromptsConfig(): Config['prompts'];
   getPromptsRegisterWithMcp(): boolean | undefined;
   getTransportMode(): TransportMode;
+
+  // ── Schema validation ────────────────────────────────────────────────
+
+  /** Schema check from the last successful config load. Undefined means NOT validated — no
+   *  schema path was injected, or the last load fell back to defaults; never read as valid. */
+  getSchemaValidation(): ConfigSchemaValidationResult | undefined;
 
   // ── Domain config getters ────────────────────────────────────────────
 
