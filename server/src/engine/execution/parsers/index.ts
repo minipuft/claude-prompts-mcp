@@ -69,6 +69,8 @@ import { ArgumentParser, createArgumentParser } from './argument-parser.js';
 import { UnifiedCommandParser, createUnifiedCommandParser } from './command-parser.js';
 import { ContextResolver, createContextResolver } from '../context/context-resolver.js';
 
+import type { FrameworkIdLookup } from './symbolic-operator-parser.js';
+
 import { Logger } from '#infra/logging/index.js';
 
 /**
@@ -78,11 +80,6 @@ export interface ParsingSystem {
   commandParser: UnifiedCommandParser;
   argumentParser: ArgumentParser;
   contextResolver: ContextResolver;
-  /**
-   * Update the set of registered framework IDs for quote-aware @framework detection.
-   * Call this when FrameworkManager becomes available.
-   */
-  updateRegisteredFrameworkIds(frameworkIds: Set<string>): void;
 }
 
 /**
@@ -94,16 +91,16 @@ export interface ParsingSystem {
  * - Context resolver with intelligent fallbacks
  *
  * @param logger Logger instance for system-wide logging
- * @param registeredFrameworkIds Optional set of registered framework IDs (uppercase).
- *   When provided, only @framework operators matching registered IDs are detected.
- *   Unregistered @word patterns (like @docs/, @mention) are silently skipped.
+ * @param isRegisteredFramework Optional lookup for quote-aware @framework detection, asked on
+ *   every parse. When provided, only @framework operators it accepts are detected, and other
+ *   @word patterns (like @docs/, @mention) stay literal text.
  * @returns Complete parsing system ready for use
  */
 export function createParsingSystem(
   logger: Logger,
-  registeredFrameworkIds?: Set<string>
+  isRegisteredFramework?: FrameworkIdLookup
 ): ParsingSystem {
-  const commandParser = createUnifiedCommandParser(logger, registeredFrameworkIds);
+  const commandParser = createUnifiedCommandParser(logger, isRegisteredFramework);
   const argumentParser = createArgumentParser(logger);
   const contextResolver = createContextResolver(logger);
 
@@ -116,8 +113,5 @@ export function createParsingSystem(
     commandParser,
     argumentParser,
     contextResolver,
-    updateRegisteredFrameworkIds: (frameworkIds: Set<string>) => {
-      commandParser.updateRegisteredFrameworkIds(frameworkIds);
-    },
   };
 }
