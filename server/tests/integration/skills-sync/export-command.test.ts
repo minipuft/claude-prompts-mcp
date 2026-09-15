@@ -1243,7 +1243,7 @@ describe('Export Command Integration', () => {
       const checksSection = /### Checks\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
       const remindersSection = /### Reminders\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
 
-      expect(checksSection).toContain('Passes `npm test`');
+      expect(checksSection).toContain('check: runs `npm test`');
       expect(remindersSection).toContain('code-quality');
       expect(remindersSection).not.toContain('| security-awareness |');
       expect(skill).toContain(
@@ -1251,7 +1251,7 @@ describe('Export Command Integration', () => {
       );
     });
 
-    it('ships no gates/<id>/ files or manifest entry for a harness-covered reminder (row 2.3)', async () => {
+    it('ships no gates/<id>/ files or manifest entry for a harness-covered reminder', async () => {
       await writeServerConfig(['security']);
       await writeConfig('claude-code');
       const out = await runExport();
@@ -1292,7 +1292,7 @@ describe('Export Command Integration', () => {
 
       const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
 
-      expect(skill).toContain('Passes `npm test`');
+      expect(skill).toContain('check: runs `npm test`');
       expect(skill).toContain('security-awareness');
       expect(skill).toContain('code-quality');
       expect(skill).not.toContain('Omitted');
