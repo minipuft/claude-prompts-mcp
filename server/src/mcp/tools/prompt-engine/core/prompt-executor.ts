@@ -118,6 +118,13 @@ export class PromptExecutor {
   private readonly gateManager: GateManager;
   /** StyleManager for dynamic style guidance (# operator) */
   private styleManager?: StyleManager;
+  /**
+   * Settles once `initializeStyleManager()` has run to completion (success or handled
+   * failure). The constructor kicks that load off in the background, so a caller reading
+   * `styleManager` before it settles would see `undefined` even when the load is about to
+   * succeed; `resolveStyleManager()` awaits this instead of racing it.
+   */
+  private styleManagerReady!: Promise<void>;
   /** Resolver for {{ref:prompt_id}} references in templates */
   private referenceResolver?: PromptReferenceResolver;
   /** Resolver for {{script:id}} references in templates */
@@ -129,6 +136,13 @@ export class PromptExecutor {
    * than holding the instance.
    */
   private scriptToolRuntime?: ScriptToolRuntime;
+  /**
+   * Same instance as `scriptToolRuntime.loader`, held separately and concretely typed:
+   * `scriptToolRuntime.loader` is a `ScriptLoader` port (deliberately minimal, crossing the
+   * `engine/` boundary), so it carries no `clearCache()`. Script hot reload needs one to
+   * invalidate a workspace-tier script edit between reloads.
+   */
+  private workspaceScriptLoader?: WorkspaceScriptLoader;
   /** Hook registry for pipeline event emissions */
   private hookRegistry?: HookRegistryPort;
   /** Notification emitter for MCP client notifications */
@@ -255,8 +269,9 @@ export class PromptExecutor {
       this.executionPlanner.setGateManager(this.gateManager);
     }
 
-    // Initialize StyleManager asynchronously
-    void this.initializeStyleManager();
+    // Initialize StyleManager asynchronously; `resolveStyleManager()` is how a caller waits
+    // for it rather than reading `styleManager` mid-load.
+    this.styleManagerReady = this.initializeStyleManager();
 
     this.logger.info('[PromptExecutor] Initialized pipeline dependencies');
   }
@@ -273,6 +288,7 @@ export class PromptExecutor {
     const scriptLoader = new WorkspaceScriptLoader({
       workspaceScriptsPath: this.configManager.getScriptsDirectory(),
     });
+    this.workspaceScriptLoader = scriptLoader;
     const scriptExecutor = createScriptExecutor({ debug: false });
     this.scriptReferenceResolver = new ScriptReferenceResolver(
       this.logger,
@@ -956,6 +972,29 @@ export class PromptExecutor {
       });
       // StyleManager is optional - pipeline will fall back to hardcoded styles
     }
+  }
+
+  /**
+   * Resolve the style manager the pipeline renders `#style` guidance from, once its
+   * background load has settled. Callers that need a wired instance — hot reload
+   * registration is the current one — must await this rather than reading `styleManager`
+   * synchronously, which can still be `undefined` while the load is in flight. Resolves to
+   * `undefined` only when `initializeStyleManager()` failed and logged the reason.
+   */
+  async resolveStyleManager(): Promise<StyleManager | undefined> {
+    await this.styleManagerReady;
+    return this.styleManager;
+  }
+
+  /**
+   * Clear cached script-tool definitions — prompt-local and workspace alike — on the
+   * `WorkspaceScriptLoader` instance `{{script:id}}` resolution currently reads. Rebuilt fresh
+   * on every `updateData()`, so this only matters between reloads: a workspace script edit that
+   * reaches hot reload (`runtime/script-hot-reload.ts`) without also touching the prompts tree
+   * would otherwise keep serving whatever this instance already cached.
+   */
+  clearScriptToolCache(): void {
+    this.workspaceScriptLoader?.clearCache();
   }
 
   /**

@@ -247,7 +247,11 @@ export function createStyleHotReloadRegistration(
   const coordinator = new StyleHotReloadCoordinator(logger, loader, config);
 
   return {
-    directories: [loader.getStylesDir()],
+    // Primary directory plus every additional overlay directory the loader was configured with
+    // (`getWatchDirectories()`) — mirrors `GateDefinitionLoader`'s registration in
+    // `engine/gates/hot-reload/gate-hot-reload.ts`. `loader.getStylesDir()` alone would miss a
+    // workspace overlay directory entirely.
+    directories: loader.getWatchDirectories(),
     handler: (event: StyleHotReloadEvent) => coordinator.handleStyleChange(event),
     coordinator,
   };

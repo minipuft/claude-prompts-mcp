@@ -14,9 +14,8 @@ import { McpServer } from '@modelcontextprotocol/server';
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData } from './data-loader.js';
-import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
-import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
+import { buildHotReloadAuxiliaryConfigs } from './hot-reload-auxiliaries.js';
 import {
   publishPromptsChanged,
   publishResourcesChanged,
@@ -24,10 +23,8 @@ import {
 } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
-import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
 import { indexerResourceRoots } from './resource-roots.js';
-import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
@@ -860,33 +857,14 @@ export class Application {
         this.serviceOrchestrator.register({
           name: serviceName,
           start: async () => {
-            // Build auxiliary reload configs for framework, gates, and script tools
-            const frameworkAux = buildFrameworkAuxiliaryReloadConfig(
-              this.logger,
-              this.mcpToolsManager
-            );
-            const gateAux = buildGateAuxiliaryReloadConfig(this.logger, this.gateManager);
-
-            // Build script tool auxiliary reload config
-            const scriptLoader = this.promptManager.getModules().converter.getScriptToolLoader();
-            const promptsDir = this.promptsDirectory ?? undefined;
-            const scriptAux = promptsDir
-              ? buildScriptAuxiliaryReloadConfig(this.logger, scriptLoader, promptsDir)
-              : undefined;
-
-            // Build resource change tracking auxiliary reload config
-            const resourceChangeTrackerAux = buildResourceChangeTrackerAuxiliaryReloadConfig(
-              this.logger,
-              this.configManager
-            );
-
-            // Collect all auxiliary reloads
-            const auxiliaryReloads = [
-              frameworkAux,
-              gateAux,
-              scriptAux,
-              resourceChangeTrackerAux,
-            ].filter((aux): aux is NonNullable<typeof aux> => aux !== undefined);
+            const auxiliaryReloads = await buildHotReloadAuxiliaryConfigs({
+              logger: this.logger,
+              mcpToolsManager: this.mcpToolsManager,
+              gateManager: this.gateManager,
+              scriptLoader: this.promptManager.getModules().converter.getScriptToolLoader(),
+              promptsDir: this.promptsDirectory ?? undefined,
+              configManager: this.configManager,
+            });
 
             const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};
 
