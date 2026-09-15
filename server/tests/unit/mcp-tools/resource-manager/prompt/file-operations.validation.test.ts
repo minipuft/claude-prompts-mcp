@@ -833,6 +833,57 @@ describe('FileOperations canonical prompt writes', () => {
       expect(result.message).toMatch(/Updated prompt: flat_prompt/);
     });
 
+    /**
+     * A category-changing update of a single-file prompt is a conversion AND a relocation in one
+     * write — measured live before this test existed: `general/one_file_note.yaml` updated with a
+     * new `category` left BOTH `general/one_file_note.yaml` and `docs/one_file_note/` on disk,
+     * served twice.
+     */
+    it('converts and relocates a single-file prompt in the same write when category changes', async () => {
+      seedFlatPrompt('moved_flat_prompt', 'general', ['subagentModel: heavy']);
+      const oldFlatFile = join(promptsDir, 'general', 'moved_flat_prompt.yaml');
+      const newDir = join(promptsDir, 'docs', 'moved_flat_prompt');
+      expect(existsSync(oldFlatFile)).toBe(true);
+
+      const operations = new FileOperations({ logger, configManager });
+      const result = await operations.updatePromptImplementation({
+        id: 'moved_flat_prompt',
+        name: 'Moved Flat Prompt',
+        category: 'docs',
+        description: 'Moved and updated',
+        userMessageTemplate: 'Use {{tool}}',
+        arguments: [],
+        tools: [],
+      });
+
+      // FALSIFICATION: scope `findExistingPromptFile`'s scan back to the write's own target
+      // category (as it was before this test) and this line goes red — the flat file survives
+      // under `general/`, undiscovered, while a second definition is created under `docs/`.
+      expect(existsSync(oldFlatFile)).toBe(false);
+      expect(existsSync(join(promptsDir, 'general'))).toBe(true); // category dir itself remains
+      expect(existsSync(join(newDir, 'prompt.yaml'))).toBe(true);
+      expect(existsSync(join(newDir, 'user-message.md'))).toBe(true);
+
+      // Exactly one definition, anywhere under the prompts root.
+      const discoveredGeneral = discoverYamlPromptsInCategory(join(promptsDir, 'general')).filter(
+        (p) => p.id === 'moved_flat_prompt'
+      );
+      const discoveredDocs = discoverYamlPromptsInCategory(join(promptsDir, 'docs')).filter(
+        (p) => p.id === 'moved_flat_prompt'
+      );
+      expect(discoveredGeneral).toHaveLength(0);
+      expect(discoveredDocs).toHaveLength(1);
+      expect(discoveredDocs[0]?.format).toBe('directory');
+
+      const written = readPromptYaml('docs', 'moved_flat_prompt');
+      expect(written['description']).toBe('Moved and updated');
+      expect(written['category']).toBe('docs');
+      // Preserved across the relocation too, the same as the same-category case.
+      expect(written['subagentModel']).toBe('heavy');
+      expect(result.message).toMatch(/Updated prompt: moved_flat_prompt/);
+      expect(result.message).toMatch(/moved from 'general' to 'docs'/);
+    });
+
     it('a mid-conversion failure restores the flat file and leaves no partial directory', async () => {
       seedFlatPrompt('flat_prompt_2', 'general');
       const flatFile = join(promptsDir, 'general', 'flat_prompt_2.yaml');

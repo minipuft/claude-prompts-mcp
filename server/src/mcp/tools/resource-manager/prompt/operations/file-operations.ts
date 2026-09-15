@@ -212,10 +212,11 @@ interface PromptWritePlan {
   /** The prompt's directory under another category, relocated to `promptDir` first. */
   moveSource: string | null;
   /**
-   * The prompt's prior single-file location (`{category}/{id}.yaml`), deleted as part of
-   * converting it to directory layout in this same write (B.21). Mutually exclusive with
-   * `moveSource` and `copyOnWriteSource` — this is a format conversion, not a relocation or a
-   * copy-up, so at most one of the three names anything.
+   * The prompt's prior single-file location (`{category}/{id}.yaml`, any category), deleted as
+   * part of converting it to directory layout in this same write (B.21) — which also relocates it
+   * when this file's category differs from `effectiveCategory`, the same way `moveSource` relocates
+   * a directory. Mutually exclusive with `moveSource` and `copyOnWriteSource`: the prior state is
+   * either a directory, a flat file, or neither, never two of the three.
    */
   fileSource: string | null;
   /** The prompt's directory under the root it was loaded from, copied to `promptDir` first. */
@@ -330,7 +331,9 @@ export class FileOperations {
         }
 
         if (fileSource !== null) {
-          messages.push(...(await this.convertPromptFileToDirectory(fileSource, promptId)));
+          messages.push(
+            ...(await this.convertPromptFileToDirectory(fileSource, promptId, effectiveCategory))
+          );
         }
 
         if (copyOnWriteSource !== null) {
@@ -498,17 +501,19 @@ export class FileOperations {
         ? this.findExistingPromptDirectory(promptsDir, promptId, promptDir)
         : null;
 
-    // B.21 — single-file → directory conversion, in the SAME write. `findExistingPromptDirectory`
-    // above deliberately excludes `format: 'file'` matches, so an update of a
-    // `{category}/{id}.yaml` prompt reached this point with `moveSource === null` and then wrote a
-    // fresh `{id}/` directory beside the untouched file — the prompt defined twice, one copy going
-    // stale from the moment of the first update. Scoped to the write's own TARGET category (unlike
-    // `moveSource`'s all-category scan): a flat-file prompt combined with a category change still
-    // falls through to an ordinary create at the target, same as before this fix — only the
-    // reported same-category update converts in place.
+    // B.21 — single-file → directory conversion, in the SAME write, including across a category
+    // change. `findExistingPromptDirectory` above deliberately excludes `format: 'file'` matches,
+    // so an update of a `{category}/{id}.yaml` prompt reached this point with `moveSource === null`
+    // and then wrote a fresh `{id}/` directory beside the untouched file — the prompt defined
+    // twice, one copy going stale from the moment of the first update. Scans every category, the
+    // same way `moveSource`'s directory-format search does, because the flat file being converted
+    // may not live under the write's own TARGET category — a category-changing update of a
+    // single-file prompt is exactly that: measured live, `general/one_file_note.yaml` updated with
+    // `category: "docs"` left BOTH `general/one_file_note.yaml` and `docs/one_file_note/` on disk,
+    // served twice, before this scan was widened from the target category alone.
     const fileSource =
       !isNestedId && moveSource === null && !existsSync(promptDir)
-        ? this.findExistingPromptFile(promptsDir, effectiveCategory, promptId)
+        ? this.findExistingPromptFile(promptsDir, promptId)
         : null;
 
     // A move relocates the WHOLE prior state — composes with Fix B as a forced full scope. The
@@ -614,10 +619,9 @@ export class FileOperations {
    * category-changing update can find where the prompt currently lives (Part 2 — category move).
    * Returns `null` when no OTHER directory declares this id, which is the ordinary "brand new
    * prompt" case, not a move. Excludes flat single-file prompts (`{category}/{id}.yaml`,
-   * `format: 'file'`) — this writer only ever produces directory-format prompts, and relocating a
-   * single file into a directory tree across a category change is a different operation this
-   * method does not attempt; such a call falls through to an ordinary create at the target. The
-   * SAME-category conversion (no category change) is `findExistingPromptFile`, below (B.21).
+   * `format: 'file'`) — this writer only ever produces directory-format prompts, so a flat-file
+   * match is not a directory to relocate. The sibling single-file case, including a category
+   * change, is `findExistingPromptFile`, below (B.21).
    */
   /**
    * The directory to copy from when a prompt is being edited into a root it does not yet live in.
@@ -679,38 +683,49 @@ export class FileOperations {
   }
 
   /**
-   * Locate `promptId` at its single-file location (`{category}/{id}.yaml`) inside `category` —
-   * used only when no directory-format match exists (`moveSource === null`) and the write's own
+   * Locate `promptId` at its single-file location (`{category}/{id}.yaml`) across every category
+   * — used only when no directory-format match exists (`moveSource === null`) and the write's own
    * TARGET directory does not yet exist, so an update of a single-file prompt can convert it to
    * directory layout in the same write (B.21) instead of leaving it in place and creating `{id}/`
-   * beside it. Unlike `findExistingPromptDirectory`, this does not scan every category: a flat-file
-   * prompt combined with a category change is not a conversion this method attempts, matching
-   * `findExistingPromptDirectory`'s own documented boundary for the reverse combination.
+   * beside it. Scans every category the same way `findExistingPromptDirectory` does, rather than
+   * only the write's target category: a category-changing update of a single-file prompt is the
+   * ordinary case this needs to find, not an exception to it — the flat file being converted lives
+   * under whatever category it was authored in, which the caller is in the middle of changing.
    */
-  private findExistingPromptFile(
-    promptsDir: string,
-    category: string,
-    promptId: string
-  ): string | null {
-    const found = findYamlPromptInCategory(path.join(promptsDir, category), promptId);
-    return found !== null && found.format === 'file' ? found.path : null;
+  private findExistingPromptFile(promptsDir: string, promptId: string): string | null {
+    for (const categoryDir of this.discoverCategoryDirectories(promptsDir)) {
+      const found = findYamlPromptInCategory(categoryDir, promptId);
+      if (found !== null && found.format === 'file') {
+        return found.path;
+      }
+    }
+    return null;
   }
 
   /**
    * Delete the prompt's prior single-file location as part of converting it to directory layout
-   * (B.21). The directory's own files are written separately by `createOrUpdateYamlPrompt`, from
+   * (B.21) — the same write relocates it too when `targetCategory` names a different category than
+   * the flat file lived under, since `findExistingPromptFile` now finds it regardless of category.
+   * The directory's own files are written separately by `createOrUpdateYamlPrompt`, from
    * `plan.promptFiles` — which already carries the flat file's content forward via
    * `priorYamlPath`-based field preservation, so this method's only job is removing the file the
-   * conversion supersedes. Placed in `mutate()` the same way `relocatePromptDirectory` is: before
-   * the content write, and covered by the same transaction target for rollback.
+   * conversion (and possible relocation) supersedes. Placed in `mutate()` the same way
+   * `relocatePromptDirectory` is: before the content write, and covered by the same transaction
+   * target for rollback.
    */
   private async convertPromptFileToDirectory(
     fileSource: string,
-    promptId: string
+    promptId: string,
+    targetCategory: string
   ): Promise<string[]> {
+    const sourceCategory = path.basename(path.dirname(fileSource));
     await fs.rm(fileSource, { force: true });
+    const relocation =
+      sourceCategory === targetCategory
+        ? ''
+        : ` and moved from '${sourceCategory}' to '${targetCategory}'`;
     return [
-      `Converted prompt '${promptId}' from single-file layout (${path.basename(fileSource)}) to directory layout`,
+      `Converted prompt '${promptId}' from single-file layout (${path.basename(fileSource)}) to directory layout${relocation}`,
     ];
   }
 
