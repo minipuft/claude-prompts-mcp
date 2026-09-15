@@ -57,10 +57,23 @@ export class SkillsSyncActionHandler extends ActionHandler {
       );
     }
 
+    // The path provider is wired unconditionally at startup (`module-initializer.ts`), so a
+    // missing value here is a composition-root regression, not a runtime state this handler
+    // should paper over -- falling back to `resolveSkillsSyncPaths()`'s environment-only
+    // default would silently resolve a different workspace than the one this server was
+    // started with, which is the exact defect this handler exists to close.
+    if (this.context.skillsSyncPaths === undefined) {
+      throw new Error(
+        'system_control skills_sync: no path resolver was wired for this server. ' +
+          'This is a startup wiring bug, not a request-time condition to recover from.'
+      );
+    }
+    const paths = this.context.skillsSyncPaths();
+
     // The database is what makes manifests persist. Without it export still
     // writes skills but drops every manifest row, leaving diff and prune blind --
     // the state this subsystem sat in for as long as it went unregistered.
-    const skillsSync = createConsolidatedSkillsSync(this.logger, this.context.databasePort);
+    const skillsSync = createConsolidatedSkillsSync(this.logger, paths, this.context.databasePort);
 
     return await skillsSync.handleAction({
       operation,
