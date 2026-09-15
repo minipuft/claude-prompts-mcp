@@ -91,7 +91,7 @@ export class ChangesActionHandler extends ActionHandler {
     response += '---\n';
     response += '💡 **Filter options:**\n';
     response += '- `source`: "filesystem" | "mcp-tool" | "external"\n';
-    response += '- `resourceType`: "prompt" | "gate"\n';
+    response += '- `resource_type`: "prompt" | "gate"\n';
     response += '- `since`: ISO timestamp (e.g., "2026-01-20T00:00:00Z")\n';
     response += '- `limit`: Number of entries to return (default: 50)\n';
 
