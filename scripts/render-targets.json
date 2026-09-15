@@ -43,7 +43,10 @@
         "server/dist"
       ],
       "output": { "repo": "minipuft/claude-prompts-mcp", "branch": "dist" },
-      "placeholderMap": { "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}" },
+      "placeholderMap": {
+        "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}",
+        "${PLUGIN_DATA}": "${CLAUDE_PLUGIN_DATA}"
+      },
       "hookMapping": { "hooks": "hooks/hooks.json" },
       "notes": "The only target with a real file-copy relationship, and therefore the whole subject of the drift gate. `consumes` lists what the PUBLISHING jobs stage; `renders` lists what this repo generates from the canonical pair — the two overlap on the manifests and are not the same list. Both extension-publish.yml jobs that stage these files now run the drift check before staging. marketplace.json pins sourceRef 'dist'."
     },
