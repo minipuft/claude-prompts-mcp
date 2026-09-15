@@ -514,7 +514,7 @@ describe('GateToolHandler', () => {
   });
 
   /**
-   * Owner ruling on resource-manager-gate-newline-2026-09-14 (a)(2): a `version_history` snapshot
+   * Ruling on tutorial-rework B.18: a `version_history` snapshot
    * recorded BEFORE the guidance.md verbatim-load fix holds `.trim()`'d guidance — lossy, and not
    * invertible, since `.trim()` cannot say whether the original had zero, one, or more trailing
    * newlines. Every shipped, Prettier-formatted `guidance.md` ends in exactly one, so restoring

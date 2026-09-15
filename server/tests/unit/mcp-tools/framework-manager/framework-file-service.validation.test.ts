@@ -117,7 +117,7 @@ describe('FrameworkFileWriter canonical writes', () => {
   });
 
   /**
-   * Sibling coverage for resource-manager-gate-newline-2026-09-14: the gate side of this class
+   * Sibling coverage for tutorial-rework B.18: the gate side of this class
    * (`guidance.md`) lost a trailing newline on an omitted-field update because its loader
    * `.trim()`ed the file on read. `loadExistingFramework` never trims `system-prompt.md` /
    * `judge-prompt.md` (plain `readFile`, no `.trim()`), so falling back to it here

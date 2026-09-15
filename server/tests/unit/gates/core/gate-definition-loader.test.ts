@@ -7,7 +7,7 @@ import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-def
 
 /**
  * Root-cause coverage for the guidance.md trailing-newline defect
- * (resource-manager-gate-newline-2026-09-14): `inlineReferencedFiles` used to `.trim()` the
+ * (tutorial-rework B.18): `inlineReferencedFiles` used to `.trim()` the
  * content it read from `guidance.md`, so every loaded gate's `getGuidance()` — and anything that
  * falls back to it, like an update omitting `guidance` — disagreed with the file on disk by
  * exactly its leading/trailing whitespace. The prompt loader's equivalent inlining

@@ -188,7 +188,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
   });
 
   /**
-   * resource-manager-gate-newline-2026-09-14 follow-up: `GateDefinitionLoader` now inlines
+   * Tutorial-rework B.18 follow-up: `GateDefinitionLoader` now inlines
    * `guidance.md` verbatim (no `.trim()`), so `gate.guidance` on a real, Prettier-formatted gate
    * ends with `\n`. This is the ONE reachable render site (`.guidanceText` in `gate-loader.ts`
    * and `gate-provider-adapter.ts` is built but never read by anything — verified via
