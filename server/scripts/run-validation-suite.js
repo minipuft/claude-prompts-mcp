@@ -366,7 +366,7 @@ export const SUITE = [
   {
     script: 'validate:hook-harness:self-test',
     io: 'read',
-    reads: ['file'],
+    reads: ['file', 'spawn'],
     converse: 'unexamined',
   },
   {

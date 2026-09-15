@@ -186,4 +186,72 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     expect(guidance).toContain('Code Quality Gate');
     expect(guidance).toContain('Ensure code passes linting.');
   });
+
+  /**
+   * Tutorial-rework B.18 follow-up: `GateDefinitionLoader` now inlines
+   * `guidance.md` verbatim (no `.trim()`), so `gate.guidance` on a real, Prettier-formatted gate
+   * ends with `\n`. This is the ONE reachable render site (`.guidanceText` in `gate-loader.ts`
+   * and `gate-provider-adapter.ts` is built but never read by anything — verified via
+   * `rg -n "\.guidanceText\b" src` finding only its own definition). Guards that a trailing
+   * newline on the loaded value does not widen the blank line between rendered gate sections.
+   */
+  describe('trailing-newline guidance stays a single blank line between sections', () => {
+    function loaderWithTrailingNewlineGuidance() {
+      const loader = createMockLoader();
+      // `as any`: matches this file's existing untyped-mock pattern (see the other
+      // `mockImplementation`/`mockResolvedValue` calls above) — `createMockLoader()` returns
+      // bare `jest.fn()`s, so a typed callback is never assignable without it.
+      (loader.loadGate as jest.Mock).mockImplementation((async (gateId: string) => {
+        if (gateId === 'framework_gate_one') {
+          return {
+            id: gateId,
+            name: 'Framework Gate One',
+            type: 'framework',
+            // Trailing `\n` — what `GateDefinitionLoader` now returns for a real guidance.md.
+            guidance: '- Do the first thing.\n',
+            activation: {},
+          };
+        }
+        if (gateId === 'framework_gate_two') {
+          return {
+            id: gateId,
+            name: 'Framework Gate Two',
+            type: 'framework',
+            guidance: '- Do the second thing.\n',
+            activation: {},
+          };
+        }
+        return null;
+      }) as any);
+      (loader.isGateActive as jest.Mock).mockReturnValue(true);
+      return loader;
+    }
+
+    test('two framework gates stay separated by exactly one blank line', async () => {
+      const loader = loaderWithTrailingNewlineGuidance();
+      const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+
+      const guidance = await renderer.renderGuidance(['framework_gate_one', 'framework_gate_two'], {
+        framework: 'CAGEERF',
+      });
+
+      // MUTATION KILLED: dropping the `.trim()` in `formatGateGuidance` makes this fail — three
+      // gate one's trailing `\n` plus the `\n\n` join separator produce a second blank line.
+      // Confirmed by reverting the trim, re-running this file (red), and restoring it.
+      expect(guidance).toContain('Do the first thing.\n\n### Framework Gate Two');
+      expect(guidance).not.toContain('Do the first thing.\n\n\n');
+    });
+
+    test('the Post-Execution Review section stays one blank line after the last gate', async () => {
+      const loader = loaderWithTrailingNewlineGuidance();
+      const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+
+      const guidance = await renderer.renderGuidance(['framework_gate_two'], {
+        framework: 'CAGEERF',
+      });
+
+      expect(guidance).toContain('Do the second thing.\n\n**Post-Execution Review Guidelines:**');
+      expect(guidance).not.toContain('Do the second thing.\n\n\n');
+    });
+  });
 });

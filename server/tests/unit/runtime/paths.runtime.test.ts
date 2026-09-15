@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -346,6 +354,111 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
       assertUsableDirectorySetting({ name: 'MCP_RESOURCES_PATH', value: missing }, { verb: 'run' })
     ).toThrow(
       `Refusing to run: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.\nExpected an existing directory at that path, or unset MCP_RESOURCES_PATH.`
+    );
+  });
+});
+
+/**
+ * A custom workspace is where new resources are written, even before it holds any.
+ *
+ * `resolveResourceSubdir` used to return the first directory that EXISTED, so an empty workspace
+ * resolved every type to the package tree. That is the Claude Code plugin's data directory on its
+ * first start, and every prompt `resource_manager` created there landed inside the install
+ * directory, which the next plugin update replaced.
+ */
+describe('PathResolver resolves resource directories inside a custom workspace', () => {
+  const TYPES = ['prompts', 'gates', 'frameworks', 'styles', 'scripts'] as const;
+  let dir: string;
+  let packageRoot: string;
+  let workspace: string;
+
+  function directoriesOf(resolver: PathResolver): Record<(typeof TYPES)[number], string> {
+    return {
+      prompts: resolver.getPromptsPath(),
+      gates: resolver.getGatesPath(),
+      frameworks: resolver.getFrameworksPath(),
+      styles: resolver.getStylesPath(),
+      scripts: resolver.getScriptsPath(),
+    };
+  }
+
+  function expectedUnder(root: string): Record<(typeof TYPES)[number], string> {
+    return Object.fromEntries(TYPES.map((type) => [type, path.join(root, type)])) as Record<
+      (typeof TYPES)[number],
+      string
+    >;
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'workspace-write-root-'));
+    packageRoot = path.join(dir, 'package');
+    workspace = path.join(dir, 'workspace');
+    for (const type of TYPES)
+      mkdirSync(path.join(packageRoot, 'resources', type), { recursive: true });
+    mkdirSync(workspace);
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('resolves every type to <workspace>/resources/<type> in an empty workspace, creating nothing', () => {
+    process.env['MCP_WORKSPACE'] = workspace;
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
+    // Resolution names the directory; only a write creates it.
+    expect(readdirSync(workspace)).toEqual([]);
+    // The bundled tree still contributes underneath, and the not-yet-created root is no overlay.
+    expect(resolver.getBundledResourceDir('prompts')).toBe(
+      path.join(packageRoot, 'resources', 'prompts')
+    );
+    expect(resolver.getOverlayResourceDirs('prompts', resolver.getPromptsPath())).toEqual([]);
+  });
+
+  it('resolves the same way for a --workspace flag, and keeps a resources directory that exists', () => {
+    mkdirSync(path.join(workspace, 'resources', 'gates'), { recursive: true });
+    const resolver = new PathResolver({ cli: { workspace }, packageRoot });
+
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
+    expect(existsSync(path.join(workspace, 'resources', 'prompts'))).toBe(false);
+  });
+
+  it('keeps writing into a legacy <workspace>/<type> directory, so an existing collection does not split', () => {
+    mkdirSync(path.join(workspace, 'prompts'));
+    mkdirSync(path.join(workspace, 'frameworks'));
+    mkdirSync(path.join(workspace, 'resources', 'frameworks'), { recursive: true });
+    process.env['MCP_WORKSPACE'] = workspace;
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(resolver.getPromptsPath()).toBe(path.join(workspace, 'prompts'));
+    expect(resolver.getGatesPath()).toBe(path.join(workspace, 'resources', 'gates'));
+    // With both layouts present, `resources/<type>` is the root and the legacy one overlays it.
+    expect(resolver.getFrameworksPath()).toBe(path.join(workspace, 'resources', 'frameworks'));
+    expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
+      path.join(workspace, 'frameworks'),
+    ]);
+  });
+
+  it('leaves an explicit MCP_RESOURCES_PATH its meaning: its own directory, else the package', () => {
+    const resources = path.join(dir, 'personal');
+    mkdirSync(path.join(resources, 'prompts'), { recursive: true });
+    process.env['MCP_WORKSPACE'] = workspace;
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(resolver.getPromptsPath()).toBe(path.join(resources, 'prompts'));
+    expect(resolver.getGatesPath()).toBe(path.join(packageRoot, 'resources', 'gates'));
+  });
+
+  it('leaves a server whose workspace is the package root on the package tree', () => {
+    expect(directoriesOf(new PathResolver({ cli: {}, packageRoot }))).toEqual(
+      expectedUnder(path.join(packageRoot, 'resources'))
+    );
+
+    process.env['MCP_WORKSPACE'] = packageRoot;
+    expect(directoriesOf(new PathResolver({ cli: {}, packageRoot }))).toEqual(
+      expectedUnder(path.join(packageRoot, 'resources'))
     );
   });
 });

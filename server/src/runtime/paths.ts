@@ -404,12 +404,8 @@ export class PathResolver {
   }
 
   /**
-   * Get prompts directory path
-   *
-   * Priority:
-   *   1. ${resources}/prompts/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/prompts/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/prompts/ (default)
+   * Get prompts directory path: where prompts are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getPromptsPath(): string {
     if (this.cache.prompts) return this.cache.prompts;
@@ -420,12 +416,8 @@ export class PathResolver {
   }
 
   /**
-   * Get frameworks directory path
-   *
-   * Priority:
-   *   1. ${resources}/frameworks/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/frameworks/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/frameworks/ (default)
+   * Get frameworks directory path: where frameworks are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getFrameworksPath(): string {
     if (this.cache.frameworks) return this.cache.frameworks;
@@ -436,12 +428,8 @@ export class PathResolver {
   }
 
   /**
-   * Get gates directory path
-   *
-   * Priority:
-   *   1. ${resources}/gates/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/gates/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/gates/ (default)
+   * Get gates directory path: where gates are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getGatesPath(): string {
     if (this.cache.gates) return this.cache.gates;
@@ -452,12 +440,8 @@ export class PathResolver {
   }
 
   /**
-   * Get scripts directory path
-   *
-   * Priority:
-   *   1. ${resources}/scripts/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/scripts/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/scripts/ (default)
+   * Get scripts directory path: where scripts are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getScriptsPath(): string {
     if (this.cache.scripts) return this.cache.scripts;
@@ -468,12 +452,8 @@ export class PathResolver {
   }
 
   /**
-   * Get styles directory path
-   *
-   * Priority:
-   *   1. ${resources}/styles/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/styles/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/styles/ (default)
+   * Get styles directory path: where styles are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getStylesPath(): string {
     if (this.cache.styles) return this.cache.styles;
@@ -529,9 +509,9 @@ export class PathResolver {
   /**
    * The package's own resources directory for a type — always a contributing root.
    *
-   * `resolveResourceSubdir` returns the FIRST existing candidate and stops, so once a workspace
-   * has `resources/<type>/` the bundled tree is never read. That is not a fallback; it is a
-   * replacement, and it fails three ways depending on the type:
+   * `resolveResourceSubdir` names ONE directory per type, so a loader reading only that directory
+   * never reads the bundled tree once a workspace has `resources/<type>/`. That is not a fallback;
+   * it is a replacement, and before this root existed it failed three ways depending on the type:
    *
    *   - prompts: a workspace holding one prompt serves one prompt, and the 39 bundled ones vanish
    *     with nothing in the log to distinguish it from a healthy start
@@ -587,23 +567,52 @@ export class PathResolver {
   }
 
   /**
-   * Resolve a resource subdirectory using the unified resolution chain:
-   *   1. ${resources}/${subdir}/ (from MCP_RESOURCES_PATH or workspace)
+   * Resolve a resource subdirectory: the directory a type is read from first and written to.
+   *
+   * A custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
+   *   1. ${workspace}/resources/${subdir}/ (if exists)
+   *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
+   *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
+   *
+   * Otherwise (an explicit `MCP_RESOURCES_PATH`, or the package root as the workspace):
+   *   1. ${resources}/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists)
    *   3. ${packageRoot}/resources/${subdir}/ (default)
+   *
+   * Step 3 of the workspace chain names a directory that may not exist. Falling through to the
+   * package instead sent every write from an empty workspace into the install directory, which a
+   * plugin update replaces. Readers treat the absent directory as empty, and the bundled tree
+   * still loads underneath (`getBundledResourceDir`).
    */
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
-    const resourcesBase = this.getResourcesPath();
-    const resourcesDir = join(resourcesBase, subdir);
+    const workspace = this.getWorkspace();
+    const legacyDir = join(workspace, subdir);
+    const explicitResources = process.env['MCP_RESOURCES_PATH'];
 
+    if (
+      (explicitResources === undefined || explicitResources === '') &&
+      this.isUsingCustomWorkspace()
+    ) {
+      const workspaceDir = join(workspace, 'resources', subdir);
+      if (existsSync(workspaceDir)) {
+        return { resolved: workspaceDir, source: `workspace resources/${subdir}/` };
+      }
+      if (existsSync(legacyDir)) {
+        return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
+      }
+      return {
+        resolved: workspaceDir,
+        source: `workspace resources/${subdir}/ (created on first write)`,
+      };
+    }
+
+    const resourcesDir = join(this.getResourcesPath(), subdir);
     if (existsSync(resourcesDir)) {
       return { resolved: resourcesDir, source: `resources/${subdir}/` };
     }
 
-    const workspace = this.getWorkspace();
-    const workspaceDir = join(workspace, subdir);
-    if (existsSync(workspaceDir)) {
-      return { resolved: workspaceDir, source: `workspace ${subdir}/ (legacy)` };
+    if (existsSync(legacyDir)) {
+      return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
     }
 
     return {

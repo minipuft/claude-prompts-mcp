@@ -4,7 +4,7 @@
  * Reuses existing PromptAssetManager behavior without duplicating transport/config logic.
  */
 
-import { access, readFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import * as yaml from 'js-yaml';
@@ -18,6 +18,7 @@ import type { PromptAssetManager } from '#modules/prompts/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
+import type { Stats } from 'node:fs';
 
 import { loadPromptsAcrossRoots, mergePromptResults } from '#modules/prompts/prompt-root-loader.js';
 
@@ -83,24 +84,16 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     }
   }
 
-  // Verify path exists (can be directory or file for backward compatibility)
-  await access(promptsPath).catch((error) => {
-    logger.error(`✗ Prompts path NOT FOUND: ${promptsPath}`);
-    if (isVerbose) {
-      logger.error(`File access error:`, error);
-      logger.error(`Is path absolute? ${path.isAbsolute(promptsPath)}`);
-      logger.error(`Normalized path: ${path.normalize(promptsPath)}`);
-    }
-    throw new Error(`Prompts path not found: ${promptsPath}`);
-  });
-
-  // Determine if path is directory or file
-  const pathStats = await stat(promptsPath);
-  const isDirectory = pathStats.isDirectory();
+  // Absence is not refused here. A custom workspace's prompts directory is created by its first
+  // write, and until then `loadPromptsAcrossRoots` serves the bundled tree; it still throws when
+  // no bundled tree backs a missing primary. Any other failure to read the path stops startup.
+  const pathStats = await statUnlessAbsent(promptsPath);
+  // A directory, or a file for backward compatibility.
+  const isDirectory = pathStats?.isDirectory() ?? true;
 
   if (isVerbose) {
     const pathType = isDirectory ? 'directory' : 'file';
-    logger.info(`✓ Prompts ${pathType} exists: ${promptsPath}`);
+    logger.info(`✓ Prompts ${pathType}: ${promptsPath}`);
   }
 
   // Drop cached file contents before reading, so a reload observes the disk rather than the last
@@ -114,8 +107,8 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   promptManager.clearLoaderCache();
 
   // The bundled tree loads FIRST, so a workspace prompts directory overlays it instead of
-  // replacing it. `resolveResourceSubdir` returns the first existing candidate and stops, so a
-  // workspace holding one prompt used to serve exactly one prompt — the 39 bundled ones silently
+  // replacing it. `resolveResourceSubdir` names a single directory per type, so before this a
+  // workspace holding one prompt served exactly one prompt — the 39 bundled ones silently
   // gone, and the startup line indistinguishable from a healthy one. Measured 2026-08-28; see
   // `PathResolver.getBundledResourceDir` for the same defect's fatal form on frameworks.
   //
@@ -208,6 +201,16 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     convertedPrompts,
     promptsDirectory: promptsPath,
   };
+}
+
+/** A path's stats, or `undefined` when nothing exists there yet. Any other failure throws. */
+async function statUnlessAbsent(target: string): Promise<Stats | undefined> {
+  try {
+    return await stat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
 
 /** One load pass: the prompts, their categories, and the MCP-converted forms. */

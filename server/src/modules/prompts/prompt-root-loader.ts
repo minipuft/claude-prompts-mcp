@@ -73,7 +73,22 @@ export async function loadPromptsAcrossRoots(
   ) => number,
   logger?: Logger
 ): Promise<PromptRootLoadResult> {
-  const primary = await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
+  // The bundled root only contributes when it is a REAL, distinct directory. Skipping this check
+  // would make an absent bundled path load as an empty catalog and merge nothing — silent, and
+  // indistinguishable from a healthy start.
+  const bundledContributes =
+    roots.bundled !== undefined &&
+    roots.bundled !== roots.primary &&
+    (await directoryExists(roots.bundled));
+
+  // An absent primary is an empty root while the bundled tree backs it: a custom workspace's
+  // `resources/prompts/` is created by its first write, and the bundle serves alone until then.
+  // Without a bundle behind it the loader still throws, because nothing at all would be served.
+  // Only absence qualifies — a primary that exists and cannot be read still fails loudly.
+  const primary =
+    bundledContributes && (await pathIsAbsent(roots.primary))
+      ? { promptsData: [], categories: [], convertedPrompts: [], invalid: 0 }
+      : await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
 
   let overridden = 0;
   let invalid = primary.invalid;
@@ -83,14 +98,6 @@ export async function loadPromptsAcrossRoots(
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
   } = primary;
-
-  // The bundled root only contributes when it is a REAL, distinct directory. Skipping this check
-  // would make an absent bundled path load as an empty catalog and merge nothing — silent, and
-  // indistinguishable from a healthy start.
-  const bundledContributes =
-    roots.bundled !== undefined &&
-    roots.bundled !== roots.primary &&
-    (await directoryExists(roots.bundled));
 
   if (bundledContributes && roots.bundled !== undefined) {
     const bundled = await promptManager.loadAndConvertPrompts(roots.bundled, roots.bundled);
@@ -219,5 +226,15 @@ async function directoryExists(candidate: string): Promise<boolean> {
     return (await stat(candidate)).isDirectory();
   } catch {
     return false;
+  }
+}
+
+/** Whether nothing exists at a path. A file, or a path that cannot be read, is not absent. */
+async function pathIsAbsent(candidate: string): Promise<boolean> {
+  try {
+    await stat(candidate);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
   }
 }
