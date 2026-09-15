@@ -213,7 +213,10 @@ export class McpToolRouter {
   async initialize(
     onRefresh: () => Promise<void>,
     onRestart: (reason: string) => Promise<void>,
-    metricsCollector: MetricsCollector
+    metricsCollector: MetricsCollector,
+    // Undefined only when the composition root opened no database; `setDatabasePort` still wires
+    // the remaining handlers afterwards.
+    databasePort?: import('#shared/types/persistence.js').DatabasePort
   ): Promise<void> {
     // Store callback references
     this.onRestart = onRestart;
@@ -241,8 +244,11 @@ export class McpToolRouter {
       this.semanticAnalyzer,
       this.textReferenceStore,
       this.gateManager,
-      this // Pass manager reference for analytics data flow
-      // Removed executionCoordinator - chains now use LLM-driven execution
+      this, // Pass manager reference for analytics data flow
+      undefined, // promptGuidanceService
+      // The chain session store is built inside the executor's constructor, so its port has to
+      // arrive here rather than through the later `setDatabasePort` cascade.
+      databasePort
     );
 
     // Set gate system manager in prompt engine
@@ -1289,7 +1295,8 @@ export async function createMcpToolRouter(
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>,
   gateManager: GateManager,
-  metricsCollector: MetricsCollector
+  metricsCollector: MetricsCollector,
+  databasePort?: import('#shared/types/persistence.js').DatabasePort
 ): Promise<McpToolRouter> {
   const manager = new McpToolRouter(
     logger,
@@ -1300,7 +1307,7 @@ export async function createMcpToolRouter(
     gateManager
   );
 
-  await manager.initialize(onRefresh, onRestart, metricsCollector);
+  await manager.initialize(onRefresh, onRestart, metricsCollector, databasePort);
   return manager;
 }
 

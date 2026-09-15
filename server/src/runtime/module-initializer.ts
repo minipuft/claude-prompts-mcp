@@ -33,6 +33,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -103,9 +104,9 @@ export interface ModuleInitResult {
  * PathResolver-derived path. Claiming it here makes that an invariant rather than an ordering
  * accident; the divergence guard in `SqliteEngine.getInstance` names any later disagreement.
  *
- * Extracted rather than inlined: `initializeModules` is already at cognitive complexity 63, and
+ * Extracted rather than inlined: `initializeModules` is already at cognitive complexity 53, and
  * the lint ratchet counts violations, not the number inside one — an inline `if` would have
- * pushed it to 64 with every gate still green.
+ * pushed it to 54 with every gate still green.
  */
 async function claimStateDatabase(
   runtimeDbPath: string | undefined,
@@ -115,6 +116,45 @@ async function claimStateDatabase(
   if (runtimeDbPath === undefined) return;
   const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
   await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+}
+
+/**
+ * Open the state database the MCP tools persist through, or `undefined` when no server root is
+ * configured — the one composition in which persistence is genuinely off.
+ *
+ * Opened BEFORE the tools are built, so `PromptExecutor` hands the port to its chain session store
+ * at construction. That store starts initializing in its constructor; when the port arrived later
+ * through `setDatabasePort`, every start warned "persistence disabled" for a store that went on to
+ * persist. `claimStateDatabase` has already fixed the path — this only opens the same singleton.
+ */
+async function openToolsDatabase(
+  serverRoot: string | undefined,
+  logger: Logger
+): Promise<DatabasePort | undefined> {
+  if (serverRoot === undefined || serverRoot === '') return undefined;
+  try {
+    const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+    const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
+    await dbManager.initialize();
+    return dbManager;
+  } catch (error) {
+    throw toolsDatabaseWiringError(serverRoot, error);
+  }
+}
+
+/**
+ * The startup failure for the tools' database wiring, shared by the open and the wiring step.
+ *
+ * This wiring owns argument history and version history. A swallow here left the rollback feature
+ * silently inert — `resource_manager` would report no versions rather than report that it could not
+ * reach them.
+ */
+function toolsDatabaseWiringError(serverRoot: string | undefined, error: unknown): Error {
+  const msg = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `Failed to wire DatabasePort to MCP tools (serverRoot ${String(serverRoot)}): ${msg}`,
+    { cause: error }
+  );
 }
 
 /**
@@ -309,6 +349,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   if (isVerbose) logger.info('🔄 Initializing MCP tools manager...');
   const metricsCollector = createMetricsCollector(logger);
+  const toolsDatabase = await openToolsDatabase(serverRoot, logger);
   const mcpToolsManager = await createMcpToolsManager(
     logger,
     mcpServer,
@@ -318,19 +359,17 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     callbacks.fullServerRefresh,
     callbacks.restartServer,
     gateManager,
-    metricsCollector
+    metricsCollector,
+    toolsDatabase
   );
 
   if (isVerbose) logger.info('🔄 Updating MCP tools manager data...');
   mcpToolsManager.updateData(promptsData, convertedPrompts, categories);
 
   // Wire DatabasePort early so sub-handlers have it before first use
-  if (serverRoot !== undefined && serverRoot !== '') {
+  if (toolsDatabase !== undefined) {
     try {
-      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
       const { SqliteStateStore } = await import('#infra/database/stores/sqlite-store.js');
-      const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
-      await dbManager.initialize();
       // Built here, not in the tracker or in mcp/: `modules-no-infra-static` and
       // `mcp-no-infra-static` both bar those layers from naming a concrete infra store, so the
       // composition root is the only place allowed to construct one. It is handed down as the
@@ -338,7 +377,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       // `INSERT ... kv_state ... 'default'`, which made it a second writer to a table
       // `sqlite-store.ts` owns and pinned all argument history to one shared scope.
       const argHistoryStore = new SqliteStateStore<PersistedArgumentHistory>(
-        dbManager,
+        toolsDatabase,
         {
           tableName: 'kv_state',
           key: 'arg_history',
@@ -354,16 +393,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       // Same launch workspace the tracker and chain stores use, so version_history rows land
       // under the project that produced them instead of one shared 'default' tenant.
       const versionHistoryScope = workspaceId != null ? { workspaceId } : undefined;
-      mcpToolsManager.setDatabasePort(dbManager, argHistoryStore, versionHistoryScope);
+      mcpToolsManager.setDatabasePort(toolsDatabase, argHistoryStore, versionHistoryScope);
     } catch (error) {
-      // This wiring owns argument history and version history. A swallow here left the
-      // rollback feature silently inert — `resource_manager` would report no versions
-      // rather than report that it could not reach them.
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to wire DatabasePort to MCP tools (serverRoot ${serverRoot}): ${msg}`,
-        { cause: error }
-      );
+      throw toolsDatabaseWiringError(serverRoot, error);
     }
   }
 
