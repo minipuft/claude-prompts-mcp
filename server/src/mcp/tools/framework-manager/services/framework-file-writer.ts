@@ -463,16 +463,38 @@ export class FrameworkFileWriter {
       // A copy puts the prior tree at `frameworkDir` before any file is written, so the content a
       // write replaces is the copy source's.
       priorDir: existsSync(frameworkDir) ? frameworkDir : copyOnWriteSource,
-      files: this.planFrameworkFiles(data, existingData ?? null),
+      files: this.planFrameworkFiles(data, existingData ?? null, frameworkDir),
     };
   }
 
   /** The files a framework write lands, in write order, as the exact bytes each will hold. */
   private planFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData: ExistingFrameworkData | null
+    existingData: ExistingFrameworkData | null,
+    frameworkDir: string
   ): PlannedFrameworkFile[] {
-    const newFrameworkData = this.buildFrameworkYamlData(data);
+    // The framework's OWN declared names win over the defaults — a hand-authored or seeded
+    // `framework.yaml` naming `custom-phases.yaml` keeps that name across every future write.
+    // Falls back to the canonical names only when nothing is declared (create, or an existing
+    // framework that never named one). Resolving before `buildFrameworkYamlData` runs means the
+    // `phasesFile`/`judgePromptFile` fields it writes and the file names below are always the
+    // same string — the prior code hardcoded the fallback into both, which silently renamed a
+    // framework's companion files the first time an update touched phases or judge_prompt, and
+    // orphaned the declared file with stale content on every update after that.
+    const companionFiles = {
+      phasesFile: this.resolveDeclaredFileName(
+        frameworkDir,
+        existingData?.framework['phasesFile'],
+        'phases.yaml'
+      ),
+      judgePromptFile: this.resolveDeclaredFileName(
+        frameworkDir,
+        existingData?.framework['judgePromptFile'],
+        'judge-prompt.md'
+      ),
+    };
+
+    const newFrameworkData = this.buildFrameworkYamlData(data, companionFiles);
     const finalFrameworkData =
       existingData !== null
         ? this.deepMerge(existingData.framework, newFrameworkData)
@@ -487,7 +509,7 @@ export class FrameworkFileWriter {
     const phasesData = this.planPhasesYamlData(data, existingData?.phases ?? null);
     if (phasesData !== null) {
       files.push({
-        relativePath: 'phases.yaml',
+        relativePath: companionFiles.phasesFile,
         content: serializeYaml(phasesData, { sortKeys: false }),
       });
     }
@@ -499,10 +521,31 @@ export class FrameworkFileWriter {
 
     const judgePromptContent = data.judge_prompt ?? existingData?.judgePrompt ?? '';
     if (judgePromptContent !== '') {
-      files.push({ relativePath: 'judge-prompt.md', content: judgePromptContent });
+      files.push({ relativePath: companionFiles.judgePromptFile, content: judgePromptContent });
     }
 
     return files;
+  }
+
+  /**
+   * The companion file name a framework declares for one field, or `fallback` when it declares
+   * none.
+   *
+   * Validated by name against `frameworkDir` before it is ever joined into a path — the same
+   * class of guard `getFrameworkDir` applies to a caller-supplied id, just for a field the
+   * framework's OWN author controls (`framework.yaml`, hand-authored or seeded). A declared name
+   * like `../x.yaml` throws here rather than resolving outside the framework's folder.
+   */
+  private resolveDeclaredFileName(
+    frameworkDir: string,
+    declared: unknown,
+    fallback: string
+  ): string {
+    if (typeof declared !== 'string' || declared === '') {
+      return fallback;
+    }
+    resolveContainedPath(frameworkDir, declared);
+    return declared;
   }
 
   /** The merged `phases.yaml` document, or null when the write lands no phases file. */
@@ -528,9 +571,18 @@ export class FrameworkFileWriter {
 
   /**
    * Build framework.yaml data from input (only sets defined fields)
+   *
+   * `companionFiles` names the files `phasesFile`/`judgePromptFile` point at when this write sets
+   * them — the framework's own declared names when it has any, the canonical defaults otherwise
+   * (`planFrameworkFiles` resolves which). Defaulted here too, so a direct caller with no
+   * declared framework still gets the canonical names rather than an undefined reference.
    */
   buildFrameworkYamlData(
-    data: Partial<FrameworkCreationData> & { id: string }
+    data: Partial<FrameworkCreationData> & { id: string },
+    companionFiles: { phasesFile: string; judgePromptFile: string } = {
+      phasesFile: 'phases.yaml',
+      judgePromptFile: 'judge-prompt.md',
+    }
   ): Record<string, unknown> {
     const yamlData: Record<string, unknown> = {};
     const typeValue = data.type;
@@ -566,9 +618,9 @@ export class FrameworkFileWriter {
       yamlData['systemPromptGuidance'] = data.system_prompt_guidance;
     }
 
-    // Check if phases.yaml is needed
+    // Check if a phases file is needed
     if (this.needsPhasesFile(data)) {
-      yamlData['phasesFile'] = 'phases.yaml';
+      yamlData['phasesFile'] = companionFiles.phasesFile;
     }
 
     // Optional fields (only if defined)
@@ -593,7 +645,7 @@ export class FrameworkFileWriter {
       yamlData['argumentSuggestions'] = data.argument_suggestions;
     }
     if (data.judge_prompt !== undefined) {
-      yamlData['judgePromptFile'] = 'judge-prompt.md';
+      yamlData['judgePromptFile'] = companionFiles.judgePromptFile;
     }
 
     // Always set version for new frameworks
