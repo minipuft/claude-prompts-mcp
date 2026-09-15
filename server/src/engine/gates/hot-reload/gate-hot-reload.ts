@@ -15,7 +15,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { GateRegistry } from '../registry/gate-registry.js';
 import type {
   GateActivationRules,
-  GateDefinitionYaml,
+  LoadedGateDefinition,
   GatePassCriteria,
   GateRetryConfig,
 } from '../types.js';
@@ -213,7 +213,7 @@ export class GateHotReloadCoordinator {
       }
 
       // Step 3: Create new guide from definition
-      const normalizedDefinition: GateDefinitionYaml = {
+      const normalizedDefinition: LoadedGateDefinition = {
         id: definition.id,
         name: definition.name,
         type: definition.type,

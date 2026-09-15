@@ -8,7 +8,8 @@
  * Features:
  * - Runtime YAML parsing via shared utilities
  * - Automatic inlining of guidance.md files
- * - Validation of definitions on load
+ * - Schema parsing on load: every definition goes through `GateDefinitionSchema`, so what a
+ *   caller receives is the parsed object with the schema's defaults applied, not the raw YAML
  * - Configurable caching for performance
  * - Multi-location directory resolution
  *
@@ -22,7 +23,7 @@ import { fileURLToPath } from 'url';
 import {
   validateGateSchema,
   type GateSchemaValidationResult,
-  type GateDefinitionYaml,
+  type LoadedGateDefinition,
 } from './gate-schema.js';
 
 import {
@@ -44,8 +45,6 @@ export interface GateDefinitionLoaderConfig {
   additionalGatesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
-  /** Validate definitions on load (default: true) */
-  validateOnLoad?: boolean;
   /** Log debug information */
   debug?: boolean;
 }
@@ -84,17 +83,16 @@ export type { GateSchemaValidationResult } from './gate-schema.js';
  * const ids = loader.discoverGates();
  * // ['code-quality', 'framework-compliance', ...]
  *
- * // Load a specific gate
+ * // Load a specific gate — parsed through GateDefinitionSchema, defaults applied
  * const definition = loader.loadGate('code-quality');
  * ```
  */
 export class GateDefinitionLoader {
-  private cache = new Map<string, GateDefinitionYaml>();
+  private cache = new Map<string, LoadedGateDefinition>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   private gatesDir: string;
   private additionalGatesDirs: string[];
   private enableCache: boolean;
-  private validateOnLoad: boolean;
   private debug: boolean;
 
   constructor(config: GateDefinitionLoaderConfig = {}) {
@@ -103,7 +101,6 @@ export class GateDefinitionLoader {
       (dir) => existsSync(dir) && dir !== this.gatesDir
     );
     this.enableCache = config.enableCache ?? true;
-    this.validateOnLoad = config.validateOnLoad ?? true;
     this.debug = config.debug ?? false;
 
     if (this.debug) {
@@ -120,9 +117,10 @@ export class GateDefinitionLoader {
    * Load a gate definition by ID
    *
    * @param id - Gate ID (e.g., 'code-quality', 'framework-compliance')
-   * @returns Loaded definition or undefined if not found
+   * @returns The definition parsed through `GateDefinitionSchema` — schema defaults applied —
+   *          or undefined if the gate is not found or fails validation
    */
-  loadGate(id: string): GateDefinitionYaml | undefined {
+  loadGate(id: string): LoadedGateDefinition | undefined {
     const normalizedId = id.toLowerCase();
 
     // Check cache first
@@ -173,10 +171,10 @@ export class GateDefinitionLoader {
   /**
    * Load all available gates
    *
-   * @returns Map of ID to definition for all successfully loaded gates
+   * @returns Map of ID to parsed definition for all successfully loaded gates
    */
-  loadAllGates(): Map<string, GateDefinitionYaml> {
-    const results = new Map<string, GateDefinitionYaml>();
+  loadAllGates(): Map<string, LoadedGateDefinition> {
+    const results = new Map<string, LoadedGateDefinition>();
     const ids = this.discoverGates();
 
     for (const id of ids) {
@@ -258,7 +256,7 @@ export class GateDefinitionLoader {
    * @param id - Gate ID
    * @param baseDir - Directory to load from (defaults to primary gatesDir)
    */
-  private loadFromYamlDir(id: string, baseDir?: string): GateDefinitionYaml | undefined {
+  private loadFromYamlDir(id: string, baseDir?: string): LoadedGateDefinition | undefined {
     try {
       const gateDir = join(baseDir ?? this.gatesDir, id);
       const entryPath = join(gateDir, 'gate.yaml');
@@ -270,36 +268,37 @@ export class GateDefinitionLoader {
         return undefined;
       }
 
-      // Load main gate.yaml
-      const definition = loadYamlFileSync<GateDefinitionYaml>(entryPath, {
+      // Load main gate.yaml. Typed as an untrusted record: nothing has checked it yet, so
+      // naming it with the gate type here would be the claim the parse below actually earns.
+      const raw = loadYamlFileSync<Record<string, unknown>>(entryPath, {
         required: true,
       });
 
-      if (!definition) {
+      if (!raw) {
         return undefined;
       }
 
-      // Inline referenced files (guidance.md)
-      this.inlineReferencedFiles(definition, gateDir);
+      // Inline referenced files (guidance.md) before the parse, so `guidance` is validated
+      // whether it was written inline or pulled from the sidecar file.
+      this.inlineReferencedFiles(raw, gateDir);
 
-      // Validate if enabled
-      if (this.validateOnLoad) {
-        const validation = this.validateDefinition(definition, id);
-        if (!validation.valid) {
-          this.stats.loadErrors++;
-          console.error(
-            `[GateDefinitionLoader] Validation failed for '${id}':`,
-            validation.errors.join('; ')
-          );
-          return undefined;
-        }
-        if (validation.warnings.length > 0 && this.debug) {
-          console.warn(
-            `[GateDefinitionLoader] Warnings for '${id}':`,
-            validation.warnings.join('; ')
-          );
-        }
+      const validation = this.validateDefinition(raw, id);
+      if (!validation.valid || !validation.data) {
+        this.stats.loadErrors++;
+        console.error(
+          `[GateDefinitionLoader] Validation failed for '${id}':`,
+          validation.errors.join('; ')
+        );
+        return undefined;
       }
+      if (validation.warnings.length > 0 && this.debug) {
+        console.warn(
+          `[GateDefinitionLoader] Warnings for '${id}':`,
+          validation.warnings.join('; ')
+        );
+      }
+
+      const definition = validation.data;
 
       if (this.debug) {
         console.error(`[GateDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
@@ -316,19 +315,20 @@ export class GateDefinitionLoader {
   }
 
   /**
-   * Inline referenced files into the definition
+   * Inline referenced files into the raw record, before it is parsed.
    */
-  private inlineReferencedFiles(definition: GateDefinitionYaml, gateDir: string): void {
+  private inlineReferencedFiles(definition: Record<string, unknown>, gateDir: string): void {
     // Inline guidance.md if referenced
-    if (definition.guidanceFile) {
-      const guidancePath = join(gateDir, definition.guidanceFile);
+    const guidanceFile = definition['guidanceFile'];
+    if (typeof guidanceFile === 'string' && guidanceFile.length > 0) {
+      const guidancePath = join(gateDir, guidanceFile);
       if (existsSync(guidancePath)) {
         try {
           // Verbatim, not trimmed (matches `yaml-prompt-loader.ts`'s file inlining): an update
           // that omits `guidance` writes this exact string straight back to guidance.md, so
           // trimming here silently dropped the file's trailing newline on every write-back.
           const content = readFileSync(guidancePath, 'utf-8');
-          definition.guidance = content;
+          definition['guidance'] = content;
           if (this.debug) {
             console.error(`[GateDefinitionLoader] Inlined guidance from ${guidancePath}`);
           }
@@ -342,7 +342,7 @@ export class GateDefinitionLoader {
         console.warn(`[GateDefinitionLoader] Referenced guidance file not found: ${guidancePath}`);
       }
       // Remove the file reference after inlining
-      delete (definition as any).guidanceFile;
+      delete definition['guidanceFile'];
     }
   }
 
@@ -350,7 +350,7 @@ export class GateDefinitionLoader {
    * Attempt to load a gate from additional directories.
    * Tries flat path first, then scans for grouped nesting.
    */
-  private loadFromAdditionalDirs(id: string): GateDefinitionYaml | undefined {
+  private loadFromAdditionalDirs(id: string): LoadedGateDefinition | undefined {
     const resolvedDir = this.findInAdditionalDirs(id);
     if (resolvedDir === undefined) return undefined;
     return this.loadFromYamlDir(id, resolvedDir);
@@ -389,7 +389,7 @@ export class GateDefinitionLoader {
    * Validate a gate definition using shared Zod schema
    */
   private validateDefinition(
-    definition: GateDefinitionYaml,
+    definition: Record<string, unknown>,
     expectedId: string
   ): GateSchemaValidationResult {
     return validateGateSchema(definition, expectedId);
