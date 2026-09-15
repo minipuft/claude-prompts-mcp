@@ -96,9 +96,10 @@ describe('Export Command Integration', () => {
 
   /**
    * `extra` carries `activation` and `gate_type`. A gate written without `activation` is
-   * ALWAYS active — `isGateActiveForContext` reads absent rules as "no restriction", the same
-   * as `GateManager.selectGates` does at runtime — so a fixture that wants to stay out of an
-   * unrelated prompt has to say so.
+   * OPT-IN ONLY (Ruling A1) — `isGateActiveForContext` reads absent rules as "never
+   * registry-auto-activated", the same as `GateManager.selectGates` does at runtime. It still
+   * attaches when a prompt or chain step names it explicitly via `gateConfiguration.include` /
+   * `inlineGateIds`, which never routes through that function.
    */
   async function writeGate(
     id: string,
@@ -246,15 +247,29 @@ describe('Export Command Integration', () => {
    * `creed-fidelity` below is here to pin.
    */
   describe('gate activation follows the engine (F1)', () => {
-    it('activates a gate that declares no category restriction', async () => {
-      // The five-gate half of the measured gap. The old check demanded a category MATCH; the
-      // engine only requires the absence of a CONFLICT, so an unrestricted gate is active.
+    it('does not auto-activate a gate that declares no activation block (Ruling A1)', async () => {
+      // isGateActiveForContext now reads an absent `activation` as opt-in-only, not
+      // always-active — registry-auto (no explicit include) must withhold it.
       await writeGate('unrestricted', 'Unrestricted');
       await writePrompt('general', 'plain');
       await writeConfig('claude-code');
       await runExport();
 
       const skill = await readFile(path.join(outputDir, 'plain', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('unrestricted');
+    });
+
+    it('still activates a no-activation-block gate once a prompt includes it explicitly', async () => {
+      // gateConfiguration.include never calls isGateActiveForContext — it registers the id
+      // directly — so the same gate the test above withholds still resolves here.
+      await writeGate('unrestricted', 'Unrestricted');
+      await writePrompt('general', 'explicit', {
+        gateConfiguration: { include: ['unrestricted'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'explicit', 'SKILL.md'), 'utf-8');
       expect(skill).toContain('unrestricted');
     });
 
@@ -612,6 +627,7 @@ describe('Export Command Integration', () => {
     it('emits both the frontmatter hook and the script it points at', async () => {
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('claude-code');
       await runExport();
@@ -637,6 +653,7 @@ describe('Export Command Integration', () => {
     it('claims enforcement only when it actually shipped a hook', async () => {
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('claude-code');
       await runExport();
@@ -647,10 +664,12 @@ describe('Export Command Integration', () => {
     });
 
     it('says it is NOT enforced on a client with no frontmatter-hook support', async () => {
-      // codex uses the agent-skills adapter, which assigns no meaning to `hooks`.
-      // Claiming enforcement there is the exact lie this branch exists to prevent.
+      // codex uses the agent-skills adapter, which assigns no meaning to `hooks`. Opted in
+      // (Ruling A3) so this isolates the client-capability branch from the opt-in branch:
+      // claiming enforcement here would be the exact lie this branch exists to prevent.
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('codex');
       await runExport('codex');
@@ -670,6 +689,51 @@ describe('Export Command Integration', () => {
       const skill = await readFile(path.join(outputDir, 'ungated', 'SKILL.md'), 'utf-8');
       expect(frontmatterOf(skill)['hooks']).toBeUndefined();
       expect(await exists(path.join(outputDir, 'ungated', 'hooks', 'gate-review.py'))).toBe(false);
+    });
+  });
+
+  /**
+   * Ruling A3. A skill's frontmatter hooks register at SESSION scope; a worker's Skill
+   * invocation under an Agent-tool subagent was measured (2026-09-14) firing its hook at the
+   * PLANNER session's own stop rather than the subagent's. Hook enforcement is therefore
+   * opt-in per prompt (`enforceGateHooks: true`) — the default renders gates as prose only,
+   * even when the prompt has gates and the client can honour the frontmatter block.
+   */
+  describe('gate hook enforcement is opt-in per prompt (Ruling A3)', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality', {
+        activation: { prompt_categories: ['code'] },
+      });
+    });
+
+    it('renders gates as prose only by default, with no Stop hook shipped', async () => {
+      await writePrompt('general', 'unopted', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'unopted', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('## Quality Gates');
+      expect(skill).toContain('Not mechanically enforced');
+      expect(skill).not.toContain('registers a `Stop` hook');
+      expect(frontmatterOf(skill)['hooks']).toBeUndefined();
+      expect(await exists(path.join(outputDir, 'unopted', 'hooks', 'gate-review.py'))).toBe(false);
+    });
+
+    it('ships the Stop hook once the prompt opts in with enforceGateHooks: true', async () => {
+      await writePrompt('general', 'opted', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'opted', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('registers a `Stop` hook');
+      expect(skill).not.toContain('Not mechanically enforced');
+      expect(frontmatterOf(skill)['hooks']).toBeDefined();
+      expect(await exists(path.join(outputDir, 'opted', 'hooks', 'gate-review.py'))).toBe(true);
     });
   });
 
@@ -697,6 +761,7 @@ describe('Export Command Integration', () => {
       await writeGate('code-quality', 'Code Quality');
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('claude-code');
       await runExport();
