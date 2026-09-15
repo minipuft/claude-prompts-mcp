@@ -428,7 +428,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops",
+      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations",
   },
   {
     script: 'validate:agent-plugins',
