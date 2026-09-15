@@ -52,7 +52,7 @@ const ROOT =
 
 interface Problem {
   file: string;
-  kind: 'schema' | 'gate' | 'convention';
+  kind: 'schema' | 'gate' | 'convention' | 'orphan';
   detail: string;
 }
 
@@ -183,12 +183,105 @@ function validateFile(file: string): Problem[] {
   return problems;
 }
 
+interface GateYamlMinimal {
+  id?: string;
+  activation?: unknown;
+}
+
+/** `gate.yaml` files one level under `dir` (`<gatesRoot>/<id>/gate.yaml`). */
+function findGateFiles(dir: string): string[] {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const gateFile = join(dir, entry.name, 'gate.yaml');
+    if (existsSync(gateFile)) found.push(gateFile);
+  }
+  return found;
+}
+
+/**
+ * Every gate id a prompt reaches for by reference rather than defining inline — the two surfaces
+ * `resolveActiveGateRefs` (skills-sync/service.ts) registers ahead of auto-activation: a prompt's
+ * `gateConfiguration.include`, and a chain step's `inlineGateIds` (flattened to prompt level, same
+ * as that resolver's rank 1b). `gateConfiguration.inline` is NOT in this set — it carries free-text
+ * criteria strings for `inline-N` gate refs, never gate ids (confirmed against its one reader,
+ * `resolveActiveGateRefs` rank 4). `inline_gate_definitions` defines new gates rather than
+ * including existing ones, so it is out of scope for an ORPHAN check.
+ */
+function collectIncludedGateIds(promptFiles: string[]): Set<string> {
+  const included = new Set<string>();
+  for (const file of promptFiles) {
+    let parsed: unknown;
+    try {
+      parsed = yaml.load(readFileSync(file, 'utf8'));
+    } catch {
+      continue; // unparseable YAML is already reported as a schema problem
+    }
+    const doc = parsed as {
+      gateConfiguration?: { include?: unknown };
+      chainSteps?: Array<{ inlineGateIds?: unknown }>;
+    };
+    for (const id of doc.gateConfiguration?.include ?? []) {
+      if (typeof id === 'string') included.add(id);
+    }
+    for (const step of doc.chainSteps ?? []) {
+      for (const id of step.inlineGateIds ?? []) {
+        if (typeof id === 'string') included.add(id);
+      }
+    }
+  }
+  return included;
+}
+
+/**
+ * A gate declaring no `activation` block only ever attaches through an explicit include (row A.2's
+ * sibling ruling A1 — a gate with no `activation` is opt-in, not always-active). If no prompt or
+ * chain step includes it, it never attaches and nothing notices: the process still exits 0, same
+ * silent-drop shape as the dropped-gate check above.
+ */
+function findOrphanGates(root: string, promptFiles: string[]): Problem[] {
+  const gatesRoot = join(dirname(root), 'gates');
+  const gateFiles = findGateFiles(gatesRoot);
+  if (gateFiles.length === 0) return [];
+
+  const included = collectIncludedGateIds(promptFiles);
+  const problems: Problem[] = [];
+
+  for (const file of gateFiles) {
+    let parsed: unknown;
+    try {
+      parsed = yaml.load(readFileSync(file, 'utf8'));
+    } catch {
+      continue; // malformed gate YAML is a different gate's concern
+    }
+    const gate = parsed as GateYamlMinimal;
+    if (gate.activation !== undefined) continue; // opt-in on its own terms
+    const id = gate.id ?? basename(dirname(file));
+    if (included.has(id)) continue;
+    problems.push({
+      file: relative(root, file),
+      kind: 'orphan',
+      detail:
+        `gate '${id}' declares no activation and is included by no prompt or chain step — ` +
+        `add an activation block, or include it via gateConfiguration.include / a chain step's inlineGateIds`,
+    });
+  }
+  return problems;
+}
+
 function run(root: string): Problem[] {
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     console.error(`validate:prompts — no such directory: ${root}`);
     process.exit(2);
   }
-  return findPromptFiles(root).flatMap(validateFile);
+  const promptFiles = findPromptFiles(root);
+  return [...promptFiles.flatMap(validateFile), ...findOrphanGates(root, promptFiles)];
 }
 
 // A self-test that only proved the validator ACCEPTS the bundled tree would pass against a
@@ -265,6 +358,100 @@ if (SELF_TEST) {
   if (!schemaCaught) failures.push('an empty description was NOT reported');
   if (!gateCaught) failures.push('a gate missing `guidance` was NOT reported');
 
+  // Orphan-gate fixtures — a real `resources/{prompts,gates}` layout (`findOrphanGates` derives
+  // `gatesRoot` as `dirname(root)/gates`), one gate per activation/inclusion combination: a gate
+  // WITH `activation` (never flagged, opt-in on its own terms), one opt-in gate included via
+  // `gateConfiguration.include`, one opt-in gate included only via a chain step's `inlineGateIds`,
+  // and one opt-in gate included nowhere (must be the one flagged).
+  const gateDir = mkdtempSync(join(tmpdir(), 'validate-prompts-gate-selftest-'));
+  const promptsRoot = join(gateDir, 'resources', 'prompts');
+  const gatesRoot = join(gateDir, 'resources', 'gates');
+  const writeGate = (id: string, body: string): void => {
+    mkdirSync(join(gatesRoot, id), { recursive: true });
+    writeFileSync(join(gatesRoot, id, 'gate.yaml'), body, 'utf8');
+  };
+  const writePrompt = (name: string, body: string): void => {
+    mkdirSync(join(promptsRoot, name), { recursive: true });
+    writeFileSync(join(promptsRoot, name, 'prompt.yaml'), body, 'utf8');
+  };
+
+  writeGate(
+    'has-activation',
+    [
+      'id: has-activation',
+      'name: Has Activation',
+      'description: always active',
+      'activation:',
+      '  prompt_categories:',
+      '    - general',
+      '',
+    ].join('\n')
+  );
+  writeGate(
+    'included-via-config',
+    [
+      'id: included-via-config',
+      'name: Included Via Config',
+      'description: opt-in, included by a prompt',
+      '',
+    ].join('\n')
+  );
+  writeGate(
+    'included-via-chain-step',
+    [
+      'id: included-via-chain-step',
+      'name: Included Via Chain Step',
+      'description: opt-in, included by a chain step',
+      '',
+    ].join('\n')
+  );
+  writeGate(
+    'orphan-gate',
+    ['id: orphan-gate', 'name: Orphan Gate', 'description: opt-in and included nowhere', ''].join(
+      '\n'
+    )
+  );
+  writePrompt(
+    'general/includer',
+    [
+      'id: includer',
+      'name: Includer',
+      'category: general',
+      'description: Includes one gate explicitly and one via a chain step.',
+      'userMessageTemplateFile: user-message.md',
+      'gateConfiguration:',
+      '  include:',
+      '    - included-via-config',
+      'chainSteps:',
+      '  - stepName: Step One',
+      '    promptId: includer',
+      '    inlineGateIds:',
+      '      - included-via-chain-step',
+      '',
+    ].join('\n')
+  );
+
+  const orphanFound = findOrphanGates(promptsRoot, findPromptFiles(promptsRoot));
+  rmSync(gateDir, { recursive: true, force: true });
+
+  const flaggedOrphan = orphanFound.some((p) => p.file.includes('orphan-gate'));
+  const flaggedIncludedViaConfig = orphanFound.some((p) => p.file.includes('included-via-config'));
+  const flaggedIncludedViaChainStep = orphanFound.some((p) =>
+    p.file.includes('included-via-chain-step')
+  );
+  const flaggedHasActivation = orphanFound.some((p) => p.file.includes('has-activation'));
+
+  if (!flaggedOrphan)
+    failures.push('a gate with no activation and no includer was NOT reported as orphan');
+  if (flaggedIncludedViaConfig)
+    failures.push('a gate included via gateConfiguration.include was wrongly reported as orphan');
+  if (flaggedIncludedViaChainStep)
+    failures.push(
+      "a gate included via a chain step's inlineGateIds was wrongly reported as orphan"
+    );
+  if (flaggedHasActivation)
+    failures.push('a gate declaring its own activation block was wrongly reported as orphan');
+
   if (failures.length > 0) {
     console.error(
       `validate:prompts --self-test FAILED\n${failures.map((f) => `  - ${f}`).join('\n')}`
@@ -272,7 +459,8 @@ if (SELF_TEST) {
     process.exit(1);
   }
   console.log(
-    'validate:prompts --self-test OK — accepts a valid prompt, catches both defect kinds'
+    'validate:prompts --self-test OK — accepts a valid prompt, catches both defect kinds, ' +
+      'and flags an orphan gate without false-positiving on activation/include/inlineGateIds'
   );
   process.exit(0);
 }
@@ -301,20 +489,29 @@ if (problems.length === 0) {
 const schemaProblems = problems.filter((p) => p.kind === 'schema');
 const gateProblems = problems.filter((p) => p.kind === 'gate');
 const conventionProblems = problems.filter((p) => p.kind === 'convention');
+const orphanProblems = problems.filter((p) => p.kind === 'orphan');
 
 console.error(
   `validate:prompts FAILED — ${schemaProblems.length} schema error(s), ` +
-    `${gateProblems.length} silently dropped gate(s) and ${conventionProblems.length} ` +
-    `convention violation(s) across ${files} prompt(s) under ${ROOT}\n`
+    `${gateProblems.length} silently dropped gate(s), ${conventionProblems.length} ` +
+    `convention violation(s) and ${orphanProblems.length} orphan gate(s) across ${files} ` +
+    `prompt(s) under ${ROOT}\n`
 );
 for (const problem of problems) {
   const label =
-    problem.kind === 'schema' ? 'INVALID' : problem.kind === 'gate' ? 'GATE   ' : 'CONVENT';
+    problem.kind === 'schema'
+      ? 'INVALID'
+      : problem.kind === 'gate'
+        ? 'GATE   '
+        : problem.kind === 'convention'
+          ? 'CONVENT'
+          : 'ORPHAN ';
   console.error(`  ${label}  ${problem.file}`);
   console.error(`            ${problem.detail}`);
 }
 console.error(
-  '\nA prompt with a schema error is DROPPED at load and a dropped gate never runs — both are ' +
-    'silent at runtime. Fix the file, or the server will keep starting "successfully" without it.'
+  '\nA prompt with a schema error is DROPPED at load, a dropped gate never runs, and an orphan ' +
+    'gate never attaches — all three are silent at runtime. Fix the file, or the server will keep ' +
+    'starting "successfully" without it.'
 );
 process.exit(1);
