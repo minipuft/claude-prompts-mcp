@@ -114,3 +114,20 @@ outside the run, including one in the owner's terminal, is not excluded; the own
 **Guard adopted.** Workers W2 and R bracket every test suite, drive and commit with a fingerprint of the shared trees:
 entry counts for root and `server/node_modules`, plus the presence of `jest` and `commitlint`. They stop and report the
 bracketed command on any drop, so a repeat names its own cause.
+
+## Worker W2 accepted (2026-09-14)
+
+Rows 1.3, 1.5, 1.6 and 1.7 merged. Planner probes, with the dependency guard steady at root 259 and server 474: the knip
+ratchet OK at 1194, `validate:arch` OK, and the paths unit test plus the new e2e file at 31/31. The CHANGELOG entry for
+clients that set a workspace stays under Fixed, because the docs already promised that writes land in the workspace.
+
+Closed, not rows:
+
+- **Agent Plugins hosts still write inside the install folder.** The canonical `mcp.json` sets
+  `MCP_WORKSPACE=${PLUGIN_ROOT}`, so after R5 those hosts write to `${PLUGIN_ROOT}/resources/<type>/`, which an update
+  still replaces, as before. ✗ KILLED (2026-09-14 · not a regression, and the measured Codex host passes no
+  `PLUGIN_DATA` to the MCP server, so the canonical file has no persistent directory to name (R2) · revives if a host
+  passes `PLUGIN_DATA` to the MCP server, or a user reports resources lost on an Agent Plugins update)
+- **`docs/guides/gates.md` near 289–317** describes workspace gate layouts without the write rule. ✗ KILLED
+  (2026-09-14 · the file is mid-edit in the `claude-prompts-mcp-findings` worktree · revives when that worktree merges,
+  as a row of its own)
