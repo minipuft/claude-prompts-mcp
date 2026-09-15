@@ -10,10 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
-import {
-  validateConfigAgainstSchema,
-  type ConfigSchemaValidationResult,
-} from './config-schema-validator.js';
+import { validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -23,6 +20,8 @@ const logger = createLogger(
     enableDebug: false,
   })
 );
+
+import type { ConfigSchemaValidationResult } from '#shared/types/config-manager.js';
 
 import {
   Config,

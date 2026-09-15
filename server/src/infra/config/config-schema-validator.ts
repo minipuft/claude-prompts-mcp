@@ -4,10 +4,6 @@ import { readFile } from 'node:fs/promises';
 import type { ConfigSchemaValidationResult } from '#shared/types/config-manager.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 
-// Re-exported (not just imported): infra/config/index.ts imports this type from this module,
-// and ConfigSchemaValidationResult's single definition lives in shared/types/config-manager.ts.
-export type { ConfigSchemaValidationResult };
-
 type JsonSchema = Record<string, unknown>;
 
 interface CachedValidator {

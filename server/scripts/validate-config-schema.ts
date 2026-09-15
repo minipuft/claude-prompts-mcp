@@ -43,8 +43,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { ConfigSchemaValidationResult } from '../src/infra/config/config-schema-validator.js';
 import { validateConfigAgainstSchema } from '../src/infra/config/config-schema-validator.js';
+
+import type { ConfigSchemaValidationResult } from '../src/shared/types/config-manager.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = path.join(SERVER_ROOT, 'config.json');
