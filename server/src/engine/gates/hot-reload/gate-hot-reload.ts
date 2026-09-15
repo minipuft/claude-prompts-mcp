@@ -238,18 +238,9 @@ export class GateHotReloadCoordinator {
             type: criteria.type,
           };
 
-          if (criteria.min_length !== undefined) {
-            normalizedCriteria.min_length = criteria.min_length;
-          }
-          if (criteria.max_length !== undefined) {
-            normalizedCriteria.max_length = criteria.max_length;
-          }
-          if (criteria.required_patterns) {
-            normalizedCriteria.required_patterns = criteria.required_patterns;
-          }
-          if (criteria.forbidden_patterns) {
-            normalizedCriteria.forbidden_patterns = criteria.forbidden_patterns;
-          }
+          // min_length/max_length/required_patterns/forbidden_patterns/regex_patterns/
+          // keyword_count are deliberately not copied — they were never evaluated (B9) and
+          // are rejected at load, so GatePassCriteria no longer declares them.
           if (criteria.framework) {
             normalizedCriteria.framework = criteria.framework;
           }
@@ -273,12 +264,6 @@ export class GateHotReloadCoordinator {
               qualityIndicators[indicator] = normalizedIndicator;
             }
             normalizedCriteria.quality_indicators = qualityIndicators;
-          }
-          if (criteria.regex_patterns) {
-            normalizedCriteria.regex_patterns = criteria.regex_patterns;
-          }
-          if (criteria.keyword_count) {
-            normalizedCriteria.keyword_count = criteria.keyword_count;
           }
 
           return normalizedCriteria;

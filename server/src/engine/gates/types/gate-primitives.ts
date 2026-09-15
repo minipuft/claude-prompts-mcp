@@ -56,11 +56,9 @@ export interface GatePassCriteria {
    */
   type: 'inline_guidance' | 'framework_compliance' | 'shell_verify' | 'script_tool';
 
-  // Content check options
-  min_length?: number;
-  max_length?: number;
-  required_patterns?: string[];
-  forbidden_patterns?: string[];
+  // NOTE: min_length, max_length, required_patterns, forbidden_patterns, regex_patterns,
+  // and keyword_count are deliberately NOT declared here — see gate-schema.ts's matching
+  // NOTE for why (B9: no evaluator ever read them, so they are refused at load).
 
   // Framework compliance options
   framework?: string;
@@ -73,10 +71,6 @@ export interface GatePassCriteria {
       patterns?: string[];
     }
   >;
-
-  // Pattern check options
-  regex_patterns?: string[];
-  keyword_count?: { [keyword: string]: number };
 
   // Shell verification options (ground-truth validation via exit code)
   /** Shell command to execute for verification (exit 0 = pass) */

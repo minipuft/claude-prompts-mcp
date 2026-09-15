@@ -137,7 +137,7 @@ describe('GateDefinitionSchema `subject` and removed `llm_self_check` type', () 
     expect(result.data?.subject).toBe('code-quality');
   });
 
-  test('warns (does not error) when a criterion carries a rendered-only pattern field', () => {
+  test('rejects a criterion carrying a pattern/length field, naming the field and the fix', () => {
     const result = validateGateSchema(
       minimalGate({
         pass_criteria: [{ type: 'inline_guidance', required_patterns: ['^export'] }],
@@ -145,8 +145,9 @@ describe('GateDefinitionSchema `subject` and removed `llm_self_check` type', () 
       'probe'
     );
 
-    expect(result.valid).toBe(true);
-    expect(result.warnings.join('\n')).toContain('never evaluated');
+    expect(result.valid).toBe(false);
+    expect(result.errors.join('\n')).toContain('pass_criteria[0].required_patterns');
+    expect(result.errors.join('\n')).toContain('guidance.md');
   });
 });
 

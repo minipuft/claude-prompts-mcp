@@ -993,22 +993,17 @@ describe('Export Command Integration', () => {
 
     it('renders an inline_guidance criterion as prose with no JSON object', async () => {
       // The section is a checklist a model self-reviews against. A serialized config
-      // blob is not a reviewable instruction.
+      // blob is not a reviewable instruction. required_patterns/min_length are no longer
+      // a legal criterion shape (B9: rejected at load), so framework/min_compliance_score
+      // stand in as the still-valid multi-field case.
       const skill = await gateSkillWithCriteria('prose-gate', [
-        {
-          type: 'inline_guidance',
-          min_length: 100,
-          required_patterns: ['States the work type'],
-          forbidden_patterns: ['TODO'],
-        },
+        { type: 'inline_guidance', framework: 'CAGEERF', min_compliance_score: 0.8 },
       ]);
       const section = passCriteriaSection(skill);
 
-      expect(section).toContain('States the work type');
-      expect(section).toContain('100 characters');
-      expect(section).toContain('TODO');
+      expect(section).toContain('Complies with the CAGEERF framework');
+      expect(section).toContain('0.8');
       expect(section).not.toContain('{"');
-      expect(section).not.toContain('min_length');
       expect(section).not.toContain('[inline_guidance]');
     });
 
@@ -1028,32 +1023,36 @@ describe('Export Command Integration', () => {
 
     it('names an unrecognized criterion by its keys rather than serializing it', async () => {
       // GatePassCriteria is a passthrough schema, so unknown keys reach the exporter.
-      // The fallback must stay lossy-but-readable — never a JSON dump.
+      // The fallback must stay lossy-but-readable — never a JSON dump. keyword_count is
+      // no longer an example of this: it is now a rejected-at-load field (B9), not merely
+      // an unrecognized one, so a genuinely unknown key stands in instead.
       const section = passCriteriaSection(
         await gateSkillWithCriteria('odd-gate', [
-          { type: 'inline_guidance', keyword_count: { evidence: 2 } },
+          { type: 'inline_guidance', confidence_threshold: 0.9 },
         ])
       );
 
-      expect(section).toContain('keyword_count');
+      expect(section).toContain('confidence_threshold');
       expect(section).not.toContain('{"');
-      expect(section).not.toContain('evidence');
+      expect(section).not.toContain('0.9');
     });
 
     it('renders prose for the generic adapter too, not just claude-code', async () => {
       // The defect existed as byte-identical copies in BOTH exporters. Breaking only
       // the generic one left the whole 74-test suite green (mutation M-K), so a
-      // claude-code-only assertion cannot close this row.
+      // claude-code-only assertion cannot close this row. required_patterns/min_length
+      // are no longer a legal criterion shape (B9), so framework/min_compliance_score
+      // stand in, same as the claude-code case above.
       const section = passCriteriaSection(
         await gateSkillWithCriteria(
           'generic-gate',
-          [{ type: 'inline_guidance', min_length: 100, required_patterns: ['Cites evidence'] }],
+          [{ type: 'inline_guidance', framework: 'CAGEERF', min_compliance_score: 0.8 }],
           'codex'
         )
       );
 
-      expect(section).toContain('Cites evidence');
-      expect(section).toContain('100 characters');
+      expect(section).toContain('Complies with the CAGEERF framework');
+      expect(section).toContain('0.8');
       expect(section).not.toContain('{"');
       expect(section).not.toContain('min_length');
     });

@@ -81,12 +81,12 @@ export const GatePassCriteriaSchema = z
         '`shell_verify`/`script_tool` (check)',
     }),
 
-    // Content check options — rendered as reminder prose, never evaluated (see the
-    // pattern/length warning in validateGateSchema below); does not make a gate a check.
-    min_length: z.number().int().nonnegative().optional(),
-    max_length: z.number().int().positive().optional(),
-    required_patterns: z.array(z.string()).optional(),
-    forbidden_patterns: z.array(z.string()).optional(),
+    // NOTE: min_length, max_length, required_patterns, forbidden_patterns, regex_patterns,
+    // and keyword_count are deliberately NOT declared here. They never had an evaluator —
+    // they rendered as reminder prose and never gated anything (B9) — so they are refused
+    // at load rather than accepted and silently ignored. `validateGateSchema` below reads
+    // them off `.passthrough()`'s extra keys and errors, naming the field and the fix: move
+    // the sentence into guidance.md (reminder) or use shell_verify/script_tool (check).
 
     // Framework compliance options
     framework: z.string().optional(),
@@ -101,11 +101,6 @@ export const GatePassCriteriaSchema = z
         })
       )
       .optional(),
-
-    // Pattern check options — rendered as reminder prose, never evaluated (see the
-    // pattern/length warning in validateGateSchema below); does not make a gate a check.
-    regex_patterns: z.array(z.string()).optional(),
-    keyword_count: z.record(z.string(), z.number()).optional(),
 
     // Shell verification options (ground-truth validation via exit code)
     /**
@@ -421,11 +416,11 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
     );
   }
 
-  // Pattern/length fields have no evaluator: they render as reminder prose and never
-  // gate anything, so a criterion carrying one is not the check its author may expect.
-  // Warning, not error — the registry still carries these fields until they are removed
-  // from the write surface.
-  const RENDERED_ONLY_CRITERIA_FIELDS = [
+  // Pattern/length fields have no evaluator: they never gated anything (B9), so they are
+  // no longer declared on GatePassCriteriaSchema and are refused at load rather than
+  // accepted and silently ignored. They still reach here as `.passthrough()` extra keys,
+  // which is why the lookup below goes through an index signature instead of the typed field.
+  const REJECTED_CRITERIA_FIELDS = [
     'required_patterns',
     'forbidden_patterns',
     'regex_patterns',
@@ -434,10 +429,13 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
     'max_length',
   ] as const;
   definition.pass_criteria?.forEach((criterion, index) => {
-    for (const field of RENDERED_ONLY_CRITERIA_FIELDS) {
-      if (criterion[field] !== undefined) {
-        warnings.push(
-          `pass_criteria[${index}]: ${field} is rendered as reminder prose and never evaluated; it does not make this gate a check`
+    const rawCriterion = criterion as Record<string, unknown>;
+    for (const field of REJECTED_CRITERIA_FIELDS) {
+      if (rawCriterion[field] !== undefined) {
+        errors.push(
+          `pass_criteria[${index}].${field} is not evaluated by any runner and is no longer ` +
+            'accepted; move the sentence into guidance.md (reminder) or use shell_verify/' +
+            'script_tool (check)'
         );
       }
     }

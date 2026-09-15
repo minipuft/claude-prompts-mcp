@@ -188,21 +188,12 @@ export function composeReviewPrompt(
 /**
  * Convert structured GatePassCriteria into human-readable gate criteria strings.
  */
-function formatCriteria(criteria: GatePassCriteria): string[] {
-  const lines: string[] = [];
-  if (criteria.min_length !== undefined) {
-    lines.push(`Content must be at least ${criteria.min_length} characters`);
-  }
-  if (criteria.max_length !== undefined) {
-    lines.push(`Content must not exceed ${criteria.max_length} characters`);
-  }
-  if (criteria.required_patterns?.length) {
-    lines.push(`Must include: ${criteria.required_patterns.join(', ')}`);
-  }
-  if (criteria.forbidden_patterns?.length) {
-    lines.push(`Must not include: ${criteria.forbidden_patterns.join(', ')}`);
-  }
-  return lines;
+function formatCriteria(_criteria: GatePassCriteria): string[] {
+  // min_length/max_length/required_patterns/forbidden_patterns were the only fields this
+  // rendered, and they were never evaluated (B9) — GatePassCriteria no longer declares
+  // them, so there is nothing left here to format. Structured criteria (shell_verify,
+  // script_tool, framework_compliance) were never rendered as prose by this function.
+  return [];
 }
 
 /**

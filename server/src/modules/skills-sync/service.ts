@@ -2456,18 +2456,11 @@ function chainStepLabel(step: IRChainStep, index: number): string {
  */
 function describePassCriterion(criterion: Record<string, unknown>): string[] {
   const lines: string[] = [];
-  const strings = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 
-  for (const pattern of strings(criterion['required_patterns']))
-    lines.push(`Addresses: ${pattern}`);
-  for (const pattern of strings(criterion['forbidden_patterns'])) lines.push(`Avoids: ${pattern}`);
-  for (const pattern of strings(criterion['regex_patterns'])) lines.push(`Matches \`${pattern}\``);
-
-  const minLength = criterion['min_length'];
-  if (typeof minLength === 'number') lines.push(`Runs to at least ${minLength} characters`);
-  const maxLength = criterion['max_length'];
-  if (typeof maxLength === 'number') lines.push(`Stays under ${maxLength} characters`);
+  // required_patterns/forbidden_patterns/regex_patterns/min_length/max_length are
+  // deliberately not read here — they never had an evaluator (B9) and `validateGateSchema`
+  // now refuses them at load, so a live gate.yaml cannot carry them. A criterion with none
+  // of the fields below falls through to the unrecognized-keys fallback, same as before.
 
   const shellCommand = criterion['shell_command'];
   if (Array.isArray(shellCommand) && shellCommand.length > 0) {
@@ -2485,8 +2478,8 @@ function describePassCriterion(criterion: Record<string, unknown>): string[] {
   if (typeof minScore === 'number')
     lines.push(`Scores at least ${minScore} on framework compliance`);
 
-  const promptTemplate = criterion['prompt_template'];
-  if (typeof promptTemplate === 'string') lines.push(promptTemplate);
+  // `prompt_template` is not a declared GatePassCriteria field (`llm_self_check` never
+  // had a runner — gate-schema.ts) and is deliberately not read here either.
 
   const scriptToolId = criterion['script_tool_id'];
   if (typeof scriptToolId === 'string') lines.push(`Passes the \`${scriptToolId}\` check`);

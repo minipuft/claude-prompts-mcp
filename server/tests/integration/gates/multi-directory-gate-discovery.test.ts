@@ -22,8 +22,6 @@ function gateYaml(id: string, name: string, opts?: { guidanceFile?: string }): s
     `description: Test gate ${id}`,
     `pass_criteria:`,
     `  - type: inline_guidance`,
-    `    required_patterns:`,
-    `      - test`,
   ];
   if (opts?.guidanceFile) {
     lines.push(`guidanceFile: ${opts.guidanceFile}`);

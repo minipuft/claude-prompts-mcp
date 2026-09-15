@@ -171,8 +171,6 @@ validation with an error naming the replacement: use `inline_guidance` (reminder
 ```yaml
 pass_criteria:
   - type: inline_guidance
-    min_length: 100
-    forbidden_patterns: ["eval(", "innerHTML"]
 
 retry_config:
   max_attempts: 2
@@ -184,26 +182,19 @@ retry_config:
 | `max_attempts`      | How many times Claude retries before failing.      |
 | `improvement_hints` | Feed validation errors back into the retry prompt. |
 
-### Pattern/length fields render as prose, not as checks
+### Pattern/length fields are rejected at load
 
 `required_patterns`, `forbidden_patterns`, `regex_patterns`, `keyword_count`, `min_length`, and
-`max_length` are accepted on any `pass_criteria` entry, but none of them has a runtime evaluator:
-they render into the reminder's guidance text as prose, and are never evaluated against the
-agent's actual output. Setting one does not make a gate a `check` (see [Tiers](#tiers)) — schema
-validation warns on this rather than rejecting it, since the registry still carries these fields
-on existing gates.
+`max_length` are **not** accepted on a `pass_criteria` entry. None of them ever had a runtime
+evaluator — they used to render into the reminder's guidance text as prose and were never
+evaluated against the agent's actual output, so setting one never made a gate a `check` (see
+[Tiers](#tiers)) even while the schema still accepted it. `validateGateSchema` now refuses a
+criterion carrying any of these six fields, naming the field and the fix.
 
-| Field                | Renders as                                      |
-| -------------------- | ----------------------------------------------- |
-| `required_patterns`  | "MUST appear" prose in the guidance text.       |
-| `forbidden_patterns` | "MUST NOT appear" prose in the guidance text.   |
-| `regex_patterns`     | Pattern-requirement prose in the guidance text. |
-| `keyword_count`      | Keyword-frequency prose in the guidance text.   |
-| `min_length`         | Minimum-length prose in the guidance text.      |
-| `max_length`         | Maximum-length prose in the guidance text.      |
-
-If the check needs to be real, use `shell_verify` or `script_tool` against the agent's response
-(`shell_stdin_source: agent_response`) instead of one of these fields.
+| If you want this...                                           | Do this instead                                                                                                                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A reminder sentence ("must mention X", "avoid Y", "≥N chars") | Put the sentence in `guidance` / `guidanceFile` — the agent self-assesses against it.                                                                              |
+| A real, evaluated check                                       | Use `shell_verify` (exit-code ground truth) or `script_tool` (structured verdict), optionally against the agent's response (`shell_stdin_source: agent_response`). |
 
 ---
 

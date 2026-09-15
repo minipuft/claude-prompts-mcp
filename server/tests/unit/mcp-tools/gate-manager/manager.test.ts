@@ -324,7 +324,7 @@ describe('GateToolHandler', () => {
       gateManager.get.mockReturnValue(
         createFakeGate({
           gateId: 'gate-c',
-          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         })
       );
 
@@ -335,7 +335,7 @@ describe('GateToolHandler', () => {
 
       expect(result.isError).toBe(false);
       const written = readWrittenGateYaml('gate-c');
-      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 120 }]);
+      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance' }]);
     });
 
     test('update explicitly supplying activation/retry_config/pass_criteria overrides the existing value', async () => {
@@ -345,7 +345,7 @@ describe('GateToolHandler', () => {
           gateId: 'gate-d',
           activation: { prompt_categories: ['docs'] },
           retry_config: { max_attempts: 5 },
-          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         })
       );
 
@@ -355,7 +355,7 @@ describe('GateToolHandler', () => {
           id: 'gate-d',
           activation: { prompt_categories: ['code'], explicit_request: true },
           retry_config: { max_attempts: 1 },
-          pass_criteria: [{ type: 'inline_guidance', min_length: 50 }],
+          pass_criteria: [{ type: 'framework_compliance' }],
         },
         {}
       );
@@ -367,7 +367,7 @@ describe('GateToolHandler', () => {
         explicit_request: true,
       });
       expect(written['retry_config']).toEqual({ max_attempts: 1 });
-      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 50 }]);
+      expect(written['pass_criteria']).toEqual([{ type: 'framework_compliance' }]);
     });
 
     // Regression coverage for the writer-side gap left after the above:

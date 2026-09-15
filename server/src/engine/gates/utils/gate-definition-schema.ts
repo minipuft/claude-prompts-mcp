@@ -92,18 +92,9 @@ export function validateLightweightGateDefinition(
         type: criteria.type,
       };
 
-      if (criteria.min_length !== undefined) {
-        normalized.min_length = criteria.min_length;
-      }
-      if (criteria.max_length !== undefined) {
-        normalized.max_length = criteria.max_length;
-      }
-      if (criteria.required_patterns) {
-        normalized.required_patterns = criteria.required_patterns;
-      }
-      if (criteria.forbidden_patterns) {
-        normalized.forbidden_patterns = criteria.forbidden_patterns;
-      }
+      // min_length/max_length/required_patterns/forbidden_patterns/regex_patterns/
+      // keyword_count are deliberately not copied — they were never evaluated (B9) and
+      // are rejected at load, so GatePassCriteria no longer declares them.
       if (criteria.framework) {
         normalized.framework = criteria.framework;
       }
@@ -126,12 +117,6 @@ export function validateLightweightGateDefinition(
           indicators[key] = normalizedIndicator;
         }
         normalized.quality_indicators = indicators;
-      }
-      if (criteria.regex_patterns) {
-        normalized.regex_patterns = criteria.regex_patterns;
-      }
-      if (criteria.keyword_count) {
-        normalized.keyword_count = criteria.keyword_count;
       }
 
       // Shell verification fields
