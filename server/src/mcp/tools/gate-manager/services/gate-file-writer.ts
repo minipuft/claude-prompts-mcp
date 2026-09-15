@@ -115,8 +115,12 @@ export function resolvePreservedGateYamlFields(
  * through here, so a version saved while the loader trimmed guidance restores a newline-terminated
  * file. Content that already ends with a newline is left as it is, so an update that does not
  * touch guidance keeps `guidance.md` byte-identical.
+ *
+ * Exported for `GateLifecycleProcessor`'s create-path version snapshot: the recorded
+ * state must match what a disk read-back produces, or the first update bridges a "mismatch" that
+ * is really just this same newline this function already applies at write time.
  */
-function ensureTrailingNewline(guidance: string): string {
+export function ensureTrailingNewline(guidance: string): string {
   if (guidance === '' || guidance.endsWith('\n')) {
     return guidance;
   }

@@ -17,8 +17,8 @@
  * typecheck, both ratchets, `validate:all` and 3026 unit tests. This check is what fails when a
  * seventh call site appears outside a `commit:`, rather than the class being rediscovered.
  *
- * WHAT IT CHECKS. Every call to `.recordEditResult(...)` or `.commitEdit(...)` under
- * `src/mcp/tools/` has a `commit:` property assignment among its ancestors.
+ * WHAT IT CHECKS. Every call to `.recordEditResult(...)`, `.commitEdit(...)` or `.saveVersion(...)`
+ * under `src/mcp/tools/` has a `commit:` property assignment among its ancestors.
  *
  * Parsed with the TypeScript AST rather than matched by text: a regex cannot tell a call inside a
  * `commit` callback from one merely near it, and brace counting misreads braces in strings and
@@ -36,8 +36,12 @@ import ts from 'typescript';
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCAN_ROOT = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
 
-/** The two version-history writers. Both persist and both throw; neither may stand alone. */
-const RECORDING_METHODS = ['recordEditResult', 'commitEdit'] as const;
+/**
+ * The version-history writers. All three persist and all three throw; none may stand alone.
+ * `saveVersion` is the create-path writer — a create has no prior state to bridge, so
+ * it calls `saveVersion` directly rather than through `recordEditResult`/`commitEdit`.
+ */
+const RECORDING_METHODS = ['recordEditResult', 'commitEdit', 'saveVersion'] as const;
 
 export interface UnguardedRecord {
   file: string;

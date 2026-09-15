@@ -9,6 +9,7 @@ import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
+import type { ResourceWriteCommitOptions } from '#modules/resources/services/index.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
@@ -87,8 +88,32 @@ export class FrameworkLifecycleProcessor {
       return this.validationService.createErrorResponse(id, validation);
     }
 
+    // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
+    // numbering every edit uses, which a fresh id resolves to 1 on its own. No bridge: a create
+    // has no prior live state to carry across, unlike an edit of an unrecorded framework. Runs as
+    // the writer's `commit` step (P4.2 / SF-3 contract, matching `handleUpdate` below) so a
+    // persistence failure aborts the create with nothing written.
+    const skipVersion = args.skip_version === true;
+    const commitOptions: ResourceWriteCommitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              await this.ctx.versionHistoryService.saveVersion(
+                'framework',
+                id,
+                projectWriteModel(
+                  id,
+                  frameworkData as unknown as Record<string, unknown>,
+                  frameworkSnapshotContract.projectedFields
+                ),
+                { description: 'Created via resource_manager', diff_summary: '' }
+              );
+            },
+          }
+        : {};
+
     // Atomic create with rollback on failure
-    const result = await this.createFrameworkAtomic(id, frameworkData);
+    const result = await this.createFrameworkAtomic(id, frameworkData, commitOptions);
     if (!result.success) {
       return this.error(`Failed to create framework: ${result.error}`);
     }
@@ -525,13 +550,18 @@ export class FrameworkLifecycleProcessor {
    */
   private async createFrameworkAtomic(
     id: string,
-    frameworkData: FrameworkCreationData
+    frameworkData: FrameworkCreationData,
+    commitOptions: ResourceWriteCommitOptions = {}
   ): Promise<{ success: boolean; error?: string; paths?: string[] }> {
     const normalizedId = id.toLowerCase();
     const registry = this.ctx.frameworkManager.getFrameworkRegistry();
 
     // Step 1: Write files to disk
-    const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, null);
+    const writeResult = await this.ctx.fileService.writeFrameworkFiles(
+      frameworkData,
+      null,
+      commitOptions
+    );
     if (!writeResult.success) {
       return { success: false, error: `File write failed: ${writeResult.error}` };
     }
