@@ -17,6 +17,8 @@ import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
 
+import { PathSettingError } from '#shared/utils/path-setting.js';
+
 const EMPTY_HEALTH_REPORT: HealthReport = {
   healthy: false,
   modules: {
@@ -321,8 +323,11 @@ QUICK START:
   Claude can update your prompts via resource_manager - no manual editing needed!
 
 PATH OPTIONS:
-  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/)
-  --config=/path          Direct path to config.json
+  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/);
+                          the server refuses to start if it is not an existing
+                          directory, or if a config.json there is not a JSON object
+  --config=/path          Direct path to config.json; the server refuses to start
+                          if it is not a readable JSON file
 
 RUNTIME OPTIONS:
   --init=/path            Create a new workspace with starter prompts at the specified path
@@ -336,11 +341,14 @@ RUNTIME OPTIONS:
   --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
-  MCP_WORKSPACE            Base workspace directory (same as --workspace)
-  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default)
+  MCP_WORKSPACE            Base workspace directory (same as --workspace); the server
+                           refuses to start if it is not an existing directory
+  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default);
+                           the server refuses to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
-  MCP_CONFIG_PATH          Direct path to config.json (same as --config)
+  MCP_CONFIG_PATH          Direct path to config.json (same as --config); the server
+                           refuses to start if it is not a readable JSON file
   LOG_LEVEL                Override log level (debug, info, warn, error)
 
 PRIORITY ORDER:
@@ -557,6 +565,7 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
     }
 
     const result = initWorkspace(targetPath);
+    // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
     console.log(result.message);
     return { shouldExit: true, exitCode: result.success ? 0 : 1 };
   }
@@ -753,6 +762,13 @@ async function main(): Promise<void> {
     // Log successful complete initialization
     activeLogger.info('✅ Application initialization completed - all systems operational');
   } catch (error) {
+    // A refused path setting is an operator error with a complete explanation, thrown before
+    // anything starts: print it once, without a stack, and leave nothing to roll back.
+    if (error instanceof PathSettingError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+
     // Comprehensive error handling with rollback
     console.error('❌ Failed to start MCP Claude Prompts Server:', error);
 

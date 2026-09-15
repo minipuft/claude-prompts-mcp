@@ -53,6 +53,7 @@ import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
 import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
+import { PathSettingError } from '#shared/utils/path-setting.js';
 import { ServiceOrchestrator } from '#shared/utils/service-orchestrator.js';
 
 /**
@@ -152,6 +153,8 @@ export class Application {
 
       this.logger.info('Application startup completed successfully');
     } catch (error) {
+      // The entry point prints a path-setting refusal once; logging it here too repeats it with a stack.
+      if (error instanceof PathSettingError) throw error;
       if (this.logger) {
         this.logger.error('Error during application startup:', error);
       } else {

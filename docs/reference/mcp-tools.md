@@ -725,6 +725,12 @@ Successful prompt writes return a machine-readable receipt with `config_path`, `
 loaded after refresh, and the current version. A write whose refreshed registry does not match the
 produced prompt is reported as an error, even when the filesystem transaction itself succeeded.
 
+Any `resource_manager` result that carries both readable `content` text and `structuredContent` —
+`validate`, `create`, `preview`, `update`, and `inspect` all do — also carries the same text in
+`structuredContent.message`. Some MCP clients hand the model only `structuredContent` when a
+result carries both, so a client reading solely the JSON half still receives the write receipt,
+preview notice, or validation outcome. A result with `content` text only is unaffected.
+
 Maintain an existing prompt through one bounded sequence:
 
 ```text
@@ -1647,6 +1653,15 @@ node dist/index.js --transport stdio \
   --config /path/to/config.json
 ```
 
+A path setting the server cannot use stops it before it serves anything, on every transport,
+exiting non-zero with the reason on stderr: the variable or flag, the value, the resolved path,
+what is wrong, and what removing the setting would fall back to. `--config` and `MCP_CONFIG_PATH`
+must name a readable JSON config file; `--workspace`, `MCP_WORKSPACE` and `MCP_RESOURCES_PATH`
+must name an existing directory; and a workspace `config.json`, when one exists, must be a readable
+JSON object. Each of these used to start a server on something else — ignored settings, a freshly
+created empty workspace, the bundled catalog in place of yours — with nothing reporting it. A
+workspace without a `config.json` uses the packaged one, and an empty value counts as unset.
+
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
 `--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
 `MCP_RESOURCES_PATH`) at a directory instead. The full parsed set (17, from `server/src/runtime/cli.ts`) is `--client`, `--config`,
@@ -1669,14 +1684,14 @@ success. The same check applies to `transport` in `config.json`.
 
 ### Environment Variables
 
-| Variable                    | Description                                          |
-| --------------------------- | ---------------------------------------------------- |
-| `MCP_WORKSPACE`             | Workspace root for config resolution                 |
-| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_CONFIG_PATH`           | Override config.json path                            |
-| `MCP_SERVER_ROOT`           | Server package root, used by skills export           |
-| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file      |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file   |
+| Variable                    | Description                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start                 |
+| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.); must be an existing directory, or the server refuses to start |
+| `MCP_CONFIG_PATH`           | Override config.json path; must name a readable JSON file, or the server refuses to start                           |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                          |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                     |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file                                                                  |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
@@ -1690,6 +1705,8 @@ Path resolution follows this priority (first match wins):
 
 Workspace resources overlay the bundled ones. There is no per-resource-type override layer —
 the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
+A set `MCP_RESOURCES_PATH` that does not exist is not "no match": it refuses startup rather than
+falling through to the package defaults, which would serve the bundled catalog under your name.
 
 **Example: MCP config with custom resources**
 

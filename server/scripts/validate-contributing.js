@@ -16,11 +16,12 @@
  * STDIO only, because the other transport the row named did not exist. The bug was on both.
  *
  * ZERO DEPENDENCIES, ON PURPOSE
- * `CONTRIBUTING.md` classifies as `docs` scope (scripts/classify-validation-scope.js), and ci.yml
- * guards "Setup Node.js" on `scope != 'docs'` and "Install dependencies" on `scope == 'full'`. There
- * is no node_modules on the docs route. A validator that imported anything would be unrunnable on
- * exactly the pull requests that edit CONTRIBUTING, which is the only time it matters. Node builtins
- * only. Keep it that way.
+ * `CONTRIBUTING.md` classifies as `docs` scope, or as `hooks` when it rides with a `hooks/**`
+ * change (scripts/classify-validation-scope.js). ci.yml runs this check on both lightweight routes
+ * and guards "Install dependencies" on `scope == 'full'`, so there is no node_modules on either
+ * route, `docs` or `hooks`. A validator that imported anything would be unrunnable on exactly the
+ * pull requests that edit CONTRIBUTING, which is the only time it matters. Node builtins only. Keep
+ * it that way.
  *
  * DECLARED BLIND SPOT
  * This checks that named commands EXIST. It does not check that a documented gate SEQUENCE matches

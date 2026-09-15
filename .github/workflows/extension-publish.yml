@@ -224,7 +224,12 @@ jobs:
           # The plugin ships no agents since 2026-08-27: a delegated step's EXECUTION
           # BRIEF is self-contained and runs on the host's general-purpose agent.
           test ! -e "$VERIFY_DIR/agents"
-          MCP_WORKSPACE="$RUNNER_TEMP/dist-smoke-workspace" node "$VERIFY_DIR/server/dist/index.js" --startup-test
+          # A throwaway workspace keeps --startup-test's runtime-state out of the
+          # unpacked artifact. It must exist: the server refuses a workspace that
+          # does not, instead of creating it.
+          SMOKE_WORKSPACE="$RUNNER_TEMP/dist-smoke-workspace"
+          mkdir -p "$SMOKE_WORKSPACE"
+          MCP_WORKSPACE="$SMOKE_WORKSPACE" node "$VERIFY_DIR/server/dist/index.js" --startup-test
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -645,7 +650,11 @@ jobs:
           test -d .plugin-staging/server/resources
           test -f .plugin-staging/hooks/hooks.json
           test ! -e .plugin-staging/agents
-          MCP_WORKSPACE="$RUNNER_TEMP/plugin-smoke-workspace" node .plugin-staging/server/dist/index.js --startup-test
+          # Same throwaway workspace as the dist smoke test above, for the same
+          # reason: runtime-state stays out of the zip, and the directory must exist.
+          SMOKE_WORKSPACE="$RUNNER_TEMP/plugin-smoke-workspace"
+          mkdir -p "$SMOKE_WORKSPACE"
+          MCP_WORKSPACE="$SMOKE_WORKSPACE" node .plugin-staging/server/dist/index.js --startup-test
 
           # Create archive
           cd .plugin-staging

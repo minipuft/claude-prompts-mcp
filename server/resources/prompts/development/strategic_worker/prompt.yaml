@@ -44,5 +44,27 @@ arguments:
       planner merges; shared-tree — commit nothing, leave edits in the planner's
       worktree for it to commit per concern.
     required: false
+# exclude names the measured RUNTIME set of gates that auto-activate for a `development`-category
+# prompt — the ten category-scoped gates plus `creed-fidelity`, which attaches only under an
+# active framework context (confirmed live via the `>>strategic_worker` positive control).
+# `framework_gates: false` alone does not stop any of them: it only vetoes a framework's OWN gate
+# set. `exclude` binds up to rank 60 (`prompt-config`, gate-set-resolver.ts), above the rank-20
+# registry-auto tier every gate here activates through, so it drops them at runtime once rebuilt,
+# and it drops them from the exported skill the same way (skills-sync/service.ts
+# `resolveActiveGateRefs`, which also excludes `creed-fidelity` independently via its framework
+# dependency). The export test in export-command.test.ts fails the day a new auto-activating gate
+# appears and this list has not grown to match.
 gateConfiguration:
+  exclude:
+    - api-documentation
+    - code-quality
+    - creed-fidelity
+    - information-placement
+    - intent-quality
+    - plan-quality
+    - product-positioning-fidelity
+    - prose-hygiene
+    - security-awareness
+    - semantic-discoverability
+    - test-coverage
   framework_gates: false

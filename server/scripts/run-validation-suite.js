@@ -84,7 +84,7 @@ export const SUITE = [
   {
     script: 'validate:knip-ratchet',
     io: 'read',
-    reads: ['file', 'spawn'],
+    reads: ['file', 'spawn', 'walk'],
     converse: 'unexamined',
   },
   {
@@ -367,7 +367,7 @@ export const SUITE = [
   {
     script: 'validate:hook-harness:self-test',
     io: 'read',
-    reads: ['file'],
+    reads: ['file', 'spawn'],
     converse: 'unexamined',
   },
   {
@@ -385,11 +385,16 @@ export const SUITE = [
       'CHECKED both ways — UNWIRED (a check in no SUITE) and FALSE REASON (an exception whose consumers vanished); the header records that only the first was guarded originally',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `spawnSync`, and validate-hermetic-child-env.js carries that literal in three self-test
+    // fixture strings that exercise its server-spawn classifier. The script starts no process and
+    // imports only node:fs, node:path and node:url. Declared rather than worked around, because the
+    // detector is textual by design and omitting a matched substrate fails.
     script: 'validate:hermetic-child-env',
     io: 'read',
-    reads: ['file', 'walk'],
+    reads: ['file', 'spawn', 'walk'],
     converse:
-      'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
+      'CHECKED — covers tests/e2e (no spread) and server-spawning scripts (must import scripts/lib/hermetic-server-env.js, no spread); the self-test runs each predicate over input that must trip it and input that must not, a run classifying zero spawners fails, and a positive control restoring a spread in capture-tool-schemas.mjs exits 1 naming it. UNCHECKED and known — a server spawned through an entry spelling the classifier does not recognise',
   },
   {
     script: 'validate:shipped-frameworks',

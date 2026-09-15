@@ -1,0 +1,36 @@
+id: tech_recommendation
+name: Technology Recommendation
+category: development
+description: >-
+  Go/no-go on a TECHNIQUE, ALGORITHM, SHADER APPROACH, OPTIMIZATION, or library
+  — judged AGAINST YOUR BASELINE (current approach or hand-rolling), grounded in
+  practitioner prior art (dev blogs, game-dev talks, shader/graphics resources,
+  community threads): how OTHER stacks solve it, the complexity/perf (O(n)/GPU)
+  tradeoff, and a concrete borrowed technique + code. Verdicts include KEEP
+  (current approach already right) and RETIRE (the improvement is deletion).
+  Use when ADOPTING or UPGRADING an approach in your OWN stack, when weighing a
+  library against hand-rolled code, or when surveying stack improvements. For
+  risks of ONE already-chosen candidate use technical_deep_dive; for full
+  dependency adoption use tech_evaluation_chain. Step 4 of the tech evaluation
+  chain.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: subject
+    required: true
+    description: The technique, algorithm, library, or current-stack approach under evaluation
+    type: string
+  - name: context
+    required: true
+    description: Your project context
+    type: string
+  - name: evaluation_summary
+    required: false
+    description: Summary of findings from previous steps
+    type: string
+  - name: library
+    required: false
+    description: Compat alias filled by the evaluation chain; standalone callers use subject
+    type: string
+gateConfiguration:
+  include:
+    - technical-accuracy

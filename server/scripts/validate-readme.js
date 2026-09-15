@@ -347,6 +347,25 @@ function checkClaimCoverage(lines) {
 }
 
 /**
+ * Every path under `server/resources/prompts/` that npm would package, or `null` outside a git
+ * checkout. Shared by the count check and the operand check so both read one set; why this git
+ * call equals what npm packs is recorded on `checkShippedPromptCount`.
+ */
+function shippedPromptPaths() {
+  try {
+    return execFileSync(
+      'git',
+      ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'server/resources/prompts/'],
+      { cwd: REPO_ROOT, encoding: 'utf8' }
+    )
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The README's "ships N prompts across M categories" must match what npm actually packages.
  *
  * WHY: it read "120+ prompts across 17 categories" until 2026-08-11, when the tarball held 27
@@ -367,20 +386,10 @@ function checkShippedPromptCount(lines) {
   const claimedPrompts = Number(match[1]);
   const claimedCategories = Number(match[2]);
 
-  let shipped;
-  try {
-    shipped = execFileSync(
-      'git',
-      ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'server/resources/prompts/'],
-      { cwd: REPO_ROOT, encoding: 'utf8' }
-    );
-  } catch {
-    // Outside a git checkout (a published tarball, say) there is nothing to compare against, and
-    // a lint that fails for lack of git would block work it cannot inform.
-    return [];
-  }
-
-  const paths = shipped.split('\n').filter(Boolean);
+  const paths = shippedPromptPaths();
+  // Outside a git checkout (a published tarball, say) there is nothing to compare against, and
+  // a lint that fails for lack of git would block work it cannot inform.
+  if (paths === null) return [];
   const actualPrompts = paths.filter((p) => p.endsWith('/prompt.yaml')).length;
   const actualCategories = new Set(
     paths
@@ -396,10 +405,111 @@ function checkShippedPromptCount(lines) {
       category: 'claim-coverage',
       detail:
         `README claims ${claimedPrompts} prompts across ${claimedCategories} categories; ` +
-        `the package ships ${actualPrompts} across ${actualCategories}. Update the sentence, or ` +
-        'widen resources/prompts/.gitignore so the claim becomes true (plan row 0.5.20)',
+        `the package ships ${actualPrompts} across ${actualCategories}. Update the sentence`,
     },
   ];
+}
+
+/**
+ * Every prompt a README command names must be one the package ships.
+ *
+ * WHY: until 2026-09-13 all three install paths ended with a command naming a prompt that lived
+ * only in the author's personal store. The author's shell exports `MCP_RESOURCES_PATH` at that
+ * store, so every local run of the quick start passed, and every installer got prompt-not-found.
+ * This is the same author-machine blind spot `checkShippedPromptCount` closes for the count.
+ *
+ * A reader cannot tell a grammar illustration from a command, so neither can this check unless the
+ * README says which is which: `<!-- illustrative-prompts: a b -->` declares named placeholders for
+ * the section it sits in, heading to heading. A declared id the section no longer names, or one
+ * that now ships, is reported — a declaration that has stopped being true reads as coverage.
+ *
+ * Operands come from code only, and each inline span is matched on its own: joining a line's spans
+ * turns a table cell holding `>>` and the next cell's text into an operand nobody wrote. Ids are
+ * normalised as `normalizePromptId` (src/shared/utils/resource-ids.ts) does, keeping `/` for nested
+ * steps, and a shipped id drops its category directory — `examples/deep_analysis/initial_scan`
+ * serves as `deep_analysis/initial_scan`.
+ */
+const PROMPT_OPERAND = /(?:>>|-->|==>)\s*([a-zA-Z][a-zA-Z0-9_/-]*)/g;
+const ILLUSTRATIVE_PROMPTS = /<!--\s*illustrative-prompts:\s*([^>]*?)\s*-->/;
+const FENCE = /^\s*(```|~~~)/;
+const HEADING = /^#{1,6}\s/;
+
+/** Mirror of normalizePromptId in src/shared/utils/resource-ids.ts — scripts cannot import src. */
+function normalizePromptId(id) {
+  return id
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+function shippedPromptIds(paths) {
+  return new Set(
+    paths
+      .filter((p) => p.endsWith('/prompt.yaml'))
+      .map((p) => p.replace('server/resources/prompts/', '').split('/').slice(1, -1).join('/'))
+      .map(normalizePromptId)
+  );
+}
+
+/** The whole line inside a fence; otherwise each inline code span, separately. */
+function codeSegments(line, inFence) {
+  return inFence ? [line] : [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+}
+
+function scanPromptOperands(lines) {
+  const operands = [];
+  const declarations = [];
+  let inFence = false;
+  let section = 0;
+  lines.forEach((line, index) => {
+    if (FENCE.test(line)) {
+      inFence = !inFence;
+      return;
+    }
+    if (!inFence && HEADING.test(line)) section += 1;
+    const marker = inFence ? null : line.match(ILLUSTRATIVE_PROMPTS);
+    for (const raw of marker ? marker[1].split(/\s+/).filter(Boolean) : []) {
+      declarations.push({ id: normalizePromptId(raw), line: index + 1, section });
+    }
+    for (const segment of codeSegments(line, inFence)) {
+      for (const match of segment.matchAll(PROMPT_OPERAND)) {
+        operands.push({ id: normalizePromptId(match[1]), raw: match[1], line: index + 1, section });
+      }
+    }
+  });
+  return { operands, declarations };
+}
+
+function checkPromptOperands(lines) {
+  const paths = shippedPromptPaths();
+  if (paths === null) return [];
+  const shipped = shippedPromptIds(paths);
+  const { operands, declarations } = scanPromptOperands(lines);
+  const sameSection = (a, b) => a.section === b.section && a.id === b.id;
+
+  const unresolved = operands
+    .filter((op) => !shipped.has(op.id) && !declarations.some((d) => sameSection(d, op)))
+    .map((op) => ({
+      line: op.line,
+      category: 'prompt-operand',
+      detail:
+        `\`${op.raw}\` names no prompt the package ships. Name a shipped prompt, or declare it ` +
+        `with <!-- illustrative-prompts: ${op.raw} --> in this section and tell the reader it is a placeholder`,
+    }));
+
+  const stale = declarations
+    .filter((d) => shipped.has(d.id) || !operands.some((op) => sameSection(op, d)))
+    .map((d) => ({
+      line: d.line,
+      category: 'prompt-operand',
+      detail: shipped.has(d.id)
+        ? `\`${d.id}\` is declared illustrative but ships; remove it from the declaration`
+        : `\`${d.id}\` is declared illustrative but its section no longer names it; remove the declaration`,
+    }));
+
+  return [...unresolved, ...stale];
 }
 
 function main() {
@@ -430,10 +540,14 @@ function main() {
     ...checkInternalLinks(lines, readmeDir),
     ...checkClaimCoverage(lines),
     ...checkShippedPromptCount(lines),
+    ...checkPromptOperands(lines),
   ];
 
   if (violations.length === 0) {
-    process.stdout.write(`README.md: charter checks passed (${lines.length} lines)\n`);
+    const declared = scanPromptOperands(lines).declarations.length;
+    process.stdout.write(
+      `README.md: charter checks passed (${lines.length} lines, ${declared} declared illustrative prompt(s))\n`
+    );
     process.exit(0);
   }
 

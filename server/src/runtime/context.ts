@@ -107,6 +107,11 @@ export async function createRuntimeFoundation(
     dependencies.pathResolver ??
     new PathResolver({ cli: options.paths, packageRoot: serverRoot, debug: options.verbose });
 
+  // Refuse an unusable workspace, resources path or config before anything below reads, watches or
+  // creates one — the logs mkdir would otherwise create a missing workspace. Both transports pass
+  // through here, so both refuse identically.
+  pathResolver.assertUsablePathSettings();
+
   // Use PathResolver for config path (supports workspace override)
   const configPath = pathResolver.getConfigPath();
 

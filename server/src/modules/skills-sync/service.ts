@@ -1,5 +1,6 @@
 // @lifecycle canonical - Exports canonical YAML resources to client-native skill packages.
 /* eslint-disable -- Lifted from CLI implementation; follow-up decomposition tracked in migration plan. */
+/* eslint-enable no-console -- this module runs inside the server, where stdout is the STDIO protocol channel; the console-backed CLI output lives in scripts/skills-sync.ts. */
 /**
  * Skills Sync CLI
  *
@@ -19,6 +20,7 @@ import { createTwoFilesPatch } from 'diff';
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
+import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import {
@@ -47,8 +49,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveServerRoot(): string {
   const fromResourcesEnv = process.env['MCP_RESOURCES_PATH'];
-  if (fromResourcesEnv && existsSync(fromResourcesEnv)) {
-    const normalizedResources = path.resolve(fromResourcesEnv);
+  if (fromResourcesEnv) {
+    // The server refuses an MCP_RESOURCES_PATH that names no directory, and so does this: falling
+    // through to the roots below would export or sync some other tree under the operator's name.
+    const normalizedResources = path.resolve(
+      assertUsableDirectorySetting(
+        { name: 'MCP_RESOURCES_PATH', value: fromResourcesEnv },
+        { verb: 'run' }
+      )
+    );
     if (path.basename(normalizedResources) === 'resources') {
       return path.dirname(normalizedResources);
     }
@@ -517,12 +526,6 @@ export interface SkillsSyncOutput {
   error: (...args: unknown[]) => void;
 }
 
-const DEFAULT_OUTPUT: SkillsSyncOutput = {
-  log: (...args) => console.log(...args),
-  warn: (...args) => console.warn(...args),
-  error: (...args) => console.error(...args),
-};
-
 const VALID_COMMANDS = new Set(['export', 'sync', 'diff', 'patch', 'pull', 'clone', 'help']);
 const VALID_SCOPES = new Set(['user', 'project']);
 const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'framework', 'style']);
@@ -798,7 +801,14 @@ function resolveOutputDir(clientConfig: ClientConfig, scope: 'user' | 'project')
 function resolveProjectRoot(): string {
   const fromWorkspaceEnv = process.env['MCP_WORKSPACE'];
   if (fromWorkspaceEnv) {
-    return path.resolve(fromWorkspaceEnv);
+    // Refused like the server refuses it: a project-scope export resolved against a workspace that
+    // is not there writes skills into a directory tree the operator never named.
+    return path.resolve(
+      assertUsableDirectorySetting(
+        { name: 'MCP_WORKSPACE', value: fromWorkspaceEnv },
+        { verb: 'run' }
+      )
+    );
   }
 
   const serverRoot = getServerRoot();
@@ -4423,8 +4433,8 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
   };
 }
 
-export function printSkillsSyncHelp(): void {
-  DEFAULT_OUTPUT.log(`
+export function printSkillsSyncHelp(output: SkillsSyncOutput): void {
+  output.log(`
 skills-sync — Export canonical resources to client skill packages
 
 Usage:
@@ -4456,7 +4466,7 @@ Options:
 
 export async function runSkillsSyncCommand(
   opts: SkillsSyncOptions,
-  output: SkillsSyncOutput = DEFAULT_OUTPUT
+  output: SkillsSyncOutput
 ): Promise<SkillsSyncRunReport> {
   validateSkillsSyncOptions(opts);
 
@@ -4494,7 +4504,7 @@ export async function runSkillsSyncCommand(
       await cloneCommand(opts, commandOutput, report);
       break;
     case 'help':
-      if (!opts.json) printSkillsSyncHelp();
+      if (!opts.json) printSkillsSyncHelp(commandOutput);
       break;
     default:
       throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
@@ -4507,8 +4517,11 @@ export async function runSkillsSyncCommand(
   return report;
 }
 
-export async function runSkillsSyncFromArgv(argv: string[]): Promise<void> {
-  await runSkillsSyncCommand(parseSkillsSyncArgs(argv));
+export async function runSkillsSyncFromArgv(
+  argv: string[],
+  output: SkillsSyncOutput
+): Promise<void> {
+  await runSkillsSyncCommand(parseSkillsSyncArgs(argv), output);
 }
 
 export function listSupportedSkillsSyncClients(): string[] {

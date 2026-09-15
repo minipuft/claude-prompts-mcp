@@ -25,7 +25,7 @@
  * being necessary.
  *
  * WHAT RUNS WHEN
- *   --self-test   pure, milliseconds, no API calls  -> belongs in validate:all
+ *   --self-test   milliseconds, no API calls, no files -> belongs in validate:all
  *   --build       writes a traced plugin to a temp dir -> manual
  *   (running the scenarios spawns `claude -p` and costs real money -> always manual)
  *
@@ -35,6 +35,7 @@
  *   node scripts/hook-harness.mjs --scenarios
  */
 
+import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
@@ -126,17 +127,49 @@ export const MCP_REGISTRATION = (repo, workspace) => ({
   },
 });
 
-/** Wrap one command so it marks itself. Pure, and invertible by `unwrap`. */
-export function wrap(command, event, name, tracePath) {
+/**
+ * Where a traced plugin writes its trace and keeps its plugin data, both inside the output
+ * directory.
+ *
+ * The copy keeps `plugin.json`'s name, so under `--plugin-dir` Claude Code hands its hooks the
+ * owner's own data directory as `CLAUDE_PLUGIN_DATA`, and `get_state_db_path()` reads that before
+ * anything else. A harness run would then read, and report on, the owner's real `state.db`.
+ */
+export function harnessPaths(outDir) {
+  return {
+    trace: path.join(outDir, "trace.log"),
+    pluginData: path.join(outDir, "plugin-data"),
+  };
+}
+
+/**
+ * Wrap one command so it marks itself and runs against the harness's own plugin data. Pure, and
+ * invertible by `unwrap`.
+ */
+export function wrap(command, event, name, tracePath, pluginDataDir) {
   if (command.includes("'")) {
     throw new Error(
       `cannot trace a command containing a single quote (${name}): the wrapper is sh -c '...'`,
     );
   }
-  return `sh -c 'echo "${event}|${name}" >> ${tracePath}; exec ${command}'`;
+  if (/['"]/.test(pluginDataDir)) {
+    throw new Error(
+      `cannot export a plugin data directory containing a quote: ${pluginDataDir}`,
+    );
+  }
+  return (
+    `sh -c 'echo "${event}|${name}" >> ${tracePath}; ` +
+    `export CLAUDE_PLUGIN_DATA="${pluginDataDir}"; exec ${command}'`
+  );
 }
 
-const WRAPPED = /^sh -c 'echo "[^"]*" >> \S+; exec (.*)'$/;
+const WRAPPED =
+  /^sh -c 'echo "[^"]*" >> \S+; export CLAUDE_PLUGIN_DATA="[^"]*"; exec (.*)'$/;
+
+/** The plugin data directory a wrapped command exports, or undefined when it exports none. */
+export function wrappedPluginData(command) {
+  return /; export CLAUDE_PLUGIN_DATA="([^"]*)"; exec /.exec(command)?.[1];
+}
 
 /** Recover the original command. `unwrap(wrap(x)) === x` is the anti-drift invariant. */
 export function unwrap(command) {
@@ -162,7 +195,7 @@ export function registeredHooks(config) {
 }
 
 /** Derive the traced config from a real one. Never stored — rebuilt on every use. */
-export function traceConfig(config, tracePath) {
+export function traceConfig(config, tracePath, pluginDataDir) {
   const traced = JSON.parse(JSON.stringify(config));
   for (const [event, matchers] of Object.entries(traced.hooks || {})) {
     for (const matcher of matchers) {
@@ -172,6 +205,7 @@ export function traceConfig(config, tracePath) {
           event,
           hook.name || "unnamed",
           tracePath,
+          pluginDataDir,
         );
       }
     }
@@ -246,11 +280,13 @@ function readConfig() {
 
 /**
  * Write a traced plugin. `dist` and `resources` are SYMLINKED to the repo so the harness runs the
- * real build, while `runtime-state` stays local so a run cannot mutate this repo's state.db.
+ * real build, while `runtime-state` stays local so a run cannot mutate this repo's state.db, and
+ * the hooks read plugin data from `plugin-data` rather than the owner's data directory.
  */
 function build(outDir) {
-  const trace = path.join(outDir, "trace.log");
+  const { trace, pluginData } = harnessPaths(outDir);
   mkdirSync(path.join(outDir, ".claude-plugin"), { recursive: true });
+  mkdirSync(pluginData, { recursive: true });
   mkdirSync(path.join(outDir, "server", "runtime-state"), { recursive: true });
 
   cpSync(path.join(REPO, "hooks"), path.join(outDir, "hooks"), {
@@ -268,7 +304,7 @@ function build(outDir) {
 
   writeFileSync(
     path.join(outDir, "hooks", "hooks.json"),
-    `${JSON.stringify(traceConfig(readConfig(), trace), null, 2)}\n`,
+    `${JSON.stringify(traceConfig(readConfig(), trace, pluginData), null, 2)}\n`,
   );
   writeFileSync(
     path.join(outDir, "mcp-config.json"),
@@ -278,6 +314,7 @@ function build(outDir) {
 
   console.log(`traced plugin: ${outDir}`);
   console.log(`  trace file:  ${trace}`);
+  console.log(`  plugin data: ${pluginData}`);
   console.log("\nRun a scenario (costs API credits):");
   console.log(
     `  cd ${outDir} && claude -p '<prompt>' --plugin-dir ${outDir} ` +
@@ -289,6 +326,8 @@ function build(outDir) {
 /** Each assertion must be able to fail; a check that cannot fail enforces nothing. */
 function selfTest() {
   const config = readConfig();
+  const outDir = "/tmp/hook-harness-self-test";
+  const out = harnessPaths(outDir);
   let failures = 0;
   const check = (name, ok) => {
     if (ok) console.log(`✔ ${name}`);
@@ -299,7 +338,7 @@ function selfTest() {
   };
 
   // THE anti-drift invariant: the traced copy is the real config, reversibly transformed.
-  const traced = traceConfig(config, "/tmp/t.log");
+  const traced = traceConfig(config, out.trace, out.pluginData);
   check(
     "traced config unwraps back to the real hooks.json, byte for byte",
     JSON.stringify(untraceConfig(traced)) === JSON.stringify(config),
@@ -314,7 +353,8 @@ function selfTest() {
     "every real command round-trips individually",
     registeredHooks(config).every(
       ({ event, name, command }) =>
-        unwrap(wrap(command, event, name, "/tmp/t.log")) === command,
+        unwrap(wrap(command, event, name, out.trace, out.pluginData)) ===
+        command,
     ),
   );
   check(
@@ -323,11 +363,12 @@ function selfTest() {
   );
 
   // A drifted copy must be caught, or the invariant above is decorative.
-  const drifted = traceConfig(config, "/tmp/t.log");
+  const drifted = traceConfig(config, out.trace, out.pluginData);
   registeredHooks(drifted); // touch
   const firstEvent = Object.keys(drifted.hooks)[0];
   drifted.hooks[firstEvent][0].hooks[0].command =
-    "sh -c 'echo \"x|y\" >> /tmp/t.log; exec python3 /impostor.py'";
+    `sh -c 'echo "x|y" >> ${out.trace}; ` +
+    `export CLAUDE_PLUGIN_DATA="${out.pluginData}"; exec python3 /impostor.py'`;
   check(
     "a traced copy whose underlying command changed FAILS the round-trip",
     JSON.stringify(untraceConfig(drifted)) !== JSON.stringify(config),
@@ -337,12 +378,72 @@ function selfTest() {
     "a command containing a single quote is refused rather than silently mis-quoted",
     (() => {
       try {
-        wrap("python3 'x'.py", "E", "n", "/tmp/t.log");
+        wrap("python3 'x'.py", "E", "n", out.trace, out.pluginData);
         return false;
       } catch {
         return true;
       }
     })(),
+  );
+
+  // Isolation: a traced hook must not read the owner's plugin data, which Claude Code passes in
+  // because the copied plugin.json carries the real plugin's name.
+  const insideOutDir = (dir) => {
+    if (dir === undefined) return false;
+    const relative = path.relative(outDir, dir);
+    return (
+      relative !== "" &&
+      !relative.startsWith("..") &&
+      !path.isAbsolute(relative)
+    );
+  };
+  check(
+    "every traced hook exports a CLAUDE_PLUGIN_DATA inside the harness output directory",
+    registeredHooks(traced).every((hook) =>
+      insideOutDir(wrappedPluginData(hook.command)),
+    ),
+  );
+  check(
+    "a traced hook exporting a data directory outside the output directory is detected",
+    !insideOutDir(
+      wrappedPluginData(
+        wrap("true", "E", "n", out.trace, "/home/owner/.claude/plugins/data/x"),
+      ),
+    ),
+  );
+  const hostEnv = {
+    ...process.env,
+    CLAUDE_PLUGIN_DATA: "/owner/real-plugin-data",
+  };
+  const unwrappedProbe = spawnSync(
+    "sh",
+    ["-c", "printenv CLAUDE_PLUGIN_DATA"],
+    {
+      env: hostEnv,
+      encoding: "utf8",
+    },
+  );
+  check(
+    "the probe observes the data directory a host passes in (positive control)",
+    unwrappedProbe.stdout.trim() === "/owner/real-plugin-data",
+  );
+  const wrappedProbe = spawnSync(
+    "sh",
+    [
+      "-c",
+      wrap(
+        "printenv CLAUDE_PLUGIN_DATA",
+        "E",
+        "n",
+        "/dev/null",
+        out.pluginData,
+      ),
+    ],
+    { env: hostEnv, encoding: "utf8" },
+  );
+  check(
+    "a traced hook sees the harness's data directory, not the one its host passed in",
+    wrappedProbe.stdout.trim() === out.pluginData,
   );
 
   // Coverage: adding a hook must not silently add an untested hook.

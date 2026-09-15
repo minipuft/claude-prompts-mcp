@@ -1,0 +1,20 @@
+id: initial_scan
+name: Initial Scan
+category: analysis
+description: >-
+  Quick overview of a topic: key themes, major perspectives, scope definition.
+  Step 1 of the research chain.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    type: string
+    description: The topic to research
+    required: true
+  - name: purpose
+    type: string
+    description: Why you need this research (decision, learning, project, etc.)
+    required: false
+  - name: constraints
+    type: string
+    description: Any constraints (time, scope, specific angle)
+    required: false

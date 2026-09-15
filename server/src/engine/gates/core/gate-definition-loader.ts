@@ -324,8 +324,11 @@ export class GateDefinitionLoader {
       const guidancePath = join(gateDir, definition.guidanceFile);
       if (existsSync(guidancePath)) {
         try {
+          // Verbatim, not trimmed (matches `yaml-prompt-loader.ts`'s file inlining): an update
+          // that omits `guidance` writes this exact string straight back to guidance.md, so
+          // trimming here silently dropped the file's trailing newline on every write-back.
           const content = readFileSync(guidancePath, 'utf-8');
-          definition.guidance = content.trim();
+          definition.guidance = content;
           if (this.debug) {
             console.error(`[GateDefinitionLoader] Inlined guidance from ${guidancePath}`);
           }

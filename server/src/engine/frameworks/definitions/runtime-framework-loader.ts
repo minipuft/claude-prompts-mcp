@@ -307,7 +307,6 @@ export class RuntimeFrameworkLoader {
           const phasesValidation = this.validatePhases(definition.phases);
           if (!phasesValidation.valid) {
             this.stats.loadErrors++;
-            // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
             console.error(
               `[RuntimeFrameworkLoader] Phases validation failed for '${id}':`,
               phasesValidation.errors.join('; ')
@@ -315,7 +314,6 @@ export class RuntimeFrameworkLoader {
             return undefined;
           }
           if (phasesValidation.warnings.length > 0) {
-            // eslint-disable-next-line no-console -- matches this file's stderr-logging convention
             console.warn(
               `[RuntimeFrameworkLoader] Phases warnings for '${id}':`,
               phasesValidation.warnings.join('; ')

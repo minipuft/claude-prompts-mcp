@@ -339,7 +339,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // Whatever the last check said describes a file this load did not serve.
       this.schemaValidation = undefined;
       console.error(`Error loading configuration from ${this.configPath}:`, error);
-      console.info('Using default configuration');
+      // stderr, not stdout: on STDIO stdout is the protocol channel, and a stray line corrupts it.
+      console.error('Using default configuration');
       this.config = DEFAULT_CONFIG;
       this.validateAndSetDefaults();
       this.emitConfigChange(previousFrameworks);

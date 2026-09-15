@@ -81,7 +81,7 @@
     },
     "no-console": {
       "errors": 0,
-      "warnings": 74
+      "warnings": 0
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
