@@ -25,10 +25,10 @@ remains in `server/.dependency-cruiser.cjs`.
 | `infra-logging` | `src/infra/logging` | shared | canonical | Provides structured logging primitives and configuration. | — | `index.ts` | shared-types | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-config<br>infra-database<br>infra-http<br>infra-observability<br>runtime<br>server-source |
 | `infra-observability` | `src/infra/observability` | domain | canonical | Provides tracing and operational telemetry infrastructure. | — | — | infra-database<br>infra-hooks<br>infra-logging<br>shared-types<br>shared-utils | runtime |
 | `mcp-boundary` | `src/mcp` | layer | canonical | Model Context Protocol contracts, transports, metadata, and tool adapters. | — | — | — | — |
-| `mcp-contracts` | `src/mcp/contracts` | protocol | canonical | Defines runtime-facing MCP contract metadata and generated schemas. | — | — | mcp-metadata | mcp-metadata |
+| `mcp-contracts` | `src/mcp/contracts` | protocol | canonical | Defines runtime-facing MCP contract metadata and generated schemas. | — | — | mcp-metadata | mcp-metadata<br>mcp-tools |
 | `mcp-http` | `src/mcp/http` | protocol | canonical | Implements the Streamable HTTP MCP transport boundary. | — | — | engine-execution<br>mcp-tools<br>prompts<br>shared-types<br>shared-utils | runtime |
 | `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | mcp-contracts<br>mcp-tools |
-| `mcp-tools` | `src/mcp/tools` | protocol | canonical | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-metadata<br>prompts<br>resources<br>runtime<br>semantic<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
+| `mcp-tools` | `src/mcp/tools` | protocol | canonical | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-contracts<br>mcp-metadata<br>prompts<br>resources<br>runtime<br>semantic<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
 | `application-modules` | `src/modules` | layer | canonical | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
 | `automation` | `src/modules/automation` | domain | canonical | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
 | `chains` | `src/modules/chains` | domain | canonical | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
@@ -182,6 +182,7 @@ flowchart LR
   module_mcp_tools --> module_engine_frameworks
   module_mcp_tools --> module_engine_gates
   module_mcp_tools --> module_formatting
+  module_mcp_tools --> module_mcp_contracts
   module_mcp_tools --> module_mcp_metadata
   module_mcp_tools --> module_prompts
   module_mcp_tools --> module_resources

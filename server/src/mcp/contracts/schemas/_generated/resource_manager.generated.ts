@@ -31,6 +31,9 @@ export type resource_managerParamName =
   | 'enabled_only'
   | 'confirm'
   | 'reason'
+  | 'full_restart'
+  | 'goal'
+  | 'include_legacy'
   | 'category'
   | 'user_message_template'
   | 'system_message'
@@ -148,6 +151,33 @@ export const resource_managerParameters: ToolParameter[] = [
     description: 'Audit reason for reload/delete/switch operations.',
     status: 'working',
     compatibility: 'canonical',
+  },
+  {
+    name: 'full_restart',
+    type: 'boolean',
+    description:
+      '[Prompt] For reload, create, update and delete: restart the server instead of hot-reloading prompts. Default: false.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'goal',
+    type: 'string',
+    description:
+      '[Prompt guide] What you are trying to do; the guide ranks its suggested actions against it.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'include_legacy',
+    type: 'boolean',
+    description:
+      '[Prompt guide] Show full details for actions that are not marked working. Default: false.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
   },
   {
     name: 'category',
@@ -731,7 +761,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'prompt:guide',
     summary: 'Get action suggestions for prompt management.',
-    parameters: ['resource_type', 'action'],
+    parameters: ['resource_type', 'action', 'goal', 'include_legacy'],
     status: 'working',
   },
   {
