@@ -8,9 +8,10 @@
 
 import { existsSync } from 'fs';
 import { cp, mkdir, readFile } from 'node:fs/promises';
-import { join } from 'path';
+import { join, relative, sep } from 'path';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { FrameworkCreationData } from '../core/types.js';
 
 import {
@@ -49,6 +50,30 @@ export interface FrameworkFileResult {
   success: boolean;
   paths?: string[];
   error?: string;
+}
+
+/** A file a framework write lands, addressed relative to the framework's own directory. */
+interface PlannedFrameworkFile {
+  relativePath: string;
+  content: string;
+}
+
+/**
+ * Everything one framework write does, resolved before anything is written.
+ *
+ * `writeFrameworkFiles` applies it and `projectFrameworkWrite` reports it. A diff built any other
+ * way — the framework's recorded fields rendered as one `framework.yaml`, say — misses
+ * `system-prompt.md`, `phases.yaml` and `judge-prompt.md`, and shows `framework.yaml` lines the
+ * merged file never holds (tutorial-rework B.20).
+ */
+interface FrameworkWritePlan {
+  frameworksDir: string;
+  frameworkDir: string;
+  /** The framework's bundled directory, copied to `frameworkDir` first; null when none is. */
+  copyOnWriteSource: string | null;
+  /** Where the files this write replaces are before it runs; null when there are none. */
+  priorDir: string | null;
+  files: PlannedFrameworkFile[];
 }
 
 // ============================================================================
@@ -329,19 +354,12 @@ export class FrameworkFileWriter {
     existingData?: ExistingFrameworkData | null,
     options: ResourceWriteCommitOptions = {}
   ): Promise<FrameworkFileResult> {
-    const frameworkDir = this.getFrameworkDir(data.id);
+    // Every byte this write lands is decided here, before the transaction opens; the mutation
+    // below applies the plan and decides nothing of its own, which is what keeps
+    // `projectFrameworkWrite` reporting the same files and contents.
+    const plan = this.planFrameworkWrite(data, existingData);
+    const { frameworkDir, copyOnWriteSource } = plan;
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
-
-    // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
-    // bundled tree and the write goes elsewhere. Same reasoning as prompts: the merge below
-    // reconstructs `framework.yaml` and `phases.yaml` from data, so anything else in the
-    // directory — `judge-prompt.md`, `system-prompt.md`, any file a future framework carries —
-    // would simply not exist at the destination.
-    const existingDir = this.resolveExistingFrameworkDir(data.id);
-    const copyOnWriteSource =
-      existingDir !== null && existingDir !== frameworkDir && !existsSync(frameworkDir)
-        ? existingDir
-        : null;
 
     const txResult = await this.mutationTransaction.run({
       targets: [{ path: frameworkDir, kind: 'directory' }],
@@ -359,54 +377,10 @@ export class FrameworkFileWriter {
         await mkdir(frameworkDir, { recursive: true });
         paths.push(frameworkDir);
 
-        // Build and merge framework.yaml
-        const newFrameworkData = this.buildFrameworkYamlData(data);
-        const finalFrameworkData =
-          existingData !== undefined && existingData !== null
-            ? this.deepMerge(existingData.framework, newFrameworkData)
-            : newFrameworkData;
-
-        const frameworkContent = serializeYaml(finalFrameworkData, { sortKeys: false });
-        await safeWriteFile(frameworkYamlPath, frameworkContent);
-        paths.push(frameworkYamlPath);
-
-        // Handle phases.yaml
-        const existingPhases = existingData?.phases ?? null;
-        const needsPhasesFile = this.needsPhasesFile(data) || existingPhases !== null;
-        if (needsPhasesFile) {
-          const newPhasesData = this.buildPhasesYamlData(data);
-          const hasNewPhasesData = Object.keys(newPhasesData).length > 0;
-          const finalPhasesData =
-            existingPhases !== null && hasNewPhasesData
-              ? this.deepMerge(existingPhases, newPhasesData)
-              : (existingPhases ?? newPhasesData);
-
-          if (Object.keys(finalPhasesData).length > 0) {
-            const phasesPath = join(frameworkDir, 'phases.yaml');
-            const phasesContent = serializeYaml(finalPhasesData, { sortKeys: false });
-            await safeWriteFile(phasesPath, phasesContent);
-            paths.push(phasesPath);
-          }
-        }
-
-        // Handle system-prompt.md
-        const systemPromptPath = join(frameworkDir, 'system-prompt.md');
-        const systemPromptContent = data.system_prompt_guidance ?? existingData?.systemPrompt ?? '';
-        if (systemPromptContent !== '') {
-          await safeWriteFile(systemPromptPath, systemPromptContent);
-          paths.push(systemPromptPath);
-        }
-
-        // Handle judge-prompt.md
-        const existingJudgePrompt = existingData?.judgePrompt ?? null;
-        const hasJudgePrompt = data.judge_prompt !== undefined || existingJudgePrompt !== null;
-        if (hasJudgePrompt) {
-          const judgePromptPath = join(frameworkDir, 'judge-prompt.md');
-          const judgePromptContent = data.judge_prompt ?? existingJudgePrompt ?? '';
-          if (judgePromptContent !== '') {
-            await safeWriteFile(judgePromptPath, judgePromptContent);
-            paths.push(judgePromptPath);
-          }
+        for (const file of plan.files) {
+          const filePath = join(frameworkDir, file.relativePath);
+          await safeWriteFile(filePath, file.content);
+          paths.push(filePath);
         }
 
         return { paths };
@@ -426,6 +400,126 @@ export class FrameworkFileWriter {
     }
 
     return { success: true, paths: txResult.result?.paths ?? [] };
+  }
+
+  /**
+   * What `writeFrameworkFiles(data, existingData)` would change on disk, file by file, without
+   * writing anything.
+   *
+   * Resolves the plan that method applies, so the files and contents are exactly that call's.
+   * Paths are relative to the frameworks root. A framework copied up from the bundled tree is read
+   * from its bundled files; both roots address it by the same id, so its path is the same on each
+   * side.
+   */
+  async projectFrameworkWrite(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingData?: ExistingFrameworkData | null
+  ): Promise<FileContentChange[]> {
+    const plan = this.planFrameworkWrite(data, existingData);
+    const prefix = relative(plan.frameworksDir, plan.frameworkDir);
+
+    const changes: FileContentChange[] = [];
+    for (const file of plan.files) {
+      const priorPath = plan.priorDir !== null ? join(plan.priorDir, file.relativePath) : null;
+      const relativePath = join(prefix, file.relativePath).split(sep).join('/');
+      changes.push({
+        path: relativePath,
+        previousPath: relativePath,
+        before:
+          priorPath !== null && existsSync(priorPath) ? await readFile(priorPath, 'utf8') : null,
+        after: file.content,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * Resolve where one framework write lands and the files it writes there, writing nothing.
+   *
+   * The single place those answers are decided, so `writeFrameworkFiles` and
+   * `projectFrameworkWrite` share them.
+   */
+  private planFrameworkWrite(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingData: ExistingFrameworkData | null | undefined
+  ): FrameworkWritePlan {
+    const frameworkDir = this.getFrameworkDir(data.id);
+
+    // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
+    // bundled tree and the write goes elsewhere. Same reasoning as prompts: the files below are
+    // reconstructed from data, so anything else in the directory — `judge-prompt.md`,
+    // `system-prompt.md`, any file a future framework carries — would simply not exist at the
+    // destination.
+    const existingDir = this.resolveExistingFrameworkDir(data.id);
+    const copyOnWriteSource =
+      existingDir !== null && existingDir !== frameworkDir && !existsSync(frameworkDir)
+        ? existingDir
+        : null;
+
+    return {
+      frameworksDir: this.configManager.getFrameworksDirectory(),
+      frameworkDir,
+      copyOnWriteSource,
+      // A copy puts the prior tree at `frameworkDir` before any file is written, so the content a
+      // write replaces is the copy source's.
+      priorDir: existsSync(frameworkDir) ? frameworkDir : copyOnWriteSource,
+      files: this.planFrameworkFiles(data, existingData ?? null),
+    };
+  }
+
+  /** The files a framework write lands, in write order, as the exact bytes each will hold. */
+  private planFrameworkFiles(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingData: ExistingFrameworkData | null
+  ): PlannedFrameworkFile[] {
+    const newFrameworkData = this.buildFrameworkYamlData(data);
+    const finalFrameworkData =
+      existingData !== null
+        ? this.deepMerge(existingData.framework, newFrameworkData)
+        : newFrameworkData;
+    const files: PlannedFrameworkFile[] = [
+      {
+        relativePath: 'framework.yaml',
+        content: serializeYaml(finalFrameworkData, { sortKeys: false }),
+      },
+    ];
+
+    const phasesData = this.planPhasesYamlData(data, existingData?.phases ?? null);
+    if (phasesData !== null) {
+      files.push({
+        relativePath: 'phases.yaml',
+        content: serializeYaml(phasesData, { sortKeys: false }),
+      });
+    }
+
+    const systemPromptContent = data.system_prompt_guidance ?? existingData?.systemPrompt ?? '';
+    if (systemPromptContent !== '') {
+      files.push({ relativePath: 'system-prompt.md', content: systemPromptContent });
+    }
+
+    const judgePromptContent = data.judge_prompt ?? existingData?.judgePrompt ?? '';
+    if (judgePromptContent !== '') {
+      files.push({ relativePath: 'judge-prompt.md', content: judgePromptContent });
+    }
+
+    return files;
+  }
+
+  /** The merged `phases.yaml` document, or null when the write lands no phases file. */
+  private planPhasesYamlData(
+    data: Partial<FrameworkCreationData>,
+    existingPhases: Record<string, unknown> | null
+  ): Record<string, unknown> | null {
+    if (!this.needsPhasesFile(data) && existingPhases === null) {
+      return null;
+    }
+    const newPhasesData = this.buildPhasesYamlData(data);
+    const hasNewPhasesData = Object.keys(newPhasesData).length > 0;
+    const finalPhasesData =
+      existingPhases !== null && hasNewPhasesData
+        ? this.deepMerge(existingPhases, newPhasesData)
+        : (existingPhases ?? newPhasesData);
+    return Object.keys(finalPhasesData).length > 0 ? finalPhasesData : null;
   }
 
   // ==========================================================================
