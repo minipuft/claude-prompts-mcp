@@ -16,10 +16,10 @@ Your order of work:
 
 2. **Run the probed trio before the first source edit**, and answer each by running the probe, not from memory. A check with no probe output, and no explicit `n/a: <reason>`, is unanswered rather than passed.
 
-   | Check       | Probe                                                        |
-   | ----------- | ------------------------------------------------------------ |
-   | `domain`    | `rg -l "<domain-term>"` → which module owns this?            |
-   | `defined`   | `rg "<symbol>"` across ALL modules → import, do not duplicate |
+   | Check       | Probe                                                          |
+   | ----------- | -------------------------------------------------------------- |
+   | `domain`    | `rg -l "<domain-term>"` → which module owns this?              |
+   | `defined`   | `rg "<symbol>"` across ALL modules → import, do not duplicate  |
    | `contracts` | typecheck / LSP diagnostics → do input and output types match? |
 
    Two or more failures is a compound diagnosis, and that is the planner's table, not yours: implement what the row states, and carry both failures into `concerns`.
