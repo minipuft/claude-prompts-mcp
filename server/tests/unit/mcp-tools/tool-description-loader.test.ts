@@ -1,30 +1,31 @@
 import { EventEmitter, once } from 'events';
-import { promises as fs } from 'fs';
-import os from 'os';
-import path from 'path';
 
 import { describe, expect, it, beforeEach, jest } from '@jest/globals';
 
-import { createToolDescriptionLoader } from '../src/mcp/tools/tool-description-loader.js';
-import { resetDefaultRuntimeLoader } from '../src/engine/frameworks/definitions/index.js';
+import { createToolDescriptionLoader } from '../../../src/mcp/tools/tool-description-loader.js';
+import { resetDefaultRuntimeLoader } from '../../../src/engine/frameworks/definitions/index.js';
 
-import type { ConfigManager } from '../src/infra/config/index.js';
-import type { FrameworkStateStore } from '../src/engine/frameworks/framework-state-store.js';
-import type { Logger } from '../src/infra/logging/index.js';
-import type { ResolvedFrameworkConfig, ToolDescriptionsConfig } from '../src/shared/types/index.js';
+import type { FrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
+import type { Logger } from '../../../src/infra/logging/index.js';
+import type { ConfigManager, ResolvedFrameworkConfig } from '../../../src/shared/types/index.js';
+
+// The same generated contract ToolDescriptionLoader statically imports (esbuild inlines it into
+// dist/index.js — see tool-description-loader.ts). Importing it here too lets this suite assert
+// against the real content instead of a fake file the loader no longer reads from disk.
+import toolDescriptionsContract from '../../../src/mcp/contracts/schemas/_generated/tool-descriptions.contracts.json' with { type: 'json' };
 
 class FakeConfigManager extends EventEmitter {
-  private root: string;
   private frameworks: ResolvedFrameworkConfig;
 
-  constructor(root: string, frameworks: ResolvedFrameworkConfig) {
+  constructor(frameworks: ResolvedFrameworkConfig) {
     super();
-    this.root = root;
     this.frameworks = frameworks;
   }
 
   getServerRoot(): string {
-    return this.root;
+    // ToolDescriptionLoader no longer reads base descriptions from disk (static JSON import),
+    // so this value is unused by production code. Kept only because ConfigManager declares it.
+    return '/unused-server-root';
   }
 
   getFrameworksConfig(): ResolvedFrameworkConfig {
@@ -78,36 +79,10 @@ const makeLogger = (): Logger =>
 
 const baseFrameworksConfig: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
+  // Matches DEFAULT_FRAMEWORK_ID (src/shared/utils/constants.ts) and the 'CAGEERF' active
+  // framework FakeFrameworkStateStore below defaults to — not an arbitrary filler value.
+  defaultFramework: 'CAGEERF',
 };
-
-async function setupTempConfigRoot(): Promise<string> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'tool-desc-'));
-  const generatedDir = path.join(root, 'src', 'tooling', 'contracts', '_generated');
-  await fs.mkdir(generatedDir, { recursive: true });
-
-  const contractsConfig: ToolDescriptionsConfig = {
-    version: '2.0.0',
-    tools: {
-      prompt_engine: {
-        description: 'BASE PROMPT ENGINE DESCRIPTION',
-      },
-      resource_manager: {
-        description: 'BASE RESOURCE MANAGER DESCRIPTION',
-      },
-      system_control: {
-        description: 'BASE SYSTEM CONTROL DESCRIPTION',
-      },
-    },
-  };
-
-  await fs.writeFile(
-    path.join(generatedDir, 'tool-descriptions.contracts.json'),
-    JSON.stringify(contractsConfig, null, 2),
-    'utf-8'
-  );
-
-  return root;
-}
 
 describe('ToolDescriptionLoader (framework-aware active config)', () => {
   beforeEach(() => {
@@ -115,12 +90,31 @@ describe('ToolDescriptionLoader (framework-aware active config)', () => {
     resetDefaultRuntimeLoader();
   });
 
-  it('loads descriptions from generated contracts and applies framework overlays', async () => {
-    const root = await setupTempConfigRoot();
-    const configManager = new FakeConfigManager(
-      root,
-      baseFrameworksConfig
-    ) as unknown as ConfigManager;
+  it('loads base descriptions from the generated contracts file, not in-memory defaults', async () => {
+    // No FrameworkStateStore attached: getActiveFrameworkContext() returns {}, so
+    // buildActiveConfig applies no framework overlay and the served description is the base
+    // contract text verbatim — this is the assertion this row exists to make (measured
+    // 2026-09-15: before the static-import fix, this always fell back to
+    // createDefaultToolDescriptionMap() and source reported 'defaults').
+    const configManager = new FakeConfigManager(baseFrameworksConfig) as unknown as ConfigManager;
+    const manager = createToolDescriptionLoader(makeLogger(), configManager);
+
+    await manager.initialize();
+
+    const stats = manager.getStats();
+    expect(stats.source).toBe('contracts');
+    // Derived from the same contract file, not hardcoded: the loader's tool set must track
+    // whatever the contract lists, so this fails if the two ever diverge in either direction.
+    const contractToolNames = Object.keys(toolDescriptionsContract.tools);
+    expect(contractToolNames.length).toBeGreaterThan(0);
+    expect(manager.getAvailableTools().slice().sort()).toEqual(contractToolNames.slice().sort());
+    expect(manager.getDescription('prompt_engine')).toBe(
+      toolDescriptionsContract.tools.prompt_engine.description
+    );
+  });
+
+  it('applies framework overlays on top of the loaded base descriptions', async () => {
+    const configManager = new FakeConfigManager(baseFrameworksConfig) as unknown as ConfigManager;
     const frameworkStateStore = new FakeFrameworkStateStore() as unknown as FrameworkStateStore;
     const manager = createToolDescriptionLoader(makeLogger(), configManager);
     manager.setFrameworkStateStore(frameworkStateStore);
@@ -129,18 +123,11 @@ describe('ToolDescriptionLoader (framework-aware active config)', () => {
 
     const stats = manager.getStats();
     expect(stats.source).toBe('contracts');
-    expect(manager.getAvailableTools()).toEqual(
-      expect.arrayContaining(['prompt_engine', 'resource_manager', 'system_control'])
-    );
     expect(manager.getDescription('prompt_engine', true, 'CAGEERF')).toContain('[CAGEERF]');
   });
 
   it('updates in-memory descriptions when framework switch events fire', async () => {
-    const root = await setupTempConfigRoot();
-    const configManager = new FakeConfigManager(
-      root,
-      baseFrameworksConfig
-    ) as unknown as ConfigManager;
+    const configManager = new FakeConfigManager(baseFrameworksConfig) as unknown as ConfigManager;
     const frameworkStateStore = new FakeFrameworkStateStore() as unknown as FrameworkStateStore;
     const manager = createToolDescriptionLoader(makeLogger(), configManager);
     manager.setFrameworkStateStore(frameworkStateStore);

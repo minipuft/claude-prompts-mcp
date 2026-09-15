@@ -113,8 +113,13 @@ export class Application {
     this.runtimeOptions = runtimeOptions ?? resolveRuntimeLaunchOptions();
     this.serviceOrchestrator = new ServiceOrchestrator();
 
-    // Initialize debug output control - suppress in test environments
-    this.debugOutput = !this.runtimeOptions.testEnvironment;
+    // Startup trace prints only under --verbose/--debug-startup. This previously
+    // gated on `!testEnvironment` (CI/jest/test-arg detection) instead, which is
+    // orthogonal to verbosity: a normal operator launch is not a test environment,
+    // so `debugOutput` was `true` and every "DEBUG: " line printed to stderr
+    // regardless of `--quiet`'s STDIO default. `verbose` already folds in both
+    // flags (`resolveRuntimeLaunchOptions`), so no new flag is needed.
+    this.debugOutput = this.runtimeOptions.verbose;
   }
 
   /**
@@ -146,7 +151,7 @@ export class Application {
       this.debugLog('Starting - Server Setup and Startup...');
       await this.startServer();
       this.debugLog('completed successfully');
-      console.error('DEBUG: All startup phases completed, server should be running...');
+      this.debugLog('All startup phases completed, server should be running...');
 
       this.logger.info('Application startup completed successfully');
     } catch (error) {

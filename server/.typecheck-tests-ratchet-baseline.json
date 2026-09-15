@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T07:36:46.733Z",
+  "generatedAt": "2026-09-15T21:12:43.662Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 366
+    "errors": 364
   },
   "byCode": {
     "TS18046": 3,
@@ -17,7 +17,7 @@
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
-    "TS2459": 16,
+    "TS2459": 15,
     "TS2551": 8,
     "TS2554": 20,
     "TS2558": 1,
@@ -26,7 +26,7 @@
     "TS2698": 1,
     "TS2707": 1,
     "TS2739": 8,
-    "TS2741": 14,
+    "TS2741": 13,
     "TS2835": 3,
     "TS7006": 18,
     "TS7019": 4,
@@ -50,7 +50,6 @@
     "tests/integration/versioning/version-history-workflow.test.ts": 1,
     "tests/manual/test-execution-modes.ts": 12,
     "tests/manual/test-versioning-service.ts": 18,
-    "tests/tool-description-loader.test.ts": 2,
     "tests/unit/chain-session/chain-session-store.test.ts": 9,
     "tests/unit/execution/execution-context.test.ts": 2,
     "tests/unit/execution/operators/chain-operator-executor.test.ts": 7,
