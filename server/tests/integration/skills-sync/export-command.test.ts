@@ -29,6 +29,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 // The real `server/` root, computed rather than hardcoded so a directory move does not
 // silently stop this file from finding the resources it copies fixtures from below.
@@ -150,7 +151,8 @@ describe('Export Command Integration', () => {
     const out = silentOutput();
     await runSkillsSyncCommand(
       { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
     return out;
   }
@@ -177,7 +179,8 @@ describe('Export Command Integration', () => {
       const out = silentOutput();
       const report = await runSkillsSyncCommand(
         { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // The foreign render is untouched — the whole point.
@@ -445,7 +448,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       const degraded = report.failures.filter((f) => f.id === 'dropped_owner/beta-widget');
@@ -467,7 +471,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // Without this the previous test also passes for a fix that warns about
@@ -490,7 +495,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           json: true,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // An export normally logs a banner, a per-file `wrote ...` line and a
@@ -530,7 +536,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           json: true,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       expect(report.failures.some((f) => f.reason.includes('manifest not saved'))).toBe(true);
