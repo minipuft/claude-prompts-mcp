@@ -224,4 +224,147 @@ describe('sync and diff commands end to end (F11)', () => {
     expect(report.command).toBe('diff');
     expect(report.written).toBe(0);
   });
+
+  /**
+   * Every run above passes no database, which is the state a plain CLI export leaves behind:
+   * files on disk and no manifest row. Diff used to print nothing at all there, which reads
+   * exactly like a clean tree — so these drive the comparison against the would-be export.
+   */
+  describe('diff with no saved manifest', () => {
+    const skillMd = (id: string) => path.join(outputDir, id, 'SKILL.md');
+
+    it('reports a locally edited skill file as output drift, in the JSON', async () => {
+      await writePrompt('edited_prompt');
+      await run({ command: 'sync' });
+      await writeFile(
+        skillMd('edited_prompt'),
+        (await readFile(skillMd('edited_prompt'), 'utf-8')) + '\nHand-typed paragraph.\n'
+      );
+
+      const { out } = await run({ command: 'diff', json: true });
+
+      const report = JSON.parse(out.logs.join('\n')) as {
+        drift?: Array<{ entries: Array<{ type: string; id: string; files: string[] }> }>;
+      };
+      expect(report.drift?.[0]?.entries).toContainEqual({
+        type: 'output',
+        id: 'edited_prompt',
+        files: ['edited_prompt/SKILL.md'],
+      });
+    });
+
+    it('reports a resource with no skill directory as new', async () => {
+      await writePrompt('erased_prompt');
+      await run({ command: 'sync' });
+      await rm(path.join(outputDir, 'erased_prompt'), { recursive: true, force: true });
+
+      const { report } = await run({ command: 'diff' });
+
+      expect(report.drift?.[0]?.entries).toContainEqual({
+        type: 'new',
+        id: 'erased_prompt',
+        files: [],
+      });
+    });
+
+    it('reports a managed directory whose resource is gone as an orphan', async () => {
+      await writePrompt('kept_prompt');
+      await writePrompt('retired_prompt');
+      await run({ command: 'sync' });
+      await rm(path.join(serverRoot, 'resources', 'prompts', 'general', 'retired_prompt'), {
+        recursive: true,
+        force: true,
+      });
+
+      const { report } = await run({ command: 'diff' });
+
+      expect(report.drift?.[0]?.entries).toContainEqual({
+        type: 'orphan',
+        id: 'prompt:general/retired_prompt',
+        files: [],
+      });
+    });
+
+    it('survives a neighbouring skill whose frontmatter is not valid YAML', async () => {
+      // Measured against a real ~/.claude/skills (2026-09-15): two hand-written skills carry a
+      // `description:` with an unquoted colon, and the marker parser threw on them — aborting a
+      // read-only diff over every client.
+      await writePrompt('kept_prompt');
+      await run({ command: 'sync' });
+      const handWritten = path.join(outputDir, 'hand_written');
+      await mkdir(handWritten, { recursive: true });
+      await writeFile(
+        path.join(handWritten, 'SKILL.md'),
+        '---\nname: hand_written\ndescription: Use when: a colon appears unquoted.\n---\n\nBody.\n'
+      );
+
+      const { report } = await run({ command: 'diff' });
+
+      expect(report.drift).toEqual([{ client: 'claude-code', scope: 'user', entries: [] }]);
+    });
+
+    it('reports an untouched export as clean, and still prints the drift report', async () => {
+      // The inverse of the three above: without this, a change that classified everything as
+      // drift would pass all of them.
+      await writePrompt('kept_prompt');
+      await run({ command: 'sync' });
+
+      const { report, out } = await run({ command: 'diff' });
+
+      expect(report.drift).toEqual([{ client: 'claude-code', scope: 'user', entries: [] }]);
+      expect(out.logs.join('\n')).toContain('── claude-code (user) drift report');
+      expect(out.logs.join('\n')).toContain('no drift detected');
+    });
+  });
+
+  /**
+   * A database that stores the manifest rows and nothing else — enough for an export to save a
+   * manifest and the next diff to read it back. Resources are loaded from disk either way.
+   */
+  function manifestDatabase() {
+    const columns = [
+      'client',
+      'scope',
+      'resource_key',
+      'resource_id',
+      'resource_type',
+      'source_hash',
+      'output_hash',
+      'output_files',
+      'exported_at',
+      'version',
+      'version_date',
+      'config_hash',
+      'source_snapshot',
+    ];
+    let rows: Array<Record<string, unknown>> = [];
+    return {
+      isInitialized: () => true,
+      query: (sql: string, params: unknown[] = []) =>
+        sql.includes('skills_sync_manifests')
+          ? rows.filter((row) => row['client'] === params[0] && row['scope'] === params[1])
+          : [],
+      run: (sql: string, params: unknown[] = []) => {
+        if (sql.includes('DELETE FROM skills_sync_manifests')) {
+          rows = rows.filter((row) => !(row['client'] === params[0] && row['scope'] === params[1]));
+        } else if (sql.includes('INSERT INTO skills_sync_manifests')) {
+          rows.push(Object.fromEntries(columns.map((column, i) => [column, params[i]])));
+        }
+      },
+      transaction: async (fn: () => unknown) => await fn(),
+    };
+  }
+
+  it('diff fills the same drift report from a saved manifest', async () => {
+    // Positive control for the block above: the manifest path must keep answering the JSON
+    // question too, or "drift is present" would only ever mean "no manifest was found".
+    await writePrompt('kept_prompt');
+    const dbManager = manifestDatabase() as never;
+    await run({ command: 'sync', dbManager });
+
+    const { report, out } = await run({ command: 'diff', dbManager });
+
+    expect(report.drift).toEqual([{ client: 'claude-code', scope: 'user', entries: [] }]);
+    expect(out.logs.join('\n')).not.toContain('no manifest is saved');
+  });
 });

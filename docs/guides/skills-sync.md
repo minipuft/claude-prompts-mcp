@@ -40,11 +40,11 @@ Behavior references: [Claude Code memory](https://code.claude.com/docs/en/memory
 [Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md), and
 [OpenCode rules](https://opencode.ai/docs/rules/).
 
-| Problem                            | Solution                                       | Result                                                    |
-| ---------------------------------- | ---------------------------------------------- | --------------------------------------------------------- |
-| Prompts locked inside MCP server   | `skills-sync export` compiles to native format | `/review` works as a Claude Code skill, Cursor rule, etc. |
-| Exported prompts duplicated in MCP | Auto-deregistration via exports list           | Single source, no duplication                             |
-| Drift between source and exports   | `skills-sync diff` with SHA-256 manifests      | Know when skills are stale                                |
+| Problem                            | Solution                                                        | Result                                                    |
+| ---------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts locked inside MCP server   | `skills-sync export` compiles to native format                  | `/review` works as a Claude Code skill, Cursor rule, etc. |
+| Exported prompts duplicated in MCP | Auto-deregistration via exports list                            | Single source, no duplication                             |
+| Drift between source and exports   | `skills-sync diff`, against the manifest or the would-be export | Know when skills are stale                                |
 
 ## Quick Start
 
@@ -313,6 +313,16 @@ Each export records a manifest in the `skills_sync_manifests` table of `server/r
 - Missing exports (resource in manifest but not on disk)
 - New resources (in exports list but not yet exported)
 
+**With no saved manifest, `diff` compares against the would-be export instead.** An export run
+without a database writes every skill file and saves no manifest row, so a manifest is missing far
+more often than it looks. Rather than report nothing — which reads exactly like a clean tree —
+`diff` renders each registered resource the way an export would, writes nothing, and compares that
+against the output directory: a resource with no skill directory is `new`, files on disk that
+differ from the render (or that the render would add) are `output` drift, and a directory carrying
+the managed marker whose resource is no longer registered is an `orphan`. Source drift is the one
+finding this mode cannot make — only the manifest holds the snapshot of what the source said at
+export time. The report prints under the same header either way, and says which comparison it ran.
+
 **Symlinked skill directories are refused, not written through.** `export` and `sync` compare each
 resource's output directory against the client's base directory after resolving links. A directory
 that resolves elsewhere — `~/.codex/skills/dev-workflow -> ~/.claude/skills/dev-workflow` is the
@@ -322,22 +332,26 @@ clients should share one, register the resource for only one of them.
 
 ## Commands
 
-| Command  | NPM Script              | Purpose                                                                        |
-| -------- | ----------------------- | ------------------------------------------------------------------------------ |
-| `export` | `npm run skills:export` | Write skill packages to configured output directories                          |
-| `sync`   | —                       | Export, then prune managed skills whose resource is no longer registered       |
-| `diff`   | `npm run skills:diff`   | Compare source against exported skills; `--output <dir>` writes `.patch` files |
-| `pull`   | `npm run skills:pull`   | Merge prose edited in an exported skill back into the canonical YAML           |
-| `clone`  | —                       | Create a canonical resource from an external `SKILL.md`                        |
+| Command  | NPM Script              | Purpose                                                                                                                                       |
+| -------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `export` | `npm run skills:export` | Write skill packages to configured output directories                                                                                         |
+| `sync`   | —                       | Export, then prune managed skills whose resource is no longer registered                                                                      |
+| `diff`   | `npm run skills:diff`   | Compare exported skills against the saved manifest, or against the would-be export when none is saved; `--output <dir>` writes `.patch` files |
+| `pull`   | `npm run skills:pull`   | Merge prose edited in an exported skill back into the canonical YAML                                                                          |
+| `clone`  | —                       | Create a canonical resource from an external `SKILL.md`                                                                                       |
 
 Every command accepts `--json`, which suppresses the progress log and writes a single
 machine-readable run summary to stdout — counts plus a `failures` array naming each resource
-that did not export cleanly and why.
+that did not export cleanly and why. A `diff` run adds `drift`: one element per client and scope
+it examined, each with `client`, `scope`, and an `entries` array of `{ type, id, files }`. The
+element is present with `entries: []` when that client and scope are clean, because "examined and
+in step" and "never looked at" are different answers and only a present element says the first.
 
 The same operations are reachable over MCP as `system_control` with
 `action: "skills_sync"` and `operation: "status" | "export" | "sync" | "diff" | "pull" | "clone"`.
-Prefer that path when a database is attached: it is the route that persists manifests, and
-without a manifest `diff` and prune cannot see what was exported.
+Prefer that path when a database is attached: it is the route that persists manifests. Without one,
+prune cannot see what was exported at all, and `diff` falls back to the would-be-export comparison
+above — which still finds drift, but cannot tell you the source changed since the last export.
 
 ## See Also
 

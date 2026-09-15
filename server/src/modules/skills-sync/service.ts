@@ -43,6 +43,7 @@ import {
   isAdoptableSkillMarkdown,
   parseManagedSkillMarker,
   type ManagedSkillDirMap,
+  type ManagedSkillMarker,
 } from './sync-engine.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -577,6 +578,24 @@ export interface SkillsSyncFailure {
   reason: string;
 }
 
+/** One drifted resource, as `diff` classified it. */
+export interface SkillsSyncDriftEntry {
+  /** new | source | output | orphan */
+  type: string;
+  /** Resource id, or the manifest/marker key for an orphan */
+  id: string;
+  /** Output-relative paths that differ, when the type names specific files */
+  files: string[];
+}
+
+/** Drift found in one client + scope that `diff` examined. */
+export interface SkillsSyncDriftGroup {
+  client: string;
+  scope: 'user' | 'project';
+  /** Empty when that client + scope is clean — examined and found in step with the sources */
+  entries: SkillsSyncDriftEntry[];
+}
+
 /**
  * Machine-readable summary of one skills-sync run, emitted by `--json`.
  *
@@ -593,11 +612,27 @@ export interface SkillsSyncRunReport {
   /** Managed directories pruned — whole skill dirs (sync only) plus stale gates/<id>/ dirs (both) */
   pruned: number;
   failures: SkillsSyncFailure[];
+  /**
+   * What drifted, per client + scope — `diff` only.
+   *
+   * Absent on every other command rather than empty: an empty array on an export
+   * would read as "nothing drifted" when the truth is that nothing was compared.
+   */
+  drift?: SkillsSyncDriftGroup[];
 }
 
 /** Empty report — the single place the shape is constructed. */
 function emptyRunReport(command: string, preview: boolean): SkillsSyncRunReport {
-  return { command, preview, resources: 0, written: 0, pruned: 0, failures: [] };
+  const report: SkillsSyncRunReport = {
+    command,
+    preview,
+    resources: 0,
+    written: 0,
+    pruned: 0,
+    failures: [],
+  };
+  if (command === 'diff') report.drift = [];
+  return report;
 }
 
 export interface SkillsSyncOutput {
@@ -3580,6 +3615,24 @@ async function findAdoptableSkillDirs(baseDir: string): Promise<string[]> {
   return adoptable.sort();
 }
 
+/**
+ * The managed marker, or null when the frontmatter will not parse.
+ *
+ * `parseManagedSkillMarker` lets js-yaml throw, which is the right posture when the input is a
+ * file this tool wrote. Scanning an output directory feeds it every skill sitting there,
+ * hand-written ones included — and a `description:` holding an unquoted colon is not valid YAML.
+ * Measured 2026-09-15 against a real `~/.claude/skills`: two of them, enough to abort a whole
+ * read-only scan. Frontmatter that will not parse is a definite "not written by this tool", so it
+ * is an answer rather than a failure.
+ */
+function readManagedSkillMarker(skillMarkdown: string): ManagedSkillMarker | null {
+  try {
+    return parseManagedSkillMarker(skillMarkdown);
+  } catch {
+    return null;
+  }
+}
+
 async function collectManagedSkillDirsFromMarkers(
   baseDir: string,
   clientId: string,
@@ -3595,7 +3648,7 @@ async function collectManagedSkillDirsFromMarkers(
     if (!entry.isDirectory()) continue;
     const skillContent = await readOptionalFile(path.join(baseDir, entry.name, 'SKILL.md'));
     if (!skillContent) continue;
-    const marker = parseManagedSkillMarker(skillContent);
+    const marker = readManagedSkillMarker(skillContent);
     if (!marker) continue;
     if (marker.clientId !== clientId || marker.scope !== scope) continue;
 
@@ -4004,14 +4057,19 @@ async function diffCommand(
       seenDirs.set(dirKey, clientId);
 
       const manifestEntries = loadManifestEntries(clientId, scope, opts.dbManager);
-      if (manifestEntries.size === 0) {
-        if (cliScope) {
-          output.log(`${clientId} (${scope}): no manifest found (run export first)`);
-        }
-        continue;
-      }
+      // With no saved manifest there is no record of a previous export to compare against, so the
+      // comparison falls back to what an export would write right now. Reporting nothing instead
+      // would be indistinguishable from a clean tree, and a manifest is missing far more often
+      // than it looks: an export run without a database writes the files and saves no manifest.
+      const againstWouldBeExport = manifestEntries.size === 0;
 
       output.log(`\n── ${clientId} (${scope}) drift report`);
+      if (againstWouldBeExport) {
+        output.log(
+          `  no manifest is saved for this client — exports run without a database save none, ` +
+            `so this compares the files on disk against what an export would write now`
+        );
+      }
       const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
 
       const driftEntries: Array<{
@@ -4025,14 +4083,15 @@ async function diffCommand(
       for (const ir of scopedResources) {
         const key = manifestKey(ir);
         const entry = manifestEntries.get(key);
-        if (!entry) {
+        if (!entry && !againstWouldBeExport) {
           output.log(`  [NEW] ${ir.id} — not in manifest`);
           driftEntries.push({ type: 'new', id: ir.id, files: [] });
           continue;
         }
 
-        // Source drift: canonical YAML changed
-        if (ir.sourceHash !== entry.sourceHash) {
+        // Source drift: canonical YAML changed. Only the manifest carries the snapshot this
+        // compares against; without one, a source change shows up as output drift instead.
+        if (entry && ir.sourceHash !== entry.sourceHash) {
           const changedFiles: string[] = [];
           output.log(`  [SOURCE DRIFT] ${ir.id} — canonical sources changed`);
           if (entry.sourceSnapshot && ir.sourceContents) {
@@ -4073,6 +4132,19 @@ async function diffCommand(
           harnessCovers
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
+
+        // Without a manifest, "never exported" is a question the output directory answers: no
+        // skill directory means nothing was written for this resource, which is the same finding
+        // the manifest path reports when a resource has no row.
+        if (
+          againstWouldBeExport &&
+          !existsSync(path.join(baseDir, outputSubDir(ir, duplicateIds)))
+        ) {
+          output.log(`  [NEW] ${ir.id} — no skill directory in the output`);
+          driftEntries.push({ type: 'new', id: ir.id, files: [] });
+          continue;
+        }
+
         const outputPatches: string[] = [];
         const changedOutputFiles: string[] = [];
         for (const file of outputFiles) {
@@ -4082,7 +4154,13 @@ async function diffCommand(
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
           const existing = await readOptionalFile(fullPath);
-          if (!existing) continue;
+          if (!existing) {
+            // A file the export would write that is absent: drift only when the comparison is
+            // against the would-be export. Against a manifest it is not — the manifest names the
+            // files the last export actually produced, and this set may legitimately be wider.
+            if (againstWouldBeExport) changedOutputFiles.push(file.relativePath);
+            continue;
+          }
           if (existing !== file.content) {
             changedOutputFiles.push(file.relativePath);
             const patch = createTwoFilesPatch(
@@ -4098,7 +4176,7 @@ async function diffCommand(
             }
           }
         }
-        if (outputPatches.length > 0) {
+        if (changedOutputFiles.length > 0) {
           output.log(`  [OUTPUT DRIFT] ${ir.id} — exported files modified locally`);
           for (const patch of outputPatches) {
             output.log(formatPatchForDisplay(patch));
@@ -4107,12 +4185,30 @@ async function diffCommand(
         }
       }
 
-      // Check for orphans (in manifest but no longer in resources)
       const resourceKeys = new Set(scopedResources.map((r) => manifestKey(r)));
-      for (const [key, entry] of manifestEntries) {
-        if (!resourceKeys.has(key)) {
-          output.log(`  [ORPHAN] ${key} (${entry.resourceType}) — no longer in sources`);
-          driftEntries.push({ type: 'orphan', id: key, files: [] });
+      if (againstWouldBeExport) {
+        // Check for orphans (managed on disk but no longer in resources). The marker each
+        // exported SKILL.md carries names the resource it came from, so it answers the same
+        // question the manifest does — which directories this tool wrote for a resource that is
+        // no longer registered — from the output directory alone.
+        for (const [markerKey, dirs] of await collectManagedSkillDirsFromMarkers(
+          baseDir,
+          clientId,
+          scope
+        )) {
+          if (resourceKeys.has(markerKey)) continue;
+          output.log(
+            `  [ORPHAN] ${markerKey} — ${[...dirs].sort().join(', ')}/ is managed but no longer in sources`
+          );
+          driftEntries.push({ type: 'orphan', id: markerKey, files: [] });
+        }
+      } else {
+        // Check for orphans (in manifest but no longer in resources)
+        for (const [key, entry] of manifestEntries) {
+          if (!resourceKeys.has(key)) {
+            output.log(`  [ORPHAN] ${key} (${entry.resourceType}) — no longer in sources`);
+            driftEntries.push({ type: 'orphan', id: key, files: [] });
+          }
         }
       }
 
@@ -4204,6 +4300,13 @@ async function diffCommand(
 
         output.log(`  output → ${clientDir}/`);
       }
+
+      // One element per client + scope this run examined, empty entries included: under `--json`
+      // "examined and clean" and "never looked at" are different answers, and only a present
+      // element with no entries says the first.
+      // `emptyRunReport` constructs this array for the diff command; the assignment keeps the
+      // push total if a caller ever hands this function a report built for another one.
+      (report.drift ??= []).push({ client: clientId, scope, entries: driftEntries });
     }
   }
 }
