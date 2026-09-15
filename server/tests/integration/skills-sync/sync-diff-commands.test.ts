@@ -17,6 +17,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[] } {
   const logs: string[] = [];
@@ -99,7 +100,8 @@ describe('sync and diff commands end to end (F11)', () => {
     const out = silentOutput();
     return runSkillsSyncCommand(
       { command: 'sync', client: 'claude-code', scope: 'user', ...opts } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     ).then((report) => ({ report, out }));
   }
 

@@ -49,26 +49,13 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function resolveServerRoot(): string {
-  const fromResourcesEnv = process.env['MCP_RESOURCES_PATH'];
-  if (fromResourcesEnv) {
-    // The server refuses an MCP_RESOURCES_PATH that names no directory, and so does this: falling
-    // through to the roots below would export or sync some other tree under the operator's name.
-    const normalizedResources = path.resolve(
-      assertUsableDirectorySetting(
-        { name: 'MCP_RESOURCES_PATH', value: fromResourcesEnv },
-        { verb: 'run' }
-      )
-    );
-    if (path.basename(normalizedResources) === 'resources') {
-      return path.dirname(normalizedResources);
-    }
-    if (existsSync(path.join(normalizedResources, 'resources'))) {
-      return normalizedResources;
-    }
-    return path.dirname(normalizedResources);
-  }
-
+/**
+ * The package root: where the bundled resource tree and the package's own skills-sync.yaml live.
+ *
+ * Locates the package only. Which directories a run reads and writes once a workspace or a
+ * resources directory is configured is `SkillsSyncPaths`, which the caller resolves.
+ */
+export function locateSkillsSyncPackageRoot(): string {
   const fromEnv = process.env['MCP_SERVER_ROOT'];
   if (fromEnv) {
     const normalizedRoot = path.resolve(fromEnv);
@@ -100,37 +87,71 @@ function resolveServerRoot(): string {
   return bundleRelative;
 }
 
-function getServerRoot(): string {
-  return resolveServerRoot();
+/**
+ * Every directory a run reads from or writes to, resolved by the caller.
+ *
+ * The precedence (`MCP_RESOURCES_PATH`, then `MCP_WORKSPACE`, then the package) and the root set
+ * (the bundled tree with workspace overlays over it) belong to the server's `PathResolver` and
+ * `runtime/resource-roots.ts`. `modules/` may not import `runtime/`, so the caller resolves them
+ * (`runtime/skills-sync-paths.ts`) and this module reads the result. A second derivation here is
+ * how skills sync came to read the package tree while the server served the workspace.
+ */
+export interface SkillsSyncPaths {
+  /** The package root (`locateSkillsSyncPackageRoot`). */
+  packageRoot: string;
+  /** The configured workspace, or undefined when the workspace is the package root. */
+  workspace: string | undefined;
+  /** Where runtime output such as patch files is written. */
+  runtimeStateDir: string;
+  /** The `config.json` the server reads: `--config` or `MCP_CONFIG_PATH`, else the workspace's, else the package's. */
+  serverConfigPath: string;
+  /** Every directory that contributes definitions of a type, lowest precedence first. */
+  sourceRoots: Readonly<Record<ResourceType, readonly string[]>>;
+  /** The directory a new resource of a type is written to. */
+  writeRoots: Readonly<Record<ResourceType, string>>;
+  /** The package's own directory for a type, which a package update replaces. */
+  bundledRoots: Readonly<Record<ResourceType, string>>;
 }
 
-function getResourcesDir(): string {
-  return path.join(getServerRoot(), 'resources');
+/**
+ * Refuse an `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` that names no directory, before any source is
+ * read or any resource written. The server refuses both at startup; this runs without it, and
+ * falling through to another tree would export, sync or clone under a name the operator never gave.
+ */
+function assertUsableSourceSettings(): void {
+  for (const name of ['MCP_WORKSPACE', 'MCP_RESOURCES_PATH'] as const) {
+    const value = process.env[name];
+    if (value) assertUsableDirectorySetting({ name, value }, { verb: 'run' });
+  }
 }
 
-function getConfigPath(): string {
-  return path.join(getServerRoot(), 'skills-sync.yaml');
-}
-
-/** Server-root `config.json` path — same `getServerRoot()` resolution as `getConfigPath()`. */
-function getServerConfigPath(): string {
-  return path.join(getServerRoot(), 'config.json');
+/**
+ * The skills-sync.yaml a run reads, and writes registrations back to: the workspace's when it
+ * holds one, else the package's.
+ */
+export function getSkillsSyncConfigPath(paths: SkillsSyncPaths): string {
+  if (paths.workspace !== undefined) {
+    const workspaceConfig = path.join(paths.workspace, 'skills-sync.yaml');
+    if (existsSync(workspaceConfig)) return workspaceConfig;
+  }
+  return path.join(paths.packageRoot, 'skills-sync.yaml');
 }
 
 /**
  * `gates.harnessCovers` for this installation (ruling B2, gate-checks-and-reminders), read
- * directly off `config.json` rather than through `ConfigManager`/`ConfigLoader`: this module
+ * directly off the `config.json` the server reads (`SkillsSyncPaths.serverConfigPath`), so an
+ * export omits the reminders the runtime omits. It goes around `ConfigManager`/`ConfigLoader`: this module
  * lives in `modules/` (Layer 3), and `.dependency-cruiser.cjs`'s `modules-no-infra-static` /
  * `modules-infra-type-only` rules forbid a static OR type-only import from `infra/` — even for
  * `ConfigManager`'s type. `exportCommand` already reads a config file this same way a few lines
- * down (`readFile(getConfigPath())` for `skills-sync.yaml`), so this mirrors that sibling
+ * down (`readFile(configPath)` for `skills-sync.yaml`), so this mirrors that sibling
  * pattern instead of adding a second parser: one JSON read, one optional field, no schema
  * re-validation. A missing or unparsable `config.json` returns `[]`, the same default
  * `ConfigLoader.getGatesConfig()` falls back to.
  */
-async function resolveHarnessCovers(): Promise<readonly string[]> {
+async function resolveHarnessCovers(paths: SkillsSyncPaths): Promise<readonly string[]> {
   try {
-    const raw = await readFile(getServerConfigPath(), 'utf-8');
+    const raw = await readFile(paths.serverConfigPath, 'utf-8');
     const parsed = JSON.parse(raw) as { gates?: { harnessCovers?: unknown } };
     const covers = parsed.gates?.harnessCovers;
     return Array.isArray(covers)
@@ -656,14 +677,15 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
 
 // ─── Section 2: Config Loader ───────────────────────────────────────────────
 
-async function loadSyncConfig(): Promise<SyncConfig> {
-  const configPath = getConfigPath();
+async function loadSyncConfig(configPath: string, paths: SkillsSyncPaths): Promise<SyncConfig> {
   try {
     const raw = await readFile(configPath, 'utf-8');
     return (yaml.load(raw) as SyncConfig | null) ?? {};
   } catch (error) {
-    const example = configPath.replace('skills-sync.yaml', 'skills-sync.example.yaml');
-    const message = `No skills-sync.yaml found. Copy the example to get started:\n  cp ${example} ${configPath}`;
+    const example = path.join(paths.packageRoot, 'skills-sync.example.yaml');
+    // With a workspace set the copy belongs there: it is read first, and an update replaces the package.
+    const target = path.join(paths.workspace ?? paths.packageRoot, 'skills-sync.yaml');
+    const message = `No skills-sync.yaml found. Copy the example to get started:\n  cp ${example} ${target}`;
     throw new Error(error instanceof Error ? `${message}\n(${error.message})` : message);
   }
 }
@@ -832,7 +854,11 @@ function resolveClientConfig(clientId: string, config: SyncConfig): ClientConfig
   };
 }
 
-function resolveOutputDir(clientConfig: ClientConfig, scope: 'user' | 'project'): string {
+function resolveOutputDir(
+  clientConfig: ClientConfig,
+  scope: 'user' | 'project',
+  paths: SkillsSyncPaths
+): string {
   const dir = clientConfig.outputDir[scope];
   let resolved: string;
   if (dir.startsWith('~')) {
@@ -840,7 +866,7 @@ function resolveOutputDir(clientConfig: ClientConfig, scope: 'user' | 'project')
   } else if (path.isAbsolute(dir)) {
     resolved = dir;
   } else if (scope === 'project') {
-    resolved = path.resolve(resolveProjectRoot(), dir);
+    resolved = path.resolve(resolveProjectRoot(paths), dir);
   } else {
     resolved = path.resolve(dir);
   }
@@ -857,7 +883,7 @@ function resolveOutputDir(clientConfig: ClientConfig, scope: 'user' | 'project')
   return resolved;
 }
 
-function resolveProjectRoot(): string {
+function resolveProjectRoot(paths: SkillsSyncPaths): string {
   const fromWorkspaceEnv = process.env['MCP_WORKSPACE'];
   if (fromWorkspaceEnv) {
     // Refused like the server refuses it: a project-scope export resolved against a workspace that
@@ -870,7 +896,7 @@ function resolveProjectRoot(): string {
     );
   }
 
-  const serverRoot = getServerRoot();
+  const serverRoot = paths.packageRoot;
   if (path.basename(serverRoot) === 'server') {
     const repoRoot = path.dirname(serverRoot);
     if (existsSync(path.join(repoRoot, 'AGENTS.md'))) {
@@ -926,7 +952,7 @@ function dependsOnFramework(gate: GateYaml): boolean {
 async function resolveActiveGateRefs(
   gateConfig: PromptYaml['gateConfiguration'],
   promptCategory: string,
-  gatesRoot: string,
+  gateRoots: readonly string[],
   chainSteps: PromptYamlChainStep[] = [],
   declaredArtifacts?: ArtifactKind[]
 ): Promise<IRGateRef[]> {
@@ -935,19 +961,16 @@ async function resolveActiveGateRefs(
   const registeredIds = new Set<string>();
 
   // Read every gate once, keyed by declared id. The directory name is the fallback key because
-  // that is what `include` entries and the auto-activation scan both used before.
-  let gateDirs: string[] = [];
-  try {
-    gateDirs = (await readdir(gatesRoot, { withFileTypes: true }))
-      .filter((d) => d.isDirectory() && !d.name.startsWith('_'))
-      .map((d) => d.name);
-  } catch {
-    /* no gates directory */
-  }
+  // that is what `include` entries and the auto-activation scan both used before. Across roots the
+  // highest-precedence directory of a name wins, so a workspace gate replaces a bundled one.
+  const gateDirs = await collectResourceDirs(
+    gateRoots,
+    (name, dir) => !name.startsWith('_') && existsSync(path.join(dir, 'gate.yaml'))
+  );
 
   const gatesById = new Map<string, GateYaml>();
-  for (const dirName of gateDirs) {
-    const gateYamlRaw = await readOptionalFile(path.join(gatesRoot, dirName, 'gate.yaml'));
+  for (const [dirName, gateDir] of gateDirs) {
+    const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
     if (!gateYamlRaw) continue;
     const gate = yaml.load(gateYamlRaw) as GateYaml;
     // `getAllGuides(enabledOnly)` defaults to true in `selectGates`; match it.
@@ -990,7 +1013,8 @@ async function resolveActiveGateRefs(
 
   // 3. Load registered gate content
   for (const gateId of registeredIds) {
-    const gateDir = path.join(gatesRoot, gateId);
+    const gateDir = gateDirs.get(gateId);
+    if (gateDir === undefined) continue;
     const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
     if (!gateYamlRaw) continue;
     const gate = yaml.load(gateYamlRaw) as GateYaml;
@@ -1069,6 +1093,7 @@ async function loadDocFiles(promptDir: string): Promise<IRDocFile[]> {
 async function loadPromptIR(
   promptDir: string,
   category: string,
+  gateRoots: readonly string[],
   toolsCache: Record<string, ToolIndexEntry>,
   output?: SkillsSyncOutput,
   report?: SkillsSyncRunReport
@@ -1154,11 +1179,10 @@ async function loadPromptIR(
   }));
 
   // Resolve active gates for this prompt
-  const gatesRoot = path.join(getResourcesDir(), 'gates');
   const gateRefs = await resolveActiveGateRefs(
     data.gateConfiguration,
     category,
-    gatesRoot,
+    gateRoots,
     data.chainSteps ?? [],
     data.artifacts?.produces
   );
@@ -1391,102 +1415,116 @@ interface LoadFilters {
   exportAllowList?: Set<string>;
 }
 
+/**
+ * Resource directories across every contributing root, keyed by directory name.
+ *
+ * Roots arrive lowest precedence first, so a later root's directory replaces an earlier one's of
+ * the same name: a workspace entry wins over the bundled one, as it does when the server loads
+ * them. A root that does not exist contributes nothing.
+ */
+async function collectResourceDirs(
+  roots: readonly string[],
+  include: (name: string, dir: string) => boolean = () => true
+): Promise<Map<string, string>> {
+  const dirs = new Map<string, string>();
+  for (const root of roots) {
+    const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const dir = path.join(root, entry.name);
+      if (entry.isDirectory() && include(entry.name, dir)) dirs.set(entry.name, dir);
+    }
+  }
+  return dirs;
+}
+
+/** Prompt directories across every root, keyed by `category/id`, the identity the server merges on. */
+async function collectPromptDirs(
+  roots: readonly string[]
+): Promise<Map<string, { category: string; id: string; dir: string }>> {
+  const prompts = new Map<string, { category: string; id: string; dir: string }>();
+  for (const root of roots) {
+    for (const [category, categoryDir] of await collectResourceDirs([root])) {
+      for (const [id, dir] of await collectResourceDirs([categoryDir])) {
+        prompts.set(`${category}/${id}`, { category, id, dir });
+      }
+    }
+  }
+  return prompts;
+}
+
 async function loadAllResources(
   filters: LoadFilters | undefined,
   output: SkillsSyncOutput,
-  dbManager?: DatabasePort,
-  report?: SkillsSyncRunReport
+  dbManager: DatabasePort | undefined,
+  report: SkillsSyncRunReport | undefined,
+  paths: SkillsSyncPaths
 ): Promise<SkillIR[]> {
   const resources: SkillIR[] = [];
 
   // Load tools cache for full metadata (schema, execution config)
   const toolsCache = await loadToolsCache(output, dbManager);
 
-  // Prompts: resources/prompts/{category}/{id}/prompt.yaml
+  // Prompts: {root}/{category}/{id}/prompt.yaml
   if (!filters?.resourceType || filters.resourceType === 'prompt') {
-    const promptsBase = path.join(getResourcesDir(), 'prompts');
-    try {
-      const categories = await readdir(promptsBase, { withFileTypes: true });
-      for (const cat of categories) {
-        if (!cat.isDirectory()) continue;
-        const catDir = path.join(promptsBase, cat.name);
-        const promptDirs = await readdir(catDir, { withFileTypes: true });
-        for (const pd of promptDirs) {
-          if (!pd.isDirectory()) continue;
-          if (filters?.id && pd.name !== filters.id) continue;
-          try {
-            resources.push(
-              await loadPromptIR(path.join(catDir, pd.name), cat.name, toolsCache, output, report)
-            );
-          } catch (e) {
-            output.error(`  skip prompt ${cat.name}/${pd.name}: ${(e as Error).message}`);
-            report?.failures.push({
-              id: `${cat.name}/${pd.name}`,
-              reason: `prompt skipped: ${(e as Error).message}`,
-            });
-          }
-        }
+    for (const prompt of (await collectPromptDirs(paths.sourceRoots.prompt)).values()) {
+      if (filters?.id && prompt.id !== filters.id) continue;
+      try {
+        resources.push(
+          await loadPromptIR(
+            prompt.dir,
+            prompt.category,
+            paths.sourceRoots.gate,
+            toolsCache,
+            output,
+            report
+          )
+        );
+      } catch (e) {
+        output.error(`  skip prompt ${prompt.category}/${prompt.id}: ${(e as Error).message}`);
+        report?.failures.push({
+          id: `${prompt.category}/${prompt.id}`,
+          reason: `prompt skipped: ${(e as Error).message}`,
+        });
       }
-    } catch {
-      /* no prompts dir */
     }
   }
 
-  // Gates: resources/gates/{id}/gate.yaml
+  // Gates: {root}/{id}/gate.yaml
   if (!filters?.resourceType || filters.resourceType === 'gate') {
-    const gatesBase = path.join(getResourcesDir(), 'gates');
-    try {
-      const gateDirs = await readdir(gatesBase, { withFileTypes: true });
-      for (const gd of gateDirs) {
-        if (!gd.isDirectory()) continue;
-        if (!existsSync(path.join(gatesBase, gd.name, 'gate.yaml'))) continue;
-        if (filters?.id && gd.name !== filters.id) continue;
-        try {
-          resources.push(await loadGateIR(path.join(gatesBase, gd.name)));
-        } catch (e) {
-          output.error(`  skip gate ${gd.name}: ${(e as Error).message}`);
-        }
+    const gateDirs = await collectResourceDirs(paths.sourceRoots.gate, (_name, dir) =>
+      existsSync(path.join(dir, 'gate.yaml'))
+    );
+    for (const [name, dir] of gateDirs) {
+      if (filters?.id && name !== filters.id) continue;
+      try {
+        resources.push(await loadGateIR(dir));
+      } catch (e) {
+        output.error(`  skip gate ${name}: ${(e as Error).message}`);
       }
-    } catch {
-      /* no gates dir */
     }
   }
 
-  // Frameworks: resources/frameworks/{id}/framework.yaml
+  // Frameworks: {root}/{id}/framework.yaml
   if (!filters?.resourceType || filters.resourceType === 'framework') {
-    const methBase = path.join(getResourcesDir(), 'frameworks');
-    try {
-      const methDirs = await readdir(methBase, { withFileTypes: true });
-      for (const md of methDirs) {
-        if (!md.isDirectory()) continue;
-        if (filters?.id && md.name !== filters.id) continue;
-        try {
-          resources.push(await loadFrameworkIR(path.join(methBase, md.name)));
-        } catch (e) {
-          output.error(`  skip framework ${md.name}: ${(e as Error).message}`);
-        }
+    for (const [name, dir] of await collectResourceDirs(paths.sourceRoots.framework)) {
+      if (filters?.id && name !== filters.id) continue;
+      try {
+        resources.push(await loadFrameworkIR(dir));
+      } catch (e) {
+        output.error(`  skip framework ${name}: ${(e as Error).message}`);
       }
-    } catch {
-      /* no frameworks dir */
     }
   }
 
-  // Styles: resources/styles/{id}/style.yaml
+  // Styles: {root}/{id}/style.yaml
   if (!filters?.resourceType || filters.resourceType === 'style') {
-    const stylesBase = path.join(getResourcesDir(), 'styles');
-    try {
-      const styleDirs = await readdir(stylesBase, { withFileTypes: true });
-      for (const sd of styleDirs) {
-        if (!sd.isDirectory()) continue;
-        if (filters?.id && sd.name !== filters.id) continue;
-        try {
-          resources.push(await loadStyleIR(path.join(stylesBase, sd.name)));
-        } catch (e) {
-          output.error(`  skip style ${sd.name}: ${(e as Error).message}`);
-        }
+    for (const [name, dir] of await collectResourceDirs(paths.sourceRoots.style)) {
+      if (filters?.id && name !== filters.id) continue;
+      try {
+        resources.push(await loadStyleIR(dir));
+      } catch (e) {
+        output.error(`  skip style ${name}: ${(e as Error).message}`);
       }
-    } catch {
-      /* no styles dir */
     }
   }
 
@@ -3146,10 +3184,12 @@ function findForeignAliasForResource(
 async function exportCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
-  report: SkillsSyncRunReport
+  report: SkillsSyncRunReport,
+  paths: SkillsSyncPaths
 ): Promise<void> {
-  const config = await loadSyncConfig();
-  const harnessCovers = await resolveHarnessCovers();
+  const configPath = getSkillsSyncConfigPath(paths);
+  const config = await loadSyncConfig(configPath, paths);
+  const harnessCovers = await resolveHarnessCovers(paths);
   const cliScope = opts.scope; // undefined = use per-resource scope; set = override all
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
@@ -3158,7 +3198,7 @@ async function exportCommand(
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
 
-  const resources = await loadAllResources(filters, output, opts.dbManager, report);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
   report.resources = resources.length;
   output.log(`Loaded ${resources.length} resources`);
 
@@ -3176,7 +3216,7 @@ async function exportCommand(
     );
   }
 
-  const configRaw = await readFile(getConfigPath(), 'utf-8');
+  const configRaw = await readFile(configPath, 'utf-8');
   const configHash = computeContentHash([configRaw]);
 
   // Determine which scopes to export to (default: user-global only)
@@ -3201,7 +3241,7 @@ async function exportCommand(
     }
 
     for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope);
+      const baseDir = resolveOutputDir(clientConfig, scope, paths);
 
       // Collision guard: skip if another client already wrote to this physical directory
       const dirKey = `${baseDir}:${scope}`;
@@ -3312,7 +3352,7 @@ async function exportCommand(
   }
 
   if (!opts.preview) {
-    const mutationResult = await applyRegistrationMutations(getConfigPath(), registrationMutations);
+    const mutationResult = await applyRegistrationMutations(configPath, registrationMutations);
     if (mutationResult.updated) {
       output.log(`Updated skills-sync.yaml registrations (+${mutationResult.addedKeys} key(s))`);
     }
@@ -3476,10 +3516,12 @@ async function applySyncPrune(
 async function syncCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
-  report: SkillsSyncRunReport
+  report: SkillsSyncRunReport,
+  paths: SkillsSyncPaths
 ): Promise<void> {
-  const config = await loadSyncConfig();
-  const harnessCovers = await resolveHarnessCovers();
+  const configPath = getSkillsSyncConfigPath(paths);
+  const config = await loadSyncConfig(configPath, paths);
+  const harnessCovers = await resolveHarnessCovers(paths);
   const cliScope = opts.scope;
   const shouldPrune = opts.prune ?? true;
   const clientIds =
@@ -3489,7 +3531,7 @@ async function syncCommand(
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
 
-  const resources = await loadAllResources(filters, output, opts.dbManager, report);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
   output.log(`Loaded ${resources.length} resources`);
 
   const idCounts = new Map<string, number>();
@@ -3502,7 +3544,6 @@ async function syncCommand(
 
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user'];
   const seenDirs = new Map<string, string>();
-  const configPath = getConfigPath();
 
   for (const clientId of clientIds) {
     const clientConfig = resolveClientConfig(clientId, config);
@@ -3520,7 +3561,7 @@ async function syncCommand(
     }
 
     for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope);
+      const baseDir = resolveOutputDir(clientConfig, scope, paths);
       const dirKey = `${baseDir}:${scope}`;
       const previousClient = seenDirs.get(dirKey);
       if (previousClient) {
@@ -3705,10 +3746,11 @@ function formatPatchForDisplay(rawPatch: string, indent = '    '): string {
 async function diffCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
-  report: SkillsSyncRunReport
+  report: SkillsSyncRunReport,
+  paths: SkillsSyncPaths
 ): Promise<void> {
-  const config = await loadSyncConfig();
-  const harnessCovers = await resolveHarnessCovers();
+  const config = await loadSyncConfig(getSkillsSyncConfigPath(paths), paths);
+  const harnessCovers = await resolveHarnessCovers(paths);
   const cliScope = opts.scope;
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
@@ -3716,7 +3758,7 @@ async function diffCommand(
   const filters: LoadFilters = {};
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
-  const resources = await loadAllResources(filters, output, opts.dbManager, report);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
 
   // When --output is provided, collect patches and write .patch files
@@ -3750,7 +3792,7 @@ async function diffCommand(
     );
 
     for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope);
+      const baseDir = resolveOutputDir(clientConfig, scope, paths);
       const dirKey = `${baseDir}:${scope}`;
       const previousClient = seenDirs.get(dirKey);
       if (previousClient) {
@@ -3820,7 +3862,7 @@ async function diffCommand(
 
         // Output drift: exported files edited locally since last export
         const resourceKey = manifestKey(ir);
-        const baseDir = resolveOutputDir(clientConfig, scope);
+        const baseDir = resolveOutputDir(clientConfig, scope, paths);
         let outputFiles = adaptResource(
           ir,
           clientConfig,
@@ -3972,13 +4014,45 @@ async function diffCommand(
  * system message, user message, guidance). Structured metadata (arguments,
  * chains, gates) is never modified.
  */
+/**
+ * Why a pull may not write this resource back, or undefined when it may.
+ *
+ * A pull writes into the resource's own source files. When those sit in the package's bundled tree
+ * while a workspace or resources directory is where resources are written, the write would edit
+ * the copy a package update replaces (the Claude Code plugin replaces it on every update), not the
+ * operator's own library.
+ */
+function describeBundledPullRefusal(
+  ir: SkillIR,
+  targetFiles: readonly string[],
+  paths: SkillsSyncPaths
+): string | undefined {
+  const bundledRoot = paths.bundledRoots[ir.resourceType];
+  const writeRoot = paths.writeRoots[ir.resourceType];
+  const sourcePath = ir.sourcePaths[0];
+  if (sourcePath === undefined || writeRoot === bundledRoot) return undefined;
+  const relative = path.relative(bundledRoot, sourcePath);
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
+
+  const library =
+    paths.workspace !== undefined
+      ? `the workspace ${paths.workspace}`
+      : `the resources directory ${writeRoot}`;
+  return (
+    `Refusing to pull ${ir.resourceType} ${ir.id}: ${targetFiles.join(', ')} is in the bundled ` +
+    `package tree, which a package update replaces, while ${library} is configured. ` +
+    `Copy the ${ir.resourceType} into ${writeRoot} and pull again.`
+  );
+}
+
 async function pullCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
-  report: SkillsSyncRunReport
+  report: SkillsSyncRunReport,
+  paths: SkillsSyncPaths
 ): Promise<void> {
-  const config = await loadSyncConfig();
-  const harnessCovers = await resolveHarnessCovers();
+  const config = await loadSyncConfig(getSkillsSyncConfigPath(paths), paths);
+  const harnessCovers = await resolveHarnessCovers(paths);
   const cliScope = opts.scope;
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
@@ -3986,7 +4060,7 @@ async function pullCommand(
   const filters: LoadFilters = {};
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
-  const resources = await loadAllResources(filters, output, opts.dbManager, report);
+  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
 
   for (const clientId of clientIds) {
@@ -4012,7 +4086,7 @@ async function pullCommand(
     );
 
     for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope);
+      const baseDir = resolveOutputDir(clientConfig, scope, paths);
       const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
 
       let pullCount = 0;
@@ -4137,14 +4211,38 @@ async function pullCommand(
           continue;
         }
 
+        // Every loader records the file it read, so this should not fire; without the check an edit
+        // would resolve its target against the working directory instead of the resource.
+        const sourcePath = ir.sourcePaths[0];
+        if (sourcePath === undefined) {
+          const reason = `Refusing to pull ${ir.resourceType} ${ir.id}: it has no source file to write the edit back to.`;
+          output.warn(reason);
+          report.failures.push({ id: ir.id, reason });
+          continue;
+        }
+        const targetFiles = [
+          ...new Set(
+            changes.map((change) =>
+              change.section === 'name' || change.section === 'description'
+                ? sourcePath
+                : path.join(path.dirname(sourcePath), change.file)
+            )
+          ),
+        ];
+        const refusal = describeBundledPullRefusal(ir, targetFiles, paths);
+        if (refusal !== undefined) {
+          output.warn(refusal);
+          report.failures.push({ id: ir.id, reason: refusal });
+          continue;
+        }
+
         if (opts.preview) {
           pullCount++;
           continue;
         }
 
         // Write changes to canonical YAML files
-        const resourceDir = path.dirname(ir.sourcePaths[0] ?? '');
-        if (!resourceDir) continue;
+        const resourceDir = path.dirname(sourcePath);
 
         // Map section names to canonical IR fields for Nunjucks detection
         const sectionToCanonical: Record<string, string | null> = {
@@ -4169,8 +4267,7 @@ async function pullCommand(
 
           if (change.section === 'name' || change.section === 'description') {
             // Update prompt.yaml field
-            const yamlPath = ir.sourcePaths[0] ?? '';
-            if (!yamlPath) continue;
+            const yamlPath = sourcePath;
             const yamlContent = await readOptionalFile(yamlPath);
             if (!yamlContent) continue;
             const doc = yaml.load(yamlContent) as Record<string, unknown>;
@@ -4210,7 +4307,8 @@ async function pullCommand(
 async function cloneCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
-  report: SkillsSyncRunReport
+  report: SkillsSyncRunReport,
+  paths: SkillsSyncPaths
 ): Promise<void> {
   const filePath = opts.file;
   if (!filePath) {
@@ -4231,19 +4329,13 @@ async function cloneCommand(
     throw usageError('Could not infer resource ID. Use --id <name> to specify.');
   }
 
-  const serverRoot = resolveServerRoot();
-  const typeDir =
-    resourceType === 'prompt'
-      ? 'prompts'
-      : resourceType === 'gate'
-        ? 'gates'
-        : resourceType === 'framework'
-          ? 'frameworks'
-          : 'styles';
+  // The write root is the workspace's when one is set, so a clone lands in the operator's library
+  // rather than the package tree an update replaces.
+  const writeRoot = paths.writeRoots[resourceType];
   const targetDir =
     resourceType === 'prompt'
-      ? path.join(serverRoot, 'resources', typeDir, category, resourceId)
-      : path.join(serverRoot, 'resources', typeDir, resourceId);
+      ? path.join(writeRoot, category, resourceId)
+      : path.join(writeRoot, resourceId);
 
   if (existsSync(targetDir) && !opts.force) {
     throw usageError(`Target directory exists: ${targetDir}. Use --force to overwrite.`);
@@ -4326,11 +4418,11 @@ async function cloneCommand(
   const mutationTargets = new Map<string, { path: string; kind: 'directory' }>();
   mutationTargets.set(targetDir, { path: targetDir, kind: 'directory' });
   if (resourceType === 'prompt') {
-    const categoryDir = path.join(serverRoot, 'resources', 'prompts', category);
+    const categoryDir = path.join(paths.writeRoots.prompt, category);
     mutationTargets.set(categoryDir, { path: categoryDir, kind: 'directory' });
   }
   for (const gateEntry of gateDirEntries) {
-    const gateTargetDir = path.join(serverRoot, 'resources', 'gates', gateEntry.name);
+    const gateTargetDir = path.join(paths.writeRoots.gate, gateEntry.name);
     mutationTargets.set(gateTargetDir, { path: gateTargetDir, kind: 'directory' });
   }
   for (const stepEntry of stepDirEntries) {
@@ -4400,7 +4492,7 @@ async function cloneCommand(
         for (const gateEntry of gateDirEntries) {
           const gateId = gateEntry.name;
           gateIds.push(gateId);
-          const gateTargetDir = path.join(serverRoot, 'resources', 'gates', gateId);
+          const gateTargetDir = path.join(paths.writeRoots.gate, gateId);
           if (existsSync(gateTargetDir) && !opts.force) {
             output.log(`  skip gate ${gateId} (exists, use --force)`);
             continue;
@@ -4624,9 +4716,11 @@ Options:
 
 export async function runSkillsSyncCommand(
   opts: SkillsSyncOptions,
-  output: SkillsSyncOutput
+  output: SkillsSyncOutput,
+  paths: SkillsSyncPaths
 ): Promise<SkillsSyncRunReport> {
   validateSkillsSyncOptions(opts);
+  if (opts.command !== 'help') assertUsableSourceSettings();
 
   const report = emptyRunReport(opts.command, opts.preview ?? false);
 
@@ -4639,27 +4733,28 @@ export async function runSkillsSyncCommand(
 
   switch (opts.command) {
     case 'export':
-      await exportCommand(opts, commandOutput, report);
+      await exportCommand(opts, commandOutput, report, paths);
       break;
     case 'sync':
-      await syncCommand({ ...opts, prune: opts.prune ?? true }, commandOutput, report);
+      await syncCommand({ ...opts, prune: opts.prune ?? true }, commandOutput, report, paths);
       break;
     case 'diff':
-      await diffCommand(opts, commandOutput, report);
+      await diffCommand(opts, commandOutput, report, paths);
       break;
     case 'patch':
       // Backward compat: 'patch' is now 'diff --output'
       await diffCommand(
-        { ...opts, output: opts.output ?? path.join(getServerRoot(), 'runtime-state', 'patches') },
+        { ...opts, output: opts.output ?? path.join(paths.runtimeStateDir, 'patches') },
         commandOutput,
-        report
+        report,
+        paths
       );
       break;
     case 'pull':
-      await pullCommand(opts, commandOutput, report);
+      await pullCommand(opts, commandOutput, report, paths);
       break;
     case 'clone':
-      await cloneCommand(opts, commandOutput, report);
+      await cloneCommand(opts, commandOutput, report, paths);
       break;
     case 'help':
       if (!opts.json) printSkillsSyncHelp(commandOutput);
@@ -4677,17 +4772,14 @@ export async function runSkillsSyncCommand(
 
 export async function runSkillsSyncFromArgv(
   argv: string[],
-  output: SkillsSyncOutput
+  output: SkillsSyncOutput,
+  paths: SkillsSyncPaths
 ): Promise<void> {
-  await runSkillsSyncCommand(parseSkillsSyncArgs(argv), output);
+  await runSkillsSyncCommand(parseSkillsSyncArgs(argv), output, paths);
 }
 
 export function listSupportedSkillsSyncClients(): string[] {
   return Object.keys(CLIENT_REGISTRY);
-}
-
-export function getSkillsSyncConfigPath(): string {
-  return getConfigPath();
 }
 
 // @internal — exported for testing

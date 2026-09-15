@@ -13,6 +13,7 @@ import {
   type ResourceType,
   type SkillsSyncOutput,
 } from '#modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '#runtime/skills-sync-paths.js';
 
 export const SKILLS_SYNC_OPERATIONS = [
   'status',
@@ -105,7 +106,7 @@ export class ConsolidatedSkillsSync {
   }
 
   private async getStatus(): Promise<ToolResponse> {
-    const configPath = getSkillsSyncConfigPath();
+    const configPath = getSkillsSyncConfigPath(resolveSkillsSyncPaths());
     // No initializer: the try assigns true, the catch assigns false.
     let configExists: boolean;
     let selectionSource: SkillsSyncStatus['selectionSource'] = 'none';
@@ -265,7 +266,8 @@ export class ConsolidatedSkillsSync {
           force: args.force,
           dbManager: this.dbManager,
         },
-        output
+        output,
+        resolveSkillsSyncPaths()
       );
 
       const text = logs.length > 0 ? logs.join('\n') : `skills_sync ${operation} completed.`;

@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 
 import { formatResourceInventory } from './resource-inventory.js';
+import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
@@ -21,6 +22,7 @@ import type { PathResolver } from './paths.js';
 import type { Stats } from 'node:fs';
 
 import { loadPromptsAcrossRoots, mergePromptResults } from '#modules/prompts/prompt-root-loader.js';
+import { getSkillsSyncConfigPath } from '#modules/skills-sync/service.js';
 
 export interface PromptDataLoadParams {
   logger: Logger;
@@ -180,7 +182,7 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   // Set unconditionally: a hot reload that REMOVES the last registration must
   // clear the previous set, or the prompt stays deregistered until restart.
   const exportedPromptIds = await loadSkillsSyncExports(
-    serverRoot,
+    pathResolver,
     logger,
     convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
   );
@@ -285,13 +287,16 @@ function collectRegisteredKeys(
  * Returns an empty set when the file is missing or declares neither key.
  */
 export async function loadSkillsSyncExports(
-  serverRoot: string | undefined,
+  pathResolver: PathResolver | undefined,
   logger: Logger,
   allPromptKeys: string[]
 ): Promise<Set<string>> {
-  if (serverRoot === undefined) return new Set();
+  if (pathResolver === undefined) return new Set();
 
-  const configPath = path.join(serverRoot, 'skills-sync.yaml');
+  // The file skills sync itself reads and registers into: the workspace's when it holds one, else
+  // the package's. Reading only the package copy left a prompt registered in the workspace listed
+  // here as well as served as a skill.
+  const configPath = getSkillsSyncConfigPath(resolveSkillsSyncPaths(pathResolver));
   try {
     const content = await readFile(configPath, 'utf-8');
     const config = yaml.load(content) as SkillsSyncDeregistrationConfig | null;

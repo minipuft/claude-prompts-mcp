@@ -16,6 +16,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -132,7 +133,8 @@ describe('Clone Command Integration', () => {
         id: 'my-skill',
         category: 'testing',
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     // Verify canonical structure was created
@@ -180,7 +182,8 @@ describe('Clone Command Integration', () => {
         id: 'arg-skill',
         category: 'testing',
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     const yamlContent = await readFile(
@@ -222,7 +225,8 @@ describe('Clone Command Integration', () => {
         id: 'reverse-skill',
         category: 'testing',
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     const targetDir = path.join(serverRoot, 'resources', 'prompts', 'testing', 'reverse-skill');
@@ -262,7 +266,8 @@ describe('Clone Command Integration', () => {
           id: 'exists-skill',
           category: 'testing',
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       )
     ).rejects.toThrow(/exists.*force/i);
   });
@@ -292,7 +297,8 @@ describe('Clone Command Integration', () => {
         category: 'testing',
         force: true,
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     // Verify overwritten
@@ -320,7 +326,8 @@ describe('Clone Command Integration', () => {
         // No --id, should infer from dir name "inferred-id"
         category: 'testing',
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     const targetDir = path.join(serverRoot, 'resources', 'prompts', 'testing', 'inferred-id');
@@ -352,7 +359,8 @@ describe('Clone Command Integration', () => {
         category: 'testing',
         preview: true,
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     // Should report what would happen
@@ -399,7 +407,8 @@ describe('Clone Command Integration', () => {
         id: 'gated-skill',
         category: 'testing',
       } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
 
     // Verify gate was copied to canonical gates directory
@@ -426,7 +435,7 @@ describe('Clone Command Integration', () => {
   it('fails gracefully when --file is not provided', async () => {
     const out = silentOutput();
     await expect(
-      runSkillsSyncCommand({ command: 'clone' } as SkillsSyncOptions, out)
+      runSkillsSyncCommand({ command: 'clone' } as SkillsSyncOptions, out, resolveSkillsSyncPaths())
     ).rejects.toThrow(/--file/i);
   });
 
@@ -440,7 +449,8 @@ describe('Clone Command Integration', () => {
           id: 'nope',
           category: 'testing',
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       )
     ).rejects.toThrow(/not found/i);
   });
