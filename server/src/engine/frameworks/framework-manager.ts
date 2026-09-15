@@ -45,6 +45,7 @@ interface FrameworkStateAccessor {
   isFrameworkSystemEnabled(): boolean;
   getActiveFramework(): { id: string; type: string } | null | undefined;
   switchFramework(request: FrameworkSwitchRequest, scope?: StateStoreOptions): Promise<boolean>;
+  selectDefaultForRemovedFrameworks(): Promise<void>;
 }
 
 /**
@@ -328,6 +329,27 @@ export class FrameworkManager extends BaseResourceHandler<
       this.logger.error(`Framework switch failed: ${errorMsg}`);
       return { success: false, error: errorMsg };
     }
+  }
+
+  /**
+   * Remove a framework from this process, and move any selection that named it.
+   *
+   * Every path that takes a framework away calls this: `resource_manager` delete, and hot reload
+   * of a deleted framework folder. `unregister` alone is synchronous and cannot wait for the state
+   * store, and a selection left naming a removed framework cannot be resolved — every later
+   * `getActiveFramework()` throws, which over Streamable HTTP fails each request's tool
+   * registration. A manager with no state store holds no selection to move.
+   *
+   * @returns whether the framework was registered.
+   * @throws when a moved selection fails to persist, or the configured default framework is not
+   *   registered either.
+   */
+  async removeFramework(frameworkId: string): Promise<boolean> {
+    const removed = this.unregister(frameworkId);
+    if (this.frameworkStateStore !== undefined) {
+      await this.frameworkStateStore.selectDefaultForRemovedFrameworks();
+    }
+    return removed;
   }
 
   /**

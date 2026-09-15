@@ -232,6 +232,24 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     }
   }
 
+  // Initialize the framework loader with PathResolver-resolved dirs.
+  // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
+  // Must happen before the framework state store is built, and before any pipeline/tool code calls
+  // getDefaultRuntimeLoader(): the store builds the one framework manager the server uses, and that
+  // manager's registry keeps the loader it finds at construction. Configured afterwards, the
+  // manager would read only the package's frameworks and never a workspace one.
+  // Without the bundled tree trailing the search list, a workspace holding a single framework made
+  // the server throw `FATAL: Framework 'cageerf' not found` at startup — `resolveResourceSubdir`
+  // had made that workspace dir the only frameworks root (see `PathResolver.getBundledResourceDir`).
+  const frameworkRoots = resolveResourceRoots(
+    pathResolver,
+    'frameworks',
+    pathResolver?.getFrameworksPath()
+  );
+  const frameworkLoader = getDefaultRuntimeLoader(
+    loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
+  );
+
   if (isVerbose) logger.info('🔄 Initializing Framework State Manager...');
   const frameworkStateRoot =
     typeof configManager.getServerRoot === 'function'
@@ -269,21 +287,8 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     logger.info(`✅ GateManager initialized with ${gateManager.getStats().totalGates} gates`);
   }
 
-  // Initialize framework + style loaders with PathResolver-resolved dirs
-  // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
-  // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
-  // Without the bundled tree trailing the search list, a workspace holding a single framework made
-  // the server throw `FATAL: Framework 'cageerf' not found` at startup — `resolveResourceSubdir`
-  // had made that workspace dir the only frameworks root (see `PathResolver.getBundledResourceDir`).
-  const frameworkRoots = resolveResourceRoots(
-    pathResolver,
-    'frameworks',
-    pathResolver?.getFrameworksPath()
-  );
-  const frameworkLoader = getDefaultRuntimeLoader(
-    loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
-  );
-
+  // Initialize the style loader with PathResolver-resolved dirs, for the same reason as the
+  // framework loader above: PathResolver is the SSOT for directory resolution and enables overlays.
   const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver?.getStylesPath());
   const styleLoader = getDefaultStyleDefinitionLoader(
     loaderDirsConfig(styleRoots, 'stylesDir', 'additionalStylesDirs')
@@ -378,7 +383,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   mcpToolsManager.setFrameworkStateStore(frameworkStateStore);
 
   if (isVerbose) logger.info('🔄 Initializing Framework Manager...');
-  await mcpToolsManager.setFrameworkManager();
+  mcpToolsManager.setFrameworkManager();
 
   if (isVerbose) logger.info('🔄 Initializing Tool Description Manager...');
   const toolDescriptionLoader = createToolDescriptionLoader(logger, configManager);

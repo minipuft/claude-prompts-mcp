@@ -53,7 +53,7 @@ describe('framework deletion refuses what the server ships', () => {
       // stub returning a hardcoded answer would test the mock rather than the shipped set.
       frameworkManager: {
         isShippedFramework: (id: string) => isShippedFrameworkId(id),
-        unregister: jest.fn(() => true),
+        removeFramework: jest.fn(async () => true),
       },
       configManager: {
         getServerRoot: () => workspaceDir,

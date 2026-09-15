@@ -6,6 +6,8 @@ import * as path from 'path';
 
 import { createFrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
 
+import type { PersistedFrameworkState } from '../../../src/engine/frameworks/framework-state-store.js';
+import type { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 
 const createLogger = (): Logger =>
@@ -105,5 +107,65 @@ describe('FrameworkStateStore (persistence)', () => {
     expect(mgr.getCurrentState().activeFramework.toLowerCase()).toBe('react');
 
     await mgr.shutdown();
+  });
+
+  test('a persisted framework that is no longer registered falls back to the configured default', async () => {
+    const logger = createLogger();
+    const scope = { workspaceId: 'project-with-a-removed-framework' };
+    // `switchFramework` on the store persists what it is told; validation belongs to the manager.
+    const before = await createFrameworkStateStore(logger, tmpRoot, { defaultScope: scope });
+    await before.switchFramework({ targetFramework: 'framework-that-was-removed' });
+    await before.shutdown();
+
+    const after = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultFramework: 'radiant',
+      defaultScope: scope,
+    });
+    // Not the first framework available, which is what the recovery used to pick.
+    expect(after.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    expect(after.getActiveFramework().id.toLowerCase()).toBe('radiant');
+    await after.shutdown();
+  });
+
+  test('removing the selected framework selects the configured default and persists it', async () => {
+    const logger = createLogger();
+    const scope = { workspaceId: 'project-removing-its-framework' };
+    const options = { defaultFramework: 'radiant', defaultScope: scope };
+    const store = await createFrameworkStateStore(logger, tmpRoot, options);
+    await store.switchFramework({ targetFramework: 'react' });
+
+    const removed = await store.getFrameworkManager()!.removeFramework('react');
+
+    expect(removed).toBe(true);
+    expect(store.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    expect(store.getActiveFramework().id.toLowerCase()).toBe('radiant');
+    await store.shutdown();
+
+    const restarted = await createFrameworkStateStore(logger, tmpRoot, options);
+    expect(restarted.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    await restarted.shutdown();
+  });
+
+  test('a selection moved off a removed framework that fails to persist rejects', async () => {
+    const logger = createLogger();
+    let failSaves = false;
+    const stateStore = {
+      exists: async () => false,
+      load: async () => undefined,
+      save: async () => {
+        if (failSaves) throw new Error('state database is read-only');
+      },
+    } as unknown as SqliteStateStore<PersistedFrameworkState>;
+    const store = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultFramework: 'radiant',
+      defaultScope: { workspaceId: 'project-with-a-read-only-database' },
+      stateStore,
+    });
+    await store.switchFramework({ targetFramework: 'react' });
+
+    failSaves = true;
+    await expect(store.getFrameworkManager()!.removeFramework('react')).rejects.toThrow(
+      'state database is read-only'
+    );
   });
 });

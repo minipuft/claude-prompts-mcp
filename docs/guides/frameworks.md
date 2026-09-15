@@ -57,6 +57,18 @@ This is the **floor**, not a lock. It applies to any scope with no persisted sta
 `system_control` switch overrides it for that project and survives restarts. A project that
 declares nothing falls back to `CAGEERF`.
 
+Any framework the server has can be switched to, including one in your workspace or one created
+with `resource_manager` while the server runs, and that selection survives a restart as well.
+
+The configured default is also where the selection goes when the active framework disappears:
+
+- deleting the active framework with `resource_manager` selects `defaultFramework` and saves that
+  selection;
+- at startup, a saved selection whose framework no longer exists is replaced by `defaultFramework`.
+
+If `defaultFramework` itself names no registered framework in either case, the server reports that
+setting instead of picking another framework.
+
 Isolation depends on each project resolving a distinct scope id. Confirm it in the startup log:
 
 ```

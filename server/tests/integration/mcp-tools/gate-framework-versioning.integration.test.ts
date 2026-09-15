@@ -1786,6 +1786,11 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
       return hadDefinition || hadGuide;
     }
 
+    /** Mirrors `FrameworkManager.removeFramework`; this double holds no selection to move. */
+    removeFramework(id: string): Promise<boolean> {
+      return Promise.resolve(this.unregister(id));
+    }
+
     /** Test-only drift: forget the framework while leaving its files on disk. */
     forget(id: string): void {
       this.unregister(id);

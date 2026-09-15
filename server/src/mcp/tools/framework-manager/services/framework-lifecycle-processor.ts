@@ -366,8 +366,9 @@ export class FrameworkLifecycleProcessor {
       );
     }
 
-    // Unregister framework from in-memory registry
-    const unregistered = this.ctx.frameworkManager.unregister(id);
+    // Unregister framework from in-memory registry, moving a selection that named it to the
+    // configured default. Throws when that move fails to persist.
+    const unregistered = await this.ctx.frameworkManager.removeFramework(id);
     if (!unregistered) {
       this.ctx.logger.warn(`Framework '${id}' was not found in registry during deletion`);
     }

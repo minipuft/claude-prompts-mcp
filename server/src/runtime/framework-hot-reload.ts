@@ -21,9 +21,9 @@ export function buildFrameworkAuxiliaryReloadConfig(
 
     // Wire hot-reload callbacks to keep FrameworkManager.frameworks cache in sync
     const registration = createFrameworkHotReloadRegistration(logger, registry, undefined, {
-      onFrameworkDeleted: (frameworkId: string) => {
-        // Remove framework from cache when framework is deleted
-        frameworkManager.unregister(frameworkId);
+      onFrameworkDeleted: async (frameworkId: string) => {
+        // Remove the framework, moving a selection that named it to the configured default
+        await frameworkManager.removeFramework(frameworkId);
         logger.debug(`Framework cache cleared for deleted framework: ${frameworkId}`);
       },
       onFrameworkReloaded: async (frameworkId: string) => {
