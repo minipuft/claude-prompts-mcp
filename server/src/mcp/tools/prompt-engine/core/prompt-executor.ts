@@ -171,7 +171,14 @@ export class PromptExecutor {
     this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
     this.executionPlanner = new ExecutionPlanner(semanticAnalyzer, logger);
-    this.parsingSystem = createParsingSystem(logger);
+    // `@id` detection asks the framework manager on every parse, so a framework created, updated
+    // or deleted while the server runs is recognized the same moment the rest of the server sees
+    // it. Until the manager arrives, every `@word` is treated as a framework operator.
+    this.parsingSystem = createParsingSystem(
+      logger,
+      (normalizedId) =>
+        this.frameworkManager === undefined || this.frameworkManager.has(normalizedId)
+    );
     this.inlineGateParser = createSymbolicCommandParser(logger);
     this.mcpToolsManager = mcpToolsManager;
     this.promptGuidanceService = promptGuidanceService;
@@ -314,11 +321,6 @@ export class PromptExecutor {
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();
     void this.initializePromptGuidanceService();
-
-    // Update parsing system with registered framework IDs for quote-aware @framework detection
-    // This allows @docs/, @mention, etc. to be treated as literal text while @CAGEERF works
-    const frameworkIds = new Set(frameworkManager.getFrameworkIds(false));
-    this.parsingSystem.updateRegisteredFrameworkIds(frameworkIds);
   }
 
   setToolDescriptionLoader(manager: ToolDescriptionLoader): void {
