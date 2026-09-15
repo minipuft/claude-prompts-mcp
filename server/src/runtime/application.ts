@@ -13,7 +13,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
-import { loadPromptData } from './data-loader.js';
+import { loadPromptData, loadSkillsSyncExports } from './data-loader.js';
 import { buildHealthReport } from './health.js';
 import { buildHotReloadAuxiliaryConfigs } from './hot-reload-auxiliaries.js';
 import {
@@ -923,6 +923,22 @@ export class Application {
           mcpToolsManager: this.mcpToolsManager,
         });
 
+        // Resolve the exported-prompt set from the reloaded content BEFORE publishing
+        // anything a per-request shell reads. `createMcpServerFactory` builds a fresh
+        // `McpServer` per HTTP request and registers straight from `_convertedPrompts` plus
+        // whatever export set is current at that moment; an `await` sitting between those two
+        // writes let a request land in between and filter fresh content against the export
+        // set the PREVIOUS reload left behind. `loadPromptData` (startup, and the manual
+        // `fullServerRefresh` path) never had this gap, because it resolves the export set
+        // before returning and the caller only publishes afterward — this path publishes and
+        // resolves in the opposite order, which is the defect. Every write below runs
+        // synchronously once the export set is known, closing the window.
+        const exportedPromptIds = await loadSkillsSyncExports(
+          this.pathResolver,
+          this.logger,
+          result.convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
+        );
+
         this._promptsData = result.promptsData;
         this._convertedPrompts = result.convertedPrompts;
         this._categories = result.categories;
@@ -931,6 +947,8 @@ export class Application {
         if (this.apiRouter) {
           this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
         }
+
+        this.promptManager.setExportedPromptIds(exportedPromptIds);
 
         // Content refresh alone updates every already-bound handler, on every
         // shell, because handlers resolve through the live map at call time.
