@@ -124,7 +124,7 @@ const executionStepSchema = z.object({
  * populate `required_patterns`. Author a reminder sentence into `guidance` instead, or use
  * `shell_verify`/`script_tool` for a real check.
  */
-const gatePassCriteriaSchema = z.object({
+export const gatePassCriteriaSchema = z.object({
   type: z
     .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
     .optional(),
