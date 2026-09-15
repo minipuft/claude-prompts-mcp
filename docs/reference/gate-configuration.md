@@ -76,11 +76,12 @@ can copy the exact spelling into `harnessCovers` rather than guessing at it.
 
 When does this gate apply automatically?
 
-| Field               | Type       | Description                                                 |
-| ------------------- | ---------- | ----------------------------------------------------------- |
-| `prompt_categories` | `string[]` | Auto-apply to prompts in these folders (e.g., `code`).      |
-| `explicit_request`  | `boolean`  | If `true`, only applies when user asks (e.g., `pr-review`). |
-| `framework_context` | `string[]` | Applies when using these frameworks (e.g., `CAGEERF`).      |
+| Field               | Type             | Description                                                 |
+| ------------------- | ---------------- | ----------------------------------------------------------- |
+| `prompt_categories` | `string[]`       | Auto-apply to prompts in these folders (e.g., `code`).      |
+| `explicit_request`  | `boolean`        | If `true`, only applies when user asks (e.g., `pr-review`). |
+| `framework_context` | `string[]`       | Applies when using these frameworks (e.g., `CAGEERF`).      |
+| `artifacts`         | `ArtifactKind[]` | When present, DECIDES activation alone — see below.         |
 
 ### Example
 
@@ -89,6 +90,49 @@ activation:
   prompt_categories: ["development", "api"]
   framework_context: ["ReACT"]
 ```
+
+### Artifacts decide activation when present (ruling B13)
+
+A gate declares the artifact it checks instead of guessing from the prompt category that
+invoked it — a `code-quality` gate should attach because source changed, not because the prompt
+happened to live under `development/`. `activation.artifacts` names the kinds this gate cares
+about:
+
+```yaml
+activation:
+  artifacts: ["source"]
+```
+
+When a gate names `artifacts`, that field decides ALONE: the gate attaches if the run declared
+at least one of the named kinds, and `prompt_categories` is not consulted at all — even if the
+block still carries one (a gate that names both is stating what it checks twice; the artifact
+statement is the specific one and wins). `explicit_request` and, for framework gates,
+`framework_context` are independent conditions and still apply alongside `artifacts`.
+
+The kind vocabulary is fixed and lives in one place, `engine/gates/utils/artifact-kinds.ts`:
+`source`, `test`, `docs`, `readme`, `plan`, `changelog`, `config`, `prompt`, `gate`, `pr-body`.
+`pr-body` is declaration-only — no file path classifies to it, because a PR body is not a file on
+disk. A prompt that manufactures one declares it explicitly (`produces: ["pr-body"]`); the kind
+exists so that declaration has somewhere to point.
+
+A run declares the artifacts it touches on the **prompt**, not the gate, with a top-level
+`artifacts:` block:
+
+```yaml
+# prompt.yaml
+artifacts:
+  produces: ["plan"] # kinds this prompt always produces, whatever it is invoked with
+  fromArgument: files # name of a declared argument carrying the paths this run touches
+```
+
+`produces` and `fromArgument` union. `fromArgument` must name an argument the prompt actually
+declares in its `arguments:` list — the prompt schema refuses to load one that names an
+undeclared argument, catching the typo at authoring time instead of at a silent runtime miss.
+At execution, the named argument's value is split into candidate paths and each one is
+classified into a kind by the same path table `activation.artifacts` reads against; a prompt
+declaring neither `produces` nor `fromArgument`, or whose argument carries no paths, simply
+declares nothing — every artifact-scoped gate stays off for that run, since "declared nothing"
+and "declared some other kind" must stay distinguishable.
 
 ### No Activation Block
 
@@ -127,8 +171,6 @@ validation with an error naming the replacement: use `inline_guidance` (reminder
 ```yaml
 pass_criteria:
   - type: inline_guidance
-    min_length: 100
-    forbidden_patterns: ["eval(", "innerHTML"]
 
 retry_config:
   max_attempts: 2
@@ -140,26 +182,19 @@ retry_config:
 | `max_attempts`      | How many times Claude retries before failing.      |
 | `improvement_hints` | Feed validation errors back into the retry prompt. |
 
-### Pattern/length fields render as prose, not as checks
+### Pattern/length fields are rejected at load
 
 `required_patterns`, `forbidden_patterns`, `regex_patterns`, `keyword_count`, `min_length`, and
-`max_length` are accepted on any `pass_criteria` entry, but none of them has a runtime evaluator:
-they render into the reminder's guidance text as prose, and are never evaluated against the
-agent's actual output. Setting one does not make a gate a `check` (see [Tiers](#tiers)) — schema
-validation warns on this rather than rejecting it, since the registry still carries these fields
-on existing gates.
+`max_length` are **not** accepted on a `pass_criteria` entry. None of them ever had a runtime
+evaluator — they used to render into the reminder's guidance text as prose and were never
+evaluated against the agent's actual output, so setting one never made a gate a `check` (see
+[Tiers](#tiers)) even while the schema still accepted it. `validateGateSchema` now refuses a
+criterion carrying any of these six fields, naming the field and the fix.
 
-| Field                | Renders as                                      |
-| -------------------- | ----------------------------------------------- |
-| `required_patterns`  | "MUST appear" prose in the guidance text.       |
-| `forbidden_patterns` | "MUST NOT appear" prose in the guidance text.   |
-| `regex_patterns`     | Pattern-requirement prose in the guidance text. |
-| `keyword_count`      | Keyword-frequency prose in the guidance text.   |
-| `min_length`         | Minimum-length prose in the guidance text.      |
-| `max_length`         | Maximum-length prose in the guidance text.      |
-
-If the check needs to be real, use `shell_verify` or `script_tool` against the agent's response
-(`shell_stdin_source: agent_response`) instead of one of these fields.
+| If you want this...                                           | Do this instead                                                                                                                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A reminder sentence ("must mention X", "avoid Y", "≥N chars") | Put the sentence in `guidance` / `guidanceFile` — the agent self-assesses against it.                                                                              |
+| A real, evaluated check                                       | Use `shell_verify` (exit-code ground truth) or `script_tool` (structured verdict), optionally against the agent's response (`shell_stdin_source: agent_response`). |
 
 ---
 

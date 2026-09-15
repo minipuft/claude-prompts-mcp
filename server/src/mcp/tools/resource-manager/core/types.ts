@@ -279,6 +279,10 @@ export interface ResourceManagerInput {
   execution_hint?: 'single' | 'chain';
   is_chain?: boolean;
   full_restart?: boolean;
+  /** Read by prompt `guide`: what the caller is trying to do. */
+  goal?: string;
+  /** Read by prompt `guide`: show full details for actions not marked working. */
+  include_legacy?: boolean;
   filter?: string;
   format?: 'table' | 'json' | 'text';
   detail?: 'summary' | 'full';

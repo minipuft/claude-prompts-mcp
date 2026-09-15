@@ -7,6 +7,8 @@ guidanceFile: guidance.md
 pass_criteria:
   - type: inline_guidance
 activation:
+  artifacts:
+    - test
   prompt_categories:
     - code
     - development

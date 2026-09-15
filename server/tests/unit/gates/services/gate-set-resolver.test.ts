@@ -713,3 +713,43 @@ describe('GateSetResolver — a no-activation gate is opt-in, not registry-auto 
     );
   });
 });
+
+/**
+ * B13: the resolver is the hop between "the planner derived what this run touches" and "the
+ * registry decided which gates that attaches". It owns no artifact logic of its own — this
+ * asserts only that the list arrives at `selectGates` intact, because a list dropped here reads
+ * downstream as "the run declared nothing", which is indistinguishable from a run that did.
+ */
+describe('GateSetResolver — B13 declaredArtifacts reaches the registry selection context', () => {
+  test('a declared list is forwarded verbatim onto the selection context', async () => {
+    const logger = createLogger();
+    const gateManager = createGateManager(['test-coverage']);
+    const resolver = buildResolver(logger, gateManager, createGateLoader());
+
+    const result = await resolver.resolve(
+      baseInput({ frameworkInjected: false, declaredArtifacts: ['test', 'readme'] })
+    );
+
+    const selectGates = (gateManager as unknown as { selectGates: jest.Mock }).selectGates;
+    expect(selectGates).toHaveBeenCalledTimes(1);
+    expect(selectGates.mock.calls[0]?.[0]).toMatchObject({
+      promptCategory: 'development',
+      declaredArtifacts: ['test', 'readme'],
+    });
+    expect(result.gateIds).toContain('test-coverage');
+  });
+
+  test('an absent or empty list leaves the field off — absent means "could not say", never "none"', async () => {
+    const logger = createLogger();
+    const gateManager = createGateManager(['code-quality']);
+    const resolver = buildResolver(logger, gateManager, createGateLoader());
+
+    await resolver.resolve(baseInput({ frameworkInjected: false }));
+    await resolver.resolve(baseInput({ frameworkInjected: false, declaredArtifacts: [] }));
+
+    const selectGates = (gateManager as unknown as { selectGates: jest.Mock }).selectGates;
+    for (const call of selectGates.mock.calls) {
+      expect(call[0]).not.toHaveProperty('declaredArtifacts');
+    }
+  });
+});

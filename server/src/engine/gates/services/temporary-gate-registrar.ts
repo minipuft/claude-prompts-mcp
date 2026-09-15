@@ -584,7 +584,7 @@ export class TemporaryGateRegistrar {
     /**
      * Whether inline definitions execute this release. The check lives here rather than at the
      * call site so the calling stage stays branch-free — see ADR 0001 (d) and
-     * `GatesConfig.executeInlineGateDefinitions`.
+     * `ResolvedGateSettings.executeInlineGateDefinitions`.
      */
     enabled: boolean
   ): string[] {

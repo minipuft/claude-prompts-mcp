@@ -324,7 +324,7 @@ describe('GateToolHandler', () => {
       gateManager.get.mockReturnValue(
         createFakeGate({
           gateId: 'gate-c',
-          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         })
       );
 
@@ -335,7 +335,7 @@ describe('GateToolHandler', () => {
 
       expect(result.isError).toBe(false);
       const written = readWrittenGateYaml('gate-c');
-      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 120 }]);
+      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance' }]);
     });
 
     test('update explicitly supplying activation/retry_config/pass_criteria overrides the existing value', async () => {
@@ -345,7 +345,7 @@ describe('GateToolHandler', () => {
           gateId: 'gate-d',
           activation: { prompt_categories: ['docs'] },
           retry_config: { max_attempts: 5 },
-          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         })
       );
 
@@ -355,7 +355,7 @@ describe('GateToolHandler', () => {
           id: 'gate-d',
           activation: { prompt_categories: ['code'], explicit_request: true },
           retry_config: { max_attempts: 1 },
-          pass_criteria: [{ type: 'inline_guidance', min_length: 50 }],
+          pass_criteria: [{ type: 'framework_compliance' }],
         },
         {}
       );
@@ -367,7 +367,7 @@ describe('GateToolHandler', () => {
         explicit_request: true,
       });
       expect(written['retry_config']).toEqual({ max_attempts: 1 });
-      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 50 }]);
+      expect(written['pass_criteria']).toEqual([{ type: 'framework_compliance' }]);
     });
 
     // Regression coverage for the writer-side gap left after the above:
@@ -418,8 +418,9 @@ describe('GateToolHandler', () => {
     // must be classified into GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS, or
     // PRESERVED_GATE_YAML_KEYS — silently falling through either bucket re-opens the data-loss
     // hole this describe block exists to close. Does NOT catch a new passthrough-ONLY field
-    // (one never added to the Zod object shape) — see the `evaluation`/`blockResponseOnFail`
-    // note on `PRESERVED_GATE_YAML_KEYS` in gate-file-writer.ts for that residual gap.
+    // (one never added to the Zod object shape at all) — a load-bearing key read at runtime but
+    // never declared on the schema is invisible to `Object.keys(GateDefinitionSchema.shape)` and
+    // so to this test too.
     test('projected + excluded + preserved keys cover every declared gate.yaml schema key', () => {
       const schemaKeys = Object.keys(GateDefinitionSchema.shape);
       const covered = new Set<string>([

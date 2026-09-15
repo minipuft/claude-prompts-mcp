@@ -23,7 +23,6 @@ export class AnalyticsActionHandler extends ActionHandler {
       default:
         return await this.getAnalytics({
           include_history: args.include_history,
-          reset_analytics: args.reset_analytics,
         });
     }
   }
@@ -113,16 +112,8 @@ export class AnalyticsActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'switch_history');
   }
 
-  private async getAnalytics(args: {
-    include_history?: boolean;
-    reset_analytics?: boolean;
-  }): Promise<ToolResponse> {
-    const { include_history = false, reset_analytics = false } = args;
-
-    if (reset_analytics) {
-      this.resetAnalyticsData();
-      return this.createMinimalSystemResponse('📊 Analytics have been reset to zero.', 'analytics');
-    }
+  private async getAnalytics(args: { include_history?: boolean }): Promise<ToolResponse> {
+    const { include_history = false } = args;
 
     const analytics = this.context.systemAnalytics;
     const successRate = this.getSuccessRate();

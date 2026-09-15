@@ -6,3 +6,7 @@ description: >-
   Diátaxis category.
 subject: doc-placement
 guidanceFile: guidance.md
+activation:
+  artifacts:
+    - docs
+    - readme
