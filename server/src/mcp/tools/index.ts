@@ -37,6 +37,7 @@ import {
   type ToolSurfaceState,
   type ResourceManagerInput as ResourceManagerSchemaInput,
 } from './schemas/index.js';
+import { deriveStructuredMessage } from './shared/structured-message.js';
 import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
@@ -936,12 +937,11 @@ export class McpToolRouter {
               _sdkExtra: this.enrichExtraWithClientInfo(extra),
             });
 
+            const structuredContent = deriveStructuredMessage(toolResponse);
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent != null
-                ? { structuredContent: toolResponse.structuredContent }
-                : {}),
+              ...(structuredContent != null ? { structuredContent } : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -1025,12 +1025,11 @@ export class McpToolRouter {
               args,
               this.enrichExtraWithClientInfo(extra)
             );
+            const structuredContent = deriveStructuredMessage(toolResponse);
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent != null
-                ? { structuredContent: toolResponse.structuredContent }
-                : {}),
+              ...(structuredContent != null ? { structuredContent } : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -1102,12 +1101,11 @@ export class McpToolRouter {
               args as ResourceManagerInput,
               (this.enrichExtraWithClientInfo(extra) ?? {}) as Record<string, unknown>
             );
+            const structuredContent = deriveStructuredMessage(toolResponse);
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent != null
-                ? { structuredContent: toolResponse.structuredContent }
-                : {}),
+              ...(structuredContent != null ? { structuredContent } : {}),
             };
           } catch (error) {
             this.logger.error(
