@@ -127,6 +127,23 @@ describe('FrameworkStateStore (persistence)', () => {
     await after.shutdown();
   });
 
+  test('startup refuses when the persisted framework and the configured default are both unregistered', async () => {
+    const logger = createLogger();
+    const scope = { workspaceId: 'project-with-no-registered-framework' };
+    const before = await createFrameworkStateStore(logger, tmpRoot, { defaultScope: scope });
+    await before.switchFramework({ targetFramework: 'framework-that-was-removed' });
+    await before.shutdown();
+
+    // Refusing is the rule: selecting whichever framework is listed first would override the
+    // operator's declared default without saying so.
+    await expect(
+      createFrameworkStateStore(logger, tmpRoot, {
+        defaultFramework: 'framework-nobody-registered',
+        defaultScope: scope,
+      })
+    ).rejects.toThrow(/frameworks\.defaultFramework/);
+  });
+
   test('removing the selected framework selects the configured default and persists it', async () => {
     const logger = createLogger();
     const scope = { workspaceId: 'project-removing-its-framework' };

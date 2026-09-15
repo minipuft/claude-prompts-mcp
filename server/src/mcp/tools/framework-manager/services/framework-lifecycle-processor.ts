@@ -288,26 +288,11 @@ export class FrameworkLifecycleProcessor {
     const frameworksDir = this.ctx.configManager.getFrameworksDirectory();
     const frameworkDir = resolveContainedPath(frameworksDir, id.toLowerCase());
 
-    // Refuse to delete a framework that ships with the package.
-    //
-    // This asked a hardcoded four-id literal until 2026-09-07 while eight ship, so `focus`,
-    // `liquescent`, `radiant` and `verify` fell through to `fs.rm` and were deleted FROM THE
-    // BUNDLED TREE in a default install. The comment below claimed the bundled-tree check covered
-    // them; it could not, because that check sits inside `if (!existsSync(frameworkDir))` and
-    // those directories exist at the configured root. The owner of framework validity answers this
-    // now — project CLAUDE.md's Domain Ownership Matrix says never hardcode a framework list.
-    //
-    // Placed AFTER path resolution, not before, so the refusal can say where the thing it is
-    // protecting actually lives. P1.3 ruled that a refusal states the reason that is true and
-    // names the location, and an e2e case asserts it; refusing earlier would have been correct and
-    // less useful, which is the kind of regression a message-only assertion exists to catch.
-    if (this.ctx.frameworkManager.isShippedFramework(id)) {
-      return this.error(
-        `Cannot delete framework '${id}': it ships with the server and is served from ` +
-          `${frameworkDir}, which is read-only for deletion. Only frameworks you created can be ` +
-          `deleted. Update it instead — the update copies it into your own resources root first ` +
-          `and your copy takes precedence.`
-      );
+    // Placed AFTER path resolution, not before, so a refusal can say where the thing it is
+    // protecting actually lives, and before the preview, so a preview reports the same refusal.
+    const refusal = this.protectedDeletionRefusal(id, frameworkDir);
+    if (refusal !== undefined) {
+      return refusal;
     }
 
     if (!existsSync(frameworkDir)) {
@@ -543,6 +528,46 @@ export class FrameworkLifecycleProcessor {
       registry: registryExists,
       frameworkMap: frameworkExists,
     };
+  }
+
+  /**
+   * The refusal for deleting a framework that must not be removed, or `undefined` when the delete
+   * may proceed. Checked before anything is removed.
+   *
+   * A framework that ships with the package. This asked a hardcoded four-id literal until
+   * 2026-09-07 while eight ship, so `focus`, `liquescent`, `radiant` and `verify` fell through to
+   * `fs.rm` and were deleted FROM THE BUNDLED TREE in a default install. The bundled-tree check in
+   * `handleDelete` could not cover them, because it sits inside `if (!existsSync(frameworkDir))`
+   * and those directories exist at the configured root. The owner of framework validity answers
+   * this — project CLAUDE.md's Domain Ownership Matrix says never hardcode a framework list. P1.3
+   * ruled that a refusal states the reason that is true and names the location, and an e2e case
+   * asserts it.
+   *
+   * The configured default framework. It is where the active framework goes when its own framework
+   * is removed, so without it that selection has nothing to resolve to. Ids are compared
+   * case-insensitively, as the framework state store compares them.
+   */
+  private protectedDeletionRefusal(id: string, frameworkDir: string): ToolResponse | undefined {
+    if (this.ctx.frameworkManager.isShippedFramework(id)) {
+      return this.error(
+        `Cannot delete framework '${id}': it ships with the server and is served from ` +
+          `${frameworkDir}, which is read-only for deletion. Only frameworks you created can be ` +
+          `deleted. Update it instead — the update copies it into your own resources root first ` +
+          `and your copy takes precedence.`
+      );
+    }
+
+    const configuredDefault = this.ctx.configManager.getFrameworksConfig().defaultFramework;
+    if (id.toLowerCase() === configuredDefault.toLowerCase()) {
+      return this.error(
+        `Cannot delete framework '${id}': it is the configured default framework ` +
+          `(frameworks.defaultFramework), which the active framework falls back to when its ` +
+          `framework is removed. Point frameworks.defaultFramework at another framework first. ` +
+          `Nothing was removed.`
+      );
+    }
+
+    return undefined;
   }
 
   /**

@@ -1816,6 +1816,8 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
       getServerRoot: () => tempDir,
       getFrameworksDirectory: () => path.join(tempDir, 'resources', 'frameworks'),
       getBundledResourceDirectory: () => undefined,
+      // Delete refuses the configured default; this suite deletes a framework that is not it.
+      getFrameworksConfig: () => ({ defaultFramework: 'cageerf' }),
     } as unknown as ConfigManager;
     fileService = new FrameworkFileWriter({
       logger: mockLogger as unknown as Logger,

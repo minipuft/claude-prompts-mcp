@@ -66,8 +66,11 @@ The configured default is also where the selection goes when the active framewor
   selection;
 - at startup, a saved selection whose framework no longer exists is replaced by `defaultFramework`.
 
-If `defaultFramework` itself names no registered framework in either case, the server reports that
-setting instead of picking another framework.
+Because the selection has nowhere else to go, the framework named by `defaultFramework` cannot be
+deleted: `resource_manager` refuses the delete, and its preview, and removes nothing until the
+setting names another framework. If neither the saved selection nor `defaultFramework` names a
+registered framework when the server starts, the server refuses to start, and the error names
+`frameworks.defaultFramework`; it does not pick another framework in its place.
 
 Isolation depends on each project resolving a distinct scope id. Confirm it in the startup log:
 

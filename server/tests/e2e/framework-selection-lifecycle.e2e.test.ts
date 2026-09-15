@@ -17,7 +17,7 @@
 
 import { afterEach, describe, expect, it } from '@jest/globals';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -159,6 +159,9 @@ async function startStdioSession(env: Record<string, string>): Promise<McpSessio
 
 interface Workspace {
   env: Record<string, string>;
+  frameworkDir: string;
+  /** Rewrites `frameworks.defaultFramework`; a server reads it when it starts. */
+  setConfiguredDefault(frameworkId: string): Promise<void>;
   cleanup(): Promise<void>;
 }
 
@@ -169,11 +172,16 @@ async function createWorkspace(): Promise<Workspace> {
   const config = JSON.parse(readFileSync(path.join(SERVER_ROOT, 'config.json'), 'utf8')) as {
     frameworks: Record<string, unknown>;
   };
-  config.frameworks.defaultFramework = CONFIGURED_DEFAULT;
   const configPath = path.join(runtimeRoot, 'config.json');
-  await writeFile(configPath, JSON.stringify(config, null, 2));
+  const setConfiguredDefault = async (frameworkId: string): Promise<void> => {
+    config.frameworks.defaultFramework = frameworkId;
+    await writeFile(configPath, JSON.stringify(config, null, 2));
+  };
+  await setConfiguredDefault(CONFIGURED_DEFAULT);
   return {
     env: { MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot, MCP_CONFIG_PATH: configPath },
+    frameworkDir: path.join(workspace, 'resources', 'frameworks', FRAMEWORK_ID),
+    setConfiguredDefault,
     cleanup: async () => {
       await rm(workspace, { recursive: true, force: true });
       await rm(runtimeRoot, { recursive: true, force: true });
@@ -307,6 +315,45 @@ describe('framework selection when the selected framework goes away (Streamable 
     expect(rendered.text).not.toContain(FRAMEWORK_GUIDANCE);
     expect(await session.countTools()).toBe(3);
   }, 90000);
+
+  it('the configured default cannot be deleted while it is the active framework, and still renders', async () => {
+    const workspace = await newWorkspace();
+    const seed = await startHttpSession(workspace.env);
+    try {
+      await createPromptAndFramework(seed);
+    } finally {
+      await seed.stop();
+    }
+    await workspace.setConfiguredDefault(FRAMEWORK_ID);
+
+    const session = await start(startHttpSession, workspace);
+    await switchTo(session, FRAMEWORK_ID);
+
+    const previewed = await session.callTool('resource_manager', {
+      resource_type: 'framework',
+      action: 'preview',
+      preview_action: 'delete',
+      id: FRAMEWORK_ID,
+    });
+    expect(previewed.isError).toBe(true);
+    expect(previewed.text).toContain('frameworks.defaultFramework');
+
+    const deleted = await session.callTool('resource_manager', {
+      resource_type: 'framework',
+      action: 'delete',
+      id: FRAMEWORK_ID,
+      confirm: true,
+    });
+    expect(deleted.isError).toBe(true);
+    expect(deleted.text).toContain('frameworks.defaultFramework');
+
+    expect(existsSync(workspace.frameworkDir)).toBe(true);
+    expect(await activeFramework(session)).toBe(FRAMEWORK_ID);
+    const rendered = await render(session);
+    expect(rendered.isError).toBe(false);
+    expect(rendered.text).toContain(FRAMEWORK_GUIDANCE);
+    expect(await session.countTools()).toBe(3);
+  }, 120000);
 
   it('a workspace framework selected before a restart is still selected after it', async () => {
     const workspace = await newWorkspace();
