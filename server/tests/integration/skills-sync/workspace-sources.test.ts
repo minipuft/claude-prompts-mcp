@@ -36,12 +36,16 @@ function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[] } 
   };
 }
 
-async function writeGate(root: string, id: string): Promise<void> {
+async function writeGate(
+  root: string,
+  id: string,
+  extra: Record<string, unknown> = {}
+): Promise<void> {
   const gateDir = path.join(root, 'resources', 'gates', id);
   await mkdir(gateDir, { recursive: true });
   await writeFile(
     path.join(gateDir, 'gate.yaml'),
-    yaml.dump({ id, name: id, type: 'validation', description: `${id} gate` })
+    yaml.dump({ id, name: id, type: 'validation', description: `${id} gate`, ...extra })
   );
   await writeFile(path.join(gateDir, 'guidance.md'), `Guidance for ${id}.`);
 }
@@ -253,5 +257,28 @@ describe('skills sync reads the workspace over the bundled tree', () => {
 
     expect(existsSync(path.join(workspace, 'runtime-state', 'patches'))).toBe(true);
     expect(existsSync(path.join(packageRoot, 'runtime-state'))).toBe(false);
+  });
+
+  it('applies gates.harnessCovers from the config.json the server reads, the workspace one first', async () => {
+    // The server reads the workspace's config.json when the workspace holds one, so an export
+    // that read only the package's copy would keep a reminder the runtime leaves out.
+    await writeGate(packageRoot, 'security-reminder', {
+      subject: 'security',
+      pass_criteria: [{ type: 'inline_guidance' }],
+    });
+    await writePrompt(workspace, 'general', 'covered_prompt', {
+      gateConfiguration: { include: ['security-reminder'] },
+    });
+    await writeFile(
+      path.join(workspace, 'config.json'),
+      JSON.stringify({ gates: { harnessCovers: ['security'] } })
+    );
+    await writeConfig(workspace, outputDir);
+
+    await run({ command: 'export', client: 'claude-code', scope: 'user', id: 'covered_prompt' });
+
+    const skill = await readFile(path.join(outputDir, 'covered_prompt', 'SKILL.md'), 'utf-8');
+    expect(skill).toContain("Omitted 1 reminder(s) this installation's harness covers: security.");
+    expect(skill).not.toContain('| security-reminder |');
   });
 });

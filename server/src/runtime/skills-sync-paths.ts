@@ -43,6 +43,7 @@ export function resolveSkillsSyncPaths(
     packageRoot: pathResolver.getPackageRoot(),
     workspace: pathResolver.isUsingCustomWorkspace() ? pathResolver.getWorkspace() : undefined,
     runtimeStateDir: pathResolver.getRuntimeStatePath(),
+    serverConfigPath: pathResolver.getConfigPath(),
     sourceRoots: {
       prompt: sourceRootsOf('prompt'),
       gate: sourceRootsOf('gate'),

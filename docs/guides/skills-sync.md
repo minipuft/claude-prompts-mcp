@@ -282,8 +282,9 @@ does: a **check** (a gate with a `shell_verify` or `script_tool` pass criterion)
 `### Checks` as a single command or tool line — for example, a line naming `npm test` — never its
 guidance, since a check is settled by rerunning that command rather than by the reader
 self-attesting it. Every other gate is a **reminder**, and renders under `### Reminders` as the
-criteria table, same as before. An installation's `gates.harnessCovers` (`server/config.json`)
-shapes the export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
+criteria table, same as before. An installation's `gates.harnessCovers`, read from the
+`config.json` the server reads (the workspace's when it holds one, else the package's), shapes the
+export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
 out of the exported skill entirely, and the SKILL.md notes how many were omitted and which
 subjects covered them. Checks are never suppressed. See
 [gate-configuration.md](../reference/gate-configuration.md#tiers) for the full tier and

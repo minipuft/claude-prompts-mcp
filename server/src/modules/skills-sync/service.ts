@@ -103,6 +103,8 @@ export interface SkillsSyncPaths {
   workspace: string | undefined;
   /** Where runtime output such as patch files is written. */
   runtimeStateDir: string;
+  /** The `config.json` the server reads: `--config` or `MCP_CONFIG_PATH`, else the workspace's, else the package's. */
+  serverConfigPath: string;
   /** Every directory that contributes definitions of a type, lowest precedence first. */
   sourceRoots: Readonly<Record<ResourceType, readonly string[]>>;
   /** The directory a new resource of a type is written to. */
@@ -135,14 +137,10 @@ export function getSkillsSyncConfigPath(paths: SkillsSyncPaths): string {
   return path.join(paths.packageRoot, 'skills-sync.yaml');
 }
 
-/** The package's `config.json`, beside the package's `skills-sync.yaml`. */
-function getServerConfigPath(paths: SkillsSyncPaths): string {
-  return path.join(paths.packageRoot, 'config.json');
-}
-
 /**
  * `gates.harnessCovers` for this installation (ruling B2, gate-checks-and-reminders), read
- * directly off `config.json` rather than through `ConfigManager`/`ConfigLoader`: this module
+ * directly off the `config.json` the server reads (`SkillsSyncPaths.serverConfigPath`), so an
+ * export omits the reminders the runtime omits. It goes around `ConfigManager`/`ConfigLoader`: this module
  * lives in `modules/` (Layer 3), and `.dependency-cruiser.cjs`'s `modules-no-infra-static` /
  * `modules-infra-type-only` rules forbid a static OR type-only import from `infra/` — even for
  * `ConfigManager`'s type. `exportCommand` already reads a config file this same way a few lines
@@ -153,7 +151,7 @@ function getServerConfigPath(paths: SkillsSyncPaths): string {
  */
 async function resolveHarnessCovers(paths: SkillsSyncPaths): Promise<readonly string[]> {
   try {
-    const raw = await readFile(getServerConfigPath(paths), 'utf-8');
+    const raw = await readFile(paths.serverConfigPath, 'utf-8');
     const parsed = JSON.parse(raw) as { gates?: { harnessCovers?: unknown } };
     const covers = parsed.gates?.harnessCovers;
     return Array.isArray(covers)

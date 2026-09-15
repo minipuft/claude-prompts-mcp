@@ -15,7 +15,10 @@ const consoleOutput: SkillsSyncOutput = {
   error: (...args) => console.error(...args),
 };
 
-runSkillsSyncFromArgv(process.argv, consoleOutput, resolveSkillsSyncPaths()).catch((err: Error) => {
-  console.error(`Fatal: ${err.message}`);
-  process.exit(1);
-});
+// Paths resolve inside the chain, so a refused path setting reports as `Fatal:` like any failure.
+Promise.resolve()
+  .then(() => runSkillsSyncFromArgv(process.argv, consoleOutput, resolveSkillsSyncPaths()))
+  .catch((err: Error) => {
+    console.error(`Fatal: ${err.message}`);
+    process.exit(1);
+  });
