@@ -218,6 +218,26 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario asserting text present only in the detailed or history-inclusive ' +
       'report, distinguishing it from the current default-level assertions.'
   ),
+  ...exceptionGroup(
+    'system_control',
+    ['id'],
+    'skills_sync `id` filters the resources a run loads, so it is read only after option ' +
+      'validation passes and server/skills-sync.yaml has loaded — a gitignored file, absent in CI ' +
+      "and holding the developer's own registrations locally. The conformance servers inherit the " +
+      'real HOME, so a scenario that got that far would read real client skill folders, and write ' +
+      'them if `preview` ever stopped arriving. The other skills_sync parameters are covered by ' +
+      'option-validation refusals in tool-surface.yaml, which stop before that point.',
+    'A conformance server with a temp HOME and a fixture skills-sync.yaml, running `diff` or a ' +
+      '`preview: true` export filtered by `id`.'
+  ),
+  ...exceptionGroup(
+    'system_control',
+    ['backup_path'],
+    'Read only by `config` restore, which replaces config.json from a backup. The corpus never ' +
+      'restores config on either server; `confirm` is covered by analytics reset instead.',
+    'A scenario on a server with its own throwaway config.json, restoring with `confirm: true` ' +
+      "and a missing `backup_path`, asserting the writer's error names that path."
+  ),
 
   ...exceptionGroup(
     'prompt_engine',
@@ -229,6 +249,27 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'B, resume executes in B, and a second claim on the spent token is refused by name.'
   ),
   // ── resource_manager ─────────────────────────────────────────────────────
+  ...exceptionGroup(
+    'resource_manager',
+    ['full_restart'],
+    '`full_restart: true` restarts the server a second after it answers, which would take down ' +
+      'the shared or isolated conformance server for every later scenario. The harness cannot ' +
+      'wait out a restart and reconnect.',
+    'A conformance harness that survives a restart: `reload` with `full_restart: true` answers ' +
+      '"Full Server Restart", and the server answers again after reconnecting.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
+    ['include_legacy'],
+    'NOT a coverage gap — `include_legacy` reaches the prompt guide, and has no effect there ' +
+      'today. It widens the ranked actions to ones not marked working and hides the Heads-Up ' +
+      'section that lists them, and all 14 prompt actions in metadata/definitions/prompt-resource.ts ' +
+      'are marked working. `true` and `false` return the same text, so a scenario would pass and ' +
+      'prove nothing, the same reasoning as `format` below.',
+    'A prompt resource action whose status is not `working` — then `include_legacy: true` drops ' +
+      'the Heads-Up section and a scenario can assert it — or removing the parameter at the next ' +
+      'major.'
+  ),
   ...exceptionGroup(
     'resource_manager',
     [
@@ -324,29 +365,6 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'or an update carrying skip_version.',
     'A conformance scenario exercising `action:compare` or `action:history`, or an update with ' +
       'skip_version:true asserting no new version was saved.'
-  ),
-
-  // ── skills_sync ──────────────────────────────────────────────────────────
-  ...exceptionGroup(
-    'skills_sync',
-    [
-      'action',
-      'client',
-      'scope',
-      'resource_type',
-      'id',
-      'prune',
-      'output',
-      'file',
-      'category',
-      'preview',
-      'preview_detail',
-      'force',
-    ],
-    'skills_sync has no conformance corpus file at all — the tool ships zero scenarios, so every ' +
-      'one of its parameters is unexercised.',
-    'A tests/e2e/conformance/skills-sync.yaml file with at least one scenario per parameter, ' +
-      "mirroring the other three tools' corpus files."
   ),
 ];
 

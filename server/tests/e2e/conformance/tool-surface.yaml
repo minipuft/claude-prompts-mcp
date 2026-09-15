@@ -19,6 +19,16 @@ scenarios:
     requests: [{ tool: system_control, args: { action: status } }]
     expect: { ok: true }
 
+  - id: sc-status-without-metrics
+    claim_source: >-
+      system_control contract — `include_metrics` "Include detailed metrics output". The status
+      overview prints its Performance Metrics block unless `include_metrics: false` arrives.
+    requests:
+      - tool: system_control
+        args: { action: status, include_metrics: false }
+    expect:
+      { text_contains: '**System Status Overview**', text_not_contains: '**Performance Metrics**' }
+
   - id: sc-framework-list
     claim_source: 'system_control action: framework (list) — FrameworkManager is the authority'
     requests: [{ tool: system_control, args: { action: framework, operation: list } }]
@@ -66,6 +76,24 @@ scenarios:
         args: { action: guide, topic: framework }
     expect: { text_contains: 'Focus: `framework`' }
 
+  - id: sc-guide-without-planned
+    claim_source: >-
+      system_control contract — `include_planned` "set false to leave out operations marked
+      planned". The guide adds its include-planned hint only when `include_planned: false` arrives.
+    requests:
+      - tool: system_control
+        args: { action: guide, include_planned: false }
+    expect: { text_contains: 'Include planned operations with `include_planned:true`.' }
+
+  - id: sc-config-get
+    claim_source: >-
+      system_control contract — `config` "{ key, value?, operation }". A get prints the one key;
+      without the object the action lists the whole configuration instead.
+    requests:
+      - tool: system_control
+        args: { action: config, config: { operation: get, key: server.name } }
+    expect: { text_contains: '**server.name**:' }
+
   - id: sc-injection
     claim_source: 'system_control action: injection — docs/guides/injection-control.md'
     requests: [{ tool: system_control, args: { action: injection } }]
@@ -81,6 +109,22 @@ scenarios:
     requests: [{ tool: system_control, args: { action: changes } }]
     expect: { ok: true }
 
+  - id: sc-changes-filters
+    claim_source: >-
+      system_control contract — changes list `source`, `resource_type` and `since`. An empty page
+      names every filter it applied, so each value is shown reaching the action.
+    requests:
+      - tool: system_control
+        args:
+          {
+            action: changes,
+            operation: list,
+            source: mcp-tool,
+            resource_type: gate,
+            since: '2999-01-01T00:00:00Z',
+          }
+    expect: { text_contains: 'from source `mcp-tool` for type `gate` since `2999-01-01T00:00:00Z`' }
+
   - id: sc-execution-history
     claim_source: 'system_control action: execution_history — SEP-1686 ledger, v_execution_history'
     requests: [{ tool: system_control, args: { action: execution_history } }]
@@ -91,6 +135,82 @@ scenarios:
     requests: [{ tool: system_control, args: { action: definitely_not_an_action } }]
     # Names the rejected action AND that a closed set exists — a generic failure cannot produce it.
     expect: { error_contains: 'Unknown action: definitely_not_an_action. Valid actions:' }
+
+  # ── system_control skills_sync: each option reaches its validation ──────────
+  #
+  # Every row is refused by option validation, which runs before skills-sync.yaml is read and
+  # before anything is written. Each uses `diff` or `clone` so that if its field ever stopped
+  # arriving, the call would fall through to a read-only diff or another refusal — never an export
+  # against this server's real HOME.
+  - id: sc-skills-sync-client
+    claim_source: 'system_control contract — skills_sync `client` "Target client id"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, client: no-such-client }
+    expect: { error_contains: 'Unknown client: no-such-client' }
+
+  - id: sc-skills-sync-scope
+    claim_source: >-
+      system_control contract — `scope` is shared: skills_sync takes user or project and refuses
+      the injection values.
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, scope: session }
+    expect: { error_contains: 'Invalid scope: session. Expected one of: user, project.' }
+
+  - id: sc-skills-sync-preview-detail
+    claim_source: 'system_control contract — `preview_detail` "Requires `preview: true`"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, preview_detail: summary }
+    expect: { error_contains: '--preview-detail requires --preview' }
+
+  - id: sc-skills-sync-preview
+    claim_source: >-
+      system_control contract — skills_sync `preview`. With `preview: true` present, the diff depth
+      is refused for its command rather than for a missing preview.
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, preview: true, preview_detail: diff }
+    expect: { error_contains: '--preview-detail diff is only valid for the pull command.' }
+
+  - id: sc-skills-sync-output
+    claim_source: 'system_control contract — skills_sync `output` "For skills_sync diff"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: clone, output: conformance-patches }
+    expect: { error_contains: '--output is only valid for the diff command.' }
+
+  - id: sc-skills-sync-file
+    claim_source: 'system_control contract — skills_sync `file` "For skills_sync clone"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, file: conformance/SKILL.md }
+    expect:
+      { error_contains: '--file, --category, and --force are only valid for the clone command.' }
+
+  - id: sc-skills-sync-category
+    claim_source: 'system_control contract — skills_sync `category` "For skills_sync clone"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, category: conformance }
+    expect:
+      { error_contains: '--file, --category, and --force are only valid for the clone command.' }
+
+  - id: sc-skills-sync-force
+    claim_source: 'system_control contract — skills_sync `force` "For skills_sync clone"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, force: true }
+    expect:
+      { error_contains: '--file, --category, and --force are only valid for the clone command.' }
+
+  - id: sc-skills-sync-prune
+    claim_source: 'system_control contract — skills_sync `prune` "For skills_sync sync"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, prune: false }
+    expect: { error_contains: '--prune/--no-prune are only valid for the sync command.' }
 
   # ── resource_manager: list answers for every advertised resource_type ───────
   - id: rm-list-prompt
@@ -174,3 +294,12 @@ scenarios:
       - tool: resource_manager
         args: { resource_type: prompt, action: list, source_workspace: elsewhere }
     expect: { error_contains: "'source_workspace' is a read-only parameter" }
+
+  - id: rm-prompt-guide-goal
+    claim_source: >-
+      resource_manager contract — prompt guide `goal` "the guide ranks its suggested actions
+      against it". The guide echoes the goal it received in place of its default goal line.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: guide, goal: conformance gate review }
+    expect: { text_contains: '🎯 **Goal**: conformance gate review' }
