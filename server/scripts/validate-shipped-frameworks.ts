@@ -102,13 +102,30 @@ function selfTest(): number {
       name: 'a framework on disk but undeclared is reported (the motivating instance)',
       declared: ['a'],
       onDisk: ['a', 'b'],
-      expect: (f) => f.length === 1 && f[0].kind === 'undeclared' && f[0].id === 'b',
+      expect: (f) => {
+        if (f.length !== 1) return false;
+        const only = f[0];
+        // f.length === 1 guarantees index 0 is populated — findDivergences only ever
+        // pushes onto the array. Undefined here would mean the array is sparse, which
+        // is a broken invariant in the code under test, not a legitimate empty slot.
+        if (only === undefined) {
+          throw new Error('self-test invariant violated: f.length === 1 but f[0] is undefined');
+        }
+        return only.kind === 'undeclared' && only.id === 'b';
+      },
     },
     {
       name: 'a declared framework with no directory is reported',
       declared: ['a', 'b'],
       onDisk: ['a'],
-      expect: (f) => f.length === 1 && f[0].kind === 'missing' && f[0].id === 'b',
+      expect: (f) => {
+        if (f.length !== 1) return false;
+        const only = f[0];
+        if (only === undefined) {
+          throw new Error('self-test invariant violated: f.length === 1 but f[0] is undefined');
+        }
+        return only.kind === 'missing' && only.id === 'b';
+      },
     },
     {
       name: 'both directions are reported together',

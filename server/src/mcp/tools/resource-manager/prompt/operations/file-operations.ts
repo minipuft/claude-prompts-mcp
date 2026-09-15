@@ -521,7 +521,7 @@ export class FileOperations {
       promptFiles,
       removesSystemMessage,
       scaffoldFiles: Array.isArray(promptData.chainSteps)
-        ? this.planChainStepScaffolds(priorDir, promptId, promptData.chainSteps)
+        ? this.planChainStepScaffolds(promptDir, priorDir, promptId, promptData.chainSteps)
         : [],
       toolFiles: Array.isArray(promptData.tools) ? this.planToolFiles(promptData.tools) : [],
       removedToolIds: writeIntent.removedToolIds,
@@ -1064,8 +1064,13 @@ export class FileOperations {
    * directory already exists in the prior tree or that an earlier step in the same list named.
    *
    * Produces, relative to the parent's directory: {stepDirName}/prompt.yaml + user-message.md
+   *
+   * A `stepDirName` of `.` or `..` names the parent's own folder or its category, so it is refused
+   * by name instead of skipped: a skip reads as success, and on a fresh create the stub would land
+   * one level above the parent. Every scaffold path also goes through `resolveContainedPath`.
    */
   private planChainStepScaffolds(
+    promptDir: string,
     priorDir: string | null,
     parentId: string,
     steps: unknown[]
@@ -1085,6 +1090,16 @@ export class FileOperations {
       if (!stepDirName || stepDirName.includes('/')) {
         continue; // Empty or deeply nested — skip
       }
+
+      if (stepDirName === '.' || stepDirName === '..') {
+        throw new Error(
+          `Chain step "${promptId}" cannot scaffold outside its parent's own directory — ` +
+            `"${stepDirName}" names the parent's own folder or its category, not a sub-prompt. ` +
+            `Nothing was written.`
+        );
+      }
+      // The same containment check every other resource write goes through.
+      resolveContainedPath(promptDir, stepDirName);
 
       const alreadyExists =
         planned.has(stepDirName) ||

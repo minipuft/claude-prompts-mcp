@@ -11,6 +11,7 @@ import { handleError as utilsHandleError } from '#shared/utils/index.js';
 export class ConfigActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
     const operation = args.operation || 'default';
+    const configRequest: unknown = args.config;
 
     switch (operation) {
       case 'restore':
@@ -18,14 +19,18 @@ export class ConfigActionHandler extends ActionHandler {
           backup_path: args.backup_path,
           confirm: args.confirm,
         });
+      case 'validate':
+        if (configRequest === undefined) {
+          return await this.handleSchemaValidate();
+        }
+      // falls through: a validate call WITH a config object is handled like get/set/list below
       case 'get':
       case 'set':
       case 'list':
-      case 'validate':
       case 'default':
       default:
         return await this.manageConfig({
-          config: args.config,
+          config: configRequest as Parameters<typeof this.manageConfig>[0]['config'],
         });
     }
   }
@@ -138,6 +143,47 @@ export class ConfigActionHandler extends ActionHandler {
       validation.valid
         ? `✅ Configuration valid for **${key}**`
         : `❌ Invalid configuration for **${key}**: ${validation.error}`,
+      'config_validate'
+    );
+  }
+
+  /**
+   * Reports the schema check the server already ran at config load — never re-validates
+   * `getConfig()`: the normalized config always fails the schema, because loading adds a root
+   * `transport` key the schema does not declare.
+   */
+  private async handleSchemaValidate(): Promise<ToolResponse> {
+    if (this.configManager === undefined) throw new Error('Config manager unavailable');
+    const result = this.configManager.getSchemaValidation();
+
+    if (result === undefined) {
+      return this.createMinimalSystemResponse(
+        '⚠️ The config has not been checked against a schema in this process.',
+        'config_validate'
+      );
+    }
+
+    if (result.status === 'valid') {
+      return this.createMinimalSystemResponse(
+        '✅ config.json matches its schema.',
+        'config_validate'
+      );
+    }
+
+    if (result.status === 'unavailable') {
+      return this.createMinimalSystemResponse(
+        ['⚠️ The schema could not be read, so the config was not checked.', ...result.errors].join(
+          '\n'
+        ),
+        'config_validate'
+      );
+    }
+
+    return this.createMinimalSystemResponse(
+      [
+        '❌ config.json does not match its schema. The server keeps running.',
+        ...result.errors,
+      ].join('\n'),
       'config_validate'
     );
   }
