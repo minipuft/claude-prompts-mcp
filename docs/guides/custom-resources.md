@@ -16,7 +16,17 @@ This creates `~/my-prompts/resources/` with starter prompts you own. Set `MCP_WO
 
 ## Option B — Plugin install (bundled resources + hooks)
 
-Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automatically and ship the bundled prompts, gates, and frameworks. Prompts created via `resource_manager` are saved to the plugin's resources directory.
+Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automatically and ship the bundled prompts, gates, and frameworks. Where created resources are saved follows the rules below; for the Claude Code plugin the workspace is its plugin data folder, which Claude Code keeps across plugin updates.
+
+## Where created resources are saved
+
+Prompts, gates, and frameworks you create through `resource_manager` are written to one folder per type:
+
+- **A workspace is set** (`MCP_WORKSPACE` or `--workspace`) and `MCP_RESOURCES_PATH` is not: `<workspace>/resources/<type>/`, for example `<workspace>/resources/prompts/`. The folder does not need to exist; the first write creates it. If the workspace already keeps that type in the older `<workspace>/<type>/` layout, writes go there instead, so one collection is not split across two folders.
+- **`MCP_RESOURCES_PATH` is set**: its `<type>/` folder when that folder exists, otherwise the package's own resources folder.
+- **Neither is set**: the package's own resources folder, which a reinstall replaces.
+
+Editing a bundled prompt copies it into your folder first, and your copy then takes precedence over the bundled one.
 
 ## Environment variables
 
