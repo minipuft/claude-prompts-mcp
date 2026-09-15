@@ -10,7 +10,6 @@ import {
 import type { GateDefinitionProvider } from './gate-loader.js';
 import type { GateReviewPrompt } from '../../execution/types.js';
 import type { JudgeEvaluationDefaults } from '../judge/types.js';
-import type { GatePassCriteria } from '../types/gate-primitives.js';
 import type { LightweightGateDefinition } from '../types.js';
 
 export interface ReviewPromptTimestamps {
@@ -186,31 +185,16 @@ export function composeReviewPrompt(
 // ============================================================================
 
 /**
- * Convert structured GatePassCriteria into human-readable gate criteria strings.
- */
-function formatCriteria(_criteria: GatePassCriteria): string[] {
-  // min_length/max_length/required_patterns/forbidden_patterns were the only fields this
-  // rendered, and they were never evaluated (B9) — GatePassCriteria no longer declares
-  // them, so there is nothing left here to format. Structured criteria (shell_verify,
-  // script_tool, framework_compliance) were never rendered as prose by this function.
-  return [];
-}
-
-/**
- * Collect all criteria strings from a gate definition.
- * Formats pass_criteria into readable text and includes guidance.
+ * The criteria text a judge is given for one gate.
+ *
+ * `guidance` is all of it. A `pass_criteria` entry contributes nothing: the only fields this
+ * ever rendered as prose were min_length/max_length/required_patterns/forbidden_patterns, which
+ * had no evaluator (B9) and are now refused at load, and the structured types (`shell_verify`,
+ * `script_tool`, `framework_compliance`) were never rendered here — they are run by the engine
+ * and their verdict reaches the judge as a result, not as a criterion to assess.
  */
 function collectGateCriteria(gate: LightweightGateDefinition): string[] {
-  const criteria: string[] = [];
-  if (gate.pass_criteria) {
-    for (const pc of gate.pass_criteria) {
-      criteria.push(...formatCriteria(pc));
-    }
-  }
-  if (gate.guidance) {
-    criteria.push(gate.guidance);
-  }
-  return criteria;
+  return gate.guidance ? [gate.guidance] : [];
 }
 
 /**

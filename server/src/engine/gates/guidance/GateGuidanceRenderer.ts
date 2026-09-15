@@ -15,8 +15,10 @@ import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateActivationContext, LightweightGateDefinition } from '../types.js';
 
+import { DEFAULT_GATES_CONFIG } from '#shared/types/core-config.js';
+
 /**
- * The slice of `gates` config this renderer reads. Narrower than `GatesConfig` on purpose:
+ * The slice of `gates` config this renderer reads. Narrower than `ResolvedGateSettings` on purpose:
  * `ConfigManager.getGatesConfig()` satisfies it structurally, and a test can supply a literal.
  */
 export interface GateGuidanceConfig {
@@ -44,15 +46,6 @@ export interface GateGuidanceRendererOptions {
    */
   gatesConfigProvider?: () => GateGuidanceConfig | undefined;
 }
-
-/**
- * Fallbacks when no `gatesConfigProvider` is supplied. These mirror the `gates.harnessCovers`
- * and `gates.reminderTokenBudget` defaults declared in `server/config.schema.json`, which is
- * where an installation's defaults live; `ConfigManager`'s `DEFAULT_GATES_CONFIG` is
- * module-private, so it cannot be imported here.
- */
-const FALLBACK_HARNESS_COVERS: readonly string[] = [];
-const FALLBACK_REMINDER_TOKEN_BUDGET = 800;
 
 /** Severity ordering weights, most severe first. */
 const SEVERITY_ORDER: Record<NonNullable<LightweightGateDefinition['severity']>, number> = {
@@ -237,9 +230,13 @@ export class GateGuidanceRenderer {
     reminderTokenBudget: number;
   } {
     const gatesConfig = this.gatesConfigProvider?.();
+    // No provider means no wiring, not a second opinion about what the defaults are:
+    // `DEFAULT_GATES_CONFIG` is the same object `ConfigManager` folds into `getGatesConfig()`,
+    // so an unwired renderer and a wired one with an empty config.json render identically.
     return {
-      harnessCovers: gatesConfig?.harnessCovers ?? FALLBACK_HARNESS_COVERS,
-      reminderTokenBudget: gatesConfig?.reminderTokenBudget ?? FALLBACK_REMINDER_TOKEN_BUDGET,
+      harnessCovers: gatesConfig?.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
+      reminderTokenBudget:
+        gatesConfig?.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
     };
   }
 

@@ -20,7 +20,7 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
-import type { GatesConfig } from '../types.js';
+import type { ResolvedGateSettings } from '../types.js';
 
 /**
  * Every prompt in this execution that may carry inline gate definitions.
@@ -163,7 +163,7 @@ export class GateEnhancementService {
     gateContext: SinglePromptGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: GatesConfig | undefined,
+    gatesConfig: ResolvedGateSettings | undefined,
     frameworkGateIds: Set<string>,
     /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
     inlineDefinitionGateIds: readonly string[] = []
@@ -293,7 +293,7 @@ export class GateEnhancementService {
     gateContext: ChainStepGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: GatesConfig | undefined,
+    gatesConfig: ResolvedGateSettings | undefined,
     frameworkGateIds: Set<string>,
     /**
      * Canonical ids for every step's inline definitions, registered up front by the caller.
@@ -882,7 +882,7 @@ export class GateEnhancementService {
    */
   private ensureDefaultFrameworkGate(
     gateIds: string[],
-    gatesConfig: GatesConfig | undefined,
+    gatesConfig: ResolvedGateSettings | undefined,
     activeFrameworkId: string | undefined,
     frameworkGateIds: Set<string>,
     frameworkVetoes: readonly FrameworkVeto[]
