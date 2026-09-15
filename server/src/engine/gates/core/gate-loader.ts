@@ -9,7 +9,7 @@ import { GateDefinitionLoader, type GateDefinitionLoaderConfig } from './gate-de
 import { isGateActiveForContext } from '../utils/gate-activation.js';
 
 import type {
-  GateDefinitionYaml,
+  LoadedGateDefinition,
   LightweightGateDefinition,
   GateActivationResult,
 } from '../types.js';
@@ -283,9 +283,9 @@ export class GateLoader implements GateDefinitionProvider {
   }
 
   /**
-   * Convert GateDefinitionYaml to LightweightGateDefinition shape expected by legacy consumers.
+   * Convert a loaded definition to the LightweightGateDefinition shape legacy consumers expect.
    */
-  private toLightweightGate(definition: GateDefinitionYaml): LightweightGateDefinition {
+  private toLightweightGate(definition: LoadedGateDefinition): LightweightGateDefinition {
     const retryConfig = this.normalizeRetryConfig(definition.retry_config);
 
     return {
@@ -294,7 +294,7 @@ export class GateLoader implements GateDefinitionProvider {
       type: definition.type,
       description: definition.description,
       ...(definition.subject !== undefined ? { subject: definition.subject } : {}),
-      ...(definition.severity !== undefined ? { severity: definition.severity } : {}),
+      severity: definition.severity,
       ...(definition.enforcementMode !== undefined
         ? { enforcementMode: definition.enforcementMode }
         : {}),
@@ -305,13 +305,13 @@ export class GateLoader implements GateDefinitionProvider {
         : {}),
       ...(retryConfig !== undefined ? { retry_config: retryConfig } : {}),
       ...(definition.activation !== undefined ? { activation: definition.activation } : {}),
-      ...(definition.gate_type !== undefined ? { gate_type: definition.gate_type } : {}),
+      gate_type: definition.gate_type,
       ...(definition.evaluation !== undefined ? { evaluation: definition.evaluation } : {}),
     };
   }
 
   private normalizeRetryConfig(
-    retry?: GateDefinitionYaml['retry_config']
+    retry?: LoadedGateDefinition['retry_config']
   ): LightweightGateDefinition['retry_config'] {
     if (!retry) return undefined;
     return {

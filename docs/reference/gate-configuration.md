@@ -227,3 +227,25 @@ Nothing is dropped: a reminder past the budget still appears, just degraded to i
 only. A `check` (`shell_verify` / `script_tool`) always renders — one line naming the command or
 tool it runs — regardless of `subject`, coverage, or budget, because it states what the engine is
 about to measure, not guidance the model could self-assess instead.
+
+---
+
+## Executing a prompt's inline gate definitions
+
+A prompt's own `gateConfiguration.inline_gate_definitions` block is displayed and analyzed rather
+than executed, unless one more `gates` config key is turned on:
+
+| Key                                  | Type      | Default | Description                                                                 |
+| ------------------------------------ | --------- | ------- | --------------------------------------------------------------------------- |
+| `gates.executeInlineGateDefinitions` | `boolean` | `false` | Execute a prompt's inline gate definitions instead of only displaying them. |
+
+**Why it ships off.** A definition an author wrote and forgot would newly arm a gate the moment
+this flips, and a workspace overlaid via `MCP_WORKSPACE` cannot be inventoried from the server. So
+this release warns instead: watch the server log for `Dropped inline gate definition` and check
+any prompt it names. Set the key to `true` to opt in early and verify the behavior before the next
+release makes `true` the default, per
+[ADR 0001 (d)](../adr/0001-gate-resolution-precedence.md).
+
+An inline definition is scoped to one prompt and accepts fewer fields than the standalone
+`gate.yaml` schema this page documents — see
+[Prompt YAML Schema § Inline Gate Definitions](prompt-yaml-schema.md#inline-gate-definitions).
