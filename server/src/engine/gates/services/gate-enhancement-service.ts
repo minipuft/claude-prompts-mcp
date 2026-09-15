@@ -4,6 +4,7 @@ import { isFrameworkInjected } from '../../execution/pipeline/decisions/injectio
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { GateSystemSettings } from '#shared/types/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
 import type { FrameworkVeto, GateResolutionInput } from './gate-set-resolver.js';
@@ -20,7 +21,6 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
-import type { ResolvedGateSettings } from '../types.js';
 
 /**
  * Every prompt in this execution that may carry inline gate definitions.
@@ -55,6 +55,31 @@ export interface ChainStepGateContext {
 }
 
 export type GateEnhancementContext = SinglePromptGateContext | ChainStepGateContext;
+
+/**
+ * Which step of a chain walk the run is standing at — node identity first, ordinal as fallback.
+ */
+interface CurrentStepKey {
+  readonly nodeId?: string;
+  readonly ordinal: number;
+}
+
+/**
+ * Everything one step of a chain walk needs that comes from the call rather than from the step.
+ *
+ * One named input rather than seven parameters: every field is fixed for the whole walk, and each
+ * per-step method reads a different subset. Same shape the resolver already uses — a context plus
+ * one input object (`GateResolutionInput`).
+ */
+interface ChainStepEnhancementInput {
+  readonly context: ExecutionContext;
+  readonly gateService: GateService;
+  readonly gatesConfig: GateSystemSettings | undefined;
+  readonly frameworkGateIds: Set<string>;
+  readonly inlineDefinitionGateIds: readonly string[];
+  readonly runStepView: RunStepView | undefined;
+  readonly currentStepKey: CurrentStepKey;
+}
 
 /**
  * Core gate enhancement logic extracted from GateEnhancementStage.
@@ -163,7 +188,7 @@ export class GateEnhancementService {
     gateContext: SinglePromptGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: ResolvedGateSettings | undefined,
+    gatesConfig: GateSystemSettings | undefined,
     frameworkGateIds: Set<string>,
     /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
     inlineDefinitionGateIds: readonly string[] = []
@@ -293,7 +318,7 @@ export class GateEnhancementService {
     gateContext: ChainStepGateContext,
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
-    gatesConfig: ResolvedGateSettings | undefined,
+    gatesConfig: GateSystemSettings | undefined,
     frameworkGateIds: Set<string>,
     /**
      * Canonical ids for every step's inline definitions, registered up front by the caller.
@@ -307,138 +332,189 @@ export class GateEnhancementService {
     const gateService = this.requireGateService();
     const { steps } = gateContext;
     const runStepView = this.resolveRunStepView(context);
-    const currentStepKey = this.resolveCurrentStepKey(runStepView);
-    let totalGatesApplied = 0;
+    const stepInput: ChainStepEnhancementInput = {
+      context,
+      gateService,
+      gatesConfig,
+      frameworkGateIds,
+      inlineDefinitionGateIds,
+      runStepView,
+      currentStepKey: this.resolveCurrentStepKey(runStepView),
+    };
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
     this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
 
+    let totalGatesApplied = 0;
     for (const step of steps) {
-      const prompt = step.convertedPrompt;
-      if (prompt === undefined) {
-        this.logger.warn(
-          `[GateEnhancementService] Skipping step ${step.stepNumber} - no convertedPrompt`
-        );
-        continue;
-      }
-
-      if (this.shouldSkip(step.executionPlan?.modifiers)) {
-        // Row 4.5 (P5-F4 residual, DEV-T4-10, owner-ruled 2026-08-13). A modifier-skipped step
-        // produces no output, so there is nothing to review. Write the same positive-empty-list
-        // convention the "no applicable gates" case below uses (line ~356) rather than leaving
-        // the field unset — unset is exactly what both readers' `?? accumulatedGateIds` fallback
-        // turns into a run-wide review, the last remaining fallback path this row closes.
-        if (this.isCurrentStep(step, currentStepKey)) {
-          context.state.gates.reviewGateIds = [];
-        }
-        continue;
-      }
-
-      const plannedGates =
-        Array.isArray(step.executionPlan?.gates) && step.executionPlan.gates.length > 0
-          ? step.executionPlan.gates
-          : [];
-      const stepInlineGates = Array.isArray(step.inlineGateIds) ? step.inlineGateIds : [];
-
-      const activeFrameworkId = this.getActiveFrameworkId(context);
-      const stepFrameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
-
-      // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
-      // prompt and may carry its own injection block and its own `gateConfiguration`.
-      const frameworkInjected = isFrameworkInjected({
-        modifiers: step.executionPlan?.modifiers,
-        promptInjection: prompt.injection,
-      });
-      const frameworkVetoes = applicableFrameworkVetoes({
-        frameworkInjected,
-        frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
-        promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
-      });
-
-      await this.resolveIntoAccumulator(context, {
-        prompt,
-        category: prompt.category ?? '',
-        modifiers: step.executionPlan?.modifiers,
-        frameworkId: stepFrameworkId,
-        frameworkInjected,
-        frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
-        knownFrameworkGateIds: [...frameworkGateIds],
-        inlineOperatorGateIds: stepInlineGates,
-        plannedGateIds: plannedGates,
-        inlineDefinitionGateIds,
-        // A step with no category must not pull in registry gates on a 'general' fallback.
-        autoAssignCategoryGates: prompt.category !== undefined && prompt.category.length > 0,
-      });
-
-      // The accumulator is intentionally NOT reset between steps: step N inherits the gates
-      // accumulated by steps 1..N-1, which is the pre-existing chain contract.
-      let gateIds = [...context.gates.getAll()];
-      gateIds = this.ensureDefaultFrameworkGate(
-        gateIds,
-        gatesConfig,
-        activeFrameworkId,
-        frameworkGateIds,
-        frameworkVetoes
-      );
-
-      if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
-        gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
-      }
-
-      gateIds = this.filterGatesByStepTarget(gateIds, step, runStepView);
-
-      // P4-F3 / OQ-P5-4. The per-step list is what REVIEW must be scoped to, and it exists only
-      // here, transiently. Published before the empty-list `continue` on purpose: "this step has
-      // no applicable gates" is the finding, and leaving the field unwritten would hand its
-      // readers the run-wide list through their fallback — the exact defect being closed.
-      if (this.isCurrentStep(step, currentStepKey)) {
-        context.state.gates.reviewGateIds = gateIds;
-      }
-
-      if (gateIds.length === 0) {
-        continue;
-      }
-
-      try {
-        const originalTemplate = prompt.userMessageTemplate ?? '';
-
-        const stepGateContext: GateContext = { promptId: prompt.id };
-        if (Array.isArray(step.inlineGateIds)) {
-          stepGateContext.explicitGateIds = step.inlineGateIds;
-        }
-        if (stepFrameworkId !== undefined) {
-          stepGateContext.framework = stepFrameworkId;
-        }
-        if (prompt.category !== undefined) {
-          stepGateContext.category = prompt.category;
-        }
-
-        const result = await gateService.enhancePrompt(prompt, gateIds, stepGateContext);
-
-        const enhancedTemplate = result.enhancedPrompt.userMessageTemplate ?? '';
-        if (enhancedTemplate.startsWith(originalTemplate)) {
-          const stepGateInstructions = enhancedTemplate.substring(originalTemplate.length).trim();
-          step.metadata ??= {};
-          step.metadata['gateInstructions'] = stepGateInstructions;
-        }
-
-        totalGatesApplied += gateIds.length;
-
-        this.metricsRecorder.recordGateUsageMetrics(context, gateIds, result.instructionLength);
-      } catch (error) {
-        this.logger.warn(
-          `[GateEnhancementService] Gate enhancement failed for step ${step.stepNumber}`,
-          { error, promptId: step.promptId }
-        );
-      }
+      totalGatesApplied += await this.applyGatesToStep(step, stepInput);
     }
 
+    this.publishChainGateState(context, runStepView, totalGatesApplied);
+  }
+
+  /**
+   * Enhance ONE step of the chain walk; returns how many gates it applied.
+   *
+   * Zero covers all three ways a step applies none: no converted prompt, a modifier-skipped step,
+   * and an empty applicable set — plus a failed enhancement, which must not count toward the
+   * walk's blocking verdict.
+   */
+  private async applyGatesToStep(
+    step: ChainStepPrompt,
+    input: ChainStepEnhancementInput
+  ): Promise<number> {
+    const { context } = input;
+    const prompt = step.convertedPrompt;
+    if (prompt === undefined) {
+      this.logger.warn(
+        `[GateEnhancementService] Skipping step ${step.stepNumber} - no convertedPrompt`
+      );
+      return 0;
+    }
+
+    if (this.shouldSkip(step.executionPlan?.modifiers)) {
+      // Row 4.5 (P5-F4 residual, DEV-T4-10, owner-ruled 2026-08-13). A modifier-skipped step
+      // produces no output, so there is nothing to review. Write the same positive-empty-list
+      // convention the "no applicable gates" case below uses rather than leaving the field unset
+      // — unset is exactly what both readers' `?? accumulatedGateIds` fallback turns into a
+      // run-wide review, the last remaining fallback path this row closes.
+      if (this.isCurrentStep(step, input.currentStepKey)) {
+        context.state.gates.reviewGateIds = [];
+      }
+      return 0;
+    }
+
+    const activeFrameworkId = this.getActiveFrameworkId(context);
+    const stepFrameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
+
+    // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
+    // prompt and may carry its own injection block and its own `gateConfiguration`.
+    const frameworkInjected = isFrameworkInjected({
+      modifiers: step.executionPlan?.modifiers,
+      promptInjection: prompt.injection,
+    });
+    const frameworkVetoes = applicableFrameworkVetoes({
+      frameworkInjected,
+      frameworkGatesEnabled: input.gatesConfig?.enableFrameworkGates !== false,
+      promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
+    });
+
+    await this.resolveIntoAccumulator(
+      context,
+      stepResolutionInput({
+        step,
+        prompt,
+        frameworkId: stepFrameworkId,
+        frameworkInjected,
+        frameworkGatesEnabled: input.gatesConfig?.enableFrameworkGates !== false,
+        knownFrameworkGateIds: [...input.frameworkGateIds],
+        inlineDefinitionGateIds: input.inlineDefinitionGateIds,
+      })
+    );
+
+    const gateIds = this.stepApplicableGateIds(step, input, activeFrameworkId, frameworkVetoes);
+
+    // P4-F3 / OQ-P5-4. The per-step list is what REVIEW must be scoped to, and it exists only
+    // here, transiently. Published before the empty-list return on purpose: "this step has no
+    // applicable gates" is the finding, and leaving the field unwritten would hand its readers
+    // the run-wide list through their fallback — the exact defect being closed.
+    if (this.isCurrentStep(step, input.currentStepKey)) {
+      context.state.gates.reviewGateIds = gateIds;
+    }
+
+    if (gateIds.length === 0) {
+      return 0;
+    }
+
+    return await this.enhanceStepPrompt(step, prompt, gateIds, stepFrameworkId, input);
+  }
+
+  /**
+   * Which of the accumulated gates apply to THIS step — the framework default, the operator-level
+   * framework switch, then step targeting, in that order.
+   */
+  private stepApplicableGateIds(
+    step: ChainStepPrompt,
+    input: ChainStepEnhancementInput,
+    activeFrameworkId: string | undefined,
+    frameworkVetoes: readonly FrameworkVeto[]
+  ): string[] {
+    const { context, gatesConfig, frameworkGateIds } = input;
+
+    // The accumulator is intentionally NOT reset between steps: step N inherits the gates
+    // accumulated by steps 1..N-1, which is the pre-existing chain contract.
+    let gateIds = this.ensureDefaultFrameworkGate(
+      [...context.gates.getAll()],
+      gatesConfig,
+      activeFrameworkId,
+      frameworkGateIds,
+      frameworkVetoes
+    );
+
+    if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
+      gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
+    }
+
+    return this.filterGatesByStepTarget(gateIds, step, input.runStepView);
+  }
+
+  /**
+   * Render this step's gate instructions onto its own prompt; returns how many gates were applied.
+   *
+   * Enhancement failure is per step and non-fatal: the warn keeps the walk going so later steps
+   * still enhance, and the zero keeps the failed step out of the blocking verdict.
+   */
+  private async enhanceStepPrompt(
+    step: ChainStepPrompt,
+    prompt: ConvertedPrompt,
+    gateIds: string[],
+    stepFrameworkId: string | undefined,
+    input: ChainStepEnhancementInput
+  ): Promise<number> {
+    try {
+      const originalTemplate = prompt.userMessageTemplate ?? '';
+
+      const result = await input.gateService.enhancePrompt(
+        prompt,
+        gateIds,
+        stepGateContext(prompt, step, stepFrameworkId)
+      );
+
+      const enhancedTemplate = result.enhancedPrompt.userMessageTemplate ?? '';
+      if (enhancedTemplate.startsWith(originalTemplate)) {
+        const stepGateInstructions = enhancedTemplate.substring(originalTemplate.length).trim();
+        step.metadata ??= {};
+        step.metadata['gateInstructions'] = stepGateInstructions;
+      }
+
+      this.metricsRecorder.recordGateUsageMetrics(input.context, gateIds, result.instructionLength);
+
+      return gateIds.length;
+    } catch (error) {
+      this.logger.warn(
+        `[GateEnhancementService] Gate enhancement failed for step ${step.stepNumber}`,
+        { error, promptId: step.promptId }
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Publish what the whole walk accumulated: the run-wide gate list, the inherited review scope
+   * for an inserted node, and the enforcement posture.
+   */
+  private publishChainGateState(
+    context: ExecutionContext,
+    runStepView: RunStepView | undefined,
+    totalGatesApplied: number
+  ): void {
     const allGateIds = [...context.gates.getAll()];
     context.state.gates.accumulatedGateIds = allGateIds;
 
-    // P5-F4 / row 4.4. An INSERTED node has no parse-time step, so the loop above never visited
-    // it and nothing above wrote a scope for it. Its review is INHERITED from the node its
-    // triggering unknown blocked (owner ruling 2026-08-12). Written after the loop and
+    // P5-F4 / row 4.4. An INSERTED node has no parse-time step, so the walk above never visited
+    // it and nothing there wrote a scope for it. Its review is INHERITED from the node its
+    // triggering unknown blocked (owner ruling 2026-08-12). Written after the walk and
     // unconditionally within this branch — not behind an "unwritten" guard — because a chain
     // whose parse steps carry no node ids falls back to ordinal matching in `isCurrentStep`,
     // which can match some other step for an inserted current node; the run's own provenance is
@@ -643,32 +719,15 @@ export class GateEnhancementService {
     let added = 0;
 
     for (const gateId of gateIds) {
-      let retryLimit: number | undefined;
-      let blockResponseOnFail = false;
-
-      if (gateManager) {
-        try {
-          const registry = gateManager.getGateRegistry();
-          const gate = registry?.getGuide(gateId);
-
-          if (gate) {
-            const retryConfig = gate.getRetryConfig();
-            if (retryConfig?.max_attempts !== undefined) {
-              retryLimit = retryConfig.max_attempts;
-            }
-
-            const definition = gate.getDefinition();
-            if (definition.blockResponseOnFail === true) {
-              blockResponseOnFail = true;
-              context.gates.addBlockingGate(gateId);
-            }
-          }
-        } catch {
-          // Gate registry lookup failed - continue without config
-        }
+      const config = readRegistryGateExecutionConfig(gateManager, gateId);
+      if (config.blockResponseOnFail) {
+        context.gates.addBlockingGate(gateId);
       }
 
-      const metadata = retryLimit !== undefined ? { retryLimit, blockResponseOnFail } : undefined;
+      const metadata =
+        config.retryLimit !== undefined
+          ? { retryLimit: config.retryLimit, blockResponseOnFail: config.blockResponseOnFail }
+          : undefined;
       if (context.gates.add(gateId, 'registry-auto', metadata)) {
         added++;
       }
@@ -712,10 +771,7 @@ export class GateEnhancementService {
    * current: ordinal 0 matches nothing, which leaves `reviewGateIds` unwritten for a run that
    * has no step left to review.
    */
-  private resolveCurrentStepKey(view: RunStepView | undefined): {
-    nodeId?: string;
-    ordinal: number;
-  } {
+  private resolveCurrentStepKey(view: RunStepView | undefined): CurrentStepKey {
     if (view === undefined) {
       return { ordinal: 1 };
     }
@@ -735,7 +791,7 @@ export class GateEnhancementService {
    * stage 14's `resolveCurrentChainStep` use, for the same reason: once a node has been inserted
    * the run's ordinal space and the parse-time array stop being the same list.
    */
-  private isCurrentStep(step: ChainStepPrompt, key: { nodeId?: string; ordinal: number }): boolean {
+  private isCurrentStep(step: ChainStepPrompt, key: CurrentStepKey): boolean {
     if (key.nodeId !== undefined && typeof step.nodeId === 'string' && step.nodeId.length > 0) {
       return step.nodeId === key.nodeId;
     }
@@ -882,7 +938,7 @@ export class GateEnhancementService {
    */
   private ensureDefaultFrameworkGate(
     gateIds: string[],
-    gatesConfig: ResolvedGateSettings | undefined,
+    gatesConfig: GateSystemSettings | undefined,
     activeFrameworkId: string | undefined,
     frameworkGateIds: Set<string>,
     frameworkVetoes: readonly FrameworkVeto[]
@@ -899,4 +955,113 @@ export class GateEnhancementService {
     }
     return [...gateIds, 'framework-compliance'];
   }
+}
+
+// ============================================================================
+// Pure helpers for chain-step enhancement
+// ============================================================================
+
+/**
+ * One step's contribution to the chain's cumulative gate resolution.
+ *
+ * A free function rather than a method: deciding WHAT a step contributes reads only the step and
+ * its prompt, so it stays answerable without an ExecutionContext (`architecture.md`).
+ */
+function stepResolutionInput(args: {
+  readonly step: ChainStepPrompt;
+  readonly prompt: ConvertedPrompt;
+  readonly frameworkId: string | undefined;
+  readonly frameworkInjected: boolean;
+  readonly frameworkGatesEnabled: boolean;
+  readonly knownFrameworkGateIds: readonly string[];
+  readonly inlineDefinitionGateIds: readonly string[];
+}): GateResolutionInput {
+  const { step, prompt } = args;
+  const plannedGates =
+    Array.isArray(step.executionPlan?.gates) && step.executionPlan.gates.length > 0
+      ? step.executionPlan.gates
+      : [];
+
+  return {
+    prompt,
+    category: prompt.category ?? '',
+    modifiers: step.executionPlan?.modifiers,
+    frameworkId: args.frameworkId,
+    frameworkInjected: args.frameworkInjected,
+    frameworkGatesEnabled: args.frameworkGatesEnabled,
+    knownFrameworkGateIds: args.knownFrameworkGateIds,
+    inlineOperatorGateIds: Array.isArray(step.inlineGateIds) ? step.inlineGateIds : [],
+    plannedGateIds: plannedGates,
+    inlineDefinitionGateIds: args.inlineDefinitionGateIds,
+    // A step with no category must not pull in registry gates on a 'general' fallback.
+    autoAssignCategoryGates: prompt.category !== undefined && prompt.category.length > 0,
+  };
+}
+
+/**
+ * The gate context one step's enhancement runs under.
+ *
+ * Optional fields are assigned only when present: an absent key is what the readers of
+ * `GateContext` test for, so writing `undefined` would not mean the same thing.
+ */
+function stepGateContext(
+  prompt: ConvertedPrompt,
+  step: ChainStepPrompt,
+  frameworkId: string | undefined
+): GateContext {
+  const gateCtx: GateContext = { promptId: prompt.id };
+  if (Array.isArray(step.inlineGateIds)) {
+    gateCtx.explicitGateIds = step.inlineGateIds;
+  }
+  if (frameworkId !== undefined) {
+    gateCtx.framework = frameworkId;
+  }
+  if (prompt.category !== undefined) {
+    gateCtx.category = prompt.category;
+  }
+  return gateCtx;
+}
+
+/** Per-gate execution metadata the gate registry carries for a `registry-auto` entry. */
+interface RegistryGateExecutionConfig {
+  readonly retryLimit?: number;
+  readonly blockResponseOnFail: boolean;
+}
+
+/**
+ * What the gate registry says about how one `registry-auto` gate executes.
+ *
+ * Every way of finding nothing — no manager, no registry, no guide, or a registry that throws —
+ * yields the neutral config, which leaves the gate applying with no retry limit and no block.
+ * Reads the registry but touches no execution state, so the caller owns the accumulator writes.
+ */
+function readRegistryGateExecutionConfig(
+  gateManager: GateManager | undefined,
+  gateId: string
+): RegistryGateExecutionConfig {
+  let retryLimit: number | undefined;
+  let blockResponseOnFail = false;
+
+  if (gateManager) {
+    try {
+      const registry = gateManager.getGateRegistry();
+      const gate = registry?.getGuide(gateId);
+
+      if (gate) {
+        const retryConfig = gate.getRetryConfig();
+        if (retryConfig?.max_attempts !== undefined) {
+          retryLimit = retryConfig.max_attempts;
+        }
+
+        const definition = gate.getDefinition();
+        if (definition.blockResponseOnFail === true) {
+          blockResponseOnFail = true;
+        }
+      }
+    } catch {
+      // Gate registry lookup failed - continue without config
+    }
+  }
+
+  return retryLimit !== undefined ? { retryLimit, blockResponseOnFail } : { blockResponseOnFail };
 }

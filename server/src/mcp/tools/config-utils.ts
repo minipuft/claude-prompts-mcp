@@ -20,6 +20,7 @@ export const CONFIG_VALID_KEYS = [
   'gates.frameworkGates',
   'gates.harnessCovers',
   'gates.reminderTokenBudget',
+  'gates.executeInlineGateDefinitions',
   'execution.judge',
   'frameworks.enabled',
   'frameworks.dynamicToolDescriptions',
@@ -89,6 +90,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
 
     case 'gates.enabled':
     case 'gates.frameworkGates':
+    case 'gates.executeInlineGateDefinitions':
     case 'execution.judge':
     case 'frameworks.enabled':
     case 'frameworks.dynamicToolDescriptions':

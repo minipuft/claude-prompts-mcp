@@ -13,7 +13,7 @@
  */
 
 import type { GateEnforcementMode, GatePassCriteria, GateSeverity } from './gate-primitives.js';
-import type { GateDefinitionYaml } from '../core/gate-schema.js';
+import type { GateDefinitionYaml, LoadedGateDefinition } from '../core/gate-schema.js';
 import type { ArtifactKind } from '../utils/artifact-kinds.js';
 
 // ============================================================================
@@ -85,12 +85,13 @@ export interface GateRetryConfig {
  * twice already did not, until `subject` (row 0.2) and the six pattern/length fields (row 1.5)
  * were each edited in both places. The import path stays `../types.js` for every consumer.
  *
- * It is the schema's INPUT side (`z.input`), which is what a consumer holds: the loader returns
- * the raw YAML object and validates beside it, so zod's defaults have not been applied. A key the
- * schema does not declare is `unknown` and reachable only via `definition['key']`, which is the
- * pressure that keeps a runtime-read key declared in the schema.
+ * It is the schema's INPUT side (`z.input`) — the shape of the text, held by whatever BUILDS a
+ * gate.yaml. A definition READ back from `GateDefinitionLoader` is `LoadedGateDefinition`, the
+ * schema's output side, with the defaults applied. A key the schema does not declare is `unknown`
+ * on both and reachable only via `definition['key']`, which is the pressure that keeps a
+ * runtime-read key declared in the schema.
  */
-export type { GateDefinitionYaml };
+export type { GateDefinitionYaml, LoadedGateDefinition };
 
 // ============================================================================
 // GateGuide Interface
@@ -198,9 +199,9 @@ export interface GateGuide {
    * Get the underlying gate definition.
    * Useful for debugging and introspection.
    *
-   * @returns The YAML definition that created this guide
+   * @returns The parsed definition that created this guide, schema defaults applied
    */
-  getDefinition(): GateDefinitionYaml;
+  getDefinition(): LoadedGateDefinition;
 }
 
 // ============================================================================

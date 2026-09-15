@@ -278,7 +278,15 @@ describe('skills sync reads the workspace over the bundled tree', () => {
     await run({ command: 'export', client: 'claude-code', scope: 'user', id: 'covered_prompt' });
 
     const skill = await readFile(path.join(outputDir, 'covered_prompt', 'SKILL.md'), 'utf-8');
-    expect(skill).toContain("Omitted 1 reminder(s) this installation's harness covers: security.");
+    expect(skill).toContain(
+      "Omitted 1 reminder(s) this installation's harness covers: security-reminder (security)."
+    );
     expect(skill).not.toContain('| security-reminder |');
+
+    // Row 2.3: the omitted reminder's gate files and manifest entry are absent too — not
+    // just the SKILL.md table row.
+    expect(existsSync(path.join(outputDir, 'covered_prompt', 'gates', 'security-reminder'))).toBe(
+      false
+    );
   });
 });

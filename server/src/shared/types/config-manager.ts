@@ -11,7 +11,7 @@ import type {
   SemanticAnalysisConfig,
   LoggingConfig,
   ResolvedFrameworkConfig,
-  GateSystemSettings as GatesConfig,
+  GateSystemSettings,
   ChainSessionConfig,
   ExecutionConfig,
   VersioningConfig,
@@ -58,7 +58,7 @@ export interface ConfigManager {
   // but nothing reads the parsed value any more — the analyzer that took it never read a field.
   getLoggingConfig(): LoggingConfig;
   getFrameworksConfig(): ResolvedFrameworkConfig;
-  getGatesConfig(): GatesConfig;
+  getGatesConfig(): GateSystemSettings;
   getChainSessionConfig(): ChainSessionConfig;
   getExecutionConfig(): ExecutionConfig;
   isJudgeEnabled(): boolean;
