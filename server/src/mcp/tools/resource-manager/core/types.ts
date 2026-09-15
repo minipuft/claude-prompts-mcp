@@ -287,6 +287,8 @@ export interface ResourceManagerInput {
   // Gate-specific parameters
   /** Maps to the gate.yaml key `type`, NOT to `gate_type` — see the schema note on the collision. */
   gate_type?: 'validation' | 'guidance';
+  /** Free kebab-case tag naming what the gate reminds about; suppressed via `gates.harnessCovers`. */
+  subject?: string;
   severity?: 'critical' | 'high' | 'medium' | 'low';
   enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   guidance?: string;

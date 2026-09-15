@@ -109,4 +109,33 @@ describe('settable gate fields (P4.4)', () => {
     expect(result.success).toBe(true);
     expect(readGateYaml()['severity']).toBe('critical');
   });
+
+  // `subject` joins this class via `PRESERVED_GATE_YAML_KEYS`'s schema-driven derivation
+  // (`GATE_YAML_DECLARED_KEYS = Object.keys(GateDefinitionSchema.shape)`) rather than a
+  // hand-added entry — see the constant's own comment in gate-file-writer.ts. This proves the
+  // derivation actually reaches disk, not just that the constant contains the key.
+  it('writes a caller-supplied subject into gate.yaml', async () => {
+    const service = new GateFileWriter({ logger, configManager });
+
+    const result = await service.writeGateFiles({
+      ...baseGate,
+      subject: 'code-quality',
+    });
+
+    expect(result.success).toBe(true);
+    expect(readGateYaml()['subject']).toBe('code-quality');
+  });
+
+  it('preserves an existing subject when a later update omits the field', async () => {
+    const service = new GateFileWriter({ logger, configManager });
+
+    await service.writeGateFiles({ ...baseGate, subject: 'code-quality' });
+    const result = await service.writeGateFiles({
+      ...baseGate,
+      description: 'updated, saying nothing about subject',
+    });
+
+    expect(result.success).toBe(true);
+    expect(readGateYaml()['subject']).toBe('code-quality');
+  });
 });

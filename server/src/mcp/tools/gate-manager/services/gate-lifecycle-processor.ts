@@ -30,6 +30,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      subject,
     } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
@@ -52,6 +53,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      subject,
     };
 
     // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
@@ -143,6 +145,7 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      subject,
     } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
@@ -183,6 +186,7 @@ export class GateLifecycleProcessor {
       // definition reports `medium` for a file that declares nothing.
       severity,
       enforcementMode,
+      subject,
     };
 
     // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
@@ -203,6 +207,7 @@ export class GateLifecycleProcessor {
         retry_config,
         severity,
         enforcementMode,
+        subject,
       })
         .filter(([, value]) => value !== undefined)
         .map(([key]) => key)

@@ -291,12 +291,15 @@ describe('script_tool gate criteria', () => {
 
   // Ported from `shell-verify-gate-criteria.test.ts`, deleted with GateValidator.
   //
-  // `llm_self_check` is reserved: no runner exists anywhere. It used to reach GateValidator's
-  // auto-pass stub, which returned `passed: true` with a skip message — that stub is gone, so
-  // the property worth protecting is the one that keeps a reserved type from CLEARING a
-  // review: it contributes no ground-truth result, and coverage clears only gates covered by
-  // a passing one. Silence must read as "not verified", never as "verified".
-  describe('a reserved criteria type cannot clear a review', () => {
+  // `llm_self_check` never had a runner anywhere and is now removed from the schema's `type`
+  // enum entirely (registry count 0 — no gate file ever used it). It used to reach
+  // GateValidator's auto-pass stub, which returned `passed: true` with a skip message — that
+  // stub is gone. Two properties are worth protecting now: the schema refuses the removed
+  // value at load with a message naming the fix, and — for a raw provider value that bypasses
+  // schema validation entirely (e.g. stale on-disk data from before the removal) — the runtime
+  // path still cannot be tricked into treating it as a ground-truth result. Silence must read
+  // as "not verified", never as "verified".
+  describe('a removed criteria type cannot clear a review', () => {
     test('contributes no ground-truth result, so coverage is not satisfied', async () => {
       const gate = gateWith({ type: 'llm_self_check', prompt_template: 'Assess depth' });
       const provider = {
@@ -314,7 +317,7 @@ describe('script_tool gate criteria', () => {
       expect(coverage.satisfied).toBe(false);
     });
 
-    test('the schema still accepts the type, so existing gate files keep loading', () => {
+    test('the schema rejects the type, naming the replacement types', () => {
       const result = validateGateSchema(
         {
           id: 'probe',
@@ -326,7 +329,8 @@ describe('script_tool gate criteria', () => {
         'probe'
       );
 
-      expect(result.valid).toBe(true);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join('\n')).toContain('never had a runner');
     });
   });
 

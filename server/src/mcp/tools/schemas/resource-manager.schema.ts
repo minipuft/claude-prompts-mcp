@@ -368,6 +368,18 @@ export const resourceManagerInputSchema = z
      */
     gate_type: z.enum(['validation', 'guidance']).optional(),
     /**
+     * [Gate] Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`).
+     * An installation's `gates.harnessCovers` (config.json) suppresses reminders whose
+     * subject it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
+     */
+    subject: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        'subject must be kebab-case: lowercase letters, digits, and hyphens only, e.g. "code-quality"'
+      )
+      .optional(),
+    /**
      * [Gate] Severity for prioritization. Omitting it leaves an existing gate's value
      * untouched; a new gate takes the loader default `medium`.
      */

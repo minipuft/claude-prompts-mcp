@@ -38,6 +38,12 @@ export interface GateManagerInput {
   /** Enforcement mode override; absent, the loader derives it from `severity`. */
   enforcementMode?: 'blocking' | 'advisory' | 'informational';
   description?: string;
+  /**
+   * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
+   * installation's `gates.harnessCovers` (config.json) suppresses reminders whose subject
+   * it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
+   */
+  subject?: string;
   guidance?: string;
   pass_criteria?: Array<{
     type?: string;
@@ -113,4 +119,6 @@ export interface GateCreationData {
    */
   severity?: GateManagerInput['severity'];
   enforcementMode?: GateManagerInput['enforcementMode'];
+  /** Same class as `severity`/`enforcementMode` above — settable half of `PRESERVED_GATE_YAML_KEYS`. */
+  subject?: GateManagerInput['subject'];
 }
