@@ -577,8 +577,14 @@ export interface SkillsSyncFailure {
   reason: string;
 }
 
-/** One drifted resource, as `diff` classified it. */
-export interface SkillsSyncDriftEntry {
+/**
+ * One drifted resource, as `diff` classified it.
+ *
+ * Unexported, like the group below: both are reached through `SkillsSyncRunReport.drift`, which is
+ * the surface callers hold. Exporting a name nothing imports is a second way to refer to the same
+ * shape, and the one that drifts from it.
+ */
+interface SkillsSyncDriftEntry {
   /** new | source | output | orphan */
   type: string;
   /** Resource id, or the manifest/marker key for an orphan */
@@ -588,7 +594,7 @@ export interface SkillsSyncDriftEntry {
 }
 
 /** Drift found in one client + scope that `diff` examined. */
-export interface SkillsSyncDriftGroup {
+interface SkillsSyncDriftGroup {
   client: string;
   scope: 'user' | 'project';
   /** Empty when that client + scope is clean — examined and found in step with the sources */
