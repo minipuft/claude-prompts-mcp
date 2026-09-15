@@ -110,18 +110,10 @@ export function resolvePreservedGateYamlFields(
 }
 
 /**
- * The one place guidance content becomes `guidance.md`'s bytes — create, update, and rollback
- * (`gate-versioning-processor.ts` `handleRollback`) all pass their `guidance` through
- * `writeGateFiles`, so fixing it here closes every write path in one place rather than N call
- * sites (owner ruling, resource-manager-gate-newline-2026-09-14 (a)(2)).
- *
- * Non-empty content that does not already end in `\n` gets exactly one appended: every shipped,
- * Prettier-formatted `guidance.md` ends that way, so a pre-fix `version_history` snapshot — whose
- * guidance was `.trim()`'d on load before this fix existed and can never recover its original
- * trailing whitespace — restores to the faithful reconstruction on rollback. Content that already
- * ends in `\n` is returned UNCHANGED: this must not collapse multiple trailing newlines to one,
- * or an update that changes only an unrelated field on an already-correct file would rewrite it
- * anyway, reopening the byte-identity this writer exists to hold.
+ * Ends non-empty guidance with a newline when it has none. Create, update and rollback all write
+ * through here, so a version saved while the loader trimmed guidance restores a newline-terminated
+ * file. Content that already ends with a newline is left as it is, so an update that does not
+ * touch guidance keeps `guidance.md` byte-identical.
  */
 function ensureTrailingNewline(guidance: string): string {
   if (guidance === '' || guidance.endsWith('\n')) {

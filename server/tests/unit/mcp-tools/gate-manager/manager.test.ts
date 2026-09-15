@@ -137,7 +137,7 @@ describe('GateToolHandler', () => {
         name: 'New Gate',
         description: 'Gate description',
         // No trailing newline on purpose: `GateFileWriter` appends exactly one for content that
-        // lacks it (owner ruling (a)(2)), so this doubles as the "create" case of that contract.
+        // lacks it, so this doubles as the "create" case of that contract.
         guidance: 'Gate guidance',
       },
       {}
@@ -433,7 +433,7 @@ describe('GateToolHandler', () => {
     });
   });
 
-  describe('update leaves omitted guidance.md byte-identical (resource-manager-gate-newline-2026-09-14)', () => {
+  describe('update leaves omitted guidance.md byte-identical', () => {
     // Unlike `createFakeGate` above (a hand-written stub whose `getGuidance()` returns whatever
     // string the test passed it), this drives the REAL load path: `GateDefinitionLoader` reads
     // `guidance.md` off disk and `GenericGateGuide` wraps that definition exactly the way
@@ -524,7 +524,7 @@ describe('GateToolHandler', () => {
    * rather than through the full `GateVersioningProcessor.handleRollback` (which needs a
    * SQLite-backed `VersionHistoryService` this file's `configManager` stub deliberately disables).
    */
-  describe('GateFileWriter appends exactly one trailing newline to unterminated guidance (owner ruling (a)(2))', () => {
+  describe('GateFileWriter appends exactly one trailing newline to unterminated guidance', () => {
     function gateFileWriterConfigManager(): ConfigManager {
       return {
         getGatesDirectory: () => gatesDir,
