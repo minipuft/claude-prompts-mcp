@@ -234,4 +234,24 @@ describe('skills sync reads the workspace over the bundled tree', () => {
     expect(existsSync(path.join(workspace, relative))).toBe(true);
     expect(existsSync(path.join(packageRoot, relative))).toBe(false);
   });
+
+  it('writes patch files under MCP_RUNTIME_ROOT when it is set, not under the package', async () => {
+    await writeConfig(workspace, outputDir);
+    const runtimeRoot = path.join(tmpDir, 'runtime');
+    process.env['MCP_RUNTIME_ROOT'] = runtimeRoot;
+
+    await run({ command: 'patch', client: 'claude-code', scope: 'user' });
+
+    expect(existsSync(path.join(runtimeRoot, 'runtime-state', 'patches'))).toBe(true);
+    expect(existsSync(path.join(packageRoot, 'runtime-state'))).toBe(false);
+  });
+
+  it('writes patch files under the workspace when MCP_RUNTIME_ROOT is unset', async () => {
+    await writeConfig(workspace, outputDir);
+
+    await run({ command: 'patch', client: 'claude-code', scope: 'user' });
+
+    expect(existsSync(path.join(workspace, 'runtime-state', 'patches'))).toBe(true);
+    expect(existsSync(path.join(packageRoot, 'runtime-state'))).toBe(false);
+  });
 });
