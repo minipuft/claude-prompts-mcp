@@ -4,10 +4,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { createFrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
+import {
+  createFrameworkStateStore,
+  type PersistedFrameworkState,
+} from '../../../src/engine/frameworks/framework-state-store.js';
+import { SqliteEngine, SqliteStateStore } from '../../../src/infra/database/index.js';
 
-import type { PersistedFrameworkState } from '../../../src/engine/frameworks/framework-state-store.js';
-import type { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 
 const createLogger = (): Logger =>
@@ -184,5 +186,72 @@ describe('FrameworkStateStore (persistence)', () => {
     await expect(store.getFrameworkManager()!.removeFramework('react')).rejects.toThrow(
       'state database is read-only'
     );
+  });
+
+  test('a scope that has never persisted framework state logs at debug, not warn', async () => {
+    const logger = createLogger();
+    // A scope name never touched by an earlier test in this file — the load path must see
+    // `exists() === false`, not a row left over from another test.
+    const mgr = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultScope: { workspaceId: 'workspace-truly-empty' },
+    });
+
+    const warnedInvalid = (logger.warn as jest.Mock).mock.calls.some(([message]) =>
+      String(message).includes('Invalid framework state')
+    );
+    expect(warnedInvalid).toBe(false);
+
+    const debugedNoState = (logger.debug as jest.Mock).mock.calls.some(([message]) =>
+      String(message).includes('No saved framework state found')
+    );
+    expect(debugedNoState).toBe(true);
+
+    await mgr.shutdown();
+  });
+
+  test('a persisted row that fails validation still logs the invalid-state warning', async () => {
+    const logger = createLogger();
+    const corruptScope = { workspaceId: 'workspace-corrupt-framework-row' };
+
+    // Seed a row directly through the same SQLite table/key the store reads, missing the
+    // `switchReason` field `isValidPersistedState` requires — a corrupt row, not an absent one.
+    const dbManager = await SqliteEngine.getInstance(tmpRoot, logger);
+    await dbManager.initialize();
+    const rawStore = new SqliteStateStore<PersistedFrameworkState>(
+      dbManager,
+      {
+        tableName: 'kv_state',
+        key: 'framework',
+        defaultState: () => ({
+          version: '1.0.0',
+          frameworkSystemEnabled: false,
+          activeFramework: 'CAGEERF',
+          lastSwitchedAt: new Date().toISOString(),
+          switchReason: 'Initial framework selection',
+        }),
+      },
+      logger
+    );
+    await rawStore.save(
+      {
+        version: '1.0.0',
+        frameworkSystemEnabled: false,
+        activeFramework: 'react',
+        lastSwitchedAt: new Date().toISOString(),
+        // switchReason intentionally omitted
+      } as unknown as PersistedFrameworkState,
+      corruptScope
+    );
+
+    const mgr = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultScope: corruptScope,
+    });
+
+    const warnedInvalid = (logger.warn as jest.Mock).mock.calls.some(([message]) =>
+      String(message).includes('Invalid framework state')
+    );
+    expect(warnedInvalid).toBe(true);
+
+    await mgr.shutdown();
   });
 });
