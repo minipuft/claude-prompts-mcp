@@ -1,5 +1,5 @@
 /**
- * B.27 — the framework writer writes the file names the framework DECLARES.
+ * tutorial-rework B.27 — the framework writer writes the file names the framework DECLARES.
  *
  * `framework.yaml` may name its companion files with `phasesFile` / `judgePromptFile`
  * (`framework-schema.ts`; the loader follows them, `runtime-framework-loader.ts`). Before this
