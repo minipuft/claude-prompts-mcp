@@ -179,8 +179,13 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   params.apiRouter?.updateData(promptsData, categories, convertedPrompts);
 
   // Auto-deregister prompts exported as client skills via skills-sync.yaml.
-  // Set unconditionally: a hot reload that REMOVES the last registration must
-  // clear the previous set, or the prompt stays deregistered until restart.
+  // Set unconditionally: a call that REMOVES the last registration must clear
+  // the previous set, or the prompt stays deregistered until restart.
+  //
+  // This function runs at startup and on the manual `fullServerRefresh` path. The
+  // filesystem-watch hot-reload path (`Application.handlePromptHotReload`) does not call
+  // it — that path reloads prompt content through `reloadPromptData` instead — so it
+  // recomputes the exported set the same way, separately, right after that call.
   const exportedPromptIds = await loadSkillsSyncExports(
     pathResolver,
     logger,

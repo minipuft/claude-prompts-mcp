@@ -146,8 +146,10 @@ Override any output directory via the `overrides` key in `skills-sync.yaml`.
 A prompt exported as a skill is served by that client's native harness, so listing it again under MCP `prompts/list` offers the same prompt twice. The server reads `skills-sync.yaml` during prompt registration and skips any prompt whose `{category}/{id}` is registered for export. It reads the same `skills-sync.yaml` Skills Sync does: the workspace's when the workspace holds one, else the package's.
 
 ```
-skills-sync.yaml registrations → data-loader reads at startup → registry skips prompts/list registration
+skills-sync.yaml registrations → prompt registration reads it → registry skips prompts/list registration
 ```
+
+The exported set is recomputed at startup and on every prompt hot reload, not read once and cached — editing `skills-sync.yaml` and then editing (or re-saving) a prompt file is enough to pick up a new export or an unregistration without a restart. Editing `skills-sync.yaml` alone does not trigger a reload; it takes effect the next time a prompt file changes or the server restarts.
 
 - Reads `registrations` (every client and every scope, unioned). The pre-`registrations` flat `exports` list is still honored on read
 - A client set to `'all'` deregisters every prompt
