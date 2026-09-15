@@ -44,5 +44,21 @@ arguments:
       planner merges; shared-tree — commit nothing, leave edits in the planner's
       worktree for it to commit per concern.
     required: false
+# exclude lists every gate that auto-activates for a `development`-category prompt (measured via
+# `isGateActiveForContext`, server/src/engine/gates/utils/gate-activation.ts, with
+# promptCategory: "development", explicitRequest: false — `framework_gates: false` alone does not
+# stop them; the export test in export-command.test.ts fails the day a new auto-activating gate
+# appears and this list has not grown to match).
 gateConfiguration:
+  exclude:
+    - api-documentation
+    - code-quality
+    - information-placement
+    - intent-quality
+    - plan-quality
+    - product-positioning-fidelity
+    - prose-hygiene
+    - security-awareness
+    - semantic-discoverability
+    - test-coverage
   framework_gates: false
