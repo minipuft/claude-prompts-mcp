@@ -15,8 +15,8 @@ tags: [config, schema, validation, cli, contracts]
 ## Now (2026-09-14)
 
 - **Goal**: one owner for `config.json`'s shape. T1 makes a bad config visible at load without refusing to serve.
-- **Slice**: T1. 1.5, 1.6 and 1.1 ✓. 1.3, 1.4, 0.6 and 0.7 dispatched 2026-09-14 (four sonnet workers, disjoint files). 1.7 follows 1.3; 0.5 follows 0.6 and 0.7; 1.8 waits on OQ-6.
-- **Next decision**: accept each handoff as it lands and commit it per concern; then brief 1.7 and 0.5. OQ-5 (row 2.5) and OQ-6 (row 1.8) are open for the owner.
+- **Slice**: T1. 1.5, 1.6 and 1.1 ✓. Rows 1.3, 1.4, 0.6 and 0.7 were killed by a session rate limit near their ends on 2026-09-14 and resumed with context intact on 2026-09-15, after the planner measured the tree: only their named files modified, no stray probes, no server left on 9391, `index.ts` mutation restored. 1.4 has handed off; 1.3, 0.6 and 0.7 are running. 1.7 follows the `main` merge (R23); 0.5 follows 0.6 and 0.7; 1.8 waits on OQ-6.
+- **Next decision**: accept the batch once 1.3, 0.6 and 0.7 hand off — running `validate:suite-membership` and the knip ratchet for the rows that edit validator scripts (R24) — and commit per concern; then merge `origin/main` (R23) and re-verify on the merged tree before cutting 1.7. OQ-5 and OQ-6 are open for the owner.
 - **Constraint in force**: shared-tree in `../claude-prompts-mcp-config` — workers edit only their named files and commit nothing. The planner commits source per concern only while no worker is editing, because lint-staged stashes unstaged changes; a plans-only commit takes the docs path, which does not, and may land while a worker is live. Nothing is pushed before the owner reviews.
 
 ## Why this exists
