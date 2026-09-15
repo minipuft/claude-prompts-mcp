@@ -109,6 +109,19 @@ export function resolvePreservedGateYamlFields(
   return preserved;
 }
 
+/**
+ * Ends non-empty guidance with a newline when it has none. Create, update and rollback all write
+ * through here, so a version saved while the loader trimmed guidance restores a newline-terminated
+ * file. Content that already ends with a newline is left as it is, so an update that does not
+ * touch guidance keeps `guidance.md` byte-identical.
+ */
+function ensureTrailingNewline(guidance: string): string {
+  if (guidance === '' || guidance.endsWith('\n')) {
+    return guidance;
+  }
+  return `${guidance}\n`;
+}
+
 export interface GateFileWriterDependencies {
   logger: Logger;
   configManager: ConfigManager;
@@ -165,7 +178,7 @@ export class GateFileWriter {
         await writeFile(yamlPath, yamlContent, 'utf8');
         paths.push(yamlPath);
 
-        await writeFile(guidancePath, data.guidance, 'utf8');
+        await writeFile(guidancePath, ensureTrailingNewline(data.guidance), 'utf8');
         paths.push(guidancePath);
 
         return { paths };

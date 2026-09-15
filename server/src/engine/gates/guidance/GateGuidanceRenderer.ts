@@ -193,7 +193,12 @@ export class GateGuidanceRenderer {
    * Format gate guidance for display with framework-specific filtering
    */
   private formatGateGuidance(gate: LightweightGateDefinition, context: GateContext): string {
-    let guidance = gate.guidance ?? '';
+    // Trimmed here, not at load: `GateDefinitionLoader` inlines `guidance.md` verbatim (so
+    // resource_manager can write it back byte-for-byte), which means a Prettier-formatted file's
+    // trailing newline now reaches this method. Rendering is display-only — nothing here feeds a
+    // write-back — so trimming for display keeps the section spacing below unchanged from before
+    // that fix, one blank line between gates rather than two.
+    let guidance = (gate.guidance ?? '').trim();
     const frameworkNames = this.frameworkIdentifierProvider?.();
 
     if (context.framework && hasFrameworkSpecificContent(guidance, frameworkNames)) {
