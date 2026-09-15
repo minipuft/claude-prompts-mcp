@@ -514,7 +514,7 @@ describe('GateToolHandler', () => {
   });
 
   /**
-   * Row B.28 — `gate.yaml` and `guidance.md` are two independently-scoped writes, not one write
+   * tutorial-rework B.28 — `gate.yaml` and `guidance.md` are two independently-scoped writes, not one write
    * that always touches both. Before this fix, `buildGateYaml` unconditionally built (and
    * `planGateWrite` unconditionally wrote) `gate.yaml` on every update, so a guidance-only call
    * re-serialized it into the writer's own key order and dropped any hand-authored comment — a
@@ -523,7 +523,7 @@ describe('GateToolHandler', () => {
    * same bytes back. A hand-authored `gate.yaml`, with a comment and a scrambled key order the
    * writer would never emit, is what makes the re-serialization visible.
    */
-  describe('write-scope narrowing (B.28): gate.yaml and guidance.md are rewritten independently', () => {
+  describe('write-scope narrowing (tutorial-rework B.28): gate.yaml and guidance.md are rewritten independently', () => {
     const GATE_ID = 'scoped-write-gate';
     const HAND_AUTHORED_YAML = [
       '# Hand-authored — this comment and the scrambled key order below must survive any update',
