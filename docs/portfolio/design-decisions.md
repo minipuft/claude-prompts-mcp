@@ -182,13 +182,13 @@ Three components prevent distributed state bugs:
 
 ### What Hot-Reloads
 
-| Resource          | Watch Location                                | Manager                           |
-| ----------------- | --------------------------------------------- | --------------------------------- |
-| Prompts           | `server/prompts/**/*.md`                      | FileObserver → PromptAssetManager |
-| Gates             | `server/resources/gates/*/gate.yaml`          | GateHotReloadCoordinator          |
-| Styles            | `server/resources/styles/*/style.yaml`        | StyleHotReloadCoordinator         |
-| Frameworks        | `server/resources/frameworks/*/*.yaml`        | FrameworkHotReload                |
-| Tool Descriptions | `_generated/tool-descriptions.contracts.json` | ToolDescriptionLoader             |
+| Resource          | Watch Location                                                                                                | Manager                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Prompts           | `server/prompts/**/*.md`                                                                                      | FileObserver → PromptAssetManager |
+| Gates             | `server/resources/gates/*/gate.yaml`                                                                          | GateHotReloadCoordinator          |
+| Styles            | `server/resources/styles/*/style.yaml`, plus a configured workspace's `resources/styles/*/style.yaml` overlay | StyleHotReloadCoordinator         |
+| Frameworks        | `server/resources/frameworks/*/*.yaml`                                                                        | FrameworkHotReload                |
+| Tool Descriptions | `_generated/tool-descriptions.contracts.json`                                                                 | ToolDescriptionLoader             |
 
 ### Hot-Reload Strategy
 
