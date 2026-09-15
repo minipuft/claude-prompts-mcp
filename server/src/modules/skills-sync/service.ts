@@ -18,7 +18,7 @@ import * as yaml from 'js-yaml';
 import { createTwoFilesPatch } from 'diff';
 
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
-import { deriveGateTier, type GateTier } from '#engine/gates/core/gate-tier.js';
+import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/core/gate-tier.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
@@ -2255,39 +2255,6 @@ if __name__ == "__main__":
 `;
 }
 
-/**
- * One exported check's command line — the export-time counterpart to
- * `GateGuidanceRenderer.formatCheckLine` (ruling B2/B9, gate-checks-and-reminders). A check
- * states ground truth the engine (or whoever reruns the command) can verify directly, so it
- * names what runs and never the gate's guidance — the runtime renderer applies the same rule
- * for the same reason: asking the agent to self-attest something already measured is redundant.
- */
-function formatExportedCheckLine(name: string, passCriteria: unknown[]): string {
-  const criteria = passCriteria.map((entry) => (entry ?? {}) as Record<string, unknown>);
-  const criterion = criteria.find(
-    (entry) => entry['type'] === 'shell_verify' || entry['type'] === 'script_tool'
-  );
-
-  const shellCommand = criterion?.['shell_command'];
-  if (criterion?.['type'] === 'shell_verify') {
-    if (Array.isArray(shellCommand) && shellCommand.length > 0) {
-      return `- **${name}** — Passes \`${shellCommand.join(' ')}\``;
-    }
-    if (typeof shellCommand === 'string' && shellCommand.length > 0) {
-      return `- **${name}** — Passes \`${shellCommand}\``;
-    }
-  }
-
-  const scriptToolId = criterion?.['script_tool_id'];
-  if (criterion?.['type'] === 'script_tool' && typeof scriptToolId === 'string') {
-    return `- **${name}** — Runs tool \`${scriptToolId}\``;
-  }
-
-  // A check whose criterion names neither a command nor a tool id cannot run; still list it, so
-  // an operator sees the gate rather than silently losing it (mirrors the runtime fallback).
-  return `- **${name}** — check`;
-}
-
 /** A registered gate ref, parsed once: its yaml-derived tier and reminder subject. */
 interface TieredGateRef {
   ref: IRGateRef;
@@ -2384,7 +2351,9 @@ function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: 
   if (checks.length > 0) {
     section += `### Checks\n\n`;
     for (const { ref, passCriteria } of checks) {
-      section += `${formatExportedCheckLine(ref.name ?? ref.id, passCriteria)}\n`;
+      // `passCriteria` comes off a raw parsed `gate.yaml` as `unknown[]`; cast once here, at
+      // the boundary, rather than inside the shared formatter.
+      section += `${formatCheckLine(ref.name ?? ref.id, passCriteria as Array<Record<string, unknown>>)}\n`;
     }
     section += '\n';
   }

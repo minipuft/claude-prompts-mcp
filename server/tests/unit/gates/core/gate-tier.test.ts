@@ -23,6 +23,7 @@ import * as yaml from 'js-yaml';
 
 import {
   deriveGateTier,
+  formatCheckLine,
   type GateTierSource,
 } from '../../../../src/engine/gates/core/gate-tier.js';
 
@@ -63,6 +64,34 @@ describe('deriveGateTier — unit cases', () => {
       ],
     };
     expect(deriveGateTier(def)).toBe('reminder');
+  });
+});
+
+describe('formatCheckLine — one formatter shared by the runtime renderer and skills export', () => {
+  test('shell_verify with an argv shell_command names the joined command', () => {
+    const line = formatCheckLine('Test Suite', [
+      { type: 'shell_verify', shell_command: ['npm', 'test'] },
+    ]);
+    expect(line).toBe('- **Test Suite** — check: runs `npm test`');
+  });
+
+  test('shell_verify with a legacy string shell_command (pre-argv-migration gate.yaml) names it as written', () => {
+    const line = formatCheckLine('Test Suite', [
+      { type: 'shell_verify', shell_command: 'npm test' },
+    ]);
+    expect(line).toBe('- **Test Suite** — check: runs `npm test`');
+  });
+
+  test('script_tool names the tool id', () => {
+    const line = formatCheckLine('Lint Tool', [
+      { type: 'script_tool', script_tool_id: 'lint-runner' },
+    ]);
+    expect(line).toBe('- **Lint Tool** — check: runs tool `lint-runner`');
+  });
+
+  test('neither a command nor a tool id still lists the gate', () => {
+    const line = formatCheckLine('Broken Check', [{ type: 'shell_verify' }]);
+    expect(line).toBe('- **Broken Check** — check');
   });
 });
 
