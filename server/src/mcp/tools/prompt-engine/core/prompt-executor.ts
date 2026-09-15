@@ -118,6 +118,13 @@ export class PromptExecutor {
   private readonly gateManager: GateManager;
   /** StyleManager for dynamic style guidance (# operator) */
   private styleManager?: StyleManager;
+  /**
+   * Settles once `initializeStyleManager()` has run to completion (success or handled
+   * failure). The constructor kicks that load off in the background, so a caller reading
+   * `styleManager` before it settles would see `undefined` even when the load is about to
+   * succeed; `resolveStyleManager()` awaits this instead of racing it.
+   */
+  private styleManagerReady!: Promise<void>;
   /** Resolver for {{ref:prompt_id}} references in templates */
   private referenceResolver?: PromptReferenceResolver;
   /** Resolver for {{script:id}} references in templates */
@@ -255,8 +262,9 @@ export class PromptExecutor {
       this.executionPlanner.setGateManager(this.gateManager);
     }
 
-    // Initialize StyleManager asynchronously
-    void this.initializeStyleManager();
+    // Initialize StyleManager asynchronously; `resolveStyleManager()` is how a caller waits
+    // for it rather than reading `styleManager` mid-load.
+    this.styleManagerReady = this.initializeStyleManager();
 
     this.logger.info('[PromptExecutor] Initialized pipeline dependencies');
   }
@@ -956,6 +964,18 @@ export class PromptExecutor {
       });
       // StyleManager is optional - pipeline will fall back to hardcoded styles
     }
+  }
+
+  /**
+   * Resolve the style manager the pipeline renders `#style` guidance from, once its
+   * background load has settled. Callers that need a wired instance — hot reload
+   * registration is the current one — must await this rather than reading `styleManager`
+   * synchronously, which can still be `undefined` while the load is in flight. Resolves to
+   * `undefined` only when `initializeStyleManager()` failed and logged the reason.
+   */
+  async resolveStyleManager(): Promise<StyleManager | undefined> {
+    await this.styleManagerReady;
+    return this.styleManager;
   }
 
   /**

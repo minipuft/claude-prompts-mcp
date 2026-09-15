@@ -47,6 +47,7 @@ import { ToolDescriptionLoader } from './tool-description-loader.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ChainSessionStore } from '#modules/chains/manager.js';
+import type { StyleManager } from '#modules/formatting/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type {
@@ -692,6 +693,16 @@ export class McpToolRouter {
    */
   getChainSessionStore(): ChainSessionStore | undefined {
     return this.promptExecutor.getChainSessionStore() as ChainSessionStore | undefined;
+  }
+
+  /**
+   * Resolve the style manager the pipeline renders `#style` guidance from, for runtime
+   * integrations that need a wired instance (e.g. style hot reload). Delegates to
+   * PromptExecutor, which owns the canonical instance and loads it in the background, so this
+   * is async rather than a synchronous `getX()` like `getFrameworkManager()` above.
+   */
+  async resolveStyleManager(): Promise<StyleManager | undefined> {
+    return this.promptExecutor.resolveStyleManager();
   }
 
   /**

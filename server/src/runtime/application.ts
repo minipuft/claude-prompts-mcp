@@ -30,6 +30,7 @@ import { indexerResourceRoots } from './resource-roots.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
+import { buildStyleAuxiliaryReloadConfig } from './style-hot-reload.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -880,12 +881,19 @@ export class Application {
               this.configManager
             );
 
+            // Build style auxiliary reload config
+            const styleAux = await buildStyleAuxiliaryReloadConfig(
+              this.logger,
+              this.mcpToolsManager
+            );
+
             // Collect all auxiliary reloads
             const auxiliaryReloads = [
               frameworkAux,
               gateAux,
               scriptAux,
               resourceChangeTrackerAux,
+              styleAux,
             ].filter((aux): aux is NonNullable<typeof aux> => aux !== undefined);
 
             const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};
