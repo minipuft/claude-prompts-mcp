@@ -103,9 +103,11 @@ describe('ToolDescriptionLoader (framework-aware active config)', () => {
 
     const stats = manager.getStats();
     expect(stats.source).toBe('contracts');
-    expect(manager.getAvailableTools()).toEqual(
-      expect.arrayContaining(['prompt_engine', 'resource_manager', 'system_control', 'skills_sync'])
-    );
+    // Derived from the same contract file, not hardcoded: the loader's tool set must track
+    // whatever the contract lists, so this fails if the two ever diverge in either direction.
+    const contractToolNames = Object.keys(toolDescriptionsContract.tools);
+    expect(contractToolNames.length).toBeGreaterThan(0);
+    expect(manager.getAvailableTools().slice().sort()).toEqual(contractToolNames.slice().sort());
     expect(manager.getDescription('prompt_engine')).toBe(
       toolDescriptionsContract.tools.prompt_engine.description
     );
