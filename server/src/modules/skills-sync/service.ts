@@ -195,6 +195,8 @@ export interface SkillIR {
   delegation?: boolean;
   /** Default agent type for all delegated steps (overridden by step-level agentType) */
   delegationAgent?: string;
+  /** Opt-in for a Claude Code export to carry a real Stop-hook gate enforcement. See PromptYaml. */
+  enforceGateHooks?: boolean;
 
   gateData: { type: string; passCriteria: unknown[]; activation?: unknown } | null;
   frameworkData: {
@@ -248,6 +250,15 @@ interface PromptYaml {
   arguments?: PromptYamlArgument[];
   delegation?: boolean;
   delegationAgent?: string;
+  /**
+   * Opts an exported Claude Code skill into a `hooks:` frontmatter block that mechanically
+   * enforces its gates via a Stop hook, rather than rendering them as prose only. Same
+   * exporter-only shape as `delegation`/`delegationAgent` above — no canonical PromptYamlSchema
+   * field, read off raw YAML through `.passthrough()`. Ruling A3: default is off, because a
+   * skill's frontmatter hooks register at SESSION scope, and a worker's Skill invocation under
+   * an Agent-tool subagent was measured firing that hook at the planner's own stop (2026-09-14).
+   */
+  enforceGateHooks?: boolean;
   gateConfiguration?: {
     include?: string[];
     exclude?: string[];
@@ -320,6 +331,11 @@ interface ClientCapabilities {
    * skill carry real gate enforcement instead of only describing it. Claude Code
    * registers such hooks when the skill is invoked; the Agent Skills spec assigns
    * no meaning to the key, so those variants get the prose protocol alone.
+   *
+   * Necessary but not sufficient: even here, a prompt still needs `enforceGateHooks: true`
+   * (Ruling A3) before a hook ships. Frontmatter hooks register at SESSION scope, and an
+   * Agent-tool subagent's Skill invocation was measured (2026-09-14) firing its hook at the
+   * PLANNER session's own stop — enforcement is opt-in per prompt, default is prose only.
    */
   skillFrontmatterHooks: boolean;
 }
@@ -1173,6 +1189,7 @@ async function loadPromptIR(
     docFiles,
     delegation: data.delegation === true ? true : undefined,
     delegationAgent: data.delegationAgent ? data.delegationAgent : undefined,
+    enforceGateHooks: data.enforceGateHooks === true ? true : undefined,
     gateData: null,
     frameworkData: null,
     styleData: null,
@@ -2524,7 +2541,10 @@ function buildClaudeCodeSkill(
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
-  const hookEnforced = config.capabilities.skillFrontmatterHooks && ir.gateRefs.length > 0;
+  const hookEnforced =
+    config.capabilities.skillFrontmatterHooks &&
+    ir.gateRefs.length > 0 &&
+    ir.enforceGateHooks === true;
 
   // Frontmatter
   const fm: Record<string, unknown> = { name: ir.name, description: ir.description };

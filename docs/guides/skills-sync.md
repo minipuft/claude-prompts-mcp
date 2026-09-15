@@ -135,7 +135,7 @@ skills-sync.yaml registrations → data-loader reads at startup → registry ski
 
 | Path                          | What you get                                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Skill (native client harness) | Prose, arguments as a hint, bundled gate guidance, gate-review hook                                  |
+| Skill (native client harness) | Prose, arguments as a hint, bundled gate guidance, gate-review hook (Claude Code, opt-in per prompt) |
 | `>>id` (MCP)                  | Full pipeline — runtime gate enforcement, chain sessions, framework injection, argument substitution |
 
 ## Adapters
@@ -173,7 +173,14 @@ Client variants control minor format differences (e.g., Cursor's `alwaysApply` f
 
 ### Gate Enforcement in Exported Skills
 
-For **Claude Code only**, a prompt with active gates exports a `Stop` hook that makes the Enforcement Protocol real rather than advisory:
+For **Claude Code only**, a prompt can export a `Stop` hook that makes the Enforcement Protocol
+real rather than advisory — but only when the prompt opts in with `enforceGateHooks: true` in its
+`prompt.yaml`. The key is exporter-only, not part of the canonical prompt schema, and only the
+`claude-code` export client can carry hooks at all; Cursor, Codex, and OpenCode never get one
+regardless of the setting. Without `enforceGateHooks: true`, an exported skill's gates still
+render — as the prose `## Quality Gates` section described below, with no hook attached.
+
+With `enforceGateHooks: true`:
 
 ```
 strategicImplement/
@@ -240,7 +247,7 @@ the guidance in a skill matches what `>>id` would enforce:
 | Named in the prompt's `gates.include`                                     | Always                                            |
 | Named in `gates.exclude`                                                  | Never                                             |
 | Declares `prompt_categories` matching the prompt                          | Yes — activation is by category, not by naming it |
-| Declares no activation rules at all                                       | Yes — an unrestricted gate is active everywhere   |
+| Declares no activation rules at all                                       | Never — opt-in only, same as at runtime           |
 | Requires a framework (`gate_type: framework`, or any `framework_context`) | **Never**                                         |
 
 The last row is the one that differs from runtime. The engine reads an absent framework as

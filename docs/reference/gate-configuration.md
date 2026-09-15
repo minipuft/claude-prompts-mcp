@@ -51,6 +51,22 @@ activation:
   framework_context: ["ReACT"]
 ```
 
+### No Activation Block
+
+Omitting `activation` entirely is opt-in, not always-on: the gate never auto-attaches to any
+prompt or chain step. It still activates where something names it directly — a prompt's
+`gateConfiguration.include`, or a chain step's `inlineGateIds` — because both of those paths add
+the gate id without consulting activation rules at all. To keep the old always-active behavior,
+declare an explicit empty block instead of omitting the field:
+
+```yaml
+activation: {}
+```
+
+A gate with no `activation` block and no `include`/`inlineGateIds` reference anywhere in the
+resource tree is unreachable. `npm run validate:prompts` fails on it with `ORPHAN <gate-id>`,
+naming the gate that needs either an activation rule or an explicit reference.
+
 ---
 
 ## Pass Criteria & Retries

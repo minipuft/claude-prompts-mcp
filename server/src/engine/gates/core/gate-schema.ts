@@ -394,7 +394,9 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
   }
 
   if (!definition.activation) {
-    warnings.push('No activation rules - gate will always be active');
+    warnings.push(
+      'No activation rules - gate is opt-in and attaches only when a prompt or chain step includes it'
+    );
   }
 
   const resultPayload = {

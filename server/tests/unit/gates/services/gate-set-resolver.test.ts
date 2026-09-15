@@ -2,9 +2,11 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/framework-injection.js';
 import { GateSetResolver } from '../../../../src/engine/gates/services/gate-set-resolver.js';
+import { isGateActiveForContext } from '../../../../src/engine/gates/utils/gate-activation.js';
 
 import type { GateResolutionInput } from '../../../../src/engine/gates/services/gate-set-resolver.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
+import type { GateActivationRules } from '../../../../src/engine/gates/types/index.js';
 
 const createLogger = () => ({
   info: jest.fn(),
@@ -36,6 +38,32 @@ const createGateManager = (categoryGates: string[] = [], frameworkScopedGates: s
         context.framework !== undefined
           ? [...categoryGates, ...frameworkScopedGates]
           : [...categoryGates],
+      guides: [],
+      skippedIds: [],
+      metadata: { selectionMethod: 'category', selectionTime: 0 },
+    })),
+  }) as unknown as Parameters<typeof buildResolver>[1];
+
+/**
+ * Fake registry that filters through the real `isGateActiveForContext` instead of a fixed id
+ * list, for the ruling-A1 tests below. `GateManager.selectGates` runs this same check per guide
+ * (`guide.isActive` in `generic-gate-guide.ts`) — this mirrors that shape so the resolver test
+ * exercises the production activation semantics rather than asserting them in isolation.
+ */
+const createActivationAwareGateManager = (
+  gates: Array<{ id: string; activation?: GateActivationRules }>
+) =>
+  ({
+    selectGates: jest.fn((context: { promptCategory?: string; framework?: string }) => ({
+      selectedIds: gates
+        .filter((gate) =>
+          isGateActiveForContext(gate.activation, {
+            promptCategory: context.promptCategory,
+            framework: context.framework,
+            explicitRequest: false,
+          })
+        )
+        .map((gate) => gate.id),
       guides: [],
       skippedIds: [],
       metadata: { selectionMethod: 'category', selectionTime: 0 },
@@ -652,5 +680,36 @@ describe('GateSetResolver — framework nesting driven by the real signal (plan 
     const result = await resolveWith({ judge: true });
 
     expect(result.gateIds).toContain('framework-compliance');
+  });
+});
+
+describe('GateSetResolver — a no-activation gate is opt-in, not registry-auto (ruling A1)', () => {
+  test('a gate with no activation block is never registry-auto-assigned', async () => {
+    const resolver = buildResolver(
+      createLogger(),
+      createActivationAwareGateManager([{ id: 'no-activation-gate' }])
+    );
+
+    const result = await resolver.resolve(baseInput());
+
+    expect(result.gateIds).not.toContain('no-activation-gate');
+  });
+
+  test('the same gate resolves once the prompt names it under gateConfiguration.include', async () => {
+    const resolver = buildResolver(
+      createLogger(),
+      createActivationAwareGateManager([{ id: 'no-activation-gate' }])
+    );
+
+    const result = await resolver.resolve(
+      baseInput({
+        prompt: makePrompt({ gateConfiguration: { include: ['no-activation-gate'] } }),
+      })
+    );
+
+    expect(result.gateIds).toContain('no-activation-gate');
+    expect(result.accepted.find((gate) => gate.id === 'no-activation-gate')?.source).toBe(
+      'prompt-config'
+    );
   });
 });
