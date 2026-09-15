@@ -10,6 +10,8 @@ pass_criteria:
   - type: inline_guidance
 
 activation:
+  artifacts:
+    - plan
   prompt_categories:
     - planning
     - development

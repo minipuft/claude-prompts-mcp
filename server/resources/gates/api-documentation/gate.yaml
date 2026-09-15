@@ -9,6 +9,9 @@ guidanceFile: guidance.md
 pass_criteria:
   - type: inline_guidance
 activation:
+  artifacts:
+    - docs
+    - readme
   prompt_categories:
     - documentation
     - api

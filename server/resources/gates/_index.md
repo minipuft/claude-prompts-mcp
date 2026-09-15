@@ -20,36 +20,36 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 | `workflow-diagnosis` | reminder | high | workflow, refactoring | diagnosis | 233 | Validates that the Diagnosis Card synthesizes collected signals into a named pattern before implementation. Required when pre-flight has 2+ failures, multiple skills flag the same area, or multi-file changes are planned. |
 | `workflow-integration` | reminder | high | workflow, implementation | integration | 219 | Validates that replaced systems are fully removed, integration points are tested, and no orphaned references remain. Ensures clean state before marking work complete. |
 | `workflow-preflight` | reminder | high | workflow, refactoring | preflight | 372 | Validates that the mandatory pre-flight checklist from refactoring.md was completed before implementation begins. Checks domain ownership, complexity, layer identification, naming, and dependency analysis. |
-| `workflow-changelog` | reminder | medium | workflow, implementation | changelog | 147 | Validates that CHANGELOG.md [Unreleased] section was updated during implementation. Changes should be documented as they happen, not at release. |
+| `workflow-changelog` | reminder | medium | artifacts: changelog | changelog | 147 | Validates that CHANGELOG.md [Unreleased] section was updated during implementation. Changes should be documented as they happen, not at release. |
 | `workflow-growth` | reminder | medium | workflow, implementation | growth | 291 | Validates that the task explicitly declares its learning outcome. Every task must state whether it produced novel patterns, confirmed existing ones, or found nothing new. Silence is not acceptable. |
-| `api-documentation` | reminder | — | documentation, api, development | api-docs | 77 | Ensures API documentation includes all required sections and follows best practices |
-| `code-quality` | reminder | — | development, code_generation, debugging | code-quality | 91 | Ensures generated code follows best practices and quality standards |
+| `api-documentation` | reminder | — | artifacts: docs, readme | api-docs | 77 | Ensures API documentation includes all required sections and follows best practices |
+| `code-quality` | reminder | — | artifacts: source | code-quality | 91 | Ensures generated code follows best practices and quality standards |
 | `educational-clarity` | reminder | — | education, documentation, content_processing | education | 139 | Ensures educational content is clear, well-structured, and pedagogically sound |
-| `information-placement` | reminder | — | opt-in | doc-placement | 215 | Blocks documentation changes that place content in the wrong reader journey or Diátaxis category. |
+| `information-placement` | reminder | — | artifacts: docs, readme | doc-placement | 215 | Blocks documentation changes that place content in the wrong reader journey or Diátaxis category. |
 | `intent-quality` | reminder | — | opt-in | intent | 665 | Validates that Intent Declaration is complete, properly formatted for workflow routing, and extracts acceptance criteria when a source spec exists |
-| `product-positioning-fidelity` | reminder | — | opt-in | positioning | 174 | Blocks public documentation that misstates the boundary between the AI client and Claude Prompts. |
-| `prose-hygiene` | reminder | — | opt-in | prose | 176 | Guides public documentation away from formulaic AI cadence while preserving a direct technical voice. |
-| `semantic-discoverability` | reminder | — | opt-in | discoverability | 182 | Guides documentation toward consistent reader terminology and factual search semantics without keyword stuffing. |
+| `product-positioning-fidelity` | reminder | — | artifacts: docs, readme | positioning | 174 | Blocks public documentation that misstates the boundary between the AI client and Claude Prompts. |
+| `prose-hygiene` | reminder | — | artifacts: docs, readme | prose | 176 | Guides public documentation away from formulaic AI cadence while preserving a direct technical voice. |
+| `semantic-discoverability` | reminder | — | artifacts: docs, readme | discoverability | 182 | Guides documentation toward consistent reader terminology and factual search semantics without keyword stuffing. |
 | `technical-accuracy` | reminder | — | development, analysis, research · explicit only | technical-accuracy | 139 | Ensures technical correctness, fact-checking, and precision in technical content |
 
 ## Security
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
-| `security-awareness` | reminder | — | code, development | security | 119 | Ensures security-conscious development practices and prevents common vulnerabilities |
+| `security-awareness` | reminder | — | artifacts: source | security | 119 | Ensures security-conscious development practices and prevents common vulnerabilities |
 
 ## Testing
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
 | `test-suite` | check | high | code, development, implementation · explicit only | testing | 233 | Validates implementation by running the test suite. Uses shell verification for ground-truth validation via exit codes. |
-| `test-coverage` | reminder | — | code, development | testing | 48 | Ensures code changes include appropriate test coverage |
+| `test-coverage` | reminder | — | artifacts: test | testing | 48 | Ensures code changes include appropriate test coverage |
 
 ## Planning
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
-| `plan-quality` | reminder | high | planning, development | planning | 39 | Ensures implementation plans are complete, actionable, and risk-aware |
+| `plan-quality` | reminder | high | artifacts: plan | planning | 39 | Ensures implementation plans are complete, actionable, and risk-aware |
 
 ## Research
 
@@ -62,8 +62,8 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
-| `pr-security` | reminder | critical (blocking) | pr-review · explicit only | security | 345 | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
-| `pr-performance` | reminder | medium (advisory) | pr-review · explicit only | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
+| `pr-security` | reminder | critical (blocking) | artifacts: source | security | 345 | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
+| `pr-performance` | reminder | medium (advisory) | artifacts: source | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
 
 ## Framework
 

@@ -98,6 +98,14 @@ function severityBadge(gate) {
 }
 
 function activationSummary(gate) {
+  // Ruling B13: when a gate names `activation.artifacts`, artifacts alone decide — the
+  // runtime (`isGateActiveForContext`) never consults `prompt_categories` once this is set, so
+  // printing them beside it would claim a say they no longer have.
+  const artifacts = gate.activation?.artifacts ?? [];
+  if (artifacts.length > 0) {
+    return `artifacts: ${artifacts.join(', ')}`;
+  }
+
   const parts = [];
   const cats = gate.activation?.prompt_categories ?? [];
   const explicit = gate.activation?.explicit_request;
@@ -109,7 +117,7 @@ function activationSummary(gate) {
   if (parts.length === 0) {
     // Mirrors isGateActiveForContext (server/src/engine/gates/utils/gate-activation.ts):
     // a MISSING activation block never auto-activates (opt-in only, since claude-prompts-mcp
-    // #286); an activation block with no restrictions still auto-attaches (always).
+    // #286); an activation block with no restricting rule still auto-attaches (always).
     return gate.activation === undefined ? 'opt-in' : 'always';
   }
   return parts.join(' · ');
