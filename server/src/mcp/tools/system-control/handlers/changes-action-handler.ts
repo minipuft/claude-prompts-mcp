@@ -35,7 +35,7 @@ export class ChangesActionHandler extends ActionHandler {
 
     const limit = typeof args['limit'] === 'number' ? args['limit'] : 50;
     const source = args['source'] as ChangeSource | undefined;
-    const resourceType = args['resourceType'] as TrackedResourceType | undefined;
+    const resourceType = args['resource_type'] as TrackedResourceType | undefined;
     const since = args['since'] as string | undefined;
 
     const changes = await tracker.getChanges({
