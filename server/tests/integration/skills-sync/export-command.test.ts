@@ -1245,10 +1245,44 @@ describe('Export Command Integration', () => {
 
       expect(checksSection).toContain('Passes `npm test`');
       expect(remindersSection).toContain('code-quality');
-      expect(skill).not.toContain('security-awareness');
+      expect(remindersSection).not.toContain('| security-awareness |');
       expect(skill).toContain(
-        "Omitted 1 reminder(s) this installation's harness covers: security."
+        "Omitted 1 reminder(s) this installation's harness covers: security-awareness (security)."
       );
+    });
+
+    it('ships no gates/<id>/ files or manifest entry for a harness-covered reminder (row 2.3)', async () => {
+      await writeServerConfig(['security']);
+      await writeConfig('claude-code');
+      const out = await runExport();
+
+      const writtenFiles = out.logs.join('\n');
+      expect(writtenFiles).not.toContain('gates/security-awareness/');
+
+      expect(
+        await exists(path.join(outputDir, 'tiered', 'gates', 'security-awareness', 'gate.yaml'))
+      ).toBe(false);
+      expect(
+        await exists(path.join(outputDir, 'tiered', 'gates', 'security-awareness', 'guidance.md'))
+      ).toBe(false);
+
+      // Positive control: a check is never suppressed, so its files ship regardless.
+      expect(await exists(path.join(outputDir, 'tiered', 'gates', 'test-suite', 'gate.yaml'))).toBe(
+        true
+      );
+
+      const manifestRaw = await readFile(
+        path.join(outputDir, 'tiered', 'gates', 'index.json'),
+        'utf-8'
+      );
+      const manifest = JSON.parse(manifestRaw) as {
+        gates: Array<{ id: string }>;
+      };
+      expect(manifest.gates.some((g) => g.id === 'security-awareness')).toBe(false);
+      expect(manifest.gates.some((g) => g.id === 'test-suite')).toBe(true);
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('security-awareness (security)');
     });
 
     it('keeps every gate and emits no omission line when harnessCovers is empty', async () => {
