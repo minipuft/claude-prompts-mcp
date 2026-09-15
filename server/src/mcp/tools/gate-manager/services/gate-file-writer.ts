@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { GateCreationData } from '../core/types.js';
 
 import { GATE_YAML_DECLARED_KEYS } from '#engine/gates/core/gate-yaml-keys.js';
@@ -136,6 +137,20 @@ export interface GateFileWriteResult {
   verificationFailure?: ResourceVerificationFailurePayload;
 }
 
+/**
+ * Everything one gate write puts on disk, resolved before anything is written.
+ *
+ * `writeGateFiles` applies it and `projectGateWrite` reports it. A diff built any other way — the
+ * gate's fields rendered as one `gate.yaml`, say — hides the `guidance.md` the write also lands and
+ * shows `gate.yaml` lines the file never holds (tutorial-rework B.20).
+ */
+interface GateWritePlan {
+  gatesDir: string;
+  gateDir: string;
+  /** `gate.yaml` then `guidance.md`, as the exact bytes the write leaves. */
+  files: Array<{ relativePath: string; content: string }>;
+}
+
 export class GateFileWriter {
   private readonly logger: Logger;
   private readonly configManager: ConfigManager;
@@ -155,16 +170,12 @@ export class GateFileWriter {
     data: GateCreationData,
     options: ResourceWriteCommitOptions = {}
   ): Promise<GateFileWriteResult> {
-    // `data.id` is caller-supplied and unvalidated for path segments. Measured 2026-08-30:
-    // `id: '../../ESCAPED_GATE'` wrote gate.yaml and guidance.md outside the resources root, and
-    // the tool reported the write. Contained before the directory is created.
-    const gateDir = resolveContainedPath(this.configManager.getGatesDirectory(), data.id);
+    // Every byte this write lands is decided here, before the transaction opens; the mutation
+    // below applies the plan and decides nothing of its own, which is what keeps
+    // `projectGateWrite` reporting the same files and contents.
+    const plan = await this.planGateWrite(data);
+    const { gateDir } = plan;
     const yamlPath = path.join(gateDir, 'gate.yaml');
-    const guidancePath = path.join(gateDir, 'guidance.md');
-
-    // Read BEFORE the mutation starts — an update overwrites this same path, and a create has
-    // nothing here yet (readExistingGateYaml returns undefined either way it can't read).
-    const existingYaml = await this.readExistingGateYaml(yamlPath);
 
     const transactionResult = await this.mutationTransaction.run({
       targets: [{ path: gateDir, kind: 'directory' }],
@@ -173,13 +184,11 @@ export class GateFileWriter {
         await mkdir(gateDir, { recursive: true });
         paths.push(gateDir);
 
-        const yamlData = this.buildGateYaml(data, existingYaml);
-        const yamlContent = serializeYaml(yamlData, { sortKeys: false });
-        await writeFile(yamlPath, yamlContent, 'utf8');
-        paths.push(yamlPath);
-
-        await writeFile(guidancePath, ensureTrailingNewline(data.guidance), 'utf8');
-        paths.push(guidancePath);
+        for (const file of plan.files) {
+          const filePath = path.join(gateDir, file.relativePath);
+          await writeFile(filePath, file.content, 'utf8');
+          paths.push(filePath);
+        }
 
         return { paths };
       },
@@ -213,6 +222,63 @@ export class GateFileWriter {
     }
 
     return { success: true, paths: transactionResult.result?.paths ?? [] };
+  }
+
+  /**
+   * What `writeGateFiles(data)` would change on disk, file by file, without writing anything.
+   *
+   * Resolves the plan that method applies, so the files and contents are exactly that call's.
+   * Paths are relative to the gates root. A gate with no directory under that root yet — a create,
+   * or a gate served from the bundled tree — has no prior content, because the write creates its
+   * files there rather than editing the bundled ones.
+   */
+  async projectGateWrite(data: GateCreationData): Promise<FileContentChange[]> {
+    const plan = await this.planGateWrite(data);
+    const prefix = path.relative(plan.gatesDir, plan.gateDir);
+
+    const changes: FileContentChange[] = [];
+    for (const file of plan.files) {
+      const priorPath = path.join(plan.gateDir, file.relativePath);
+      const relativePath = path.join(prefix, file.relativePath).split(path.sep).join('/');
+      changes.push({
+        path: relativePath,
+        previousPath: relativePath,
+        before: existsSync(priorPath) ? await readFile(priorPath, 'utf8') : null,
+        after: file.content,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * Resolve the files one gate write lands, reading the disk but writing nothing.
+   *
+   * The single place those contents are decided, so `writeGateFiles` and `projectGateWrite` share
+   * one answer. `ensureTrailingNewline` shapes `guidance.md` here rather than at the write, so the
+   * planned bytes are the written bytes.
+   */
+  private async planGateWrite(data: GateCreationData): Promise<GateWritePlan> {
+    const gatesDir = this.configManager.getGatesDirectory();
+    // `data.id` is caller-supplied and unvalidated for path segments. Measured 2026-08-30:
+    // `id: '../../ESCAPED_GATE'` wrote gate.yaml and guidance.md outside the resources root, and
+    // the tool reported the write. Contained before the directory is created.
+    const gateDir = resolveContainedPath(gatesDir, data.id);
+
+    // Read before the mutation starts — an update overwrites this same path, and a create has
+    // nothing here yet (readExistingGateYaml returns undefined either way it can't read).
+    const existingYaml = await this.readExistingGateYaml(path.join(gateDir, 'gate.yaml'));
+
+    return {
+      gatesDir,
+      gateDir,
+      files: [
+        {
+          relativePath: 'gate.yaml',
+          content: serializeYaml(this.buildGateYaml(data, existingYaml), { sortKeys: false }),
+        },
+        { relativePath: 'guidance.md', content: ensureTrailingNewline(data.guidance) },
+      ],
+    };
   }
 
   private buildGateYaml(

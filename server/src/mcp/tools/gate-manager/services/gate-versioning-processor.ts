@@ -66,14 +66,18 @@ export class GateVersioningProcessor {
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither of the two
-    // side-effect surfaces moves.
+    // side-effect surfaces moves. The diff is projected from the write the rollback below performs
+    // — same write model — so it names `gate.yaml` and `guidance.md` as that write leaves them
+    // rather than the snapshot's fields rendered as one YAML document.
     if (isPreviewRequest(args)) {
       return this.success(
         describeRollbackPreview(
           'gate',
           id,
           version,
-          this.ctx.textDiffService.generateObjectDiff(currentState, snapshot, `${id}/gate.yaml`)
+          this.ctx.textDiffService.generateFileChangeDiff(
+            await this.ctx.gateFileService.projectGateWrite(restore.writeModel)
+          )
         )
       );
     }

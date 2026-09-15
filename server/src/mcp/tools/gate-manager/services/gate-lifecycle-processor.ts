@@ -156,6 +156,14 @@ export class GateLifecycleProcessor {
       gateSnapshotContract.projectedFields
     );
 
+    // One projection of the write serves the version's diff summary and the update's own diff. It
+    // is resolved from the plan the writer applies, with the payload the writer is handed below, so
+    // both name the files the write lands in (`gate.yaml` and `guidance.md`) and the lines that
+    // change in them.
+    const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
+      await this.ctx.gateFileService.projectGateWrite(gateData)
+    );
+
     // Auto-versioning — go-forward: version N holds the state edit N produced, so the newest
     // version always equals what `inspect` shows. `recordEditResult` bridges the prior live state
     // first when it is not already the newest row, which is what carries pre-P7 gate rows across
@@ -173,11 +181,6 @@ export class GateLifecycleProcessor {
             // `framework-lifecycle-processor.ts`: `validate:mutation-atomicity` reads the record's
             // position lexically, and a gate that cannot see the property is not guarding it.
             commit: async (): Promise<void> => {
-              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-                beforeState,
-                afterState,
-                `${id}/gate.yaml`
-              );
               const versionResult = await this.ctx.versionHistoryService.recordEditResult(
                 'gate',
                 id,
@@ -185,7 +188,7 @@ export class GateLifecycleProcessor {
                 afterState,
                 {
                   description: 'Update via resource_manager',
-                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
               versionSaved = versionResult.version;
@@ -204,12 +207,6 @@ export class GateLifecycleProcessor {
     // branches on twelve lines up.
     const reloaded = await this.ctx.gateManager.reload(id);
     this.trackChange('modified', id);
-
-    const diffResult = this.ctx.textDiffService.generateObjectDiff(
-      beforeState,
-      afterState,
-      `${id}/gate.yaml`
-    );
 
     let response =
       `✅ Gate '${id}' updated successfully\n\n` +
