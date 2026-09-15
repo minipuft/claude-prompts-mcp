@@ -514,6 +514,108 @@ describe('GateToolHandler', () => {
   });
 
   /**
+   * tutorial-rework B.28 — `gate.yaml` and `guidance.md` are two independently-scoped writes, not one write
+   * that always touches both. Before this fix, `buildGateYaml` unconditionally built (and
+   * `planGateWrite` unconditionally wrote) `gate.yaml` on every update, so a guidance-only call
+   * re-serialized it into the writer's own key order and dropped any hand-authored comment — a
+   * bug invisible to `update supplying only activation leaves guidance.md byte-identical` above,
+   * because that test's gate was ITSELF written by the writer, so re-serializing it produced the
+   * same bytes back. A hand-authored `gate.yaml`, with a comment and a scrambled key order the
+   * writer would never emit, is what makes the re-serialization visible.
+   */
+  describe('write-scope narrowing (tutorial-rework B.28): gate.yaml and guidance.md are rewritten independently', () => {
+    const GATE_ID = 'scoped-write-gate';
+    const HAND_AUTHORED_YAML = [
+      '# Hand-authored — this comment and the scrambled key order below must survive any update',
+      '# that does not touch a gate.yaml-resident field.',
+      'name: Scoped Write Gate',
+      'severity: high',
+      `id: ${GATE_ID}`,
+      'type: validation',
+      'activation:',
+      '  prompt_categories: [code]',
+      'description: Proves gate.yaml write scope is narrowed to supplied fields.',
+      'guidanceFile: guidance.md',
+      'gate_type: custom',
+      '',
+    ].join('\n');
+
+    function seedHandAuthoredGate(guidanceContent: string): string {
+      const gateDir = join(gatesDir, GATE_ID);
+      mkdirSync(gateDir, { recursive: true });
+      writeFileSync(join(gateDir, 'gate.yaml'), HAND_AUTHORED_YAML, 'utf8');
+      writeFileSync(join(gateDir, 'guidance.md'), guidanceContent, 'utf8');
+      return gateDir;
+    }
+
+    // The real load path, like `writeRealGate` above — `existingDefinition` in
+    // `gate-lifecycle-processor.ts` has to read the ACTUAL hand-authored values (not a test
+    // double's arbitrary stub) for the omitted fields to merge back byte-for-byte.
+    function loadRealGate(): GateGuide {
+      const loader = new GateDefinitionLoader({ gatesDir });
+      const definition = loader.loadGate(GATE_ID);
+      expect(definition).toBeDefined();
+      return new GenericGateGuide(definition!);
+    }
+
+    test('guidance-only update leaves a hand-authored gate.yaml byte-identical (comment and key order included), and its diff names only guidance.md', async () => {
+      const gateDir = seedHandAuthoredGate('Original guidance.\n');
+      const before = readFileSync(join(gateDir, 'gate.yaml'), 'utf8');
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(loadRealGate());
+
+      const result = await manager.handleAction(
+        { action: 'update', id: GATE_ID, guidance: 'Updated guidance only.\n' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      // MUTATION KILLED: reverting `planGateWrite`'s `writesYaml` narrowing back to
+      // unconditionally true (`buildGateYaml`'s pre-fix behaviour) makes this fail — `gate.yaml`
+      // comes back re-serialized into the writer's own key order with the comment dropped, even
+      // though this call named only `guidance`. Confirmed by making that revert, re-running this
+      // file (red on this assertion), and restoring the narrowing.
+      const after = readFileSync(join(gateDir, 'gate.yaml'), 'utf8');
+      expect(after).toBe(before);
+
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain(`${GATE_ID}/guidance.md`);
+      expect(text).not.toContain(`${GATE_ID}/gate.yaml`);
+    });
+
+    test('activation-only update rewrites gate.yaml and leaves guidance.md byte-identical', async () => {
+      const gateDir = seedHandAuthoredGate('Guidance stays put.\n');
+      const guidanceBefore = readFileSync(join(gateDir, 'guidance.md'), 'utf8');
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(loadRealGate());
+
+      const result = await manager.handleAction(
+        { action: 'update', id: GATE_ID, activation: { prompt_categories: ['docs'] } },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const guidanceAfter = readFileSync(join(gateDir, 'guidance.md'), 'utf8');
+      expect(guidanceAfter).toBe(guidanceBefore);
+
+      const yamlAfter = readFileSync(join(gateDir, 'gate.yaml'), 'utf8');
+      expect(yamlAfter).not.toBe(HAND_AUTHORED_YAML);
+      const parsed = loadYamlFileSync(join(gateDir, 'gate.yaml')) as Record<string, unknown>;
+      expect(parsed['activation']).toEqual({ prompt_categories: ['docs'] });
+      // The positive control's other half: fields the writer builds no value for (preserved, not
+      // projected) still carry forward across a write that DOES touch gate.yaml.
+      expect(parsed['severity']).toBe('high');
+      expect(parsed['gate_type']).toBe('custom');
+
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain(`${GATE_ID}/gate.yaml`);
+      expect(text).not.toContain(`${GATE_ID}/guidance.md`);
+    });
+  });
+
+  /**
    * Ruling on tutorial-rework B.18: a `version_history` snapshot
    * recorded BEFORE the guidance.md verbatim-load fix holds `.trim()`'d guidance — lossy, and not
    * invertible, since `.trim()` cannot say whether the original had zero, one, or more trailing
