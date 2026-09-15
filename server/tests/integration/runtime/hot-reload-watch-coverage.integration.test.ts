@@ -8,7 +8,7 @@
  * actually configured with). Framework had the identical shape (`framework-hot-reload.ts` used
  * `[runtimeLoader.getFrameworksDir()]` instead of `runtimeLoader.getWatchDirectories()`, despite
  * that method already existing). Script tools had a related but distinct gap: the workspace-tier
- * scripts folder (`configManager.getScriptsDirectory()`, loadable since B.30) was never watched
+ * scripts folder (`configManager.getScriptsDirectory()`) was never watched
  * at all. A fix at one site is not a fix of the class — this table asserts the same invariant,
  * "watched directories ⊇ loader-read directories", across every registration that can express
  * it, so a future regression on any one of them fails here instead of shipping silently again.

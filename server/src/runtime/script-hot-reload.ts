@@ -14,7 +14,7 @@ import {
 /**
  * A workspace script has no `getWatchDirectories()` to call: `WorkspaceScriptLoader` isn't a
  * loader in the gate/style/framework sense, and its workspace tier is one fixed directory
- * (`configManager.getScriptsDirectory()`, per B.30) rather than a primary-plus-overlay set. This
+ * (`configManager.getScriptsDirectory()`) rather than a primary-plus-overlay set. This
  * carries that directory and a way to invalidate the pipeline's live copy once an edit lands in
  * it — `WorkspaceScriptLoader.workspaceCache` has no per-file invalidation, so a whole-cache
  * clear is what `clearWorkspaceCache` is expected to do.

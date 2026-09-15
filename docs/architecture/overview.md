@@ -618,12 +618,13 @@ MCP notification sent to clients
 
 ### Watched Directories
 
-| Resource   | Directory Source                                                                                   | Registration                                              |
-| ---------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Prompts    | `getPromptsDirectory()` + category subdirs (primary resolved directory only — see Limitations)     | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
-| Gates      | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                   | `createGateHotReloadRegistration()` auxiliary reload      |
-| Frameworks | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)              | `createFrameworkHotReloadRegistration()` auxiliary reload |
-| Styles     | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included) | `createStyleHotReloadRegistration()` auxiliary reload     |
+| Resource     | Directory Source                                                                                               | Registration                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts      | `getPromptsDirectory()` + category subdirs (primary resolved directory only — see Limitations)                 | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
+| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
+| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
+| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
+| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`) | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
 
 ### Limitations
 
