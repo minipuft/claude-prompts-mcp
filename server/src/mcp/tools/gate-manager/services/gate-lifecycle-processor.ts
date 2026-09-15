@@ -82,7 +82,15 @@ export class GateLifecycleProcessor {
           }
         : {};
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
+    // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
+    // against — so `suppliedKeys` is left at the writer's own default (every gate-data key)
+    // rather than computing one, the same convention `updatePromptImplementation`'s create
+    // caller uses in `prompt-lifecycle-processor.ts`.
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      undefined,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to create gate: ${result.error}`);
     }
