@@ -38,6 +38,7 @@ import * as yaml from 'js-yaml';
 import { normalizeInlineGateDefinitions } from '../src/modules/prompts/yaml-prompt-loader.js';
 import { validatePromptYaml } from '../src/modules/prompts/prompt-schema.js';
 import { isCanonicalPromptId, isKebabId } from '../src/shared/utils/resource-ids.js';
+import type { Logger } from '../src/shared/types/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = join(__dirname, '..', 'resources', 'prompts');
@@ -145,11 +146,18 @@ function findDroppedGates(parsed: unknown): string[] {
   if (!Array.isArray(declared) || declared.length === 0) return [];
 
   const reasons: string[] = [];
-  normalizeInlineGateDefinitions(declared, {
-    logger: {
-      warn: (message: string) => reasons.push(message.replace('[PromptLoader] ', '')),
+  // `normalizeInlineGateDefinitions` only ever calls `logger.warn`
+  // (yaml-prompt-loader.ts `warnInlineGateDropped`), but `InlineGateSource.logger` is typed
+  // as the full `Logger` interface — these are real no-ops, not a cast around a partial shape.
+  const logger: Logger = {
+    info: () => {},
+    error: () => {},
+    debug: () => {},
+    warn: (message: string) => {
+      reasons.push(message.replace('[PromptLoader] ', ''));
     },
-  } as Parameters<typeof normalizeInlineGateDefinitions>[1]);
+  };
+  normalizeInlineGateDefinitions(declared, { logger });
   return reasons;
 }
 
