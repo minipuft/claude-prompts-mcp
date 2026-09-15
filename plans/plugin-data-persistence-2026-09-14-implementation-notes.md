@@ -83,3 +83,34 @@ directory has none.
   overrides. ✗ KILLED (2026-09-14 · wrong before this change, and the file is mid-edit in the `claude-prompts-mcp-findings`
   worktree · revives when that worktree's changes merge, as a row of its own)
 - **`AGENTS.md` sits 575 bytes under its budget** after row 1.4. Recorded for the next guidance edit.
+
+## Shared node_modules emptied mid-run (2026-09-14)
+
+**What happened.** The main checkout's root `node_modules` was emptied at 22:23:18, down to 0 entries with its
+`.package-lock.json` gone. `server/node_modules` followed at 22:23:28. Both lockfiles were unchanged. Every worktree
+symlinks to these trees, so commits failed at commit-msg (commitlint missing) and every worker's tests and build tools
+were gone. A commit at 22:19:45 had still passed commitlint; the next attempt, at 22:24:54, failed.
+
+**Restored.** The planner ran `npm ci` at the main checkout root (403 packages) and in `server/` (690 packages) from the
+committed lockfiles. `validate:lockfile-sync` reports OK, `core.hooksPath` is unchanged, and the checkout is clean.
+
+**Ruled out, each by reading or measuring:**
+
+- worker W2's drive staging: `rm -rf` only on `/tmp/w2-drive/<x>`, `cp -r` without dereferencing, and no symlinks
+  anywhere under the drive directory;
+- `drive.mjs`, which removes nothing;
+- `scripts/stage-server-runtime.sh`, which deletes only inside its target argument;
+- W2's new e2e test, which removes only its own `mkdtemp` workspaces;
+- the jest `package-resources-guard` setup and teardown;
+- the repo's git hooks (`commit-msg`, `pre-commit`, `pre-push`), none of which runs npm, rsync or rm;
+- `scripts/sync-to-cache.sh`, which only copies;
+- other Claude sessions in the main checkout, none of whose transcripts changed in the window;
+- W2's commits, at 22:19 (hooks passed) and 22:35 (after the restore).
+
+**Cause: unidentified.** Two trees emptied ten seconds apart, root first, with each directory itself kept. That looks like
+a delete that ran through a path resolving into each tree. No command recorded in this run matches it. A command
+outside the run, including one in the owner's terminal, is not excluded; the owner is asked.
+
+**Guard adopted.** Workers W2 and R bracket every test suite, drive and commit with a fingerprint of the shared trees:
+entry counts for root and `server/node_modules`, plus the presence of `jest` and `commitlint`. They stop and report the
+bracketed command on any drop, so a repeat names its own cause.
