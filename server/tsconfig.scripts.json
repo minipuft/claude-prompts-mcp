@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Same reason as tsconfig.test.json: the base config pins rootDir to ./src, and
+    // scripts/ sits outside that root. rootDir carries no output meaning here (noEmit
+    // is on) -- it is purely a validation constraint, widened just enough to admit
+    // scripts/ without widening the build (tsconfig.json:rootDir stays ./src).
+    "rootDir": ".",
+    "noEmit": true
+  },
+  // .ts scripts only -- the 50 .js/.mjs scripts under scripts/ are out of scope
+  // (checkJs was measured at 695 findings, 61% implicit-any annotation work).
+  "include": ["src/**/*", "scripts/**/*.ts"]
+}

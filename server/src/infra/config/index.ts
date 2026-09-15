@@ -10,6 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
+import { validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -19,6 +20,8 @@ const logger = createLogger(
     enableDebug: false,
   })
 );
+
+import type { ConfigSchemaValidationResult } from '#shared/types/config-manager.js';
 
 import {
   Config,
@@ -136,6 +139,19 @@ function adoptInertSpellings(root: Record<string, unknown>): void {
 
     delete container[from];
   }
+}
+
+/**
+ * Writes a schema warning to stderr directly.
+ *
+ * Not `logger.warn`: the module logger is built for the STDIO transport, and under STDIO it writes
+ * to the console only when `CI` or `NODE_ENV=test` is set — measured 2026-09-14, a STDIO logger's
+ * `warn` printed nothing to stderr. A config mistake reported only into a temp-dir log file is not
+ * reported. `console.warn` is stderr, which the STDIO transport leaves free (it owns stdout), and
+ * `setupConsoleRedirection` does not replace it.
+ */
+function writeSchemaWarning(message: string): void {
+  console.warn(message);
 }
 
 /**
@@ -269,15 +285,30 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private frameworksConfigCache: ResolvedFrameworkConfig;
   /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
   private warnedAnalysisDeprecated = false;
+  /**
+   * The package's own `config.schema.json`, injected by the composition root. Never read from the
+   * config's `$schema`, which is an editor hint. Undefined means the file is not schema-checked.
+   */
+  private readonly schemaPath: string | undefined;
+  /** The schema check of the last successful parse; undefined when none ran or the load failed. */
+  private schemaValidation: ConfigSchemaValidationResult | undefined;
+  /**
+   * Status + errors of the last result that WARNED. Unlike `warnedAnalysisDeprecated` this is not
+   * once-per-process: hot reload re-enters `loadConfig`, so an unchanged file must stay quiet while
+   * a new mistake must still be reported. Cleared by a valid load, so a reintroduced error warns.
+   */
+  private lastWarnedSchemaSignature: string | undefined;
 
   constructor(
     configPath: string,
-    private readonly resourcePaths?: ResourcePathSource
+    private readonly resourcePaths?: ResourcePathSource,
+    options: { readonly schemaPath?: string } = {}
   ) {
     super();
     this.configPath = configPath;
     this.config = DEFAULT_CONFIG;
     this.frameworksConfigCache = { ...DEFAULT_FRAMEWORKS_CONFIG };
+    this.schemaPath = options.schemaPath;
   }
 
   /**
@@ -287,7 +318,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     const previousFrameworks = { ...this.frameworksConfigCache };
     try {
       const configContent = await readFile(this.configPath, 'utf8');
-      this.config = JSON.parse(configContent) as Config;
+      const parsedConfig = JSON.parse(configContent) as Config;
+
+      // Checked against the RAW file, before `validateAndSetDefaults`: that rewrites inert
+      // spellings in place and fills defaults the schema does not declare, so a check after it
+      // would report the loader's own additions and no longer see what the user wrote.
+      await this.checkAgainstSchema(parsedConfig);
+
+      this.config = parsedConfig;
 
       // Validate and set defaults for any missing properties
       this.validateAndSetDefaults();
@@ -296,6 +334,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
       return this.config;
     } catch (error) {
+      // Whatever the last check said describes a file this load did not serve.
+      this.schemaValidation = undefined;
       console.error(`Error loading configuration from ${this.configPath}:`, error);
       // stderr, not stdout: on STDIO stdout is the protocol channel, and a stray line corrupts it.
       console.error('Using default configuration');
@@ -311,6 +351,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getConfig(): Config {
     return this.config;
+  }
+
+  /**
+   * The schema check of the last successful parse. Undefined means NOT VALIDATED — no schema path
+   * was injected, or the last load fell back to defaults — and must never be read as valid.
+   */
+  getSchemaValidation(): ConfigSchemaValidationResult | undefined {
+    return this.schemaValidation;
   }
 
   /**
@@ -822,6 +870,55 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
         'For model-graded gate evaluation use the `%judge` modifier or `gates.evaluation.defaultMode`. ' +
         'Remove the `analysis` section from config.json to silence this notice.'
     );
+  }
+
+  /**
+   * Validates the raw parsed file against the injected schema and records the result. Reports,
+   * never gates: a config that fails its schema still loads, because refusing to start over a
+   * typo would turn a warning into an outage.
+   */
+  private async checkAgainstSchema(rawConfig: Config): Promise<void> {
+    if (this.schemaPath === undefined) {
+      this.schemaValidation = undefined;
+      return;
+    }
+
+    const result = await validateConfigAgainstSchema(
+      rawConfig as unknown as Record<string, unknown>,
+      this.schemaPath
+    );
+    this.schemaValidation = result;
+    this.warnOnSchemaResult(result, this.schemaPath);
+  }
+
+  /**
+   * Warns only when the status + error set differs from the last one warned. An unreadable schema
+   * says nothing about the config, so it is reported as unchecked, never as invalid.
+   */
+  private warnOnSchemaResult(result: ConfigSchemaValidationResult, schemaPath: string): void {
+    if (result.status === 'valid') {
+      this.lastWarnedSchemaSignature = undefined;
+      return;
+    }
+
+    const signature = JSON.stringify([result.status, [...result.errors].sort()]);
+    if (signature === this.lastWarnedSchemaSignature) return;
+    this.lastWarnedSchemaSignature = signature;
+
+    if (result.status === 'unavailable') {
+      writeSchemaWarning(
+        `[CONFIG] Could not read the config schema at ${schemaPath}, so ${this.configPath} was not ` +
+          `checked against it (${result.errors.join('; ')}). The server keeps running.`
+      );
+      return;
+    }
+
+    for (const error of result.errors) {
+      writeSchemaWarning(
+        `[CONFIG] ${this.configPath} does not match its schema: ${error} — the server keeps ` +
+          'running, but this setting may not take effect as written.'
+      );
+    }
   }
 
   /**

@@ -911,6 +911,129 @@ describe('FileOperations canonical prompt writes', () => {
       expect(existsSync(newDir)).toBe(false);
     });
   });
+
+  /**
+   * B.22 — a chain step whose remainder after `{parentId}/` is `.` or `..` names the parent's own
+   * directory or its category folder, not a sub-prompt. Before this, it was silently SKIPPED on an
+   * update against an existing parent (`existsSync` happens to find the category dir, for `..`, or
+   * the parent's own dir, for `.`, already there and treats the step as "already scaffolded"), and
+   * on a FRESH create — no prior directory to shadow it — it silently ESCAPED: measured against a
+   * live server 2026-09-15, `promptId: "<parent>/.."` in the very first `chainSteps` reported
+   * "✅ Prompt Created" and wrote a stray `prompt.yaml` (`id: ..`) into the parent's CATEGORY
+   * directory. Both are now refused by name before the write transaction opens.
+   */
+  describe('chain step scaffold containment (B.22)', () => {
+    /** Every file under `dir`, relative to it, keyed to its content — empty when `dir` is absent. */
+    function snapshotTree(dir: string): Record<string, string> {
+      const snapshot: Record<string, string> = {};
+      if (!existsSync(dir)) return snapshot;
+      for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const full = join(entry.parentPath, entry.name);
+        snapshot[path.relative(dir, full)] = readFileSync(full, 'utf8');
+      }
+      return snapshot;
+    }
+
+    it('refuses a fresh create whose only chain step is "<parent>/.." — nothing lands outside the parent', async () => {
+      const operations = new FileOperations({ logger, configManager });
+      const before = snapshotTree(promptsDir);
+
+      await expect(
+        operations.updatePromptImplementation({
+          id: 'escaping_parent',
+          name: 'Escaping Parent',
+          category: 'escape-cat',
+          description: 'd',
+          userMessageTemplate: 'hi',
+          arguments: [],
+          tools: [],
+          chainSteps: [{ promptId: 'escaping_parent/..', stepName: 'Escape' }],
+        })
+      ).rejects.toThrow(/escaping_parent\/\.\..*cannot scaffold outside its parent/);
+
+      // FALSIFICATION: comment out the `.`/`..` throw in `planChainStepScaffolds` and this goes
+      // red — a `prompt.yaml` (id: `..`) lands directly in `escape-cat/`, the CATEGORY directory,
+      // one level above where `escaping_parent` itself would have been created.
+      expect(snapshotTree(promptsDir)).toEqual(before);
+      expect(existsSync(join(promptsDir, 'escape-cat', 'prompt.yaml'))).toBe(false);
+    });
+
+    it('refuses a fresh create whose only chain step is "<parent>/." — nothing lands outside the parent', async () => {
+      const operations = new FileOperations({ logger, configManager });
+      const before = snapshotTree(promptsDir);
+
+      await expect(
+        operations.updatePromptImplementation({
+          id: 'dotdot_parent',
+          name: 'Dot Parent',
+          category: 'escape-cat-2',
+          description: 'd',
+          userMessageTemplate: 'hi',
+          arguments: [],
+          tools: [],
+          chainSteps: [{ promptId: 'dotdot_parent/.', stepName: 'Escape' }],
+        })
+      ).rejects.toThrow(/dotdot_parent\/\..*cannot scaffold outside its parent/);
+
+      expect(snapshotTree(promptsDir)).toEqual(before);
+      expect(existsSync(join(promptsDir, 'escape-cat-2', 'dotdot_parent', 'prompt.yaml'))).toBe(
+        false
+      );
+    });
+
+    it('refuses an update adding "<parent>/.." to an existing parent, naming the step, leaving the tree unchanged', async () => {
+      const operations = new FileOperations({ logger, configManager });
+      await operations.updatePromptImplementation({
+        id: 'existing_parent',
+        name: 'Existing Parent',
+        category: 'existing-cat',
+        description: 'd',
+        userMessageTemplate: 'hi',
+        arguments: [],
+        tools: [],
+        chainSteps: [{ promptId: 'existing_parent/legit_step', stepName: 'Legit' }],
+      });
+      const before = snapshotTree(promptsDir);
+
+      // FALSIFICATION: before B.22, this reported "✅ Prompt Updated" — `existsSync` found
+      // `existing-cat/` (the category directory `..` resolves to) already on disk and treated the
+      // step as already scaffolded, so the write "succeeded" with a `chainSteps` entry that
+      // resolves nowhere and no error naming it.
+      await expect(
+        operations.updatePromptImplementation({
+          id: 'existing_parent',
+          name: 'Existing Parent',
+          category: 'existing-cat',
+          description: 'd',
+          userMessageTemplate: 'hi',
+          arguments: [],
+          tools: [],
+          chainSteps: [{ promptId: 'existing_parent/..', stepName: 'Escape' }],
+        })
+      ).rejects.toThrow(/existing_parent\/\.\..*cannot scaffold outside its parent/);
+
+      expect(snapshotTree(promptsDir)).toEqual(before);
+    });
+
+    it('still scaffolds an ordinary nested chain step', async () => {
+      const operations = new FileOperations({ logger, configManager });
+      await operations.updatePromptImplementation({
+        id: 'normal_parent',
+        name: 'Normal Parent',
+        category: 'normal-cat',
+        description: 'd',
+        userMessageTemplate: 'hi',
+        arguments: [],
+        tools: [],
+        chainSteps: [{ promptId: 'normal_parent/real_step', stepName: 'Real Step' }],
+      });
+
+      const stepDir = join(promptsDir, 'normal-cat', 'normal_parent', 'real_step');
+      expect(existsSync(join(stepDir, 'prompt.yaml'))).toBe(true);
+      expect(existsSync(join(stepDir, 'user-message.md'))).toBe(true);
+    });
+  });
 });
 
 describe('normalizePromptId', () => {

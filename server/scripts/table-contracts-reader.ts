@@ -126,6 +126,11 @@ export function parseSchemaDdl(engineSource: string): Map<string, DdlTable> {
   let match: RegExpExecArray | null;
   while ((match = header.exec(source)) !== null) {
     const name = match[1];
+    if (name === undefined) {
+      // The header pattern's one capture group is not optional — a successful match always
+      // captures it. Absence here means the pattern and this code have drifted apart.
+      throw new Error(`parseSchemaDdl: CREATE TABLE matched with no table name: ${match[0]}`);
+    }
     const openIndex = source.indexOf('(', match.index + match[0].length - 1);
     const closeIndex = findMatchingParen(source, openIndex);
     const body = source.slice(openIndex + 1, closeIndex);
@@ -135,7 +140,15 @@ export function parseSchemaDdl(engineSource: string): Map<string, DdlTable> {
       const part = rawPart.trim();
       if (part.length === 0) continue;
 
-      const firstToken = part.split(/\s+/)[0].replace(/["'`]/g, '');
+      const [rawToken] = part.split(/\s+/);
+      if (rawToken === undefined) {
+        // `part` is checked non-empty above, and `String.split` always returns at least one
+        // element for a non-empty input — this can only fire if that invariant breaks.
+        throw new Error(
+          `parseSchemaDdl: column fragment produced no token: ${JSON.stringify(part)}`
+        );
+      }
+      const firstToken = rawToken.replace(/["'`]/g, '');
       if (CONSTRAINT_KEYWORDS.has(firstToken.toLowerCase())) continue;
 
       columns.push({
@@ -159,7 +172,12 @@ export function parseSchemaViews(engineSource: string): string[] {
 
   let match: RegExpExecArray | null;
   while ((match = header.exec(source)) !== null) {
-    names.push(match[1]);
+    const name = match[1];
+    if (name === undefined) {
+      // Same non-optional capture group as parseSchemaDdl's header match.
+      throw new Error(`parseSchemaViews: CREATE VIEW matched with no view name: ${match[0]}`);
+    }
+    names.push(name);
   }
 
   return names;
@@ -243,6 +261,13 @@ export function findSqlSites(contractedTables: ReadonlySet<string>): SqlSite[] {
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(line)) !== null) {
           const table = match[1];
+          if (table === undefined) {
+            // Every WRITE_PATTERNS entry has exactly one non-optional capture group — a
+            // successful match always captures a table name.
+            throw new Error(
+              `findSqlSites: ${kind} pattern matched with no table name: ${match[0]}`
+            );
+          }
           if (contractedTables.has(table)) {
             sites.push({ file: relative, line: index + 1, kind, table });
           }
@@ -287,7 +312,15 @@ export function collectWrittenColumns(source: string, table: string): Set<string
     const stop = rest.search(/\b(WHERE|RETURNING)\b|;|`/i);
     const setClause = stop === -1 ? rest : rest.slice(0, stop);
     for (const assignment of splitTopLevel(setClause)) {
-      const name = assignment.split('=')[0].trim().replace(/["'`]/g, '');
+      const [rawName] = assignment.split('=');
+      if (rawName === undefined) {
+        // `String.split` always returns at least one element, even for an empty string —
+        // this can only fire if that invariant breaks.
+        throw new Error(
+          `collectWrittenColumns: SET assignment produced no name: ${JSON.stringify(assignment)}`
+        );
+      }
+      const name = rawName.trim().replace(/["'`]/g, '');
       if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) written.add(name);
     }
   }
