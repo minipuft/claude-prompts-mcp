@@ -10,15 +10,10 @@ description: >-
   (tools/cdp probe, screenshot, or measured delta) that would catch the violation.
   If no CloudySky visual/aesthetic surface is in play, state "creed: n/a — no visual
   surface" and pass.
+subject: creed
 guidanceFile: guidance.md
 pass_criteria:
   - type: inline_guidance
-    required_patterns:
-      - creed
-  - type: inline_guidance
-    regex_patterns:
-      - 'serves|n/a'
-      - 'risk|n/a'
 
 retry_config:
   max_attempts: 2
