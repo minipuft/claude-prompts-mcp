@@ -1,23 +1,27 @@
 // @lifecycle canonical - Builds style hot-reload config for the hot-reload manager.
 
 import type { Logger } from '#infra/logging/index.js';
-import type { StyleManager } from '#modules/formatting/index.js';
+import type { McpToolRouter } from '#mcp/tools/index.js';
 import type { AuxiliaryReloadConfig } from '#modules/hot-reload/hot-reload-observer.js';
 
 import { createStyleHotReloadRegistration } from '#modules/formatting/hot-reload/index.js';
 
 /**
  * Build style auxiliary reload configuration for HotReloadObserver.
- * Follows the same pattern as buildGateAuxiliaryReloadConfig.
+ * Takes the McpToolRouter and resolves the pipeline's style manager through it — the same shape
+ * as `buildFrameworkAuxiliaryReloadConfig` — because that manager loads in the background after
+ * construction. `resolveStyleManager()` awaits its startup load rather than racing it, so an
+ * `undefined` result here means the load genuinely failed, not that it hasn't settled yet.
  *
  * @param logger - Logger instance
- * @param styleManager - StyleManager instance (optional)
- * @returns AuxiliaryReloadConfig or undefined if style manager unavailable
+ * @param mcpToolsManager - Owns the canonical StyleManager instance (optional)
+ * @returns AuxiliaryReloadConfig or undefined if the style manager never became available
  */
-export function buildStyleAuxiliaryReloadConfig(
+export async function buildStyleAuxiliaryReloadConfig(
   logger: Logger,
-  styleManager?: StyleManager
-): AuxiliaryReloadConfig | undefined {
+  mcpToolsManager?: McpToolRouter
+): Promise<AuxiliaryReloadConfig | undefined> {
+  const styleManager = await mcpToolsManager?.resolveStyleManager();
   if (!styleManager) {
     logger.debug('Style manager unavailable; skipping style hot reload wiring.');
     return undefined;
