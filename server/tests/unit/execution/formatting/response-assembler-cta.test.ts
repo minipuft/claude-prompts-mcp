@@ -712,5 +712,63 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
         '"reminders": {"satisfied": ["code-quality", "prose-hygiene"], "not_applicable": []}'
       );
     });
+
+    test('a run of leading reminders does not push a later check off the template', () => {
+      const reminderIds = Array.from({ length: 10 }, (_, i) => `reminder-${i + 1}`);
+      const checkId = 'check-11';
+      const gateIds = [...reminderIds, checkId];
+      const gateTiers = {
+        ...Object.fromEntries(reminderIds.map((id) => [id, 'reminder' as const])),
+        [checkId]: 'check' as const,
+      };
+
+      const context = createSinglePromptContext({
+        accumulatedGateIds: gateIds,
+        chainId: 'chain-tiers#4',
+        pendingReview: {
+          ...mixedReview,
+          gateIds,
+          gateTiers,
+        },
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      // The eleventh gate is a check, so it must still get a per_gate slot at its ORIGINAL
+      // position — even though ten reminders precede it and the pre-fix code sliced to the
+      // first ten of `gateIds` before ever walking to it.
+      expect(result).toContain('"index": 11');
+      const perGateEntries = (result.match(/\{"index":/g) ?? []).length;
+      expect(perGateEntries).toBe(1);
+      // All ten reminders are still attested, in the one `reminders` field.
+      for (const id of reminderIds) {
+        expect(result).toContain(id);
+      }
+    });
+
+    test('twelve check-tier gates still cap per_gate at ten entries', () => {
+      const gateIds = Array.from({ length: 12 }, (_, i) => `check-${i + 1}`);
+      const gateTiers = Object.fromEntries(gateIds.map((id) => [id, 'check' as const]));
+
+      const context = createSinglePromptContext({
+        accumulatedGateIds: gateIds,
+        chainId: 'chain-tiers#5',
+        pendingReview: {
+          ...mixedReview,
+          gateIds,
+          gateTiers,
+        },
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      const perGateEntries = (result.match(/\{"index":/g) ?? []).length;
+      expect(perGateEntries).toBe(10);
+      for (let i = 1; i <= 10; i++) {
+        expect(result).toContain(`"index": ${i}`);
+      }
+      expect(result).not.toContain('"index": 11');
+      expect(result).not.toContain('"index": 12');
+    });
   });
 });

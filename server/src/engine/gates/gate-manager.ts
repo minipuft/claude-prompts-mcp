@@ -188,6 +188,12 @@ export class GateManager
     if (context.framework) {
       activationContext.framework = context.framework;
     }
+    // B13: the run's declared artifacts. Copied on only when the caller supplied a non-empty list
+    // so an artifact-unaware caller leaves the field absent, which `isGateActiveForContext` reads
+    // as "this run declared nothing" — category gates are untouched either way.
+    if (context.declaredArtifacts !== undefined && context.declaredArtifacts.length > 0) {
+      activationContext.artifacts = context.declaredArtifacts;
+    }
 
     // Get all enabled guides
     const allGuides = this.registry!.getAllGuides(context.enabledOnly ?? true);

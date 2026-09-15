@@ -64,6 +64,11 @@ export class CompositionalGateService implements GateService {
       if (context.explicitGateIds) {
         guidanceContext.explicitGateIds = context.explicitGateIds;
       }
+      // B13: forwarded, not re-derived. This method rebuilds the render context field by field,
+      // so an artifact list dropped here reaches the renderer as "declared nothing".
+      if (context.artifacts !== undefined && context.artifacts.length > 0) {
+        guidanceContext.artifacts = context.artifacts;
+      }
 
       const guidance = await this.gateGuidanceRenderer.renderGuidance(gateIds, guidanceContext);
 

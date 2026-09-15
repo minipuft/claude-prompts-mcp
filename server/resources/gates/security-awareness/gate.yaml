@@ -14,6 +14,8 @@ retry_config:
   preserve_context: true
 
 activation:
+  artifacts:
+    - source
   prompt_categories:
     - code
     - development

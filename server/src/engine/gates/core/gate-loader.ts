@@ -188,9 +188,7 @@ export class GateLoader implements GateDefinitionProvider {
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     try {
       const loaded = this.definitionLoader.loadAllGates();
-      return Array.from(loaded.values()).map((definition) =>
-        this.toLightweightGate(definition as GateDefinitionYaml)
-      );
+      return Array.from(loaded.values()).map((definition) => this.toLightweightGate(definition));
     } catch (error) {
       this.logger.error('Failed to list available gate definitions:', error);
       return [];

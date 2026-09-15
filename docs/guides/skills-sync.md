@@ -97,7 +97,7 @@ exports:
   - prompt:development/review # → resources/prompts/development/review/
 ```
 
-**Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` criteria table in the SKILL.md.
+**Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` section in the SKILL.md split into `### Checks` and `### Reminders` — see [Which Gates an Exported Skill Carries](#which-gates-an-exported-skill-carries) for how each tier renders.
 
 **Doc bundling**: Prompts with a `docs/` subdirectory get all `.md` files bundled into `docs/` in the exported skill directory. Use this for templates, reference material, and supporting documentation that supplements the main SKILL.md. Doc files are included in the content hash for drift detection.
 
@@ -254,6 +254,19 @@ The last row is the one that differs from runtime. The engine reads an absent fr
 _unconstrained_, which is right for a live execution where a framework may yet be selected, but
 wrong for a static artifact: an exported skill has no framework, so a gate that only makes sense
 under one would ship guidance the reader cannot act on.
+
+**How a carried gate renders.** Once a gate is included, export splits it the same way the runtime
+does: a **check** (a gate with a `shell_verify` or `script_tool` pass criterion) renders under
+`### Checks` as a single command or tool line — for example, a line naming `npm test` — never its
+guidance, since a check is settled by rerunning that command rather than by the reader
+self-attesting it. Every other gate is a **reminder**, and renders under `### Reminders` as the
+criteria table, same as before. An installation's `gates.harnessCovers` (`server/config.json`)
+shapes the export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
+out of the exported skill entirely, and the SKILL.md notes how many were omitted and which
+subjects covered them. Checks are never suppressed. See
+[gate-configuration.md](../reference/gate-configuration.md#tiers) for the full tier and
+`harnessCovers` reference — this export path reads the same config field, just once per run
+instead of once per dispatch.
 
 ## Drift Detection
 

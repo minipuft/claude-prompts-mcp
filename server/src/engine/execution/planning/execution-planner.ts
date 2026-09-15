@@ -1,6 +1,7 @@
 // @lifecycle canonical - Plans operator execution order and dependencies.
 import { CategoryExtractor } from './category-extractor.js';
 import { GateSetResolver } from '../../gates/services/gate-set-resolver.js';
+import { resolveDeclaredArtifacts } from '../../gates/utils/artifact-kinds.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -115,6 +116,15 @@ export class ExecutionPlanner {
 
     // Gate resolution is owned by GateSetResolver (ADR 0001) — this stage only supplies inputs
     // and reads the result. Do not reintroduce gate logic here.
+    // B13: what this run says it touches. `produces` comes from the prompt, the rest is
+    // classified out of the argument the prompt's `fromArgument` names — so the author declares
+    // the shape and the invocation supplies the paths. Empty when the prompt declares nothing,
+    // which leaves every artifact-scoped gate off and every category gate untouched.
+    const declaredArtifacts = resolveDeclaredArtifacts(
+      convertedPrompt.artifacts,
+      parsedCommand?.promptArgs
+    );
+
     const resolution = await this.buildGateSetResolver().resolve({
       prompt: convertedPrompt,
       category: categoryInfo.category,
@@ -125,6 +135,7 @@ export class ExecutionPlanner {
         promptInjection: convertedPrompt.injection,
       }),
       callerGateIds: collectStringGateIds(gateOverrides),
+      declaredArtifacts,
     });
 
     // Check for framework override from symbolic operators

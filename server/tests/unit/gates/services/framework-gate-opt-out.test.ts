@@ -6,7 +6,7 @@ import { GateEnhancementService } from '../../../../src/engine/gates/services/ga
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
-import type { GatesConfig } from '../../../../src/engine/gates/types.js';
+import type { ResolvedGateSettings } from '../../../../src/engine/gates/types.js';
 
 /**
  * F2. `GateSetResolver` withholds the active framework's gates on three conditions — the
@@ -41,11 +41,11 @@ const createGateService = () =>
     })),
   }) as never;
 
-const GATES_CONFIG: GatesConfig = {
+const GATES_CONFIG: ResolvedGateSettings = {
   enabled: true,
   definitionsDirectory: 'gates',
   enableFrameworkGates: true,
-} as GatesConfig;
+} as ResolvedGateSettings;
 
 interface Scenario {
   /** The prompt author's `gateConfiguration.framework_gates`. */
@@ -109,7 +109,7 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
     context,
     { temporaryGateIds: [], canonicalGateIds: [] },
     scenario.enableFrameworkGates === false
-      ? ({ ...GATES_CONFIG, enableFrameworkGates: false } as GatesConfig)
+      ? ({ ...GATES_CONFIG, enableFrameworkGates: false } as ResolvedGateSettings)
       : GATES_CONFIG,
     new Set([FRAMEWORK_GATE])
   );

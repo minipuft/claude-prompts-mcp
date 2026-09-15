@@ -49,18 +49,10 @@ const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
  * Same class of bug already fixed for prompts via `PRESERVED_PROMPT_YAML_KEYS`
  * (`resource-manager/prompt/operations/file-operations.ts`).
  *
- * Two sources feed this list:
- *  - Derived from `GATE_YAML_DECLARED_KEYS` (`gate-yaml-keys.ts`'s engine-side walk of
- *    `GateDefinitionSchema`'s declared object keys), minus the projected and excluded sets above
- *    (currently `severity`, `enforcementMode`, `gate_type`). A future schema field lands here
- *    automatically — nothing to update by hand.
- *  - `evaluation` and `blockResponseOnFail` are appended manually. Both are real, load-bearing
- *    gate.yaml keys read at runtime (`gate-loader.ts` `toLightweightGate`), but
- *    `GateDefinitionSchema` accepts them only via `.passthrough()` — it does not declare them as
- *    object keys, so the derivation above cannot see them. The schema-coverage test
- *    (`manager.test.ts` "update preservation") only walks `GateDefinitionSchema`'s DECLARED
- *    keys; it cannot catch a third passthrough-only field the way it catches a new declared one
- *    — that gap is the one still open here.
+ * Derived from `GATE_YAML_DECLARED_KEYS` (`gate-yaml-keys.ts`'s engine-side walk of
+ * `GateDefinitionSchema`'s declared object keys), minus the projected and excluded sets above
+ * (currently `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail`). A
+ * future schema field lands here automatically — nothing to update by hand.
  *
  * `GateCreationData` carries `severity` and `enforcementMode` since P4.4, so the "caller supplied
  * a value" branch of `resolvePreservedGateYamlFields` is reachable for those two: supplied, they
@@ -72,15 +64,11 @@ const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
  * surface by a parameter that maps to the YAML key `type`. Not an oversight: resolving it means
  * renaming that parameter, which is breaking. Tracked as P4.10.
  */
-export const PRESERVED_GATE_YAML_KEYS = [
-  ...GATE_YAML_DECLARED_KEYS.filter(
-    (key) =>
-      !(GATE_YAML_PROJECTED_KEYS as readonly string[]).includes(key) &&
-      !(GATE_YAML_EXCLUDED_KEYS as readonly string[]).includes(key)
-  ),
-  'evaluation',
-  'blockResponseOnFail',
-] as const;
+export const PRESERVED_GATE_YAML_KEYS = GATE_YAML_DECLARED_KEYS.filter(
+  (key) =>
+    !(GATE_YAML_PROJECTED_KEYS as readonly string[]).includes(key) &&
+    !(GATE_YAML_EXCLUDED_KEYS as readonly string[]).includes(key)
+);
 
 export { GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS };
 

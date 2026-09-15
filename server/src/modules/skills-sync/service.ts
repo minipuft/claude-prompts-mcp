@@ -18,10 +18,12 @@ import * as yaml from 'js-yaml';
 import { createTwoFilesPatch } from 'diff';
 
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
+import { deriveGateTier } from '#engine/gates/core/gate-tier.js';
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
+import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import {
   ResourceMutationTransaction,
@@ -108,6 +110,35 @@ function getResourcesDir(): string {
 
 function getConfigPath(): string {
   return path.join(getServerRoot(), 'skills-sync.yaml');
+}
+
+/** Server-root `config.json` path — same `getServerRoot()` resolution as `getConfigPath()`. */
+function getServerConfigPath(): string {
+  return path.join(getServerRoot(), 'config.json');
+}
+
+/**
+ * `gates.harnessCovers` for this installation (ruling B2, gate-checks-and-reminders), read
+ * directly off `config.json` rather than through `ConfigManager`/`ConfigLoader`: this module
+ * lives in `modules/` (Layer 3), and `.dependency-cruiser.cjs`'s `modules-no-infra-static` /
+ * `modules-infra-type-only` rules forbid a static OR type-only import from `infra/` — even for
+ * `ConfigManager`'s type. `exportCommand` already reads a config file this same way a few lines
+ * down (`readFile(getConfigPath())` for `skills-sync.yaml`), so this mirrors that sibling
+ * pattern instead of adding a second parser: one JSON read, one optional field, no schema
+ * re-validation. A missing or unparsable `config.json` returns `[]`, the same default
+ * `ConfigLoader.getGatesConfig()` falls back to.
+ */
+async function resolveHarnessCovers(): Promise<readonly string[]> {
+  try {
+    const raw = await readFile(getServerConfigPath(), 'utf-8');
+    const parsed = JSON.parse(raw) as { gates?: { harnessCovers?: unknown } };
+    const covers = parsed.gates?.harnessCovers;
+    return Array.isArray(covers)
+      ? covers.filter((entry): entry is string => typeof entry === 'string')
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 // ─── Section 1: Types ──────────────────────────────────────────────────────
@@ -259,6 +290,16 @@ interface PromptYaml {
    * an Agent-tool subagent was measured firing that hook at the planner's own stop (2026-09-14).
    */
   enforceGateHooks?: boolean;
+  /**
+   * The prompt's `artifacts:` declaration (ruling B13). Only `produces` is meaningful at export:
+   * `fromArgument` names an argument whose VALUE exists solely at invocation, and an exported
+   * SKILL.md is written once, ahead of every invocation — so an artifact gate scoped to a
+   * `fromArgument` kind cannot be resolved here and is simply not exported.
+   */
+  artifacts?: {
+    produces?: ArtifactKind[];
+    fromArgument?: string;
+  };
   gateConfiguration?: {
     include?: string[];
     exclude?: string[];
@@ -294,6 +335,8 @@ interface GateYaml {
   pass_criteria?: unknown[];
   activation?: GateActivationRules;
   retry_config?: unknown;
+  /** Reminder subject tag (ruling B2, gate-checks-and-reminders). Absent on most legacy gates. */
+  subject?: string;
 }
 
 interface FrameworkYaml {
@@ -884,7 +927,8 @@ async function resolveActiveGateRefs(
   gateConfig: PromptYaml['gateConfiguration'],
   promptCategory: string,
   gatesRoot: string,
-  chainSteps: PromptYamlChainStep[] = []
+  chainSteps: PromptYamlChainStep[] = [],
+  declaredArtifacts?: ArtifactKind[]
 ): Promise<IRGateRef[]> {
   const refs: IRGateRef[] = [];
   const excludeSet = new Set(gateConfig?.exclude ?? []);
@@ -932,7 +976,11 @@ async function resolveActiveGateRefs(
   }
 
   // 2. Auto-activated gates — the engine's rules, not a local approximation of them.
-  const activationContext: GateActivationContext = { promptCategory, explicitRequest: false };
+  const activationContext: GateActivationContext = {
+    promptCategory,
+    explicitRequest: false,
+    artifacts: declaredArtifacts,
+  };
   for (const [gateId, gate] of gatesById) {
     if (registeredIds.has(gateId)) continue;
     if (isGateActiveForContext(gate.activation, activationContext, gate.gate_type ?? 'custom')) {
@@ -1111,7 +1159,8 @@ async function loadPromptIR(
     data.gateConfiguration,
     category,
     gatesRoot,
-    data.chainSteps ?? []
+    data.chainSteps ?? [],
+    data.artifacts?.produces
   );
 
   // Load chain step sub-prompt content
@@ -2169,28 +2218,113 @@ if __name__ == "__main__":
 }
 
 /**
- * Builds the Quality Gates markdown section for SKILL.md.
- * Includes criteria table, inline criteria, and enforcement protocol.
+ * One exported check's command line — the export-time counterpart to
+ * `GateGuidanceRenderer.formatCheckLine` (ruling B2/B9, gate-checks-and-reminders). A check
+ * states ground truth the engine (or whoever reruns the command) can verify directly, so it
+ * names what runs and never the gate's guidance — the runtime renderer applies the same rule
+ * for the same reason: asking the agent to self-attest something already measured is redundant.
  */
-function buildQualityGatesSection(gateRefs: IRGateRef[], hookEnforced: boolean): string {
+function formatExportedCheckLine(name: string, passCriteria: unknown[]): string {
+  const criteria = passCriteria.map((entry) => (entry ?? {}) as Record<string, unknown>);
+  const criterion = criteria.find(
+    (entry) => entry['type'] === 'shell_verify' || entry['type'] === 'script_tool'
+  );
+
+  const shellCommand = criterion?.['shell_command'];
+  if (criterion?.['type'] === 'shell_verify') {
+    if (Array.isArray(shellCommand) && shellCommand.length > 0) {
+      return `- **${name}** — Passes \`${shellCommand.join(' ')}\``;
+    }
+    if (typeof shellCommand === 'string' && shellCommand.length > 0) {
+      return `- **${name}** — Passes \`${shellCommand}\``;
+    }
+  }
+
+  const scriptToolId = criterion?.['script_tool_id'];
+  if (criterion?.['type'] === 'script_tool' && typeof scriptToolId === 'string') {
+    return `- **${name}** — Runs tool \`${scriptToolId}\``;
+  }
+
+  // A check whose criterion names neither a command nor a tool id cannot run; still list it, so
+  // an operator sees the gate rather than silently losing it (mirrors the runtime fallback).
+  return `- **${name}** — check`;
+}
+
+/**
+ * Builds the Quality Gates markdown section for SKILL.md.
+ *
+ * Registered gates split into `### Checks` (a command/tool line, never guidance) and
+ * `### Reminders` (the criteria table, as before) by `deriveGateTier` — mirroring
+ * `GateGuidanceRenderer.renderGuidance`'s runtime split, so an exported skill reads like a live
+ * dispatch. `harnessCovers` suppresses a reminder whose `subject` this installation's harness
+ * already covers; checks are never suppressed (ruling B2).
+ */
+function buildQualityGatesSection(
+  gateRefs: IRGateRef[],
+  hookEnforced: boolean,
+  harnessCovers: readonly string[]
+): string {
   if (gateRefs.length === 0) return '';
 
   const registered = gateRefs.filter((g) => g.source === 'registered');
   const inlineCriteria = gateRefs.filter((g) => g.source === 'inline');
   const inlineDefs = gateRefs.filter((g) => g.source === 'inline_definition');
 
+  // The exporter has no loaded `LightweightGateDefinition` (that's a runtime-only shape) — only
+  // the raw yaml text each registered ref already carries — so this constructs the minimal
+  // `{ pass_criteria }` structure `deriveGateTier` actually reads.
+  const tiered = registered.map((ref) => {
+    let parsed: GateYaml | null = null;
+    try {
+      parsed = ref.gateYamlContent ? (yaml.load(ref.gateYamlContent) as GateYaml) : null;
+    } catch {
+      parsed = null;
+    }
+    const passCriteria = parsed?.pass_criteria ?? [];
+    return {
+      ref,
+      passCriteria,
+      tier: deriveGateTier({ pass_criteria: passCriteria as Array<{ type?: string }> }),
+      subject: parsed?.subject,
+    };
+  });
+
+  const checks = tiered.filter((t) => t.tier === 'check');
+  const omittedSubjects: string[] = [];
+  const reminders = tiered.filter((t) => {
+    if (t.tier !== 'reminder') return false;
+    if (t.subject && harnessCovers.includes(t.subject)) {
+      omittedSubjects.push(t.subject);
+      return false;
+    }
+    return true;
+  });
+
   let section = `## Quality Gates\n\n`;
 
-  // Criteria table (registered gates)
-  if (registered.length > 0) {
-    section += `### Criteria\n\n`;
+  // Checks first: a runtime rerun of the same command settles them, no self-review needed.
+  if (checks.length > 0) {
+    section += `### Checks\n\n`;
+    for (const { ref, passCriteria } of checks) {
+      section += `${formatExportedCheckLine(ref.name ?? ref.id, passCriteria)}\n`;
+    }
+    section += '\n';
+  }
+
+  // Reminders (criteria table) — registered gates whose subject this harness doesn't cover
+  if (reminders.length > 0) {
+    section += `### Reminders\n\n`;
     section += `| Gate | Type | When Active |\n|------|------|-------------|\n`;
-    for (const g of registered) {
-      const cats = g.activation?.categories?.join(', ') ?? 'explicit';
-      const mode = g.activation?.explicitRequest ? 'Explicit include' : `Auto (${cats})`;
-      section += `| ${g.id} | ${g.type ?? 'validation'} | ${mode} |\n`;
+    for (const { ref } of reminders) {
+      const cats = ref.activation?.categories?.join(', ') ?? 'explicit';
+      const mode = ref.activation?.explicitRequest ? 'Explicit include' : `Auto (${cats})`;
+      section += `| ${ref.id} | ${ref.type ?? 'validation'} | ${mode} |\n`;
     }
     section += `\nSee \`gates/{gateId}/guidance.md\` for detailed criteria.\n\n`;
+  }
+
+  if (omittedSubjects.length > 0) {
+    section += `Omitted ${omittedSubjects.length} reminder(s) this installation's harness covers: ${omittedSubjects.join(', ')}.\n\n`;
   }
 
   // Inline definitions
@@ -2322,18 +2456,11 @@ function chainStepLabel(step: IRChainStep, index: number): string {
  */
 function describePassCriterion(criterion: Record<string, unknown>): string[] {
   const lines: string[] = [];
-  const strings = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 
-  for (const pattern of strings(criterion['required_patterns']))
-    lines.push(`Addresses: ${pattern}`);
-  for (const pattern of strings(criterion['forbidden_patterns'])) lines.push(`Avoids: ${pattern}`);
-  for (const pattern of strings(criterion['regex_patterns'])) lines.push(`Matches \`${pattern}\``);
-
-  const minLength = criterion['min_length'];
-  if (typeof minLength === 'number') lines.push(`Runs to at least ${minLength} characters`);
-  const maxLength = criterion['max_length'];
-  if (typeof maxLength === 'number') lines.push(`Stays under ${maxLength} characters`);
+  // required_patterns/forbidden_patterns/regex_patterns/min_length/max_length are
+  // deliberately not read here — they never had an evaluator (B9) and `validateGateSchema`
+  // now refuses them at load, so a live gate.yaml cannot carry them. A criterion with none
+  // of the fields below falls through to the unrecognized-keys fallback, same as before.
 
   const shellCommand = criterion['shell_command'];
   if (Array.isArray(shellCommand) && shellCommand.length > 0) {
@@ -2351,8 +2478,8 @@ function describePassCriterion(criterion: Record<string, unknown>): string[] {
   if (typeof minScore === 'number')
     lines.push(`Scores at least ${minScore} on framework compliance`);
 
-  const promptTemplate = criterion['prompt_template'];
-  if (typeof promptTemplate === 'string') lines.push(promptTemplate);
+  // `prompt_template` is not a declared GatePassCriteria field (`llm_self_check` never
+  // had a runner — gate-schema.ts) and is deliberately not read here either.
 
   const scriptToolId = criterion['script_tool_id'];
   if (typeof scriptToolId === 'string') lines.push(`Passes the \`${scriptToolId}\` check`);
@@ -2537,7 +2664,8 @@ function buildClaudeCodeSkill(
   ir: SkillIR,
   config: ClientConfig,
   placement: SkillPlacement,
-  duplicateIds?: Set<string>
+  duplicateIds?: Set<string>,
+  harnessCovers: readonly string[] = []
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
@@ -2576,7 +2704,7 @@ function buildClaudeCodeSkill(
   }
 
   // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(ir.gateRefs, hookEnforced);
+  body += buildQualityGatesSection(ir.gateRefs, hookEnforced, harnessCovers);
 
   // Usage / user message template (compiled)
   if (ir.userMessage) {
@@ -2681,7 +2809,8 @@ function buildClaudeCodeSkill(
 function buildAgentSkillsSkill(
   ir: SkillIR,
   config: ClientConfig,
-  duplicateIds?: Set<string>
+  duplicateIds?: Set<string>,
+  harnessCovers: readonly string[] = []
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
@@ -2732,7 +2861,7 @@ function buildAgentSkillsSkill(
   }
 
   // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(ir.gateRefs, false);
+  body += buildQualityGatesSection(ir.gateRefs, false, harnessCovers);
 
   if (ir.userMessage) {
     body += `## Usage\n\n${compileTemplateToPlaintext(ir.userMessage.trim(), ir.arguments)}\n`;
@@ -2850,12 +2979,13 @@ function adaptResource(
   ir: SkillIR,
   clientConfig: ClientConfig,
   placement: SkillPlacement,
-  duplicateIds?: Set<string>
+  duplicateIds?: Set<string>,
+  harnessCovers: readonly string[] = []
 ): OutputFile[] {
   if (clientConfig.adapter === 'claude-code') {
-    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds);
+    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds, harnessCovers);
   }
-  return buildAgentSkillsSkill(ir, clientConfig, duplicateIds);
+  return buildAgentSkillsSkill(ir, clientConfig, duplicateIds, harnessCovers);
 }
 
 // ─── Section 7: Manifest Operations (SQLite-backed) ────────────────────────
@@ -3019,6 +3149,7 @@ async function exportCommand(
   report: SkillsSyncRunReport
 ): Promise<void> {
   const config = await loadSyncConfig();
+  const harnessCovers = await resolveHarnessCovers();
   const cliScope = opts.scope; // undefined = use per-resource scope; set = override all
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
@@ -3098,7 +3229,8 @@ async function exportCommand(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds
+          duplicateIds,
+          harnessCovers
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
@@ -3347,6 +3479,7 @@ async function syncCommand(
   report: SkillsSyncRunReport
 ): Promise<void> {
   const config = await loadSyncConfig();
+  const harnessCovers = await resolveHarnessCovers();
   const cliScope = opts.scope;
   const shouldPrune = opts.prune ?? true;
   const clientIds =
@@ -3462,7 +3595,8 @@ async function syncCommand(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds
+          duplicateIds,
+          harnessCovers
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
@@ -3574,6 +3708,7 @@ async function diffCommand(
   report: SkillsSyncRunReport
 ): Promise<void> {
   const config = await loadSyncConfig();
+  const harnessCovers = await resolveHarnessCovers();
   const cliScope = opts.scope;
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
@@ -3690,7 +3825,8 @@ async function diffCommand(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds
+          duplicateIds,
+          harnessCovers
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputPatches: string[] = [];
@@ -3842,6 +3978,7 @@ async function pullCommand(
   report: SkillsSyncRunReport
 ): Promise<void> {
   const config = await loadSyncConfig();
+  const harnessCovers = await resolveHarnessCovers();
   const cliScope = opts.scope;
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
@@ -3886,7 +4023,8 @@ async function pullCommand(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds
+          duplicateIds,
+          harnessCovers
         );
         const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
         if (!skillFile) continue;

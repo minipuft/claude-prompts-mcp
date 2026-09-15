@@ -6,6 +6,8 @@
  * This enables clean dependencies and consistent interfaces.
  */
 
+import type { ArtifactKind } from '../utils/artifact-kinds.js';
+
 /**
  * Gate type classification for precedence and activation logic
  */
@@ -34,6 +36,13 @@ export interface GateContext {
   category?: string;
   promptId?: string;
   explicitGateIds?: readonly string[];
+  /**
+   * Artifact kinds this run declares (ruling B13), the same set the gate-set resolver selected
+   * with. Carried onto the RENDER context because the renderer re-runs activation per gate: an
+   * artifact-scoped gate resolved at rank 20 would otherwise be dropped here and attach with no
+   * guidance at all.
+   */
+  artifacts?: readonly ArtifactKind[];
 }
 
 /**

@@ -1679,7 +1679,122 @@
         "type": "string"
       },
       "pass_criteria": {
-        "items": {},
+        "items": {
+          "properties": {
+            "framework": {
+              "type": "string"
+            },
+            "min_compliance_score": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "quality_indicators": {
+              "additionalProperties": {
+                "properties": {
+                  "keywords": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "patterns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "script_tool_id": {
+              "type": "string"
+            },
+            "script_tool_input": {
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "script_tool_timeout": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "script_tool_working_dir": {
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "warn",
+                "fail"
+              ],
+              "type": "string"
+            },
+            "shell_command": {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "shell_env": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "shell_max_attempts": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "shell_preset": {
+              "enum": [
+                "fast",
+                "full",
+                "extended"
+              ],
+              "type": "string"
+            },
+            "shell_response_env_var": {
+              "type": "string"
+            },
+            "shell_stdin_source": {
+              "enum": [
+                "agent_response"
+              ],
+              "type": "string"
+            },
+            "shell_timeout": {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "shell_working_dir": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "inline_guidance",
+                "framework_compliance",
+                "shell_verify",
+                "script_tool"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
         "type": "array"
       },
       "patch": {

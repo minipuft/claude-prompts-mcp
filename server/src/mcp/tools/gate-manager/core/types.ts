@@ -45,12 +45,13 @@ export interface GateManagerInput {
    */
   subject?: string;
   guidance?: string;
+  /**
+   * min_length/required_patterns/keyword_count/regex_patterns are deliberately not
+   * declared — they never had an evaluator (B9) and are refused at load; a `shell_verify`
+   * or `script_tool` criterion, or a reminder line in `guidance`, is what enforces instead.
+   */
   pass_criteria?: Array<{
     type?: string;
-    min_length?: number;
-    required_patterns?: string[];
-    keyword_count?: Record<string, number>;
-    regex_patterns?: string[];
   }>;
   activation?: {
     prompt_categories?: string[];

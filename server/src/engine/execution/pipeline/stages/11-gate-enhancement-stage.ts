@@ -5,10 +5,10 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type { TemporaryGateRegistrar } from '../../../gates/services/temporary-gate-registrar.js';
-import type { GatesConfig } from '../../../gates/types.js';
+import type { ResolvedGateSettings } from '../../../gates/types.js';
 import type { ExecutionContext } from '../../context/index.js';
 
-type GatesConfigProvider = () => GatesConfig | undefined;
+type ResolvedGateSettingsProvider = () => ResolvedGateSettings | undefined;
 
 /**
  * Pipeline Stage 11: Gate Enhancement
@@ -25,7 +25,7 @@ export class GateEnhancementStage extends BasePipelineStage {
   constructor(
     private readonly enhancementService: GateEnhancementService,
     private readonly registrar: TemporaryGateRegistrar,
-    private readonly gatesConfigProvider: GatesConfigProvider | undefined,
+    private readonly gatesConfigProvider: ResolvedGateSettingsProvider | undefined,
     logger: Logger
   ) {
     super(logger);
