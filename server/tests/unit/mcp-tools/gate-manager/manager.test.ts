@@ -3,8 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-definition-loader.js';
 import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GateToolHandler } from '../../../../src/mcp/tools/gate-manager/core/manager.js';
+import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import {
   GATE_YAML_EXCLUDED_KEYS,
   GATE_YAML_PROJECTED_KEYS,
@@ -422,6 +424,86 @@ describe('GateToolHandler', () => {
 
       const uncovered = schemaKeys.filter((key) => !covered.has(key));
       expect(uncovered).toEqual([]);
+    });
+  });
+
+  describe('update leaves omitted guidance.md byte-identical (resource-manager-gate-newline-2026-09-14)', () => {
+    // Unlike `createFakeGate` above (a hand-written stub whose `getGuidance()` returns whatever
+    // string the test passed it), this drives the REAL load path: `GateDefinitionLoader` reads
+    // `guidance.md` off disk and `GenericGateGuide` wraps that definition exactly the way
+    // production's `GateRegistry` does. That is load-bearing here — the defect this guards
+    // lived in the loader's inlining step, not in `gate-lifecycle-processor.ts`'s fallback
+    // expression, so a stub that never calls the loader could not have caught it.
+    function writeRealGate(id: string, guidanceContent: string): string {
+      const gateDir = join(gatesDir, id);
+      mkdirSync(gateDir, { recursive: true });
+      writeFileSync(
+        join(gateDir, 'gate.yaml'),
+        [
+          `id: ${id}`,
+          'name: Newline Gate',
+          'type: validation',
+          'description: Existing description',
+          'guidanceFile: guidance.md',
+          '',
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(join(gateDir, 'guidance.md'), guidanceContent, 'utf8');
+      return gateDir;
+    }
+
+    test('update supplying only activation leaves guidance.md byte-identical', async () => {
+      const gateId = 'newline-gate';
+      const guidanceContent = 'Check the newline.\n';
+      writeRealGate(gateId, guidanceContent);
+
+      const loader = new GateDefinitionLoader({ gatesDir });
+      const definition = loader.loadGate(gateId);
+      expect(definition).toBeDefined();
+      const realGuide = new GenericGateGuide(definition!);
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(realGuide);
+
+      const result = await manager.handleAction(
+        {
+          action: 'update',
+          id: gateId,
+          activation: { prompt_categories: ['docs'] },
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      // MUTATION KILLED: re-introducing `.trim()` in `gate-definition-loader.ts`'s
+      // `inlineReferencedFiles` makes this fail — the rewritten file loses its trailing `\n` and
+      // no longer matches `guidanceContent`. Confirmed by applying that mutation, re-running this
+      // file (red), and reverting (see tests/unit/gates/core/gate-definition-loader.test.ts for
+      // the isolated repro of the same mutation).
+      const rewritten = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
+      expect(rewritten).toBe(guidanceContent);
+    });
+
+    test('update explicitly supplying guidance still rewrites it to the new value', async () => {
+      const gateId = 'newline-gate-explicit';
+      writeRealGate(gateId, 'Old guidance.\n');
+
+      const loader = new GateDefinitionLoader({ gatesDir });
+      const definition = loader.loadGate(gateId);
+      const realGuide = new GenericGateGuide(definition!);
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(realGuide);
+
+      const result = await manager.handleAction(
+        { action: 'update', id: gateId, guidance: 'New guidance.\n' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const rewritten = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
+      expect(rewritten).toBe('New guidance.\n');
     });
   });
 });

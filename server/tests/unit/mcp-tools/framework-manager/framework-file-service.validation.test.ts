@@ -115,4 +115,42 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(yamlContent).toContain('type: MERGE_BASE');
     expect(promptContent).toBe('Original guidance.');
   });
+
+  /**
+   * Sibling coverage for resource-manager-gate-newline-2026-09-14: the gate side of this class
+   * (`guidance.md`) lost a trailing newline on an omitted-field update because its loader
+   * `.trim()`ed the file on read. `loadExistingFramework` never trims `system-prompt.md` /
+   * `judge-prompt.md` (plain `readFile`, no `.trim()`), so falling back to it here
+   * (`data.system_prompt_guidance ?? existingData?.systemPrompt ?? ''`) writes back the exact
+   * bytes read — this locks that in for both companion files, trailing newline included.
+   */
+  it('update omitting system_prompt_guidance and judge_prompt leaves both companion files byte-identical', async () => {
+    const service = new FrameworkFileWriter({ logger, configManager });
+    const systemPromptGuidance = 'Original guidance.\n';
+    const judgePrompt = 'Original judgement.\n';
+    await service.writeFrameworkFiles({
+      id: 'newline-test',
+      name: 'Newline Test',
+      type: 'NEWLINE_BASE',
+      system_prompt_guidance: systemPromptGuidance,
+      judge_prompt: judgePrompt,
+    });
+
+    const existing = await service.loadExistingFramework('newline-test');
+    expect(existing).not.toBeNull();
+
+    // Only `name` supplied — mirrors a gate update that supplies only `activation`.
+    const result = await service.writeFrameworkFiles(
+      { id: 'newline-test', name: 'Newline Test Updated' },
+      existing
+    );
+    expect(result.success).toBe(true);
+
+    const frameworkDir = service.getFrameworkDir('newline-test');
+    // MUTATION KILLED: appending `.trim()` to either `readFile` call in
+    // `loadExistingFramework` (system-prompt.md / judge-prompt.md) makes this fail — the
+    // rewritten file loses its trailing `\n` and no longer matches the seeded content.
+    expect(readFileSync(join(frameworkDir, 'system-prompt.md'), 'utf8')).toBe(systemPromptGuidance);
+    expect(readFileSync(join(frameworkDir, 'judge-prompt.md'), 'utf8')).toBe(judgePrompt);
+  });
 });

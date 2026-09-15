@@ -324,8 +324,18 @@ export class GateDefinitionLoader {
       const guidancePath = join(gateDir, definition.guidanceFile);
       if (existsSync(guidancePath)) {
         try {
+          // Verbatim, not trimmed — matches the prompt loader's `systemMessageFile` /
+          // `userMessageTemplateFile` inlining (`yaml-prompt-loader.ts`), which reads the
+          // referenced file raw. An update that omits `guidance` falls back to this exact string
+          // (`gate-lifecycle-processor.ts` `guidance: guidance || existingGate.getGuidance()`)
+          // and writes it straight back (`gate-file-writer.ts`), so this is the one point where
+          // loaded text and written text meet: trimming here was the whole defect — it silently
+          // dropped `guidance.md`'s trailing newline on every load, so any update that changed an
+          // unrelated field (`activation`, `description`, ...) rewrote the file one byte short of
+          // what the repo's own Prettier formatting requires, and the next commit-time format
+          // check blocked on a file the caller never touched.
           const content = readFileSync(guidancePath, 'utf-8');
-          definition.guidance = content.trim();
+          definition.guidance = content;
           if (this.debug) {
             console.error(`[GateDefinitionLoader] Inlined guidance from ${guidancePath}`);
           }
