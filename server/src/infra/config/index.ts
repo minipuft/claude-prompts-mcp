@@ -151,7 +151,6 @@ function adoptInertSpellings(root: Record<string, unknown>): void {
  * `setupConsoleRedirection` does not replace it.
  */
 function writeSchemaWarning(message: string): void {
-  // eslint-disable-next-line no-console -- the STDIO module logger is silent on stderr outside CI
   console.warn(message);
 }
 
