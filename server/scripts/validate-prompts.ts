@@ -231,7 +231,10 @@ function collectIncludedGateIds(promptFiles: string[]): Set<string> {
     } catch {
       continue; // unparseable YAML is already reported as a schema problem
     }
-    const doc = parsed as {
+    // `parsed` is `null` for a document containing only `null`/`~` — coalesce to `{}` before the
+    // cast (findDroppedGates's `?.`-after-cast idiom, applied once for both fields below instead
+    // of twice) so neither property read below dereferences a null document.
+    const doc = (parsed ?? {}) as {
       gateConfiguration?: { include?: unknown };
       chainSteps?: unknown;
     };
@@ -278,18 +281,28 @@ function findOrphanGates(root: string, promptFiles: string[]): Problem[] {
   const problems: Problem[] = [];
 
   for (const file of gateFiles) {
+    const rel = relative(root, file);
     let parsed: unknown;
     try {
       parsed = yaml.load(readFileSync(file, 'utf8'));
     } catch {
       continue; // malformed gate YAML is a different gate's concern
     }
+    // A gate.yaml that parses to `null` (content `null`/`~`) or to a non-mapping is nobody else's
+    // concern: `validate:gate-index` (generate-gate-index.js) reads every gate.yaml too, but it
+    // CRASHES on the same shape rather than reporting it (`classifyGate`'s `gate.id.startsWith`
+    // on the `undefined` a null-spread produces, verified 2026-09-15) — so this is the only reader
+    // that can report it, and it does, rather than skipping.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      problems.push({ file: rel, kind: 'schema', detail: 'gate.yaml is empty or not a mapping' });
+      continue;
+    }
     const gate = parsed as GateYamlMinimal;
     if (gate.activation !== undefined) continue; // opt-in on its own terms
     const id = gate.id ?? basename(dirname(file));
     if (included.has(id)) continue;
     problems.push({
-      file: relative(root, file),
+      file: rel,
       kind: 'orphan',
       detail:
         `gate '${id}' declares no activation and is included by no prompt or chain step — ` +
@@ -471,16 +484,30 @@ if (SELF_TEST) {
       '',
     ].join('\n')
   );
+  // A whole prompt document that is `null` (content `null`/`~`) — `collectIncludedGateIds` must
+  // not dereference `gateConfiguration`/`chainSteps` off it.
+  writePrompt('general/null_document', 'null\n');
+  // A whole gate document that is `null` — nothing else in `validate:all` reports this shape
+  // (`validate:gate-index` crashes on it instead, see `findOrphanGates`), so it must be reported
+  // here as a schema problem rather than skipped.
+  writeGate('null-document', 'null\n');
 
   let orphanFound: Problem[] = [];
   try {
     orphanFound = findOrphanGates(promptsRoot, findPromptFiles(promptsRoot));
   } catch (error) {
-    failures.push(
-      `findOrphanGates threw on a non-array gateConfiguration.include: ${String(error)}`
-    );
+    failures.push(`findOrphanGates threw: ${String(error)}`);
   }
   rmSync(gateDir, { recursive: true, force: true });
+
+  const flaggedNullGate = orphanFound.some(
+    (p) =>
+      p.file.includes('null-document') &&
+      p.kind === 'schema' &&
+      p.detail === 'gate.yaml is empty or not a mapping'
+  );
+  if (!flaggedNullGate)
+    failures.push('a gate.yaml that parses to null was NOT reported as a schema problem');
 
   const flaggedOrphan = orphanFound.some((p) => p.file.includes('orphan-gate'));
   const flaggedIncludedViaConfig = orphanFound.some((p) => p.file.includes('included-via-config'));
