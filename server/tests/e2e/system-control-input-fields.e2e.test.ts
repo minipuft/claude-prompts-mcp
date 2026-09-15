@@ -9,16 +9,15 @@
  *
  * HOME, the workspace and the runtime root are temp directories, because an export writes client
  * skill folders under HOME. `skills-sync.yaml` is a local, gitignored file that skills_sync reads
- * beside the resources directory, so the suite serves a copy of the bundled resources through
- * `MCP_RESOURCES_PATH` with a fixture config next to it.
+ * from the workspace before the package, so the suite writes a fixture config into the temp
+ * workspace and serves the bundled resources beneath it.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   getAvailablePort,
@@ -29,8 +28,6 @@ import {
 } from './helpers/http-mcp-client.js';
 
 import type { ChildProcess } from 'node:child_process';
-
-const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Two registered clients, so an export limited to one can be seen leaving the other alone. */
 const FIXTURE_CONFIG = [
@@ -63,7 +60,6 @@ function countFiles(dir: string): number {
 }
 
 describe('system_control fields over MCP', () => {
-  let root = '';
   let home = '';
   let workspace = '';
   let server: ChildProcess | undefined;
@@ -84,13 +80,9 @@ describe('system_control fields over MCP', () => {
   }
 
   beforeAll(async () => {
-    root = await mkdtemp(path.join(tmpdir(), 'system-control-fields-root-'));
     home = await mkdtemp(path.join(tmpdir(), 'system-control-fields-home-'));
     workspace = await mkdtemp(path.join(tmpdir(), 'system-control-fields-workspace-'));
-    await cp(path.join(SERVER_ROOT, 'resources'), path.join(root, 'resources'), {
-      recursive: true,
-    });
-    await writeFile(path.join(root, 'skills-sync.yaml'), FIXTURE_CONFIG);
+    await writeFile(path.join(workspace, 'skills-sync.yaml'), FIXTURE_CONFIG);
 
     const port = await getAvailablePort();
     server = startServerWithHttp(port, {
@@ -98,7 +90,6 @@ describe('system_control fields over MCP', () => {
         HOME: home,
         MCP_WORKSPACE: workspace,
         MCP_RUNTIME_ROOT: workspace,
-        MCP_RESOURCES_PATH: path.join(root, 'resources'),
       },
     });
     const baseUrl = `http://127.0.0.1:${port}`;
@@ -111,7 +102,7 @@ describe('system_control fields over MCP', () => {
     await client?.close();
     if (server) await killServer(server);
     await Promise.all(
-      [root, home, workspace]
+      [home, workspace]
         .filter((dir) => dir !== '')
         .map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5 }))
     );
