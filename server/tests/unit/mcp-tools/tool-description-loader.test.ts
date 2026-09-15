@@ -2,18 +2,17 @@ import { EventEmitter, once } from 'events';
 
 import { describe, expect, it, beforeEach, jest } from '@jest/globals';
 
-import { createToolDescriptionLoader } from '../src/mcp/tools/tool-description-loader.js';
-import { resetDefaultRuntimeLoader } from '../src/engine/frameworks/definitions/index.js';
+import { createToolDescriptionLoader } from '../../../src/mcp/tools/tool-description-loader.js';
+import { resetDefaultRuntimeLoader } from '../../../src/engine/frameworks/definitions/index.js';
 
-import type { ConfigManager } from '../src/infra/config/index.js';
-import type { FrameworkStateStore } from '../src/engine/frameworks/framework-state-store.js';
-import type { Logger } from '../src/infra/logging/index.js';
-import type { ResolvedFrameworkConfig } from '../src/shared/types/index.js';
+import type { FrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
+import type { Logger } from '../../../src/infra/logging/index.js';
+import type { ConfigManager, ResolvedFrameworkConfig } from '../../../src/shared/types/index.js';
 
 // The same generated contract ToolDescriptionLoader statically imports (esbuild inlines it into
 // dist/index.js — see tool-description-loader.ts). Importing it here too lets this suite assert
 // against the real content instead of a fake file the loader no longer reads from disk.
-import toolDescriptionsContract from '../src/mcp/contracts/schemas/_generated/tool-descriptions.contracts.json' with { type: 'json' };
+import toolDescriptionsContract from '../../../src/mcp/contracts/schemas/_generated/tool-descriptions.contracts.json' with { type: 'json' };
 
 class FakeConfigManager extends EventEmitter {
   private frameworks: ResolvedFrameworkConfig;
@@ -80,6 +79,9 @@ const makeLogger = (): Logger =>
 
 const baseFrameworksConfig: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
+  // Matches DEFAULT_FRAMEWORK_ID (src/shared/utils/constants.ts) and the 'CAGEERF' active
+  // framework FakeFrameworkStateStore below defaults to — not an arbitrary filler value.
+  defaultFramework: 'CAGEERF',
 };
 
 describe('ToolDescriptionLoader (framework-aware active config)', () => {

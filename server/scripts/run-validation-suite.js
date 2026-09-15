@@ -104,6 +104,20 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `\bnpm run\b`, and validate-test-directory-membership.js's self-test fixtures carry that
+    // literal inside synthetic `package.json` script strings ('npm run test:unit') used to prove
+    // the delegation-following logic. The script spawns no process and imports only node:fs,
+    // node:os, node:path and node:url. Declared rather than worked around, for the reason
+    // validate:contributing and validate:hermetic-child-env already declare it: the detector is
+    // textual by design and omitting a matched substrate fails.
+    script: 'validate:test-directory-membership',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives a fixture tree with a planted stray *.test.ts outside every declared directory (must report, naming the file) and a clean fixture with only allowed-directory tests plus a non-test file at tests/ root (must stay silent); a synthetic declared-directory audit also proves the drift check fires when a directory string no longer appears in any CI-run script's resolved command — following one level of npm-run indirection (test:ci -> test:unit), rejecting a shared-prefix false match (tests/unit vs tests/unit-renamed), a missing CI script, and a self-referential delegation cycle, each independently. The motivating instance (server/tests/tool-description-loader.test.ts) is the fifth case, restored as a positive control after the real move and confirmed to fail naming that exact path",
+  },
+  {
     script: 'validate:format',
     io: 'read',
     reads: ['spawn', 'tracked'],
