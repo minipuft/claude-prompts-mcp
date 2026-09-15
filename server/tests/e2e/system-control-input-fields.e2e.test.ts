@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   getAvailablePort,
+  killServer,
   startServerWithHttp,
   StreamableHttpMcpClient,
   waitForHealth,
@@ -108,11 +109,11 @@ describe('system_control fields over MCP', () => {
 
   afterAll(async () => {
     await client?.close();
-    server?.kill('SIGTERM');
+    if (server) await killServer(server);
     await Promise.all(
       [root, home, workspace]
         .filter((dir) => dir !== '')
-        .map((dir) => rm(dir, { recursive: true, force: true }))
+        .map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5 }))
     );
   });
 
