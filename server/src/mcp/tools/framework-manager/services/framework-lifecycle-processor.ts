@@ -274,7 +274,7 @@ export class FrameworkLifecycleProcessor {
     // is the authority — and the `existsSync` check below is exactly that. A registry check here
     // refused to delete a framework that exists on disk but was never registered, which is
     // precisely the state a failed re-registration produces: the tool could not clean up what it
-    // had just written, and the directory had to be removed by hand. The `unregister` call
+    // had just written, and the directory had to be removed by hand. The `removeFramework` call
     // further down already tolerates a framework the registry does not know, and logs when that
     // happens. Same removal, same reasoning, as the gate side in `b7102dd9`.
 
@@ -330,7 +330,7 @@ export class FrameworkLifecycleProcessor {
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${frameworkDir}\n` +
           // Corrects a claim the live path never made good on: deletion is `fs.rm` +
-          // `unregister` and touches no database row. The version rows survive and become
+          // `removeFramework` and touches no database row. The version rows survive and become
           // unreachable, since rollback resolves the framework first — the same wording, and the
           // same reason, as the gate-side correction in `b7102dd9`.
           `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
