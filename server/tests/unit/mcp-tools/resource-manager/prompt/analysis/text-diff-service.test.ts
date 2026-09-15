@@ -1,25 +1,30 @@
 import { describe, expect, test } from '@jest/globals';
-import { ObjectDiffGenerator } from '../../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
-import type { ConvertedPrompt } from '../../../../../../src/shared/types/index.js';
+import {
+  ObjectDiffGenerator,
+  type FileContentChange,
+} from '../../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 
 describe('ObjectDiffGenerator', () => {
   const service = new ObjectDiffGenerator();
 
-  // Helper to create minimal prompt for testing
-  const createPrompt = (overrides: Partial<ConvertedPrompt> = {}): ConvertedPrompt => ({
-    id: 'test-prompt',
-    name: 'Test Prompt',
-    description: 'A test prompt',
-    category: 'testing',
-    userMessageTemplate: 'Hello {{name}}',
-    arguments: [],
+  const USER_MESSAGE = 'general/test_prompt/user-message.md';
+
+  const change = (overrides: Partial<FileContentChange> = {}): FileContentChange => ({
+    path: USER_MESSAGE,
+    previousPath: USER_MESSAGE,
+    before: 'Hello {{name}}\n',
+    after: 'Hello {{name}}\n',
     ...overrides,
   });
 
-  describe('generatePromptDiff', () => {
-    test('returns hasChanges:false when content is identical', () => {
-      const prompt = createPrompt();
-      const result = service.generatePromptDiff(prompt, prompt);
+  const longChange = (): FileContentChange => {
+    const content = Array(100).fill('Line of content').join('\n');
+    return change({ before: content, after: content.replace(/Line/g, 'Changed') });
+  };
+
+  describe('generateFileChangeDiff', () => {
+    test('returns hasChanges:false when no file content changes', () => {
+      const result = service.generateFileChangeDiff([change()]);
 
       expect(result.hasChanges).toBe(false);
       expect(result.diff).toBe('');
@@ -28,81 +33,82 @@ describe('ObjectDiffGenerator', () => {
       expect(result.stats.deletions).toBe(0);
     });
 
-    test('detects changes in userMessageTemplate', () => {
-      const before = createPrompt({ userMessageTemplate: 'Hello world' });
-      const after = createPrompt({ userMessageTemplate: 'Hello universe' });
-
-      const result = service.generatePromptDiff(before, after);
+    test('names a changed file on both sides and shows only its changed lines', () => {
+      const result = service.generateFileChangeDiff([
+        change({ before: 'Hello world\nKeep me\n', after: 'Hello universe\nKeep me\n' }),
+      ]);
 
       expect(result.hasChanges).toBe(true);
-      expect(result.diff).toContain('-userMessageTemplate: Hello world');
-      expect(result.diff).toContain('+userMessageTemplate: Hello universe');
-      expect(result.stats.additions).toBeGreaterThan(0);
-      expect(result.stats.deletions).toBeGreaterThan(0);
+      expect(result.diff).toContain(`--- a/${USER_MESSAGE}`);
+      expect(result.diff).toContain(`+++ b/${USER_MESSAGE}`);
+      expect(result.diff).toContain('-Hello world');
+      expect(result.diff).toContain('+Hello universe');
+      expect(result.stats).toMatchObject({ additions: 1, deletions: 1, hunks: 1 });
     });
 
-    test('detects changes in description', () => {
-      const before = createPrompt({ description: 'Old description' });
-      const after = createPrompt({ description: 'New description' });
+    test('keeps a long line as the file holds it rather than rewrapping it', () => {
+      const long = 'word '.repeat(40).trim();
 
-      const result = service.generatePromptDiff(before, after);
+      const result = service.generateFileChangeDiff([
+        change({ before: `${long}\n`, after: `${long}!\n` }),
+      ]);
 
-      expect(result.hasChanges).toBe(true);
-      expect(result.diff).toContain('-description: Old description');
-      expect(result.diff).toContain('+description: New description');
+      expect(result.diff).toContain(`-${long}\n+${long}!`);
     });
 
-    test('handles null before (new prompt)', () => {
-      const after = createPrompt({ id: 'new-prompt', name: 'New Prompt' });
+    test('diffs a created file from /dev/null and a deleted file to it', () => {
+      const result = service.generateFileChangeDiff([
+        change({
+          path: 'general/p/system-message.md',
+          previousPath: 'general/p/system-message.md',
+          before: null,
+          after: 'Be precise.\n',
+        }),
+        change({
+          path: 'general/p/tools/old/tool.yaml',
+          previousPath: 'general/p/tools/old/tool.yaml',
+          before: 'id: old\n',
+          after: null,
+        }),
+      ]);
 
-      const result = service.generatePromptDiff(null, after);
-
-      expect(result.hasChanges).toBe(true);
-      expect(result.stats.deletions).toBe(0);
-      expect(result.stats.additions).toBeGreaterThan(0);
-      // All lines should be additions
-      expect(result.diff).toContain('+name: New Prompt');
+      expect(result.diff).toContain('--- /dev/null\n+++ b/general/p/system-message.md');
+      expect(result.diff).toContain('--- a/general/p/tools/old/tool.yaml\n+++ /dev/null');
+      expect(result.stats).toMatchObject({ additions: 1, deletions: 1, hunks: 2 });
     });
 
-    test('handles systemMessage changes', () => {
-      const before = createPrompt({ systemMessage: 'You are a helper' });
-      const after = createPrompt({ systemMessage: 'You are an expert helper' });
+    test('omits a file whose content does not change and names the rest', () => {
+      const result = service.generateFileChangeDiff([
+        change({
+          path: 'general/test_prompt/prompt.yaml',
+          previousPath: 'general/test_prompt/prompt.yaml',
+          before: 'id: test_prompt\n',
+          after: 'id: test_prompt\n',
+        }),
+        change({ before: 'a\n', after: 'b\n' }),
+      ]);
 
-      const result = service.generatePromptDiff(before, after);
-
-      expect(result.hasChanges).toBe(true);
-      expect(result.diff).toContain('-systemMessage: You are a helper');
-      expect(result.diff).toContain('+systemMessage: You are an expert helper');
+      expect(result.diff).not.toContain('prompt.yaml');
+      expect(result.diff).toContain(USER_MESSAGE);
     });
 
-    test('handles argument changes', () => {
-      const before = createPrompt({
-        arguments: [{ name: 'input', type: 'string', description: 'Input text' }],
-      });
-      const after = createPrompt({
-        arguments: [
-          { name: 'input', type: 'string', description: 'Input text' },
-          { name: 'format', type: 'string', description: 'Output format' },
-        ],
-      });
+    test('names the previous path when a write relocates the file', () => {
+      const result = service.generateFileChangeDiff([
+        change({
+          previousPath: 'old_category/test_prompt/user-message.md',
+          before: 'a\n',
+          after: 'b\n',
+        }),
+      ]);
 
-      const result = service.generatePromptDiff(before, after);
-
-      expect(result.hasChanges).toBe(true);
-      expect(result.diff).toContain('format');
+      expect(result.diff).toContain('--- a/old_category/test_prompt/user-message.md');
+      expect(result.diff).toContain(`+++ b/${USER_MESSAGE}`);
     });
   });
 
   describe('truncation', () => {
     test('truncates large diffs to maxLines', () => {
-      // Create prompts with many lines of content
-      const longContent = Array(100).fill('Line of content').join('\n');
-      const before = createPrompt({ userMessageTemplate: longContent });
-      const after = createPrompt({
-        userMessageTemplate: longContent.replace(/Line/g, 'Changed'),
-      });
-
-      const result = service.generatePromptDiff(before, after, { maxLines: 20 });
+      const result = service.generateFileChangeDiff([longChange()], { maxLines: 20 });
 
       expect(result.stats.truncated).toBe(true);
       expect(result.diff).toContain('... (');
@@ -110,10 +116,12 @@ describe('ObjectDiffGenerator', () => {
     });
 
     test('does not truncate small diffs', () => {
-      const before = createPrompt({ description: 'Short' });
-      const after = createPrompt({ description: 'Also short' });
-
-      const result = service.generatePromptDiff(before, after, { maxLines: 100 });
+      const result = service.generateFileChangeDiff(
+        [change({ before: 'Short\n', after: 'Also short\n' })],
+        {
+          maxLines: 100,
+        }
+      );
 
       expect(result.stats.truncated).toBe(false);
     });
@@ -121,10 +129,7 @@ describe('ObjectDiffGenerator', () => {
 
   describe('formatted output', () => {
     test('includes stats summary', () => {
-      const before = createPrompt({ name: 'Old Name' });
-      const after = createPrompt({ name: 'New Name' });
-
-      const result = service.generatePromptDiff(before, after);
+      const result = service.generateFileChangeDiff([change({ before: 'Old\n', after: 'New\n' })]);
 
       expect(result.formatted).toContain('**Changes**:');
       expect(result.formatted).toMatch(/\+\d+ additions/);
@@ -132,55 +137,39 @@ describe('ObjectDiffGenerator', () => {
     });
 
     test('wraps diff in markdown code block', () => {
-      const before = createPrompt({ name: 'Old' });
-      const after = createPrompt({ name: 'New' });
-
-      const result = service.generatePromptDiff(before, after);
+      const result = service.generateFileChangeDiff([change({ before: 'Old\n', after: 'New\n' })]);
 
       expect(result.formatted).toContain('```diff');
       expect(result.formatted).toContain('```');
     });
 
-    test('includes truncation notice when truncated', () => {
-      const longContent = Array(100).fill('Content line').join('\n');
-      const before = createPrompt({ userMessageTemplate: longContent });
-      const after = createPrompt({
-        userMessageTemplate: longContent.replace(/Content/g, 'Modified'),
-      });
+    test('reports the configured line budget when truncated', () => {
+      const result = service.generateFileChangeDiff([longChange()], { maxLines: 30 });
 
-      const result = service.generatePromptDiff(before, after, { maxLines: 30 });
-
-      expect(result.formatted).toContain('*(Showing');
+      expect(result.formatted).toContain('*(Showing 30 of');
       expect(result.formatted).toContain('lines)*');
-    });
-  });
-
-  describe('error handling', () => {
-    test('returns empty result on invalid input', () => {
-      // Pass something that would fail serialization
-      const result = service.generatePromptDiff(null, { id: 'test' } as Partial<ConvertedPrompt>);
-
-      // Should not throw, just return empty result
-      expect(result.hasChanges).toBe(true); // Has changes since before was null
     });
   });
 
   describe('context lines', () => {
     test('respects custom context setting', () => {
-      const before = createPrompt({
-        userMessageTemplate: 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5',
-      });
-      const after = createPrompt({
-        userMessageTemplate: 'Line 1\nLine 2\nChanged\nLine 4\nLine 5',
-      });
+      const before = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n';
+      const edited = change({ before, after: before.replace('Line 3', 'Changed') });
 
-      const resultWithContext = service.generatePromptDiff(before, after, { context: 1 });
-      const resultWithMoreContext = service.generatePromptDiff(before, after, { context: 3 });
+      const resultWithContext = service.generateFileChangeDiff([edited], { context: 1 });
+      const resultWithMoreContext = service.generateFileChangeDiff([edited], { context: 3 });
 
-      // More context = longer diff
-      expect(resultWithMoreContext.diff.length).toBeGreaterThanOrEqual(
-        resultWithContext.diff.length
-      );
+      expect(resultWithMoreContext.diff.length).toBeGreaterThan(resultWithContext.diff.length);
+    });
+  });
+
+  describe('generateObjectDiff', () => {
+    test('diffs two objects as YAML under the given file name', () => {
+      const result = service.generateObjectDiff({ name: 'Old' }, { name: 'New' }, 'gate.yaml');
+
+      expect(result.hasChanges).toBe(true);
+      expect(result.diff).toContain('-name: Old');
+      expect(result.diff).toContain('+name: New');
     });
   });
 });
