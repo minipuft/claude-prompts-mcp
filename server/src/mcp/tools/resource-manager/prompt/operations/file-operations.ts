@@ -521,7 +521,7 @@ export class FileOperations {
       promptFiles,
       removesSystemMessage,
       scaffoldFiles: Array.isArray(promptData.chainSteps)
-        ? this.planChainStepScaffolds(priorDir, promptId, promptData.chainSteps)
+        ? this.planChainStepScaffolds(promptDir, priorDir, promptId, promptData.chainSteps)
         : [],
       toolFiles: Array.isArray(promptData.tools) ? this.planToolFiles(promptData.tools) : [],
       removedToolIds: writeIntent.removedToolIds,
@@ -1064,8 +1064,21 @@ export class FileOperations {
    * directory already exists in the prior tree or that an earlier step in the same list named.
    *
    * Produces, relative to the parent's directory: {stepDirName}/prompt.yaml + user-message.md
+   *
+   * `stepDirName` of `.` or `..` names the parent's own directory or its category folder, not a
+   * sub-prompt — refused by name (tutorial-rework B.22) rather than silently skipped, because a
+   * skip here reads as success: on an existing parent, `existsSync` happens to find the category
+   * (`..`) or the parent's own directory (`.`) already there and treats the step as "already
+   * scaffolded", while on a FRESH create there is no prior directory to shadow it, and the stub
+   * writes `${stepDirName}/prompt.yaml` one level above the caller's own prompt. Measured against
+   * a live server 2026-09-15: a fresh create with a step `promptId: "<parent>/.."` reported
+   * "✅ Prompt Created" and wrote a stray `prompt.yaml` (`id: ..`) into the parent's CATEGORY
+   * directory. `resolveContainedPath` runs unconditionally below as defense in depth — the same
+   * containment every other resource write already trusts — so a future name that escapes without
+   * being literally `.`/`..` is still refused at the path layer, not merely by this check.
    */
   private planChainStepScaffolds(
+    promptDir: string,
     priorDir: string | null,
     parentId: string,
     steps: unknown[]
@@ -1083,8 +1096,21 @@ export class FileOperations {
 
       const stepDirName = promptId.slice(prefix.length);
       if (!stepDirName || stepDirName.includes('/')) {
-        continue; // Empty or deeply nested — skip
+        continue; // Empty or deeply nested — skip (out of scope for B.22, see concerns)
       }
+
+      if (stepDirName === '.' || stepDirName === '..') {
+        throw new Error(
+          `Chain step "${promptId}" cannot scaffold outside its parent's own directory — ` +
+            `"${stepDirName}" names the parent's own folder or its category, not a sub-prompt. ` +
+            `Nothing was written.`
+        );
+      }
+      // Defense in depth: the same containment check every other resource write already goes
+      // through. Nothing on this path escapes today that the check above does not already catch
+      // (the sole remaining vectors, empty and deeply-nested, are filtered before this line), but
+      // the join stays the check rather than a second thing to remember.
+      resolveContainedPath(promptDir, stepDirName);
 
       const alreadyExists =
         planned.has(stepDirName) ||
