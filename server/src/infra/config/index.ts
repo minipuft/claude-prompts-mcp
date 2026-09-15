@@ -257,6 +257,8 @@ export interface ResourcePathSource {
   getPromptsPath(): string;
   getGatesPath(): string;
   getFrameworksPath(): string;
+  getScriptsPath(): string;
+  getStylesPath(): string;
   /**
    * The bundled (package-shipped) directory for a resource type — the lowest-precedence root,
    * always read, never written.
@@ -748,6 +750,37 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
     const configDir = path.dirname(this.configPath);
     return path.join(configDir, 'resources', 'gates');
+  }
+
+  /**
+   * Get scripts directory path — the primary root `WorkspaceScriptLoader` searches after
+   * prompt-local scripts, for `{{script:id}}` references (`prompt-executor.ts`).
+   *
+   * Fourth instance of the prompts/gates/frameworks defect: this loader built its search
+   * directory from `getServerRoot()` directly, so it read the package tree even with a
+   * workspace configured — the read side never went through `PathResolver` at all, prompts'
+   * starting point before D8 Arc 1.
+   */
+  getScriptsDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getScriptsPath();
+    }
+
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'scripts');
+  }
+
+  /**
+   * Get styles directory path — the primary root `StyleManager` resolves `#style` references
+   * against (`prompt-executor.ts`). Same defect and fix as {@link getScriptsDirectory}.
+   */
+  getStylesDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getStylesPath();
+    }
+
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'styles');
   }
 
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts
