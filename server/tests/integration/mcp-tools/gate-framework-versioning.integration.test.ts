@@ -993,7 +993,12 @@ describe('Framework lifecycle error messages name the resolved directory (B.26)'
       } as unknown as ConfigManager,
       fileService,
       textDiffService: new ObjectDiffGenerator(),
-      versionHistoryService: {} as unknown as VersionHistoryService,
+      // This suite is about error-path directory naming, not versioning — `handleCreate` now
+      // reads `isAutoVersionEnabled()` before it ever reaches the failure branches under test
+      // (row B.25), so a bare `{}` no longer stands in here.
+      versionHistoryService: {
+        isAutoVersionEnabled: () => false,
+      } as unknown as VersionHistoryService,
     };
   }
 
