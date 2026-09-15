@@ -205,6 +205,12 @@ export const resourceManagerInputSchema = z
     confirm: z.boolean().optional(),
     /** Audit reason for reload/delete/switch operations. */
     reason: z.string().trim().optional(),
+    /** [Prompt] reload, create, update and delete restart the server instead of hot-reloading. */
+    full_restart: z.boolean().optional(),
+    /** [Prompt guide] What the caller is trying to do; ranks the suggested actions. */
+    goal: z.string().optional(),
+    /** [Prompt guide] Include full details for actions that are not marked working. */
+    include_legacy: z.boolean().optional(),
 
     // ── Prompt parameters ────────────────────────────────────────────────
     /** [Prompt] Category tag for the prompt. */

@@ -1506,6 +1506,9 @@
       "from_version": {
         "type": "number"
       },
+      "full_restart": {
+        "type": "boolean"
+      },
       "gate_configuration": {
         "additionalProperties": {},
         "propertyNames": {
@@ -1527,11 +1530,17 @@
         },
         "type": "object"
       },
+      "goal": {
+        "type": "string"
+      },
       "guidance": {
         "type": "string"
       },
       "id": {
         "type": "string"
+      },
+      "include_legacy": {
+        "type": "boolean"
       },
       "injection": {
         "additionalProperties": false,
@@ -2106,7 +2115,70 @@
         "description": "<present>",
         "type": "string"
       },
+      "backup_path": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "category": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "client": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "config": {
+        "description": "<present>",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "get",
+              "set",
+              "list",
+              "validate"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "confirm": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "enabled": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "expires_in_ms": {
+        "description": "<present>",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer"
+      },
+      "file": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "force": {
+        "description": "<present>",
+        "type": "boolean"
+      },
       "framework": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "id": {
         "description": "<present>",
         "type": "string"
       },
@@ -2118,7 +2190,21 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "include_planned": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "<present>",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer"
+      },
       "operation": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "output": {
         "description": "<present>",
         "type": "string"
       },
@@ -2126,7 +2212,48 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "preview": {
+        "description": "<present>",
+        "type": "boolean"
+      },
+      "preview_detail": {
+        "description": "<present>",
+        "enum": [
+          "summary",
+          "diff"
+        ],
+        "type": "string"
+      },
+      "prune": {
+        "description": "<present>",
+        "type": "boolean"
+      },
       "reason": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "resource_type": {
+        "description": "<present>",
+        "enum": [
+          "prompt",
+          "gate",
+          "framework",
+          "style"
+        ],
+        "type": "string"
+      },
+      "scope": {
+        "description": "<present>",
+        "enum": [
+          "user",
+          "project",
+          "session",
+          "chain",
+          "step"
+        ],
+        "type": "string"
+      },
+      "scope_id": {
         "description": "<present>",
         "type": "string"
       },
@@ -2142,8 +2269,30 @@
         "description": "<present>",
         "type": "boolean"
       },
+      "since": {
+        "description": "<present>",
+        "type": "string"
+      },
+      "source": {
+        "description": "<present>",
+        "enum": [
+          "filesystem",
+          "mcp-tool",
+          "external"
+        ],
+        "type": "string"
+      },
       "topic": {
         "description": "<present>",
+        "type": "string"
+      },
+      "type": {
+        "description": "<present>",
+        "enum": [
+          "system-prompt",
+          "gate-guidance",
+          "style-guidance"
+        ],
         "type": "string"
       }
     },

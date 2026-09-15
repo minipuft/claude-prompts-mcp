@@ -216,8 +216,10 @@ export class ResourceManagerRouter {
       mcp_prompt_mode: args.mcp_prompt_mode,
       subagent_model: args.subagent_model,
       agent_type: args.agent_type,
-      is_chain: args.is_chain,
       full_restart: args.full_restart,
+      // Read by `guide`. Forwarded under the caller's names like every field above.
+      goal: args.goal,
+      include_legacy: args.include_legacy,
       execution_hint: args.execution_hint,
       filter: args.filter,
       format: args.format,

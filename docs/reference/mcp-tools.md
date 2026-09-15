@@ -1048,16 +1048,26 @@ system_control(action:"gates", operation:"list")
 
 ### Actions
 
-| Action              | Operations                            | Purpose                   |
-| ------------------- | ------------------------------------- | ------------------------- |
-| `status`            | —                                     | Runtime overview          |
-| `framework`         | `list`, `switch`, `enable`, `disable` | Framework management      |
-| `gates`             | `list`, `enable`, `disable`, `status` | Gate management           |
-| `analytics`         | —                                     | Execution metrics         |
-| `config`            | —                                     | View config overlays      |
-| `changes`           | `list`                                | Resource change audit log |
-| `session`           | `list`, `inspect`, `clear`            | Chain session lifecycle   |
-| `execution_history` | `list`                                | Chain execution ledger    |
+| Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                               |
+| ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                      |
+| `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                  |
+| `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                       |
+| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                     |
+| `config`            | `restore`, `validate`                               | `config: { key, value?, operation }` for get/set/list/validate; `backup_path` and `confirm: true` for restore         | View, change and restore configuration                                                |
+| `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                        |
+| `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                    |
+| `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                           |
+| `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                             |
+| `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                               |
+| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                |
+| `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md) |
+
+Every parameter is declared in the tool's input schema, which drops any field it does not declare
+before the action runs. Two names are shared across actions with different values: `scope` is
+`user` or `project` for `skills_sync` and `session`, `chain` or `step` for an injection override,
+and `resource_type` takes `prompt`, `gate`, `framework` or `style` for `skills_sync` while the
+change log records only `prompt` and `gate`. Each action refuses a value that belongs to the other.
 
 ### Execution History
 
@@ -1153,8 +1163,8 @@ system_control(action:"changes", operation:"list", source:"filesystem")
 system_control(action:"changes", operation:"list", source:"mcp-tool")
 
 # Filter by resource type
-system_control(action:"changes", operation:"list", resourceType:"prompt")
-system_control(action:"changes", operation:"list", resourceType:"gate")
+system_control(action:"changes", operation:"list", resource_type:"prompt")
+system_control(action:"changes", operation:"list", resource_type:"gate")
 
 # Filter by time
 system_control(action:"changes", operation:"list", since:"2026-01-20T00:00:00Z")
@@ -1733,15 +1743,16 @@ falling through to the package defaults, which would serve the bundled catalog u
 
 ## Reference
 
-| Component          | Location                                                  |
-| ------------------ | --------------------------------------------------------- |
-| Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
-| Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
-| Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
-| Frameworks         | `server/resources/frameworks/{id}/framework.yaml`         |
-| Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
-| Resource changes   | `runtime-state/resource-changes.jsonl`                    |
-| Server config      | `server/config.json`                                      |
+| Component               | Location                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt definitions      | `server/resources/prompts/{category}/{id}/prompt.yaml`                                                                                                               |
+| Gate definitions        | `server/resources/gates/{id}/gate.yaml`                                                                                                                              |
+| Style definitions       | `server/resources/styles/{id}/style.yaml` (package default; a workspace `resources/styles/{id}/` overlays it, same as prompts/gates/frameworks)                      |
+| Script tool definitions | `server/resources/scripts/{id}/tool.yaml` (workspace `resources/scripts/{id}/` when a custom workspace is configured; see [Script Tools](../guides/script-tools.md)) |
+| Frameworks              | `server/resources/frameworks/{id}/framework.yaml`                                                                                                                    |
+| Chain sessions          | SQLite (`runtime-state/state.db`, table `chain_sessions`)                                                                                                            |
+| Resource changes        | `runtime-state/resource-changes.jsonl`                                                                                                                               |
+| Server config           | `server/config.json`                                                                                                                                                 |
 
 **Related docs:**
 

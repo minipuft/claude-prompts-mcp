@@ -14,6 +14,14 @@ import {
   type InjectionType,
 } from '#engine/execution/pipeline/decisions/injection/index.js';
 
+const INJECTION_OVERRIDE_SCOPES = ['session', 'chain', 'step'] as const;
+
+function isInjectionOverrideScope(
+  value: unknown
+): value is (typeof INJECTION_OVERRIDE_SCOPES)[number] {
+  return (INJECTION_OVERRIDE_SCOPES as readonly unknown[]).includes(value);
+}
+
 export class InjectionActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
     const operation = args.operation || 'status';
@@ -97,9 +105,18 @@ export class InjectionActionHandler extends ActionHandler {
   private setInjectionOverride(args: any): ToolResponse {
     const type = args.type as InjectionType | undefined;
     const enabled = args.enabled as boolean | undefined;
-    const scope = (args.scope as 'session' | 'chain' | 'step') || 'session';
+    // `scope` is shared with skills_sync, whose user|project values the schema also admits.
+    const scope: unknown = args.scope ?? 'session';
     const scopeId = args.scope_id as string | undefined;
     const expiresInMs = args.expires_in_ms as number | undefined;
+
+    if (!isInjectionOverrideScope(scope)) {
+      return this.createMinimalSystemResponse(
+        `❌ Invalid injection override scope: \`${String(scope)}\`\n\n` +
+          `Valid scopes: ${INJECTION_OVERRIDE_SCOPES.map((s) => `\`${s}\``).join(', ')}`,
+        'injection_override_error'
+      );
+    }
 
     if (!type || !INJECTION_TYPES.includes(type)) {
       return this.createMinimalSystemResponse(

@@ -611,3 +611,44 @@ scenarios:
     # substring rather than merely omit a line the assertion never checked.
     expect:
       text_contains: "Advanced Fields:\n  - framework_gates: 1 item\n  - template_suggestions: 1 item\n  - framework_elements: 2 keys\n  - argument_suggestions: 1 item\n  - judge_prompt: JUDGE_PROMPT_FIRST_LINE_MARKER\n  - processing_steps: 1 item\n  - execution_steps: 1 item\n  - execution_type_enhancements: 1 key\n  - template_enhancements: 1 key\n  - execution_flow: 1 key\n  - quality_indicators: 1 key"
+
+  # ── system_control fields that change server state ─────────────────────────
+  # Here rather than in tool-surface.yaml because each one mutates: analytics reset clears the
+  # metrics, and an injection override is session state. The override expires after 1 ms, so it
+  # cannot steer any later row's injection decision.
+  - id: sc-analytics-reset-confirmed
+    claim_source: >-
+      system_control contract — `confirm` "Required `true` for operations that replace or discard
+      state". analytics reset answers "Metrics reset cancelled" unless `confirm: true` arrives.
+    requests:
+      - tool: system_control
+        args: { action: analytics, operation: reset, confirm: true }
+    expect: { text_contains: 'Metrics Reset Completed' }
+
+  - id: sc-injection-override-expiring
+    claim_source: >-
+      system_control contract — injection override `type`, `enabled`, `scope`, `scope_id` and
+      `expires_in_ms`. The confirmation prints each value the override was set with.
+    requests:
+      - tool: system_control
+        args:
+          {
+            action: injection,
+            operation: override,
+            type: gate-guidance,
+            enabled: true,
+            scope: chain,
+            scope_id: conformance-probe,
+            expires_in_ms: 1,
+          }
+    expect:
+      text_contains: "**Type:** `gate-guidance`\n**Enabled:** ✅ Yes\n**Scope:** chain\n**Scope ID:** conformance-probe\n**Expires:** "
+
+  - id: sc-changes-limit
+    claim_source: >-
+      system_control contract — changes list `limit` "Maximum entries to return". The prompt
+      creates above record mcp-tool changes, and the page header names the limit it applied.
+    requests:
+      - tool: system_control
+        args: { action: changes, operation: list, source: mcp-tool, limit: 1 }
+    expect: { text_contains: '(1 of max 1)' }

@@ -13,8 +13,6 @@
  *                 └── PipelineStage[] (22 stages)
  */
 
-import * as path from 'node:path';
-
 import { ChainSessionRouter } from './chain-session-router.js';
 import { PipelineBuilder } from './pipeline-builder.js';
 import { ToolDescriptionLoader } from '../../tool-description-loader.js';
@@ -268,9 +266,12 @@ export class PromptExecutor {
     this.chainSessionRouter.updatePrompts(convertedPrompts);
     // Create reference resolver with updated prompts
     this.referenceResolver = new PromptReferenceResolver(this.logger, convertedPrompts);
-    // Create script reference resolver with workspace loader
+    // Create script reference resolver with workspace loader. `getScriptsDirectory()` resolves
+    // through `PathResolver` (workspace `resources/scripts/` when a custom workspace is
+    // configured, the package tree only as the no-resolver fallback) — `this.serverRoot` is
+    // always the package root and never saw a workspace script.
     const scriptLoader = new WorkspaceScriptLoader({
-      workspaceScriptsPath: path.join(this.serverRoot, 'resources', 'scripts'),
+      workspaceScriptsPath: this.configManager.getScriptsDirectory(),
     });
     const scriptExecutor = createScriptExecutor({ debug: false });
     this.scriptReferenceResolver = new ScriptReferenceResolver(
@@ -940,9 +941,12 @@ export class PromptExecutor {
     }
 
     try {
+      const stylesDir = this.configManager.getStylesDirectory();
+      const additionalStylesDirs = this.overlayDirsFor('styles', stylesDir);
       this.styleManager = await createStyleManager(this.logger, {
         loaderConfig: {
-          stylesDir: path.join(this.serverRoot, 'resources', 'styles'),
+          stylesDir,
+          ...(additionalStylesDirs.length > 0 ? { additionalStylesDirs } : {}),
         },
       });
       this.logger.info('[PromptExecutor] StyleManager initialized');
@@ -952,6 +956,27 @@ export class PromptExecutor {
       });
       // StyleManager is optional - pipeline will fall back to hardcoded styles
     }
+  }
+
+  /**
+   * Every directory `StyleDefinitionLoader` should fall back to beyond `primaryDir`: workspace
+   * overlay candidates, then the bundled package tree last when it is a distinct source —
+   * `StyleDefinitionLoader` itself drops entries that do not exist or duplicate the primary.
+   *
+   * Mirrors the combination `runtime/resource-roots.ts`'s `resolveResourceRoots` performs for
+   * `module-initializer.ts`'s own style loader (used only for the startup inventory line, never
+   * fed to the pipeline). Not imported from there: `mcp/` does not reach into `runtime/`, the
+   * application composition boundary. Both derive from the same `PathResolver` primitives,
+   * reached here through `ConfigManager.getOverlayResourceDirectories` /
+   * `getBundledResourceDirectory` — one resolution, two call sites.
+   */
+  private overlayDirsFor(resourceType: string, primaryDir: string): string[] {
+    const overlays = this.configManager.getOverlayResourceDirectories(resourceType, primaryDir);
+    const bundled = this.configManager.getBundledResourceDirectory(resourceType);
+    if (bundled !== undefined && bundled !== primaryDir && !overlays.includes(bundled)) {
+      return [...overlays, bundled];
+    }
+    return overlays;
   }
 
   private resetPipeline(): void {
