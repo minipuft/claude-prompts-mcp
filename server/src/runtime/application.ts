@@ -13,7 +13,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
-import { loadPromptData } from './data-loader.js';
+import { loadPromptData, loadSkillsSyncExports } from './data-loader.js';
 import { buildHealthReport } from './health.js';
 import { buildHotReloadAuxiliaryConfigs } from './hot-reload-auxiliaries.js';
 import {
@@ -926,6 +926,20 @@ export class Application {
         if (this.apiRouter) {
           this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
         }
+
+        // Recompute the exported-prompt set from the resolved skills-sync.yaml on every
+        // reload, not just at startup. `loadPromptData` (startup, and the manual
+        // `fullServerRefresh` path) already does this; this filesystem-watch path used to
+        // publish fresh prompt content without ever touching it, so a prompt newly
+        // registered for export stayed in `prompts/list` until a restart, and one
+        // unregistered stayed hidden. Set unconditionally, the same as `loadPromptData`: a
+        // reload that removes the last registration must clear the previous set too.
+        const exportedPromptIds = await loadSkillsSyncExports(
+          this.pathResolver,
+          this.logger,
+          this._convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
+        );
+        this.promptManager.setExportedPromptIds(exportedPromptIds);
 
         // Content refresh alone updates every already-bound handler, on every
         // shell, because handlers resolve through the live map at call time.
