@@ -263,10 +263,13 @@ Run `npm run skills:export` and read the warnings: they name every placeholder t
 per prompt, before you ship it.
 
 **A re-export that would take something away says so, too.** Before overwriting a SKILL.md this
-tool already manages, export compares it against what it is about to write and warns on anything
-the new version drops — a frontmatter `hooks` block (for example, a prompt that lost its
-`enforceGateHooks: true`) or a `## ` section present on disk and absent from the new content. Only
-removals are reported; an added or reworded section is ordinary sync output.
+tool already manages, export (and sync, the same way) compares it against what it is about to write
+and warns on anything the new version drops — a frontmatter `hooks` block (for example, a prompt
+that lost its `enforceGateHooks: true`) or a `## ` section present on disk and absent from the new
+content. Only removals are reported; an added or reworded section is ordinary sync output. The same
+managed-skill check also prunes `gates/<id>/` directories a prior run wrote for a gate that has
+since dropped out of the skill's set — left behind, they would keep advertising a gate
+`gates/index.json` no longer lists — and the run log names each one it removes.
 
 ## Which Gates an Exported Skill Carries
 

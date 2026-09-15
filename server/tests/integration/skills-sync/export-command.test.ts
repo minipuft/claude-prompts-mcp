@@ -925,6 +925,88 @@ describe('Export Command Integration', () => {
     });
   });
 
+  // ── Stale gate directories: pruned on export ─────────────────────────────
+
+  describe('export prunes stale gates/<id>/ directories under a managed skill', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality');
+    });
+
+    it("removes a gates/<id>/ directory no longer in the skill's gate set, and names it", async () => {
+      await writePrompt('general', 'pruned_gate', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport(); // first export: SKILL.md is stamped managed, gates/code-quality/ is written
+
+      // A gate directory this tool wrote on an earlier run that the current gate set no longer
+      // includes — the fixture stands in for a gate dropped from `gateConfiguration.include`.
+      const staleGateDir = path.join(outputDir, 'pruned_gate', 'gates', 'stale');
+      await mkdir(staleGateDir, { recursive: true });
+      await writeFile(
+        path.join(staleGateDir, 'gate.yaml'),
+        yaml.dump({ id: 'stale', name: 'Stale', type: 'validation', description: 'Stale gate' })
+      );
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      expect(await exists(staleGateDir)).toBe(false);
+      expect(
+        out.logs.some((l) => l.includes('pruned_gate') && l.includes('removed stale gates/stale/'))
+      ).toBe(true);
+      expect(report.pruned).toBeGreaterThan(0);
+      // The gate still in the current set survives the same run.
+      expect(await exists(path.join(outputDir, 'pruned_gate', 'gates', 'code-quality'))).toBe(true);
+    });
+
+    it('leaves a hand-written gates/<id>/ directory with no gate.yaml untouched', async () => {
+      await writePrompt('general', 'handwritten_notes', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const handwrittenDir = path.join(outputDir, 'handwritten_notes', 'gates', 'handwritten');
+      await mkdir(handwrittenDir, { recursive: true });
+      await writeFile(path.join(handwrittenDir, 'notes.md'), 'Hand-written, no gate.yaml here.');
+
+      await runExport();
+
+      expect(await exists(path.join(handwrittenDir, 'notes.md'))).toBe(true);
+    });
+
+    it('does not prune a stale gate directory under a skill with no managed marker', async () => {
+      await writePrompt('general', 'unmanaged_gate', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+
+      // Hand-written SKILL.md carrying no managed-by marker — positive control on the guard:
+      // without it, this fixture would be indistinguishable from the managed case above.
+      const skillDir = path.join(outputDir, 'unmanaged_gate');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        '---\nname: unmanaged_gate\ndescription: hand-written\n---\n\n## Instructions\n\nHand-written.\n'
+      );
+      const staleGateDir = path.join(skillDir, 'gates', 'stale');
+      await mkdir(staleGateDir, { recursive: true });
+      await writeFile(
+        path.join(staleGateDir, 'gate.yaml'),
+        yaml.dump({ id: 'stale', name: 'Stale', type: 'validation', description: 'Stale gate' })
+      );
+
+      await runExport();
+
+      expect(await exists(staleGateDir)).toBe(true);
+    });
+  });
+
   // ── F3 + F4: template fidelity reporting (Wave 2) ──────────────────────────
 
   describe('template fidelity warnings', () => {

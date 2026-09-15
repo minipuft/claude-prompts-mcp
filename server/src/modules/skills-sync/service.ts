@@ -590,7 +590,7 @@ export interface SkillsSyncRunReport {
   resources: number;
   /** Files written (0 on a preview) */
   written: number;
-  /** Managed skill directories pruned */
+  /** Managed directories pruned — whole skill dirs (sync only) plus stale gates/<id>/ dirs (both) */
   pruned: number;
   failures: SkillsSyncFailure[];
 }
@@ -2167,6 +2167,22 @@ function describeSkillRemovals(existing: string, next: string): string[] {
   return warnings;
 }
 
+/**
+ * Runs `describeSkillRemovals` at a write-loop call site and warns once per removal, prefixed
+ * with the resource id — the shape both `exportCommand` and `syncCommand` need before writing
+ * over a managed SKILL.md, factored out so extending it into `syncCommand` does not duplicate it.
+ */
+function warnSkillRemovals(
+  resourceId: string,
+  existingSkillMd: string,
+  nextSkillMd: string,
+  output: SkillsSyncOutput
+): void {
+  for (const removal of describeSkillRemovals(existingSkillMd, nextSkillMd)) {
+    output.warn(`  ${resourceId}: ${removal}`);
+  }
+}
+
 // ─── Section 3b: Gate & Chain Section Builders ──────────────────────────────
 
 /** Where an exported skill will live, needed to write a cwd-independent hook command. */
@@ -2723,6 +2739,64 @@ export function emitGateFiles(
     });
   }
   return files;
+}
+
+/**
+ * Ids of `gates/<id>/` directories under `skillDir` that this tool wrote on an earlier run and
+ * no longer belongs to `currentGateIds`. A directory counts as this tool's own only if it holds
+ * a `gate.yaml` — a hand-added `gates/<id>/notes.md` with no `gate.yaml` is never a candidate.
+ * Read-only: the caller decides whether and how to remove what this returns.
+ */
+async function staleGateDirectories(
+  skillDir: string,
+  currentGateIds: ReadonlySet<string>
+): Promise<string[]> {
+  const gatesDir = path.join(skillDir, 'gates');
+  let entries;
+  try {
+    entries = await readdir(gatesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && !currentGateIds.has(entry.name))
+    .filter((entry) => existsSync(path.join(gatesDir, entry.name, 'gate.yaml')))
+    .map((entry) => entry.name);
+}
+
+/**
+ * Removes the stale `gates/<id>/` directories `staleGateDirectories` finds for one resource's
+ * just-emitted `outputFiles`, and logs each removal by id. Shared by `exportCommand` and
+ * `syncCommand` so a gate dropped from a skill's set does not keep advertising itself through
+ * `gates/<id>/gate.yaml` after `gates/index.json` has already stopped listing it (both write
+ * loops call this only when the on-disk SKILL.md carries this tool's managed marker).
+ */
+async function pruneStaleGates(
+  resourceId: string,
+  baseDir: string,
+  subDir: string,
+  outputFiles: OutputFile[],
+  preview: boolean,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
+  if (preview) return;
+  const gatesPrefix = `${subDir}/gates/`;
+  const currentGateIds = new Set(
+    outputFiles
+      .filter(
+        (f) => f.relativePath.startsWith(gatesPrefix) && f.relativePath.endsWith('/gate.yaml')
+      )
+      .map((f) => f.relativePath.slice(gatesPrefix.length, -'/gate.yaml'.length))
+  );
+  const skillDir = resolveContainedPath(baseDir, subDir);
+  for (const staleId of await staleGateDirectories(skillDir, currentGateIds)) {
+    await rm(path.join(skillDir, 'gates', staleId), { recursive: true, force: true });
+    report.pruned++;
+    output.log(
+      `  ${resourceId}: removed stale gates/${staleId}/ (no longer in this skill's gate set)`
+    );
+  }
 }
 
 /**
@@ -3358,6 +3432,7 @@ async function exportCommand(
           continue;
         }
 
+        let skillIsManaged = false;
         for (const file of outputFiles) {
           // Contained against the OUTPUT dir, not the resources root: this writer's destination is
           // the client's skills directory. `relativePath` is built from resource ids, so a
@@ -3371,9 +3446,8 @@ async function exportCommand(
           if (file.relativePath.endsWith('/SKILL.md')) {
             const existingSkillMd = await readOptionalFile(fullPath);
             if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
-              for (const removal of describeSkillRemovals(existingSkillMd, file.content)) {
-                output.warn(`  ${ir.id}: ${removal}`);
-              }
+              skillIsManaged = true;
+              warnSkillRemovals(ir.id, existingSkillMd, file.content, output);
             }
           }
 
@@ -3385,6 +3459,21 @@ async function exportCommand(
             report.written++;
             output.log(`  wrote ${file.relativePath}`);
           }
+        }
+
+        // Same managed-marker guard as the removal warnings above: a gate dropped from this
+        // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
+        if (skillIsManaged) {
+          const subDir = outputSubDir(ir, duplicateIds);
+          await pruneStaleGates(
+            ir.id,
+            baseDir,
+            subDir,
+            outputFiles,
+            opts.preview === true,
+            output,
+            report
+          );
         }
 
         // Load version history for the resource
@@ -3738,12 +3827,25 @@ async function syncCommand(
           continue;
         }
 
+        let skillIsManaged = false;
         for (const file of outputFiles) {
           // Contained against the OUTPUT dir, not the resources root: this writer's destination is
           // the client's skills directory. `relativePath` is built from resource ids, so a
           // traversing id would place a skill file outside the directory the operator pointed the
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
+
+          // Same removal warning as `exportCommand`: a hand-written file being overwritten is a
+          // different, pre-existing behaviour (unmarked, never warned about here) — this only
+          // compares against what the tool itself last wrote.
+          if (file.relativePath.endsWith('/SKILL.md')) {
+            const existingSkillMd = await readOptionalFile(fullPath);
+            if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
+              skillIsManaged = true;
+              warnSkillRemovals(ir.id, existingSkillMd, file.content, output);
+            }
+          }
+
           if (opts.preview) {
             output.log(`  [preview] ${file.relativePath}`);
           } else {
@@ -3752,6 +3854,21 @@ async function syncCommand(
             report.written++;
             output.log(`  wrote ${file.relativePath}`);
           }
+        }
+
+        // Same managed-marker guard as the removal warnings above: a gate dropped from this
+        // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
+        if (skillIsManaged) {
+          const subDir = outputSubDir(ir, duplicateIds);
+          await pruneStaleGates(
+            ir.id,
+            baseDir,
+            subDir,
+            outputFiles,
+            opts.preview === true,
+            output,
+            report
+          );
         }
 
         const firstSourcePath = ir.sourcePaths[0];

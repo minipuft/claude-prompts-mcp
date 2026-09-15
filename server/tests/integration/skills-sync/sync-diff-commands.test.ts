@@ -70,7 +70,7 @@ describe('sync and diff commands end to end (F11)', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  async function writePrompt(id: string): Promise<void> {
+  async function writePrompt(id: string, extra: Record<string, unknown> = {}): Promise<void> {
     const dir = path.join(serverRoot, 'resources', 'prompts', 'general', id);
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, 'user-message.md'), 'Do the thing.');
@@ -82,8 +82,23 @@ describe('sync and diff commands end to end (F11)', () => {
         description: `${id} description`,
         category: 'general',
         userMessageTemplateFile: 'user-message.md',
+        ...extra,
       })
     );
+  }
+
+  async function writeGate(
+    id: string,
+    name: string,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
+    const gateDir = path.join(serverRoot, 'resources', 'gates', id);
+    await mkdir(gateDir, { recursive: true });
+    await writeFile(
+      path.join(gateDir, 'gate.yaml'),
+      yaml.dump({ id, name, type: 'validation', description: `${name} gate`, ...extra })
+    );
+    await writeFile(path.join(gateDir, 'guidance.md'), `Guidance for ${id}.`);
   }
 
   /** A directory left by an export that predates managed markers. */
@@ -177,6 +192,27 @@ describe('sync and diff commands end to end (F11)', () => {
     const { report } = await run({ command: 'sync', prune: false });
 
     expect(report.pruned).toBe(0);
+  });
+
+  it('sync warns before removing the frontmatter hooks block from an on-disk managed SKILL.md', async () => {
+    // Mirrors the export removal-warning test (d3308a56): the same guard, now on the sync
+    // write loop, which previously carried no removal check at all.
+    await writeGate('code-quality', 'Code Quality');
+    await writePrompt('hook_dropped', {
+      gateConfiguration: { include: ['code-quality'] },
+      enforceGateHooks: true,
+    });
+    await run({ command: 'sync' }); // first sync: SKILL.md carries the frontmatter hooks block
+
+    await writePrompt('hook_dropped', {
+      gateConfiguration: { include: ['code-quality'] },
+      // enforceGateHooks dropped — the second sync would lose the block silently.
+    });
+    const { out } = await run({ command: 'sync' });
+
+    expect(
+      out.warns.some((w) => w.includes('hook_dropped') && w.includes('enforceGateHooks'))
+    ).toBe(true);
   });
 
   it('diff runs against the exported tree without writing', async () => {
