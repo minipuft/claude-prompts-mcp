@@ -995,7 +995,7 @@ describe('Framework lifecycle error messages name the resolved directory (B.26)'
       textDiffService: new ObjectDiffGenerator(),
       // This suite is about error-path directory naming, not versioning — `handleCreate` now
       // reads `isAutoVersionEnabled()` before it ever reaches the failure branches under test
-      // (row B.25), so a bare `{}` no longer stands in here.
+      // (tutorial-rework B.25), so a bare `{}` no longer stands in here.
       versionHistoryService: {
         isAutoVersionEnabled: () => false,
       } as unknown as VersionHistoryService,
