@@ -14,7 +14,7 @@ import { isGateActiveForContext } from '../utils/gate-activation.js';
 
 import type {
   GateGuide,
-  GateDefinitionYaml,
+  LoadedGateDefinition,
   GateActivationRules,
   GateActivationContext,
   GateRetryConfig,
@@ -63,13 +63,13 @@ export class GenericGateGuide implements GateGuide {
   // Private State
   // -------------------------------------------------------------------------
 
-  private readonly definition: GateDefinitionYaml;
+  private readonly definition: LoadedGateDefinition;
 
   // -------------------------------------------------------------------------
   // Constructor
   // -------------------------------------------------------------------------
 
-  constructor(definition: GateDefinitionYaml) {
+  constructor(definition: LoadedGateDefinition) {
     this.definition = definition;
 
     // Extract core properties
@@ -78,15 +78,15 @@ export class GenericGateGuide implements GateGuide {
     this.type = definition.type;
     this.description = definition.description;
 
-    // Resolve severity (default to 'medium')
-    this.severity = definition.severity ?? 'medium';
+    // Severity and gate type are present on every loaded definition: the loader parses
+    // through GateDefinitionSchema, which supplies both defaults.
+    this.severity = definition.severity;
 
     // Resolve enforcement mode (from definition or severity mapping)
     this.enforcementMode =
       definition.enforcementMode ?? DEFAULT_SEVERITY_TO_ENFORCEMENT[this.severity];
 
-    // Resolve gate type (default to 'custom')
-    this.gateType = definition.gate_type ?? 'custom';
+    this.gateType = definition.gate_type;
   }
 
   // -------------------------------------------------------------------------
@@ -145,7 +145,7 @@ export class GenericGateGuide implements GateGuide {
   /**
    * Get the underlying gate definition
    */
-  getDefinition(): GateDefinitionYaml {
+  getDefinition(): LoadedGateDefinition {
     return this.definition;
   }
 
@@ -169,6 +169,6 @@ export class GenericGateGuide implements GateGuide {
 /**
  * Factory function to create a GenericGateGuide from a definition
  */
-export function createGenericGateGuide(definition: GateDefinitionYaml): GenericGateGuide {
+export function createGenericGateGuide(definition: LoadedGateDefinition): GenericGateGuide {
   return new GenericGateGuide(definition);
 }

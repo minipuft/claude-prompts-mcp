@@ -289,8 +289,9 @@ self-attesting it. Every other gate is a **reminder**, and renders under `### Re
 criteria table, same as before. An installation's `gates.harnessCovers`, read from the
 `config.json` the server reads (the workspace's when it holds one, else the package's), shapes the
 export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
-out of the exported skill entirely, and the SKILL.md notes how many were omitted and which
-subjects covered them. Checks are never suppressed. See
+out of the exported skill entirely — no `### Reminders` row, no `gates/{gateId}/gate.yaml` or
+`guidance.md`, and no entry in `gates/index.json` — and the SKILL.md notes how many were omitted
+and which gates (id and subject) covered them. Checks are never suppressed. See
 [gate-configuration.md](../reference/gate-configuration.md#tiers) for the full tier and
 `harnessCovers` reference — this export path reads the same config field, just once per run
 instead of once per dispatch.

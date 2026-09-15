@@ -7,7 +7,7 @@
 
 import { REMINDER_CHARS_PER_TOKEN } from '../constants.js';
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
-import { deriveGateTier } from '../core/gate-tier.js';
+import { deriveGateTier, formatCheckLine } from '../core/gate-tier.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';
@@ -18,7 +18,7 @@ import type { GateActivationContext, LightweightGateDefinition } from '../types.
 import { DEFAULT_GATES_CONFIG } from '#shared/types/core-config.js';
 
 /**
- * The slice of `gates` config this renderer reads. Narrower than `ResolvedGateSettings` on purpose:
+ * The slice of `gates` config this renderer reads. Narrower than `GateSystemSettings` on purpose:
  * `ConfigManager.getGatesConfig()` satisfies it structurally, and a test can supply a literal.
  */
 export interface GateGuidanceConfig {
@@ -145,7 +145,7 @@ export class GateGuidanceRenderer {
         // so a check contributes exactly one line naming what it runs — and is never suppressed
         // and never budgeted.
         if (deriveGateTier(gate) === 'check') {
-          checkLines.push(this.formatCheckLine(gate));
+          checkLines.push(formatCheckLine(gate.name, gate.pass_criteria ?? []));
           this.logger.debug('[GATE GUIDANCE RENDERER] Added check line for gate:', gateId);
           continue;
         }
@@ -238,25 +238,6 @@ export class GateGuidanceRenderer {
       reminderTokenBudget:
         gatesConfig?.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
     };
-  }
-
-  /**
-   * One line per check naming the command or tool that produces its verdict — never its guidance.
-   */
-  private formatCheckLine(gate: LightweightGateDefinition): string {
-    const criterion = (gate.pass_criteria ?? []).find(
-      (entry) => entry.type === 'shell_verify' || entry.type === 'script_tool'
-    );
-
-    if (criterion?.type === 'shell_verify' && criterion.shell_command?.length) {
-      return `- **${gate.name}** — check: runs \`${criterion.shell_command.join(' ')}\``;
-    }
-    if (criterion?.type === 'script_tool' && criterion.script_tool_id) {
-      return `- **${gate.name}** — check: runs tool \`${criterion.script_tool_id}\``;
-    }
-    // A check whose criterion names neither a command nor a tool id cannot run; still list it,
-    // so an operator sees the gate rather than silently losing it.
-    return `- **${gate.name}** — check`;
   }
 
   /**

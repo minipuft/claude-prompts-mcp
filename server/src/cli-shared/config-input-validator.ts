@@ -55,6 +55,7 @@ export const CONFIG_VALID_KEYS = [
   'gates.enforcePendingVerdict',
   'gates.harnessCovers',
   'gates.reminderTokenBudget',
+  'gates.executeInlineGateDefinitions',
   'hooks.expandedOutput',
   'phaseGuards.mode',
   'phaseGuards.maxRetries',
@@ -157,6 +158,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     case 'gates.frameworkGates':
     case 'gates.enabled':
     case 'gates.enforcePendingVerdict':
+    case 'gates.executeInlineGateDefinitions':
     case 'execution.judge':
     case 'frameworks.enabled':
     case 'frameworks.dynamicToolDescriptions':
