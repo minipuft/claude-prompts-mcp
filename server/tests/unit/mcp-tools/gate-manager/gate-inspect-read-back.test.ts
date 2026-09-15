@@ -1,36 +1,33 @@
 /**
- * P4.11 — gate `inspect` reads back `severity`/`enforcementMode` from the on-disk definition.
+ * P4.11 — gate `inspect` reads `severity`/`enforcementMode` from the definition
+ * (`GateGuide.getDefinition()`), not from `gate.severity`/`gate.enforcementMode`.
  *
- * WHY `getDefinition()`, NOT `gate.severity`/`gate.enforcementMode`. `GenericGateGuide` resolves
- * both to a loader default (severity → 'medium', enforcementMode → the severity-based mapping)
- * whenever gate.yaml omits them, so the guide's own properties can never distinguish "author set
- * it" from "loader defaulted it" — only the raw `GateDefinitionYaml` from `getDefinition()` still
- * carries `undefined` for an omitted key. These tests exercise both branches directly against
+ * Each fixture is authored the way a `gate.yaml` is and then run through
+ * `GateDefinitionSchema.parse`, so every double is an object `GateDefinitionLoader` could
+ * actually hand back: `severity` carries the schema default when the file omits it, while
+ * `enforcementMode` has no default and stays absent. Inspect therefore reports the EFFECTIVE
+ * severity — the value the engine acts on — and there is no "author set it" vs "loader
+ * defaulted it" distinction left to read off a parsed object. These tests drive
  * `GateDiscoveryProcessor.handleInspect`, the real render path, not a copy of its logic.
  */
 import { describe, expect, it } from '@jest/globals';
 
+import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import { GateDiscoveryProcessor } from '../../../../src/mcp/tools/gate-manager/services/index.js';
 
-import type {
-  GateDefinitionYaml,
-  LoadedGateDefinition,
-} from '../../../../src/engine/gates/types/index.js';
+import type { GateDefinitionYaml } from '../../../../src/engine/gates/types/index.js';
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
 import type { GateResourceContext } from '../../../../src/mcp/tools/gate-manager/core/context.js';
 import type { GateManagerInput } from '../../../../src/mcp/tools/gate-manager/core/types.js';
 
 function buildProcessor(definitions: Map<string, GateDefinitionYaml>): GateDiscoveryProcessor {
   const guides = new Map(
-    // These fixtures are the WRITE side (`GateDefinitionYaml`) on purpose: the point of the
-    // cases below is a definition with `severity`/`enforcementMode` absent, which the read side
-    // (`LoadedGateDefinition`, what `GateDefinitionLoader` now returns) cannot express for
-    // `severity`. The guide only reads the fields, so the widening is safe here and confined to
-    // the double.
     Array.from(definitions.entries()).map(([id, def]) => [
       id,
-      new GenericGateGuide(def as LoadedGateDefinition),
+      // Through the schema, not around it: the loader parses, so a double built any other way
+      // could assert about a definition no gate.yaml can produce.
+      new GenericGateGuide(GateDefinitionSchema.parse(def)),
     ])
   );
   const gateManager = {
@@ -47,7 +44,7 @@ const baseDefinition: GateDefinitionYaml = {
   description: 'a gate used only to prove read-back',
 };
 
-describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMode read-back', () => {
+describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMode rendering', () => {
   it('renders severity and enforcementMode when the definition sets them', async () => {
     const processor = buildProcessor(
       new Map([['test-gate', { ...baseDefinition, severity: 'low', enforcementMode: 'blocking' }]])
@@ -59,14 +56,14 @@ describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMod
     } satisfies GateManagerInput);
     const text = (result.content[0] as { text: string }).text;
 
-    // MUTATION KILLED: inverting `definition.severity !== undefined` to `=== undefined` in
-    // gate-discovery-processor.ts makes this assertion fail (the line disappears). Confirmed by
-    // applying the inversion, re-running this file (red), and reverting.
+    // MUTATION KILLED: dropping `${severityLine}` from the template in
+    // gate-discovery-processor.ts makes this assertion fail. Confirmed by applying the deletion,
+    // re-running this file (red), and reverting.
     expect(text).toContain('Severity: low');
     expect(text).toContain('Enforcement Mode: blocking');
   });
 
-  it('omits both lines when the definition has neither field — never a printed default', async () => {
+  it('renders the defaulted severity, and still omits enforcementMode, when the gate.yaml sets neither', async () => {
     const processor = buildProcessor(new Map([['test-gate', baseDefinition]]));
 
     const result = await processor.handleInspect({
@@ -75,9 +72,12 @@ describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMod
     } satisfies GateManagerInput);
     const text = (result.content[0] as { text: string }).text;
 
-    // MUTATION KILLED: the same inversion above makes THIS assertion fail too — it would start
-    // printing 'Severity: undefined' / an always-present line. Confirmed alongside the case above.
-    expect(text).not.toContain('Severity:');
+    // 'medium' is the schema default, not a literal in the fixture above — inspect shows the
+    // severity the engine will use.
+    expect(text).toContain('Severity: medium');
+    // MUTATION KILLED: inverting `definition.enforcementMode !== undefined` to `=== undefined`
+    // makes this print 'Enforcement Mode: undefined'. Confirmed by applying the inversion,
+    // re-running this file (red), and reverting.
     expect(text).not.toContain('Enforcement Mode:');
   });
 });
