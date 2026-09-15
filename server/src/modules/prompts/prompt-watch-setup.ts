@@ -47,7 +47,11 @@ export async function discoverPromptDirectories(
       }
     }
   } catch (error) {
-    logger.error('Failed to discover prompt directories:', error);
+    // A directory that does not exist yet has no categories. The observer watches it once it is
+    // created, which for a custom workspace's resources directory is the first write.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.error('Failed to discover prompt directories:', error);
+    }
   }
 
   return directories;
