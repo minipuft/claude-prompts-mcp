@@ -125,16 +125,21 @@ async function claimStateDatabase(
  * Opened BEFORE the tools are built, so `PromptExecutor` hands the port to its chain session store
  * at construction. That store starts initializing in its constructor; when the port arrived later
  * through `setDatabasePort`, every start warned "persistence disabled" for a store that went on to
- * persist. `claimStateDatabase` has already fixed the path — this only opens the same singleton.
+ * persist. Takes the same `runtimeDbPath` that `claimStateDatabase` claimed the singleton with and
+ * supplies it to `getInstance` here too, so this call opens the same singleton at the same path
+ * rather than merely relying on it already being open.
  */
 async function openToolsDatabase(
+  runtimeDbPath: string | undefined,
   serverRoot: string | undefined,
   logger: Logger
 ): Promise<DatabasePort | undefined> {
   if (serverRoot === undefined || serverRoot === '') return undefined;
   try {
     const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-    const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
+    const dbManager = await SqliteEngine.getInstance(serverRoot, logger, {
+      dbPath: runtimeDbPath,
+    });
     await dbManager.initialize();
     return dbManager;
   } catch (error) {
@@ -349,7 +354,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   if (isVerbose) logger.info('🔄 Initializing MCP tools manager...');
   const metricsCollector = createMetricsCollector(logger);
-  const toolsDatabase = await openToolsDatabase(serverRoot, logger);
+  const toolsDatabase = await openToolsDatabase(runtimeDbPath, serverRoot, logger);
   const mcpToolsManager = await createMcpToolsManager(
     logger,
     mcpServer,
