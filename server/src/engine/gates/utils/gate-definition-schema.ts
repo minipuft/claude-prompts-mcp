@@ -127,12 +127,6 @@ export function validateLightweightGateDefinition(
         }
         normalized.quality_indicators = indicators;
       }
-      if (criteria.prompt_template) {
-        normalized.prompt_template = criteria.prompt_template;
-      }
-      if (criteria.pass_threshold !== undefined) {
-        normalized.pass_threshold = criteria.pass_threshold;
-      }
       if (criteria.regex_patterns) {
         normalized.regex_patterns = criteria.regex_patterns;
       }

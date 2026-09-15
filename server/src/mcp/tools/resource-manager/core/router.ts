@@ -263,6 +263,7 @@ export class ResourceManagerRouter {
     // lands here rather than diverging the published name from the file it writes.
     if (args.enforcement_mode) gateArgs.enforcementMode = args.enforcement_mode;
     if (args.description) gateArgs.description = args.description;
+    if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;
     if (args.pass_criteria !== undefined) {
       const normalizedPassCriteria: NonNullable<GateManagerInput['pass_criteria']> = (

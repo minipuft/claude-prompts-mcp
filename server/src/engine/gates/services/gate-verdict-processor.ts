@@ -350,6 +350,25 @@ export class GateVerdictProcessor {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
     }
 
+    // Checked BEFORE the outcome is recorded, not after: recording spends a retry attempt, and a
+    // verdict the engine will not accept must not cost the submitter one.
+    const refusal = this.refuseVerdictAgainstRecordedFailure(
+      session.pendingGateReview,
+      verdictPayload.verdict
+    );
+    if (refusal !== null) {
+      context.setResponse({
+        content: [{ type: 'text', text: `❌ ${refusal}` }],
+        isError: true,
+      });
+      context.diagnostics.warn(
+        'GateVerdictProcessor',
+        'Gate PASS refused — a recorded check failed',
+        { sessionId, gateIds: capturedGateIds }
+      );
+      return { passClearedThisCall: false, earlyExit: true, userResponse };
+    }
+
     const outcome = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {
       verdict: verdictPayload.verdict,
       rationale: verdictPayload.rationale,
@@ -401,6 +420,44 @@ export class GateVerdictProcessor {
     }
 
     return { passClearedThisCall, earlyExit: false, userResponse };
+  }
+
+  /**
+   * Refuse, by name, a PASS that walks past a check the engine recorded as failing (ruling B4).
+   *
+   * `GateReviewStage` runs each gate's `shell_verify` / `script_tool` criteria and writes the
+   * outcome to `PendingGateReview.checkResults`. Until this existed, nothing downstream read it:
+   * the stage printed the failing command into the review, the model answered PASS anyway, and
+   * the processor cleared on the verdict alone — a recorded exit code losing to an opinion.
+   *
+   * Scope, deliberately narrow:
+   *
+   * - **PASS only.** A FAIL is the submitter agreeing with the check; it takes the normal
+   *   failure path with its retry budget intact.
+   * - **`gate_action: skip` / `abort` are untouched.** They are the operator's override, by
+   *   design and behind retry exhaustion — a human choosing to ship past a failing check is a
+   *   decision, where a model PASS over the same check is an unnoticed contradiction. They do
+   *   not pass through here at all (`handleGateAction`).
+   * - **No recorded results, no refusal.** A review of reminder-tier gates records nothing, so
+   *   this returns `null` and the verdict is the model's as before.
+   *
+   * @returns the sentence the submitter reads, or `null` when the verdict may proceed.
+   */
+  private refuseVerdictAgainstRecordedFailure(
+    pendingReview: ChainSession['pendingGateReview'],
+    verdict: 'PASS' | 'FAIL'
+  ): string | null {
+    if (verdict !== 'PASS') return null;
+
+    const failed = (pendingReview?.checkResults ?? []).filter((result) => !result.passed);
+    if (failed.length === 0) return null;
+
+    const gateIds = [...new Set(failed.map((result) => result.gateId))].join(', ');
+    const summaries = failed.map((result) => result.summary).join('; ');
+    return (
+      `Gate verdict refused: ${gateIds} recorded a failing check (${summaries}). ` +
+      'Fix the cause and resubmit; the check re-runs on the next review.'
+    );
   }
 
   /**

@@ -229,6 +229,9 @@ export class GateHotReloadCoordinator {
       if (definition.guidance) {
         normalizedDefinition.guidance = definition.guidance;
       }
+      if (definition.subject) {
+        normalizedDefinition.subject = definition.subject;
+      }
       if (definition.pass_criteria) {
         normalizedDefinition.pass_criteria = definition.pass_criteria.map((criteria) => {
           const normalizedCriteria: GatePassCriteria = {
@@ -270,12 +273,6 @@ export class GateHotReloadCoordinator {
               qualityIndicators[indicator] = normalizedIndicator;
             }
             normalizedCriteria.quality_indicators = qualityIndicators;
-          }
-          if (criteria.prompt_template) {
-            normalizedCriteria.prompt_template = criteria.prompt_template;
-          }
-          if (criteria.pass_threshold !== undefined) {
-            normalizedCriteria.pass_threshold = criteria.pass_threshold;
           }
           if (criteria.regex_patterns) {
             normalizedCriteria.regex_patterns = criteria.regex_patterns;

@@ -95,6 +95,12 @@ export interface GateDefinitionYaml {
   type: 'validation' | 'guidance';
   /** Description of what this gate checks/guides */
   description: string;
+  /**
+   * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
+   * installation's `gates.harnessCovers` (config.json) suppresses reminders whose subject
+   * it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
+   */
+  subject?: string;
   /** Severity level for prioritization */
   severity?: GateSeverity;
   /** Enforcement mode override (defaults to severity-based mapping) */

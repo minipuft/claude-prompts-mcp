@@ -188,6 +188,10 @@ export interface GateSystemSettings {
   definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
   enableFrameworkGates?: boolean;
+  /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
+  harnessCovers?: string[];
+  /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
+  reminderTokenBudget?: number;
 }
 
 /**
@@ -213,6 +217,10 @@ export interface GatesConfig {
     defaultModel?: string;
     strict?: boolean;
   };
+  /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
+  harnessCovers?: string[];
+  /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
+  reminderTokenBudget?: number;
 }
 
 /**

@@ -21,15 +21,54 @@ Full schema for defining reusable quality gates in `resources/gates/{id}/gate.ya
 
 ## Root Fields
 
-| Field             | Type     | Required | Description                                             |
-| ----------------- | -------- | -------- | ------------------------------------------------------- |
-| `id`              | `string` | **Yes**  | Unique ID (e.g., `code-quality`).                       |
-| `name`            | `string` | **Yes**  | Human-readable name.                                    |
-| `type`            | `string` | No       | `validation` (checks) or `guidance` (hints).            |
-| `description`     | `string` | No       | Tooltip description.                                    |
-| `guidanceFile`    | `string` | No       | Path to markdown file with instructions.                |
-| `severity`        | `string` | No       | `critical`, `high`, `medium`, `low`. Default: `medium`. |
-| `enforcementMode` | `string` | No       | `blocking` (must pass), `advisory` (warn only).         |
+| Field             | Type     | Required | Description                                                                      |
+| ----------------- | -------- | -------- | -------------------------------------------------------------------------------- |
+| `id`              | `string` | **Yes**  | Unique ID (e.g., `code-quality`).                                                |
+| `name`            | `string` | **Yes**  | Human-readable name.                                                             |
+| `type`            | `string` | No       | `validation` (checks) or `guidance` (hints).                                     |
+| `description`     | `string` | No       | Tooltip description.                                                             |
+| `subject`         | `string` | No       | Kebab-case tag naming what this gate reminds about. See [§ `subject`](#subject). |
+| `guidanceFile`    | `string` | No       | Path to markdown file with instructions.                                         |
+| `severity`        | `string` | No       | `critical`, `high`, `medium`, `low`. Default: `medium`.                          |
+| `enforcementMode` | `string` | No       | `blocking` (must pass), `advisory` (warn only).                                  |
+
+---
+
+## Tiers
+
+A gate is a `check` when at least one of its `pass_criteria` entries carries a real runtime
+evaluator — `shell_verify` (exit-code ground truth) or `script_tool` (structured verdict from a
+registered tool). Every other gate is a `reminder`, including a gate with no `pass_criteria` at
+all, and a gate whose `pass_criteria` only sets the pattern/length fields (below) — those render
+as prose and have no evaluator that flips a verdict.
+
+| Gate           | Criterion type                   | Tier       |
+| -------------- | -------------------------------- | ---------- |
+| `test-suite`   | `shell_verify` (runs `npm test`) | `check`    |
+| `code-quality` | `inline_guidance`                | `reminder` |
+
+The tier decides how a gate renders and enforces: checks contribute one line naming what runs and
+are recorded by the engine, and a `PASS` verdict walking past a recorded failure is refused by
+gate id; reminders render full guidance, subject to `harnessCovers` suppression and the token
+budget below. See [Gates Guide § Verdicts and reminders](../guides/gates.md#verdicts-and-reminders)
+for the enforcement side, and the generated
+[`resources/gates/_index.md`](../../server/resources/gates/_index.md) for a `Tier` column per gate
+so this never has to be derived by hand.
+
+## `subject`
+
+A free kebab-case tag (`^[a-z0-9]+(?:-[a-z0-9]+)*$`, e.g. `code-quality`, `security`) naming what
+a gate's reminder is about. It is optional — a reminder with no `subject` names no coverable topic
+and can never be suppressed.
+
+`subject` exists for one downstream use: an installation's `gates.harnessCovers` list (below)
+suppresses a reminder whose `subject` appears in it, on the theory that the installation's own
+rules or hooks already cover that topic. Checks (`shell_verify` / `script_tool`) are never
+suppressed by `subject`, regardless of what it names — a check states a runtime fact, not a
+reminder an installation could already be giving some other way.
+
+The generated gate index (`resources/gates/_index.md`) carries a `Subject` column so an operator
+can copy the exact spelling into `harnessCovers` rather than guessing at it.
 
 ---
 
@@ -71,7 +110,19 @@ naming the gate that needs either an activation rule or an explicit reference.
 
 ## Pass Criteria & Retries
 
-Define how strict the gate is.
+Define how strict the gate is. Each `pass_criteria` entry's `type` selects one of four
+enforcement modes — this is also what [Tiers](#tiers) reads to decide `check` vs `reminder`.
+
+| `type`                 | Enforcement                                                                                                                                          | When to use                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `inline_guidance`      | None — rendered as an agent-facing checklist.                                                                                                        | Soft criteria the agent self-assesses (style, completeness reminders).               |
+| `framework_compliance` | None — auto-passed by `GateValidator`. `PhaseGuardVerificationStage` enforces framework phase guards from `phases.yaml` independently of this value. | Declaring intent only.                                                               |
+| `shell_verify`         | Hard — runs `shell_command` as argv, exit 0 = pass.                                                                                                  | Ground-truth checks: tests passing, files existing, content claims matching reality. |
+| `script_tool`          | Hard — resolves `script_tool_id` to a registered tool and runs it with JSON stdin, parsing `{passed, reason?}` back.                                 | Checks needing typed arguments and an explained verdict.                             |
+
+`llm_self_check` never had a runner and is not a valid `type`. Declaring it is rejected at schema
+validation with an error naming the replacement: use `inline_guidance` (reminder) or
+`shell_verify` / `script_tool` (check).
 
 ```yaml
 pass_criteria:
@@ -84,9 +135,60 @@ retry_config:
   improvement_hints: true
 ```
 
-| Field                | Description                                        |
-| -------------------- | -------------------------------------------------- |
-| `required_patterns`  | Strings that MUST appear in the output.            |
-| `forbidden_patterns` | Strings that MUST NOT appear.                      |
-| `max_attempts`       | How many times Claude retries before failing.      |
-| `improvement_hints`  | Feed validation errors back into the retry prompt. |
+| Field               | Description                                        |
+| ------------------- | -------------------------------------------------- |
+| `max_attempts`      | How many times Claude retries before failing.      |
+| `improvement_hints` | Feed validation errors back into the retry prompt. |
+
+### Pattern/length fields render as prose, not as checks
+
+`required_patterns`, `forbidden_patterns`, `regex_patterns`, `keyword_count`, `min_length`, and
+`max_length` are accepted on any `pass_criteria` entry, but none of them has a runtime evaluator:
+they render into the reminder's guidance text as prose, and are never evaluated against the
+agent's actual output. Setting one does not make a gate a `check` (see [Tiers](#tiers)) — schema
+validation warns on this rather than rejecting it, since the registry still carries these fields
+on existing gates.
+
+| Field                | Renders as                                      |
+| -------------------- | ----------------------------------------------- |
+| `required_patterns`  | "MUST appear" prose in the guidance text.       |
+| `forbidden_patterns` | "MUST NOT appear" prose in the guidance text.   |
+| `regex_patterns`     | Pattern-requirement prose in the guidance text. |
+| `keyword_count`      | Keyword-frequency prose in the guidance text.   |
+| `min_length`         | Minimum-length prose in the guidance text.      |
+| `max_length`         | Maximum-length prose in the guidance text.      |
+
+If the check needs to be real, use `shell_verify` or `script_tool` against the agent's response
+(`shell_stdin_source: agent_response`) instead of one of these fields.
+
+---
+
+## Harness coverage and the reminder budget
+
+Two `gates` config keys (`config.json` / `server/config.schema.json`) control how many reminders
+reach the model and at what length, once [`subject`](#subject) has named what each reminder is
+about:
+
+| Key                         | Type       | Default | Description                                                                                                                                                                           |
+| --------------------------- | ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gates.harnessCovers`       | `string[]` | `[]`    | Reminder subjects this installation's harness already covers (its own rules or hooks). A reminder gate whose `subject` is listed is not rendered; checks are never suppressed.        |
+| `gates.reminderTokenBudget` | `integer`  | `800`   | Estimated tokens of reminder guidance rendered per dispatch. Reminders over the budget render as one line each, in priority order; nothing is dropped. Checks are outside the budget. |
+
+Copy exact subject spellings from the `Subject` column of
+[`resources/gates/_index.md`](../../server/resources/gates/_index.md) into `harnessCovers` —
+guessing at the spelling means a reminder that was meant to be suppressed keeps rendering.
+
+**Estimator.** Each rendered reminder's size is estimated as `Math.ceil(chars / 4)` — a coarse
+constant (`REMINDER_CHARS_PER_TOKEN`) on purpose, since the budget is a ceiling, not a
+measurement.
+
+**Degrade rule.** Reminders are ordered explicitly-requested first, then by severity descending
+(`critical` > `high` > `medium` > `low`), then by the order they were supplied in. Once the next
+reminder in that order would push the running token total past `reminderTokenBudget`, it and every
+later reminder collapse to a single line — `- **Name** — description` — instead of full guidance.
+Nothing is dropped: a reminder past the budget still appears, just degraded to its one-liner.
+
+**Checks are never suppressed.** `harnessCovers` and `reminderTokenBudget` apply to reminders
+only. A `check` (`shell_verify` / `script_tool`) always renders — one line naming the command or
+tool it runs — regardless of `subject`, coverage, or budget, because it states what the engine is
+about to measure, not guidance the model could self-assess instead.

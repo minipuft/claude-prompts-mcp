@@ -2,6 +2,7 @@ id: test-suite
 name: Test Suite Verification
 type: validation
 description: Validates implementation by running the test suite. Uses shell verification for ground-truth validation via exit codes.
+subject: testing
 severity: high
 gate_type: custom
 guidanceFile: guidance.md

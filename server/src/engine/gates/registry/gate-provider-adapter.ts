@@ -166,6 +166,9 @@ export class GateManagerProvider implements GateDefinitionProvider {
       description: definition.description,
     };
 
+    if (definition.subject) {
+      lightweight.subject = definition.subject;
+    }
     if (definition.severity) {
       lightweight.severity = definition.severity;
     }

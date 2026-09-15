@@ -6,16 +6,10 @@ description: >-
   Validates that replaced systems are fully removed, integration points are
   tested, and no orphaned references remain. Ensures clean state before
   marking work complete.
+subject: integration
 guidanceFile: guidance.md
 pass_criteria:
   - type: inline_guidance
-    required_patterns:
-      - orphan
-      - integration
-  - type: inline_guidance
-    regex_patterns:
-      - 'replaced|removed|cleaned|verified'
-      - 'consumer|import|reference'
 
 retry_config:
   max_attempts: 2

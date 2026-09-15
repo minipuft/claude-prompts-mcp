@@ -44,16 +44,17 @@ export interface GatePassCriteria {
    * Enforcement modes (see gate-schema.ts header for full taxonomy):
    * - `inline_guidance`: agent-facing self-assessment text (replaces former
    *   `content_check` and `pattern_check`; both were inert at runtime)
-   * - `llm_self_check`: reserved, runner not yet implemented
    * - `framework_compliance`: declarative only — GateValidator auto-passes it.
    *   PhaseGuardVerificationStage enforces phase guards from `phases.yaml`, not from this value.
    * - `shell_verify`: exit-code ground truth (supports response injection)
    * - `script_tool`: resolves the id against registered script tools and runs THAT tool
    *   with JSON stdin, parsing a structured verdict; runs beside `shell_verify` and fails
    *   closed when it cannot run
+   *
+   * `llm_self_check` never had a runner and is not a valid value — use `inline_guidance`
+   * (reminder) or `shell_verify`/`script_tool` (check).
    */
-  type:
-    'inline_guidance' | 'llm_self_check' | 'framework_compliance' | 'shell_verify' | 'script_tool';
+  type: 'inline_guidance' | 'framework_compliance' | 'shell_verify' | 'script_tool';
 
   // Content check options
   min_length?: number;
@@ -72,10 +73,6 @@ export interface GatePassCriteria {
       patterns?: string[];
     }
   >;
-
-  // LLM self-check options
-  prompt_template?: string;
-  pass_threshold?: number;
 
   // Pattern check options
   regex_patterns?: string[];

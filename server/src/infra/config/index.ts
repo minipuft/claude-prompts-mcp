@@ -186,6 +186,8 @@ const DEFAULT_GATES_CONFIG: GatesConfig = {
   enabled: true,
   definitionsDirectory: 'gates',
   enableFrameworkGates: true,
+  harnessCovers: [],
+  reminderTokenBudget: 800,
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
@@ -467,6 +469,9 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
       enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
+      harnessCovers: gatesConfig.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
+      reminderTokenBudget:
+        gatesConfig.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
     };
   }
 

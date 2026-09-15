@@ -199,6 +199,13 @@ export interface LightweightGateDefinition {
   type: 'validation' | 'guidance';
   /** Description of what this gate checks/guides */
   description: string;
+  /**
+   * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
+   * installation's `gates.harnessCovers` (config.json) suppresses reminders whose subject
+   * it lists; checks (`shell_verify`/`script_tool`) are never suppressed. Surfaced by the
+   * generated gate index.
+   */
+  subject?: string;
   /** Severity level for prioritization (defaults to 'medium') */
   severity?: 'critical' | 'high' | 'medium' | 'low';
   /** Enforcement mode override (defaults to severity-based mapping) */

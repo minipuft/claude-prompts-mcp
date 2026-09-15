@@ -77,6 +77,50 @@
                 "minLength": 1,
                 "pattern": "^[^\\r\\n]+$",
                 "type": "string"
+              },
+              "reminders": {
+                "properties": {
+                  "not_applicable": {
+                    "default": [],
+                    "items": {
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "pattern": "^[^\\s,;()]+$",
+                          "type": "string"
+                        },
+                        "reason": {
+                          "allOf": [
+                            {
+                              "pattern": "^[^\\r\\n]+$"
+                            },
+                            {
+                              "pattern": "^[^;)]+$"
+                            }
+                          ],
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "reason"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "satisfied": {
+                    "default": [],
+                    "items": {
+                      "minLength": 1,
+                      "pattern": "^[^\\s,;()]+$",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
               }
             },
             "required": [
@@ -1813,6 +1857,10 @@
           "standard",
           "fast"
         ],
+        "type": "string"
+      },
+      "subject": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
         "type": "string"
       },
       "system_message": {

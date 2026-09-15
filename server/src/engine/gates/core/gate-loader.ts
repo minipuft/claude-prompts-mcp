@@ -295,6 +295,7 @@ export class GateLoader implements GateDefinitionProvider {
       name: definition.name,
       type: definition.type,
       description: definition.description,
+      ...(definition.subject !== undefined ? { subject: definition.subject } : {}),
       ...(definition.severity !== undefined ? { severity: definition.severity } : {}),
       ...(definition.enforcementMode !== undefined
         ? { enforcementMode: definition.enforcementMode }

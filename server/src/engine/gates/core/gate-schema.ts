@@ -13,13 +13,12 @@
  *
  * ## Gate Enforcement Modes (taxonomy)
  *
- * Five pass-criteria types exist. They differ in WHEN and HOW enforcement
+ * Four pass-criteria types exist. They differ in WHEN and HOW enforcement
  * happens — picking the right type for a use case is critical.
  *
  * | Type                       | Enforcement                                   | When to use                                                           |
  * |----------------------------|-----------------------------------------------|-----------------------------------------------------------------------|
  * | `inline_guidance`          | **None** — rendered as agent-facing checklist | Soft criteria the agent self-assesses (style, completeness reminders) |
- * | `llm_self_check`           | **Reserved** — runner not yet implemented     | (Not usable today)                                                    |
  * | `framework_compliance`     | **None** — auto-passed by GateValidator       | Declares intent only. PhaseGuardVerificationStage enforces framework phase guards      |
  * |                            | (see gate-validator.ts default branch)        | from `phases.yaml`, independently of this criteria type              |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
@@ -33,8 +32,8 @@
  * - Using `inline_guidance` and expecting auto-enforcement (it's display only)
  * - Using `shell_verify` to validate codebase state when the agent's CLAIM
  *   is what needs checking — set `shell_stdin_source: agent_response` for that
- * - Treating `llm_self_check` as available (it isn't yet — schema accepts it,
- *   no runner exists)
+ * - `llm_self_check` never had a runner and is not a valid `type`; use
+ *   `inline_guidance` (reminder) or `shell_verify`/`script_tool` (check)
  *
  * For deeper documentation: docs/guides/gates.md (Enforcement Modes section).
  */
@@ -48,7 +47,7 @@ import { z } from 'zod/v4';
 /**
  * Schema for gate pass criteria definitions.
  *
- * See the file-header taxonomy table for the 5 supported types and their
+ * See the file-header taxonomy table for the 4 supported types and their
  * enforcement modes. The `type` field's JSDoc below repeats the table at the
  * point of use (LLMs picking a type at YAML-authoring time read it there).
  */
@@ -62,7 +61,6 @@ export const GatePassCriteriaSchema = z
      *   self-assessment. NOT auto-enforced against output. Replaces the
      *   previously-named `content_check` and `pattern_check` (which were
      *   intentionally skipped by GateValidator — see gate-validator.ts).
-     * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
      * - `framework_compliance`: declarative only. GateValidator has no branch
      *   for it, so it falls through to the auto-pass default. PhaseGuardVerificationStage does
      *   check section presence + min_length + forbidden_terms, but it triggers
@@ -75,15 +73,14 @@ export const GatePassCriteriaSchema = z
      *   `{passed, reason?}` verdict. Runs beside `shell_verify` during gate review.
      *   Fails closed when it cannot run; a criterion with no id is refused at load.
      */
-    type: z.enum([
-      'inline_guidance',
-      'llm_self_check',
-      'framework_compliance',
-      'shell_verify',
-      'script_tool',
-    ]),
+    type: z.enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'], {
+      error: () =>
+        '`llm_self_check` never had a runner; use `inline_guidance` (reminder) or ' +
+        '`shell_verify`/`script_tool` (check)',
+    }),
 
-    // Content check options
+    // Content check options — rendered as reminder prose, never evaluated (see the
+    // pattern/length warning in validateGateSchema below); does not make a gate a check.
     min_length: z.number().int().nonnegative().optional(),
     max_length: z.number().int().positive().optional(),
     required_patterns: z.array(z.string()).optional(),
@@ -103,11 +100,8 @@ export const GatePassCriteriaSchema = z
       )
       .optional(),
 
-    // LLM self-check options
-    prompt_template: z.string().optional(),
-    pass_threshold: z.number().min(0).max(1).optional(),
-
-    // Pattern check options
+    // Pattern check options — rendered as reminder prose, never evaluated (see the
+    // pattern/length warning in validateGateSchema below); does not make a gate a check.
     regex_patterns: z.array(z.string()).optional(),
     keyword_count: z.record(z.string(), z.number()).optional(),
 
@@ -293,6 +287,20 @@ export const GateDefinitionSchema = z
     }),
     /** Description of what this gate checks/guides */
     description: z.string().min(1, 'Gate description is required'),
+    /**
+     * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`,
+     * `security`). An installation's `gates.harnessCovers` (config.json) suppresses
+     * reminders whose subject it lists; checks (`shell_verify`/`script_tool`) are never
+     * suppressed regardless of subject. Surfaced by the generated gate index so an
+     * operator can copy the exact spelling into `harnessCovers`.
+     */
+    subject: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        'subject must be kebab-case: lowercase letters, digits, and hyphens only, e.g. "code-quality"'
+      )
+      .optional(),
 
     // Optional severity and enforcement
     /** Severity level for prioritization */
@@ -398,6 +406,28 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
       'No activation rules - gate is opt-in and attaches only when a prompt or chain step includes it'
     );
   }
+
+  // Pattern/length fields have no evaluator: they render as reminder prose and never
+  // gate anything, so a criterion carrying one is not the check its author may expect.
+  // Warning, not error — the registry still carries these fields until they are removed
+  // from the write surface.
+  const RENDERED_ONLY_CRITERIA_FIELDS = [
+    'required_patterns',
+    'forbidden_patterns',
+    'regex_patterns',
+    'keyword_count',
+    'min_length',
+    'max_length',
+  ] as const;
+  definition.pass_criteria?.forEach((criterion, index) => {
+    for (const field of RENDERED_ONLY_CRITERIA_FIELDS) {
+      if (criterion[field] !== undefined) {
+        warnings.push(
+          `pass_criteria[${index}]: ${field} is rendered as reminder prose and never evaluated; it does not make this gate a check`
+        );
+      }
+    }
+  });
 
   const resultPayload = {
     valid: errors.length === 0,
