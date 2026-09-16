@@ -582,7 +582,7 @@ function assertServerTransportIsStdio(
 
   throw new TransportConfigError(
     `${configPath} sets "server.transport": ${JSON.stringify(transportValue)}, but transport is a ` +
-      'launch-time-only setting (Ruling R30) — config can no longer select it. Remove ' +
+      'launch-time-only setting — config can no longer select it. Remove ' +
       '"server.transport" from the config file and launch the server with ' +
       '--transport=streamable-http (or --transport=both) instead.'
   );
