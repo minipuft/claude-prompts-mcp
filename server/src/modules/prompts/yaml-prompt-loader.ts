@@ -25,6 +25,7 @@ import { type Logger, PromptArgument } from '#shared/types/index.js';
 import { INJECTION_TYPES } from '#shared/types/injection.js';
 import { mintNodeIds } from '#shared/utils/node-order.js';
 import {
+  isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   isSingleFilePromptName,
   singleFilePromptBaseName,
@@ -317,7 +318,7 @@ export function discoverYamlPrompts(categoryDir: string, prefix: string = ''): s
   const nestedPaths: string[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue;
+    if (isIgnoredPromptEntryName(entry.name)) continue;
 
     if (entry.isDirectory()) {
       // A prompt's `tools/` is reserved for script tools and nothing below it is a prompt — the
