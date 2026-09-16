@@ -93,13 +93,22 @@ describe('server.transport refusal at load time', () => {
  * `ConfigLoader.getTransportMode()` is the reader `pipeline-builder.ts`'s identity-resolution
  * closure and `TransportRouter.determineTransport`'s config-fallback branch both call. Since
  * `Config` carries no `transport` member (above), the config file this manager loaded cannot be
- * what changes its answer — these tests pin that the ANSWER instead follows `--transport` on
- * `process.argv`, using a config file that never mentions transport at all.
+ * what changes its answer.
+ *
+ * Row 4.12: this used to re-derive the answer by scanning `process.argv` for `--transport=`
+ * itself — a second, independent parse of the flag `runtime/cli.ts`'s `parseServerCliArgs`
+ * already owns, and one that only recognized the `=` form (missing the space form
+ * `--transport streamable-http` entirely). There is now exactly one parse of `--transport` per
+ * process; `getTransportMode()` just returns whatever `setTransportMode()` last stored, which
+ * `runtime/application.ts` calls once from the SAME resolution `TransportRouter.determineTransport`
+ * produced for the transport the server actually serves. These tests pin that new contract: no
+ * `process.argv` involvement at all, a `'stdio'` default until the setter runs, and the setter's
+ * value echoed back exactly — using a config file that never mentions transport, since that half
+ * is already covered above.
  */
-describe('getTransportMode() reads --transport from the launch, never from the config file', () => {
+describe('getTransportMode() returns what setTransportMode() stored, never process.argv', () => {
   let tempDir: string;
   let configPath: string;
-  const originalArgv = process.argv;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'cfg-transport-launch-'));
@@ -108,22 +117,21 @@ describe('getTransportMode() reads --transport from the launch, never from the c
   });
 
   afterEach(async () => {
-    process.argv = originalArgv;
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('returns the --transport value from argv', async () => {
-    process.argv = ['node', 'dist/index.js', '--transport=streamable-http'];
+  it('returns the value setTransportMode() was given, regardless of argv', async () => {
     const manager = new ConfigLoader(configPath);
     await manager.loadConfig();
+
+    manager.setTransportMode('streamable-http');
 
     expect(manager.getTransportMode()).toBe('streamable-http');
   });
 
   // POSITIVE CONTROL — without this, the assertion above could pass equally well against a
-  // getTransportMode() that always returns 'streamable-http' regardless of argv.
-  it('POSITIVE CONTROL — defaults to stdio with no --transport flag on argv', async () => {
-    process.argv = ['node', 'dist/index.js'];
+  // getTransportMode() that always returns 'streamable-http' regardless of the setter.
+  it('POSITIVE CONTROL — defaults to stdio before setTransportMode() is ever called', async () => {
     const manager = new ConfigLoader(configPath);
     await manager.loadConfig();
 

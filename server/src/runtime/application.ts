@@ -228,6 +228,14 @@ export class Application {
     this.transportType = foundation.transport;
     this.pathResolver = foundation.pathResolver;
 
+    // `ConfigLoader#getTransportMode()` no longer scans `process.argv` (row 4.12) — it returns
+    // whatever this setter last gave it. Called exactly once, here, with the SAME value
+    // `TransportRouter.determineTransport` produced for `this.transportType` (the transport the
+    // server is actually serving), so a caller holding only the configManager — the
+    // identity-resolution closure in `pipeline-builder.ts` — reads an answer that cannot disagree
+    // with what got wired up.
+    this.configManager.setTransportMode(foundation.transport);
+
     const transport = foundation.transport;
 
     // Check verbosity flags for conditional logging

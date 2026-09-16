@@ -386,9 +386,10 @@ function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
  *
  * `getGatesConfig()` owns this section's defaults, at read time — which is what lets
  * `getConfigValueWithSource` report an unset gates key as `'deferred'` rather than inventing a
- * value for it. The old `GatesConfig.definitionsDirectory` wire-to-internal rename that used to
- * live in that getter is gone (row 4.7): the directory is resolved by `getGatesDirectory()`, and
- * nothing ever read the internal `GateSystemSettings.definitionsDirectory` field it produced.
+ * value for it. The old wire-to-internal rename that used to live in that getter (the gate
+ * definitions-directory field on the internal settings shape) is gone (row 4.7, field deleted row
+ * 4.12): the directory is resolved by `getGatesDirectory()`, and nothing ever read the field the
+ * old rename produced.
  */
 function normalizeGates(file: AdoptedConfigFile): Config['gates'] {
   const gates = file.gates;
@@ -658,6 +659,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * to the defaults). Read only by `getConfigValueWithSource`.
    */
   private rawFileConfig: Record<string, unknown> | undefined;
+  /**
+   * The transport the process was launched with, as resolved by `TransportRouter.determineTransport`.
+   * Defaults to `DEFAULT_TRANSPORT_MODE` until `setTransportMode` runs, which matches
+   * `determineTransport`'s own default when no `--transport` flag is present — so a reader that
+   * calls `getTransportMode()` before startup finishes still gets the same answer startup would
+   * have produced. See {@link ConfigLoader.getTransportMode} for why this is a stored value now
+   * instead of a re-scan of the process's own command-line arguments.
+   */
+  private transportMode: TransportMode = DEFAULT_TRANSPORT_MODE;
 
   constructor(
     configPath: string,
@@ -869,19 +879,32 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Transport is launch-time-only since Ruling R30: `Config` carries no `transport` member (the
    * config file cannot select it — `loadConfig` refuses a `server.transport` other than
    * `"stdio"` outright, see {@link assertServerTransportIsStdio}), so there is nothing on
-   * `this.config` to read. `--transport` is scanned here the same way
-   * `TransportRouter.determineTransport` scans it, because a caller holding only a
-   * `ConfigManager` — no direct access to `process.argv`, e.g. the identity-resolution closure in
-   * `pipeline-builder.ts` — still needs the value the process actually launched with, not just the
-   * default.
+   * `this.config` to read. Row 4.12: this used to re-derive the answer by scanning the process's
+   * own command-line arguments for the `--transport` flag itself, which is a second, independent
+   * parse of the same flag `runtime/cli.ts`'s `parseServerCliArgs` already owns — and one that
+   * only recognized the `key=value`-joined spelling of the flag, so the space-separated form
+   * silently resolved to `stdio` here while `TransportRouter.determineTransport` (once fixed the
+   * same way) and `resolveRuntimeLaunchOptions`'s auto-quiet decision agreed it meant HTTP. There
+   * is now exactly one parse of `--transport` per process (`parseServerCliArgs`, called once by
+   * `resolveRuntimeLaunchOptions`); this getter just returns the value `setTransportMode` was
+   * given, which `runtime/application.ts` calls once, from the SAME resolution
+   * `TransportRouter.determineTransport` produced for the transport the server actually serves —
+   * so a caller holding only a `ConfigManager` (no direct access to CLI args, e.g. the
+   * identity-resolution closure in `pipeline-builder.ts`) reads the identical answer.
    */
   getTransportMode(): TransportMode {
-    const transportArg = process.argv.find((arg) => arg.startsWith('--transport='));
-    const value = transportArg?.split('=')[1];
-    if (value === 'stdio' || value === 'streamable-http' || value === 'both') {
-      return value;
-    }
-    return DEFAULT_TRANSPORT_MODE;
+    return this.transportMode;
+  }
+
+  /**
+   * Records the transport the process resolved to, so {@link getTransportMode} needs no view of
+   * the process's own command-line arguments. Called exactly once, by `runtime/application.ts`,
+   * right after `TransportRouter.determineTransport` has produced the value the server is
+   * actually serving on — never called with anything else, so `getTransportMode()` cannot
+   * disagree with the transport in use.
+   */
+  setTransportMode(transport: TransportMode): void {
+    this.transportMode = transport;
   }
 
   /**

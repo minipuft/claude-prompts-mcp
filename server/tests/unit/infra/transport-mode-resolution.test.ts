@@ -63,3 +63,40 @@ describe('TransportRouter.determineTransport', () => {
     expect(TransportRouter.determineTransport([], stubConfig('both'))).toBe('both');
   });
 });
+
+/**
+ * Row 4.12: `determineTransport` used to recognize only the `--transport=value` form here —
+ * `parseServerCliArgs` (`runtime/cli.ts`, built on node:util `parseArgs`) has always accepted the
+ * space form `--transport value` too, so `resolveRuntimeLaunchOptions`'s auto-quiet decision (fed
+ * by that parser) and this method could disagree: `--transport streamable-http` quieted the
+ * logger for HTTP while the server that actually started served STDIO. These tests pin the space
+ * form now resolving the SAME way the `=` form does, with the `=` form and the argv-absent
+ * default as controls — the space form would fail here before `extractTransportArg` was taught
+ * to recognize it.
+ */
+describe('TransportRouter.determineTransport recognizes the space form', () => {
+  test('space form --transport streamable-http selects HTTP', () => {
+    expect(
+      TransportRouter.determineTransport(['--transport', 'streamable-http'], stubConfig('stdio'))
+    ).toBe('streamable-http');
+  });
+
+  // CONTROL — the `=` form, already covered above, repeated here for a same-file comparison.
+  test('CONTROL — = form --transport=streamable-http selects HTTP', () => {
+    expect(
+      TransportRouter.determineTransport(['--transport=streamable-http'], stubConfig('stdio'))
+    ).toBe('streamable-http');
+  });
+
+  // CONTROL — no flag at all falls through to the config default, not HTTP.
+  test('CONTROL — no --transport flag does not select HTTP', () => {
+    expect(TransportRouter.determineTransport([], stubConfig('stdio'))).toBe('stdio');
+  });
+
+  test('space form is case-sensitive to the exact flag: a trailing value-bearing flag is not mistaken for it', () => {
+    // '--transporter' must not be treated as '--transport' with a truncated match.
+    expect(
+      TransportRouter.determineTransport(['--transporter', 'streamable-http'], stubConfig('stdio'))
+    ).toBe('stdio');
+  });
+});
