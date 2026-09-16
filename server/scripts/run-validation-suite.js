@@ -413,9 +413,12 @@ export const SUITE = [
     // detector is textual by design and omitting a matched substrate fails.
     script: 'validate:hermetic-child-env',
     io: 'read',
+    // `spawn` is re-derived from self-test FIXTURE strings (`spawnSync(tsc, …)`,
+    // `execFileSync('git', …)`) — the checker itself launches no process. Declared rather than
+    // dodged by rewriting the fixtures, since the fixtures are what prove the classifier.
     reads: ['file', 'spawn', 'walk'],
     converse:
-      'CHECKED — covers tests/e2e (no spread) and server-spawning scripts (must import scripts/lib/hermetic-server-env.js, no spread); the self-test runs each predicate over input that must trip it and input that must not, a run classifying zero spawners fails, and a positive control restoring a spread in capture-tool-schemas.mjs exits 1 naming it. UNCHECKED and known — a server spawned through an entry spelling the classifier does not recognise',
+      'CHECKED 2026-09-16 — every server spawn SITE (per call, tests/ + scripts/, through a second binding or a local import) must pass an env, not pass env: process.env, and sit in a file importing the builder; every buildServerEnv( call must state HOME. Positive controls: planted e2e spawn with no env exits 1 naming the line; planted builder call with no HOME exits 1; planted script reaching the entry through `const args` exits 1; a git-only planted script stays green; pre-fix HEAD content yields 15 HOME findings. UNCHECKED and known — an entry spelling the classifier does not recognise, and the provenance of an env value (presence is checked, not that the builder produced it)',
   },
   {
     script: 'validate:shipped-frameworks',

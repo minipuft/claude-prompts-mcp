@@ -4,6 +4,7 @@
     "scripts/verify-handoff.mjs",
     "scripts/verify-unknown-interrupt.mjs",
     "scripts/**/*.d.ts",
+    "tests/helpers/*.d.cts",
     "eslint-rules/**/*.d.ts"
   ],
   "ignore": [
