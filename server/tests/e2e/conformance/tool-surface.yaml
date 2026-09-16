@@ -117,6 +117,36 @@ scenarios:
         args: { action: config, operation: set }
     expect: { error_contains: 'config operation `set` is not served over MCP.' }
 
+  - id: sc-config-validate-key-valid
+    claim_source: >-
+      system_control contract — config `validate` per-key candidate check:
+      `config: { operation: "validate", key, value }` reports whether `value` would be valid for
+      `key`, without writing it. config-action-handler.ts `handleConfigValidate` prints
+      `Configuration valid for **<key>**` when `validateConfigInput` accepts the candidate.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: validate
+          config: { operation: validate, key: logging.level, value: info }
+    expect: { text_contains: 'Configuration valid for **logging.level**' }
+
+  - id: sc-config-validate-key-invalid
+    claim_source: >-
+      system_control contract — the same per-key candidate check reports the reason a candidate
+      is invalid, rather than merely refusing. `validateConfigInput` rejects any `logging.level`
+      outside debug/info/warn/error, and `handleConfigValidate` prints that reason inline —
+      distinguishing "reached the validator and failed" from the `get`/`set` refusals above, which
+      never reach it at all.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: validate
+          config: { operation: validate, key: logging.level, value: verbose }
+    expect:
+      text_contains: 'Invalid configuration for **logging.level**: Log level must be: debug, info, warn, or error'
+
   - id: sc-injection
     claim_source: 'system_control action: injection — docs/guides/injection-control.md'
     requests: [{ tool: system_control, args: { action: injection } }]
