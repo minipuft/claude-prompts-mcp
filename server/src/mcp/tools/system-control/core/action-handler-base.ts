@@ -10,7 +10,6 @@ import type {
   ToolResponse,
 } from '#shared/types/index.js';
 import type { SystemControlContext } from './types.js';
-import type { SafeConfigWriter } from '../../config-utils.js';
 
 /**
  * Base class for system_control action handlers.
@@ -40,9 +39,6 @@ export abstract class ActionHandler {
   }
   protected get configManager(): ConfigManager | undefined {
     return this.context.configManager;
-  }
-  protected get safeConfigWriter(): SafeConfigWriter | undefined {
-    return this.context.safeConfigWriter;
   }
   protected get onRestart(): ((reason: string) => Promise<void>) | undefined {
     return this.context.onRestart;
