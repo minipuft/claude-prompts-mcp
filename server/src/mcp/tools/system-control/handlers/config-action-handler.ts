@@ -64,8 +64,8 @@ export class ConfigActionHandler extends ActionHandler {
           ' `config: { operation: "validate", key, value }`).',
         '`get` is held pending a generated config shape (R41) — read one key with' +
           ' `cpm config get <key>` until it returns.',
-        'Writes never reach MCP — use `cpm config set <key> <value>` or' +
-          ' `cpm config reset --force`.',
+        'Arbitrary writes (naming a key and value) and restore-from-backup are not served over' +
+          ' MCP — use `cpm config set <key> <value>` or `cpm config reset --force`.',
       ].join('\n'),
       true,
       { action: 'config' }
