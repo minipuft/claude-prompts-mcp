@@ -40,11 +40,17 @@ export interface GateDefinitionLoaderConfig {
   /** Override default gates directory */
   gatesDir?: string;
   /**
-   * Every other contributing gate directory, HIGHEST precedence first.
+   * The WHOLE lookup order for gates, HIGHEST precedence first — `gatesDir` included.
    *
-   * An overlay listed here OUTRANKS `gatesDir` — see `resourceLookupOrder`. The composition root
-   * places `gatesDir` itself inside this list, at its own rank; a caller configuring the loader by
-   * hand may omit it, in which case it is consulted last.
+   * The name says "additional" and the contents are not: since P4.27 the composition root places
+   * `gatesDir` itself inside this list, at its own rank, because the primary is neither the top of
+   * the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list that
+   * omitted it could not say where it sits. The accurate name lives at the producing end,
+   * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach the pipeline's
+   * style loader and ~30 test call sites for no behaviour change.
+   *
+   * A caller configuring the loader by hand may omit `gatesDir`, in which case it is consulted
+   * last — see `resourceLookupOrder`.
    */
   additionalGatesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
@@ -413,13 +419,22 @@ export class GateDefinitionLoader {
    * workspace gate leaves the bundled gate of that id serving, rather than removing the id from the
    * registry. Stopping at the first root that merely HAS the file would turn a malformed overlay
    * into a missing gate.
+   *
+   * SERVING STOPS AT THE FIRST HIT; READING DOES NOT (P4.35, ruling R17). Every root that holds the
+   * id is read, including the ones below the winner, so their refusals reach the quarantine. Under
+   * a first-hit-wins walk the silent root was whichever one served LAST — which since P4.27 is the
+   * writable one an operator actually edits: a malformed `<ws>/resources/gates/foo` behind a legacy
+   * `<ws>/gates/foo` produced no warning, no `list` entry and no repair target, which is the exact
+   * defect the quarantine exists to remove, relocated rather than fixed. The cost is re-reading a
+   * root for an id that already served, paid once per id behind `loadGate`'s cache.
    */
   private loadFromLookupOrder(id: string): LoadedGateDefinition | undefined {
+    let served: LoadedGateDefinition | undefined;
     for (const base of this.entryRootsFor(id)) {
       const definition = this.loadFromYamlDir(id, base);
-      if (definition !== undefined) return definition;
+      if (definition !== undefined && served === undefined) served = definition;
     }
-    return undefined;
+    return served;
   }
 
   /**

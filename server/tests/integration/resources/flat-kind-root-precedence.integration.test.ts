@@ -98,6 +98,16 @@ const styleYaml = (id: string, name: string): string =>
     '',
   ].join('\n');
 
+/**
+ * A body no YAML parser accepts, for the kind-independent half of the P4.35 falsifier.
+ *
+ * Unparseable rather than merely schema-invalid because the three kinds have three schemas, and
+ * this file needs one malformation that every loader refuses for the SAME stated reason — a
+ * per-kind invalidity would make "it was refused" mean something different in each assertion. The
+ * unterminated flow sequence is what the loader's `catch` reports as the record's `error`.
+ */
+const unparseableYaml = (id: string): string => `id: ${id}\nname: [unterminated\n`;
+
 /** `{root}/{id}/{entryFile}` — the flat layout all three kinds use. */
 function writeResource(root: string, id: string, entryFile: string, body: string): string {
   const dir = path.join(root, id);
@@ -157,6 +167,23 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
           entry,
           body('bundledonly', 'BUNDLED ONLY')
         ),
+        // P4.35 — the same id valid in the OVERLAY and malformed in the PRIMARY, which is the
+        // writable root an operator edits. Before the fix the overlay served and the primary was
+        // never opened, so this file produced no warning, no quarantine record and no repair
+        // target. `belowwinner` names the position, not the directory: what made it silent was
+        // being below whatever served, and since P4.27 that is where the writable root sits.
+        belowWinnerOverlay: writeResource(
+          overlay,
+          'belowwinner',
+          entry,
+          body('belowwinner', 'FROM OVERLAY')
+        ),
+        belowWinnerPrimary: writeResource(
+          primary,
+          'belowwinner',
+          entry,
+          unparseableYaml('belowwinner')
+        ),
       };
     }
 
@@ -177,12 +204,12 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
   });
 
   /**
-   * The loader config the composition root builds — `{primary, additional}` under the two keys
+   * The loader config the composition root builds — `{primary, lookupDirs}` under the two keys
    * `loaderDirsConfig` (runtime/module-initializer.ts) maps them to.
    */
   const rootsFor = (
     type: string
-  ): { primary: string | undefined; additional: string[]; overlays: string[] } =>
+  ): { primary: string | undefined; lookupDirs: string[]; overlays: string[] } =>
     resolveResourceRoots(pathResolver, type, primaryPathFor(type));
 
   function primaryPathFor(type: string): string {
@@ -199,7 +226,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
       const roots = rootsFor(type);
       expect(roots.primary).toBe(path.join(workspace, 'resources', type));
       expect(roots.overlays).toEqual([path.join(workspace, type)]);
-      expect(roots.additional).toEqual([
+      expect(roots.lookupDirs).toEqual([
         path.join(workspace, type),
         path.join(workspace, 'resources', type),
         path.join(packageRoot, 'resources', type),
@@ -211,7 +238,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
     const roots = rootsFor('gates');
     const loader = new GateDefinitionLoader({
       gatesDir: roots.primary as string,
-      additionalGatesDirs: roots.additional,
+      additionalGatesDirs: roots.lookupDirs,
     });
 
     expect(loader.loadGate('shadowed')?.name).toBe('FROM OVERLAY');
@@ -226,7 +253,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
     const roots = rootsFor('frameworks');
     const loader = new RuntimeFrameworkLoader({
       frameworksDir: roots.primary as string,
-      additionalFrameworksDirs: roots.additional,
+      additionalFrameworksDirs: roots.lookupDirs,
     });
 
     expect(loader.loadFramework('shadowed')?.name).toBe('FROM OVERLAY');
@@ -240,7 +267,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
     const roots = rootsFor('styles');
     const loader = new StyleDefinitionLoader({
       stylesDir: roots.primary as string,
-      additionalStylesDirs: roots.additional,
+      additionalStylesDirs: roots.lookupDirs,
     });
 
     expect(loader.loadStyle('shadowed')?.name).toBe('FROM OVERLAY');
@@ -274,5 +301,93 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
       // the line above is not passing because the walk skipped the primary entirely.
       expect(indexedPath(type, 'primaryonly')).toBe(written[kind]?.['primaryOnly']);
     }
+  });
+
+  /**
+   * P4.35 — a malformed file BELOW the root that serves is still recorded and still repairable.
+   *
+   * First-hit-wins opened a root only when the roots above it had not served, so a broken file in
+   * a lower root was never read and never quarantined. That was symmetric with the pre-P4.27
+   * behaviour, which silenced a broken OVERLAY — but P4.27 moved the writable root down the order,
+   * so the silent root became the one an operator edits. An operator whose own
+   * `<ws>/resources/gates/foo` is malformed while `<ws>/gates/foo` serves the id saw nothing at
+   * all: no warning, no `list` entry, no repair target. Ruling R17: serving stops at the first
+   * hit, recording does not.
+   *
+   * EACH CASE CARRIES BOTH CONTROLS. A loader that quarantined everything would satisfy "the
+   * broken file is recorded" for free, so every case first loads a healthy three-root id and
+   * asserts the quarantine is EMPTY — the probe is shown to observe absence before an absence is
+   * relied on. And a loader that recorded the refusal by refusing to serve the id would satisfy it
+   * too, so every case asserts the served definition is unchanged: the id still resolves, from the
+   * root that legitimately won.
+   */
+  describe('a refusal below the serving root is recorded, not silenced (P4.35)', () => {
+    it('records the gate refused in the writable root while the overlay serves', () => {
+      const roots = rootsFor('gates');
+      const loader = new GateDefinitionLoader({
+        gatesDir: roots.primary as string,
+        additionalGatesDirs: roots.lookupDirs,
+      });
+
+      // CONTROL — a healthy id in all three roots leaves the collection empty, so the record
+      // below is this file's refusal and not a walk that quarantines whatever it touches.
+      expect(loader.loadGate('shadowed')?.name).toBe('FROM OVERLAY');
+      expect(loader.getQuarantine().list()).toEqual([]);
+
+      // CONTROL — the served definition is unaffected: the id resolves, from the overlay.
+      expect(loader.loadGate('belowwinner')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadGate('belowwinner')?.sourceRoot).toBe(path.join(workspace, 'gates'));
+
+      // …and THIS file — the one in the writable root — is the one recorded.
+      const records = loader.getQuarantine().byId('belowwinner');
+      expect(records).toHaveLength(1);
+      expect(records[0]?.path).toBe(written['gates']?.['belowWinnerPrimary']);
+      expect(records[0]?.root).toBe(path.join(workspace, 'resources', 'gates'));
+      expect(records[0]?.type).toBe('gate');
+      expect(records[0]?.error).not.toBe('');
+    });
+
+    it('records the framework refused in the writable root while the overlay serves', () => {
+      const roots = rootsFor('frameworks');
+      const loader = new RuntimeFrameworkLoader({
+        frameworksDir: roots.primary as string,
+        additionalFrameworksDirs: roots.lookupDirs,
+      });
+
+      expect(loader.loadFramework('shadowed')?.name).toBe('FROM OVERLAY');
+      expect(loader.getQuarantine().list()).toEqual([]);
+
+      expect(loader.loadFramework('belowwinner')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadFramework('belowwinner')?.sourceRoot).toBe(
+        path.join(workspace, 'frameworks')
+      );
+
+      const records = loader.getQuarantine().byId('belowwinner');
+      expect(records).toHaveLength(1);
+      expect(records[0]?.path).toBe(written['frameworks']?.['belowWinnerPrimary']);
+      expect(records[0]?.root).toBe(path.join(workspace, 'resources', 'frameworks'));
+      expect(records[0]?.type).toBe('framework');
+      expect(records[0]?.error).not.toBe('');
+    });
+
+    it('records the style refused in the writable root while the overlay serves', () => {
+      const roots = rootsFor('styles');
+      const loader = new StyleDefinitionLoader({
+        stylesDir: roots.primary as string,
+        additionalStylesDirs: roots.lookupDirs,
+      });
+
+      expect(loader.loadStyle('shadowed')?.name).toBe('FROM OVERLAY');
+      expect(loader.getQuarantine().list()).toEqual([]);
+
+      expect(loader.loadStyle('belowwinner')?.name).toBe('FROM OVERLAY');
+
+      const records = loader.getQuarantine().byId('belowwinner');
+      expect(records).toHaveLength(1);
+      expect(records[0]?.path).toBe(written['styles']?.['belowWinnerPrimary']);
+      expect(records[0]?.root).toBe(path.join(workspace, 'resources', 'styles'));
+      expect(records[0]?.type).toBe('style');
+      expect(records[0]?.error).not.toBe('');
+    });
   });
 });

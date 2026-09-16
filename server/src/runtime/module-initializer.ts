@@ -250,15 +250,22 @@ function resourceInventoryOf(
   };
 }
 
-/** A loader config naming only the roots that resolved, so an absent one stays absent. */
-function loaderDirsConfig<PrimaryKey extends string, AdditionalKey extends string>(
+/**
+ * A loader config naming only the roots that resolved, so an absent one stays absent.
+ *
+ * `lookupKey` is one of the three `additional*Dirs` keys, and what it receives is the WHOLE
+ * precedence order including `roots.primary` — not the roots beside it. The key's name predates
+ * P4.27; `ResourceRoots.lookupDirs` is the accurate end of the mapping, and each loader's config
+ * docstring restates it at the receiving end.
+ */
+function loaderDirsConfig<PrimaryKey extends string, LookupKey extends string>(
   roots: ResourceRoots,
   primaryKey: PrimaryKey,
-  additionalKey: AdditionalKey
+  lookupKey: LookupKey
 ): Record<string, string | string[]> {
   return {
     ...(roots.primary !== undefined ? { [primaryKey]: roots.primary } : {}),
-    ...(roots.additional.length > 0 ? { [additionalKey]: roots.additional } : {}),
+    ...(roots.lookupDirs.length > 0 ? { [lookupKey]: roots.lookupDirs } : {}),
   };
 }
 

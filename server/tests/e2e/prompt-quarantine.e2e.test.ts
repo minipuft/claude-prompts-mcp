@@ -306,7 +306,10 @@ describe('a prompt that fails to load is quarantined, not lost (P4.9)', () => {
         id: BUNDLED_ID,
       });
 
-      expect(result.text).toContain('A nearer file for this id failed to load');
+      // "Another", not "a nearer": P4.35 made the loaders read past the root that served, so a
+      // record can now come from a root BELOW the winner and the renderer is no longer given the
+      // rank needed to call any of them nearer.
+      expect(result.text).toContain('Another file for this id failed to load');
       expect(result.text).toContain(path.join('examples', BUNDLED_ID, 'prompt.yaml'));
       expect(result.text).toContain(path.join('server', 'resources', 'prompts'));
     });

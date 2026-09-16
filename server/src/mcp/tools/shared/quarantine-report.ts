@@ -28,6 +28,8 @@
  * a level of the tree that does not exist.
  */
 
+import * as path from 'node:path';
+
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 
 /** The served-catalog facts a report needs, without importing the catalog's type. */
@@ -93,9 +95,13 @@ export function formatQuarantineSection(
     lines.push(`\n- \`${finding.record.id}\` — ${finding.record.path}`);
     lines.push(`\n  ↳ ${finding.record.error}`);
     if (finding.shadowed) {
+      // "may change", not "will": since P4.35 a record here can come from a root BELOW the one
+      // serving, in which case repairing it changes nothing about what answers. Ranking the two
+      // is not something this renderer has been given the order to do — see `formatShadowedNote`.
       lines.push(
         `\n  ↳ **shadowed**: \`${finding.record.id}\` is currently served from ` +
-          `${finding.servedFrom ?? 'another root'}; repairing this file will change what serves.`
+          `${finding.servedFrom ?? 'another root'}; repairing this file changes what serves only ` +
+          `if its root outranks that one.`
       );
     }
   }
@@ -138,6 +144,13 @@ export function formatQuarantinedInspect(
  * The note appended to a healthy `inspect` whose id ALSO has a quarantined file behind it.
  *
  * Empty when nothing shadows it, so an ordinary inspect stays unchanged.
+ *
+ * "Another file", not "a nearer file", and "may change what serves", not "will". Both of those
+ * were true while the only root that could go quiet was one ABOVE the winner. P4.35 made the
+ * loaders read past the root that served, so a record here can now come from a LOWER root — the
+ * writable one included — and calling that file nearer, or promising that repairing it changes
+ * what serves, states a rank this renderer has not been given. The order itself is stated instead,
+ * once, from `shared/utils/resource-root-lookup.ts` §resourceRootPrecedence.
  */
 export function formatShadowedNote(
   records: readonly QuarantinedResource[],
@@ -145,12 +158,52 @@ export function formatShadowedNote(
 ): string {
   if (records.length === 0) return '';
   const lines = [
-    `\n🚧 **A nearer file for this id failed to load.** What you are reading is served from ` +
+    `\n🚧 **Another file for this id failed to load.** What you are reading is served from ` +
       `${servedFrom ?? 'another root'}.\n`,
   ];
   for (const record of records) {
     lines.push(`\n- ${record.path} — ${record.error}`);
   }
-  lines.push(`\n\n_Repairing that file will change what \`${records[0]?.id ?? ''}\` serves._\n`);
+  lines.push(
+    `\n\n_Repairing that file changes what \`${records[0]?.id ?? ''}\` serves only if its root ` +
+      `outranks ${servedFrom ?? 'the serving root'}: overlays outrank the writable root, which ` +
+      `outranks the bundled tree._\n`
+  );
   return lines.join('');
+}
+
+/**
+ * The sentence a repair response adds about which root answers the id AFTER the write.
+ *
+ * MEASURED, NOT DERIVED. `servedFrom` is the loader's own `sourceRoot` stamp read back after the
+ * reload, so this says what the catalog does rather than re-deriving precedence at a second site —
+ * the rule P4.18 (ruling R7) set for exactly this question.
+ *
+ * WHAT IT REPLACES. Both repair responses told the operator, verbatim, that the repair "wrote
+ * `<path>`, which takes precedence, so `<id>` now serves your copy". A write lands in the WRITABLE
+ * root, and since P4.27 every overlay outranks that root — so for a refused file living in an
+ * overlay the claim was false in both halves: the overlay still answered, and the operator was
+ * told their copy was serving while it was inert.
+ *
+ * One helper for both kinds rather than a copy in each processor: the claim is the thing that was
+ * wrong, and a second copy is a second place for it to go wrong again.
+ */
+export function formatRepairServingLine(
+  id: string,
+  writtenRoot: string,
+  servedFrom: string | undefined
+): string {
+  if (servedFrom === undefined) {
+    return (
+      `\n⚠️ Nothing currently serves \`${id}\` — no root in the lookup order yielded a valid ` +
+      `definition. See the server log for the loader's reason.\n`
+    );
+  }
+  if (path.resolve(servedFrom) === path.resolve(writtenRoot)) {
+    return `\n✅ \`${id}\` is served from your copy in ${writtenRoot}.\n`;
+  }
+  return (
+    `\n⚠️ \`${id}\` is still served from ${servedFrom}, which outranks ${writtenRoot} — the copy ` +
+    `this repair wrote is NOT what answers, and will not be until that root stops defining the id.\n`
+  );
 }

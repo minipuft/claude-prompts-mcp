@@ -907,9 +907,11 @@ export class PromptLifecycleProcessor {
   /**
    * The quarantine record an unqualified `update` on this id means, if any.
    *
-   * Nearest root first: `preferredRepairTarget` prefers the writable primary, matching
-   * `resolveResourceRoots`' precedence, so an operator repairing `foo` edits their own copy rather
-   * than the bundled one they cannot write to.
+   * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
+   * `resource_manager` write lands in, so an operator repairing `foo` edits the copy they can
+   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
+   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
+   * and this docstring cited that precedence back when the two happened to agree.
    */
   private resolveRepairTarget(id: string): QuarantinedResource | undefined {
     const records = this.context.dependencies.quarantine?.byId(id) ?? [];
