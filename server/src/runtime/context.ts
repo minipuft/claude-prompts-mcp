@@ -138,7 +138,7 @@ export async function createRuntimeFoundation(
   }
   await serviceOrchestrator.startService('config-watcher');
 
-  const transport = TransportRouter.determineTransport(options.args, configManager);
+  const transport = TransportRouter.determineTransport(options.transport);
   const loggingConfig = configManager.getLoggingConfig();
 
   // Log level can be overridden via CLI flag

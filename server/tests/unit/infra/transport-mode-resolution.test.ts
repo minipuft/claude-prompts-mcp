@@ -2,101 +2,54 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { TransportRouter } from '../../../src/infra/http/transport/index.js';
 
-import type { ConfigLoader } from '../../../src/infra/config/index.js';
 /**
  * The HTTP+SSE transport was removed with the MCP SDK v2 upgrade. A removed
  * option has to fail rather than resolve to something else: for a while
- * `--transport=sse` warned and then fell back to the configured default, so the
+ * `--transport=sse` warned and then fell back to a configured default, so the
  * server started on a transport nobody asked for and reported success. These
- * tests pin the loud behavior, from both places a transport value can arrive.
+ * tests pin the loud behavior.
+ *
+ * Row 4.13: `determineTransport` no longer parses `args`/`process.argv` or falls back to a
+ * `configManager` parameter — both callers (`runtime/context.ts`, `runtime/startup-server.ts`)
+ * now hand it `RuntimeLaunchOptions.transport`, the value `resolveRuntimeLaunchOptions` already
+ * resolved from `--transport` (defaulting to `'stdio'` when the flag is absent). The space-form
+ * vs `=`-form parsing tests live at the parser instead — `RuntimeLaunchOptions.transport` in
+ * `tests/unit/runtime/options.identity.test.ts` — since `parseServerCliArgs` is the only place
+ * `--transport` is parsed now; this file only tests what `determineTransport` does with an
+ * already-resolved string.
  */
-
-function stubConfig(mode: string): ConfigLoader {
-  return { getTransportMode: jest.fn().mockReturnValue(mode) } as unknown as ConfigLoader;
-}
-
 describe('TransportRouter.determineTransport', () => {
-  test.each(['stdio', 'streamable-http', 'both'])('accepts --transport=%s', (mode) => {
-    expect(TransportRouter.determineTransport([`--transport=${mode}`], stubConfig('stdio'))).toBe(
-      mode
-    );
+  test.each(['stdio', 'streamable-http', 'both'])('accepts %s', (mode) => {
+    expect(TransportRouter.determineTransport(mode)).toBe(mode);
   });
 
-  test('rejects --transport=sse instead of falling back to the config default', () => {
-    // The config says stdio. Substituting it here is exactly the bug: the
-    // operator asked for a transport that no longer exists and would have been
-    // told nothing.
-    expect(() =>
-      TransportRouter.determineTransport(['--transport=sse'], stubConfig('stdio'))
-    ).toThrow(/--transport=sse is no longer supported/);
-  });
-
-  test('rejects a configured sse transport, not just the CLI flag', () => {
-    // config.json is the second way a removed transport reaches the runtime.
-    expect(() => TransportRouter.determineTransport([], stubConfig('sse'))).toThrow(
-      /config\.transport=sse is no longer supported/
+  test('rejects sse instead of falling back to a default', () => {
+    // The operator asked for a transport that no longer exists and would have been
+    // told nothing if this fell back silently.
+    expect(() => TransportRouter.determineTransport('sse')).toThrow(
+      /--transport=sse is no longer supported/
     );
   });
 
   test('names streamable-http in the failure so the message is actionable', () => {
-    expect(() =>
-      TransportRouter.determineTransport(['--transport=sse'], stubConfig('stdio'))
-    ).toThrow(/streamable-http/);
+    expect(() => TransportRouter.determineTransport('sse')).toThrow(/streamable-http/);
   });
 
-  test('falls back to config when the flag is unrecognized but not removed', () => {
+  test('falls back to stdio when the value is unrecognized but not removed', () => {
     // An unknown value is a typo, not a decommissioned feature — the existing
     // lenient behavior is deliberate and stays.
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const resolved = TransportRouter.determineTransport(
-      ['--transport=nonsense'],
-      stubConfig('streamable-http')
-    );
+    const resolved = TransportRouter.determineTransport('nonsense');
 
-    expect(resolved).toBe('streamable-http');
+    expect(resolved).toBe('stdio');
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });
 
-  test('uses the config value when no flag is supplied', () => {
-    expect(TransportRouter.determineTransport([], stubConfig('both'))).toBe('both');
-  });
-});
-
-/**
- * Row 4.12: `determineTransport` used to recognize only the `--transport=value` form here —
- * `parseServerCliArgs` (`runtime/cli.ts`, built on node:util `parseArgs`) has always accepted the
- * space form `--transport value` too, so `resolveRuntimeLaunchOptions`'s auto-quiet decision (fed
- * by that parser) and this method could disagree: `--transport streamable-http` quieted the
- * logger for HTTP while the server that actually started served STDIO. These tests pin the space
- * form now resolving the SAME way the `=` form does, with the `=` form and the argv-absent
- * default as controls — the space form would fail here before `extractTransportArg` was taught
- * to recognize it.
- */
-describe('TransportRouter.determineTransport recognizes the space form', () => {
-  test('space form --transport streamable-http selects HTTP', () => {
-    expect(
-      TransportRouter.determineTransport(['--transport', 'streamable-http'], stubConfig('stdio'))
-    ).toBe('streamable-http');
-  });
-
-  // CONTROL — the `=` form, already covered above, repeated here for a same-file comparison.
-  test('CONTROL — = form --transport=streamable-http selects HTTP', () => {
-    expect(
-      TransportRouter.determineTransport(['--transport=streamable-http'], stubConfig('stdio'))
-    ).toBe('streamable-http');
-  });
-
-  // CONTROL — no flag at all falls through to the config default, not HTTP.
-  test('CONTROL — no --transport flag does not select HTTP', () => {
-    expect(TransportRouter.determineTransport([], stubConfig('stdio'))).toBe('stdio');
-  });
-
-  test('space form is case-sensitive to the exact flag: a trailing value-bearing flag is not mistaken for it', () => {
-    // '--transporter' must not be treated as '--transport' with a truncated match.
-    expect(
-      TransportRouter.determineTransport(['--transporter', 'streamable-http'], stubConfig('stdio'))
-    ).toBe('stdio');
+  // POSITIVE CONTROL — without this, "falls back to stdio" above could pass equally well
+  // against a determineTransport that always returns 'stdio' regardless of the recognized value.
+  test('CONTROL — a recognized value is not overridden by the stdio fallback', () => {
+    expect(TransportRouter.determineTransport('streamable-http')).toBe('streamable-http');
   });
 });

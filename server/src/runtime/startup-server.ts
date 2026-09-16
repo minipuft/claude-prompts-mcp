@@ -58,8 +58,7 @@ export async function startServerWithManagers(
     convertedPrompts,
   } = params;
 
-  const transport =
-    transportType ?? TransportRouter.determineTransport(runtimeOptions.args, configManager);
+  const transport = transportType ?? TransportRouter.determineTransport(runtimeOptions.transport);
   logger.debug(`[startup-server] Transport selected: ${transport}`);
 
   const transportRouter = createTransportRouter(

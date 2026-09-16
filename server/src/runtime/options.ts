@@ -40,11 +40,9 @@ export interface RuntimeLaunchOptions {
   /**
    * The `--transport` value `parseServerCliArgs` parsed (`'stdio'` when the flag is absent),
    * exposing the same computation this module already does locally for the auto-quiet decision
-   * below. Not yet read by `TransportRouter.determineTransport` or `ConfigLoader.getTransportMode`
-   * — both still take their own `args`/`process.argv` view (fixed, row 4.12, to recognize this
-   * same value's space form) because their call sites in `runtime/context.ts` and
-   * `runtime/startup-server.ts` are outside this row's edit scope. This field is the channel a
-   * follow-up row threads them onto, closing the last "two parsers" gap.
+   * below. Row 4.13: this is now the value both callers of `TransportRouter.determineTransport`
+   * (`runtime/context.ts`, `runtime/startup-server.ts`) hand it directly — the router no longer
+   * takes `args`/`process.argv` or a `configManager` fallback, closing the last "two parsers" gap.
    */
   transport: string;
   /** Path-related options from CLI flags */
