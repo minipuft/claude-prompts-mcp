@@ -420,6 +420,11 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * so this defers to them and reports `'environment'` only when the override actually applied
    * (an unset or invalid env var falls through to the file/default walk below, same as those
    * getters already do).
+   *
+   * Below that: `'file'` when the raw file set it, `'default'` when the file didn't but
+   * `validateAndSetDefaults` filled in a real value at load time, and `'deferred'` — see
+   * {@link ConfigValueSource} — when neither did, because the key's section is one this loader
+   * never writes back and only its owning getter defaults at read time.
    */
   getConfigValueWithSource(key: string): ConfigValueWithSource {
     if (key === 'server.port' && process.env['PORT']) {
@@ -451,6 +456,20 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // default to fall back to here — the raw value IS what the rename carried forward under a
       // different key — so this is the one case where the raw file's own value is reported.
       return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
+    }
+
+    // Neither the file nor `validateAndSetDefaults` produced a value: `gates`, `resources`,
+    // `logging`, `identity`, `verification`, `phaseGuards` and `hooks` are never written back by
+    // that method (unlike `server`/`prompts`/`analysis`/`frameworks`/`advanced`/`execution`/
+    // `versioning`/`telemetry`, which always resolve to a concrete value here), so a key living in
+    // one of those sections stays genuinely absent from `this.config` until its OWNING getter
+    // applies a default at read time (e.g. `gates.enabled` inside `getGatesConfig()`). Reporting
+    // `'default'` with an `undefined` value here would be indistinguishable from a default that IS
+    // `undefined` by design (`getPromptsRegisterWithMcp()`, `telemetry.attributePolicy.allowlist`)
+    // — exactly the false-confidence case `getConfigValueWithSource` exists to end. `'deferred'`
+    // names the state honestly instead of guessing at a value no layer has produced yet.
+    if (mergedValue === undefined) {
+      return { key, value: undefined, source: 'deferred' };
     }
 
     return { key, value: mergedValue, source: 'default' };

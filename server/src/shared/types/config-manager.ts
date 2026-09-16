@@ -31,9 +31,19 @@ export interface ConfigSchemaValidationResult {
 }
 
 /** Which layer produced a config value: the user's `config.json`, the built-in defaults this
- *  loader fills in for anything the file omits, or a process environment variable that overrides
- *  both (`PORT`, `LOG_LEVEL` today). */
-export type ConfigValueSource = 'file' | 'default' | 'environment';
+ *  loader fills in for anything the file omits, a process environment variable that overrides
+ *  both (`PORT`, `LOG_LEVEL` today), or `'deferred'`.
+ *
+ *  `'deferred'` is not a fourth kind of value — it is the honest label for NO value: the packaged
+ *  `config.schema.json` declares the key, but neither the raw file nor this loader's own
+ *  load-time defaulting (`validateAndSetDefaults`) produced one, because the section it lives in
+ *  is one of the ones that loader never writes back (e.g. `gates`, `resources`, `logging`,
+ *  `identity`, `verification`) — only the OWNING getter defaults that section, and only when it is
+ *  actually called (e.g. `gates.enabled` inside `getGatesConfig()`). Do not confuse this with
+ *  `'default'`: `'default'` means the loaded config HOLDS a concrete value nobody set in the file
+ *  (that loader-level defaulting ran); `'deferred'` means it holds none, so `value` is always
+ *  `undefined` for this source — never invented here. */
+export type ConfigValueSource = 'file' | 'default' | 'environment' | 'deferred';
 
 /**
  * The effective value of a dot-path config key (e.g. `server.port`) plus which layer produced it.
@@ -76,8 +86,9 @@ export interface ConfigManager {
    * and which layer produced it. Reports `'environment'` whenever an env override is active for
    * that key — currently `server.port` (`PORT`) and `logging.level` (`LOG_LEVEL`) — with `value`
    * set to what the server actually uses, not the file/default value the override shadows. A key
-   * absent from both the file and the schema-declared defaults resolves to
-   * `{ value: undefined, source: 'default' }`.
+   * absent from both the raw file AND this loader's own load-time defaulting resolves to
+   * `{ value: undefined, source: 'deferred' }` — never `'default'`, which is reserved for a
+   * defaulted value that actually resolved. See {@link ConfigValueSource} for the distinction.
    */
   getConfigValueWithSource(key: string): ConfigValueWithSource;
 
