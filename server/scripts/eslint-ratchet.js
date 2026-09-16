@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const BASELINE_PATH = path.resolve(process.cwd(), '.eslint-ratchet-baseline.json');
 
@@ -119,7 +120,7 @@ function summarizeEslintReport(results) {
  * require the baseline to be updated deliberately rather than drifting; the printed
  * message names both readings so the reader can tell which one they are looking at.
  */
-function compareSummaries(baseline, current) {
+export function compareSummaries(baseline, current) {
   const regressions = [];
   const vanished = [];
 
@@ -180,7 +181,7 @@ async function loadJson(filePath) {
  * (each ratchet reimplements its own `compareSummaries`/`compare`) already accepts that
  * duplication over introducing a new shared module for three call sites.
  */
-function parseAllowIncreaseArgs(argv) {
+export function parseAllowIncreaseArgs(argv) {
   const overrides = new Map();
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] !== '--allow-increase') continue;
@@ -211,7 +212,7 @@ function parseAllowIncreaseArgs(argv) {
  * `{errors: 0, warnings: 0}` on the CURRENT side, which is a decrease (or no change) — never an
  * increase — so it never needs an override; `check()` is where a vanished rule is reported.
  */
-function findUnauthorizedIncreases(baselineByRule, currentByRule, overrides) {
+export function findUnauthorizedIncreases(baselineByRule, currentByRule, overrides) {
   const increases = [];
   const allRuleIds = new Set([
     ...Object.keys(baselineByRule ?? {}),
@@ -252,22 +253,51 @@ function formatRefusal(increases) {
   ].join('\n');
 }
 
-async function writeBaseline(summary, { previousBaseline, overrides } = {}) {
-  const generatedAt = new Date().toISOString();
-  const overrideLog = [...(previousBaseline?.overrideLog ?? [])];
+/**
+ * Pure: build the overrideLog to persist, given the overrides accepted this run.
+ *
+ * Only overrides that were actually NEEDED (the rule's errors or warnings genuinely rose) are
+ * logged — an `--allow-increase` passed for a rule that did not increase this run is a no-op,
+ * reported separately by the caller, not written to the log.
+ */
+export function buildOverrideLog(
+  previousOverrideLog,
+  overrides,
+  baselineByRule,
+  currentByRule,
+  generatedAt
+) {
+  const overrideLog = [...(previousOverrideLog ?? [])];
+  const unused = [];
 
   for (const [ruleId, reason] of overrides ?? []) {
-    const before = previousBaseline?.byRule?.[ruleId] ?? { errors: 0, warnings: 0 };
-    const after = summary.byRule[ruleId] ?? { errors: 0, warnings: 0 };
+    const before = baselineByRule?.[ruleId] ?? { errors: 0, warnings: 0 };
+    const after = currentByRule?.[ruleId] ?? { errors: 0, warnings: 0 };
     const wasNeeded = after.errors > before.errors || after.warnings > before.warnings;
     if (wasNeeded) {
       overrideLog.push({ date: generatedAt, ruleId, reason, before, after });
     } else {
-      console.log(
-        `[eslint-ratchet] Note: --allow-increase ${ruleId} was passed but ${ruleId} did not ` +
-          'increase this run; ignored.'
-      );
+      unused.push(ruleId);
     }
+  }
+
+  return { overrideLog, unused };
+}
+
+async function writeBaseline(summary, { previousBaseline, overrides } = {}) {
+  const generatedAt = new Date().toISOString();
+  const { overrideLog, unused } = buildOverrideLog(
+    previousBaseline?.overrideLog,
+    overrides,
+    previousBaseline?.byRule,
+    summary.byRule,
+    generatedAt
+  );
+  for (const ruleId of unused) {
+    console.log(
+      `[eslint-ratchet] Note: --allow-increase ${ruleId} was passed but ${ruleId} did not ` +
+        'increase this run; ignored.'
+    );
   }
 
   const baseline = {
@@ -389,19 +419,25 @@ async function handleCheck() {
   process.exitCode = 1;
 }
 
-const mode = process.argv[2] ?? 'check';
+// Guarded so importing the pure functions above (compareSummaries, parseAllowIncreaseArgs,
+// findUnauthorizedIncreases, buildOverrideLog) for tests does not spawn ESLint or touch the
+// committed baseline as a side effect — the same pattern run-validation-suite.js uses to let
+// validate-suite-membership.js import `SUITE` without running the suite.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const mode = process.argv[2] ?? 'check';
 
-try {
-  if (mode === 'update-baseline') {
-    await handleUpdateBaseline(process.argv.slice(3));
-  } else if (mode === 'check') {
-    await handleCheck();
-  } else {
-    throw new Error(
-      `[eslint-ratchet] Unknown mode "${mode}". Expected: "check" or "update-baseline".`
-    );
+  try {
+    if (mode === 'update-baseline') {
+      await handleUpdateBaseline(process.argv.slice(3));
+    } else if (mode === 'check') {
+      await handleCheck();
+    } else {
+      throw new Error(
+        `[eslint-ratchet] Unknown mode "${mode}". Expected: "check" or "update-baseline".`
+      );
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
 }
