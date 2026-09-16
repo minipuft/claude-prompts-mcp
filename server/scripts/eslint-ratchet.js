@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const BASELINE_PATH = path.resolve(process.cwd(), '.eslint-ratchet-baseline.json');
 
@@ -119,7 +120,7 @@ function summarizeEslintReport(results) {
  * require the baseline to be updated deliberately rather than drifting; the printed
  * message names both readings so the reader can tell which one they are looking at.
  */
-function compareSummaries(baseline, current) {
+export function compareSummaries(baseline, current) {
   const regressions = [];
   const vanished = [];
 
@@ -171,24 +172,172 @@ async function loadJson(filePath) {
   return JSON.parse(content);
 }
 
-async function writeBaseline(summary) {
+/**
+ * Parse repeatable `--allow-increase <key> <reason>` pairs from the argv tail.
+ *
+ * Shape kept identical across all three ratchets (eslint-ratchet.js, knip-ratchet.js,
+ * typecheck-tests-ratchet.js) even though the logic is duplicated rather than shared: none of
+ * the three currently import from a common `lib/` module, and this repo's existing convention
+ * (each ratchet reimplements its own `compareSummaries`/`compare`) already accepts that
+ * duplication over introducing a new shared module for three call sites.
+ */
+export function parseAllowIncreaseArgs(argv) {
+  const overrides = new Map();
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] !== '--allow-increase') continue;
+    const key = argv[i + 1];
+    const reason = argv[i + 2];
+    if (!key || !reason || key.startsWith('--') || reason.startsWith('--')) {
+      throw new Error(
+        '[eslint-ratchet] --allow-increase requires two arguments: <ruleId> "<reason>". ' +
+          `Got: ${JSON.stringify(argv.slice(i, i + 3))}`
+      );
+    }
+    overrides.set(key, reason);
+    i += 2;
+  }
+  return overrides;
+}
+
+/**
+ * A rule's ceiling may only rise when the caller named it via `--allow-increase`.
+ *
+ * Compared per rule, against BOTH sub-metrics (errors, warnings) — either one rising without an
+ * override is a refusal. A rule absent from the baseline compares against an implicit
+ * `{errors: 0, warnings: 0}`, so a rule appearing for the first time is an increase from zero
+ * and needs the same explicit override as any other. `__unknown__` (eslint's bucket for
+ * messages with no `ruleId`, e.g. an unused `eslint-disable` directive) is just another key in
+ * `byRule` here — it gets no special case, and `--allow-increase __unknown__ "..."` overrides it
+ * the same as any named rule. A rule that disappears entirely compares against an implicit
+ * `{errors: 0, warnings: 0}` on the CURRENT side, which is a decrease (or no change) — never an
+ * increase — so it never needs an override; `check()` is where a vanished rule is reported.
+ */
+export function findUnauthorizedIncreases(baselineByRule, currentByRule, overrides) {
+  const increases = [];
+  const allRuleIds = new Set([
+    ...Object.keys(baselineByRule ?? {}),
+    ...Object.keys(currentByRule ?? {}),
+  ]);
+
+  for (const ruleId of allRuleIds) {
+    const before = baselineByRule?.[ruleId] ?? { errors: 0, warnings: 0 };
+    const after = currentByRule?.[ruleId] ?? { errors: 0, warnings: 0 };
+    const wentUp = after.errors > before.errors || after.warnings > before.warnings;
+
+    if (wentUp && !overrides.has(ruleId)) {
+      increases.push({ ruleId, before, after });
+    }
+  }
+
+  return increases.sort((a, b) => a.ruleId.localeCompare(b.ruleId));
+}
+
+function formatRefusal(increases) {
+  const example = increases[0];
+  return [
+    `[eslint-ratchet] Refusing to update baseline: ${increases.length} rule(s) would increase ` +
+      'without an explicit override.',
+    '',
+    'Lowering a ceiling is always free. Raising one requires naming the rule:',
+    ...increases.map(
+      (i) =>
+        `- ${i.ruleId}: errors ${i.before.errors}->${i.after.errors}, warnings ${i.before.warnings}->${i.after.warnings}`
+    ),
+    '',
+    'To accept one of these intentionally, pass --allow-increase <ruleId> "<reason>" for EACH',
+    'rule listed above (repeatable flag), e.g.:',
+    `  npm run lint:ratchet:baseline -- --allow-increase ${example.ruleId} "reason for the increase"`,
+    '',
+    'The reason is written into the committed baseline file (overrideLog), where a reviewer',
+    'sees it in the same diff as the ceiling change.',
+  ].join('\n');
+}
+
+/**
+ * Pure: build the overrideLog to persist, given the overrides accepted this run.
+ *
+ * Only overrides that were actually NEEDED (the rule's errors or warnings genuinely rose) are
+ * logged — an `--allow-increase` passed for a rule that did not increase this run is a no-op,
+ * reported separately by the caller, not written to the log.
+ */
+export function buildOverrideLog(
+  previousOverrideLog,
+  overrides,
+  baselineByRule,
+  currentByRule,
+  generatedAt
+) {
+  const overrideLog = [...(previousOverrideLog ?? [])];
+  const unused = [];
+
+  for (const [ruleId, reason] of overrides ?? []) {
+    const before = baselineByRule?.[ruleId] ?? { errors: 0, warnings: 0 };
+    const after = currentByRule?.[ruleId] ?? { errors: 0, warnings: 0 };
+    const wasNeeded = after.errors > before.errors || after.warnings > before.warnings;
+    if (wasNeeded) {
+      overrideLog.push({ date: generatedAt, ruleId, reason, before, after });
+    } else {
+      unused.push(ruleId);
+    }
+  }
+
+  return { overrideLog, unused };
+}
+
+async function writeBaseline(summary, { previousBaseline, overrides } = {}) {
+  const generatedAt = new Date().toISOString();
+  const { overrideLog, unused } = buildOverrideLog(
+    previousBaseline?.overrideLog,
+    overrides,
+    previousBaseline?.byRule,
+    summary.byRule,
+    generatedAt
+  );
+  for (const ruleId of unused) {
+    console.log(
+      `[eslint-ratchet] Note: --allow-increase ${ruleId} was passed but ${ruleId} did not ` +
+        'increase this run; ignored.'
+    );
+  }
+
   const baseline = {
     schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     eslintTarget: ESLINT_TARGETS.join(','),
     totals: summary.totals,
     byRule: summary.byRule,
+    ...(overrideLog.length > 0 ? { overrideLog } : {}),
   };
 
   await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
 }
 
-async function handleUpdateBaseline() {
+async function handleUpdateBaseline(argv) {
+  const overrides = parseAllowIncreaseArgs(argv);
   const reportPath = runEslintJsonReport();
   const results = await loadJson(reportPath);
   const summary = summarizeEslintReport(results);
 
-  await writeBaseline(summary);
+  // No prior baseline (first run) leaves this null — nothing to compare against, nothing to refuse.
+  let previousBaseline = null;
+  try {
+    previousBaseline = await loadJson(BASELINE_PATH);
+  } catch {
+    // Keep the pre-initialized null.
+  }
+
+  if (previousBaseline) {
+    const unauthorized = findUnauthorizedIncreases(
+      previousBaseline.byRule ?? {},
+      summary.byRule,
+      overrides
+    );
+    if (unauthorized.length > 0) {
+      throw new Error(formatRefusal(unauthorized));
+    }
+  }
+
+  await writeBaseline(summary, { previousBaseline, overrides });
 
   // Provide quick visibility for reviewers.
 
@@ -270,19 +419,25 @@ async function handleCheck() {
   process.exitCode = 1;
 }
 
-const mode = process.argv[2] ?? 'check';
+// Guarded so importing the pure functions above (compareSummaries, parseAllowIncreaseArgs,
+// findUnauthorizedIncreases, buildOverrideLog) for tests does not spawn ESLint or touch the
+// committed baseline as a side effect — the same pattern run-validation-suite.js uses to let
+// validate-suite-membership.js import `SUITE` without running the suite.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const mode = process.argv[2] ?? 'check';
 
-try {
-  if (mode === 'update-baseline') {
-    await handleUpdateBaseline();
-  } else if (mode === 'check') {
-    await handleCheck();
-  } else {
-    throw new Error(
-      `[eslint-ratchet] Unknown mode "${mode}". Expected: "check" or "update-baseline".`
-    );
+  try {
+    if (mode === 'update-baseline') {
+      await handleUpdateBaseline(process.argv.slice(3));
+    } else if (mode === 'check') {
+      await handleCheck();
+    } else {
+      throw new Error(
+        `[eslint-ratchet] Unknown mode "${mode}". Expected: "check" or "update-baseline".`
+      );
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
 }
