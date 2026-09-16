@@ -9,7 +9,4 @@ pass_criteria:
 activation:
   artifacts:
     - test
-  prompt_categories:
-    - code
-    - development
   explicit_request: false

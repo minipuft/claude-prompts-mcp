@@ -19,6 +19,4 @@ retry_config:
 activation:
   artifacts:
     - source
-  prompt_categories:
-    - pr-review
   explicit_request: true
