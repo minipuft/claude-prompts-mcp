@@ -218,12 +218,104 @@ async function loadBaselineOrThrow() {
   }
 }
 
-async function writeBaseline(summary) {
+/**
+ * Parse repeatable `--allow-increase <key> <reason>` pairs from the argv tail.
+ *
+ * Shape kept identical across all three ratchets (eslint-ratchet.js, knip-ratchet.js,
+ * typecheck-tests-ratchet.js) even though the logic is duplicated rather than shared: none of
+ * the three currently import from a common `lib/` module, and this repo's existing convention
+ * (each ratchet reimplements its own `compareSummaries`/`compare`) already accepts that
+ * duplication over introducing a new shared module for three call sites.
+ */
+function parseAllowIncreaseArgs(argv) {
+  const overrides = new Map();
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] !== '--allow-increase') continue;
+    const key = argv[i + 1];
+    const reason = argv[i + 2];
+    if (!key || !reason || key.startsWith('--') || reason.startsWith('--')) {
+      throw new Error(
+        '[knip-ratchet] --allow-increase requires two arguments: <category> "<reason>". ' +
+          `Got: ${JSON.stringify(argv.slice(i, i + 3))}`
+      );
+    }
+    overrides.set(key, reason);
+    i += 2;
+  }
+  return overrides;
+}
+
+/**
+ * A category's ceiling may only rise when the caller named it via `--allow-increase`.
+ *
+ * A category absent from the baseline compares against an implicit 0, so a brand-new category
+ * with findings is an increase from zero and needs the same explicit override as any tracked
+ * one. A category that disappears entirely compares against an implicit 0 on the CURRENT side,
+ * which is a decrease — never an increase — so it never needs an override; `check()` already
+ * reports that case as `vanished` (reporter-shape change) rather than progress.
+ */
+function findUnauthorizedIncreases(baselineByCategory, currentByCategory, overrides) {
+  const increases = [];
+  const allCategories = new Set([
+    ...Object.keys(baselineByCategory ?? {}),
+    ...Object.keys(currentByCategory ?? {}),
+  ]);
+
+  for (const category of allCategories) {
+    const before = baselineByCategory?.[category] ?? 0;
+    const after = currentByCategory?.[category] ?? 0;
+
+    if (after > before && !overrides.has(category)) {
+      increases.push({ category, before, after });
+    }
+  }
+
+  return increases.sort((a, b) => a.category.localeCompare(b.category));
+}
+
+function formatRefusal(increases) {
+  const example = increases[0];
+  return [
+    `[knip-ratchet] Refusing to update baseline: ${increases.length} categor${
+      increases.length === 1 ? 'y' : 'ies'
+    } would increase without an explicit override.`,
+    '',
+    'Lowering a ceiling is always free. Raising one requires naming the category:',
+    ...increases.map((i) => `- ${i.category}: baseline=${i.before} current=${i.after}`),
+    '',
+    'To accept one of these intentionally, pass --allow-increase <category> "<reason>" for EACH',
+    'category listed above (repeatable flag), e.g.:',
+    `  npm run knip-ratchet:baseline -- --allow-increase ${example.category} "reason for the increase"`,
+    '',
+    'The reason is written into the committed baseline file (overrideLog), where a reviewer',
+    'sees it in the same diff as the ceiling change.',
+  ].join('\n');
+}
+
+async function writeBaseline(summary, { previousBaseline, overrides } = {}) {
+  const generatedAt = new Date().toISOString();
+  const overrideLog = [...(previousBaseline?.overrideLog ?? [])];
+
+  for (const [category, reason] of overrides ?? []) {
+    const before = previousBaseline?.byCategory?.[category] ?? 0;
+    const after = summary.byCategory[category] ?? 0;
+    const wasNeeded = after > before;
+    if (wasNeeded) {
+      overrideLog.push({ date: generatedAt, category, reason, before, after });
+    } else {
+      console.log(
+        `[knip-ratchet] Note: --allow-increase ${category} was passed but ${category} did not ` +
+          'increase this run; ignored.'
+      );
+    }
+  }
+
   const baseline = {
     schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     totals: summary.totals,
     byCategory: summary.byCategory,
+    ...(overrideLog.length > 0 ? { overrideLog } : {}),
   };
   await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
 }
@@ -235,10 +327,31 @@ function formatCategoryList(summary) {
     .join(', ');
 }
 
-async function handleUpdateBaseline() {
+async function handleUpdateBaseline(argv) {
+  const overrides = parseAllowIncreaseArgs(argv);
   const report = runKnip();
   const summary = summarizeKnipReport(report.issues);
-  await writeBaseline(summary);
+
+  // No prior baseline (first run) leaves this null — nothing to compare against, nothing to refuse.
+  let previousBaseline = null;
+  try {
+    previousBaseline = await loadBaselineOrThrow();
+  } catch {
+    // Keep the pre-initialized null.
+  }
+
+  if (previousBaseline) {
+    const unauthorized = findUnauthorizedIncreases(
+      previousBaseline.byCategory ?? {},
+      summary.byCategory,
+      overrides
+    );
+    if (unauthorized.length > 0) {
+      throw new Error(formatRefusal(unauthorized));
+    }
+  }
+
+  await writeBaseline(summary, { previousBaseline, overrides });
   console.log(
     `[knip-ratchet] Baseline updated: ${summary.totals.findings} findings (${formatCategoryList(summary)})`
   );
@@ -448,6 +561,76 @@ function runSelfTest() {
     findOrphanedDeclarations(['scripts/lib/paired.d.ts'], onSyntheticDisk).length === 0
   );
 
+  // --- baseline-increase guard (parseAllowIncreaseArgs / findUnauthorizedIncreases) --------
+  check(
+    'an unauthorized increase is refused, naming the category',
+    (() => {
+      const unauthorized = findUnauthorizedIncreases({ exports: 10 }, { exports: 12 }, new Map());
+      return (
+        unauthorized.length === 1 &&
+        unauthorized[0].category === 'exports' &&
+        unauthorized[0].before === 10 &&
+        unauthorized[0].after === 12
+      );
+    })()
+  );
+  check(
+    'a brand-new category with findings needs an override too (implicit baseline of 0)',
+    findUnauthorizedIncreases({}, { brandNew: 4 }, new Map()).some(
+      (i) => i.category === 'brandNew' && i.before === 0 && i.after === 4
+    )
+  );
+  check(
+    'an explicit override for the increasing category clears the refusal',
+    findUnauthorizedIncreases({ exports: 10 }, { exports: 12 }, new Map([['exports', 'reason']]))
+      .length === 0
+  );
+  check(
+    'an override for an unrelated category does not clear a different increase',
+    findUnauthorizedIncreases(
+      { exports: 10, types: 5 },
+      { exports: 12, types: 5 },
+      new Map([['types', 'reason']])
+    ).some((i) => i.category === 'exports')
+  );
+  check(
+    'a category that disappears entirely is a decrease, never needs an override',
+    findUnauthorizedIncreases({ retiring: 3 }, {}, new Map()).length === 0
+  );
+  check(
+    'a decrease never needs an override',
+    findUnauthorizedIncreases({ exports: 10 }, { exports: 5 }, new Map()).length === 0
+  );
+  check(
+    'parseAllowIncreaseArgs reads repeatable --allow-increase <key> <reason> pairs',
+    (() => {
+      const overrides = parseAllowIncreaseArgs([
+        '--allow-increase',
+        'exports',
+        'reason one',
+        '--allow-increase',
+        'types',
+        'reason two',
+      ]);
+      return (
+        overrides.size === 2 &&
+        overrides.get('exports') === 'reason one' &&
+        overrides.get('types') === 'reason two'
+      );
+    })()
+  );
+  check(
+    'parseAllowIncreaseArgs throws when a pair is incomplete',
+    (() => {
+      try {
+        parseAllowIncreaseArgs(['--allow-increase', 'exports']);
+        return false;
+      } catch (error) {
+        return error instanceof Error && error.message.includes('--allow-increase');
+      }
+    })()
+  );
+
   if (failures > 0) {
     console.error(`\n❌ self-test: ${failures} case(s) failed`);
     process.exitCode = 1;
@@ -455,8 +638,9 @@ function runSelfTest() {
   }
   console.log(
     '\n✅ self-test: summarize counts per-category correctly (symbol-level, group-level ' +
-      'duplicates, derived categories), compare distinguishes regressions/decreases/vanished, and ' +
-      'an orphaned declaration is named\n'
+      'duplicates, derived categories), compare distinguishes regressions/decreases/vanished, an ' +
+      'orphaned declaration is named, and the baseline-increase guard refuses an unauthorized ' +
+      'rise while an explicit --allow-increase override clears it\n'
   );
 }
 
@@ -466,7 +650,7 @@ try {
   if (process.argv.includes('--self-test')) {
     runSelfTest();
   } else if (mode === 'update-baseline') {
-    await handleUpdateBaseline();
+    await handleUpdateBaseline(process.argv.slice(3));
   } else if (mode === 'check') {
     await handleCheck();
   } else {

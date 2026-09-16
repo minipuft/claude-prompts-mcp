@@ -197,20 +197,132 @@ function assertNoFatals(fatals) {
   );
 }
 
-async function handleUpdateBaseline() {
+/**
+ * Parse repeatable `--allow-increase <key> <reason>` pairs from the argv tail.
+ *
+ * Shape kept identical across all three ratchets (eslint-ratchet.js, knip-ratchet.js,
+ * typecheck-tests-ratchet.js) even though the logic is duplicated rather than shared: none of
+ * the three currently import from a common `lib/` module, and this repo's existing convention
+ * (each ratchet reimplements its own `compare`/`compareSummaries`) already accepts that
+ * duplication over introducing a new shared module for three call sites.
+ */
+function parseAllowIncreaseArgs(argv) {
+  const overrides = new Map();
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] !== '--allow-increase') continue;
+    const key = argv[i + 1];
+    const reason = argv[i + 2];
+    if (!key || !reason || key.startsWith('--') || reason.startsWith('--')) {
+      throw new Error(
+        '[typecheck-tests-ratchet] --allow-increase requires two arguments: <file> "<reason>". ' +
+          `Got: ${JSON.stringify(argv.slice(i, i + 3))}`
+      );
+    }
+    overrides.set(key, reason);
+    i += 2;
+  }
+  return overrides;
+}
+
+/**
+ * A file's ceiling may only rise when the caller named it via `--allow-increase`.
+ *
+ * A file absent from the baseline compares against an implicit 0, so a file that starts failing
+ * for the first time is an increase from zero and needs the same explicit override as a file
+ * whose count grew. A file that disappears entirely compares against an implicit 0 on the
+ * CURRENT side, which is a decrease — never an increase — so it never needs an override;
+ * `check()` already reports that case as `vanished` (left the compiler's view) separately from
+ * progress.
+ */
+function findUnauthorizedIncreases(baselineByFile, currentByFile, overrides) {
+  const increases = [];
+  const allFiles = new Set([
+    ...Object.keys(baselineByFile ?? {}),
+    ...Object.keys(currentByFile ?? {}),
+  ]);
+
+  for (const file of allFiles) {
+    const before = baselineByFile?.[file] ?? 0;
+    const after = currentByFile?.[file] ?? 0;
+
+    if (after > before && !overrides.has(file)) {
+      increases.push({ file, before, after });
+    }
+  }
+
+  return increases.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+function formatRefusal(increases) {
+  const example = increases[0];
+  return [
+    `[typecheck-tests-ratchet] Refusing to update baseline: ${increases.length} file(s) would ` +
+      'increase without an explicit override.',
+    '',
+    'Lowering a ceiling is always free. Raising one requires naming the file:',
+    ...increases.map((i) => `- ${i.file}: baseline=${i.before} current=${i.after}`),
+    '',
+    'To accept one of these intentionally, pass --allow-increase <file> "<reason>" for EACH file',
+    'listed above (repeatable flag), e.g.:',
+    '  npm run typecheck:tests:ratchet:baseline -- --allow-increase ' +
+      `${example.file} "reason for the increase"`,
+    '',
+    'The reason is written into the committed baseline file (overrideLog), where a reviewer',
+    'sees it in the same diff as the ceiling change.',
+  ].join('\n');
+}
+
+async function handleUpdateBaseline(argv) {
+  const overrides = parseAllowIncreaseArgs(argv);
   const { output, exitCode } = runTsc();
   const { summary, fatals } = summarize(output);
   assertParsed(summary, fatals, output, exitCode);
   assertNoFatals(fatals);
 
+  // No prior baseline (first run) leaves this null — nothing to compare against, nothing to refuse.
+  let previousBaseline = null;
+  try {
+    previousBaseline = await loadJson(BASELINE_PATH);
+  } catch {
+    // Keep the pre-initialized null.
+  }
+
+  if (previousBaseline) {
+    const unauthorized = findUnauthorizedIncreases(
+      previousBaseline.byFile ?? {},
+      summary.byFile,
+      overrides
+    );
+    if (unauthorized.length > 0) {
+      throw new Error(formatRefusal(unauthorized));
+    }
+  }
+
+  const generatedAt = new Date().toISOString();
+  const overrideLog = [...(previousBaseline?.overrideLog ?? [])];
+  for (const [file, reason] of overrides) {
+    const before = previousBaseline?.byFile?.[file] ?? 0;
+    const after = summary.byFile[file] ?? 0;
+    const wasNeeded = after > before;
+    if (wasNeeded) {
+      overrideLog.push({ date: generatedAt, file, reason, before, after });
+    } else {
+      console.log(
+        `[typecheck-tests-ratchet] Note: --allow-increase ${file} was passed but ${file} did ` +
+          'not increase this run; ignored.'
+      );
+    }
+  }
+
   const baseline = {
     schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     project: PROJECT,
     scope: 'tests/',
     totals: summary.totals,
     byCode: sortedByKey(summary.byCode),
     byFile: sortedByKey(summary.byFile),
+    ...(overrideLog.length > 0 ? { overrideLog } : {}),
   };
 
   await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
@@ -289,7 +401,7 @@ const mode = process.argv[2] ?? 'check';
 
 try {
   if (mode === 'update-baseline') {
-    await handleUpdateBaseline();
+    await handleUpdateBaseline(process.argv.slice(3));
   } else if (mode === 'check') {
     await handleCheck();
   } else {
