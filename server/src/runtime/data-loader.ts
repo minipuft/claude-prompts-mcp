@@ -21,6 +21,7 @@ import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 import type { Stats } from 'node:fs';
 
+import { summarizeQuarantine } from '#mcp/tools/shared/quarantine-report.js';
 import { loadPromptsAcrossRoots, mergePromptResults } from '#modules/prompts/prompt-root-loader.js';
 import { getSkillsSyncConfigPath } from '#modules/skills-sync/service.js';
 
@@ -174,14 +175,22 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   // own ERROR lines are hundreds of lines up in a startup log. Deliberately not gated on
   // `!isQuiet`, for the reason the inventory block above records: STDIO auto-enables quiet, and
   // STDIO is how every MCP client launches this server.
+  //
+  // The shadow half names the ROOT, not the fact of one. `convertedPrompts` carries `sourceRoot`,
+  // stamped by the loader on the pass that produced it (`PromptAssetManager`, P1.1), and it was in
+  // scope here while this line re-derived shadowing from a bare `Set` of served ids and could only
+  // say "another root". An operator reading that still has to work out which of bundled, primary
+  // and overlay answered — the one fact that decides whether repairing the file changes what
+  // serves. `summarizeQuarantine` is the pairing the `resource_manager` surfaces already use, so
+  // the startup log and `list` now agree by construction rather than by care.
   const quarantined = promptManager.getQuarantine().list();
-  const servedIdsForShadowCheck = new Set(convertedPrompts.map((prompt) => prompt.id));
-  for (const record of quarantined) {
-    const shadowed = servedIdsForShadowCheck.has(record.id)
-      ? ' (another root is serving this id — your edit is not live)'
+  for (const finding of summarizeQuarantine(quarantined, convertedPrompts)) {
+    const shadowed = finding.shadowed
+      ? ` (served from ${finding.servedFrom ?? 'another root'} — your edit is not live)`
       : '';
     logger.warn(
-      `🚧 quarantined prompt '${record.id}': ${record.path} — ${record.error}${shadowed}`
+      `🚧 quarantined prompt '${finding.record.id}': ${finding.record.path} — ` +
+        `${finding.record.error}${shadowed}`
     );
   }
   if (quarantined.length > 0) {
