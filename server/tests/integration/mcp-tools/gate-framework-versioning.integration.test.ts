@@ -1089,6 +1089,11 @@ describe('Framework lifecycle error messages name the resolved directory (B.26)'
       getFrameworkRegistry: () => registryDouble,
       // Force the framework-manager step to fail, entering the rollback branch.
       registerFramework: async () => false,
+      // `handleCreate` asks the quarantine whether this id is claimed by a file another root
+      // refused (P4.24), on the branch where no existence source knows it — which is this test's
+      // branch. Same reason as the reload case above: this double owns no loader, so the empty
+      // view is the honest answer, and the test is about which directory the rollback names.
+      getQuarantine: () => EMPTY_QUARANTINE_VIEW,
     } as unknown as FrameworkResourceContext['frameworkManager']);
 
     // Force the rollback's file removal to fail without disturbing the real write path.
