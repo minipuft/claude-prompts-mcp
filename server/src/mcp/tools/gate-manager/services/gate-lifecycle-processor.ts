@@ -14,7 +14,7 @@ import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
 import { projectWriteModel } from '#modules/versioning/index.js';
-import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 

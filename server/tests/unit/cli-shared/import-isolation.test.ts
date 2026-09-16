@@ -11,7 +11,11 @@ const __dirname = path.dirname(__filename);
  * This is the critical gate for Phase 0 — if cli-shared leaks runtime deps,
  * the CLI package cannot bundle independently.
  *
- * Uses dependency-cruiser to trace the actual import graph.
+ * Uses dependency-cruiser to trace the actual import graph. The claim in the title below is
+ * carried by the `cli-shared-no-runtime` rule in `.dependency-cruiser.cjs`, which is `reachable`
+ * and therefore sees the closure. Before that rule existed (added 2026-09-15) this file asserted
+ * "no dependency violations found" against a rule set that said nothing about cli-shared at all —
+ * it was green because nothing was being asked, not because nothing was wrong.
  */
 describe('cli-shared import isolation', () => {
   const serverRoot = path.resolve(__dirname, '../../..');

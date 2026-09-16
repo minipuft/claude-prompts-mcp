@@ -34,54 +34,32 @@ import { SqliteStateStore } from '../../database/stores/sqlite-store.js';
 import { Logger } from '../../logging/index.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
-import type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
+import type {
+  ChangeSource,
+  ChangeOperation,
+  GetChangesParams,
+  LogChangeParams,
+  ResourceChangeEntry,
+  ResourceChangeLogPort,
+  TrackedResourceType,
+} from '#shared/types/index.js';
 
 import { enforceRetention } from '#infra/database/retention.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
-export type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
-
 /**
- * Type of change operation
+ * The log's data contract lives in `shared/types` — `ResourceChangeLogPort` and the four shapes
+ * below — because mcp/ reads this log and may not import infra/. Re-exported here so the module
+ * that implements the contract is still a place to import it from.
  */
-export type ChangeOperation = 'added' | 'modified' | 'removed';
-
-/**
- * Individual change entry in the log
- */
-export interface ResourceChangeEntry {
-  timestamp: string;
-  source: ChangeSource;
-  operation: ChangeOperation;
-  resourceType: TrackedResourceType;
-  resourceId: string;
-  filePath: string;
-  contentHash: string;
-  previousHash?: string;
-}
-
-/**
- * Parameters for logging a change
- */
-export interface LogChangeParams {
-  source: ChangeSource;
-  operation: ChangeOperation;
-  resourceType: TrackedResourceType;
-  resourceId: string;
-  filePath: string;
-  content?: string;
-}
-
-/**
- * Query parameters for retrieving changes
- */
-export interface GetChangesParams {
-  limit?: number;
-  source?: ChangeSource;
-  resourceType?: TrackedResourceType;
-  since?: string;
-  resourceId?: string;
-}
+export type {
+  ChangeSource,
+  ChangeOperation,
+  GetChangesParams,
+  LogChangeParams,
+  ResourceChangeEntry,
+  TrackedResourceType,
+} from '#shared/types/index.js';
 
 /**
  * Configuration for the tracker
@@ -130,7 +108,7 @@ const DEFAULT_CONFIG: ResourceChangeTrackerConfig = {
  * ResourceChangeTracker class
  * Provides audit logging and hash tracking for resource changes via SQLite
  */
-export class ResourceChangeTracker {
+export class ResourceChangeTracker implements ResourceChangeLogPort {
   private logger: Logger;
   private config: ResourceChangeTrackerConfig;
   private hashCache: Map<string, string> = new Map();
