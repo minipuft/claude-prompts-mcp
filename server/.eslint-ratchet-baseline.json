@@ -1,30 +1,30 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T04:00:58.385Z",
+  "generatedAt": "2026-09-16T07:43:02.942Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 3033,
-    "warnings": 875
+    "errors": 2974,
+    "warnings": 842
   },
   "byRule": {
     "@typescript-eslint/no-explicit-any": {
-      "errors": 295,
+      "errors": 281,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 89
+      "warnings": 88
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2002,
+      "errors": 1983,
       "warnings": 0
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 107
+      "warnings": 97
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 433,
+      "errors": 407,
       "warnings": 0
     },
     "max-params": {
@@ -41,7 +41,7 @@
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 399
+      "warnings": 385
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "errors": 175,
@@ -57,7 +57,7 @@
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 36
+      "warnings": 29
     },
     "@typescript-eslint/explicit-function-return-type": {
       "errors": 26,
@@ -97,7 +97,7 @@
     },
     "max-lines": {
       "errors": 0,
-      "warnings": 2
+      "warnings": 1
     },
     "import-x/no-duplicates": {
       "errors": 2,
