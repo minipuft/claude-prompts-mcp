@@ -27,7 +27,7 @@ import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { VersionHistoryService } from '#modules/versioning/index.js';
-import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
 import { ValidationError, handleError as utilsHandleError } from '#shared/utils/index.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
