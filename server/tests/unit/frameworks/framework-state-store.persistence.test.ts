@@ -210,6 +210,42 @@ describe('FrameworkStateStore (persistence)', () => {
     );
   });
 
+  test('a framework system toggle that fails to persist rejects', async () => {
+    const logger = createLogger();
+    let failSaves = false;
+    const stateStore = {
+      exists: async () => false,
+      load: async () => undefined,
+      save: async () => {
+        if (failSaves) throw new Error('state database is read-only');
+      },
+    } as unknown as SqliteStateStore<PersistedFrameworkState>;
+    const store = await createFrameworkStateStore(logger, tmpRoot, {
+      defaultFramework: () => 'radiant',
+      defaultScope: { workspaceId: 'project-toggling-against-a-read-only-database' },
+      stateStore,
+    });
+
+    // The toggle below is a real state change, not a no-op early return.
+    expect(store.getCurrentState().frameworkSystemEnabled).toBe(false);
+
+    failSaves = true;
+
+    // Positive control: a mutation that already awaits its save rejects through this
+    // same double. Without it, a resolved toggle below would be evidence about an
+    // inert double rather than about the toggle.
+    await expect(store.switchFramework({ targetFramework: 'react' })).rejects.toThrow(
+      'state database is read-only'
+    );
+
+    // The toggle the configuration listener drives. Its save failure was caught and
+    // logged inside the store, so the caller was told the toggle succeeded while the
+    // database still held the old value.
+    await expect(store.setFrameworkSystemEnabled(true, 'unit-toggle')).rejects.toThrow(
+      'state database is read-only'
+    );
+  });
+
   test('a scope that has never persisted framework state logs at debug, not warn', async () => {
     const logger = createLogger();
     // A scope name never touched by an earlier test in this file — the load path must see
