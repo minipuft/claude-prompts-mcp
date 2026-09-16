@@ -28,6 +28,7 @@ import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { frameworkLabel } from '#shared/utils/framework-label.js';
+import { lazyQuarantineView, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)
@@ -537,6 +538,16 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
+   * Live view of the framework files the loader refused.
+   *
+   * Resolved on every call rather than bound once — the registry, and with it the loader that owns
+   * the collection, is built inside `initialize()`. See the gate manager's twin.
+   */
+  getQuarantine(): QuarantineView {
+    return lazyQuarantineView(() => this.frameworkRegistry?.getRuntimeLoader().getQuarantine());
+  }
+
+  /**
    * Expose the framework registry for integrations
    */
   getFrameworkRegistry(): FrameworkRegistry {
@@ -641,6 +652,11 @@ export class FrameworkManager extends BaseResourceHandler<
         applicableTypes: this.getApplicableTypes(guide),
         priority: this.getFrameworkPriority(guide),
         enabled: true,
+        // Carried, not re-derived (P4.18, ruling R7): the loader stamped the root it read the
+        // definition from, and this projection is the only thing standing between that stamp and
+        // the served catalog. Anything else asking "which root serves this id" would have to
+        // resolve the roots a second time and could disagree with the loader.
+        sourceRoot: guide.sourceRoot,
       };
     } catch (error) {
       this.logger.error(`Failed to generate definition for ${guide.frameworkId}:`, error);

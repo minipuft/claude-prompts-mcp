@@ -46,6 +46,7 @@ import { FrameworkVersioningProcessor } from '../../../src/mcp/tools/framework-m
 import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import { PromptVersioningProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../src/shared/utils/resource-quarantine.js';
 import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 import { MockLogger } from '../../helpers/test-helpers.js';
 
@@ -104,6 +105,15 @@ class DiskBackedGateRegistry {
 
   has(id: string): boolean {
     return this.cache.has(id);
+  }
+
+  /**
+   * P4.19 — `handleCreate` and `handleUpdate` both consult the quarantine on the branch where
+   * `has(id)` is false. This double reads gate.yaml directly and has no loader that could refuse
+   * one, so the empty view is the honest answer here.
+   */
+  getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+    return EMPTY_QUARANTINE_VIEW;
   }
 
   get(id: string): GateView | undefined {
@@ -862,6 +872,9 @@ describe('Framework versioning through the real write path', () => {
       logger: mockLogger as unknown as Logger,
       frameworkManager: {
         getFramework: (id: string) => (id === FRAMEWORK_ID ? liveFramework : undefined),
+        // A loaderless double, so an empty view is the honest answer: nothing here refused a file.
+        // `handleReload` consults the quarantine to say WHY a reload failed.
+        getQuarantine: () => EMPTY_QUARANTINE_VIEW,
       } as unknown as FrameworkResourceContext['frameworkManager'],
       configManager,
       fileService,
@@ -1041,6 +1054,11 @@ describe('Framework lifecycle error messages name the resolved directory (B.26)'
       }),
       // Force `reregisterFramework` to fail, driving `handleReload`'s failure branch.
       registerFramework: async () => false,
+      // `handleReload` asks the quarantine whether the reload failed because the file was READ
+      // and refused, so it can name the cause instead of guessing. Nothing here refused a file,
+      // and this double owns no loader, so the empty view is the honest answer — the test is
+      // about which directory the failure names, which is the vague fallback branch.
+      getQuarantine: () => EMPTY_QUARANTINE_VIEW,
     } as unknown as FrameworkResourceContext['frameworkManager']);
 
     const lifecycle = new FrameworkLifecycleProcessor(
@@ -1071,6 +1089,11 @@ describe('Framework lifecycle error messages name the resolved directory (B.26)'
       getFrameworkRegistry: () => registryDouble,
       // Force the framework-manager step to fail, entering the rollback branch.
       registerFramework: async () => false,
+      // `handleCreate` asks the quarantine whether this id is claimed by a file another root
+      // refused (P4.24), on the branch where no existence source knows it — which is this test's
+      // branch. Same reason as the reload case above: this double owns no loader, so the empty
+      // view is the honest answer, and the test is about which directory the rollback names.
+      getQuarantine: () => EMPTY_QUARANTINE_VIEW,
     } as unknown as FrameworkResourceContext['frameworkManager']);
 
     // Force the rollback's file removal to fail without disturbing the real write path.
@@ -1270,6 +1293,17 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
     private cache = new Map<string, Record<string, unknown>>();
 
     constructor(private readonly dir: string) {}
+
+    /**
+     * The loader's quarantine view, as the real manager exposes it (P4.15).
+     *
+     * Empty here on purpose: this harness never writes a schema-invalid file, so nothing is
+     * refused. `handleReload` reads it to say WHY a reload failed, and an empty view is what sends
+     * it down the "nothing on disk" branch these cases assert.
+     */
+    getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+      return EMPTY_QUARANTINE_VIEW;
+    }
 
     has(id: string): boolean {
       return this.cache.has(id);
@@ -1529,6 +1563,7 @@ describe('framework create — pre-write and post-write validation must agree (G
           registeredFrameworks.add(id);
           return true;
         },
+        getQuarantine: () => EMPTY_QUARANTINE_VIEW,
       } as unknown as FrameworkResourceContext['frameworkManager'],
       configManager,
       fileService,
@@ -1704,6 +1739,17 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
   let promptRefreshes: number;
 
   class DriftableFrameworkRegistry {
+    /**
+     * The loader's quarantine view, as the real manager exposes it (P4.15).
+     *
+     * Empty here on purpose: this harness never writes a schema-invalid file, so nothing is
+     * refused. `handleReload` reads it to say WHY a reload failed, and an empty view is what sends
+     * it down the "nothing on disk" branch these cases assert.
+     */
+    getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+      return EMPTY_QUARANTINE_VIEW;
+    }
+
     /** `RuntimeFrameworkLoader`'s parsed-definition cache. Cleared ONLY by `clearCache`. */
     private readonly loaderCache = new Map<string, Record<string, unknown>>();
     private readonly guides = new Map<string, Record<string, unknown>>();

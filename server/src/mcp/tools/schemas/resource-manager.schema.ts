@@ -170,8 +170,14 @@ export const gatePassCriteriaSchema = z.object({
 export const resourceManagerInputSchema = z
   .object({
     // ── Core parameters ──────────────────────────────────────────────────
-    /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'framework']),
+    /**
+     * Type of resource to manage. Routes to appropriate handler.
+     *
+     * `category` (P4.7) is an ADDED union member, which is the breaking half of
+     * CLAUDE.md §Public API Contract — the contract is the union of every reachable shape, and
+     * adding a member widens it.
+     */
+    resource_type: z.enum(['prompt', 'gate', 'framework', 'category']),
     /** Operation to perform. */
     action: z.enum([
       'create',
@@ -368,21 +374,31 @@ export const resourceManagerInputSchema = z
      */
     injection: PromptInjectionConfigSchema.optional(),
     /**
-     * [Prompt] Whether this prompt registers as a native MCP prompt.
+     * [Prompt | Category] Whether prompts register as native MCP prompts.
      *
-     * FREEZE HAZARD: this value is resolved through prompt → category → global → default `true`,
-     * and setting it writes an explicit prompt-level value that outranks all three PERMANENTLY —
-     * the prompt stops following any later change to the category or global default. Omit it
-     * unless this prompt specifically needs to differ from its category.
+     * ON `resource_type: 'prompt'` — FREEZE HAZARD: this value is resolved through
+     * prompt → category → global → default `true`, and setting it writes an explicit
+     * prompt-level value that outranks all three PERMANENTLY — the prompt stops following any
+     * later change to the category or global default. Omit it unless this prompt specifically
+     * needs to differ from its category.
+     *
+     * ON `resource_type: 'category'` (P4.7) — no freeze hazard, because this IS the category
+     * level: it writes `registerWithMcp` into `category.yaml`, which every prompt in the
+     * category inherits unless it declares its own. `loader.ts` has read that key since long
+     * before anything could write it.
      */
     register_with_mcp: z.boolean().optional(),
     /**
-     * [Prompt] Native MCP prompt behaviour: 'expand' (plain template text) or 'launch' (route
-     * through prompt_engine).
+     * [Prompt | Category] Native MCP prompt behaviour: 'expand' (plain template text) or
+     * 'launch' (route through prompt_engine).
      *
-     * FREEZE HAZARD: resolved through prompt → category → default `'expand'`; an explicit value
-     * outranks both PERMANENTLY and the prompt stops following any later change to the category
-     * default. Omit it unless this prompt specifically needs to differ from its category.
+     * ON `resource_type: 'prompt'` — FREEZE HAZARD: resolved through prompt → category →
+     * default `'expand'`; an explicit value outranks both PERMANENTLY and the prompt stops
+     * following any later change to the category default. Omit it unless this prompt
+     * specifically needs to differ from its category.
+     *
+     * ON `resource_type: 'category'` (P4.7) — writes `mcpPromptMode` into `category.yaml`, the
+     * default every prompt in the category inherits.
      */
     mcp_prompt_mode: z.enum(['expand', 'launch']).optional(),
     /** [Prompt] Client-agnostic capability hint for `==>` delegated steps. */
@@ -394,8 +410,6 @@ export const resourceManagerInputSchema = z
     execution_hint: z.enum(['single', 'chain']).optional(),
     /** [Prompt] List filter query. */
     filter: z.string().optional(),
-    /** [Prompt] Output format for list/inspect. */
-    format: z.enum(['table', 'json', 'text']).optional(),
     /** [Prompt] Detail level for list/inspect. */
     detail: z.enum(['summary', 'full']).optional(),
     /** [Prompt] Search query for filtering (list action). */
@@ -403,21 +417,22 @@ export const resourceManagerInputSchema = z
 
     // ── Gate parameters ──────────────────────────────────────────────────
     /**
-     * [Gate] Gate type: validation (pass/fail) or guidance (advisory).
+     * [Gate] Gate type: validation (pass/fail) or guidance (advisory). Writes the gate.yaml
+     * key `type`.
      *
-     * NAME COLLISION, load-bearing. This parameter maps to the gate.yaml key `type`
-     * (`router.ts` `gateArgs.type = args.gate_type`), NOT to the gate.yaml key `gate_type` —
-     * which is a different field entirely (`framework` | `category` | `custom`, the
-     * classification `gate-loader.ts` filters framework gates on). That second field is
-     * therefore still unauthorable through this tool, because its own name is already taken
-     * here by this one.
-     *
-     * Deliberately NOT resolved by aliasing it to a third name: the correct end state is
-     * `type` ↔ `type` and `gate_type` ↔ `gate_type`, which is a rename and so breaking. A
-     * placeholder name would ship a parameter we already intend to delete. Tracked as P4.10
-     * against the next major.
+     * Named `type` since P4.10. It was published as `gate_type` until then, which took the name
+     * of a DIFFERENT gate.yaml key and left that one unauthorable — every tool parameter is the
+     * snake_case spelling of the gate.yaml key it writes, and these two were the only pair where
+     * that was false.
      */
-    gate_type: z.enum(['validation', 'guidance']).optional(),
+    type: z.enum(['validation', 'guidance']).optional(),
+    /**
+     * [Gate] Gate classification, writing the gate.yaml key `gate_type`. `framework` is the
+     * load-bearing value: `gate-loader.ts` filters those gates out when framework gates are
+     * disabled, and `isGateActiveForContext` requires BOTH category and framework to match for
+     * them. Absent, the loader defaults to `custom`.
+     */
+    gate_type: z.enum(['framework', 'category', 'custom']).optional(),
     /**
      * [Gate] Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`).
      * An installation's `gates.harnessCovers` (config.json) suppresses reminders whose

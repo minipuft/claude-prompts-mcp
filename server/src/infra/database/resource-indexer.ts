@@ -37,12 +37,15 @@ export type ToolLoaderFn = (promptDir: string, promptId: string) => ScriptToolLo
 import type {
   JSONSchemaDefinition,
   LoadedScriptTool,
+  ScriptToolLoadFailure,
   ScriptToolLoadReport,
 } from '#shared/types/automation.js';
 import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Logger } from '../logging/index.js';
 
 import { computeContentHash } from '#shared/utils/hash.js';
+import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
 
 /**
  * Resource types supported by the indexer
@@ -133,6 +136,23 @@ export interface ShadowedResource {
 }
 
 /**
+ * One file the owning LOADER refused, which this walk therefore declined to index.
+ *
+ * Not a failure of the indexer: the file parses as YAML, which is all this walk ever checked, and
+ * that is exactly why the index used to disagree with the catalog. The refusal happened upstream
+ * and is read back through {@link QuarantineView}.
+ */
+export interface RefusedResource {
+  type: IndexedResourceType;
+  /** Id the file would have been indexed under. */
+  id: string;
+  /** Absolute path of the refused file, so an operator can find the one to repair. */
+  filePath: string;
+  /** True when an index row for this id existed and was deleted because of the refusal. */
+  rowDeleted: boolean;
+}
+
+/**
  * Sync result statistics.
  *
  * `errors` is the count of `failures` — the two are maintained together by
@@ -147,6 +167,23 @@ export interface SyncResult {
   failures: SyncFailure[];
   /** Ids that were defined more than once; see {@link ShadowedResource}. */
   shadowed: ShadowedResource[];
+  /**
+   * Files a loader refused, which are consequently absent from the index.
+   *
+   * Its own disposition rather than a use of `removed` or `failures`, because it is neither. A
+   * refused file is still on disk, so counting it as `removed` asserts that a validation failure
+   * and a deleted directory are the same event. And `failures` means the indexer could not do its
+   * job; here it did exactly its job, which is to index the served catalog and nothing else.
+   *
+   * Carries script tools as well as the four directory-form kinds. Those two arrive by different
+   * routes for a reason that is not an inconsistency: a directory-form file is refused by a loader
+   * that walks a root, read back through {@link QuarantineView}, while a script tool is loaded per
+   * prompt and {@link ResourceIndexer.syncTools} already holds its loader's own failure report.
+   *
+   * A count-plus-array pair is deliberately avoided (`errors`/`failures` carry that debt and the
+   * comment above records why they must be written together). One array cannot drift from itself.
+   */
+  refused: RefusedResource[];
 }
 
 /** Empty result — the single place the shape is constructed. */
@@ -159,6 +196,7 @@ function emptySyncResult(): SyncResult {
     errors: 0,
     failures: [],
     shadowed: [],
+    refused: [],
   };
 }
 
@@ -203,6 +241,46 @@ export function reportResourceSyncFailures(result: SyncResult, logger: Logger): 
   for (const failure of result.failures) {
     logger.warn(`  ${failure.type} ${failure.id}: ${failure.reason}`);
   }
+}
+
+/**
+ * Name every file the index withheld because its loader refused it.
+ *
+ * Its own line, distinct from the failure and shadow reports, because the operator action differs:
+ * a failure is something to report, a shadow is something to rename, and a refusal is a file to
+ * repair — and until it is repaired the index is CORRECT to omit it, which a reader will not
+ * assume from a line that says "failed".
+ *
+ * `warn`, not `error`: the server is serving the right catalog and the index agrees with it. The
+ * finding is that a file the operator wrote is not reaching either.
+ */
+export function reportRefusedResources(result: SyncResult, logger: Logger): void {
+  if (result.refused.length === 0) {
+    return;
+  }
+
+  logger.warn(
+    `ResourceIndexer: ${result.refused.length} file(s) refused by their loader and therefore not ` +
+      `indexed — resource_index describes the served catalog, so hooks reading it will not offer these:`
+  );
+  for (const { type, id, filePath, rowDeleted } of result.refused) {
+    const dropped = rowDeleted ? ' (stale index row deleted)' : '';
+    logger.warn(`  ${type} ${id}: ${filePath}${dropped}`);
+  }
+}
+
+/**
+ * Emit every finding one sync produced: failures, shadowed ids, refused files.
+ *
+ * The three reporters stayed separate and were called individually at both sync sites, in the same
+ * order, always all three — so "what a sync reports" had two definitions that could disagree, and
+ * adding a fourth finding meant remembering two places. They remain exported for tests that assert
+ * one report's text in isolation; production reports through here.
+ */
+export function reportSyncFindings(result: SyncResult, logger: Logger): void {
+  reportResourceSyncFailures(result, logger);
+  reportShadowedResources(result, logger);
+  reportRefusedResources(result, logger);
 }
 
 /** Record a failure and its count together, so the two cannot drift apart. */
@@ -509,6 +587,19 @@ export interface ResourceIndexerConfig {
   trackTools?: boolean;
   /** Injected tool loader for discovering script tools in prompt directories */
   toolLoader?: ToolLoaderFn;
+  /**
+   * Live read-only view of the files the LOADERS refused, so this walk indexes the served
+   * catalog rather than everything on disk that happens to parse as YAML.
+   *
+   * Injected rather than constructed here for two reasons. `infra/` may not value-import the
+   * loaders that own the collections (`.dependency-cruiser.cjs` makes that an `error`), and the
+   * collections are live — a hot reload replaces a root's records in place, and a snapshot taken
+   * at wiring time would describe the previous load forever.
+   *
+   * Optional: an indexer built without one indexes every parseable file, which is the behaviour
+   * every existing caller and test already depends on.
+   */
+  quarantine?: QuarantineView;
 }
 
 /**
@@ -519,13 +610,19 @@ export interface ResourceIndexerConfig {
 export class ResourceIndexer {
   private readonly db: DatabasePort;
   private readonly logger: Logger;
-  private readonly config: Required<Omit<ResourceIndexerConfig, 'toolLoader'>>;
+  private readonly config: Required<Omit<ResourceIndexerConfig, 'toolLoader' | 'quarantine'>>;
   private readonly toolLoader?: ToolLoaderFn;
+  /**
+   * Held by reference, never copied. The loaders replace a root's records on every reload, and a
+   * copy would freeze this walk's view at whatever the first load found.
+   */
+  private readonly quarantine?: QuarantineView;
 
   constructor(db: DatabasePort, logger: Logger, config: ResourceIndexerConfig) {
     this.db = db;
     this.logger = logger;
     this.toolLoader = config.toolLoader;
+    this.quarantine = config.quarantine;
     this.config = {
       resourcesDir: config.resourcesDir,
       resourceRoots: config.resourceRoots ?? {},
@@ -562,6 +659,7 @@ export class ResourceIndexer {
         result.errors += typeResult.errors;
         result.failures.push(...typeResult.failures);
         result.shadowed.push(...typeResult.shadowed);
+        result.refused.push(...typeResult.refused);
       } catch (error) {
         this.logger.error(`ResourceIndexer: Failed to sync ${type}s:`, error);
         recordSyncFailure(result, type, `<all ${type}s>`, error);
@@ -579,6 +677,7 @@ export class ResourceIndexer {
         result.errors += toolResult.errors;
         result.failures.push(...toolResult.failures);
         result.shadowed.push(...toolResult.shadowed);
+        result.refused.push(...toolResult.refused);
       } catch (error) {
         this.logger.error('ResourceIndexer: Failed to sync tools:', error);
         recordSyncFailure(result, 'tool', '<all tools>', error);
@@ -588,7 +687,8 @@ export class ResourceIndexer {
     this.logger.info(
       `ResourceIndexer: Sync complete - ${result.added} added, ` +
         `${result.modified} modified, ${result.removed} removed, ` +
-        `${result.unchanged} unchanged, ${result.errors} errors`
+        `${result.unchanged} unchanged, ${result.refused.length} refused, ` +
+        `${result.errors} errors`
     );
 
     return result;
@@ -637,11 +737,22 @@ export class ResourceIndexer {
       }
     }
 
-    // Process removals (remaining indexed resources not in filesystem)
+    // Process removals (remaining indexed resources not in the served catalog).
+    //
+    // Two causes reach this loop and they are NOT the same event. A file that went away is
+    // `removed`. A file still sitting on disk that its loader refused is `refused`: its row is
+    // deleted just the same — the index is a projection of the served catalog, and a row for an
+    // unloadable id is a promise the hooks hand to `prompt_engine`, which rejects it — but
+    // reporting it as `removed` would tell an operator their file is gone when it is not.
     for (const [id] of indexed) {
       try {
         await this.removeResource(type, id);
-        result.removed++;
+        const refusal = result.refused.find((entry) => entry.id === id);
+        if (refusal !== undefined) {
+          refusal.rowDeleted = true;
+        } else {
+          result.removed++;
+        }
       } catch (error) {
         this.logger.warn(`ResourceIndexer: Error removing ${type}/${id}:`, error);
         recordSyncFailure(result, type, id, error);
@@ -773,6 +884,83 @@ export class ResourceIndexer {
   }
 
   /**
+   * Read a `{category}/{id}.yaml` prompt — the single-file layout — or `undefined` if it will not
+   * parse.
+   *
+   * The sibling of {@link readResourceDir} for the layout that has no directory of its own. It
+   * existed in the prompt loader from the beginning (`discoverYamlPrompts` calls it the "file
+   * pattern") and reached no `resource_index` row at all, because this walk skipped every
+   * non-directory entry: a prompt written this way loaded, served, and was invisible to every
+   * Python hook. Latent for the shipped tree, which uses the directory form throughout (measured
+   * 2026-09-13: zero single-file prompts ship), and live for anything an operator authors.
+   */
+  private async readSingleFilePrompt(
+    filePath: string,
+    root: string
+  ): Promise<{ id: string; scanned: ScannedResource } | undefined> {
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      return undefined;
+    }
+
+    try {
+      // `| undefined` rather than a bare cast: `yaml.load` returns undefined for an empty document,
+      // so the optional chain below is load-bearing rather than defensive.
+      const data = yaml.load(content) as Record<string, unknown> | undefined;
+      // Segments of the CONTAINING directory: `['general']` for `general/x.yaml`,
+      // `['general', 'chain']` for `general/chain/step.yaml`. The first is the category.
+      const segments = path.relative(root, path.dirname(filePath)).split(path.sep);
+      const baseName = singleFilePromptBaseName(path.basename(filePath));
+      return {
+        // Derived the loader's way and for the reason {@link identityOf} records: the path below
+        // the category, slash-joined, with the file's own basename last. `discoverYamlPrompts`
+        // prefixes a nested folder identically, so a step at `general/chain/step.yaml` is served
+        // as `chain/step` and the index must say the same.
+        id: [...segments.slice(1), baseName].join('/'),
+        scanned: {
+          filePath,
+          content,
+          category: (data?.['category'] as string | undefined) ?? segments[0],
+        },
+      };
+    } catch (error) {
+      this.logger.debug(`ResourceIndexer: Skipping ${filePath}: ${error}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Admit a scanned definition to the candidate map, unless its loader refused the file.
+   *
+   * Excluded BEFORE `recordScanned`, not filtered out afterwards. The map is id-keyed and
+   * last-root-wins, so a refused workspace file that reached it would displace the bundled
+   * definition the loaders fall back to — and the id would then be missing from the index while
+   * `prompt_engine` still answers to it. Declining candidacy is what lets precedence resolve the
+   * way `resolveResourceRoots` documents: the refused file is simply not there. It is also not
+   * recorded as shadowing anything, for the same reason — it hides nothing.
+   */
+  private considerCandidate(
+    type: IndexedResourceType,
+    found: { id: string; scanned: ScannedResource },
+    results: Map<string, ScannedResource>,
+    result: SyncResult
+  ): void {
+    if (this.quarantine?.isRefused(found.scanned.filePath) === true) {
+      result.refused.push({
+        type,
+        id: found.id,
+        filePath: found.scanned.filePath,
+        // Set by the removal sweep, which is the only place that can know.
+        rowDeleted: false,
+      });
+      return;
+    }
+    this.recordScanned(type, found.id, found.scanned, results, result);
+  }
+
+  /**
    * The id a resource is served under, derived the way its loader derives it.
    *
    * For prompts that is the path BELOW the category directory, slash-joined — a chain step at
@@ -818,17 +1006,70 @@ export class ResourceIndexer {
     const yamlFile = this.getYamlFileName(type);
 
     for (const entry of entries) {
+      if (entry.isFile()) {
+        await this.scanSingleFilePrompt({ entry, dir, type, root, depth, results, result });
+        continue;
+      }
       if (!entry.isDirectory() || entry.name === 'tools') continue;
 
       const subDir = path.join(dir, entry.name);
       const found = await this.readResourceDir(subDir, root, yamlFile);
-      if (found !== undefined) {
-        this.recordScanned(type, found.id, found.scanned, results, result);
-      }
+      if (found !== undefined) this.considerCandidate(type, found, results, result);
       if (depth + 1 < MAX_SCAN_DEPTH) {
         await this.scanResources(subDir, type, results, result, root, depth + 1);
       }
     }
+  }
+
+  /**
+   * Consider one FILE entry as a `{category}/{id}.yaml` prompt.
+   *
+   * Three conditions, each excluding something the loaders would not serve:
+   *
+   * - `type === 'prompt'` — no other kind has a single-file layout. Gates, frameworks and styles
+   *   are `{root}/{id}/{kind}.yaml` and nothing else, so admitting a bare file for one of them
+   *   would index a resource its own loader cannot find.
+   * - `depth > 0` — the prompt loader takes its categories from the root's DIRECTORIES and looks
+   *   for single-file prompts only inside one, so a `.yaml` at the prompts root is never served.
+   * - {@link isSingleFilePromptName} — `category.yaml`, `prompts.yaml`, `tool.yaml`, `prompt.yaml`
+   *   and `_`/`.`-prefixed files all parse as YAML and are not prompts. That rule is SHARED with
+   *   the loader and with the startup baseline walk; all three used to hold their own copy and two
+   *   were wrong in opposite directions.
+   *
+   * `tools/` never reaches here, because the directory branch above declines to descend into it.
+   */
+  private async scanSingleFilePrompt(params: {
+    entry: { name: string };
+    dir: string;
+    type: IndexedResourceType;
+    root: string;
+    depth: number;
+    results: Map<string, ScannedResource>;
+    result: SyncResult;
+  }): Promise<void> {
+    const { entry, dir, type, root, depth, results, result } = params;
+    if (type !== 'prompt' || depth === 0 || !isSingleFilePromptName(entry.name)) return;
+
+    const found = await this.readSingleFilePrompt(path.join(dir, entry.name), root);
+    if (found === undefined) return;
+
+    // The loader gives the DIRECTORY form precedence over a file of the same id
+    // (`discoverYamlPrompts`: "Only add if no directory version exists"), so a
+    // `{category}/{id}.yaml` sitting beside a `{category}/{id}/prompt.yaml` must not displace it —
+    // the index would then name a file the loader does not serve, which is the disagreement this
+    // whole walk exists to end. Tested by the recorded candidate's own filename, which is
+    // unambiguous: only the directory form is ever called `prompt.yaml`. Scoped to THIS root, so
+    // cross-root last-root-wins precedence is untouched.
+    const existing = results.get(found.id);
+    if (
+      existing !== undefined &&
+      path.basename(existing.filePath) === this.getYamlFileName(type) &&
+      !path.relative(root, existing.filePath).startsWith('..')
+    ) {
+      return;
+    }
+
+    this.considerCandidate(type, found, results, result);
   }
 
   /**
@@ -1092,16 +1333,14 @@ export class ResourceIndexer {
           });
         }
         for (const failure of report.failures) {
-          const compositeId = `${prompt.id}/${failure.toolId}`;
-          // Marked seen deliberately: the tool IS on disk, it just did not load.
-          // Letting it fall through to the removal sweep below would delete its
-          // index row and report `removed`, which is the claim that a validation
-          // failure and a deleted directory are the same event.
-          seen.add(compositeId);
-          this.logger.warn(
-            `ResourceIndexer: Tool ${compositeId} failed to load: ${failure.reason}`
-          );
-          recordSyncFailure(result, 'tool', compositeId, failure.reason);
+          this.recordRefusedTool({
+            promptDir,
+            promptId: prompt.id,
+            failure,
+            indexed,
+            seen,
+            result,
+          });
         }
       } catch (error) {
         this.logger.debug(`ResourceIndexer: Error syncing tools for prompt ${prompt.id}:`, error);
@@ -1123,6 +1362,53 @@ export class ResourceIndexer {
     );
 
     return result;
+  }
+
+  /**
+   * A script tool whose definition its loader refused: no index row, and not `removed`.
+   *
+   * WHAT THIS REPLACED, AND WHY THAT WAS HALF RIGHT. The previous code kept the row and counted
+   * the tool as a `failure`, arguing that deleting it would make the removal sweep report
+   * `removed` for what is really a validation failure. The conflation it named is real — the tool
+   * is still on disk — but keeping the row was the wrong remedy, because `queryTools()` publishes
+   * every row and `skills-sync` reads it, so a tool the loader refused was still advertised as
+   * available. {@link RefusedResource} is the third disposition that did not exist when that
+   * comment was written: the row goes, and it is reported as neither removed nor a sync failure.
+   *
+   * NOT ALSO A `failure`. `failures` means the indexer could not do its job; here it did exactly
+   * its job. Counting one event under two dispositions is the conflation this whole family of
+   * changes exists to remove, and `errors` would then report a number an operator cannot act on.
+   *
+   * `seen` still takes the id, which is what keeps the removal sweep off it — this method has
+   * already decided the row's fate and recorded the reason.
+   */
+  private recordRefusedTool(params: {
+    promptDir: string;
+    promptId: string;
+    failure: ScriptToolLoadFailure;
+    indexed: Map<string, IndexedResource>;
+    seen: Set<string>;
+    result: SyncResult;
+  }): void {
+    const { promptDir, promptId, failure, indexed, seen, result } = params;
+    const compositeId = `${promptId}/${failure.toolId}`;
+    seen.add(compositeId);
+
+    const hadRow = indexed.has(compositeId);
+    if (hadRow) {
+      this.db.run("DELETE FROM resource_index WHERE id = ? AND type = 'tool'", [compositeId]);
+    }
+
+    this.logger.warn(`ResourceIndexer: Tool ${compositeId} failed to load: ${failure.reason}`);
+    result.refused.push({
+      type: 'tool',
+      id: compositeId,
+      // Derived rather than carried on the failure: `ScriptToolLoadFailure` reports an id and a
+      // reason, and this is the layout `ScriptToolDefinitionLoader` discovered it under — the
+      // same directory `LoadedScriptTool.toolDir` names for a tool that loaded.
+      filePath: path.join(promptDir, 'tools', failure.toolId),
+      rowDeleted: hadRow,
+    });
   }
 
   private upsertToolEntry(params: {

@@ -287,6 +287,35 @@ npm run typecheck && npm run lint:ratchet && npm test && npm run validate:all
 > Pre-push hooks select the appropriate route automatically. If a push is blocked, fix
 > the issue -- don't bypass hooks.
 
+### Adding or editing a validation script
+
+Two gates read **every** script in the repo, so no check scoped to the file you edited will see
+them. Run both when you add a `server/scripts/validate-*` or root `scripts/*` entry, when you add or
+remove an export, or when you add a file's first import:
+
+```bash
+node scripts/validate-suite-membership.js   # ~0.1s -- every validator declares what it touches
+node scripts/knip-ratchet.js check          # ~1min -- unused exports, files, types
+```
+
+`validate:suite-membership` fails until the new script has a `SUITE` entry declaring its substrate
+(`io`, `reads`, `spawn`, `converse`, ...). The detector re-derives those textually from the source
+and strips comments and regex literals but **not strings** -- so a signal token inside a self-test
+fixture string counts. Declare it on the SUITE entry with a comment rather than rewriting the source
+to hide it; `validate:contributing`'s entry is the precedent.
+
+A new validator also belongs in `validate:all`, which CI runs whole. A step added to a hook that CI
+does not run breaks the gate contract described above.
+
+Two more things a new validator owes its readers:
+
+- **A self-test that fires on the defect that motivated it.** Verify both directions -- restore the
+  pre-fix content and show the gate exits non-zero, then show it passes on the finished tree. A gate
+  that cannot catch its own motivating instance is not a gate.
+- **Its blind spots, stated in its own header.** A narrow gate with a documented blind spot is worth
+  more than a broad one with silent false negatives. If it exempts a symbol by name, make it fail
+  closed when that symbol disappears -- otherwise a rename widens the exemption to everything.
+
 ## Issues & Pull Requests
 
 ### Opening an Issue

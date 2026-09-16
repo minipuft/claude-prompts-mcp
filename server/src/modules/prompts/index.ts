@@ -30,6 +30,7 @@ import { ConversationStore } from '../text-refs/conversation.js';
 import { TextReferenceStore } from '../text-refs/index.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
 import type { McpServer } from '@modelcontextprotocol/server';
 
@@ -188,6 +189,18 @@ export class PromptAssetManager {
     for (const prompt of convertedPrompts) prompt.sourceRoot = promptsDir;
 
     return { promptsData, categories, convertedPrompts, invalid };
+  }
+
+  /**
+   * Live view of the prompt files the loader refused, across every root.
+   *
+   * Handed to the tool layer once at wiring time. It is the same object the loader writes to, so
+   * a reload is visible through it with no re-plumbing — and a consumer holding it can see a
+   * broken file's id, category, root, path and error, and nothing else. There is deliberately no
+   * accessor for the content that failed to load.
+   */
+  getQuarantine(): QuarantineView {
+    return this.loader.getQuarantine();
   }
 
   /**

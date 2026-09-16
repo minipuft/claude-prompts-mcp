@@ -25,11 +25,9 @@ import {
   type StyleDefinitionYaml,
 } from './style-schema.js';
 
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-  discoverNestedYamlDirectories,
-} from '#shared/utils/yaml/index.js';
+import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
+import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,7 +38,19 @@ const __dirname = dirname(__filename);
 export interface StyleDefinitionLoaderConfig {
   /** Override default styles directory */
   stylesDir?: string;
-  /** Additional directories to scan for style overlays (workspace resources) */
+  /**
+   * The WHOLE lookup order for styles, HIGHEST precedence first — `stylesDir` included.
+   *
+   * The name says "additional" and the contents are not: since P4.27 the composition root places
+   * `stylesDir` itself inside this list, at its own rank, because the primary is neither the top of
+   * the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list that
+   * omitted it could not say where it sits. The accurate name lives at the producing end,
+   * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach the pipeline's
+   * style loader and ~30 test call sites for no behaviour change.
+   *
+   * A caller configuring the loader by hand may omit `stylesDir`, in which case it is consulted
+   * last — see `resourceLookupOrder`.
+   */
   additionalStylesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
@@ -91,14 +101,33 @@ export type { StyleSchemaValidationResult } from './style-schema.js';
 export class StyleDefinitionLoader {
   private cache = new Map<string, StyleDefinitionYaml>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
+  /**
+   * Style files this loader refused, by root. ONE instance for the loader's lifetime.
+   *
+   * Styles were the fourth kind `ResourceIndexer` walks and the only one with no refusal record,
+   * so the "absent from the index when the loader dropped it" property held for three kinds and
+   * silently did not for this one: a malformed `style.yaml` left the catalog and the indexer, which
+   * parses the same YAML itself and only ever checked that it parses, indexed it anyway.
+   *
+   * Published by reference (`getQuarantine`) rather than returned per load, the way `PromptLoader`
+   * publishes its own: the composition root binds it once and every later reload is visible through
+   * the same object.
+   */
+  private readonly quarantine = new ResourceQuarantine();
   private stylesDir: string;
   private additionalStylesDirs: string[];
+  /** Every root this loader consults for an id, highest precedence first. */
+  private readonly lookupDirs: string[];
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
 
   constructor(config: StyleDefinitionLoaderConfig = {}) {
     this.stylesDir = config.stylesDir ?? this.resolveStylesDir();
+    // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
+    // filtering it out first would drop it behind the bundled tree.
+    this.lookupDirs = resourceLookupOrder(this.stylesDir, config.additionalStylesDirs ?? []);
+    // Reported and watched, not looked up.
     this.additionalStylesDirs = (config.additionalStylesDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.stylesDir
     );
@@ -134,9 +163,7 @@ export class StyleDefinitionLoader {
 
     this.stats.cacheMisses++;
 
-    // Load from primary YAML directory, then fall through to additional dirs
-    const definition =
-      this.loadFromYamlDir(normalizedId) ?? this.loadFromAdditionalDirs(normalizedId);
+    const definition = this.loadFromLookupOrder(normalizedId);
 
     if (!definition) {
       return undefined;
@@ -156,14 +183,11 @@ export class StyleDefinitionLoader {
    * @returns Array of style IDs from YAML directories
    */
   discoverStyles(): string[] {
-    // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.stylesDir, 'style.yaml');
-    const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
-
-    // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
-    for (const dir of this.additionalStylesDirs) {
-      const additionalIds = discoverNestedYamlDirectories(dir, 'style.yaml');
-      for (const id of additionalIds) {
+    // One scan shape for every root — see the gate loader's twin. This answers WHICH ids exist;
+    // `loadStyle` answers which root serves each.
+    const idSet = new Set<string>();
+    for (const dir of this.lookupDirs) {
+      for (const id of discoverNestedYamlDirectories(dir, 'style.yaml')) {
         idSet.add(id.toLowerCase());
       }
     }
@@ -197,15 +221,7 @@ export class StyleDefinitionLoader {
    * @returns True if the style has a valid entry point
    */
   styleExists(id: string): boolean {
-    const normalizedId = id.toLowerCase();
-
-    // Check primary
-    if (existsSync(join(this.stylesDir, normalizedId, 'style.yaml'))) {
-      return true;
-    }
-
-    // Check additional dirs (flat + grouped)
-    return this.findInAdditionalDirs(normalizedId) !== undefined;
+    return this.entryRootsFor(id.toLowerCase()).length > 0;
   }
 
   /**
@@ -236,6 +252,18 @@ export class StyleDefinitionLoader {
   }
 
   /**
+   * Live view of the style files that failed to load, across every root consulted so far.
+   *
+   * Populated by demand, not by discovery: `discoverStyles()` only lists directories holding a
+   * `style.yaml`, and a file is refused when it is READ. A consumer that needs the collection to
+   * describe the whole tree must drive {@link loadAllStyles} first — which is why the composition
+   * root reports the LOADED style count rather than the discovered one.
+   */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
+  /**
    * Get the styles directory being used
    */
   getStylesDir(): string {
@@ -253,43 +281,33 @@ export class StyleDefinitionLoader {
   // Private Implementation - Overlay Loading
   // ============================================================================
 
-  /**
-   * Attempt to load a style from additional directories.
-   * Tries flat path first, then scans for grouped nesting.
-   */
-  private loadFromAdditionalDirs(id: string): StyleDefinitionYaml | undefined {
-    const resolvedDir = this.findInAdditionalDirs(id);
-    if (resolvedDir === undefined) return undefined;
-    return this.loadFromYamlDir(id, resolvedDir);
+  /** The roots holding this id, highest precedence first. */
+  private entryRootsFor(id: string): string[] {
+    return resourceEntryRoots(this.lookupDirs, id, 'style.yaml');
   }
 
   /**
-   * Find which additional directory contains a style ID.
-   * Checks flat ({dir}/{id}/style.yaml) and grouped ({dir}/{group}/{id}/style.yaml).
+   * Load from the highest-precedence root that both holds this id AND yields a valid definition.
    *
-   * @returns The base directory to pass to loadFromYamlDir, or undefined
+   * The fall-through on a refusal is the property `getQuarantine`'s docstring states for the other
+   * two kinds: a broken workspace style leaves the bundled style of that id serving, rather than
+   * removing the id from the catalog.
+   *
+   * SERVING STOPS AT THE FIRST HIT; READING DOES NOT (P4.35, ruling R17). Every root that holds the
+   * id is read, including the ones below the winner, so their refusals reach the quarantine. Under
+   * a first-hit-wins walk the silent root was whichever one served LAST — which since P4.27 is the
+   * writable one an operator actually edits: a malformed `<ws>/resources/styles/foo` behind a
+   * legacy `<ws>/styles/foo` produced no warning, no `list` entry and no repair target, which is
+   * the exact defect the quarantine exists to remove, relocated rather than fixed. The cost is
+   * re-reading a root for an id that already served, paid once per id behind `loadStyle`'s cache.
    */
-  private findInAdditionalDirs(id: string): string | undefined {
-    for (const dir of this.additionalStylesDirs) {
-      // Flat: {dir}/{id}/style.yaml
-      if (existsSync(join(dir, id, 'style.yaml'))) {
-        return dir;
-      }
-
-      // Grouped: {dir}/{group}/{id}/style.yaml
-      try {
-        const groups = readdirSync(dir, { withFileTypes: true });
-        for (const group of groups) {
-          if (!group.isDirectory()) continue;
-          if (existsSync(join(dir, group.name, id, 'style.yaml'))) {
-            return join(dir, group.name);
-          }
-        }
-      } catch {
-        // Directory read failure — skip
-      }
+  private loadFromLookupOrder(id: string): StyleDefinitionYaml | undefined {
+    let served: StyleDefinitionYaml | undefined;
+    for (const base of this.entryRootsFor(id)) {
+      const definition = this.loadFromYamlDir(id, base);
+      if (definition !== undefined && served === undefined) served = definition;
     }
-    return undefined;
+    return served;
   }
 
   // ============================================================================
@@ -297,61 +315,69 @@ export class StyleDefinitionLoader {
   // ============================================================================
 
   /**
-   * Load a style from YAML directory format ({baseDir}/{id}/style.yaml)
+   * Load a style from YAML directory format ({root}/{id}/style.yaml)
    *
    * @param id - Style ID
-   * @param baseDir - Directory to load from (defaults to primary stylesDir)
+   * @param root - The directory to load from; for a grouped tree this is `{dir}/{group}`
    */
-  private loadFromYamlDir(id: string, baseDir?: string): StyleDefinitionYaml | undefined {
-    try {
-      const styleDir = join(baseDir ?? this.stylesDir, id);
-      const entryPath = join(styleDir, 'style.yaml');
+  private loadFromYamlDir(id: string, root: string): StyleDefinitionYaml | undefined {
+    const styleDir = join(root, id);
+    const entryPath = join(styleDir, 'style.yaml');
 
-      if (!existsSync(entryPath)) {
-        if (this.debug) {
-          console.error(`[StyleDefinitionLoader] YAML entry not found: ${entryPath}`);
-        }
-        return undefined;
+    // `sinkFor`, never `beginRoot`: this loader resolves ONE id at a time behind a cache, so there
+    // is no walk boundary at which a whole root could be dropped and rebuilt. Clearing the root
+    // here would erase the record of every OTHER broken style in it. Refusals are recorded per
+    // file and forgotten per file on success, which converges on the same set.
+    const sink = this.quarantine.sinkFor('style', root);
+
+    // An absent entry point is not a refusal — nothing was read, and this is the ordinary answer
+    // for an id that lives in a different root. Recording it would put a file that does not exist
+    // in front of a repair surface.
+    if (!existsSync(entryPath)) {
+      if (this.debug) {
+        console.error(`[StyleDefinitionLoader] YAML entry not found: ${entryPath}`);
       }
+      return undefined;
+    }
 
+    try {
       // Load main style.yaml
       const definition = loadYamlFileSync<StyleDefinitionYaml>(entryPath, {
         required: true,
       });
 
       if (!definition) {
+        this.stats.loadErrors++;
+        sink.record({ id, path: entryPath, error: 'style.yaml parsed to no definition' });
         return undefined;
       }
 
       // Inline referenced files (guidance.md)
       this.inlineReferencedFiles(definition, styleDir);
 
-      // Validate if enabled
-      if (this.validateOnLoad) {
-        const validation = this.validateDefinition(definition, id);
-        if (!validation.valid) {
-          this.stats.loadErrors++;
-          console.error(
-            `[StyleDefinitionLoader] Validation failed for '${id}':`,
-            validation.errors.join('; ')
-          );
-          return undefined;
-        }
-        if (validation.warnings.length > 0 && this.debug) {
-          console.warn(
-            `[StyleDefinitionLoader] Warnings for '${id}':`,
-            validation.warnings.join('; ')
-          );
-        }
+      const refusal = this.refusalReason(definition, id);
+      if (refusal !== undefined) {
+        this.stats.loadErrors++;
+        sink.record({ id, path: entryPath, error: refusal });
+        console.error(`[StyleDefinitionLoader] Validation failed for '${id}':`, refusal);
+        return undefined;
       }
 
       if (this.debug) {
         console.error(`[StyleDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
 
+      // This exact file loaded, so any record of it is now a lie — the stale-`✓` failure in
+      // reverse, and the reason a repaired style stops reporting as refused without a restart.
+      sink.forget(entryPath);
       return definition;
     } catch (error) {
       this.stats.loadErrors++;
+      sink.record({
+        id,
+        path: entryPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (this.debug) {
         console.error(`[StyleDefinitionLoader] Failed to load YAML '${id}':`, error);
       }
@@ -387,6 +413,24 @@ export class StyleDefinitionLoader {
       // Remove the file reference after inlining
       delete (definition as Record<string, unknown>)['guidanceFile'];
     }
+  }
+
+  /**
+   * Why this definition may not enter the catalog, or `undefined` when it may.
+   *
+   * One question, one answer: the caller records a refusal and needs the reason as text, and
+   * threading the whole `StyleSchemaValidationResult` out meant the caller re-derived "is this
+   * valid" from two fields. Warnings are emitted here because they belong to the same read and
+   * nothing outside acts on them.
+   */
+  private refusalReason(definition: StyleDefinitionYaml, id: string): string | undefined {
+    if (!this.validateOnLoad) return undefined;
+    const validation = this.validateDefinition(definition, id);
+    if (!validation.valid) return validation.errors.join('; ');
+    if (validation.warnings.length > 0 && this.debug) {
+      console.warn(`[StyleDefinitionLoader] Warnings for '${id}':`, validation.warnings.join('; '));
+    }
+    return undefined;
   }
 
   /**

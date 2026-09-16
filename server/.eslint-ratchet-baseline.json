@@ -1,30 +1,30 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-12T03:04:08.504Z",
+  "generatedAt": "2026-09-16T04:00:58.385Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 3200,
-    "warnings": 1020
+    "errors": 3033,
+    "warnings": 875
   },
   "byRule": {
     "@typescript-eslint/no-explicit-any": {
-      "errors": 312,
+      "errors": 295,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 96
+      "warnings": 89
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2108,
+      "errors": 2002,
       "warnings": 0
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 112
+      "warnings": 107
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 444,
+      "errors": 433,
       "warnings": 0
     },
     "max-params": {
@@ -32,36 +32,40 @@
       "warnings": 7
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 62,
+      "errors": 56,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 209
+      "warnings": 190
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 431
+      "warnings": 399
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 199,
+      "errors": 175,
       "warnings": 0
     },
     "@typescript-eslint/no-unused-vars": {
       "errors": 17,
       "warnings": 0
     },
+    "import-x/order": {
+      "errors": 6,
+      "warnings": 0
+    },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 41
+      "warnings": 36
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 27,
+      "errors": 26,
       "warnings": 0
     },
     "max-depth": {
       "errors": 0,
-      "warnings": 30
+      "warnings": 28
     },
     "@typescript-eslint/prefer-optional-chain": {
       "errors": 1,
@@ -76,20 +80,12 @@
       "warnings": 5
     },
     "@typescript-eslint/no-floating-promises": {
-      "errors": 12,
-      "warnings": 0
-    },
-    "no-console": {
-      "errors": 0,
+      "errors": 11,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 14
-    },
-    "import-x/order": {
-      "errors": 7,
-      "warnings": 0
+      "warnings": 12
     },
     "@typescript-eslint/await-thenable": {
       "errors": 2,
@@ -101,7 +97,7 @@
     },
     "max-lines": {
       "errors": 0,
-      "warnings": 1
+      "warnings": 2
     },
     "import-x/no-duplicates": {
       "errors": 2,

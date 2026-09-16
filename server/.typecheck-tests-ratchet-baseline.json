@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T21:12:43.662Z",
+  "generatedAt": "2026-09-16T03:50:20.230Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 364
+    "errors": 359
   },
   "byCode": {
     "TS18046": 3,
@@ -12,7 +12,7 @@
     "TS2305": 24,
     "TS2307": 5,
     "TS2322": 50,
-    "TS2339": 39,
+    "TS2339": 34,
     "TS2345": 91,
     "TS2353": 41,
     "TS2367": 1,
@@ -41,7 +41,7 @@
     "tests/integration/gates/gate-judge-pipeline-wiring.test.ts": 3,
     "tests/integration/hooks/gate-hooks-integration.test.ts": 8,
     "tests/integration/hooks/response-capture-hooks.test.ts": 1,
-    "tests/integration/mcp-tools/resource-manager-workflow.test.ts": 8,
+    "tests/integration/mcp-tools/resource-manager-workflow.test.ts": 3,
     "tests/integration/pipeline/script-auto-approve-flow.test.ts": 8,
     "tests/integration/reference/reference-resolution.test.ts": 4,
     "tests/integration/reference/script-reference-resolution.test.ts": 5,

@@ -33,6 +33,11 @@ describe('ResourceManagerRouter', () => {
       (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<ToolResponse>
     >;
   };
+  let mockCategoryManager: {
+    handleAction: jest.MockedFunction<
+      (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<ToolResponse>
+    >;
+  };
 
   const successResponse: ToolResponse = {
     content: [{ type: 'text', text: 'Success' }],
@@ -61,6 +66,12 @@ describe('ResourceManagerRouter', () => {
       >(() => Promise.resolve(successResponse)),
     };
 
+    mockCategoryManager = {
+      handleAction: jest.fn<
+        (args: Record<string, unknown>, context: Record<string, unknown>) => Promise<ToolResponse>
+      >(() => Promise.resolve(successResponse)),
+    };
+
     router = createResourceManagerRouter({
       logger: logger as unknown as Parameters<typeof createResourceManagerRouter>[0]['logger'],
       promptResourceHandler: mockPromptResourceHandler as unknown as Parameters<
@@ -72,17 +83,25 @@ describe('ResourceManagerRouter', () => {
       frameworkManager: mockFrameworkManager as unknown as Parameters<
         typeof createResourceManagerRouter
       >[0]['frameworkManager'],
+      categoryManager: mockCategoryManager as unknown as Parameters<
+        typeof createResourceManagerRouter
+      >[0]['categoryManager'],
     });
   });
 
   describe('destructive-action guard', () => {
-    const RESOURCE_TYPES = ['prompt', 'gate', 'framework'] as const;
+    // `category` joined at P4.7. Listed here rather than left out, because the guard this
+    // describe block exercises is PRE-DISPATCH and generic: a new resource type is exactly the
+    // thing that silently escapes a per-handler check, which is why the router owns it.
+    const RESOURCE_TYPES = ['prompt', 'gate', 'framework', 'category'] as const;
     const handlerFor = (type: (typeof RESOURCE_TYPES)[number]) =>
       type === 'prompt'
         ? mockPromptResourceHandler
         : type === 'gate'
           ? mockGateManager
-          : mockFrameworkManager;
+          : type === 'framework'
+            ? mockFrameworkManager
+            : mockCategoryManager;
 
     // Every member of DESTRUCTIVE_ACTIONS, on every resource type. A new destructive action added
     // to the registry without a guard shows up here rather than in production.
@@ -461,12 +480,19 @@ describe('ResourceManagerRouter', () => {
       );
     });
 
-    test('transforms gate_type to type for gate handler', async () => {
+    // P4.10. `type` and `gate_type` are two different gate.yaml keys, and the router used to
+    // rewrite the parameter `gate_type` into `type` — which is why the real `gate_type` key had
+    // no parameter at all. Both now pass through under their own names.
+    //
+    // KILLED BY: restoring `if (args.gate_type) gateArgs.type = args.gate_type;` in
+    // `routeToGateManager` — the handler then receives `type: 'framework'` and no `gate_type`.
+    test('forwards type and gate_type to the gate handler under their own names', async () => {
       const args: ResourceManagerInput = {
         resource_type: 'gate',
         action: 'create',
         id: 'test-gate',
-        gate_type: 'validation',
+        type: 'validation',
+        gate_type: 'framework',
         guidance: 'Test guidance',
       };
 
@@ -477,6 +503,7 @@ describe('ResourceManagerRouter', () => {
           action: 'create',
           id: 'test-gate',
           type: 'validation',
+          gate_type: 'framework',
           guidance: 'Test guidance',
         }),
         {}

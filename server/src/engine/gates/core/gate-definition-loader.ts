@@ -26,11 +26,9 @@ import {
   type LoadedGateDefinition,
 } from './gate-schema.js';
 
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-  discoverNestedYamlDirectories,
-} from '#shared/utils/yaml/index.js';
+import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
+import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,7 +39,19 @@ const __dirname = dirname(__filename);
 export interface GateDefinitionLoaderConfig {
   /** Override default gates directory */
   gatesDir?: string;
-  /** Additional gate directories (e.g., workspace overlays). Primary always wins on ID conflict. */
+  /**
+   * The WHOLE lookup order for gates, HIGHEST precedence first — `gatesDir` included.
+   *
+   * The name says "additional" and the contents are not: since P4.27 the composition root places
+   * `gatesDir` itself inside this list, at its own rank, because the primary is neither the top of
+   * the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list that
+   * omitted it could not say where it sits. The accurate name lives at the producing end,
+   * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach the pipeline's
+   * style loader and ~30 test call sites for no behaviour change.
+   *
+   * A caller configuring the loader by hand may omit `gatesDir`, in which case it is consulted
+   * last — see `resourceLookupOrder`.
+   */
   additionalGatesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
@@ -92,11 +102,27 @@ export class GateDefinitionLoader {
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   private gatesDir: string;
   private additionalGatesDirs: string[];
+  /** Every root this loader consults for an id, highest precedence first. */
+  private readonly lookupDirs: string[];
   private enableCache: boolean;
   private debug: boolean;
+  /**
+   * Gate files this loader walked, read, and refused. ONE instance for the loader's lifetime.
+   *
+   * Published by reference through {@link getQuarantine}, the way `PromptLoader` publishes its own:
+   * `GateRegistry` rebuilds guides on every reload, and a snapshot handed to the tool layer would
+   * describe whichever load happened to be last re-passed.
+   */
+  private readonly quarantine = new ResourceQuarantine();
 
   constructor(config: GateDefinitionLoaderConfig = {}) {
     this.gatesDir = config.gatesDir ?? this.resolveGatesDir();
+    // Built from the RAW list, before the filter below: the primary's rank is a position in that
+    // list, and filtering it out first would drop it to the end — behind the bundled tree.
+    this.lookupDirs = resourceLookupOrder(this.gatesDir, config.additionalGatesDirs ?? []);
+    // Reported and watched, not looked up. Keeps its long-standing meaning — the directories
+    // BESIDE the primary that actually exist — so `getWatchDirectories()` neither repeats the
+    // primary nor hands the watcher a path that is not there.
     this.additionalGatesDirs = (config.additionalGatesDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.gatesDir
     );
@@ -131,9 +157,7 @@ export class GateDefinitionLoader {
 
     this.stats.cacheMisses++;
 
-    // Load from primary YAML directory, then fall through to additional dirs
-    const definition =
-      this.loadFromYamlDir(normalizedId) ?? this.loadFromAdditionalDirs(normalizedId);
+    const definition = this.loadFromLookupOrder(normalizedId);
 
     if (!definition) {
       return undefined;
@@ -153,14 +177,13 @@ export class GateDefinitionLoader {
    * @returns Array of gate IDs from YAML directories
    */
   discoverGates(): string[] {
-    // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.gatesDir, 'gate.yaml');
-    const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
-
-    // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
-    for (const dir of this.additionalGatesDirs) {
-      const additionalIds = discoverNestedYamlDirectories(dir, 'gate.yaml');
-      for (const id of additionalIds) {
+    // Every root gets the SAME nested (flat + grouped) scan. The primary used to get a flat-only
+    // one, which made a grouped id under the primary undiscoverable while the identical tree under
+    // an overlay was found — a difference no contract asked for. Precedence does not enter here:
+    // this answers WHICH ids exist, and `loadGate` answers which root serves each.
+    const idSet = new Set<string>();
+    for (const dir of this.lookupDirs) {
+      for (const id of discoverNestedYamlDirectories(dir, 'gate.yaml')) {
         idSet.add(id.toLowerCase());
       }
     }
@@ -194,15 +217,7 @@ export class GateDefinitionLoader {
    * @returns True if the gate has a valid entry point
    */
   gateExists(id: string): boolean {
-    const normalizedId = id.toLowerCase();
-
-    // Check primary
-    if (existsSync(join(this.gatesDir, normalizedId, 'gate.yaml'))) {
-      return true;
-    }
-
-    // Check additional dirs (flat + grouped)
-    return this.findInAdditionalDirs(normalizedId) !== undefined;
+    return this.entryRootsFor(id.toLowerCase()).length > 0;
   }
 
   /**
@@ -233,6 +248,16 @@ export class GateDefinitionLoader {
   }
 
   /**
+   * Live view of the gate files that failed to load, across every root this loader has read from.
+   *
+   * Never consulted when resolving an id — `loadGate` reads the catalog side only, so a broken
+   * workspace gate still leaves the bundled gate of that id serving.
+   */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
+  /**
    * Get the gates directory being used
    */
   getGatesDir(): string {
@@ -251,17 +276,38 @@ export class GateDefinitionLoader {
   // ============================================================================
 
   /**
-   * Load a gate from YAML directory format ({baseDir}/{id}/gate.yaml)
+   * Load a gate from YAML directory format ({root}/{id}/gate.yaml)
    *
    * @param id - Gate ID
-   * @param baseDir - Directory to load from (defaults to primary gatesDir)
+   * @param root - The directory to load from; for a grouped tree this is `{dir}/{group}`
    */
-  private loadFromYamlDir(id: string, baseDir?: string): LoadedGateDefinition | undefined {
-    try {
-      const gateDir = join(baseDir ?? this.gatesDir, id);
-      const entryPath = join(gateDir, 'gate.yaml');
+  private loadFromYamlDir(id: string, root: string): LoadedGateDefinition | undefined {
+    const gateDir = join(root, id);
+    const entryPath = join(gateDir, 'gate.yaml');
+    const sink = this.quarantine.sinkFor('gate', root);
 
+    /**
+     * Refuse this file, and RECORD the refusal.
+     *
+     * One helper rather than four inline `sink.record(...)` calls, exactly as the prompt loader
+     * has: every return below is a gate that vanishes from the registry, and a site that forgets
+     * to record is indistinguishable from the `console.error`-and-drop this replaces. There is one
+     * way to leave.
+     *
+     * Diagnostic text only. Never `definition.guidance`, `description` or `name` — a gate's
+     * guidance is instruction delivered to the client LLM, and a file that failed validation is
+     * precisely the one whose content has not been checked.
+     */
+    const refuse = (error: string): undefined => {
+      this.stats.loadErrors++;
+      sink.record({ id, path: entryPath, error });
+      return undefined;
+    };
+
+    try {
       if (!existsSync(entryPath)) {
+        // NOT a refusal: nothing was walked or read. Recording here would quarantine every id this
+        // root simply does not hold, which is every id the fall-through is asking about.
         if (this.debug) {
           console.error(`[GateDefinitionLoader] YAML entry not found: ${entryPath}`);
         }
@@ -275,7 +321,7 @@ export class GateDefinitionLoader {
       });
 
       if (!raw) {
-        return undefined;
+        return refuse('gate.yaml is empty or does not parse to a YAML mapping');
       }
 
       // Inline referenced files (guidance.md) before the parse, so `guidance` is validated
@@ -284,12 +330,11 @@ export class GateDefinitionLoader {
 
       const validation = this.validateDefinition(raw, id);
       if (!validation.valid || !validation.data) {
-        this.stats.loadErrors++;
         console.error(
           `[GateDefinitionLoader] Validation failed for '${id}':`,
           validation.errors.join('; ')
         );
-        return undefined;
+        return refuse(validation.errors.join('; '));
       }
       if (validation.warnings.length > 0 && this.debug) {
         console.warn(
@@ -304,13 +349,29 @@ export class GateDefinitionLoader {
         console.error(`[GateDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
 
+      // Stamp provenance HERE, where the root is in hand (P4.18, ruling R7). One call loads from
+      // exactly one root, and every root reaches this method — primary directly, each additional
+      // one through `loadFromAdditionalDirs`. The renderer must never re-derive which root served
+      // an id: a second derivation of a question the loader already answered is the shape this
+      // plan has been bitten by twice. Mirrors `PromptLoader`'s stamp in `modules/prompts`.
+      //
+      // After validation, so an authored `sourceRoot:` is overwritten rather than believed.
+      //
+      // For a GROUPED additional directory this is `{dir}/{group}`, not the configured root —
+      // the same string `sinkFor` stamps on a refusal from that walk, which is what keeps the two
+      // sides of a shadow finding comparable.
+      definition.sourceRoot = root;
+
+      // The repair side of the record. This loader is called one id at a time — from the registry's
+      // discovery loop at startup and from `reloadGuide` after a write — so a repaired file is only
+      // ever re-read on its own, and its record has to be dropped here or it outlives the repair.
+      sink.forget(entryPath);
       return definition;
     } catch (error) {
-      this.stats.loadErrors++;
       if (this.debug) {
         console.error(`[GateDefinitionLoader] Failed to load YAML '${id}':`, error);
       }
-      return undefined;
+      return refuse(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -346,43 +407,34 @@ export class GateDefinitionLoader {
     }
   }
 
-  /**
-   * Attempt to load a gate from additional directories.
-   * Tries flat path first, then scans for grouped nesting.
-   */
-  private loadFromAdditionalDirs(id: string): LoadedGateDefinition | undefined {
-    const resolvedDir = this.findInAdditionalDirs(id);
-    if (resolvedDir === undefined) return undefined;
-    return this.loadFromYamlDir(id, resolvedDir);
+  /** The roots holding this id, highest precedence first. */
+  private entryRootsFor(id: string): string[] {
+    return resourceEntryRoots(this.lookupDirs, id, 'gate.yaml');
   }
 
   /**
-   * Find which additional directory contains a gate ID.
-   * Checks flat ({dir}/{id}/gate.yaml) and grouped ({dir}/{group}/{id}/gate.yaml).
+   * Load a gate from the highest-precedence root that both holds it AND yields a valid definition.
    *
-   * @returns The base directory to pass to loadFromYamlDir, or undefined
+   * The fall-through on a refusal is the property `getQuarantine`'s docstring states: a broken
+   * workspace gate leaves the bundled gate of that id serving, rather than removing the id from the
+   * registry. Stopping at the first root that merely HAS the file would turn a malformed overlay
+   * into a missing gate.
+   *
+   * SERVING STOPS AT THE FIRST HIT; READING DOES NOT (P4.35, ruling R17). Every root that holds the
+   * id is read, including the ones below the winner, so their refusals reach the quarantine. Under
+   * a first-hit-wins walk the silent root was whichever one served LAST — which since P4.27 is the
+   * writable one an operator actually edits: a malformed `<ws>/resources/gates/foo` behind a legacy
+   * `<ws>/gates/foo` produced no warning, no `list` entry and no repair target, which is the exact
+   * defect the quarantine exists to remove, relocated rather than fixed. The cost is re-reading a
+   * root for an id that already served, paid once per id behind `loadGate`'s cache.
    */
-  private findInAdditionalDirs(id: string): string | undefined {
-    for (const dir of this.additionalGatesDirs) {
-      // Flat: {dir}/{id}/gate.yaml
-      if (existsSync(join(dir, id, 'gate.yaml'))) {
-        return dir;
-      }
-
-      // Grouped: {dir}/{group}/{id}/gate.yaml
-      try {
-        const groups = readdirSync(dir, { withFileTypes: true });
-        for (const group of groups) {
-          if (!group.isDirectory()) continue;
-          if (existsSync(join(dir, group.name, id, 'gate.yaml'))) {
-            return join(dir, group.name);
-          }
-        }
-      } catch {
-        // Unreadable directory — skip
-      }
+  private loadFromLookupOrder(id: string): LoadedGateDefinition | undefined {
+    let served: LoadedGateDefinition | undefined;
+    for (const base of this.entryRootsFor(id)) {
+      const definition = this.loadFromYamlDir(id, base);
+      if (definition !== undefined && served === undefined) served = definition;
     }
-    return undefined;
+    return served;
   }
 
   /**

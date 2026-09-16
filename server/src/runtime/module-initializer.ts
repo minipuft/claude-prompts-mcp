@@ -35,6 +35,7 @@ import type {
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -54,6 +55,7 @@ import {
 } from '#mcp/tools/tool-description-loader.js';
 import { getDefaultStyleDefinitionLoader } from '#modules/formatting/core/style-definition-loader.js';
 import { isChainPrompt } from '#shared/utils/chainUtils.js';
+import { mergeQuarantineViews } from '#shared/utils/resource-quarantine.js';
 
 export interface ModuleInitCallbacks {
   fullServerRefresh: () => Promise<void>;
@@ -92,6 +94,14 @@ export interface ModuleInitResult {
   toolDescriptionLoader: ToolDescriptionLoader;
   /** Resource change tracker for audit logging (undefined if serverRoot not provided) */
   resourceChangeTracker?: ResourceChangeTracker;
+  /**
+   * Every loader's refusal record, merged once — what the resource index must withhold.
+   *
+   * Returned rather than rebuilt by the caller: `Application` holds the prompt and gate managers
+   * and no framework or style loader, so its hot-reload re-sync cannot assemble this and must
+   * consume it. Live, not a snapshot — see the assembly site for what each leaf reads through.
+   */
+  indexQuarantine: QuarantineView;
 }
 
 /**
@@ -117,6 +127,50 @@ async function claimStateDatabase(
   if (runtimeDbPath === undefined) return;
   const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
   await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+}
+
+/**
+ * Run the startup baseline comparison and report what it found.
+ *
+ * WHY IT IS NOT AT THE TRACKER'S CONSTRUCTION SITE. The comparison runs its own filesystem walk
+ * and, before this, called every readable YAML file a resource — so a file the prompt loader had
+ * refused was logged to `resource_changes` as an external `added`, announcing a resource that
+ * `prompt_engine` rejects. Reading the quarantine fixes that, but only for loaders that have
+ * already run: prompts load before `initializeModules` is called at all, while gates load at
+ * `createGateManager` below. Calling from there covers both of the types this comparison tracks
+ * (`TrackedResourceType` is `'prompt' | 'gate'`), which the tracker's own construction site could
+ * not.
+ *
+ * Extracted rather than inlined for the reason `claimStateDatabase` records: `initializeModules`
+ * is already over the cognitive-complexity limit, and the ratchet counts violations rather than
+ * their size, so an inline block would grow one that is already counted.
+ *
+ * No try/catch: `compareResourceBaseline` catches its own failures and returns zeros. A second
+ * boundary here would be the two-level catch `architecture.md` names — the outer one never fires
+ * and the inner one hides the failure.
+ */
+async function compareBaselineAndReport(
+  tracker: ResourceChangeTracker,
+  configManager: ConfigLoader,
+  logger: Logger,
+  quarantine: QuarantineView,
+  isVerbose: boolean
+): Promise<void> {
+  const { added, modified, removed, refused } = await compareResourceBaseline(
+    tracker,
+    configManager,
+    logger,
+    quarantine
+  );
+  if (!isVerbose) return;
+  if (added > 0 || modified > 0 || removed > 0 || refused > 0) {
+    logger.info(
+      `📊 External changes detected: ${added} added, ${modified} modified, ${removed} removed, ` +
+        `${refused} refused (on disk, not in the catalog — no change event logged)`
+    );
+  } else {
+    logger.info('✅ ResourceChangeTracker baseline compared (no external changes detected)');
+  }
 }
 
 /**
@@ -196,15 +250,22 @@ function resourceInventoryOf(
   };
 }
 
-/** A loader config naming only the roots that resolved, so an absent one stays absent. */
-function loaderDirsConfig<PrimaryKey extends string, AdditionalKey extends string>(
+/**
+ * A loader config naming only the roots that resolved, so an absent one stays absent.
+ *
+ * `lookupKey` is one of the three `additional*Dirs` keys, and what it receives is the WHOLE
+ * precedence order including `roots.primary` — not the roots beside it. The key's name predates
+ * P4.27; `ResourceRoots.lookupDirs` is the accurate end of the mapping, and each loader's config
+ * docstring restates it at the receiving end.
+ */
+function loaderDirsConfig<PrimaryKey extends string, LookupKey extends string>(
   roots: ResourceRoots,
   primaryKey: PrimaryKey,
-  additionalKey: AdditionalKey
+  lookupKey: LookupKey
 ): Record<string, string | string[]> {
   return {
     ...(roots.primary !== undefined ? { [primaryKey]: roots.primary } : {}),
-    ...(roots.additional.length > 0 ? { [additionalKey]: roots.additional } : {}),
+    ...(roots.lookupDirs.length > 0 ? { [lookupKey]: roots.lookupDirs } : {}),
   };
 }
 
@@ -249,22 +310,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         runtimeDbPath,
         trackerWorkspaceId != null ? { workspaceId: trackerWorkspaceId } : undefined
       );
-      // Compare baseline to detect external changes
-      const baselineResult = await compareResourceBaseline(
-        resourceChangeTracker,
-        configManager,
-        logger
-      );
-      if (isVerbose) {
-        const { added, modified, removed } = baselineResult;
-        if (added > 0 || modified > 0 || removed > 0) {
-          logger.info(
-            `📊 External changes detected: ${added} added, ${modified} modified, ${removed} removed`
-          );
-        } else {
-          logger.info('✅ ResourceChangeTracker initialized (no external changes detected)');
-        }
-      }
+      // The baseline comparison used to run HERE, and had to move: it must not report a refused
+      // file as an external addition, and it cannot know what was refused until the loaders that
+      // do the refusing have run. See the call below the Gate Manager.
+      if (isVerbose) logger.info('✅ ResourceChangeTracker initialized');
     } catch (error) {
       // Loud, not degraded. The `serverRoot` guard above already expresses "persistence
       // is not configured"; reaching this catch means it WAS configured and failed, and
@@ -338,6 +387,30 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     logger.info(`✅ GateManager initialized with ${gateManager.getStats().totalGates} gates`);
   }
 
+  // The loaders' record of what they refused, as the CHANGE TRACKER needs it.
+  //
+  // Prompts AND gates here, because `TrackedResourceType` is exactly `'prompt' | 'gate'` — this
+  // covers the comparison's whole domain, and adding the framework view would widen the merge past
+  // anything that reads it. The indexer walks all four kinds and extends this merge below.
+  //
+  // Both views are live: `GateManager.getQuarantine()` resolves its registry on every read
+  // (`lazyQuarantineView`), so this expression does not depend on having been evaluated after
+  // `createGateManager` — which it is, but a reader should not have to verify that to trust it.
+  const trackedQuarantine = mergeQuarantineViews(
+    promptManager.getQuarantine(),
+    gateManager.getQuarantine()
+  );
+
+  if (resourceChangeTracker !== undefined) {
+    await compareBaselineAndReport(
+      resourceChangeTracker,
+      configManager,
+      logger,
+      trackedQuarantine,
+      isVerbose
+    );
+  }
+
   // Initialize the style loader with PathResolver-resolved dirs, for the same reason as the
   // framework loader above: PathResolver is the SSOT for directory resolution and enables overlays.
   const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver?.getStylesPath());
@@ -351,11 +424,47 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   const inventories = [
     resourceInventoryOf('gates', gateRoots, gateManager.getStats().totalGates),
     resourceInventoryOf('frameworks', frameworkRoots, frameworkLoader.discoverFrameworks().length),
-    resourceInventoryOf('styles', styleRoots, styleLoader.discoverStyles().length),
+    // LOADED styles, not discovered ones. Two things follow from the difference and both are
+    // wanted: the line now reports the count the server can actually serve, and reading every
+    // style is what FILLS the loader's refusal record — `discoverStyles()` only lists directories
+    // holding a `style.yaml` and never opens one, so a quarantine consulted by the indexer further
+    // down would have been empty no matter how broken the tree was. The read is cheap (a handful
+    // of files) and its results are cached, so nothing downstream pays for it twice.
+    resourceInventoryOf('styles', styleRoots, styleLoader.loadAllStyles().size),
   ];
   for (const inventory of inventories) {
     if (inventory !== undefined) logResourceInventory(logger, inventory);
   }
+
+  // The whole catalog's refusal record, and the ONLY place it is assembled.
+  //
+  // `resource_index` is a projection of the SERVED catalog, so a file the loaders refused gets no
+  // row: the Python hooks read this table and hand its ids straight to `prompt_engine`, which
+  // rejects an unloadable one. A quarantine MARKER would work only for readers that remember to
+  // check it, and some of those readers are not in this repo.
+  //
+  // Built HERE rather than at the indexer below, and returned in `ModuleInitResult`, because the
+  // hot-reload re-sync in `application.ts` indexes the same four kinds and that file holds only
+  // `promptManager` and `gateManager` — no framework or style loader. It rebuilt what it could,
+  // which was the prompt view alone, under a comment claiming the other three joined there; the
+  // first hot reload then re-indexed every refused gate, framework and style (P4.25). One owner
+  // for one merged view is what makes that unrepeatable: the reload path can only consume it.
+  //
+  // Read by reference, never snapshotted. Every leaf is a live collection — `PromptLoader`'s is a
+  // `private readonly` field re-filled per root walk, and `GateManager`/`FrameworkManager` resolve
+  // theirs through `lazyQuarantineView` on every read — so a repair that lands between two syncs
+  // is reflected without anything re-registering.
+  //
+  // `styleLoader`, not a `StyleManager`: the manager builds its OWN `StyleDefinitionLoader` from
+  // its own config (see `PromptExecutor`), so its collection describes a different root set than
+  // the one `indexerResourceRoots` walks — and `isRefused` is path-keyed, so a record from the
+  // wrong root can never match. The loader this line reads is the same singleton instance
+  // `styleRoots` configured above.
+  const indexQuarantine = mergeQuarantineViews(
+    trackedQuarantine,
+    frameworkLoader.getQuarantine(),
+    styleLoader.getQuarantine()
+  );
 
   const chainCount = convertedPrompts.filter((p) => isChainPrompt(p)).length;
   if (isVerbose) {
@@ -451,7 +560,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
       const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      const { createResourceIndexer, reportResourceSyncFailures, reportShadowedResources } =
+      const { createResourceIndexer, reportSyncFindings } =
         await import('#infra/database/resource-indexer.js');
       const { ScriptToolDefinitionLoader } =
         await import('#modules/automation/core/script-definition-loader.js');
@@ -463,10 +572,14 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         resourcesDir,
         resourceRoots: indexerResourceRoots(pathResolver),
         toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
+        // Assembled above and returned to `Application`, so this walk and the hot-reload walk
+        // read one view rather than two that can drift. All four directory-form kinds are in it
+        // (P4.16 closed `style`, the last kind the indexer walked with no refusal record at all);
+        // the change tracker's narrower merge is `trackedQuarantine`, which this one extends.
+        quarantine: indexQuarantine,
       });
       const syncResult = await indexer.syncAll();
-      reportResourceSyncFailures(syncResult, logger);
-      reportShadowedResources(syncResult, logger);
+      reportSyncFindings(syncResult, logger);
       // The index and the catalog are two derivations of one question; compare them rather than
       // assuming they agree, which is how they came to disagree by 41 prompts unnoticed.
       const indexedPromptIds = dbManager
@@ -502,5 +615,6 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     mcpToolsManager,
     toolDescriptionLoader,
     resourceChangeTracker,
+    indexQuarantine,
   };
 }

@@ -21,26 +21,42 @@
 import type { ResourceRootMap } from '#infra/database/resource-indexer.js';
 import type { PathResolver } from './paths.js';
 
+import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
+
 /** Every directory that contributes definitions of one resource type, in precedence order. */
 export interface ResourceRoots {
-  /** The root the loader treats as primary; a same-id definition here wins. */
+  /** The writable root: where a `resource_manager` write lands, and what the inventory reports. */
   primary: string | undefined;
-  /** Workspace directories layered over the primary. */
+  /** Workspace directories layered over the primary. Highest precedence, later entry wins. */
   overlays: string[];
-  /** The package's own directory, when it is a source distinct from the primary. */
+  /** The package's own directory, when it is a source distinct from the primary. Lowest. */
   bundled: string | undefined;
-  /** What the loader takes as its fallback list: overlays, then the bundled tree last. */
-  additional: string[];
+  /**
+   * The loader's lookup list: EVERY contributing root, highest precedence first — primary included.
+   *
+   * It was called `additional` for the loader config key it feeds (`additionalGatesDirs` and its
+   * two siblings), and that name stopped describing the contents at P4.27: the primary is neither
+   * the top nor the bottom of the order, so a list that omitted it could not say where it sits.
+   * Renamed here, at the producing end. The three config keys keep their names — renaming them
+   * reaches `mcp/tools/prompt-engine/core/prompt-executor.ts` and ~30 test call sites for no
+   * behaviour change, and each loader's config docstring now states that the primary is inside the
+   * list it receives.
+   */
+  lookupDirs: string[];
 }
 
 /**
  * Resolve the contributing roots for one resource type.
  *
- * Pure apart from the resolver's own `existsSync` probes. The bundled directory goes LAST in
- * `additional`, not into `overlays`: all three loaders resolve an id as `primary ?? additional[0]
- * ?? …`, so trailing it yields "workspace wins, bundled definitions stay reachable" — the
- * semantics `src/index.ts`'s help has always documented but the code did not implement. Omitted
- * entirely on an ordinary install, where the primary already IS the bundle.
+ * Which directories contribute is decided here; their ORDER is decided by
+ * `resourceRootPrecedence` in `shared/`, which this and the pipeline's own style loader both call
+ * so the two cannot drift. Until P4.27 the three flat-layout loaders resolved `primary ??
+ * additional` and the docstring here justified it as "workspace wins"; that held only while the
+ * workspace WAS the primary, so an operator's `<workspace>/gates/foo` lost to
+ * `<workspace>/resources/gates/foo` while their `<workspace>/prompts/foo` won. Two answers to one
+ * question.
+ *
+ * Pure apart from the resolver's own `existsSync` probes.
  */
 export function resolveResourceRoots(
   pathResolver: PathResolver | undefined,
@@ -50,27 +66,22 @@ export function resolveResourceRoots(
   const overlays = pathResolver?.getOverlayResourceDirs(resourceType, primary) ?? [];
   const candidate = pathResolver?.getBundledResourceDir(resourceType);
   const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
-  const additional =
-    bundled !== undefined && !overlays.includes(bundled) ? [...overlays, bundled] : overlays;
-  return { primary, overlays, bundled, additional };
+  const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
+  return { primary, overlays, bundled, lookupDirs };
 }
 
 /**
- * The same roots as a flat list ordered LOWEST precedence first, deduplicated.
+ * The same roots as a flat list ordered LOWEST precedence first.
  *
- * `ResourceRoots.additional` is a loader fallback list — a lookup order, where the first hit wins
- * and the bundled tree therefore trails. A consumer that instead *accumulates* (the indexer scans
- * every root into one map) needs the opposite arrangement: bundled first so a later root's
- * same-id definition overwrites it. Reusing `additional` there would index the bundled copy over
- * the workspace one and invert the documented "same ID = custom wins".
+ * Literally the reverse of the loader lookup list, and derived from it rather than rebuilt beside
+ * it — the two readings of one order, not two orders. A loader looks an id UP, so the first hit
+ * wins and the highest-precedence root leads; the indexer ACCUMULATES every root into one id-keyed
+ * map, so the highest-precedence root must land last and overwrite. Stating the second arrangement
+ * independently is how the indexer once walked only the primary while the loaders walked three
+ * roots, which is the defect this module's header records.
  */
 function orderedResourceRoots(roots: ResourceRoots): string[] {
-  const ordered = [
-    ...(roots.bundled !== undefined ? [roots.bundled] : []),
-    ...(roots.primary !== undefined ? [roots.primary] : []),
-    ...roots.overlays,
-  ];
-  return [...new Set(ordered)];
+  return [...roots.lookupDirs].reverse();
 }
 
 /**

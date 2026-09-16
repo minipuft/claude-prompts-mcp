@@ -25,11 +25,9 @@ import {
 
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-  discoverNestedYamlDirectories,
-} from '#shared/utils/yaml/index.js';
+import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
+import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,7 +38,19 @@ const __dirname = dirname(__filename);
 export interface RuntimeFrameworkLoaderConfig {
   /** Override default frameworks directory */
   frameworksDir?: string;
-  /** Additional directories to scan for framework overlays (workspace resources) */
+  /**
+   * The WHOLE lookup order for frameworks, HIGHEST precedence first — `frameworksDir` included.
+   *
+   * The name says "additional" and the contents are not: since P4.27 the composition root places
+   * `frameworksDir` itself inside this list, at its own rank, because the primary is neither the
+   * top of the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list
+   * that omitted it could not say where it sits. The accurate name lives at the producing end,
+   * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach the pipeline's
+   * style loader and ~30 test call sites for no behaviour change.
+   *
+   * A caller configuring the loader by hand may omit `frameworksDir`, in which case it is consulted
+   * last — see `resourceLookupOrder`.
+   */
   additionalFrameworksDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
@@ -94,12 +104,26 @@ export class RuntimeFrameworkLoader {
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   private frameworksDir: string;
   private additionalFrameworksDirs: string[];
+  /** Every root this loader consults for an id, highest precedence first. */
+  private readonly lookupDirs: string[];
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
+  /**
+   * Framework files this loader walked, read, and refused. ONE instance for the loader's lifetime,
+   * published by reference through {@link getQuarantine} — see the gate loader's twin.
+   */
+  private readonly quarantine = new ResourceQuarantine();
 
   constructor(config: RuntimeFrameworkLoaderConfig = {}) {
     this.frameworksDir = config.frameworksDir ?? this.resolveFrameworksDir();
+    // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
+    // filtering it out first would drop it behind the bundled tree.
+    this.lookupDirs = resourceLookupOrder(
+      this.frameworksDir,
+      config.additionalFrameworksDirs ?? []
+    );
+    // Reported and watched, not looked up.
     this.additionalFrameworksDirs = (config.additionalFrameworksDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.frameworksDir
     );
@@ -135,10 +159,7 @@ export class RuntimeFrameworkLoader {
 
     this.stats.cacheMisses++;
 
-    // Load from primary directory, then fall through to additional dirs
-    const definition =
-      this.loadFromDir(normalizedId, this.frameworksDir) ??
-      this.loadFromAdditionalDirs(normalizedId);
+    const definition = this.loadFromLookupOrder(normalizedId);
 
     if (!definition) {
       return undefined;
@@ -158,14 +179,11 @@ export class RuntimeFrameworkLoader {
    * @returns Array of framework IDs that have valid entry points
    */
   discoverFrameworks(): string[] {
-    // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.frameworksDir, 'framework.yaml');
-    const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
-
-    // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
-    for (const dir of this.additionalFrameworksDirs) {
-      const additionalIds = discoverNestedYamlDirectories(dir, 'framework.yaml');
-      for (const id of additionalIds) {
+    // One scan shape for every root — see the gate loader's twin. This answers WHICH ids exist;
+    // `loadFramework` answers which root serves each.
+    const idSet = new Set<string>();
+    for (const dir of this.lookupDirs) {
+      for (const id of discoverNestedYamlDirectories(dir, 'framework.yaml')) {
         idSet.add(id.toLowerCase());
       }
     }
@@ -199,15 +217,7 @@ export class RuntimeFrameworkLoader {
    * @returns True if the framework has a valid entry point
    */
   frameworkExists(id: string): boolean {
-    const normalizedId = id.toLowerCase();
-
-    // Check primary
-    if (existsSync(join(this.frameworksDir, normalizedId, 'framework.yaml'))) {
-      return true;
-    }
-
-    // Check additional dirs (flat + grouped)
-    return this.findInAdditionalDirs(normalizedId) !== undefined;
+    return this.entryRootsFor(id.toLowerCase()).length > 0;
   }
 
   /**
@@ -238,6 +248,16 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
+   * Live view of the framework files that failed to load, across every root read from so far.
+   *
+   * Never consulted when resolving an id: `loadFramework` reads the catalog side only, so a broken
+   * workspace framework leaves the bundled framework of that id serving, exactly as before.
+   */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
+  }
+
+  /**
    * Get the frameworks directory being used
    */
   getFrameworksDir(): string {
@@ -259,11 +279,31 @@ export class RuntimeFrameworkLoader {
    * Load a framework from a specific base directory
    */
   private loadFromDir(id: string, baseDir: string): FrameworkResourceDefinition | undefined {
-    try {
-      const frameworkDir = join(baseDir, id);
-      const entryPath = join(frameworkDir, 'framework.yaml');
+    const frameworkDir = join(baseDir, id);
+    const entryPath = join(frameworkDir, 'framework.yaml');
+    const sink = this.quarantine.sinkFor('framework', baseDir);
 
+    /**
+     * Refuse this file, and RECORD the refusal.
+     *
+     * One helper rather than four inline `sink.record(...)` calls, mirroring the gate and prompt
+     * loaders: every return below is a framework that vanishes from the registry, and a site that
+     * forgets to record is indistinguishable from the `console.error`-and-drop this replaces.
+     *
+     * Diagnostic text only — never `systemPromptGuidance`, `judgePrompt`, `phases` or any other
+     * authored body. A framework's guidance is instruction delivered to the client LLM, and this
+     * file is the one whose content has not been validated.
+     */
+    const refuse = (error: string): undefined => {
+      this.stats.loadErrors++;
+      sink.record({ id, path: entryPath, error });
+      return undefined;
+    };
+
+    try {
       if (!existsSync(entryPath)) {
+        // NOT a refusal: nothing was walked or read. See the gate loader's twin — recording here
+        // would quarantine every id a root simply does not hold.
         if (this.debug) {
           console.error(`[RuntimeFrameworkLoader] Entry point not found: ${entryPath}`);
         }
@@ -276,101 +316,69 @@ export class RuntimeFrameworkLoader {
       });
 
       if (!definition) {
-        return undefined;
+        return refuse('framework.yaml is empty or does not parse to a YAML mapping');
       }
 
       // Inline referenced files
       this.inlineReferencedFiles(definition, frameworkDir);
 
-      // Validate if enabled
-      if (this.validateOnLoad) {
-        const validation = this.validateDefinition(definition, id);
-        if (!validation.valid) {
-          this.stats.loadErrors++;
-          console.error(
-            `[RuntimeFrameworkLoader] Validation failed for '${id}':`,
-            validation.errors.join('; ')
-          );
-          return undefined;
-        }
-        if (validation.warnings.length > 0) {
-          console.warn(
-            `[RuntimeFrameworkLoader] Warnings for '${id}':`,
-            validation.warnings.join('; ')
-          );
-        }
-
-        // Validate the inlined phases.yaml content (F1: previously dead code —
-        // validatePhasesSchema had zero callers, so a guards block with no
-        // section_header never reached this check despite existing as an ERROR).
-        if (definition.phases) {
-          const phasesValidation = this.validatePhases(definition.phases);
-          if (!phasesValidation.valid) {
-            this.stats.loadErrors++;
-            console.error(
-              `[RuntimeFrameworkLoader] Phases validation failed for '${id}':`,
-              phasesValidation.errors.join('; ')
-            );
-            return undefined;
-          }
-          if (phasesValidation.warnings.length > 0) {
-            console.warn(
-              `[RuntimeFrameworkLoader] Phases warnings for '${id}':`,
-              phasesValidation.warnings.join('; ')
-            );
-          }
-        }
+      const refusal = this.validationRefusal(definition, id);
+      if (refusal !== undefined) {
+        return refuse(refusal);
       }
 
       if (this.debug) {
         console.error(`[RuntimeFrameworkLoader] Loaded: ${definition.name} (${id})`);
       }
 
+      // Stamp provenance HERE, where the root is the argument (P4.18, ruling R7) — see the gate
+      // loader's twin. Every root reaches this method: the primary from `loadFramework`, each
+      // additional one through `loadFromAdditionalDirs`. After validation, so an authored
+      // `sourceRoot:` is overwritten rather than believed. For a GROUPED additional directory this
+      // is `{dir}/{group}` — the same string this walk's sink stamps on a refusal, which keeps the
+      // two sides of a shadow finding comparable.
+      definition.sourceRoot = baseDir;
+
+      // The repair side of the record — see the gate loader's twin. This loader is called one id at
+      // a time, so a repaired file's record has to be dropped here or it outlives the repair.
+      sink.forget(entryPath);
       return definition;
     } catch (error) {
-      this.stats.loadErrors++;
       console.error(`[RuntimeFrameworkLoader] Failed to load '${id}':`, error);
-      return undefined;
+      return refuse(error instanceof Error ? error.message : String(error));
     }
   }
 
-  /**
-   * Attempt to load a framework from additional directories.
-   * Tries flat path first, then scans for grouped nesting.
-   */
-  private loadFromAdditionalDirs(id: string): FrameworkResourceDefinition | undefined {
-    const resolvedDir = this.findInAdditionalDirs(id);
-    if (resolvedDir === undefined) return undefined;
-    return this.loadFromDir(id, resolvedDir);
+  /** The roots holding this id, highest precedence first. */
+  private entryRootsFor(id: string): string[] {
+    return resourceEntryRoots(this.lookupDirs, id, 'framework.yaml');
   }
 
   /**
-   * Find which additional directory contains a framework ID.
-   * Checks flat ({dir}/{id}/framework.yaml) and grouped ({dir}/{group}/{id}/framework.yaml).
+   * Load from the highest-precedence root that both holds this id AND yields a valid definition.
    *
-   * @returns The base directory to pass to loadFromDir, or undefined
+   * The fall-through on a refusal is the property `getQuarantine`'s docstring states: a broken
+   * workspace framework leaves the bundled framework of that id serving. Here it also keeps the
+   * server startable — `FrameworkRegistry.loadBuiltInGuides` throws `FATAL` on an id it cannot
+   * resolve, so collapsing this to "first root that HAS the file" would let one malformed overlay
+   * refuse the boot.
+   *
+   * SERVING STOPS AT THE FIRST HIT; READING DOES NOT (P4.35, ruling R17). Every root that holds the
+   * id is read, including the ones below the winner, so their refusals reach the quarantine. Under
+   * a first-hit-wins walk the silent root was whichever one served LAST — which since P4.27 is the
+   * writable one an operator actually edits: a malformed `<ws>/resources/frameworks/foo` behind a
+   * legacy `<ws>/frameworks/foo` produced no warning, no `list` entry and no repair target, which
+   * is the exact defect the quarantine exists to remove, relocated rather than fixed. The cost is
+   * re-reading a root for an id that already served, paid once per id behind `loadFramework`'s
+   * cache.
    */
-  private findInAdditionalDirs(id: string): string | undefined {
-    for (const dir of this.additionalFrameworksDirs) {
-      // Flat: {dir}/{id}/framework.yaml
-      if (existsSync(join(dir, id, 'framework.yaml'))) {
-        return dir;
-      }
-
-      // Grouped: {dir}/{group}/{id}/framework.yaml
-      try {
-        const groups = readdirSync(dir, { withFileTypes: true });
-        for (const group of groups) {
-          if (!group.isDirectory()) continue;
-          if (existsSync(join(dir, group.name, id, 'framework.yaml'))) {
-            return join(dir, group.name);
-          }
-        }
-      } catch {
-        // Directory read failure — skip
-      }
+  private loadFromLookupOrder(id: string): FrameworkResourceDefinition | undefined {
+    let served: FrameworkResourceDefinition | undefined;
+    for (const base of this.entryRootsFor(id)) {
+      const definition = this.loadFromDir(id, base);
+      if (definition !== undefined && served === undefined) served = definition;
     }
-    return undefined;
+    return served;
   }
 
   // ============================================================================
@@ -520,6 +528,61 @@ export class RuntimeFrameworkLoader {
       userMessageTemplate: userMatch?.[1]?.trim() ?? '',
       outputFormat: 'json',
     };
+  }
+
+  /**
+   * The refusal reason for a definition that fails validation, or undefined when it passes.
+   *
+   * Extracted from `loadFromDir` rather than left inline: validate-then-validate-phases is a
+   * decision with its own nesting, and folding it into the walk pushed that method further over
+   * the cognitive-complexity limit. Returning the reason rather than recording it keeps the single
+   * exit rule intact — this method writes nothing, so `refuse` remains the one place a refusal is
+   * recorded. Mirrors `GateDefinitionLoader.validationRefusal`.
+   */
+  private validationRefusal(
+    definition: FrameworkResourceDefinition,
+    id: string
+  ): string | undefined {
+    if (!this.validateOnLoad) return undefined;
+
+    const validation = this.validateDefinition(definition, id);
+    if (!validation.valid) {
+      console.error(
+        `[RuntimeFrameworkLoader] Validation failed for '${id}':`,
+        validation.errors.join('; ')
+      );
+      return validation.errors.join('; ');
+    }
+    if (validation.warnings.length > 0) {
+      console.warn(
+        `[RuntimeFrameworkLoader] Warnings for '${id}':`,
+        validation.warnings.join('; ')
+      );
+    }
+
+    // Validate the inlined phases.yaml content (F1: previously dead code — validatePhasesSchema had
+    // zero callers, so a guards block with no section_header never reached this check despite
+    // existing as an ERROR).
+    if (!definition.phases) return undefined;
+
+    const phasesValidation = this.validatePhases(definition.phases);
+    if (!phasesValidation.valid) {
+      console.error(
+        `[RuntimeFrameworkLoader] Phases validation failed for '${id}':`,
+        phasesValidation.errors.join('; ')
+      );
+      // The caller records this against framework.yaml, not phases.yaml: the entry point is what
+      // the tool repairs and what `resolveExistingFrameworkDir` locates, and `phasesFile` is a
+      // reference the entry point owns. The text still names the phases failure.
+      return `phases: ${phasesValidation.errors.join('; ')}`;
+    }
+    if (phasesValidation.warnings.length > 0) {
+      console.warn(
+        `[RuntimeFrameworkLoader] Phases warnings for '${id}':`,
+        phasesValidation.warnings.join('; ')
+      );
+    }
+    return undefined;
   }
 
   /**

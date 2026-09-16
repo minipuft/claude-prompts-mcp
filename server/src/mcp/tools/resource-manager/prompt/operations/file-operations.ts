@@ -769,8 +769,14 @@ export class FileOperations {
             `'${id}' ships with the server and is served from the bundled resources tree ` +
               `(${bundledDir}), which is read-only — deleting it is not possible. ` +
               `Your resources root is ${promptsDir}. ` +
+              // "over the bundled one", not a bare "takes precedence" — this branch reaches only
+              // a prompt whose sole copy is in the bundled tree, and the writable root is no
+              // longer the top of the order (`shared/utils/resource-root-lookup.ts`
+              // §resourceRootPrecedence). Unqualified, an operator with a workspace overlay was
+              // told their copy wins a contest it can lose.
               `To change how '${id}' behaves for you, update it: the update copies it into your ` +
-              `root first and your copy takes precedence. There is no way to make '${id}' stop ` +
+              `root first and your copy takes precedence over the bundled one. There is no way ` +
+              `to make '${id}' stop ` +
               `resolving, because a higher-precedence root can shadow a prompt but cannot express ` +
               `its absence.`
           );

@@ -76,9 +76,19 @@ export async function buildPromptHotReloadOptions(
     options.auxiliaryReloads = auxiliaryReloads;
   }
 
-  const promptRoots = resolveResourceRoots(context.pathResolver, 'prompts', context.promptsDir);
-  if (promptRoots.additional.length > 0) {
-    options.promptRoots = promptRoots.additional;
+  // `lookupDirs` is every contributing root INCLUDING the primary (P4.27 renamed `additional` to
+  // state that). `startHotReload`'s own `promptRoots` option is documented as "every root besides
+  // the primary" — `buildWatchTargets` already adds the primary as its own target — so the primary
+  // is filtered back out here rather than passed through, keeping this call's contract unchanged
+  // rather than relying on downstream Map-dedup to absorb a duplicate.
+  const { primary, lookupDirs } = resolveResourceRoots(
+    context.pathResolver,
+    'prompts',
+    context.promptsDir
+  );
+  const extraPromptRoots = lookupDirs.filter((dir) => dir !== primary);
+  if (extraPromptRoots.length > 0) {
+    options.promptRoots = extraPromptRoots;
   }
 
   return options;

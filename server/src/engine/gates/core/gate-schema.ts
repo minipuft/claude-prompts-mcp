@@ -429,7 +429,23 @@ export type GateDefinitionYaml = z.input<typeof GateDefinitionSchema>;
  * defaults by the time any consumer sees them. Anything holding a LOADED definition takes this
  * type; anything BUILDING one to write to disk takes `GateDefinitionYaml` above.
  */
-export type LoadedGateDefinition = z.output<typeof GateDefinitionSchema>;
+export type LoadedGateDefinition = z.output<typeof GateDefinitionSchema> & {
+  /**
+   * Root directory this definition was loaded FROM (P4.18).
+   *
+   * Stamped by `GateDefinitionLoader.loadFromYamlDir`, where the root is the argument, and read
+   * back by the quarantine report so a shadowed id names the root currently serving it instead of
+   * "another root". Mirrors `PromptData.sourceRoot`.
+   *
+   * On the OUTPUT side only, and deliberately absent from `GateDefinitionSchema` itself: a key in
+   * the loader's zod schema is a key an operator may author, which `validate:declared-surface`
+   * then requires the tool to expose. This one is written by the loader after validation and
+   * overwrites anything a file declared, so it cannot claim a provenance the file does not have.
+   * Before the input/output split this rode a hand-written interface of the same name; the split
+   * is what gives it a home that keeps the authorable surface unchanged.
+   */
+  sourceRoot?: string;
+};
 
 // ============================================
 // Validation Utilities

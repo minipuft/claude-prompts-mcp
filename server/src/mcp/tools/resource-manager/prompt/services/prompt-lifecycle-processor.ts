@@ -1,5 +1,7 @@
 // @lifecycle canonical - Prompt create/update/delete operations.
 
+import * as path from 'node:path';
+
 import { PromptDraftService, type PromptDraftInput } from './prompt-draft-service.js';
 import {
   normalizeReloadShape,
@@ -7,6 +9,7 @@ import {
   type PromptMutationReceipt,
 } from './prompt-mutation-receipt-service.js';
 import { isPreviewRequest } from '../../../shared/preview-action.js';
+import { formatRepairServingLine } from '../../../shared/quarantine-report.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator, type DiffResult } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -40,11 +43,13 @@ import {
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData } from '#modules/prompts/types.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
+import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 export class PromptLifecycleProcessor {
   private readonly context: PromptResourceContext;
@@ -300,6 +305,19 @@ export class PromptLifecycleProcessor {
     validateRequiredFields(args, ['id']);
 
     const currentPrompt = this.getConvertedPrompts().find((prompt) => prompt.id === args.id);
+    // The repair target: a file on disk the loader refused, whose id nothing in the catalog
+    // answers to. Consulted ONLY when the catalog has no entry, so a serving prompt is never
+    // redirected by a quarantined namesake — the valid resource wins unconditionally, because
+    // resolution never looks here.
+    //
+    // Without this, an update on an unloadable id produced the worst available outcome. Measured
+    // 2026-09-11 against `dist/`: `update` with a full body answered `✅ **Prompt Updated**` and
+    // wrote a SECOND prompt at `general/<id>` — the category `canonicalPromptSnapshot` falls back
+    // to — reported `Moved prompt '<id>' from '<id>' to 'general'` (nothing moved), and left the
+    // broken file exactly as it was. The record supplies the true category and root, so the write
+    // lands on the file that is actually broken.
+    const repairTarget =
+      currentPrompt === undefined ? this.resolveRepairTarget(String(args.id)) : undefined;
     const concurrencyRefusal = await this.checkExpectedVersion(args as PromptResourceInput);
     if (concurrencyRefusal !== undefined) {
       return concurrencyRefusal;
@@ -340,6 +358,14 @@ export class PromptLifecycleProcessor {
       ...canonicalPromptSnapshot(args.id, currentPrompt),
       tools: args.tools,
     };
+
+    // Ahead of the `UPDATE_FIELDS` merge, so an explicitly supplied `category` still wins and
+    // still moves the prompt. What this replaces is the FALLBACK: `canonicalPromptSnapshot`
+    // defaults an unknown prompt's category to `general`, which for a quarantined file is a
+    // category it does not live in.
+    if (repairTarget !== undefined) {
+      promptData.category = repairTarget.category;
+    }
 
     // Fix B (tier-b-settability-proposal §2 write-scope narrowing): the union of every
     // `promptData` key THIS call actually touches. `FileOperations` uses it to decide which
@@ -586,7 +612,14 @@ export class PromptLifecycleProcessor {
     if (diagnosis.blocking.length > 0) {
       const details = diagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
       return this.blockedUpdate(
-        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n💡 Nothing was written and no version was consumed.`
+        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n` +
+          (repairTarget !== undefined
+            ? `🚧 \`${repairTarget.id}\` is quarantined — the file at \`${repairTarget.path}\` ` +
+              `failed to load (${repairTarget.error}), so there is no loaded state to merge onto ` +
+              `and a repair has to supply the whole prompt. The content that failed validation is ` +
+              `deliberately not read back here.\n\n`
+            : '') +
+          `💡 Nothing was written and no version was consumed.`
       );
     }
     if (diagnosis.preExisting.length > 0) {
@@ -675,7 +708,7 @@ export class PromptLifecycleProcessor {
       result = await this.fileOperations.updatePromptImplementation(
         promptData,
         suppliedKeys,
-        currentPrompt?.sourceRoot,
+        currentPrompt?.sourceRoot ?? repairTarget?.root,
         writeIntent,
         commitOptions
       );
@@ -754,6 +787,9 @@ export class PromptLifecycleProcessor {
       reason: `Prompt updated: ${String(args.id)}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
+    if (repairTarget !== undefined) {
+      response += this.formatRepairOutcome(repairTarget);
+    }
 
     return {
       content: [
@@ -871,6 +907,80 @@ export class PromptLifecycleProcessor {
   }
 
   /** One shape for every pre-write refusal on the update path: error response, nothing written. */
+  /**
+   * The quarantine record an unqualified `update` on this id means, if any.
+   *
+   * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
+   * `resource_manager` write lands in, so an operator repairing `foo` edits the copy they can
+   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
+   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
+   * and this docstring cited that precedence back when the two happened to agree.
+   */
+  private resolveRepairTarget(id: string): QuarantinedResource | undefined {
+    const records = this.context.dependencies.quarantine?.byId(id) ?? [];
+    if (records.length === 0) return undefined;
+    return preferredRepairTarget(
+      records,
+      this.context.dependencies.configManager.getResolvedPromptsDirectory()
+    );
+  }
+
+  /**
+   * Say, in the update's own response, what happened to the refused file AND which root serves now.
+   *
+   * This is the row's falsifier rendered at the surface an operator reads. The receipt above
+   * already forced a refresh, so the quarantine and the catalog have both been rebuilt from disk
+   * by the time this runs: a record still standing for the same path means the file is still
+   * refused, whatever the write reported. Saying nothing when the repair worked would leave "did
+   * it load?" answerable only by a second call.
+   *
+   * THREE OUTCOMES, NOT TWO — the gate and framework twins had this split and prompts did not.
+   * A prompt write always lands under `getResolvedPromptsDirectory()` (`planPromptWrite` composes
+   * `promptDir` from it; `sourceRoot` only selects a subtree to copy IN, never where to write),
+   * so a refused file in another root is left exactly as broken while a working copy appears in
+   * the primary. Two outcomes reported that as `Still quarantined … the prompt remains absent
+   * from the catalog`, and the second clause was false: the prompt was in the catalog, served
+   * from the copy this call had just written. Reachable today — a malformed prompt in the bundled
+   * tree whose id nothing else claims takes exactly this path.
+   *
+   * WHICH ROOT SERVES is measured, not inferred: `sourceRoot` off the reloaded catalog entry, the
+   * stamp `PromptLoader` wrote. `formatRepairServingLine` is the one renderer allowed to turn that
+   * into a sentence, so this and the two twins cannot drift.
+   */
+  private formatRepairOutcome(repairTarget: QuarantinedResource): string {
+    const stillRefused = (this.context.dependencies.quarantine?.byId(repairTarget.id) ?? []).some(
+      (record) => record.path === repairTarget.path
+    );
+    const writtenRoot = this.context.dependencies.configManager.getResolvedPromptsDirectory();
+    const servedFrom = this.getConvertedPrompts().find(
+      (prompt) => prompt.id === repairTarget.id
+    )?.sourceRoot;
+    const serving = formatRepairServingLine(repairTarget.id, writtenRoot, servedFrom);
+
+    if (!stillRefused) {
+      return (
+        `\n🩹 **Repaired**: \`${repairTarget.path}\` now loads and its quarantine record is ` +
+        `cleared.\n` +
+        serving
+      );
+    }
+
+    // Root, not full path: the write reuses the record's own category (`promptData.category` is
+    // set from it above), so a record whose root IS the write root names the same file.
+    if (path.resolve(repairTarget.root) !== path.resolve(writtenRoot)) {
+      return (
+        `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
+        `your copy under \`${writtenRoot}\`; \`${repairTarget.path}\` stays quarantined.\n` +
+        serving
+      );
+    }
+
+    return (
+      `\n🚧 **Still quarantined**: \`${repairTarget.path}\` did not load after the write — ` +
+      `the prompt remains absent from the catalog.\n`
+    );
+  }
+
   private blockedUpdate(text: string): ToolResponse {
     return {
       content: [{ type: 'text' as const, text }],
