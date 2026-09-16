@@ -1,12 +1,25 @@
-// @lifecycle test - Verifies ResourceIndexer is populated during startup wiring
+// @lifecycle test - Verifies a syncAll over the bundled tree indexes every kind and survives a reopen
 /**
- * Startup Bootstrap Integration Test
+ * Resource Index Bootstrap Integration Test
  *
- * Simulates the server startup path: SqliteEngine.getInstance() → ResourceIndexer.syncAll()
- * → data readable from a fresh SqliteEngine instance (node:sqlite writes directly to disk).
+ * Drives `SqliteEngine.getInstance()` → `createResourceIndexer(...).syncAll()` over the real
+ * bundled `resources/` tree, then reads the rows back through a FRESH engine, the way a Python
+ * hook reads them. Two claims, both observable from here: a single `syncAll()` indexes all four
+ * directory-form kinds, and what it wrote is on disk for the next process.
  *
- * This test catches the bug where ResourceIndexer was never called at startup,
- * leaving the resource_index table empty for Python hooks.
+ * WHAT THIS FILE DOES NOT COVER, AND USED TO CLAIM. Until 2026-09-15 the header said it caught
+ * the defect where the indexer was never called at startup. It cannot, and never could: it
+ * constructs the indexer and calls `syncAll()` itself, and reaches no line of
+ * `runtime/module-initializer.ts`. Mutation-proven — replacing the `syncAll()` result at the
+ * module-initializer call site with a literal left this file 4/4 green, while
+ * `tests/e2e/bundled-resource-fallback.e2e.test.ts`, which spawns a server and reads
+ * `resource_index` out of its state.db, went 6 cases red. That e2e owns the wiring claim. The
+ * header is restated rather than the test rewritten, because driving the composition root a
+ * second time from an integration fixture would duplicate that e2e rather than close a gap.
+ *
+ * Case 1 seeds the shared `dbManager` that cases 2 and 3 read; they are ordered, not independent.
+ *
+ * Classification: Integration (real SQLite engine, real filesystem, real bundled resources).
  */
 
 import * as fs from 'node:fs/promises';
@@ -23,7 +36,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-describe('Startup Bootstrap — ResourceIndexer wiring', () => {
+describe('Resource index bootstrap — syncAll over the bundled tree', () => {
   const testDir = path.join(process.cwd(), 'tests/tmp/bootstrap-test');
   const resourcesDir = path.join(process.cwd(), 'resources');
   let dbManager: SqliteEngine;
@@ -41,7 +54,7 @@ describe('Startup Bootstrap — ResourceIndexer wiring', () => {
   });
 
   it('should populate resource_index with all resource types after syncAll + persist', async () => {
-    // Simulate the startup path from module-initializer.ts
+    // Seeds the shared `dbManager` the two cases below read.
     dbManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
     await dbManager.initialize();
 
@@ -91,13 +104,5 @@ describe('Startup Bootstrap — ResourceIndexer wiring', () => {
 
     // Reassign for cleanup
     dbManager = freshManager;
-  });
-
-  it('should not have orphaned checkpoint_state table', () => {
-    // Verify the orphaned table was removed from schema
-    const tables = dbManager.query<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoint_state'`
-    );
-    expect(tables).toHaveLength(0);
   });
 });

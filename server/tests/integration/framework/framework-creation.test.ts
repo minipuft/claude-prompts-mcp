@@ -1,16 +1,18 @@
 /**
  * Framework Creation Integration Test
  *
- * Tests the complete framework creation workflow with real modules:
- * - FrameworkToolHandler (real validation logic)
- * - FrameworkFileWriter (mocked filesystem)
- * - FrameworkManager (real registration)
+ * ONE real module: `FrameworkToolHandler` — its validation, its duplicate refusal, and the shape
+ * of what it hands the registry. The header listed three until 2026-09-15 and contradicted itself
+ * doing so, naming the manager as "real registration" four lines above naming its registry
+ * operations as mocked.
  *
- * Mocks:
- * - Filesystem operations (controlled fixtures)
- * - FrameworkManager registry operations
+ * Stand-ins, both built in this file and cast through `as unknown as`:
+ * - the framework manager (`createMockFrameworkManager`) — imported in type position only, so no
+ *   line of the real one runs here; `gate-manager/manager.test.ts` and the framework lifecycle
+ *   suites own that claim
+ * - the file writer and the rest of the filesystem (controlled fixtures)
  *
- * Classification: Integration (multiple real modules, mock I/O only)
+ * Classification: Integration (one real module, stand-in collaborators, mock I/O only)
  *
  * Note: The manager now requires framework_gates for validation to pass.
  * Frameworks without all required fields will fail validation.

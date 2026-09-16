@@ -145,6 +145,8 @@
     "validate:refusal-aware-consumers:self-test": "tsx scripts/validate-refusal-aware-consumers.ts --self-test",
     "validate:serving-claims": "tsx scripts/validate-serving-claims.ts",
     "validate:serving-claims:self-test": "tsx scripts/validate-serving-claims.ts --self-test",
+    "validate:test-subject-claims": "tsx scripts/validate-test-subject-claims.ts",
+    "validate:test-subject-claims:self-test": "tsx scripts/validate-test-subject-claims.ts --self-test",
     "validate:preview-vocabulary": "node scripts/validate-preview-vocabulary.js",
     "validate:preview-vocabulary:self-test": "node scripts/validate-preview-vocabulary.js --self-test",
     "validate:prompts": "tsx scripts/validate-prompts.ts",
