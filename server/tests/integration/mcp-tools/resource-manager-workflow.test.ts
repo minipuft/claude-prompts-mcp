@@ -1,17 +1,23 @@
 /**
- * Resource Manager Integration Test
+ * Resource Manager Router Integration Test
  *
- * Tests the complete resource_manager workflow with real modules:
- * - ResourceManagerRouter (real routing logic)
- * - PromptResourceHandler (real action handling)
- * - GateToolHandler (real action handling)
- * - FrameworkToolHandler (real action handling)
+ * ONE real module, and the header used to name four. `ResourceManagerRouter` is the subject:
+ * dispatch by `resource_type`, the pre-dispatch guards, parameter names as they cross the
+ * boundary, context passthrough, and error formatting. Everything it routes TO is a stand-in
+ * built in this file and cast through `as unknown as` — the four handler types are imported in
+ * type position only, so not one line of their production code is loaded when this file runs.
  *
- * Mocks:
- * - Filesystem operations (controlled fixtures)
- * - Registry operations (in-memory maps)
+ * Stand-ins (`createMock*` below), each an in-memory Map plus an `_`-prefixed accessor:
+ * - the prompt handler, the gate handler, the framework handler, the category handler
  *
- * Classification: Integration (multiple real modules, mock I/O only)
+ * MUTATION-PROVEN, 2026-09-15. Throwing at the top of the prompt handler's `handleAction` left
+ * all 14 cases here green while `guide-action.test.ts` reddened; throwing at the top of the gate
+ * and framework handlers' `handleAction` left them green while `gate-manager/manager.test.ts`
+ * and `framework-creation.test.ts` reddened, 26 cases between them. Those files own the handler
+ * claims. An assertion reading `_prompts` or `_getActive()` is reading this file's own Map and
+ * can only report what the router handed it.
+ *
+ * Classification: Integration (one real module, stand-in collaborators, no I/O)
  */
 
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
