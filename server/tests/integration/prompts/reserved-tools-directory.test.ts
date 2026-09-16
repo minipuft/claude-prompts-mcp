@@ -32,6 +32,7 @@ import { ResourceIndexer, SqliteEngine } from '../../../src/infra/database/index
 import { createResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { compareResourceBaseline } from '../../../src/runtime/resource-change-tracking.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 
@@ -42,7 +43,7 @@ const logger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/reserved-tools-directory');
+const TEST_DIR = testScratchPath('reserved-tools-directory');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 const PROMPTS_DIR = path.join(RESOURCES_DIR, 'prompts');
 const GATES_DIR = path.join(RESOURCES_DIR, 'gates');
