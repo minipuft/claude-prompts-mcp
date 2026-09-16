@@ -51,7 +51,39 @@ function runWithSuite(steps: Array<{ script: string }>): RunnerResult {
 const MISSING_ALPHA = 'validation-runner-fixture-alpha-does-not-exist';
 const MISSING_BETA = 'validation-runner-fixture-beta-does-not-exist';
 
+/** The developer's real receipt: bytes, or `null` when absent. Read-only — never written here. */
+const REAL_RECEIPT = path.join(SERVER_ROOT, '.cache', 'validation-receipt.json');
+function realReceiptBytes(): string | null {
+  try {
+    return readFileSync(REAL_RECEIPT, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
 describe('validation suite runner', () => {
+  /**
+   * A fixture run is not the suite. Before 2026-09-16 it wrote the real receipt, so every unit run
+   * replaced a developer's `firstSeen` history with the two fixture names below, and the next real
+   * `validate:all` reported every pre-existing failure as `NEW this run`.
+   *
+   * The assertion holds whether or not a real receipt exists — absent before must mean absent
+   * after — and the positive control is that the fixture run DOES record failures: it writes a
+   * receipt, just not this one.
+   */
+  it(
+    'leaves the real receipt untouched when run against a fixture manifest',
+    () => {
+      const before = realReceiptBytes();
+      const { status, output } = runWithSuite([{ script: MISSING_ALPHA }]);
+
+      expect(status).toBe(1);
+      expect(output).toContain('1 of 1 steps failed');
+      expect(realReceiptBytes()).toBe(before);
+    },
+    RUNNER_TIMEOUT_MS
+  );
+
   it(
     'reports BOTH broken checks in one run, not just the first',
     () => {
