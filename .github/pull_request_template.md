@@ -55,7 +55,7 @@ The gate FAILS while that plan's `status:` is non-final — finalize (every row 
 retired) in this same PR. No other plan mention belongs in the body.
 
 Generate this skeleton pre-filled: `npm run pr:body -- --out /tmp/pr-body.md` (repo root).
-Check before opening -- all four gates CI runs, body AND title:
+Check before opening -- every gate CI runs, body AND title:
   `npm run pr:check -- --body-file /tmp/pr-body.md --title "<title>"`
 A commit map is appended automatically by CI — do not maintain one by hand.
 -->

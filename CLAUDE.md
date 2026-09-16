@@ -107,9 +107,9 @@ the gate. Verified at the time: adding it reformatted zero files on either side.
 
 **`npm run pr:check` is the whole local gate, and it is a subset of CI by construction.**
 
-`PR Conventions` is a required context that runs four gating steps on every non-bot PR: two
-positive controls, the body against `.github/pull_request_template.md`, and `commitlint` on the
-title. Run all four before `gh pr create`, from the repo root:
+`PR Conventions` is a required context whose gating steps on a non-bot PR are: two positive
+controls, the body against `.github/pull_request_template.md`, and `commitlint` on the title. Run
+every one of them before `gh pr create`, from the repo root:
 
 ```bash
 TITLE="feat(scope): outcome"

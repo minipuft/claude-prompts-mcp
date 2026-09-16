@@ -338,9 +338,9 @@ gh pr create --title "$TITLE" --body-file /tmp/pr-body.md
 
 **Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`.
 
-**`pr:check` is the whole gate, not half of it.** The `PR Conventions` workflow runs four gating
-steps on a non-bot PR -- two positive controls, the body check, and `commitlint` on the title --
-and `pr:check` runs all four locally, from the repo root, in about a second. Run it before
+**`pr:check` is the whole gate, not half of it.** The `PR Conventions` workflow's gating steps on
+a non-bot PR are two positive controls, the body check, and `commitlint` on the title -- and
+`pr:check` runs every one of them locally, from the repo root, in about a second. Run it before
 `gh pr create`; a green run means that workflow will be green too.
 
 That completeness is enforced, not promised. `scripts/pr-check.mjs` names each workflow step it

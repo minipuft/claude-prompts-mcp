@@ -5,7 +5,7 @@
  * WHY THIS EXISTS. The repo's stated contract is that "CI is the contract; every other gate is a
  * documented strict subset of it" (CLAUDE.md §Validation Gates). For the PR boundary that was
  * false in the one direction that costs a CI cycle: `CONTRIBUTING.md` documented exactly ONE of
- * the four gating steps — the body check — so a contributor who followed it to the letter still
+ * its gating steps — the body check — so a contributor who followed it to the letter still
  * opened a PR with an unchecked title. Measured twice:
  *
  *   · 2026-09-14 (#283) — `validate-pr-body.mjs --body-file … --title …` passed locally and CI
