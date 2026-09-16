@@ -186,8 +186,15 @@ scenarios:
   - id: sc-unknown-action-rejects
     claim_source: 'system_control advertises a closed action set — an unknown action must not pass'
     requests: [{ tool: system_control, args: { action: definitely_not_an_action } }]
-    # Names the rejected action AND that a closed set exists — a generic failure cannot produce it.
-    expect: { error_contains: 'Unknown action: definitely_not_an_action. Valid actions:' }
+    # The refusal moved from the router to the schema when `action` became `z.enum(...)` — the
+    # router's `Unknown action: <value>. Valid actions: …` is now unreachable over MCP, because
+    # zod rejects before the callback runs. The new message drops the echoed value and gains the
+    # whole option list, so the assertion names the list instead: it is still specific to THIS
+    # tool's closed set (`action:` plus the twelve ids), which a generic failure cannot produce.
+    expect:
+      {
+        error_contains: 'action: Invalid option: expected one of "status"|"framework"|"gates"|"analytics"|"config"|"maintenance"|"guide"|"injection"|"session"|"changes"|"execution_history"|"skills_sync"',
+      }
 
   # ── system_control skills_sync: each option reaches its validation ──────────
   #

@@ -46,6 +46,10 @@ export type resource_managerParamName =
   | 'tool_ids'
   | 'unset'
   | 'chain_steps'
+  | 'chain_step_operation'
+  | 'chain_step_index'
+  | 'chain_step_data'
+  | 'chain_step_order'
   | 'tools'
   | 'gate_configuration'
   | 'composer'
@@ -60,6 +64,7 @@ export type resource_managerParamName =
   | 'search_query'
   | 'type'
   | 'gate_type'
+  | 'subject'
   | 'severity'
   | 'enforcement_mode'
   | 'guidance'
@@ -102,7 +107,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'action',
-    type: 'enum[create|validate|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
+    type: 'enum[create|validate|update|delete|reload|list|inspect|preview|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
     description:
       'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.',
     required: true,
@@ -242,7 +247,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'preview_action',
-    type: 'string',
+    type: 'enum[update|delete|rollback]',
     description:
       'Required with `action:"preview"`, and refused without it — it names WHICH mutation is being previewed. `update` (prompt only): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. A preview writes nothing, records no version, and needs no `confirm` — it is not a destructive action. `update` is refused for gate and framework, which have no update preview path and would perform the update.',
     status: 'working',
@@ -251,7 +256,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'tool_operation',
-    type: '"add" | "remove"',
+    type: 'enum[add|remove]',
     description:
       '[Prompt] Update-only: how a `tools` change relates to the CURRENT binding. Omit it and a supplied `tools` array REPLACES the binding, so a narrowed array unbinds the dropped ids and leaves their `tools/{id}/` files on disk — the non-destructive default. `add` unions the supplied definitions with what is already bound. `remove` names ids in `tool_ids`, unbinds them AND deletes their directories, and therefore requires `confirm: true`: it is the only `update` that destroys a file the caller sent no replacement for.',
     status: 'working',
@@ -280,6 +285,42 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'chain_steps',
     type: 'array<step>',
     description: '[Prompt] Chain steps definition for multi-step prompts.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_operation',
+    type: 'enum[add|remove|reorder|update]',
+    description:
+      '[Prompt] Update-only: edit ONE step instead of replacing the whole array. Omit it and a supplied `chain_steps` replaces every step. `add` inserts `chain_step_data` at `chain_step_index`; `remove` drops the step at `chain_step_index`; `reorder` applies `chain_step_order`; `update` overlays `chain_step_data` onto the step at `chain_step_index`, the per-step analogue of `argument_updates`.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_index',
+    type: 'number',
+    description:
+      '[Prompt] Target index for `chain_step_operation` add (insertion point), remove, or update (step to edit). Zero-based, and refused outside the current step range.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_data',
+    type: 'object',
+    description:
+      '[Prompt] Step definition for `chain_step_operation: "add"` (the whole step) or `"update"` (the fields to overlay). Same shape as one entry of `chain_steps`.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_order',
+    type: 'array<number>',
+    description:
+      '[Prompt] New index order for `chain_step_operation: "reorder"`. Must be a permutation of [0..n-1] for the current step count; anything else is refused rather than partially applied.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -402,6 +443,15 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'enum[framework|category|custom]',
     description:
       "[Gate] Gate classification. Default: custom. Writes the gate.yaml key 'gate_type'; 'framework' marks a gate that requires an active framework and is filtered out when framework gates are disabled.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'subject',
+    type: 'string',
+    description:
+      "[Gate] Free kebab-case tag naming what this gate reminds about (e.g. 'code-quality'). An installation's `gates.harnessCovers` (config.json) suppresses reminder-tier gates whose subject it lists; check-tier gates (shell_verify, script_tool) are never suppressed. Lowercase letters, digits and hyphens only.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
