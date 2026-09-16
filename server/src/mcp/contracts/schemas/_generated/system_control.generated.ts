@@ -38,7 +38,6 @@ export type system_controlParamName =
   | 'confirm'
   | 'limit'
   | 'config'
-  | 'backup_path'
   | 'type'
   | 'enabled'
   | 'scope'
@@ -61,7 +60,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session|changes|execution_history|skills_sync]',
     description:
-      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), injection (session overrides for injected guidance), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).',
+      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (read-only: list/keys/validate — writes go through the `cpm` CLI), maintenance (restart), guide (get recommendations), injection (session overrides for injected guidance), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -79,7 +78,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'operation',
     type: 'string',
     description:
-      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config restore/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).',
+      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -164,7 +163,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'confirm',
     type: 'boolean',
     description:
-      'Required `true` for operations that replace or discard state: config restore, analytics reset and maintenance restart. Each refuses without it.',
+      'Required `true` for operations that replace or discard state: analytics reset and maintenance restart. Each refuses without it.',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -180,15 +179,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'config',
     type: 'object',
     description:
-      'For config: `{ key, value?, operation }`, where `operation` is get, set, list or validate and `value` is the string to set or check. Omit it to list the configuration.',
-    status: 'working',
-    compatibility: 'canonical',
-  },
-  {
-    name: 'backup_path',
-    type: 'string',
-    description:
-      'For config restore: path of the backup file to restore. Requires `confirm: true`.',
+      'For config validate only: `{ key, value, operation: "validate" }` checks whether `value` would be valid for `key`, without writing it. Omit `config` and set the top-level `operation` to `list` (whole loaded configuration), `keys` (declared schema keys) or `validate` (load-time schema check).',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -402,8 +393,9 @@ export const system_controlCommands: ToolCommand[] = [
   },
   {
     id: 'config',
-    summary: 'Configuration operations (list/get/set/restore/validate).',
-    parameters: ['action', 'operation', 'config', 'backup_path', 'confirm', 'reason'],
+    summary:
+      'Configuration operations, read-only (list/keys/validate). Writes go through the `cpm` CLI.',
+    parameters: ['action', 'operation', 'config', 'reason'],
     status: 'working',
   },
   {

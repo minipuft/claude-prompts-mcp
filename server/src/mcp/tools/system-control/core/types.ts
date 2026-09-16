@@ -16,7 +16,6 @@ import type {
   ChainSessionService,
   DatabasePort,
 } from '#shared/types/index.js';
-import type { SafeConfigWriter } from '../../config-utils.js';
 import type { ResponseFormatter } from '../../prompt-engine/processors/response-formatter.js';
 
 /**
@@ -75,7 +74,6 @@ export interface SystemControlContext {
    */
   readonly skillsSyncPaths?: () => SkillsSyncPaths;
   readonly configManager?: ConfigManager;
-  readonly safeConfigWriter?: SafeConfigWriter;
   readonly onRestart?: (reason: string) => Promise<void>;
   /**
    * Rebuild and re-advertise the tool surface after a state change that alters
