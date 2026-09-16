@@ -355,6 +355,13 @@ Prefer that path when a database is attached: it is the route that persists mani
 prune cannot see what was exported at all, and `diff` falls back to the would-be-export comparison
 above — which still finds drift, but cannot tell you the source changed since the last export.
 
+The MCP response leads with the same counts `--json` reports, rendered as text rather than parsed
+from the progress log below them: resources loaded, files written for `export`/`sync` (`0` and
+labeled `preview` when `preview: true`, plus a per-client breakdown), directories pruned, a
+drifted-resource count for `diff`, and a failure count when any command reports one. `clone` gets
+no counts line — it parses one external file rather than the canonical resource set, so it has
+none of these to report — and its own log output already states what it created.
+
 ## See Also
 
 - **[Build Your First Prompt](../tutorials/build-first-prompt.md)** — Create YAML prompts that Skills Sync can export
