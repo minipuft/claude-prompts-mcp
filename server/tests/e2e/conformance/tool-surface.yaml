@@ -57,9 +57,13 @@ scenarios:
     expect: { ok: true }
 
   - id: sc-config
-    claim_source: 'system_control action: config'
-    requests: [{ tool: system_control, args: { action: config } }]
-    expect: { ok: true }
+    claim_source: >-
+      system_control contract — config `list` "the whole loaded configuration". Asserted on
+      content, not bare `ok`: a malformed config call used to fall through to this same dump
+      (the `if (!configRequest) return list` defect d69cba37 removed), so `ok: true` alone would
+      not distinguish a real `list` request from that defect reappearing.
+    requests: [{ tool: system_control, args: { action: config, operation: list } }]
+    expect: { text_contains: '**Current Configuration**' }
 
   - id: sc-guide
     claim_source: 'system_control action: guide'
@@ -85,14 +89,33 @@ scenarios:
         args: { action: guide, include_planned: false }
     expect: { text_contains: 'Include planned operations with `include_planned:true`.' }
 
-  - id: sc-config-get
+  - id: sc-config-keys
     claim_source: >-
-      system_control contract — `config` "{ key, value?, operation }". A get prints the one key;
-      without the object the action lists the whole configuration instead.
+      system_control contract — config `keys` "declared schema keys", the read that stood in for
+      per-key `get` once d69cba37 made config read-only over MCP.
     requests:
       - tool: system_control
-        args: { action: config, config: { operation: get, key: server.name } }
-    expect: { text_contains: '**server.name**:' }
+        args: { action: config, operation: keys }
+    expect: { text_contains: '**Declared Configuration Keys**' }
+
+  - id: sc-config-get-refused
+    claim_source: >-
+      system_control contract — config `get` no longer reaches MCP: it is held pending a
+      generated config shape (owner ruling R41) and refused by name rather than answered.
+    requests:
+      - tool: system_control
+        args: { action: config, operation: get }
+    expect: { error_contains: 'config operation `get` is not served over MCP.' }
+
+  - id: sc-config-write-refused
+    claim_source: >-
+      system_control contract — configuration is read-only over MCP (owner rulings R27/R35): a
+      write operation (`set`) never reaches the config manager, and refusing it is the security
+      boundary this row exists to keep closed.
+    requests:
+      - tool: system_control
+        args: { action: config, operation: set }
+    expect: { error_contains: 'config operation `set` is not served over MCP.' }
 
   - id: sc-injection
     claim_source: 'system_control action: injection — docs/guides/injection-control.md'
