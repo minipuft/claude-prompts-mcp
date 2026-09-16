@@ -103,6 +103,43 @@ ran on prettier's built-in defaults, so the contract was whatever the installed 
 happened to do, and an editor plugin resolving its own settings would silently disagree with
 the gate. Verified at the time: adding it reformatted zero files on either side.
 
+## Pull Request Boundary
+
+**`npm run pr:check` is the whole local gate, and it is a subset of CI by construction.**
+
+`PR Conventions` is a required context whose gating steps on a non-bot PR are: two positive
+controls, the body against `.github/pull_request_template.md`, and `commitlint` on the title. Run
+every one of them before `gh pr create`, from the repo root:
+
+```bash
+TITLE="feat(scope): outcome"
+npm run pr:body -- --out /tmp/pr-body.md     # seed it; never author a body from scratch
+$EDITOR /tmp/pr-body.md
+npm run pr:check -- --body-file /tmp/pr-body.md --title "$TITLE"
+```
+
+The template requires `## Demonstration` (consumer-observable before/after, or `n/a: <reason>`), a
+`## How it was verified` TABLE (claim · probe · baseline -> measured · the mutation that fails it --
+a count with no baseline is noise), and `## Notes for Reviewers`, under a 400-word above-the-fold
+budget that fenced blocks, tables and `<details>` do not count against. The `Plan:` footer is the
+ONLY sanctioned plan mention and the gate FAILS while that plan's `status:` is non-final, so a PR
+executing one step of a multi-step plan omits the footer entirely.
+
+Parity is enforced rather than documented: `scripts/pr-check.mjs` names each workflow step it
+mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads `pr-conventions.yml` and
+fails when the two sets diverge. That test exists because the relation had already broken in the
+direction that costs a CI cycle -- `CONTRIBUTING.md` documented only the body check, and the body
+checker states outright that it "does not read the title beyond its type", so following the
+instructions exactly still shipped an unchecked title (#283, `subject-case`, 2026-09-14). A
+hand-written body cost a second run three missing sections and a 488-word fold (#312, 2026-09-16).
+
+**This section is deliberately absent from `PROJECTED_HANDBOOK_SECTIONS`** in
+`scripts/sync-project-guidance.js`. The AGENTS.md projection measured 32,709 of its 32,768-byte
+ceiling before this section existed -- 59 bytes of headroom -- so projecting it would fail
+`guidance:check`. Codex and OpenCode reach the same contract through `CONTRIBUTING.md` §Pull
+Request Process and the usage text `pr-check.mjs` prints when invoked without arguments. Deciding
+what the projection should evict to make room is an owner call, not a silent one.
+
 ## Fleet Standards Upstream (`minipuft/repository-standards`)
 
 **Look there before writing any check that reads another repository, or any plan-status or dependency-policy rule.**
