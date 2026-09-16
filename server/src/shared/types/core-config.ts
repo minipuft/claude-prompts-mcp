@@ -184,8 +184,6 @@ export interface ChainSessionConfig {
 export interface GateSystemSettings {
   /** Enable/disable the gate subsystem entirely */
   enabled: boolean;
-  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
   enableFrameworkGates?: boolean;
   /** Execute a prompt's `inline_gate_definitions` instead of only displaying them; default `false`. Retirement contract on the `GatesConfig` field below. */
@@ -217,7 +215,6 @@ export interface GateSystemSettings {
  */
 export const DEFAULT_GATES_CONFIG = {
   enabled: true,
-  definitionsDirectory: 'resources/gates',
   enableFrameworkGates: true,
   executeInlineGateDefinitions: false,
   harnessCovers: [] as string[],
