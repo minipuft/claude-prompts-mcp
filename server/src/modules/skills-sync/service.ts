@@ -578,6 +578,30 @@ export interface SkillsSyncFailure {
 }
 
 /**
+ * One drifted resource, as `diff` classified it.
+ *
+ * Unexported, like the group below: both are reached through `SkillsSyncRunReport.drift`, which is
+ * the surface callers hold. Exporting a name nothing imports is a second way to refer to the same
+ * shape, and the one that drifts from it.
+ */
+interface SkillsSyncDriftEntry {
+  /** new | source | output | orphan */
+  type: string;
+  /** Resource id, or the manifest/marker key for an orphan */
+  id: string;
+  /** Output-relative paths that differ, when the type names specific files */
+  files: string[];
+}
+
+/** Drift found in one client + scope that `diff` examined. */
+interface SkillsSyncDriftGroup {
+  client: string;
+  scope: 'user' | 'project';
+  /** Empty when that client + scope is clean — examined and found in step with the sources */
+  entries: SkillsSyncDriftEntry[];
+}
+
+/**
  * Machine-readable summary of one skills-sync run, emitted by `--json`.
  *
  * Mirrors `SyncResult.failures` one layer down: counters answer "how much",
@@ -590,14 +614,30 @@ export interface SkillsSyncRunReport {
   resources: number;
   /** Files written (0 on a preview) */
   written: number;
-  /** Managed skill directories pruned */
+  /** Managed directories pruned — whole skill dirs (sync only) plus stale gates/<id>/ dirs (both) */
   pruned: number;
   failures: SkillsSyncFailure[];
+  /**
+   * What drifted, per client + scope — `diff` only.
+   *
+   * Absent on every other command rather than empty: an empty array on an export
+   * would read as "nothing drifted" when the truth is that nothing was compared.
+   */
+  drift?: SkillsSyncDriftGroup[];
 }
 
 /** Empty report — the single place the shape is constructed. */
 function emptyRunReport(command: string, preview: boolean): SkillsSyncRunReport {
-  return { command, preview, resources: 0, written: 0, pruned: 0, failures: [] };
+  const report: SkillsSyncRunReport = {
+    command,
+    preview,
+    resources: 0,
+    written: 0,
+    pruned: 0,
+    failures: [],
+  };
+  if (command === 'diff') report.drift = [];
+  return report;
 }
 
 export interface SkillsSyncOutput {
@@ -2123,6 +2163,66 @@ function parseSkillMd(content: string): ParsedSkillMd {
   };
 }
 
+/**
+ * Names what a re-export would take away from a SKILL.md already on disk.
+ *
+ * `enforceGateHooks` moved from always-on to opt-in with no other signal: a skill that had a
+ * frontmatter `hooks` block loses it on the next export unless the prompt YAML opts back in, and
+ * the diff reads as a break rather than a config change. Reports removals only — an added or
+ * reworded section is ordinary sync output, not a warning.
+ */
+function describeSkillRemovals(existing: string, next: string): string[] {
+  const warnings: string[] = [];
+
+  const existingFrontmatter = parseSkillMd(existing).frontmatter;
+  const nextFrontmatter = parseSkillMd(next).frontmatter;
+  if ('hooks' in existingFrontmatter && !('hooks' in nextFrontmatter)) {
+    warnings.push(
+      'export removes the frontmatter hooks block; set enforceGateHooks: true in the prompt YAML to keep it'
+    );
+  }
+
+  // Headings, not `parseSkillMd`'s `sections` map: that map only records the fixed KNOWN section
+  // names (Instructions, Guidance, Arguments, ...), so a hand-added `## Extra` heading would never
+  // surface through it. This reads every `## ` heading in the body, known or not.
+  const headingsOf = (content: string): string[] => {
+    const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
+    const body = fmMatch ? content.slice(fmMatch[0].length) : content;
+    const headings: string[] = [];
+    const headingRegex = /^## (.+)$/gm;
+    let headingMatch;
+    while ((headingMatch = headingRegex.exec(body)) !== null) {
+      headings.push(`## ${headingMatch[1]!.trim()}`);
+    }
+    return headings;
+  };
+
+  const nextHeadings = new Set(headingsOf(next));
+  for (const heading of headingsOf(existing)) {
+    if (!nextHeadings.has(heading)) {
+      warnings.push(`export removes section "${heading}"`);
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Runs `describeSkillRemovals` at a write-loop call site and warns once per removal, prefixed
+ * with the resource id — the shape both `exportCommand` and `syncCommand` need before writing
+ * over a managed SKILL.md, factored out so extending it into `syncCommand` does not duplicate it.
+ */
+function warnSkillRemovals(
+  resourceId: string,
+  existingSkillMd: string,
+  nextSkillMd: string,
+  output: SkillsSyncOutput
+): void {
+  for (const removal of describeSkillRemovals(existingSkillMd, nextSkillMd)) {
+    output.warn(`  ${resourceId}: ${removal}`);
+  }
+}
+
 // ─── Section 3b: Gate & Chain Section Builders ──────────────────────────────
 
 /** Where an exported skill will live, needed to write a cwd-independent hook command. */
@@ -2679,6 +2779,64 @@ export function emitGateFiles(
     });
   }
   return files;
+}
+
+/**
+ * Ids of `gates/<id>/` directories under `skillDir` that this tool wrote on an earlier run and
+ * no longer belongs to `currentGateIds`. A directory counts as this tool's own only if it holds
+ * a `gate.yaml` — a hand-added `gates/<id>/notes.md` with no `gate.yaml` is never a candidate.
+ * Read-only: the caller decides whether and how to remove what this returns.
+ */
+async function staleGateDirectories(
+  skillDir: string,
+  currentGateIds: ReadonlySet<string>
+): Promise<string[]> {
+  const gatesDir = path.join(skillDir, 'gates');
+  let entries;
+  try {
+    entries = await readdir(gatesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && !currentGateIds.has(entry.name))
+    .filter((entry) => existsSync(path.join(gatesDir, entry.name, 'gate.yaml')))
+    .map((entry) => entry.name);
+}
+
+/**
+ * Removes the stale `gates/<id>/` directories `staleGateDirectories` finds for one resource's
+ * just-emitted `outputFiles`, and logs each removal by id. Shared by `exportCommand` and
+ * `syncCommand` so a gate dropped from a skill's set does not keep advertising itself through
+ * `gates/<id>/gate.yaml` after `gates/index.json` has already stopped listing it (both write
+ * loops call this only when the on-disk SKILL.md carries this tool's managed marker).
+ */
+async function pruneStaleGates(
+  resourceId: string,
+  baseDir: string,
+  subDir: string,
+  outputFiles: OutputFile[],
+  preview: boolean,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): Promise<void> {
+  if (preview) return;
+  const gatesPrefix = `${subDir}/gates/`;
+  const currentGateIds = new Set(
+    outputFiles
+      .filter(
+        (f) => f.relativePath.startsWith(gatesPrefix) && f.relativePath.endsWith('/gate.yaml')
+      )
+      .map((f) => f.relativePath.slice(gatesPrefix.length, -'/gate.yaml'.length))
+  );
+  const skillDir = resolveContainedPath(baseDir, subDir);
+  for (const staleId of await staleGateDirectories(skillDir, currentGateIds)) {
+    await rm(path.join(skillDir, 'gates', staleId), { recursive: true, force: true });
+    report.pruned++;
+    output.log(
+      `  ${resourceId}: removed stale gates/${staleId}/ (no longer in this skill's gate set)`
+    );
+  }
 }
 
 /**
@@ -3314,12 +3472,25 @@ async function exportCommand(
           continue;
         }
 
+        let skillIsManaged = false;
         for (const file of outputFiles) {
           // Contained against the OUTPUT dir, not the resources root: this writer's destination is
           // the client's skills directory. `relativePath` is built from resource ids, so a
           // traversing id would place a skill file outside the directory the operator pointed the
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
+
+          // Warn before overwriting a SKILL.md this tool manages: a hand-written file being
+          // overwritten is a different, pre-existing behaviour (unmarked, never warned about
+          // here) — this only compares against what the tool itself last wrote.
+          if (file.relativePath.endsWith('/SKILL.md')) {
+            const existingSkillMd = await readOptionalFile(fullPath);
+            if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
+              skillIsManaged = true;
+              warnSkillRemovals(ir.id, existingSkillMd, file.content, output);
+            }
+          }
+
           if (opts.preview) {
             output.log(`  [preview] ${file.relativePath}`);
           } else {
@@ -3328,6 +3499,21 @@ async function exportCommand(
             report.written++;
             output.log(`  wrote ${file.relativePath}`);
           }
+        }
+
+        // Same managed-marker guard as the removal warnings above: a gate dropped from this
+        // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
+        if (skillIsManaged) {
+          const subDir = outputSubDir(ir, duplicateIds);
+          await pruneStaleGates(
+            ir.id,
+            baseDir,
+            subDir,
+            outputFiles,
+            opts.preview === true,
+            output,
+            report
+          );
         }
 
         // Load version history for the resource
@@ -3681,12 +3867,25 @@ async function syncCommand(
           continue;
         }
 
+        let skillIsManaged = false;
         for (const file of outputFiles) {
           // Contained against the OUTPUT dir, not the resources root: this writer's destination is
           // the client's skills directory. `relativePath` is built from resource ids, so a
           // traversing id would place a skill file outside the directory the operator pointed the
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
+
+          // Same removal warning as `exportCommand`: a hand-written file being overwritten is a
+          // different, pre-existing behaviour (unmarked, never warned about here) — this only
+          // compares against what the tool itself last wrote.
+          if (file.relativePath.endsWith('/SKILL.md')) {
+            const existingSkillMd = await readOptionalFile(fullPath);
+            if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
+              skillIsManaged = true;
+              warnSkillRemovals(ir.id, existingSkillMd, file.content, output);
+            }
+          }
+
           if (opts.preview) {
             output.log(`  [preview] ${file.relativePath}`);
           } else {
@@ -3695,6 +3894,21 @@ async function syncCommand(
             report.written++;
             output.log(`  wrote ${file.relativePath}`);
           }
+        }
+
+        // Same managed-marker guard as the removal warnings above: a gate dropped from this
+        // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
+        if (skillIsManaged) {
+          const subDir = outputSubDir(ir, duplicateIds);
+          await pruneStaleGates(
+            ir.id,
+            baseDir,
+            subDir,
+            outputFiles,
+            opts.preview === true,
+            output,
+            report
+          );
         }
 
         const firstSourcePath = ir.sourcePaths[0];
@@ -3830,14 +4044,19 @@ async function diffCommand(
       seenDirs.set(dirKey, clientId);
 
       const manifestEntries = loadManifestEntries(clientId, scope, opts.dbManager);
-      if (manifestEntries.size === 0) {
-        if (cliScope) {
-          output.log(`${clientId} (${scope}): no manifest found (run export first)`);
-        }
-        continue;
-      }
+      // With no saved manifest there is no record of a previous export to compare against, so the
+      // comparison falls back to what an export would write right now. Reporting nothing instead
+      // would be indistinguishable from a clean tree, and a manifest is missing far more often
+      // than it looks: an export run without a database writes the files and saves no manifest.
+      const againstWouldBeExport = manifestEntries.size === 0;
 
       output.log(`\n── ${clientId} (${scope}) drift report`);
+      if (againstWouldBeExport) {
+        output.log(
+          `  no manifest is saved for this client — exports run without a database save none, ` +
+            `so this compares the files on disk against what an export would write now`
+        );
+      }
       const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
 
       const driftEntries: Array<{
@@ -3851,14 +4070,15 @@ async function diffCommand(
       for (const ir of scopedResources) {
         const key = manifestKey(ir);
         const entry = manifestEntries.get(key);
-        if (!entry) {
+        if (!entry && !againstWouldBeExport) {
           output.log(`  [NEW] ${ir.id} — not in manifest`);
           driftEntries.push({ type: 'new', id: ir.id, files: [] });
           continue;
         }
 
-        // Source drift: canonical YAML changed
-        if (ir.sourceHash !== entry.sourceHash) {
+        // Source drift: canonical YAML changed. Only the manifest carries the snapshot this
+        // compares against; without one, a source change shows up as output drift instead.
+        if (entry && ir.sourceHash !== entry.sourceHash) {
           const changedFiles: string[] = [];
           output.log(`  [SOURCE DRIFT] ${ir.id} — canonical sources changed`);
           if (entry.sourceSnapshot && ir.sourceContents) {
@@ -3899,6 +4119,19 @@ async function diffCommand(
           harnessCovers
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
+
+        // Without a manifest, "never exported" is a question the output directory answers: no
+        // skill directory means nothing was written for this resource, which is the same finding
+        // the manifest path reports when a resource has no row.
+        if (
+          againstWouldBeExport &&
+          !existsSync(path.join(baseDir, outputSubDir(ir, duplicateIds)))
+        ) {
+          output.log(`  [NEW] ${ir.id} — no skill directory in the output`);
+          driftEntries.push({ type: 'new', id: ir.id, files: [] });
+          continue;
+        }
+
         const outputPatches: string[] = [];
         const changedOutputFiles: string[] = [];
         for (const file of outputFiles) {
@@ -3908,7 +4141,13 @@ async function diffCommand(
           // export at.
           const fullPath = resolveContainedPath(baseDir, file.relativePath);
           const existing = await readOptionalFile(fullPath);
-          if (!existing) continue;
+          if (!existing) {
+            // A file the export would write that is absent: drift only when the comparison is
+            // against the would-be export. Against a manifest it is not — the manifest names the
+            // files the last export actually produced, and this set may legitimately be wider.
+            if (againstWouldBeExport) changedOutputFiles.push(file.relativePath);
+            continue;
+          }
           if (existing !== file.content) {
             changedOutputFiles.push(file.relativePath);
             const patch = createTwoFilesPatch(
@@ -3924,7 +4163,7 @@ async function diffCommand(
             }
           }
         }
-        if (outputPatches.length > 0) {
+        if (changedOutputFiles.length > 0) {
           output.log(`  [OUTPUT DRIFT] ${ir.id} — exported files modified locally`);
           for (const patch of outputPatches) {
             output.log(formatPatchForDisplay(patch));
@@ -3933,12 +4172,30 @@ async function diffCommand(
         }
       }
 
-      // Check for orphans (in manifest but no longer in resources)
       const resourceKeys = new Set(scopedResources.map((r) => manifestKey(r)));
-      for (const [key, entry] of manifestEntries) {
-        if (!resourceKeys.has(key)) {
-          output.log(`  [ORPHAN] ${key} (${entry.resourceType}) — no longer in sources`);
-          driftEntries.push({ type: 'orphan', id: key, files: [] });
+      if (againstWouldBeExport) {
+        // Check for orphans (managed on disk but no longer in resources). The marker each
+        // exported SKILL.md carries names the resource it came from, so it answers the same
+        // question the manifest does — which directories this tool wrote for a resource that is
+        // no longer registered — from the output directory alone.
+        for (const [markerKey, dirs] of await collectManagedSkillDirsFromMarkers(
+          baseDir,
+          clientId,
+          scope
+        )) {
+          if (resourceKeys.has(markerKey)) continue;
+          output.log(
+            `  [ORPHAN] ${markerKey} — ${[...dirs].sort().join(', ')}/ is managed but no longer in sources`
+          );
+          driftEntries.push({ type: 'orphan', id: markerKey, files: [] });
+        }
+      } else {
+        // Check for orphans (in manifest but no longer in resources)
+        for (const [key, entry] of manifestEntries) {
+          if (!resourceKeys.has(key)) {
+            output.log(`  [ORPHAN] ${key} (${entry.resourceType}) — no longer in sources`);
+            driftEntries.push({ type: 'orphan', id: key, files: [] });
+          }
         }
       }
 
@@ -4030,6 +4287,13 @@ async function diffCommand(
 
         output.log(`  output → ${clientDir}/`);
       }
+
+      // One element per client + scope this run examined, empty entries included: under `--json`
+      // "examined and clean" and "never looked at" are different answers, and only a present
+      // element with no entries says the first.
+      // `emptyRunReport` constructs this array for the diff command; the assignment keeps the
+      // push total if a caller ever hands this function a report built for another one.
+      (report.drift ??= []).push({ client: clientId, scope, entries: driftEntries });
     }
   }
 }

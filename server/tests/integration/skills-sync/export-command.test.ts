@@ -818,6 +818,195 @@ describe('Export Command Integration', () => {
     });
   });
 
+  // ── Removal warnings: re-exporting over a managed SKILL.md ──────────────────
+
+  describe('warns before a re-export removes something the on-disk skill has', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality');
+    });
+
+    it('warns when the hooks block would be dropped', async () => {
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport(); // first export: SKILL.md carries the frontmatter hooks block
+
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        // enforceGateHooks dropped — the second export would lose the block silently.
+      });
+      const out = await runExport();
+
+      expect(
+        out.warns.some((w) => w.includes('reexported') && w.includes('enforceGateHooks'))
+      ).toBe(true);
+    });
+
+    it('does not warn when the hooks block is kept', async () => {
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true, // still opted in — nothing is taken away
+      });
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('enforceGateHooks'))).toBe(false);
+    });
+
+    it('warns when a section present on disk is absent from the new content', async () => {
+      await writePrompt('general', 'extra_section');
+      await writeConfig('claude-code');
+
+      // Hand-written on-disk state, same pattern as the foreign-alias fixture above: a prior
+      // managed export that carried a section this run's compiled content does not produce.
+      const skillDir = path.join(outputDir, 'extra_section');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        [
+          '---',
+          'name: extra_section',
+          'description: extra_section description',
+          'managed-by: claude-prompts-skills-sync',
+          'managed-client: claude-code',
+          'managed-scope: user',
+          'managed-resource-key: prompt:general/extra_section',
+          '---',
+          '',
+          '## Instructions',
+          '',
+          'Old content.',
+          '',
+          '## Extra',
+          '',
+          'Old content this export does not produce.',
+          '',
+        ].join('\n')
+      );
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('extra_section') && w.includes('## Extra'))).toBe(
+        true
+      );
+    });
+
+    it('does not warn about a hand-written SKILL.md with no managed-by marker', async () => {
+      await writePrompt('general', 'handwritten');
+      await writeConfig('claude-code');
+
+      const skillDir = path.join(outputDir, 'handwritten');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        '---\nname: handwritten\ndescription: hand-written\n---\n\n## Extra\n\nHand-written.\n'
+      );
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('handwritten'))).toBe(false);
+    });
+
+    it('does not warn on a first export with nothing on disk yet', async () => {
+      await writePrompt('general', 'fresh');
+      await writeConfig('claude-code');
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('export removes'))).toBe(false);
+    });
+  });
+
+  // ── Stale gate directories: pruned on export ─────────────────────────────
+
+  describe('export prunes stale gates/<id>/ directories under a managed skill', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality');
+    });
+
+    it("removes a gates/<id>/ directory no longer in the skill's gate set, and names it", async () => {
+      await writePrompt('general', 'pruned_gate', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport(); // first export: SKILL.md is stamped managed, gates/code-quality/ is written
+
+      // A gate directory this tool wrote on an earlier run that the current gate set no longer
+      // includes — the fixture stands in for a gate dropped from `gateConfiguration.include`.
+      const staleGateDir = path.join(outputDir, 'pruned_gate', 'gates', 'stale');
+      await mkdir(staleGateDir, { recursive: true });
+      await writeFile(
+        path.join(staleGateDir, 'gate.yaml'),
+        yaml.dump({ id: 'stale', name: 'Stale', type: 'validation', description: 'Stale gate' })
+      );
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      expect(await exists(staleGateDir)).toBe(false);
+      expect(
+        out.logs.some((l) => l.includes('pruned_gate') && l.includes('removed stale gates/stale/'))
+      ).toBe(true);
+      expect(report.pruned).toBeGreaterThan(0);
+      // The gate still in the current set survives the same run.
+      expect(await exists(path.join(outputDir, 'pruned_gate', 'gates', 'code-quality'))).toBe(true);
+    });
+
+    it('leaves a hand-written gates/<id>/ directory with no gate.yaml untouched', async () => {
+      await writePrompt('general', 'handwritten_notes', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const handwrittenDir = path.join(outputDir, 'handwritten_notes', 'gates', 'handwritten');
+      await mkdir(handwrittenDir, { recursive: true });
+      await writeFile(path.join(handwrittenDir, 'notes.md'), 'Hand-written, no gate.yaml here.');
+
+      await runExport();
+
+      expect(await exists(path.join(handwrittenDir, 'notes.md'))).toBe(true);
+    });
+
+    it('does not prune a stale gate directory under a skill with no managed marker', async () => {
+      await writePrompt('general', 'unmanaged_gate', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+
+      // Hand-written SKILL.md carrying no managed-by marker — positive control on the guard:
+      // without it, this fixture would be indistinguishable from the managed case above.
+      const skillDir = path.join(outputDir, 'unmanaged_gate');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        '---\nname: unmanaged_gate\ndescription: hand-written\n---\n\n## Instructions\n\nHand-written.\n'
+      );
+      const staleGateDir = path.join(skillDir, 'gates', 'stale');
+      await mkdir(staleGateDir, { recursive: true });
+      await writeFile(
+        path.join(staleGateDir, 'gate.yaml'),
+        yaml.dump({ id: 'stale', name: 'Stale', type: 'validation', description: 'Stale gate' })
+      );
+
+      await runExport();
+
+      expect(await exists(staleGateDir)).toBe(true);
+    });
+  });
+
   // ── F3 + F4: template fidelity reporting (Wave 2) ──────────────────────────
 
   describe('template fidelity warnings', () => {
