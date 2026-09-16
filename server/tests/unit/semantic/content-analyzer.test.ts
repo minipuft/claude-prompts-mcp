@@ -68,7 +68,20 @@ describe('ContentAnalyzer', () => {
       'Prompt content is not inspected; only its shape is reported'
     );
     expect(result.warnings).toHaveLength(0);
-    expect(result.suggestedGates).toContain('basic_validation');
+  });
+
+  // Pins the fix for a reply that suggested a gate no registry could resolve: this analyzer has
+  // no gate registry to check a name against, so it must suggest none rather than fabricate one.
+  // A previous version hardcoded `suggestedGates: ['basic_validation']`, and no gate by that id
+  // has ever existed in `resources/gates/`.
+  test('suggests no gates, because it cannot verify one against the gate registry', async () => {
+    const analyzer = createAnalyzer();
+    const result = await analyzer.analyzePrompt(createPrompt({ id: 'no-fabricated-gate' }));
+
+    expect(result.suggestedGates).toEqual([]);
+    expect(result.limitations).toContain(
+      'Gate suggestion not available; this analyzer has no access to the gate registry'
+    );
   });
 
   // Pins the T3 collapse: there is one analysis path, so the metadata cannot advertise that a
