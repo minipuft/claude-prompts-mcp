@@ -23,7 +23,6 @@ const logger = createLogger(
 
 import type {
   ConfigSchemaValidationResult,
-  ConfigValueSource,
   ConfigValueWithSource,
 } from '#shared/types/config-manager.js';
 
@@ -499,7 +498,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       throw new Error(
         `listConfigKeys: could not load the config schema at ${this.schemaPath}: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
+        { cause: error }
       );
     }
 
