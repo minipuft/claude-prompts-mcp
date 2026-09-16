@@ -252,12 +252,11 @@ describe('compareResourceBaseline refusal awareness', () => {
     });
 
     it('reports no addition for a script tool manifest under a prompt', async () => {
-      // `tool.yaml` is the other reserved name the loader excludes. In the shipped layout a
-      // `tools/` directory sits under a prompt directory, which holds `prompt.yaml`, so this walk
-      // does not descend into it — but the walk descends into ANY directory holding neither
-      // `prompt.yaml` nor `gate.yaml`, which is the shape below and is reachable the moment a
-      // `tools/` directory is not where the convention puts it. Measured: without the shared rule
-      // this case reports an addition of a prompt with the id `tool`.
+      // `tool.yaml` is the other reserved name the loader excludes. Since P4.28 this walk
+      // descends into every directory the loader descends into, `tools/` included — so the shipped
+      // layout (a `tools/` directory under a prompt directory) reaches this branch too, not just
+      // the misplaced shape below. Measured: without the shared rule this case reports an addition
+      // of a prompt with the id `tool`.
       const orphanToolDir = path.join(PROMPTS_DIR, CATEGORY, 'tools', 'word_count');
       await fs.mkdir(orphanToolDir, { recursive: true });
       await fs.writeFile(
@@ -326,6 +325,114 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       expect(operationsFor('inline_prompt')).toEqual(['added']);
       expect(result.added).toBe(1);
+    });
+  });
+
+  describe("a chain's step prompts, which sit below a directory that is itself a prompt (P4.28)", () => {
+    /**
+     * THE ROW'S FALSIFIER.
+     *
+     * > a chain's step prompts appear in the baseline and a change to one is reported as
+     * > `modified`, with a top-level prompt in the same category as the positive control.
+     *
+     * The walk used to stop descending at any directory holding `prompt.yaml`, reasoning that such
+     * a directory IS the resource rather than a container. A chain directory is both: it holds its
+     * own definition and its steps' directories. 15 step prompts ship below that line, so an
+     * external edit to any of them reached this comparison as nothing at all.
+     *
+     * The id is half the falsifier. Reaching the file while keying it by its own directory name
+     * (`step_one`) would trade the absence for a disagreement — the loader serves it as
+     * `chain_parent/step_one`, and `resource_changes` is keyed by `resourceType/resourceId`.
+     */
+    const parentDir = 'chain_parent';
+    const stepDir = path.join(parentDir, 'step_one');
+    /** The id the LOADER serves the step under, and therefore the only id this walk may use. */
+    const stepId = 'chain_parent/step_one';
+
+    it('reports the step prompt under the same id the loader serves it as', async () => {
+      await writePrompt(parentDir, validPrompt(parentDir));
+      await writePrompt(stepDir, validPrompt('step_one'));
+
+      // Fixture control: the loader that DEFINES the catalog serves both, and qualifies the
+      // nested one. Without this, an assertion on `stepId` below could be measuring a string this
+      // test invented.
+      const loader = new PromptLoader(logger as never, { enableCache: false });
+      const loaded = await loader.loadFromDirectories(PROMPTS_DIR);
+      expect(loaded.promptsData.map((prompt) => prompt.id).sort()).toEqual([parentDir, stepId]);
+
+      const result = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        loader.getQuarantine()
+      );
+
+      expect(operationsFor(stepId)).toEqual(['added']);
+      // The positive control the row names: a top-level prompt in the same category, which the
+      // walk always reached. An assertion that only read `stepId` would pass just as well against
+      // a walk that reported everything twice.
+      expect(operationsFor(parentDir)).toEqual(['added']);
+      expect(result.added).toBe(2);
+      // …and the id nobody serves is never used. This is what fails if the walk reaches the file
+      // but keys it by its own directory name.
+      expect(operationsFor('step_one')).toEqual([]);
+    });
+
+    it('reports a change to a step prompt as modified, while the unchanged parent stays silent', async () => {
+      await writePrompt(parentDir, validPrompt(parentDir));
+      await writePrompt(stepDir, validPrompt('step_one'));
+      await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        await loadAndQuarantine()
+      );
+
+      await writePrompt(stepDir, `${validPrompt('step_one')}# edited outside the server\n`);
+      const second = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        await loadAndQuarantine()
+      );
+
+      expect(second.modified).toBe(1);
+      expect(second.added).toBe(0);
+      expect(second.removed).toBe(0);
+      expect(operationsFor(stepId)).toEqual(['added', 'modified']);
+      // The discriminating control: `modified: 1` is reported for the step and NOT for the parent,
+      // so the count is measuring this file rather than the whole subtree being re-added.
+      expect(operationsFor(parentDir)).toEqual(['added']);
+    });
+
+    it('reports a single-file step prompt beside its chain the same way', async () => {
+      // The other layout for the same position: `{category}/{chain}/{step}.yaml`. Its id is
+      // qualified identically, and before P4.28 the walk never reached it either — the chain
+      // directory it sits in holds `prompt.yaml`.
+      await writePrompt(parentDir, validPrompt(parentDir));
+      await fs.writeFile(
+        path.join(PROMPTS_DIR, CATEGORY, parentDir, 'inline_step.yaml'),
+        validPrompt('inline_step'),
+        'utf-8'
+      );
+
+      const loader = new PromptLoader(logger as never, { enableCache: false });
+      const loaded = await loader.loadFromDirectories(PROMPTS_DIR);
+      expect(loaded.promptsData.map((prompt) => prompt.id).sort()).toEqual([
+        parentDir,
+        'chain_parent/inline_step',
+      ]);
+
+      const result = await compareResourceBaseline(
+        tracker,
+        configStub,
+        logger as never,
+        loader.getQuarantine()
+      );
+
+      expect(operationsFor('chain_parent/inline_step')).toEqual(['added']);
+      expect(operationsFor(parentDir)).toEqual(['added']);
+      expect(result.added).toBe(2);
     });
   });
 

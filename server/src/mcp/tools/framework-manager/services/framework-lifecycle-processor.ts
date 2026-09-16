@@ -72,6 +72,28 @@ export class FrameworkLifecycleProcessor {
       );
     }
 
+    // "Comprehensive" is true of the three sources it names and false of the disk. All three miss
+    // a framework whose only file is a REFUSED one in a root this server cannot write: the
+    // registry and the framework map never got an entry, and `frameworkExists` resolves the
+    // writable root alone (`FrameworkFileWriter.getFrameworkDir`), where there is nothing. So
+    // `create` wrote an overlay and reported plain success, never mentioning the broken file — the
+    // same silent-overwrite shape P4.19 closed on gates, which was left open here on the stated
+    // premise that the directory check already covered it. It covers the writable root only.
+    //
+    // Consulted ONLY on this branch, where nothing exists, mirroring the discipline `handleUpdate`
+    // states: a REGISTERED framework is never redirected by a quarantined namesake in another root.
+    const quarantined = this.resolveRepairTarget(id);
+    if (quarantined !== undefined) {
+      return this.error(
+        `Framework '${id}' already exists on disk, but the file at ${quarantined.path} failed to ` +
+          `load (${quarantined.error}), so no registry, framework-map or writable-root entry ` +
+          `names it.\n\n` +
+          `\`create\` would write a new copy that takes over the id, leaving that file exactly as ` +
+          `broken and unmentioned. Use \`action: "update"\` with the whole framework body ` +
+          `instead — that path repairs the refused file and reports whether it loads afterwards.`
+      );
+    }
+
     // Create framework data with available fields
     const frameworkData: FrameworkCreationData = {
       id,

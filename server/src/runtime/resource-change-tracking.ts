@@ -22,7 +22,11 @@ import {
   ResourceChangeTracker,
   TrackedResourceType,
 } from '#infra/observability/tracking/index.js';
-import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
+import {
+  isIgnoredPromptEntryName,
+  promptIdFromDirectory,
+  promptIdFromSingleFile,
+} from '#shared/utils/prompt-layout.js';
 
 /**
  * Singleton tracker instance for the application
@@ -93,8 +97,9 @@ export async function compareResourceBaseline(
   /**
    * Ask the quarantine by PATH, which is what this walk holds.
    *
-   * Deliberately not by id: this scan derives an id from the directory name, the prompt loader
-   * derives one relative to the category root, and the two disagree for every nested prompt. The
+   * Deliberately not by id, even now that this walk and the loader derive the same one (P4.28):
+   * two roots may legitimately serve the same id, which is the overlay contract, so an id is not a
+   * unique handle on a FILE. `ResourceQuarantine` is keyed by `(root, path)` for that reason. The
    * path is the one thing both sides hold unambiguously.
    */
   const isRefused = (filePath: string): boolean => quarantine?.isRefused(filePath) === true;
@@ -106,69 +111,63 @@ export async function compareResourceBaseline(
     const fsPromises = await import('node:fs/promises');
 
     /**
-     * Walk one level of the prompts tree.
+     * Record one resource, unless the layout says it is not one or the file is not there.
      *
-     * `depth` is 0 at the prompts ROOT and counts levels below it. It is load-bearing rather than
-     * bookkeeping: the loader takes its categories from the root's DIRECTORIES
-     * (`discoverCategoryDirectories`) and only looks for single-file prompts inside one, so a
-     * `.yaml` sitting directly at the root is never served and must not be announced as added.
+     * `resourceId === undefined` is `#shared/utils/prompt-layout.js` declining the entry — a
+     * reserved filename, or a location the loader does not serve a prompt from — so the two
+     * questions a walk has to get right collapse into one `if` that cannot be half-applied.
      */
-    const scanDir = async (
-      dir: string,
+    const recordResource = (
       resourceType: TrackedResourceType,
-      depth = 0
-    ): Promise<void> => {
+      resourceId: string | undefined,
+      filePath: string
+    ): void => {
+      if (resourceId === undefined || !fs.existsSync(filePath)) return;
+      resources.push({ resourceType, resourceId, filePath, refused: isRefused(filePath) });
+    };
+
+    /**
+     * Walk the prompts tree the way the loader walks it.
+     *
+     * THREE QUESTIONS, ALL OF THEM ANSWERED IN `#shared/utils/prompt-layout.js`: which entries to
+     * skip, which files are prompts and where they may sit, and what id each is served under. Only
+     * the filename half was shared before P4.28. This walk stopped descending at any directory
+     * holding `prompt.yaml` — on the reasoning that such a directory IS the resource rather than a
+     * container — while `discoverYamlPrompts` always recurses, because a chain directory holds its
+     * own definition AND its steps. Measured 2026-09-15: 15 shipped step prompts sit below that
+     * line (`examples/deep_analysis`, `planning/implementation_plan`, `examples/quick_decision`,
+     * `codebase-setup/scaffold_project`), so an external edit to any of them reached this
+     * comparison as nothing at all — no `added`, no `modified`, no `removed`.
+     *
+     * `depth` is gone with it. It existed to keep a root-level `.yaml` out of the results, and
+     * that is now a property of the id derivation rather than of the walk's bookkeeping: a file
+     * whose only segment IS its category has no id, and the shared module says so.
+     */
+    const scanDir = async (dir: string, resourceType: TrackedResourceType): Promise<void> => {
       try {
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
+          // The loader's first act on every entry, file or directory. Without it this walk would
+          // descend into `_drafts/` and announce everything below it.
+          if (isIgnoredPromptEntryName(entry.name)) continue;
+
           const entryPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            // Check for prompt.yaml inside directory
-            const promptYaml = path.join(entryPath, 'prompt.yaml');
-            const gateYaml = path.join(entryPath, 'gate.yaml');
-            const hasPromptYaml = fs.existsSync(promptYaml);
-            const hasGateYaml = fs.existsSync(gateYaml);
-
-            if (hasPromptYaml) {
-              resources.push({
-                resourceType,
-                resourceId: entry.name,
-                filePath: promptYaml,
-                refused: isRefused(promptYaml),
-              });
-            }
-            if (hasGateYaml) {
-              resources.push({
-                resourceType: 'gate',
-                resourceId: entry.name,
-                filePath: gateYaml,
-                refused: isRefused(gateYaml),
-              });
-            }
-
-            // Only recurse into directories that don't contain resource files
-            // (directories with prompt.yaml/gate.yaml ARE the resource, not containers)
-            if (!hasPromptYaml && !hasGateYaml) {
-              await scanDir(entryPath, resourceType, depth + 1);
-            }
-          } else if (depth > 0 && isSingleFilePromptName(entry.name)) {
-            // Single-file YAML prompt: `{category}/{id}.yaml`.
-            //
-            // The filename rule is `#shared/utils/prompt-layout.js`, shared with the prompt loader
-            // that defines the catalog and with `ResourceIndexer`, because this walk used to have
-            // its own and it was wrong. It excluded only a leading `_`, so `category.yaml` — which
-            // ships under `resources/prompts/guidance/` and is a category declaration, not a
-            // prompt — was reported at every startup as an external addition of a prompt with the
-            // id `category`. That is the same "logged as added for a file that never entered the
-            // catalog" defect the quarantine closed, surviving in the branch it did not touch.
-            const id = singleFilePromptBaseName(entry.name);
-            resources.push({
-              resourceType,
-              resourceId: id,
-              filePath: entryPath,
-              refused: isRefused(entryPath),
-            });
+          if (!entry.isDirectory()) {
+            recordResource(resourceType, promptIdFromSingleFile(promptsPath, entryPath), entryPath);
+            continue;
           }
+
+          recordResource(
+            resourceType,
+            promptIdFromDirectory(promptsPath, entryPath),
+            path.join(entryPath, 'prompt.yaml')
+          );
+          // Gates keep their directory name as their id: the gate layout is flat
+          // (`{root}/{id}/gate.yaml`) and has no category level for a path-derived id to strip.
+          recordResource('gate', entry.name, path.join(entryPath, 'gate.yaml'));
+
+          // Finding a definition is NOT a reason to stop — that was the defect.
+          await scanDir(entryPath, resourceType);
         }
       } catch (error) {
         logger.debug(`Error scanning directory ${dir}:`, error);

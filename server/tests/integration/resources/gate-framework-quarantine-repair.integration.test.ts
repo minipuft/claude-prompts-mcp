@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it, beforeAll, afterAll, jest } from '@jest/globals';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -415,6 +415,37 @@ const FRAMEWORK_GUIDANCE_MARKER = 'FRAMEWORK_BODY_THAT_NEVER_LOADED';
 /** A SHIPPED framework id a workspace file can shadow. Present in `server/resources/frameworks`. */
 const SHADOWED_ID = 'cageerf';
 
+/** An id whose ONLY file is a refused one, in a root the writer does not resolve into (P4.24). */
+const ELSEWHERE_ONLY_ID = 'elsewherefw';
+
+/**
+ * A `create` payload that passes validation, so a refusal can only come from an existence check.
+ *
+ * Load-bearing for the P4.24 falsifier rather than fixture noise: `handleCreate` validates AFTER
+ * the existence checks, so an incomplete payload is refused either way and the test would pass
+ * against the very code it is supposed to fail against.
+ */
+const validCreateArgs = (id: string, marker: string): FrameworkManagerInput => ({
+  action: 'create',
+  id,
+  name: `${id} framework`,
+  system_prompt_guidance: marker,
+  phases: [
+    { id: 'phase1', name: 'Phase 1', description: 'First phase' },
+    { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
+  ],
+  framework_gates: [
+    {
+      id: 'phase1_gate',
+      name: 'Phase 1 Gate',
+      description: 'Validates phase 1',
+      frameworkArea: 'Phase 1',
+      priority: 'high',
+      validationCriteria: ['Criteria 1'],
+    },
+  ],
+});
+
 function frameworkYaml(id: string, opts: { valid: boolean }): string {
   return [
     `id: ${id}`,
@@ -438,6 +469,17 @@ function writeFramework(root: string, id: string, body: string): string {
 describe('a framework file the loader refused is reachable and repairable (P4.15)', () => {
   let writable: string;
   let bundled: string;
+  /**
+   * A third, READ-ONLY-in-practice root, holding one framework whose only file is refused.
+   *
+   * The two roots above cannot express the P4.24 case. A broken file in `writable` is caught by
+   * `checkFrameworkExists`'s filesystem source, and the real bundled tree cannot hold a broken
+   * fixture — `FrameworkRegistry.loadBuiltInGuides` throws unless every shipped id resolves. This
+   * root is an additional loader root that the writer never resolves into, which is exactly the
+   * shape an overlay install has: a framework that exists on disk, is absent from all three
+   * existence sources, and is not where `create` would write.
+   */
+  let extraRoot: string;
   let dbRoot: string;
   let dbManager: SqliteEngine;
   let handler: FrameworkToolHandler;
@@ -465,12 +507,19 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     writeFramework(writable, 'partialfw', frameworkYaml('partialfw', { valid: false }));
     writeFramework(writable, SHADOWED_ID, frameworkYaml(SHADOWED_ID, { valid: false }));
 
+    extraRoot = mkdtempSync(join(tmpdir(), 'fw-repair-extra-'));
+    writeFramework(
+      extraRoot,
+      ELSEWHERE_ONLY_ID,
+      frameworkYaml(ELSEWHERE_ONLY_ID, { valid: false })
+    );
+
     // `FrameworkManager` builds its registry with no loader config, so the registry falls through
     // to the process-default runtime loader — which is exactly how `module-initializer` points it
     // at the resolved roots. Seeding it here is that same call, not a test-only hook.
     getDefaultRuntimeLoader({
       frameworksDir: writable,
-      additionalFrameworksDirs: [bundled],
+      additionalFrameworksDirs: [bundled, extraRoot],
     });
 
     const frameworkManager = await createFrameworkManager(silentLogger());
@@ -499,6 +548,7 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     warnSpy.mockRestore();
     // Only the temp roots are removed. `bundled` is the repository's own resources tree.
     rmSync(writable, { recursive: true, force: true });
+    rmSync(extraRoot, { recursive: true, force: true });
     rmSync(dbRoot, { recursive: true, force: true });
   });
 
@@ -609,13 +659,13 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
   });
 
   // ==========================================================================
-  // P4.19 — the framework premise, pinned rather than assumed
+  // P4.19 / P4.24 — `create` is no longer the silent overwrite path for frameworks either
   // ==========================================================================
 
-  it('PREMISE — create on a quarantined framework already refuses, via the directory check', async () => {
-    // P4.19 changed the GATE path only, on the stated premise that `checkFrameworkExists`
-    // consults the filesystem rather than the registry and therefore already refuses here. A
-    // premise nothing asserts is the kind that quietly stops holding.
+  it('the directory check refuses a quarantined framework in the WRITABLE root, as it always did', async () => {
+    // P4.19 changed the GATE path only, on the stated premise that `checkFrameworkExists` consults
+    // the filesystem and therefore already refuses here. The premise holds for exactly this case —
+    // a refused file in the root the writer resolves — and P4.24 below is where it stopped.
     const partialPath = join(writable, 'partialfw', 'framework.yaml');
     const before = readFileSync(partialPath, 'utf8');
 
@@ -625,6 +675,39 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     expect(result.body).toContain('already exists');
     expect(result.body).toContain('filesystem');
     expect(readFileSync(partialPath, 'utf8')).toBe(before);
+  });
+
+  it('FALSIFIER (P4.24) — create on a framework refused in another root is refused, naming the file and `update`', async () => {
+    const refusedPath = join(extraRoot, ELSEWHERE_ONLY_ID, 'framework.yaml');
+    const before = readFileSync(refusedPath, 'utf8');
+
+    // PREMISE, measured rather than assumed: all three existence sources say this id is free. The
+    // registry and framework map never got an entry, and `frameworkExists` resolves the writable
+    // root, where nothing was written. That is why `create` used to succeed here.
+    expect(existsSync(join(writable, ELSEWHERE_ONLY_ID))).toBe(false);
+
+    const result = await call(validCreateArgs(ELSEWHERE_ONLY_ID, 'this create must not land'));
+
+    expect(result.isError).toBe(true);
+    expect(result.body).toContain(refusedPath);
+    expect(result.body).toContain('update');
+    // Not the `already exists in: …` message — that branch never fires for this id, which is the
+    // whole defect. A test accepting any refusal would pass against the pre-fix code the moment
+    // some other guard happened to trip.
+    expect(result.body).toContain('failed to load');
+
+    // The refusal is a refusal, not a warning attached to a write that happened anyway — and the
+    // write would have landed in `writable`, not over the refused file, so both are checked.
+    expect(readFileSync(refusedPath, 'utf8')).toBe(before);
+    expect(existsSync(join(writable, ELSEWHERE_ONLY_ID))).toBe(false);
+  });
+
+  it('POSITIVE CONTROL — create on a genuinely unused id still succeeds', async () => {
+    // The discriminating half: a fix that refused every create would satisfy the case above.
+    const result = await call(validCreateArgs('freshfw', 'a framework nothing on disk claimed'));
+
+    expect(result.isError).toBe(false);
+    expect(readFileSync(join(writable, 'freshfw', 'framework.yaml'), 'utf8')).toContain('freshfw');
   });
 
   // ==========================================================================
