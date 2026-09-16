@@ -44,7 +44,11 @@ import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Logger } from '../logging/index.js';
 
 import { computeContentHash } from '#shared/utils/hash.js';
-import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
+import {
+  isReservedPromptDirectoryName,
+  isSingleFilePromptName,
+  singleFilePromptBaseName,
+} from '#shared/utils/prompt-layout.js';
 
 /**
  * Resource types supported by the indexer
@@ -947,7 +951,9 @@ export class ResourceIndexer {
         await this.scanSingleFilePrompt({ entry, dir, type, root, depth, results, result });
         continue;
       }
-      if (!entry.isDirectory() || entry.name === 'tools') continue;
+      // The reserved-directory rule, read from the module that states it rather than from a
+      // literal here. This walk was the only one enforcing it while the other two recursed in.
+      if (!entry.isDirectory() || isReservedPromptDirectoryName(entry.name)) continue;
 
       const subDir = path.join(dir, entry.name);
       const found = await this.readResourceDir(subDir, root, yamlFile);
