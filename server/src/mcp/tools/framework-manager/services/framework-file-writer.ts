@@ -80,6 +80,142 @@ interface FrameworkWritePlan {
 // Service Implementation
 // ============================================================================
 
+/** Which of the two YAML documents a mapped field may be read from. */
+type MappedFieldSource = 'framework' | 'phases';
+
+/** The shape a raw value must have before it is accepted into the authoring payload. */
+type MappedFieldAccept = 'array' | 'present' | 'string' | 'boolean';
+
+interface MappedFrameworkField {
+  /** Key on `FrameworkCreationData` this lands under. */
+  readonly key: string;
+  /**
+   * Documents and keys to try IN ORDER. Mirrors the `??` chains this replaced, so a `null` at an
+   * earlier position falls through to a later one exactly as it did before.
+   */
+  readonly lookup: ReadonlyArray<readonly [MappedFieldSource, string]>;
+  readonly accept: MappedFieldAccept;
+}
+
+const ACCEPTS: Record<MappedFieldAccept, (value: unknown) => boolean> = {
+  array: (v) => Array.isArray(v),
+  present: (v) => v !== undefined && v !== null,
+  string: (v) => typeof v === 'string',
+  boolean: (v) => typeof v === 'boolean',
+};
+
+/**
+ * Every field `toFrameworkCreationData` reads back, declared once.
+ *
+ * YAML stores these camelCase (`frameworkGates`); the authoring payload spells them snake_case
+ * (`framework_gates`). Both are accepted on read, which is why several entries carry two lookups.
+ * ADDING A FIELD TO THE FRAMEWORK SCHEMA MEANS ADDING A ROW HERE — that coupling is the point:
+ * before this table, two fields were written to disk and never read back and nothing noticed.
+ */
+const MAPPED_FRAMEWORK_FIELDS: readonly MappedFrameworkField[] = [
+  { key: 'description', lookup: [['framework', 'description']], accept: 'string' },
+  { key: 'type', lookup: [['framework', 'type']], accept: 'string' },
+  { key: 'enabled', lookup: [['framework', 'enabled']], accept: 'boolean' },
+  { key: 'gates', lookup: [['framework', 'gates']], accept: 'present' },
+  { key: 'tool_descriptions', lookup: [['framework', 'tool_descriptions']], accept: 'present' },
+  { key: 'phases', lookup: [['phases', 'phases']], accept: 'array' },
+  {
+    key: 'framework_gates',
+    lookup: [
+      ['framework', 'frameworkGates'],
+      ['phases', 'framework_gates'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'processing_steps',
+    lookup: [
+      ['phases', 'processingSteps'],
+      ['phases', 'processing_steps'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'execution_steps',
+    lookup: [
+      ['phases', 'executionSteps'],
+      ['phases', 'execution_steps'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'quality_indicators',
+    lookup: [
+      ['phases', 'qualityIndicators'],
+      ['phases', 'quality_indicators'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'template_enhancements',
+    lookup: [
+      ['phases', 'templateEnhancements'],
+      ['phases', 'template_enhancements'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'execution_flow',
+    lookup: [
+      ['phases', 'executionFlow'],
+      ['phases', 'execution_flow'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'execution_type_enhancements',
+    lookup: [
+      ['phases', 'executionTypeEnhancements'],
+      ['phases', 'execution_type_enhancements'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'framework_elements',
+    lookup: [
+      ['framework', 'frameworkElements'],
+      ['phases', 'framework_elements'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'argument_suggestions',
+    lookup: [
+      ['framework', 'argumentSuggestions'],
+      ['phases', 'argument_suggestions'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'template_suggestions',
+    lookup: [
+      ['framework', 'templateSuggestions'],
+      ['phases', 'template_suggestions'],
+    ],
+    accept: 'array',
+  },
+];
+
+/**
+ * Walk a field's lookup chain and return the first value that is neither `undefined` nor `null`.
+ * Skipping `null` reproduces `??`, which is what the hand-written chains used.
+ */
+function resolveMappedValue(
+  field: MappedFrameworkField,
+  sources: Record<MappedFieldSource, Record<string, unknown>>
+): unknown {
+  for (const [source, key] of field.lookup) {
+    const value = sources[source][key];
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
 export class FrameworkFileWriter {
   private logger: Logger;
   private configManager: ConfigManager;
@@ -214,6 +350,17 @@ export class FrameworkFileWriter {
    * @param existing - Raw framework data loaded from disk
    * @returns Typed FrameworkCreationData or null if essential fields missing
    */
+  /**
+   * Read one framework.yaml/phases.yaml document back into the authoring payload shape.
+   *
+   * The field-by-field mapping is DECLARED in `MAPPED_FRAMEWORK_FIELDS` rather than written as one
+   * `if` per field (P4.13). Fifteen near-identical blocks put this function at cognitive
+   * complexity 28 against the ≤15 limit, and — the reason that mattered — two of the eleven
+   * advanced fields were simply missing from the sequence with nothing to notice it: `judge_prompt`
+   * and `execution_type_enhancements` were written to disk and never read back, for as long as
+   * they had existed (P4-F12). A table cannot silently omit an entry the way a sequence of blocks
+   * can, because the entry is the thing you add.
+   */
   toFrameworkCreationData(
     id: string,
     existing: ExistingFrameworkData
@@ -241,104 +388,25 @@ export class FrameworkFileWriter {
       system_prompt_guidance: systemGuidance,
     };
 
-    // Map optional fields from framework.yaml (use bracket notation)
-    const rawDescription = framework['description'];
-    const rawType = framework['type'];
-    const rawEnabled = framework['enabled'];
-    const rawGates = framework['gates'];
-    const rawToolDescriptions = framework['tool_descriptions'];
-
-    if (typeof rawDescription === 'string') data.description = rawDescription;
-    if (typeof rawType === 'string') data.type = rawType;
-    if (typeof rawEnabled === 'boolean') data.enabled = rawEnabled;
-    if (rawGates !== undefined && rawGates !== null) {
-      data.gates = rawGates;
-    }
-    if (rawToolDescriptions !== undefined && rawToolDescriptions !== null) {
-      data.tool_descriptions = rawToolDescriptions as NonNullable<
-        FrameworkCreationData['tool_descriptions']
-      >;
-    }
     // `existing.judgePrompt` is already inlined from `judgePromptFile` by `loadExistingFramework`
-    // (above) — this was the one advanced field that read-back reached (P4.11 measured) but never
-    // carried into `FrameworkCreationData`, so `inspect` could never surface it regardless of
-    // renderer. Same "loaded and thrown away" shape as the other ten, just one call deeper.
+    // (above), so it is the one mapped field whose source is neither YAML document. It stays
+    // outside the table for that reason rather than by oversight.
     if (typeof existing.judgePrompt === 'string') {
       data.judge_prompt = existing.judgePrompt;
     }
 
-    // Map phases-related fields (may come from phases.yaml or framework.yaml)
-    // YAML uses camelCase (frameworkGates); framework_gates is the snake_case authoring-payload
-    // key. Accept both on read.
+    // `phases.yaml` is optional; when absent every phases-side key is read off framework.yaml.
     const phasesSource = phases ?? framework;
-    const rawPhases = phasesSource['phases'];
-    const rawFrameworkGates = framework['frameworkGates'] ?? phasesSource['framework_gates'];
-    const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
-    const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
-    const rawQualityIndicators =
-      phasesSource['qualityIndicators'] ?? phasesSource['quality_indicators'];
-    const rawTemplateEnhancements =
-      phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
-    const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
-    const rawExecutionTypeEnhancements =
-      phasesSource['executionTypeEnhancements'] ?? phasesSource['execution_type_enhancements'];
-    const rawFrameworkElements =
-      framework['frameworkElements'] ?? phasesSource['framework_elements'];
-    const rawArgumentSuggestions =
-      framework['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
-    const rawTemplateSuggestions =
-      framework['templateSuggestions'] ?? phasesSource['template_suggestions'];
+    const sources: Record<MappedFieldSource, Record<string, unknown>> = {
+      framework,
+      phases: phasesSource,
+    };
 
-    if (Array.isArray(rawPhases)) {
-      data.phases = rawPhases as NonNullable<FrameworkCreationData['phases']>;
-    }
-    if (Array.isArray(rawFrameworkGates)) {
-      data.framework_gates = rawFrameworkGates as NonNullable<
-        FrameworkCreationData['framework_gates']
-      >;
-    }
-    if (Array.isArray(rawProcessingSteps)) {
-      data.processing_steps = rawProcessingSteps as NonNullable<
-        FrameworkCreationData['processing_steps']
-      >;
-    }
-    if (Array.isArray(rawExecutionSteps)) {
-      data.execution_steps = rawExecutionSteps as NonNullable<
-        FrameworkCreationData['execution_steps']
-      >;
-    }
-    if (rawQualityIndicators !== undefined && rawQualityIndicators !== null) {
-      data.quality_indicators = rawQualityIndicators as NonNullable<
-        FrameworkCreationData['quality_indicators']
-      >;
-    }
-    if (rawTemplateEnhancements !== undefined && rawTemplateEnhancements !== null) {
-      data.template_enhancements = rawTemplateEnhancements;
-    }
-    if (rawExecutionFlow !== undefined && rawExecutionFlow !== null) {
-      data.execution_flow = rawExecutionFlow;
-    }
-    // P4.11 measured: written by `writeFrameworkFiles` (`phasesData['executionTypeEnhancements']`
-    // below) but never mapped back here — the one advanced field that had neither a read-back nor
-    // a WRITTEN-then-thrown-away shape; it was simply never read. Same class as `judge_prompt`
-    // above, caught by the same create-then-inspect proof.
-    if (rawExecutionTypeEnhancements !== undefined && rawExecutionTypeEnhancements !== null) {
-      data.execution_type_enhancements = rawExecutionTypeEnhancements;
-    }
-    if (rawFrameworkElements !== undefined && rawFrameworkElements !== null) {
-      data.framework_elements = rawFrameworkElements as NonNullable<
-        FrameworkCreationData['framework_elements']
-      >;
-    }
-    if (Array.isArray(rawArgumentSuggestions)) {
-      data.argument_suggestions = rawArgumentSuggestions as NonNullable<
-        FrameworkCreationData['argument_suggestions']
-      >;
-    }
-    if (Array.isArray(rawTemplateSuggestions)) {
-      data.template_suggestions = rawTemplateSuggestions as NonNullable<
-        FrameworkCreationData['template_suggestions']
-      >;
+    for (const field of MAPPED_FRAMEWORK_FIELDS) {
+      const value = resolveMappedValue(field, sources);
+      if (value !== undefined && ACCEPTS[field.accept](value)) {
+        (data as unknown as Record<string, unknown>)[field.key] = value;
+      }
     }
 
     return data;

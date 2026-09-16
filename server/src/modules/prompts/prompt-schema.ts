@@ -356,6 +356,78 @@ export const CategorySchema = z.object({
 
 export type CategoryYaml = z.infer<typeof CategorySchema>;
 
+/**
+ * Result of category schema validation.
+ *
+ * Same shape as `PromptSchemaValidationResult` / `GateSchemaValidationResult` because
+ * `ResourceVerificationService` switches over all three and reads exactly these three fields.
+ */
+export interface CategorySchemaValidationResult {
+  /** Whether validation passed */
+  valid: boolean;
+  /** Validation errors (blocking issues) */
+  errors: string[];
+  /** Validation warnings (non-blocking issues) */
+  warnings: string[];
+  /** Parsed data if validation passed */
+  data?: CategoryYaml;
+}
+
+/**
+ * Validate a `category.yaml` document against `CategorySchema`.
+ *
+ * WHY THIS EXISTS RATHER THAN `isValidCategory` (P4.7, 2026-09-11).
+ * `category.yaml` is the one resource document nothing validates ON LOAD: `loader.ts` reads it
+ * with a bare `loadYamlFileSync(...) as Partial<Category>` cast, so a malformed file degrades
+ * silently to the loader's derived defaults instead of failing. The tool that writes the file
+ * therefore cannot assume the loader will catch its output — it has to be the check. A refusal
+ * has to name the field that failed, and `isValidCategory` returns a boolean, so it cannot be
+ * that check. `CategorySchema` stays the single owner of the shape; this is the entry point that
+ * can report against it.
+ *
+ * `expectedId` mirrors `validateGateSchema`/`validatePromptYaml`, and matters MORE here than for
+ * either: the loader derives a category's id from the DIRECTORY NAME and never reads the `id`
+ * key, so a file whose `id` disagrees with its directory is served under the directory's name
+ * while declaring another. That divergence is unobservable at load; it is refused at write.
+ *
+ * @param data - Raw YAML data to validate
+ * @param expectedId - Expected ID (the category directory name)
+ */
+export function validateCategorySchema(
+  data: unknown,
+  expectedId?: string
+): CategorySchemaValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const result = CategorySchema.safeParse(data);
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const path = issue.path.length > 0 ? `${issue.path.join('.')}: ` : '';
+      errors.push(`${path}${issue.message}`);
+    }
+    return { valid: false, errors, warnings };
+  }
+
+  const definition = result.data;
+
+  if (expectedId !== undefined && definition.id !== expectedId) {
+    errors.push(`ID '${definition.id}' does not match directory '${expectedId}'`);
+  }
+
+  const validationResult: CategorySchemaValidationResult = {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+
+  if (errors.length === 0) {
+    validationResult.data = definition;
+  }
+
+  return validationResult;
+}
+
 // ============================================
 // Main Prompt Data Schema
 // ============================================
@@ -869,6 +941,12 @@ export function isValidPromptData(data: unknown): data is PromptDataYaml {
 
 /**
  * Check if a value is a valid category definition.
+ *
+ * NOT the check a WRITE should use — `validateCategorySchema` is (P4.7). A boolean cannot name
+ * the field that failed, and `category.yaml` is validated nowhere else: `loader.ts` casts the
+ * parsed document rather than parsing it, so a refusal at write time is the only signal an
+ * operator ever gets about a malformed one. Kept as the type guard it is, alongside the
+ * identically-shaped `isValidPromptData` / `isValidGateDefinition`.
  *
  * @param data - Value to check
  * @returns true if data is a valid category definition

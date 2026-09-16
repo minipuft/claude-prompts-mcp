@@ -280,14 +280,6 @@ describe('Schema version bump', () => {
     expect(row?.resource_id).toBe('survives-bump');
   });
 
-  it('carries no stale one-time exclusion into this bump', () => {
-    // The gate that forces the retirement lives in validate:table-contracts and in
-    // snapshotDurableTables(); this asserts the observable consequence rather than the constant.
-    // A non-empty DROPPED_ON_THIS_BUMP declared for an older SCHEMA_VERSION throws on init, so
-    // reaching this line at all means the two are consistent.
-    expect(engine.isInitialized()).toBe(true);
-  });
-
   it('preserves skills_sync_manifests rows across the recreate', () => {
     const row = engine.queryOne<{ resource_key: string; output_files: string }>(
       `SELECT resource_key, output_files FROM skills_sync_manifests WHERE client = ? AND scope = ?`,

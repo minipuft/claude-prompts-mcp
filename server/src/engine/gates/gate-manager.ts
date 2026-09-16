@@ -26,6 +26,7 @@ import type { IGateManager } from './types.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
+import { lazyQuarantineView, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Configuration for GateManager
@@ -274,6 +275,17 @@ export class GateManager
   getGateRegistry(): GateRegistry {
     this.ensureInitialized();
     return this.registry!;
+  }
+
+  /**
+   * Live view of the gate files the loader refused.
+   *
+   * Resolved on every call rather than bound once: the registry — and with it the loader that owns
+   * the collection — is built inside `initialize()`, so anything captured at construction would be
+   * the empty stand-in forever. Callers hold this manager, which is stable, and ask it each time.
+   */
+  getQuarantine(): QuarantineView {
+    return lazyQuarantineView(() => this.registry?.getLoader().getQuarantine());
   }
 
   /**

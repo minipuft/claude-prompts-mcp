@@ -3,9 +3,10 @@
  *
  * Classification: integration. Real `PromptLifecycleProcessor` and `PromptVersioningProcessor`,
  * real `FileOperations` writing into temp directories, real loader + converter for the refresh.
- * The gate and framework cases use their real lifecycle and versioning processors over the real
- * `GateFileWriter` and `FrameworkFileWriter`, with a disk-reading registry double. The version seam
- * is a double throughout: its rows are not what these tests compare.
+ * The gate, framework and category cases use their real lifecycle and versioning processors over
+ * the real `GateFileWriter`, `FrameworkFileWriter` and `CategoryFileWriter`, with a disk-reading
+ * registry double for gates. The version seam is a double throughout: its rows are not what these
+ * tests compare.
  *
  * The property is checked the way a reader relies on a preview: apply the preview's diff to the
  * files as they were, and the result must be the files as the write left them — with no changed
@@ -30,6 +31,10 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
+import { CategoryFileWriter } from '../../../src/mcp/tools/category-manager/services/category-file-writer.js';
+import { CategoryLifecycleProcessor } from '../../../src/mcp/tools/category-manager/services/category-lifecycle-processor.js';
+import { categorySnapshotContract } from '../../../src/mcp/tools/category-manager/services/category-snapshot-contract.js';
+import { CategoryVersioningProcessor } from '../../../src/mcp/tools/category-manager/services/category-versioning-processor.js';
 import { FrameworkFileWriter } from '../../../src/mcp/tools/framework-manager/services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-lifecycle-processor.js';
 import { frameworkSnapshotContract } from '../../../src/mcp/tools/framework-manager/services/framework-snapshot-contract.js';
@@ -52,6 +57,8 @@ import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
 import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 
+import type { CategoryResourceContext } from '../../../src/mcp/tools/category-manager/core/context.js';
+import type { CategoryManagerInput } from '../../../src/mcp/tools/category-manager/core/types.js';
 import type { FrameworkResourceContext } from '../../../src/mcp/tools/framework-manager/core/context.js';
 import type { FrameworkManagerInput } from '../../../src/mcp/tools/framework-manager/core/types.js';
 import type { GateResourceContext } from '../../../src/mcp/tools/gate-manager/core/context.js';
@@ -503,6 +510,11 @@ describe('a preview names the files and lines its write changes', () => {
 
 const GATE_ID = 'preview-probe';
 const FRAMEWORK_ID = 'preview-probe';
+const CATEGORY_ID = 'preview-probe-category';
+
+const CATEGORY_DESCRIPTION = `The authored description. ${LONG_LINE}`;
+const CATEGORY_DESCRIPTION_EDITED = `The edited description. ${LONG_LINE}`;
+const CATEGORY_DESCRIPTION_RECORDED = `The description version 1 recorded. ${LONG_LINE}`;
 
 const GUIDANCE = ['## Check', LONG_LINE, 'Report every gap.', ''].join('\n');
 const GUIDANCE_EDITED = ['## Check', LONG_LINE, 'Report every gap, and name its owner.', ''].join(
@@ -693,7 +705,83 @@ function createFrameworkHarness(frameworksDir: string, bundledDir?: string): Fra
   };
 }
 
-describe('a gate or framework diff names the files and lines its write changes', () => {
+interface CategoryHarness {
+  lifecycle: CategoryLifecycleProcessor;
+  versioning: CategoryVersioningProcessor;
+  recordEditResult: VersionSeamMock;
+  resolveRollbackTarget: VersionSeamMock;
+}
+
+/** Real category processors and writer over `promptsDir`, the writable prompts root. */
+function createCategoryHarness(promptsDir: string): CategoryHarness {
+  const logger = createLogger();
+  const configManager = {
+    getResolvedPromptsDirectory: () => promptsDir,
+    getBundledResourceDirectory: () => undefined,
+  } as unknown as ConfigManager;
+  const versions = createVersionSeam();
+  const context = {
+    logger,
+    configManager,
+    textDiffService: new ObjectDiffGenerator(),
+    versionHistoryService: versions.service,
+    categoryFileService: new CategoryFileWriter({ logger, configManager }),
+    onRefresh: jest.fn(async () => {}),
+  } as unknown as CategoryResourceContext;
+
+  return {
+    lifecycle: new CategoryLifecycleProcessor(context),
+    versioning: new CategoryVersioningProcessor(context),
+    recordEditResult: versions.recordEditResult,
+    resolveRollbackTarget: versions.resolveRollbackTarget,
+  };
+}
+
+/**
+ * A hand-authored `category.yaml`, plus a prompt the category holds.
+ *
+ * Authored rather than written by the writer, on purpose: the comment, the `description`-before-`id`
+ * key order and the over-wide description are all things a write REPLACES and a comparison of two
+ * recorded field maps cannot see. A diff built from the snapshots reports the one field the caller
+ * changed; the write rewrites the whole document. The prompt is here for the other half — a
+ * category write never touches the prompts its directory holds, so no diff of one may name them.
+ */
+function seedCategory(promptsDir: string, id: string): void {
+  const promptDir = join(promptsDir, id, 'held-prompt');
+  mkdirSync(promptDir, { recursive: true });
+  writeFileSync(
+    join(promptsDir, id, 'category.yaml'),
+    [
+      '# Authored by hand, before this file could be written through the tool.',
+      `description: ${CATEGORY_DESCRIPTION}`,
+      'name: Preview Probe Category',
+      `id: ${id}`,
+      'mcpPromptMode: expand',
+      '',
+    ].join('\n')
+  );
+  writeFileSync(
+    join(promptDir, 'prompt.yaml'),
+    [
+      'id: held-prompt',
+      'name: Held Prompt',
+      `category: ${id}`,
+      'description: A prompt the category holds and no category write touches',
+      'userMessageTemplateFile: user-message.md',
+      '',
+    ].join('\n')
+  );
+  writeFileSync(join(promptDir, 'user-message.md'), TEMPLATE);
+}
+
+/** The `category.yaml` on disk, parsed — what a version records, per `categorySnapshotContract`. */
+function declaredCategory(promptsDir: string, id: string): Record<string, unknown> {
+  return parseYamlOrThrow<Record<string, unknown>>(
+    readFileSync(join(promptsDir, id, 'category.yaml'), 'utf8')
+  );
+}
+
+describe('a gate, framework or category diff names the files and lines its write changes', () => {
   const roots: string[] = [];
   const tempRoot = (): string => {
     const dir = mkdtempSync(join(tmpdir(), 'cpm-preview-write-'));
@@ -850,6 +938,66 @@ describe('a gate or framework diff names the files and lines its write changes',
       expectDiffReproducesWrite(fencedDiffOf(update), bundledBefore, readTree(writableDir))
     ).toEqual([`${FRAMEWORK_ID}/framework.yaml`]);
   });
+
+  test('category update: a description edit is reported as the rewrite of category.yaml alone', async () => {
+    const promptsDir = tempRoot();
+    seedCategory(promptsDir, CATEGORY_ID);
+    const harness = createCategoryHarness(promptsDir);
+    const before = readTree(promptsDir);
+
+    const update = await harness.lifecycle.handleUpdate({
+      action: 'update',
+      id: CATEGORY_ID,
+      description: CATEGORY_DESCRIPTION_EDITED,
+    } as CategoryManagerInput);
+    expect(update.isError).toBe(false);
+
+    const diff = fencedDiffOf(update);
+    expect(expectDiffReproducesWrite(diff, before, readTree(promptsDir))).toEqual([
+      `${CATEGORY_ID}/category.yaml`,
+    ]);
+    // The version records the counts of the diff the update reports.
+    expect(harness.recordEditResult.mock.calls[0]?.[4]).toMatchObject({
+      diff_summary: countsOf(diff),
+    });
+  });
+
+  test('category rollback: the preview names category.yaml as the rollback writes it', async () => {
+    const promptsDir = tempRoot();
+    seedCategory(promptsDir, CATEGORY_ID);
+    const harness = createCategoryHarness(promptsDir);
+    // Rolled back straight from the hand-authored file, with no tool write in between — the state
+    // a category authored before P4.7 is actually in. What version 1 recorded is a description
+    // ago; what the file carries besides is a comment and its author's key order, which the write
+    // replaces and no comparison of two recorded field maps can see.
+    const recorded = categorySnapshotContract.project(CATEGORY_ID, {
+      ...declaredCategory(promptsDir, CATEGORY_ID),
+      description: CATEGORY_DESCRIPTION_RECORDED,
+    });
+    harness.resolveRollbackTarget.mockResolvedValue({ ok: true, entry: { snapshot: recorded } });
+
+    const before = readTree(promptsDir);
+    const preview = await harness.versioning.handleRollback({
+      action: 'preview',
+      preview_action: 'rollback',
+      id: CATEGORY_ID,
+      version: 1,
+    } as CategoryManagerInput);
+    expect(preview.isError).toBe(false);
+    expect(readTree(promptsDir)).toEqual(before);
+
+    const rollback = await harness.versioning.handleRollback({
+      action: 'rollback',
+      id: CATEGORY_ID,
+      version: 1,
+      confirm: true,
+    } as CategoryManagerInput);
+    expect(rollback.isError).toBe(false);
+
+    expect(expectDiffReproducesWrite(fencedDiffOf(preview), before, readTree(promptsDir))).toEqual([
+      `${CATEGORY_ID}/category.yaml`,
+    ]);
+  });
 });
 
 /**
@@ -863,9 +1011,10 @@ describe('preview coverage', () => {
     'prompt:rollback': 'rollback case above',
     'gate:rollback': 'gate rollback case above',
     'framework:rollback': 'framework rollback case above',
+    'category:rollback': 'category rollback case above',
   };
   /** A delete preview lists what would be removed; it renders no diff that could disagree. */
-  const RENDERS_NO_DIFF = ['prompt:delete', 'gate:delete', 'framework:delete'];
+  const RENDERS_NO_DIFF = ['prompt:delete', 'gate:delete', 'framework:delete', 'category:delete'];
 
   test('every previewable action is classified exactly once', () => {
     const previewable = Object.entries(PREVIEWABLE_ACTIONS_BY_TYPE)
@@ -910,6 +1059,7 @@ describe('preview coverage', () => {
     }
 
     expect(sites.sort()).toEqual([
+      'category-manager/services/category-versioning-processor.ts:handleCompare',
       'framework-manager/services/framework-versioning-processor.ts:handleCompare',
       'gate-manager/services/gate-versioning-processor.ts:handleCompare',
       'resource-manager/prompt/services/prompt-versioning-processor.ts:handleCompare',

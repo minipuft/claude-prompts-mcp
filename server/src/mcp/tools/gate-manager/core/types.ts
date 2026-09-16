@@ -31,6 +31,12 @@ export interface GateManagerInput {
   name?: string;
   type?: 'validation' | 'guidance';
   /**
+   * Gate classification, written to the gate.yaml key of the same name. Reaches `gate.yaml`
+   * through `PRESERVED_GATE_YAML_KEYS`, like `severity`/`enforcementMode`: supplied it is
+   * written, omitted it is carried forward from the existing file.
+   */
+  gate_type?: 'framework' | 'category' | 'custom';
+  /**
    * Severity for prioritization. Reaches `gate.yaml` through `PRESERVED_GATE_YAML_KEYS`:
    * supplied here it is written, omitted it is carried forward from the existing file, so an
    * update never silently resets a hand-authored value to the loader default.
@@ -115,9 +121,11 @@ export interface GateCreationData {
    * `resolvePreservedGateYamlFields` finds a supplied value by the same name it preserves.
    * Until P4.4 nothing populated these, and that resolver's supplied-value branch was
    * unreachable — it is the settable half of a preservation mechanism that already existed.
+   * `gate_type` joined them at P4.10, once the tool parameter holding its name was renamed.
    */
   severity?: GateManagerInput['severity'];
   enforcementMode?: GateManagerInput['enforcementMode'];
+  gate_type?: GateManagerInput['gate_type'];
   /** Same class as `severity`/`enforcementMode` above — settable half of `PRESERVED_GATE_YAML_KEYS`. */
   subject?: GateManagerInput['subject'];
 }

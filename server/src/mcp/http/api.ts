@@ -5,12 +5,12 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
 
 import express, { Request, Response } from 'express';
 
 import { ApiSecurityBoundary } from './api-security.js';
 import { PromptAuthorityApi } from './prompt-authority-api.js';
+import { CategoryFileWriter } from '../tools/category-manager/services/category-file-writer.js';
 import { McpToolRouter } from '../tools/index.js';
 import { validateCategoryName } from '../tools/resource-manager/prompt/utils/validation.js';
 
@@ -268,15 +268,20 @@ export class ApiRouter {
         return;
       }
 
-      const { id, name } = req.body;
+      const { id, name, description } = req.body;
 
-      // Categories are directory-based — create the category directory.
-      //
       // `id` arrives straight off the HTTP body. This is the same unvalidated-segment defect the
       // three MCP writers carried, on a surface the type-by-type fix did not reach — found by
       // enumerating every file that resolves a resource root and writes, which is what
-      // `validate:contained-resource-writes` now does on every run.
-      const promptsDir = this.configManager.getPromptsDirectory();
+      // `validate:resource-path-containment` now does on every run.
+      //
+      // P4.7 corrected the ROOT this resolves against. It read `getPromptsDirectory()` — the
+      // config file's literal value — while every category READ resolves through `PathResolver`,
+      // so under `MCP_RESOURCES_PATH` or `MCP_WORKSPACE` this endpoint created its directory in a
+      // tree the server does not serve from and then reported success. That is the D8 Arc 1
+      // read/write-disagreement defect at a fourth site, and the reason the MCP writers all call
+      // `getResolvedPromptsDirectory()`.
+      const promptsDir = this.configManager.getResolvedPromptsDirectory();
       let categoryDirPath: string;
       try {
         validateCategoryName(id);
@@ -295,7 +300,26 @@ export class ApiRouter {
         return;
       }
 
-      await mkdir(categoryDirPath, { recursive: true });
+      // P4.7 — this endpoint demanded `name` and `description`, rejected the request without
+      // them, and then wrote NEITHER: it created an empty directory, and the loader derived a
+      // name and description from the directory name. The two fields were phantom parameters on
+      // a write surface, and a caller who set them had no way to learn they were discarded.
+      //
+      // They reach `category.yaml` through the same `CategoryFileWriter` the MCP tool uses, so
+      // the two surfaces cannot disagree about what a declaration is or where it lands, and the
+      // write is validated and rolled back by the same transaction. `mkdir` is the writer's job
+      // now; it creates the directory as part of the same mutation.
+      const categoryWriter = new CategoryFileWriter({
+        logger: this.logger,
+        configManager: this.configManager,
+      });
+      const writeResult = await categoryWriter.writeCategoryFiles({ id, name, description });
+
+      if (!writeResult.success) {
+        this.logger.warn(`create_category failed to write a declaration: ${writeResult.error}`);
+        res.status(400).json({ error: 'Category declaration is invalid.' });
+        return;
+      }
 
       try {
         await this.reloadPromptData();

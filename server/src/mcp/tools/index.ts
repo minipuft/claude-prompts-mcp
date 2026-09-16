@@ -18,6 +18,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 
+import { CategoryToolHandler, createCategoryToolHandler } from './category-manager/index.js';
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
 import { PromptExecutor, createPromptExecutor } from './prompt-engine/index.js';
@@ -149,6 +150,7 @@ export class McpToolRouter {
   private promptResourceHandler!: PromptResourceHandler;
   private systemControl!: ConsolidatedSystemControl;
   private gateManagerTool!: GateToolHandler;
+  private categoryManagerTool!: CategoryToolHandler;
   private frameworkManagerTool!: FrameworkToolHandler;
   /** Database port received before `frameworkManagerTool` existed; applied at its construction. */
   private pendingDatabasePort?: {
@@ -266,6 +268,12 @@ export class McpToolRouter {
       onRestart
     );
 
+    // The loader's quarantine, bound by REFERENCE. Every later load writes through this same
+    // object, so `list`, `inspect` and the repair path in `update` see the current set without
+    // anything re-passing it. Wired here because this is the one place that holds both the
+    // prompt manager and the resource handler.
+    this.promptResourceHandler.setQuarantine(this.promptManager.getQuarantine());
+
     // Initialize 5 core consolidated tools
 
     this.systemControl = createConsolidatedSystemControl(this.logger, onRestart);
@@ -280,6 +288,15 @@ export class McpToolRouter {
     this.gateManagerTool = createGateToolHandler({
       logger: this.logger,
       gateManager: this.gateManager,
+      configManager: this.configManager,
+      onRefresh,
+    });
+
+    // Initialize category manager tool. Constructed HERE rather than beside the framework tool
+    // because it needs nothing the framework manager provides — and `onRefresh` is the whole of
+    // its registration route, so the earliest construction point is the correct one.
+    this.categoryManagerTool = createCategoryToolHandler({
+      logger: this.logger,
       configManager: this.configManager,
       onRefresh,
     });
@@ -351,6 +368,7 @@ export class McpToolRouter {
     this.promptExecutor.setDatabasePort(db, argHistoryStore);
     this.promptResourceHandler.setDatabasePort(db, scope);
     this.gateManagerTool.setDatabasePort(db, scope);
+    this.categoryManagerTool.setDatabasePort(db, scope);
     // The framework tool does not exist yet at the composition root's call order —
     // `module-initializer` calls this at :291 and `setFrameworkManager()` (which constructs the
     // tool) at :308. The existence guard below therefore never fired, and framework versioning
@@ -668,6 +686,7 @@ export class McpToolRouter {
         promptResourceHandler: this.promptResourceHandler,
         gateManager: this.gateManagerTool,
         frameworkManager: this.frameworkManagerTool,
+        categoryManager: this.categoryManagerTool,
       });
       this.logger.debug('ResourceManagerRouter initialized for unified resource management');
 

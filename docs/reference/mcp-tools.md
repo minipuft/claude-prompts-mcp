@@ -628,21 +628,33 @@ See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
 ## `resource_manager` — Unified Resource Management
 
-Create, update, delete, and manage prompts, gates, and frameworks through a single unified interface.
+Create, update, delete, and manage prompts, gates, frameworks, and prompt categories through a single unified interface.
 
 ### Basic Syntax
 
 ```bash
-resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
+resource_manager(resource_type:"prompt|gate|framework|category", action:"...", ...)
 ```
 
 ### Resource Types
 
-| Type        | Description                   | Specific Actions                         |
-| ----------- | ----------------------------- | ---------------------------------------- |
-| `prompt`    | Template and chain management | `analyze_type`, `analyze_gates`, `guide` |
-| `gate`      | Quality validation criteria   | —                                        |
-| `framework` | Execution frameworks          | `switch`                                 |
+| Type        | Description                     | Specific Actions                         |
+| ----------- | ------------------------------- | ---------------------------------------- |
+| `prompt`    | Template and chain management   | `analyze_type`, `analyze_gates`, `guide` |
+| `gate`      | Quality validation criteria     | —                                        |
+| `framework` | Execution frameworks            | `switch`                                 |
+| `category`  | A prompt category's declaration | —                                        |
+
+**`category` manages a `category.yaml`, not the directory of prompts around it.** A category
+exists because a directory exists under the prompts root; `category.yaml` is the optional document
+that gives it a name, a description, and the two MCP defaults its prompts inherit. So `create`
+succeeds on a directory that already holds prompts — that is the first declaration, not a
+duplicate — and `delete` removes the declaration and leaves every prompt in place, falling the
+category back to a name and description derived from its directory name. The directory is removed
+only when the declaration was the last thing in it.
+
+`reload` takes no `id` for this type. There is no per-category registry entry; the whole category
+set is rebuilt by the same walk that loads prompts.
 
 ### Common Actions
 
@@ -889,7 +901,7 @@ resource_manager(
   action:"create",
   id:"source-verification",
   name:"Source Verification",
-  gate_type:"validation",
+  type:"validation",
   description:"Ensures all claims are properly sourced",
   guidance:"All factual claims must cite sources. No unsourced statistics.",
   pass_criteria:["All claims have citations", "Sources are authoritative"]
@@ -927,6 +939,32 @@ resource_manager(
     {"id":"phase2", "name":"Solve", "description":"Implement solution"}
   ]
 )
+```
+
+### Categories
+
+```bash
+# List every category across the bundled, primary and overlay prompt roots
+resource_manager(resource_type:"category", action:"list")
+
+# Inspect one — renders only what category.yaml declares
+resource_manager(resource_type:"category", action:"inspect", id:"analysis")
+
+# Author the declaration a directory of prompts never had
+resource_manager(
+  resource_type:"category",
+  action:"create",
+  id:"analysis",
+  name:"Analysis",
+  description:"Analytical and research prompts",
+  mcp_prompt_mode:"launch"
+)
+
+# Change one field; the rest is carried forward from the file
+resource_manager(resource_type:"category", action:"update", id:"analysis", description:"Updated")
+
+# Remove the declaration. Prompts in the directory are NOT removed.
+resource_manager(resource_type:"category", action:"delete", id:"analysis", confirm:true)
 ```
 
 <details>
@@ -977,7 +1015,8 @@ older history rows, so restoring one could silently freeze a prompt that never d
 
 | Parameter          | Purpose                                                                      |
 | ------------------ | ---------------------------------------------------------------------------- |
-| `gate_type`        | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `type`             | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `gate_type`        | `framework` \| `category` \| `custom`. Default `custom`                      |
 | `severity`         | `critical` \| `high` \| `medium` \| `low`. Default `medium`                  |
 | `enforcement_mode` | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity` |
 | `guidance`         | Gate criteria content                                                        |
@@ -987,9 +1026,39 @@ older history rows, so restoring one could silently freeze a prompt that never d
 Omitting `severity` or `enforcement_mode` on an update leaves the gate's current value alone; it
 does not reset to the default.
 
-`gate_type` writes the `gate.yaml` key **`type`**. The separate `gate.yaml` key `gate_type`
-(`framework` \| `category` \| `custom`) is not authorable through the tool — its name is taken by
-this parameter — so it is carried forward from the file and edited by hand.
+Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
+different keys and each has its own parameter: `type` is the validation/guidance behaviour,
+`gate_type` is the classification the loader filters framework gates on. **Breaking change
+(P4.10):** the parameter now called `type` was published as `gate_type` until this release, where
+it took the other key's name and left that key unauthorable. Sending the validation/guidance value
+under `gate_type` is now rejected by the schema — send it under `type`.
+
+Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
+and `enforcement_mode` do.
+
+**Category Parameters:**
+
+| Parameter           | Purpose                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `id`                | The category **directory name** under the prompts root — what the loader names it by |
+| `name`              | Display name. Absent, the loader derives one from the id                             |
+| `description`       | Description. Absent, the loader derives `Prompts in the <id> category`               |
+| `register_with_mcp` | The category-level MCP-registration default every prompt in it inherits              |
+| `mcp_prompt_mode`   | `expand` or `launch` — the category-level default every prompt in it inherits        |
+
+`id`, `name` and `description` are all required to `create`; `CategorySchema` requires all three
+and the write is refused without them. The two inheritance defaults are carried forward on an
+update that omits them, the way gate `severity` is — supply one and it is set, omit it and the
+file keeps what it declared.
+
+Unlike the prompt-level versions of the same two parameters, these carry **no freeze hazard**:
+this IS the middle level of the `prompt → category → global` chain, so a prompt that declares
+nothing keeps following whatever the category says.
+
+`inspect` renders a field only when `category.yaml` declares it, and says so plainly when the file
+is absent. Nothing validates a `category.yaml` on load — the loader casts the parsed document — so
+the write-time check is the only one there is, and a document whose `id` disagrees with its
+directory is refused rather than silently served under the directory's name.
 
 **Framework Parameters:**
 
@@ -1617,12 +1686,12 @@ deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaki
 A version snapshot records the resource's authored surface, not every byte in its directory. What
 falls outside it is left to the file writers, which carry it forward from disk:
 
-| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                       |
-| --------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                              |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                      |
-| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity` and `enforcementMode` became settable, since they are preserved keys rather than projected ones |
-| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                          |
+| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                           |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                                   |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode` and `gate_type` became settable, since they are preserved keys rather than projected ones |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                       |
 
 Where a rollback restores only part of a resource, the response names what it did not restore.
 Frameworks additionally report any projected field the target version never recorded, because the

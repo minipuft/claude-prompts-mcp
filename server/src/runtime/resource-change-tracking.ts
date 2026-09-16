@@ -14,6 +14,7 @@ import type {
   AuxiliaryReloadConfig,
   HotReloadEvent,
 } from '#modules/hot-reload/hot-reload-observer.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 import { ConfigLoader } from '#infra/config/index.js';
 import {
@@ -21,6 +22,11 @@ import {
   ResourceChangeTracker,
   TrackedResourceType,
 } from '#infra/observability/tracking/index.js';
+import {
+  isIgnoredPromptEntryName,
+  promptIdFromDirectory,
+  promptIdFromSingleFile,
+} from '#shared/utils/prompt-layout.js';
 
 /**
  * Singleton tracker instance for the application
@@ -67,18 +73,36 @@ export function getResourceChangeTracker(): ResourceChangeTracker | undefined {
 /**
  * Compare current resources against baseline and log external changes
  * Called at startup to detect changes made while server was down
+ *
+ * `quarantine` is the loaders' record of what they refused. Without it this function runs its own
+ * filesystem walk and treats every readable file as a resource — a third derivation of "what is in
+ * the catalog", disagreeing with the loaders by construction, which is how a file that never
+ * entered the catalog came to be logged as `added`. With it, a refused file is neither added nor
+ * removed; see `ResourceChangeTracker.compareBaseline`.
  */
 export async function compareResourceBaseline(
   tracker: ResourceChangeTracker,
   configManager: ConfigLoader,
-  logger: Logger
-): Promise<{ added: number; modified: number; removed: number }> {
+  logger: Logger,
+  quarantine?: QuarantineView
+): Promise<{ added: number; modified: number; removed: number; refused: number }> {
   // Collect all current prompts and gates for baseline comparison
   const resources: Array<{
     resourceType: TrackedResourceType;
     resourceId: string;
     filePath: string;
+    refused?: boolean;
   }> = [];
+
+  /**
+   * Ask the quarantine by PATH, which is what this walk holds.
+   *
+   * Deliberately not by id, even now that this walk and the loader derive the same one (P4.28):
+   * two roots may legitimately serve the same id, which is the overlay contract, so an id is not a
+   * unique handle on a FILE. `ResourceQuarantine` is keyed by `(root, path)` for that reason. The
+   * path is the one thing both sides hold unambiguously.
+   */
+  const isRefused = (filePath: string): boolean => quarantine?.isRefused(filePath) === true;
 
   try {
     // Get prompts directory
@@ -86,48 +110,64 @@ export async function compareResourceBaseline(
     const fs = await import('node:fs');
     const fsPromises = await import('node:fs/promises');
 
-    // Scan for prompt YAML files
+    /**
+     * Record one resource, unless the layout says it is not one or the file is not there.
+     *
+     * `resourceId === undefined` is `#shared/utils/prompt-layout.js` declining the entry — a
+     * reserved filename, or a location the loader does not serve a prompt from — so the two
+     * questions a walk has to get right collapse into one `if` that cannot be half-applied.
+     */
+    const recordResource = (
+      resourceType: TrackedResourceType,
+      resourceId: string | undefined,
+      filePath: string
+    ): void => {
+      if (resourceId === undefined || !fs.existsSync(filePath)) return;
+      resources.push({ resourceType, resourceId, filePath, refused: isRefused(filePath) });
+    };
+
+    /**
+     * Walk the prompts tree the way the loader walks it.
+     *
+     * THREE QUESTIONS, ALL OF THEM ANSWERED IN `#shared/utils/prompt-layout.js`: which entries to
+     * skip, which files are prompts and where they may sit, and what id each is served under. Only
+     * the filename half was shared before P4.28. This walk stopped descending at any directory
+     * holding `prompt.yaml` — on the reasoning that such a directory IS the resource rather than a
+     * container — while `discoverYamlPrompts` always recurses, because a chain directory holds its
+     * own definition AND its steps. Measured 2026-09-15: 15 shipped step prompts sit below that
+     * line (`examples/deep_analysis`, `planning/implementation_plan`, `examples/quick_decision`,
+     * `codebase-setup/scaffold_project`), so an external edit to any of them reached this
+     * comparison as nothing at all — no `added`, no `modified`, no `removed`.
+     *
+     * `depth` is gone with it. It existed to keep a root-level `.yaml` out of the results, and
+     * that is now a property of the id derivation rather than of the walk's bookkeeping: a file
+     * whose only segment IS its category has no id, and the shared module says so.
+     */
     const scanDir = async (dir: string, resourceType: TrackedResourceType): Promise<void> => {
       try {
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
+          // The loader's first act on every entry, file or directory. Without it this walk would
+          // descend into `_drafts/` and announce everything below it.
+          if (isIgnoredPromptEntryName(entry.name)) continue;
+
           const entryPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            // Check for prompt.yaml inside directory
-            const promptYaml = path.join(entryPath, 'prompt.yaml');
-            const gateYaml = path.join(entryPath, 'gate.yaml');
-            const hasPromptYaml = fs.existsSync(promptYaml);
-            const hasGateYaml = fs.existsSync(gateYaml);
-
-            if (hasPromptYaml) {
-              resources.push({
-                resourceType,
-                resourceId: entry.name,
-                filePath: promptYaml,
-              });
-            }
-            if (hasGateYaml) {
-              resources.push({
-                resourceType: 'gate',
-                resourceId: entry.name,
-                filePath: gateYaml,
-              });
-            }
-
-            // Only recurse into directories that don't contain resource files
-            // (directories with prompt.yaml/gate.yaml ARE the resource, not containers)
-            if (!hasPromptYaml && !hasGateYaml) {
-              await scanDir(entryPath, resourceType);
-            }
-          } else if (entry.name.endsWith('.yaml') && !entry.name.startsWith('_')) {
-            // Single-file YAML prompt
-            const id = entry.name.replace(/\.yaml$/, '');
-            resources.push({
-              resourceType,
-              resourceId: id,
-              filePath: entryPath,
-            });
+          if (!entry.isDirectory()) {
+            recordResource(resourceType, promptIdFromSingleFile(promptsPath, entryPath), entryPath);
+            continue;
           }
+
+          recordResource(
+            resourceType,
+            promptIdFromDirectory(promptsPath, entryPath),
+            path.join(entryPath, 'prompt.yaml')
+          );
+          // Gates keep their directory name as their id: the gate layout is flat
+          // (`{root}/{id}/gate.yaml`) and has no category level for a path-derived id to strip.
+          recordResource('gate', entry.name, path.join(entryPath, 'gate.yaml'));
+
+          // Finding a definition is NOT a reason to stop — that was the defect.
+          await scanDir(entryPath, resourceType);
         }
       } catch (error) {
         logger.debug(`Error scanning directory ${dir}:`, error);
@@ -156,6 +196,7 @@ export async function compareResourceBaseline(
               resourceType: 'gate',
               resourceId: entry.name,
               filePath: gateYaml,
+              refused: isRefused(gateYaml),
             });
           }
         }
@@ -167,7 +208,7 @@ export async function compareResourceBaseline(
     return await tracker.compareBaseline(resources);
   } catch (error) {
     logger.warn('Failed to compare resource baseline:', error);
-    return { added: 0, modified: 0, removed: 0 };
+    return { added: 0, modified: 0, removed: 0, refused: 0 };
   }
 }
 

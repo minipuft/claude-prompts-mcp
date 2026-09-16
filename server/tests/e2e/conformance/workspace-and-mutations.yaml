@@ -506,7 +506,7 @@ scenarios:
           action: create
           id: conformance_gate_severity_readback
           name: Conformance Gate Severity Readback
-          gate_type: validation
+          type: validation
           description: created by the conformance corpus
           guidance: Guidance text
           severity: high
@@ -528,7 +528,7 @@ scenarios:
           action: create
           id: conformance_gate_enforcement_readback
           name: Conformance Gate Enforcement Readback
-          gate_type: validation
+          type: validation
           description: created by the conformance corpus
           guidance: Guidance text
           enforcement_mode: blocking
@@ -538,6 +538,30 @@ scenarios:
     # severity ('medium' → 'advisory') would print 'advisory' if the writer fell back to a
     # derived default instead of the caller's explicit 'blocking' — this distinguishes them.
     expect: { text_contains: 'Enforcement Mode: blocking' }
+
+  - id: gate-create-then-inspect-reads-back-gate-type
+    claim_source: >-
+      resource_manager contract — `gate_type` (P4.10) reaches gate.yaml as the key of the same
+      name, once the parameter that had taken that name was renamed to `type`. `inspect` reads it
+      back off the raw definition (gate-discovery-processor.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_classification_readback
+          name: Conformance Gate Classification Readback
+          type: validation
+          gate_type: framework
+          description: created by the conformance corpus
+          guidance: Guidance text
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_classification_readback }
+    # 'framework' is non-default — the loader resolves an undeclared gate_type to 'custom', and
+    # `inspect` prints the line only when the raw definition declares the key. A write that
+    # dropped `gate_type` (the pre-P4.10 behaviour, where the name was taken by the type
+    # parameter) prints no Classification line at all and fails this row.
+    expect: { text_contains: 'Classification: framework' }
 
   - id: framework-create-then-inspect-reads-back-advanced-fields
     claim_source: >-
@@ -611,6 +635,47 @@ scenarios:
     # substring rather than merely omit a line the assertion never checked.
     expect:
       text_contains: "Advanced Fields:\n  - framework_gates: 1 item\n  - template_suggestions: 1 item\n  - framework_elements: 2 keys\n  - argument_suggestions: 1 item\n  - judge_prompt: JUDGE_PROMPT_FIRST_LINE_MARKER\n  - processing_steps: 1 item\n  - execution_steps: 1 item\n  - execution_type_enhancements: 1 key\n  - template_enhancements: 1 key\n  - execution_flow: 1 key\n  - quality_indicators: 1 key"
+
+  # ── P4.7 read-back: resource_type `category` ───────────────────────────────
+  #
+  # The falsifier for P4.7 stated plainly: a tool call writes a `category.yaml`. Before this,
+  # `CategorySchema` had a reader for all five of its fields and no writer anywhere in `src/`, so
+  # the only way to author one was by hand — which core principle 1 (MCP Tooling Only) forbids.
+  #
+  # Both values set below are NON-DEFAULT. `register_with_mcp` resolves to `true` and
+  # `mcp_prompt_mode` to `'expand'` when a category declares neither, and `inspect` renders each
+  # line ONLY when the document on disk declares the key — so a create that wrote an empty file,
+  # or wrote the loader's defaults, prints neither line and fails this row. The name and
+  # description are asserted in the same block for the same reason: the loader derives
+  # `Conformance Category Readback` → `conformance_category_readback` and
+  # `Prompts in the ... category` from the directory name alone, so an authored value that did
+  # not survive the round trip is invisible in every other view.
+  #
+  # MUTATION KILLED: deleting the two `register_with_mcp` / `mcp_prompt_mode` translations from
+  # `routeToCategoryManager` (router.ts) reds this row and nothing else in the corpus — `create`
+  # still reports success and `inspect` still answers, it just prints no Name line because the
+  # whole payload stopped arriving under the names the writer reads. Confirmed by removing them,
+  # rebuilding `dist/`, re-running this row (red), and reverting.
+  - id: category-create-then-inspect-reads-back-declared-fields
+    claim_source: >-
+      resource_manager contract — `resource_type: category` (P4.7) authors a prompt category's
+      `category.yaml`; `register_with_mcp` and `mcp_prompt_mode` reach it as `registerWithMcp` and
+      `mcpPromptMode`, the defaults prompts in the category inherit (loader.ts:176-180).
+      `inspect` reads them back off the document, not off the loaded Category.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: category
+          action: create
+          id: conformance_category_readback
+          name: Conformance Category Readback
+          description: created by the conformance corpus
+          register_with_mcp: false
+          mcp_prompt_mode: launch
+      - tool: resource_manager
+        args: { resource_type: category, action: inspect, id: conformance_category_readback }
+    expect:
+      text_contains: "  - Name: Conformance Category Readback\n  - Description: created by the conformance corpus\n  - Register With MCP: false\n  - MCP Prompt Mode: launch"
 
   # ── system_control fields that change server state ─────────────────────────
   # Here rather than in tool-surface.yaml because each one mutates: analytics reset clears the

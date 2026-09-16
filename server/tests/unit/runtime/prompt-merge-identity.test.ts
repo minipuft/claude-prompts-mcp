@@ -42,6 +42,23 @@ function data(category: string, id: string, name: string): PromptData {
   } as PromptData;
 }
 
+function category(id: string, name: string, mcpPromptMode?: 'expand' | 'launch'): Category {
+  return {
+    id,
+    name,
+    description: `${id} description`,
+    ...(mcpPromptMode !== undefined ? { mcpPromptMode } : {}),
+  };
+}
+
+function categoryTarget(categories: Category[]): {
+  promptsData: PromptData[];
+  categories: Category[];
+  convertedPrompts: ConvertedPrompt[];
+} {
+  return { promptsData: [], categories: [...categories], convertedPrompts: [] };
+}
+
 function target(prompts: ConvertedPrompt[]): {
   promptsData: PromptData[];
   categories: Category[];
@@ -88,5 +105,61 @@ describe('mergePromptResults identity', () => {
     mergePromptResults(base, overlay);
 
     expect(base.convertedPrompts).toHaveLength(2);
+  });
+});
+
+/**
+ * The CATEGORY half of the same two rules, added at P4.7.
+ *
+ * Both defects lived in one line — `if (!target.categories.some((c) => c.name === overlayCat.name))
+ * push` — and both are the ones the prompt cases above already cover at the sibling site:
+ *
+ *  1. Keyed on `name`, a free-text label nothing enforces the uniqueness of, so two categories
+ *     with different ids and one display name collapsed into whichever root loaded first.
+ *  2. Never replacing, while `loadPromptsAcrossRoots` passes the BUNDLED result as the merge
+ *     TARGET — so the lowest-precedence root had the final say over category metadata. A
+ *     workspace `category.yaml` for a category that also ships bundled was written correctly,
+ *     loaded correctly, and discarded here. P4.7 gave `category.yaml` its first writer, and this
+ *     is what makes a write to it observable in the configuration a personal library runs in.
+ */
+describe('mergePromptResults category identity', () => {
+  it('lets an overlay category replace the bundled one with the same id', () => {
+    const base = categoryTarget([category('examples', 'Examples')]);
+    const overlay = categoryTarget([category('examples', 'My Examples', 'launch')]);
+
+    mergePromptResults(base, overlay);
+
+    // MUTATION KILLED, both halves measured separately so neither rides the other: keeping the
+    // id key but restoring "never replace" (`if (existingIdx === -1) push`) reds THIS case alone
+    // (1 of 6). Restoring the whole pre-P4.7 body reds this case and the next. Confirmed by
+    // applying each, re-running this file, and reverting.
+    expect(base.categories).toHaveLength(1);
+    expect(base.categories[0]?.name).toBe('My Examples');
+    expect(base.categories[0]?.mcpPromptMode).toBe('launch');
+  });
+
+  it('keeps two categories whose display names collide but whose ids differ', () => {
+    const base = categoryTarget([category('examples', 'Analysis')]);
+    const overlay = categoryTarget([category('analysis', 'Analysis')]);
+
+    mergePromptResults(base, overlay);
+
+    // MUTATION KILLED: keying the merge on `c.name === overlayCat.name` while KEEPING the
+    // replacement reds this case and the one above (2 of 6) — `analysis` is dropped because an
+    // unrelated category already wears its label, and `My Examples` no longer matches `Examples`
+    // so the replacement stops firing too. Confirmed by applying it, re-running this file, and
+    // reverting.
+    expect(base.categories.map((c) => c.id).sort()).toEqual(['analysis', 'examples']);
+  });
+
+  it('still adds an overlay category the target does not have', () => {
+    // The positive control for both cases above: a merge that replaced everything, or one that
+    // never matched at all, would satisfy one of them while breaking this.
+    const base = categoryTarget([category('examples', 'Examples')]);
+    const overlay = categoryTarget([category('personal', 'Personal')]);
+
+    mergePromptResults(base, overlay);
+
+    expect(base.categories.map((c) => c.id).sort()).toEqual(['examples', 'personal']);
   });
 });

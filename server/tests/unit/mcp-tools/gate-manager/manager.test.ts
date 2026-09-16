@@ -13,6 +13,7 @@ import {
   GateFileWriter,
   PRESERVED_GATE_YAML_KEYS,
 } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
 import { gateSnapshotContract } from '../../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';
 
@@ -83,7 +84,10 @@ describe('GateToolHandler', () => {
   let gatesDir: string;
   let logger: Logger;
   let gateManager: jest.Mocked<
-    Pick<GateManager, 'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get'>
+    Pick<
+      GateManager,
+      'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get' | 'getQuarantine'
+    >
   >;
   let manager: GateToolHandler;
   let onRefresh: jest.Mock<() => Promise<void>>;
@@ -98,6 +102,10 @@ describe('GateToolHandler', () => {
 
     gateManager = {
       has: jest.fn(() => false),
+      // P4.19 — `create` and `update` both consult the quarantine on the branch where `has(id)`
+      // is false. This fixture has no loader and therefore no refused files; the empty view is
+      // the honest answer, and NOT a stored production wiring (see `lazyQuarantineView`).
+      getQuarantine: jest.fn(() => EMPTY_QUARANTINE_VIEW),
       unregister: jest.fn(() => true),
       reload: jest.fn(async () => true),
       list: jest.fn(() => []),
@@ -270,6 +278,68 @@ describe('GateToolHandler', () => {
     expect((result.content[0] as { text: string }).text).not.toContain('requires confirmation');
   });
 
+  describe('gate.yaml key names (P4.10)', () => {
+    // `type` and `gate_type` are two DIFFERENT gate.yaml keys. Until P4.10 the tool published
+    // one parameter named `gate_type` that wrote the key `type`, so the real `gate_type` key —
+    // the framework/category/custom classification `gate-loader.ts` filters framework gates on —
+    // had no parameter at all. Both of these assert the KEY IN THE WRITTEN FILE, not that the
+    // call returned ok: a handler that accepted the argument and dropped it would return ok.
+
+    function readWrittenGateYaml(id: string): Record<string, unknown> {
+      const yamlPath = join(gatesDir, id, 'gate.yaml');
+      return loadYamlFileSync(yamlPath) as Record<string, unknown>;
+    }
+
+    // KILLED BY: removing `gate_type` from the `gateData` object literal in
+    // `GateLifecycleProcessor.handleCreate` — `resolvePreservedGateYamlFields` then finds no
+    // supplied value, no existing file to fall back to, and writes no `gate_type` key.
+    test("create with gate_type: 'framework' writes gate_type: framework to gate.yaml", async () => {
+      const result = await manager.handleAction(
+        {
+          action: 'create',
+          id: 'classified-gate',
+          name: 'Classified Gate',
+          type: 'validation',
+          gate_type: 'framework',
+          description: 'A framework-scoped gate',
+          guidance: 'Framework guidance',
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('classified-gate');
+      expect(written['gate_type']).toBe('framework');
+      // 'framework' is non-default: the loader resolves an absent key to 'custom', so a write
+      // that dropped the value would leave the key absent rather than produce this string.
+      expect(written['type']).toBe('validation');
+    });
+
+    // KILLED BY: hardcoding `type: 'validation'` in `GateFileWriter.buildGateYaml` (or dropping
+    // `type` from the `handleCreate` gateData literal, which makes the processor's
+    // `type || 'validation'` fallback write 'validation').
+    test("create with type: 'guidance' writes type: guidance to gate.yaml", async () => {
+      const result = await manager.handleAction(
+        {
+          action: 'create',
+          id: 'advisory-gate',
+          name: 'Advisory Gate',
+          type: 'guidance',
+          description: 'An advisory gate',
+          guidance: 'Advisory guidance',
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('advisory-gate');
+      expect(written['type']).toBe('guidance');
+      // The other half of the pair stays absent when nobody set it — proving the two keys are
+      // independent rather than one value written twice.
+      expect(written['gate_type']).toBeUndefined();
+    });
+  });
+
   describe('update preservation', () => {
     // Regression coverage for resource-manager-settability-matrix-2026-08-13 §4 gap #1:
     // `activation`/`retry_config`/`pass_criteria` had no fallback to the existing gate on
@@ -374,7 +444,10 @@ describe('GateToolHandler', () => {
     // `GateFileWriter.buildGateYaml` never wrote `severity`/`enforcementMode`/`gate_type` at
     // all — not even conditionally — so no fallback in `gate-lifecycle-processor.ts` could have
     // saved them; the fix has to live in the writer, reading the on-disk file directly.
-    test('update preserves severity/enforcementMode/gate_type not settable via GateManagerInput', async () => {
+    //
+    // All three are settable now (P4.4, P4.10), which does NOT make this redundant: preservation
+    // is the OMITTED-value branch, and the update below supplies none of them.
+    test('update omitting severity/enforcementMode/gate_type preserves the on-disk values', async () => {
       gateManager.has.mockReturnValue(true);
       gateManager.get.mockReturnValue(
         createFakeGate({ gateId: 'gate-e', description: 'Existing description' })
