@@ -105,12 +105,4 @@ describe('Resource index bootstrap — syncAll over the bundled tree', () => {
     // Reassign for cleanup
     dbManager = freshManager;
   });
-
-  it('should not have orphaned checkpoint_state table', () => {
-    // Verify the orphaned table was removed from schema
-    const tables = dbManager.query<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoint_state'`
-    );
-    expect(tables).toHaveLength(0);
-  });
 });

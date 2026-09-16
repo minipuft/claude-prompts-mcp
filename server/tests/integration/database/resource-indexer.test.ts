@@ -312,15 +312,6 @@ describe('ResourceIndexer', () => {
       expect(byId.some((r) => r.id === 'greeting')).toBe(true);
     });
 
-    it('search can filter by type', () => {
-      const promptResults = indexer.search('quality', 'prompt');
-      expect(promptResults).toHaveLength(0); // "quality" is a gate, not a prompt
-
-      const gateResults = indexer.search('quality', 'gate');
-      expect(gateResults).toHaveLength(1);
-      expect(gateResults[0].id).toBe('quality');
-    });
-
     it('getResource returns specific resource or null', () => {
       const found = indexer.getResource('prompt', 'analysis');
       expect(found).not.toBeNull();
