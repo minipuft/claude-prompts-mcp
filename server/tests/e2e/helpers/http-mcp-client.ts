@@ -15,7 +15,7 @@ import * as net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { buildServerEnv } from './child-env.js';
+import { buildServerEnv, createHermeticRoots, type HermeticRoots } from './child-env.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +41,12 @@ export async function getAvailablePort(): Promise<number> {
     server.on('error', reject);
   });
 }
+
+/**
+ * Temp roots created per spawn, keyed by the process that owns them so `killServer` can remove
+ * them without every caller having to thread a cleanup handle through its own teardown.
+ */
+const HERMETIC_ROOTS = new WeakMap<ChildProcess, HermeticRoots>();
 
 /**
  * Spawn MCP server with HTTP transport
@@ -99,10 +105,23 @@ export function startServerWithHttp(
   const callerRedirectsResources =
     callerEnv['MCP_WORKSPACE'] !== undefined || callerEnv['MCP_RESOURCES_PATH'] !== undefined;
 
+  // The two directories this child WRITES into, created as a pair per spawn.
+  //
+  // `HOME` is the leak that lands outside the repository: a `skills_sync export` writes client
+  // skill folders there, 224 files in one ordinary call (measured 2026-09-15). `MCP_RUNTIME_ROOT`
+  // is the leak that lands inside it: without one, the runtime root falls back to the workspace,
+  // which defaults below to PROJECT_ROOT — which is how a fully green `test:e2e` left
+  // `logs/mcp-server.log` and `runtime-state/state.db` at the repo root on every run until now.
+  //
+  // A caller may override either; both default here so a suite that has no opinion cannot leak by
+  // omission. `killServer` removes the pair.
+  const roots = createHermeticRoots('e2e-http-server');
+
   const proc = spawn('node', args, {
     cwd,
     env: buildServerEnv({
       PORT: String(port), // Server uses PORT env var for port
+      ...roots.env,
       ...(callerRedirectsResources
         ? {}
         : {
@@ -117,6 +136,7 @@ export function startServerWithHttp(
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false, // Keep attached but without stdin
   });
+  HERMETIC_ROOTS.set(proc, roots);
 
   // Log errors for debugging if debug option is enabled
   if (options.debug) {
@@ -529,9 +549,19 @@ export async function sendMcpRequestWithStreamableHttp(
  * Helper to kill a server process and wait for it to exit
  */
 export async function killServer(proc: ChildProcess, timeout = 5000): Promise<void> {
-  if (proc.killed) return;
+  // Runs on the already-killed path too: a caller that kills the process itself still gets the
+  // temp roots removed, and `cleanup()` is idempotent.
+  const removeRoots = () => {
+    HERMETIC_ROOTS.get(proc)?.cleanup();
+    HERMETIC_ROOTS.delete(proc);
+  };
 
-  return new Promise((resolve) => {
+  if (proc.killed) {
+    removeRoots();
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
       proc.kill('SIGKILL');
       resolve();
@@ -544,6 +574,8 @@ export async function killServer(proc: ChildProcess, timeout = 5000): Promise<vo
 
     proc.kill('SIGTERM');
   });
+
+  removeRoots();
 }
 
 export { PROJECT_ROOT, SERVER_PATH };

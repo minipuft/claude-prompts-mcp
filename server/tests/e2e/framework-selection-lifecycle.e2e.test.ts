@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 import {
   getAvailablePort,
   killServer,
@@ -112,11 +112,13 @@ async function startHttpSession(env: Record<string, string>): Promise<McpSession
 }
 
 async function startStdioSession(env: Record<string, string>): Promise<McpSession> {
+  // The HTTP sibling gets its pair from `startServerWithHttp`; a direct spawn has to ask.
+  const roots = createHermeticRoots('framework-selection-stdio');
   const proc: ChildProcess = spawn(
     'node',
     [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'],
     {
-      env: buildServerEnv(env),
+      env: buildServerEnv({ ...roots.env, ...env }),
       stdio: ['pipe', 'pipe', 'pipe'],
     }
   );
@@ -169,10 +171,14 @@ async function startStdioSession(env: Record<string, string>): Promise<McpSessio
         (error: unknown) => failedOutcome(error).text
       ),
     stop: async () => {
-      if (proc.exitCode === null) {
-        const exited = new Promise((resolve) => proc.once('exit', resolve));
-        proc.kill('SIGTERM');
-        await exited;
+      try {
+        if (proc.exitCode === null) {
+          const exited = new Promise((resolve) => proc.once('exit', resolve));
+          proc.kill('SIGTERM');
+          await exited;
+        }
+      } finally {
+        roots.cleanup();
       }
     },
   };

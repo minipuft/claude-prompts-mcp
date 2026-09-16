@@ -38,14 +38,13 @@
 
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { VERDICT, auditExceptions } from './lib/exception-hygiene.js';
-import { buildServerEnv } from './lib/hermetic-server-env.js';
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
 
 const SERVER_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -302,11 +301,11 @@ function reservePort() {
  * carries the operator's persisted `system_control` toggles — a gates disable there would reach
  * this verification too.
  */
-function spawnServer(port, runtimeRoot) {
+function spawnServer(port, roots) {
   const env = buildServerEnv({
     PORT: String(port),
     MCP_WORKSPACE: REPO_ROOT,
-    MCP_RUNTIME_ROOT: runtimeRoot,
+    ...roots.env,
   });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
@@ -812,8 +811,8 @@ async function main() {
   }
 
   const port = await reservePort();
-  const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'verify-mcp-runtime-'));
-  const server = spawnServer(port, runtimeRoot);
+  const roots = createHermeticRoots('verify-mcp');
+  const server = spawnServer(port, roots);
   const baseUrl = `http://127.0.0.1:${port}`;
 
   let stderr = '';
@@ -836,7 +835,7 @@ async function main() {
       server.kill('SIGTERM');
       await once(server, 'exit');
     }
-    rmSync(runtimeRoot, { recursive: true, force: true });
+    roots.cleanup();
   }
 
   checkNoMutation(baseline);
