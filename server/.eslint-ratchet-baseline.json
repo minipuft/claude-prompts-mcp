@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T07:43:02.942Z",
+  "generatedAt": "2026-09-16T16:20:58.962Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
     "errors": 2974,
-    "warnings": 842
+    "warnings": 840
   },
   "byRule": {
     "@typescript-eslint/no-explicit-any": {
@@ -37,11 +37,11 @@
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 190
+      "warnings": 189
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 385
+      "warnings": 384
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "errors": 175,
