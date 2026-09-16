@@ -30,6 +30,24 @@ export interface ConfigSchemaValidationResult {
   errors: string[];
 }
 
+/** Which layer produced a config value: the user's `config.json`, the built-in defaults this
+ *  loader fills in for anything the file omits, or a process environment variable that overrides
+ *  both (`PORT`, `LOG_LEVEL` today). */
+export type ConfigValueSource = 'file' | 'default' | 'environment';
+
+/**
+ * The effective value of a dot-path config key (e.g. `server.port`) plus which layer produced it.
+ *
+ * `source: 'environment'` means `value` is what the running server actually uses, even where it
+ * differs from what `getConfig()` would show for the same path — an env override shadows both the
+ * file and the default rather than merging with them.
+ */
+export interface ConfigValueWithSource {
+  key: string;
+  value: unknown;
+  source: ConfigValueSource;
+}
+
 /**
  * Read-only configuration access + event subscription for hot-reload.
  *
@@ -50,6 +68,25 @@ export interface ConfigManager {
   /** Schema check from the last successful config load. Undefined means NOT validated — no
    *  schema path was injected, or the last load fell back to defaults; never read as valid. */
   getSchemaValidation(): ConfigSchemaValidationResult | undefined;
+
+  // ── Dot-path config access ───────────────────────────────────────────
+
+  /**
+   * The effective value of a dot-path key (`server.port`, `logging.level`, `gates.enabled`, …)
+   * and which layer produced it. Reports `'environment'` whenever an env override is active for
+   * that key — currently `server.port` (`PORT`) and `logging.level` (`LOG_LEVEL`) — with `value`
+   * set to what the server actually uses, not the file/default value the override shadows. A key
+   * absent from both the file and the schema-declared defaults resolves to
+   * `{ value: undefined, source: 'default' }`.
+   */
+  getConfigValueWithSource(key: string): ConfigValueWithSource;
+
+  /**
+   * The dot-path keys the packaged `config.schema.json` declares — derived from the schema, never
+   * hardcoded. Rejects if the schema was not injected, or could not be read or parsed: an
+   * unreadable schema must never read as "this config has zero keys".
+   */
+  listConfigKeys(): Promise<string[]>;
 
   // ── Domain config getters ────────────────────────────────────────────
 
