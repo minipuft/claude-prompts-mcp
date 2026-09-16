@@ -706,16 +706,12 @@ export class FrameworkStateStore extends EventEmitter {
     defaultState.switchReason = enableReason;
     defaultState.switchedAt = new Date();
 
-    this.logger.info(`✅ Framework system enabled: ${enableReason}`);
+    // Persistence throws so the caller can decide. Catching here reported the
+    // toggle as applied while the database still held the old value, and the
+    // success line below was printed either way.
+    await this.saveStateToFile();
 
-    // Save state to file - await to ensure persistence
-    try {
-      await this.saveStateToFile();
-    } catch (error) {
-      this.logger.error(
-        `Failed to persist framework enable state: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    this.logger.info(`✅ Framework system enabled: ${enableReason}`);
 
     // Emit events
     this.emit('framework-system-toggled', true, enableReason);
@@ -740,16 +736,11 @@ export class FrameworkStateStore extends EventEmitter {
     defaultState.switchReason = disableReason;
     defaultState.switchedAt = new Date();
 
-    this.logger.info(`🚫 Framework system disabled: ${disableReason}`);
+    // Persistence throws so the caller can decide, exactly as the enable path
+    // above does. Both used to swallow it and report success regardless.
+    await this.saveStateToFile();
 
-    // Save state to file - await to ensure persistence
-    try {
-      await this.saveStateToFile();
-    } catch (error) {
-      this.logger.error(
-        `Failed to persist framework disable state: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    this.logger.info(`🚫 Framework system disabled: ${disableReason}`);
 
     // Emit events
     this.emit('framework-system-toggled', false, disableReason);

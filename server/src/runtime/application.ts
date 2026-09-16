@@ -225,7 +225,7 @@ export class Application {
     const isQuiet = this.runtimeOptions.quiet;
 
     // Monitor framework feature toggles and log state changes
-    this.setupFrameworkConfigListener();
+    await this.setupFrameworkConfigListener();
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
@@ -351,7 +351,7 @@ export class Application {
     this.mcpToolsManager = result.mcpToolsManager;
 
     const currentFrameworkConfig = this.configManager.getFrameworksConfig();
-    this.syncFrameworkSystemStateFromConfig(
+    await this.syncFrameworkSystemStateFromConfig(
       currentFrameworkConfig,
       'Framework configuration synchronized during initialization'
     );
@@ -417,23 +417,55 @@ export class Application {
       // workspace-scoped. `ctx` is the only scope signal available here: the
       // schema is built now, before any call has been dispatched, so the
       // per-call `extra` the rest of the server reads does not exist yet.
-      await this.mcpToolsManager.registerAllTools(
-        server,
-        resolveServingUnitScope(
-          ctx,
-          this.configManager.getConfig().identity?.launchDefaults?.workspaceId
-        )
+      const scope = resolveServingUnitScope(
+        ctx,
+        this.configManager.getConfig().identity?.launchDefaults?.workspaceId
       );
-      this.registerMcpResources(server);
+      // Each stage names itself, so a failure says which stage failed instead of
+      // arriving as a bare message from somewhere inside it. It is rethrown,
+      // never swallowed: the SDK answers this request with an error and calls
+      // this factory again for the next one, which succeeds if the cause was
+      // transient. Returning a server whose binding did not finish would
+      // advertise a tool surface missing the tools that failed to bind, and
+      // every client reads that as success.
+      await this.bindServingUnitStage('tools', () =>
+        this.mcpToolsManager.registerAllTools(server, scope)
+      );
+      await this.bindServingUnitStage('resources', () => this.registerMcpResources(server));
       // Prompts bind per unit for the same reason tools do. They were the one
       // primitive left on the construction-time shell, so `prompts/list` came
       // back empty on a live connection while startup logged them as
       // registered.
       if (this._convertedPrompts.length > 0) {
-        await this.promptManager.registerAllPrompts(this._convertedPrompts, server);
+        await this.bindServingUnitStage('prompts', () =>
+          this.promptManager.registerAllPrompts(this._convertedPrompts, server)
+        );
       }
       return server;
     };
+  }
+
+  /**
+   * Run one binding stage of a serving unit, naming the stage if it fails.
+   *
+   * A failure fails the request being served, which is the whole of its blast
+   * radius: the next request builds a fresh instance. It is deliberately not
+   * caught into a partial server — a tool surface that answers while missing
+   * the tools that failed to bind reports health it does not have.
+   */
+  private async bindServingUnitStage(
+    stage: string,
+    bind: () => Promise<unknown> | unknown
+  ): Promise<void> {
+    try {
+      await bind();
+    } catch (error) {
+      throw new Error(
+        `Failed to build this request's MCP server while binding ${stage}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
@@ -1173,7 +1205,7 @@ export class Application {
     }
   }
 
-  private setupFrameworkConfigListener(): void {
+  private async setupFrameworkConfigListener(): Promise<void> {
     if (!this.configManager || this.frameworksConfigListener) {
       return;
     }
@@ -1182,17 +1214,27 @@ export class Application {
       newConfig: ResolvedFrameworkConfig,
       previousConfig: ResolvedFrameworkConfig
     ) => {
-      this.handleFrameworkConfigChange(newConfig, previousConfig);
+      // The config watcher fires with no caller to return to, so this is the
+      // boundary that owns the failure and reports it. Leaving the promise
+      // unhandled instead would reach the process-level rejection handler,
+      // which shuts the server down over a state write that can be retried.
+      void this.handleFrameworkConfigChange(newConfig, previousConfig).catch((error: unknown) => {
+        this.logger.error(
+          `Failed to apply a framework configuration change: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
     };
 
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
-    this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
+    await this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
   }
 
-  private handleFrameworkConfigChange(
+  private async handleFrameworkConfigChange(
     newConfig: ResolvedFrameworkConfig,
     previousConfig?: ResolvedFrameworkConfig
-  ): void {
+  ): Promise<void> {
     if (!this.logger) {
       return;
     }
@@ -1202,7 +1244,7 @@ export class Application {
       this.logger.warn(`⚠️ Framework features disabled via config: ${disabled.join(', ')}`);
     }
 
-    this.syncFrameworkSystemStateFromConfig(newConfig);
+    await this.syncFrameworkSystemStateFromConfig(newConfig);
 
     if (previousConfig) {
       const previouslyDisabled = this.describeDisabledFrameworkFeatures(previousConfig);
@@ -1212,10 +1254,10 @@ export class Application {
     }
   }
 
-  private syncFrameworkSystemStateFromConfig(
+  private async syncFrameworkSystemStateFromConfig(
     config: ResolvedFrameworkConfig,
     reason?: string
-  ): void {
+  ): Promise<void> {
     const gatesConfig = this.configManager.getGatesConfig();
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
@@ -1230,7 +1272,10 @@ export class Application {
       (shouldEnable
         ? 'Framework system enabled via configuration toggles'
         : 'Framework system disabled via configuration toggles');
-    this.frameworkStateStore.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
+    // Awaited: this writes the toggle to SQLite. Unawaited, a failed save was
+    // never reported to anyone and the store's memory disagreed with the
+    // database for the rest of the run.
+    await this.frameworkStateStore.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
   }
 
   private describeDisabledFrameworkFeatures(config: ResolvedFrameworkConfig): string[] {
