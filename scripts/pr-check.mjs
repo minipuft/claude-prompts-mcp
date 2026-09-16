@@ -40,7 +40,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,12 +85,27 @@ export const MIRRORED_CI_STEPS = [
     ciStepName: "Lint the title with the repo's commitlint config",
     label: 'title passes commitlint.config.mjs',
     needsAuthoredInput: true,
-    run: ({ title }) =>
-      spawnSync('npx', ['--no', '--', 'commitlint', '--verbose'], {
+    run: ({ title }) => {
+      // An absent binary and a rejected title both exit non-zero through `npx`, and conflating
+      // them would make this step's failure mean two different things — one of which the author
+      // cannot act on from the message. CI installs before it lints; a developer tree may not
+      // have. Not knowing is reported as a failure, never as a pass: an unchecked title is the
+      // exact hole this script exists to close.
+      if (!existsSync(path.join(REPO_ROOT, 'node_modules', '.bin', 'commitlint'))) {
+        return {
+          status: 1,
+          stdout:
+            'commitlint is not installed at the repo root, so THE TITLE WAS NOT CHECKED.\n' +
+            'Install it and re-run:\n  npm install',
+          stderr: '',
+        };
+      }
+      return spawnSync('npx', ['--no', '--', 'commitlint', '--verbose'], {
         cwd: REPO_ROOT,
         input: `${title}\n`,
         encoding: 'utf8',
-      }),
+      });
+    },
   },
 ];
 
@@ -221,8 +236,8 @@ function main() {
   const failures = results.filter((result) => !result.passed);
   if (failures.length > 0) {
     console.log(
-      `\n${failures.length} of ${results.length} checks failed — the PR Conventions job will ` +
-        'report the same. Fix them before `gh pr create`.'
+      `\n${failures.length} of ${results.length} checks failed. CI runs these same steps on the ` +
+        'same body and title, so fix them before `gh pr create`.'
     );
     process.exit(1);
   }
