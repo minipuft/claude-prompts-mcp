@@ -29,11 +29,14 @@
  * older than `src/` — verifying a stale binary returns green for code that is not running.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, openSync, readdirSync, statSync } from 'node:fs';
+import { once } from 'node:events';
+import { mkdtempSync, openSync, readdirSync, rmSync, statSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { buildServerEnv } from './lib/hermetic-server-env.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(SERVER_ROOT, 'dist', 'index.js');
@@ -77,14 +80,18 @@ function reservePort() {
   });
 }
 
-function spawnServer(port) {
+function spawnServer(port, runtimeRoot) {
   const log = openSync(path.join(WS, `server-${port}.log`), 'w');
-  const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: SERVER_ROOT };
-  // The server skips main() under JEST_WORKER_ID, and an inherited --experimental-vm-modules
-  // leaks the parent's flags into a plain node process.
-  delete env.NODE_OPTIONS;
-  delete env.NODE_ENV;
-  delete env.JEST_WORKER_ID;
+  // The shared scrub (lib/hermetic-server-env.js): jest markers make the child skip main(), and
+  // the ambient MCP_* path overrides would point it at the operator's tree. The workspace is set
+  // on purpose, after the scrub. So is the runtime root, to a directory this run removes: unset,
+  // it falls back to the workspace, whose `state.db` keeps the operator's persisted
+  // `system_control` toggles, and those would reach this drive.
+  const env = buildServerEnv({
+    PORT: String(port),
+    MCP_WORKSPACE: SERVER_ROOT,
+    MCP_RUNTIME_ROOT: runtimeRoot,
+  });
   return spawn('node', [DIST, '--transport=streamable-http', '--quiet'], {
     env,
     stdio: ['ignore', log, log],
@@ -181,7 +188,8 @@ const UNKNOWN_THREE = 'live-drive-isolation';
 refuseStaleDist();
 
 const port = await reservePort();
-const server = spawnServer(port);
+const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'unknown-interrupt-runtime-'));
+const server = spawnServer(port, runtimeRoot);
 try {
   const base = `http://127.0.0.1:${port}`;
   await waitHealth(base);
@@ -328,7 +336,12 @@ try {
     (notAnAppend.rpcError ?? notAnAppend.text).slice(0, 120).replace(/\n/g, ' ')
   );
 } finally {
-  server.kill();
+  // Wait for exit before removing the runtime root: a server still shutting down writes there.
+  if (server.exitCode === null && server.signalCode === null) {
+    server.kill();
+    await once(server, 'exit');
+  }
+  rmSync(runtimeRoot, { recursive: true, force: true });
 }
 
 if (failures.length > 0) {

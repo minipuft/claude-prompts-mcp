@@ -84,7 +84,7 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'gate_verdict',
     type: 'string',
     description:
-      "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
+      "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. reminders: {satisfied:[ids], not_applicable:[{id, reason}]} attests reminder-tier gates in one field; per_gate carries only check-tier gates. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
     status: 'working',
     compatibility: 'canonical',
     notes: [

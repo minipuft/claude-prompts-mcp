@@ -4,4 +4,9 @@ type: guidance
 description: >-
   Guides documentation toward consistent reader terminology and factual search
   semantics without keyword stuffing.
+subject: discoverability
 guidanceFile: guidance.md
+activation:
+  artifacts:
+    - docs
+    - readme

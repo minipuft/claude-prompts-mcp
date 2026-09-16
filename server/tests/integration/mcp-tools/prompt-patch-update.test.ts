@@ -143,6 +143,9 @@ function createHarness(workspaceDir: string): Harness {
       isAutoVersionEnabled: () => true,
       loadHistory: jest.fn(async () => ({ current_version: 3 })),
       recordEditResult,
+      // The create-path writer: no prior state to bridge, so `createPrompt` calls this
+      // directly rather than through `recordEditResult`.
+      saveVersion: jest.fn(async () => ({ success: true, version: 1 })),
       rollback,
       // Bridge the test-configured `rollback` double into the two-phase contract the processor
       // now calls (resolveRollbackTarget → commitEdit → write). Tests keep configuring
@@ -592,7 +595,7 @@ describe('write-scope byte-identity and category move (Fix B + Part 2)', () => {
    * re-serialization. `system-message.md` is asserted untouched the same way.
    *
    * FALSIFICATION: neuter the scope table (make `writesYaml` always `true` in
-   * `createOrUpdateYamlPrompt`) and `rawAfter` no longer equals `rawBefore` — the comment and key
+   * `planPromptFiles`) and `rawAfter` no longer equals `rawBefore` — the comment and key
    * order are lost to `serializeYaml`, which has no comment model.
    */
   test('a patch-only edit leaves prompt.yaml byte-identical, system-message.md untouched', async () => {

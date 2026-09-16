@@ -101,7 +101,11 @@ export type {
   TelemetryAttributePolicy,
   TelemetryConfig,
 } from './core-config.js';
-export { DEFAULT_VERSIONING_CONFIG, DEFAULT_TELEMETRY_CONFIG } from './core-config.js';
+export {
+  DEFAULT_VERSIONING_CONFIG,
+  DEFAULT_TELEMETRY_CONFIG,
+  DEFAULT_GATES_CONFIG,
+} from './core-config.js';
 
 // Request identity types (workspace/organization scoping)
 export type {
@@ -148,10 +152,6 @@ export interface PromptArgument {
     allowedValues?: Array<string | number | boolean>;
   };
 }
-
-// GatesConfig (shared-layer) re-exported from core-config as GateSystemSettings.
-// Aliased here for backward compatibility.
-export { type GateSystemSettings as GatesConfig } from './core-config.js';
 
 // ContentAnalysisResult is now exported from ./core-config.js above.
 

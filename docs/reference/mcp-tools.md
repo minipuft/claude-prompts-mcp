@@ -514,10 +514,14 @@ file — the table `>>implementation_plan` emits — one tier per submission:
 | `gates: <id>` in a row's Verify | That node's `inlineGateIds`, so review fires ON the row                   |
 | The tier's gate criterion       | A run-level gate whose `target_step_id` is the tier's LAST node id        |
 | `execution_dispatch` Agent cell | `subagentModel` (`heavy`/`standard`/`fast`); `main thread` emits no field |
+| A delegated row                 | A node whose `promptId` is `strategic_worker` — the worker brief          |
 
 A row with no Depends keeps its declared place, which is what the linearization does with it
 anyway. Rows already marked ✓ are skipped. Gate verdicts, tier acceptance, open-question rulings,
-and the scope check are never compiled into a node — they stay with the calling session.
+handoff acceptance, branch merges, and the scope check are never compiled into a node — they stay
+with the calling planner session, which dispatches rows rather than editing source. `subagentModel`
+is a hint and binds nothing; the `Agent` tool binds a model per spawn and `Workflow` `agent()` binds
+model plus effort.
 
 ### Shell Verification Gates (Ralph Mode)
 
@@ -732,6 +736,12 @@ Successful prompt writes return a machine-readable receipt with `config_path`, `
 `resource_root`, `affected_files`, category ship status, refresh status, whether the expected state
 loaded after refresh, and the current version. A write whose refreshed registry does not match the
 produced prompt is reported as an error, even when the filesystem transaction itself succeeded.
+
+Any `resource_manager` result that carries both readable `content` text and `structuredContent` —
+`validate`, `create`, `preview`, `update`, and `inspect` all do — also carries the same text in
+`structuredContent.message`. Some MCP clients hand the model only `structuredContent` when a
+result carries both, so a client reading solely the JSON half still receives the write receipt,
+preview notice, or validation outcome. A result with `content` text only is unaffected.
 
 Maintain an existing prompt through one bounded sequence:
 
@@ -1107,16 +1117,26 @@ system_control(action:"gates", operation:"list")
 
 ### Actions
 
-| Action              | Operations                            | Purpose                   |
-| ------------------- | ------------------------------------- | ------------------------- |
-| `status`            | —                                     | Runtime overview          |
-| `framework`         | `list`, `switch`, `enable`, `disable` | Framework management      |
-| `gates`             | `list`, `enable`, `disable`, `status` | Gate management           |
-| `analytics`         | —                                     | Execution metrics         |
-| `config`            | —                                     | View config overlays      |
-| `changes`           | `list`                                | Resource change audit log |
-| `session`           | `list`, `inspect`, `clear`            | Chain session lifecycle   |
-| `execution_history` | `list`                                | Chain execution ledger    |
+| Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                               |
+| ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                      |
+| `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                  |
+| `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                       |
+| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                     |
+| `config`            | `restore`, `validate`                               | `config: { key, value?, operation }` for get/set/list/validate; `backup_path` and `confirm: true` for restore         | View, change and restore configuration                                                |
+| `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                        |
+| `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                    |
+| `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                           |
+| `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                             |
+| `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                               |
+| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                |
+| `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md) |
+
+Every parameter is declared in the tool's input schema, which drops any field it does not declare
+before the action runs. Two names are shared across actions with different values: `scope` is
+`user` or `project` for `skills_sync` and `session`, `chain` or `step` for an injection override,
+and `resource_type` takes `prompt`, `gate`, `framework` or `style` for `skills_sync` while the
+change log records only `prompt` and `gate`. Each action refuses a value that belongs to the other.
 
 ### Execution History
 
@@ -1212,8 +1232,8 @@ system_control(action:"changes", operation:"list", source:"filesystem")
 system_control(action:"changes", operation:"list", source:"mcp-tool")
 
 # Filter by resource type
-system_control(action:"changes", operation:"list", resourceType:"prompt")
-system_control(action:"changes", operation:"list", resourceType:"gate")
+system_control(action:"changes", operation:"list", resource_type:"prompt")
+system_control(action:"changes", operation:"list", resource_type:"gate")
 
 # Filter by time
 system_control(action:"changes", operation:"list", since:"2026-01-20T00:00:00Z")
@@ -1712,6 +1732,15 @@ node dist/index.js --transport stdio \
   --config /path/to/config.json
 ```
 
+A path setting the server cannot use stops it before it serves anything, on every transport,
+exiting non-zero with the reason on stderr: the variable or flag, the value, the resolved path,
+what is wrong, and what removing the setting would fall back to. `--config` and `MCP_CONFIG_PATH`
+must name a readable JSON config file; `--workspace`, `MCP_WORKSPACE` and `MCP_RESOURCES_PATH`
+must name an existing directory; and a workspace `config.json`, when one exists, must be a readable
+JSON object. Each of these used to start a server on something else — ignored settings, a freshly
+created empty workspace, the bundled catalog in place of yours — with nothing reporting it. A
+workspace without a `config.json` uses the packaged one, and an empty value counts as unset.
+
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
 `--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
 `MCP_RESOURCES_PATH`) at a directory instead. The full parsed set (17, from `server/src/runtime/cli.ts`) is `--client`, `--config`,
@@ -1734,14 +1763,14 @@ success. The same check applies to `transport` in `config.json`.
 
 ### Environment Variables
 
-| Variable                    | Description                                          |
-| --------------------------- | ---------------------------------------------------- |
-| `MCP_WORKSPACE`             | Workspace root for config resolution                 |
-| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_CONFIG_PATH`           | Override config.json path                            |
-| `MCP_SERVER_ROOT`           | Server package root, used by skills export           |
-| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file      |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file   |
+| Variable                    | Description                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start                 |
+| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.); must be an existing directory, or the server refuses to start |
+| `MCP_CONFIG_PATH`           | Override config.json path; must name a readable JSON file, or the server refuses to start                           |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                          |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                     |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file                                                                  |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
@@ -1755,6 +1784,8 @@ Path resolution follows this priority (first match wins):
 
 Workspace resources overlay the bundled ones. There is no per-resource-type override layer —
 the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
+A set `MCP_RESOURCES_PATH` that does not exist is not "no match": it refuses startup rather than
+falling through to the package defaults, which would serve the bundled catalog under your name.
 
 **Example: MCP config with custom resources**
 
@@ -1781,15 +1812,16 @@ the two tiers previously documented above these (CLI flags and individual env va
 
 ## Reference
 
-| Component          | Location                                                  |
-| ------------------ | --------------------------------------------------------- |
-| Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
-| Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
-| Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
-| Frameworks         | `server/resources/frameworks/{id}/framework.yaml`         |
-| Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
-| Resource changes   | `runtime-state/resource-changes.jsonl`                    |
-| Server config      | `server/config.json`                                      |
+| Component               | Location                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt definitions      | `server/resources/prompts/{category}/{id}/prompt.yaml`                                                                                                               |
+| Gate definitions        | `server/resources/gates/{id}/gate.yaml`                                                                                                                              |
+| Style definitions       | `server/resources/styles/{id}/style.yaml` (package default; a workspace `resources/styles/{id}/` overlays it, same as prompts/gates/frameworks)                      |
+| Script tool definitions | `server/resources/scripts/{id}/tool.yaml` (workspace `resources/scripts/{id}/` when a custom workspace is configured; see [Script Tools](../guides/script-tools.md)) |
+| Frameworks              | `server/resources/frameworks/{id}/framework.yaml`                                                                                                                    |
+| Chain sessions          | SQLite (`runtime-state/state.db`, table `chain_sessions`)                                                                                                            |
+| Resource changes        | `runtime-state/resource-changes.jsonl`                                                                                                                               |
+| Server config           | `server/config.json`                                                                                                                                                 |
 
 **Related docs:**
 

@@ -1,0 +1,24 @@
+id: handoff-artifacts
+name: Handoff Artifacts Exist
+type: validation
+description: Fails a delegated step whose handoff names no artifacts, or names one that does not exist where the check runs
+subject: evidence
+severity: high
+gate_type: custom
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: shell_verify
+    shell_command: ['node', 'resources/gates/handoff-artifacts/check-artifacts.js']
+    shell_stdin_source: agent_response
+    shell_timeout: 10000
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+# opt-in: attaches only when a prompt or step names it; a refused shell_verify on an
+# installation without the allowlist would otherwise block every review.
+activation:
+  explicit_request: true

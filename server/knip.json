@@ -2,7 +2,9 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "scripts/verify-handoff.mjs",
-    "scripts/verify-unknown-interrupt.mjs"
+    "scripts/verify-unknown-interrupt.mjs",
+    "scripts/**/*.d.ts",
+    "eslint-rules/**/*.d.ts"
   ],
   "ignore": [
     "src/mcp/contracts/schemas/_generated/**",

@@ -153,51 +153,101 @@ export class EnhancedLogger implements Logger {
   }
 
   /**
-   * Log to console based on transport and environment
+   * Log to console based on transport and environment.
+   *
+   * STDIO owns stdout for the protocol, so nothing ever prints there; stderr is free. Every level
+   * first passes `shouldLog` (the configured log level; `enableDebug` lets everything through).
+   * Then, by environment:
+   *  - STDIO, not CI: ERROR/WARN reach stderr. INFO/DEBUG reach stderr only with `enableDebug`,
+   *    so a clean, non-verbose start stays quiet.
+   *  - STDIO, CI: ERROR/WARN reach stderr. INFO and DEBUG never do.
+   *  - Non-STDIO, not CI: all four levels reach stderr.
+   *  - Non-STDIO, CI: ERROR/WARN/INFO reach stderr. DEBUG does only with `enableDebug`.
    */
   private logToConsole(level: LogLevel, message: string, ...args: any[]): void {
-    // Check if this log level should be output based on configuration
+    // Respect the configured level / enableDebug gate before considering environment at all.
     if (!this.shouldLog(level)) {
       return;
     }
 
-    // In CI environment, always log errors and warnings regardless of transport
-    // This ensures critical issues are visible in CI output
-    if (this.isCI) {
-      if (level === LogLevel.ERROR || level === LogLevel.WARN) {
-        switch (level) {
-          case LogLevel.ERROR:
-            console.error(`[ERROR] ${message}`, ...args);
-            break;
-          case LogLevel.WARN:
-            console.warn(`[WARN] ${message}`, ...args);
-            break;
-        }
-        return;
-      }
-      // In CI, suppress DEBUG messages unless explicitly enabled
-      if (level === LogLevel.DEBUG && !this.enableDebug) {
-        return;
-      }
+    // CI: ERROR/WARN always reach stderr regardless of transport; DEBUG is gated on enableDebug.
+    // logCILevel reports whether it fully handled the level — INFO, and DEBUG with enableDebug,
+    // are left unhandled for the transport-aware branches below to decide.
+    if (this.isCI && this.logCILevel(level, message, args)) {
+      return;
     }
 
-    // Standard logging for non-CI environments
-    // Always use stderr to avoid corrupting STDIO protocol
+    // STDIO, outside CI: stdout stays the protocol channel; stderr is free. ERROR/WARN always
+    // reach it; INFO/DEBUG are gated on enableDebug so a clean start stays quiet.
+    if (!this.isCI && this.transport === TransportType.STDIO) {
+      this.logStdioLevel(level, message, args);
+      return;
+    }
+
+    // Only a non-STDIO transport prints past this point — including a CI+STDIO level (INFO, or
+    // DEBUG with enableDebug) that reached here unhandled above, which is why CI+STDIO INFO
+    // never prints.
     if (this.transport !== TransportType.STDIO) {
-      switch (level) {
-        case LogLevel.INFO:
-          console.error(`[INFO] ${message}`, ...args);
-          break;
-        case LogLevel.ERROR:
-          console.error(`[ERROR] ${message}`, ...args);
-          break;
-        case LogLevel.WARN:
-          console.warn(`[WARN] ${message}`, ...args);
-          break;
-        case LogLevel.DEBUG:
-          console.error(`[DEBUG] ${message}`, ...args);
-          break;
+      this.logNonStdioLevel(level, message, args);
+    }
+  }
+
+  /**
+   * CI branch of {@link logToConsole} — see there for the full table. Handles ERROR/WARN by
+   * printing them, and DEBUG by suppressing it unless `enableDebug` is set — both report
+   * handled (`true`). Leaves INFO, and DEBUG with `enableDebug`, unhandled (`false`) for the
+   * caller to decide via the transport-aware branches below.
+   */
+  private logCILevel(level: LogLevel, message: string, args: unknown[]): boolean {
+    if (level === LogLevel.ERROR || level === LogLevel.WARN) {
+      if (level === LogLevel.ERROR) {
+        console.error(`[ERROR] ${message}`, ...args);
+      } else {
+        console.warn(`[WARN] ${message}`, ...args);
       }
+      return true;
+    }
+    // In CI, suppress DEBUG messages unless explicitly enabled
+    return level === LogLevel.DEBUG && !this.enableDebug;
+  }
+
+  /** STDIO-outside-CI branch of {@link logToConsole} — see there for the full table. */
+  private logStdioLevel(level: LogLevel, message: string, args: unknown[]): void {
+    switch (level) {
+      case LogLevel.ERROR:
+        console.error(`[ERROR] ${message}`, ...args);
+        break;
+      case LogLevel.WARN:
+        console.warn(`[WARN] ${message}`, ...args);
+        break;
+      case LogLevel.INFO:
+        if (this.enableDebug) {
+          console.error(`[INFO] ${message}`, ...args);
+        }
+        break;
+      case LogLevel.DEBUG:
+        if (this.enableDebug) {
+          console.error(`[DEBUG] ${message}`, ...args);
+        }
+        break;
+    }
+  }
+
+  /** Non-STDIO branch of {@link logToConsole} — see there for the full table: all four levels print. */
+  private logNonStdioLevel(level: LogLevel, message: string, args: unknown[]): void {
+    switch (level) {
+      case LogLevel.INFO:
+        console.error(`[INFO] ${message}`, ...args);
+        break;
+      case LogLevel.ERROR:
+        console.error(`[ERROR] ${message}`, ...args);
+        break;
+      case LogLevel.WARN:
+        console.warn(`[WARN] ${message}`, ...args);
+        break;
+      case LogLevel.DEBUG:
+        console.error(`[DEBUG] ${message}`, ...args);
+        break;
     }
   }
 
@@ -429,20 +479,6 @@ export function createSimpleLogger(transport: string = 'stdio'): Logger {
         console.error(`[DEBUG] ${message}`, ...args);
       }
     },
-  };
-}
-
-/**
- * Setup console redirection for STDIO transport
- * This prevents log messages from interfering with JSON MCP messages
- */
-export function setupConsoleRedirection(logger: Logger): void {
-  console.log = (...args) => {
-    logger.debug('CONSOLE: ' + args.join(' '));
-  };
-
-  console.error = (...args) => {
-    logger.error('CONSOLE_ERROR: ' + args.join(' '));
   };
 }
 

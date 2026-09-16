@@ -188,7 +188,41 @@ export interface GateSystemSettings {
   definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
   enableFrameworkGates?: boolean;
+  /** Execute a prompt's `inline_gate_definitions` instead of only displaying them; default `false`. Retirement contract on the `GatesConfig` field below. */
+  executeInlineGateDefinitions?: boolean;
+  /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
+  harnessCovers?: string[];
+  /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
+  reminderTokenBudget?: number;
 }
+
+/**
+ * The gate settings every reader gets when config.json says nothing.
+ *
+ * Lives here, in Layer 0, rather than inside `ConfigManager`, because two layers read it:
+ * `infra/config` folds it into `getGatesConfig()`, and `GateGuidanceRenderer` (engine) needs the
+ * same values when it is constructed without a config provider — a test harness, or a render path
+ * that predates wiring. While this was module-private to `ConfigManager`, the renderer carried its
+ * own literals, and the only guarantee that they still matched these was a comment saying they
+ * did. Same placement and same reason as `DEFAULT_VERSIONING_CONFIG` and
+ * `DEFAULT_TELEMETRY_CONFIG` below.
+ *
+ * `satisfies` rather than an annotation: it checks the shape against the contract while keeping
+ * `harnessCovers` and `reminderTokenBudget` known-present at each use site, so a consumer reading
+ * them gets a value instead of `T | undefined`.
+ *
+ * These values are also declared in `server/config.schema.json`, which is what an operator's
+ * editor reads; the schema file cannot import TypeScript, so that pair stays two spellings of one
+ * default and the schema is the one an operator sees.
+ */
+export const DEFAULT_GATES_CONFIG = {
+  enabled: true,
+  definitionsDirectory: 'gates',
+  enableFrameworkGates: true,
+  executeInlineGateDefinitions: false,
+  harnessCovers: [] as string[],
+  reminderTokenBudget: 800,
+} satisfies GateSystemSettings;
 
 /**
  * Configuration for gates subsystem (top-level config.json shape)
@@ -207,12 +241,33 @@ export interface GatesConfig {
   enableFrameworkGates?: boolean;
   /** config.json key: enable framework-specific quality gates */
   frameworkGates?: boolean;
+  /**
+   * Execute a prompt's `inline_gate_definitions` instead of only displaying them.
+   *
+   * **Default `false`, and that default is the migration.** ADR 0001 (d) sequences this over two
+   * releases: this release logs a warning for every malformed definition it drops so an operator
+   * can see which of their workspace prompts would newly arm a gate; the next release flips this
+   * default to `true`. Arming enforcement an author may have written and forgotten is the risk
+   * being ramped, and workspaces overlaid via `MCP_WORKSPACE` cannot be inventoried from here.
+   *
+   * Retirement, per `cleanup-standards.md` — a gate that cannot be retired is a bug:
+   * - **Evidence that flips it**: one release in which the warn logs show no unexpected prompts
+   *   arming gates.
+   * - **Commit that deletes it**: the release N+1 change bakes `true` and removes this field
+   *   together with the `executeInlineGateDefinitions === true` branches. A knob parked at its
+   *   baked value is a parallel system with a nicer name.
+   */
+  executeInlineGateDefinitions?: boolean;
   /** Judge evaluation defaults — gates with `evaluation.mode: 'judge'` use context-isolated review */
   evaluation?: {
     defaultMode?: 'self' | 'judge';
     defaultModel?: string;
     strict?: boolean;
   };
+  /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
+  harnessCovers?: string[];
+  /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
+  reminderTokenBudget?: number;
 }
 
 /**

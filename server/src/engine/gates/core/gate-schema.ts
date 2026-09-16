@@ -13,13 +13,12 @@
  *
  * ## Gate Enforcement Modes (taxonomy)
  *
- * Five pass-criteria types exist. They differ in WHEN and HOW enforcement
+ * Four pass-criteria types exist. They differ in WHEN and HOW enforcement
  * happens — picking the right type for a use case is critical.
  *
  * | Type                       | Enforcement                                   | When to use                                                           |
  * |----------------------------|-----------------------------------------------|-----------------------------------------------------------------------|
  * | `inline_guidance`          | **None** — rendered as agent-facing checklist | Soft criteria the agent self-assesses (style, completeness reminders) |
- * | `llm_self_check`           | **Reserved** — runner not yet implemented     | (Not usable today)                                                    |
  * | `framework_compliance`     | **None** — auto-passed by GateValidator       | Declares intent only. PhaseGuardVerificationStage enforces framework phase guards      |
  * |                            | (see gate-validator.ts default branch)        | from `phases.yaml`, independently of this criteria type              |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
@@ -33,13 +32,15 @@
  * - Using `inline_guidance` and expecting auto-enforcement (it's display only)
  * - Using `shell_verify` to validate codebase state when the agent's CLAIM
  *   is what needs checking — set `shell_stdin_source: agent_response` for that
- * - Treating `llm_self_check` as available (it isn't yet — schema accepts it,
- *   no runner exists)
+ * - `llm_self_check` never had a runner and is not a valid `type`; use
+ *   `inline_guidance` (reminder) or `shell_verify`/`script_tool` (check)
  *
  * For deeper documentation: docs/guides/gates.md (Enforcement Modes section).
  */
 
 import { z } from 'zod/v4';
+
+import { ARTIFACT_KINDS } from '../utils/artifact-kinds.js';
 
 // ============================================
 // Pass Criteria Schema
@@ -48,7 +49,7 @@ import { z } from 'zod/v4';
 /**
  * Schema for gate pass criteria definitions.
  *
- * See the file-header taxonomy table for the 5 supported types and their
+ * See the file-header taxonomy table for the 4 supported types and their
  * enforcement modes. The `type` field's JSDoc below repeats the table at the
  * point of use (LLMs picking a type at YAML-authoring time read it there).
  */
@@ -62,7 +63,6 @@ export const GatePassCriteriaSchema = z
      *   self-assessment. NOT auto-enforced against output. Replaces the
      *   previously-named `content_check` and `pattern_check` (which were
      *   intentionally skipped by GateValidator — see gate-validator.ts).
-     * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
      * - `framework_compliance`: declarative only. GateValidator has no branch
      *   for it, so it falls through to the auto-pass default. PhaseGuardVerificationStage does
      *   check section presence + min_length + forbidden_terms, but it triggers
@@ -75,19 +75,18 @@ export const GatePassCriteriaSchema = z
      *   `{passed, reason?}` verdict. Runs beside `shell_verify` during gate review.
      *   Fails closed when it cannot run; a criterion with no id is refused at load.
      */
-    type: z.enum([
-      'inline_guidance',
-      'llm_self_check',
-      'framework_compliance',
-      'shell_verify',
-      'script_tool',
-    ]),
+    type: z.enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'], {
+      error: () =>
+        '`llm_self_check` never had a runner; use `inline_guidance` (reminder) or ' +
+        '`shell_verify`/`script_tool` (check)',
+    }),
 
-    // Content check options
-    min_length: z.number().int().nonnegative().optional(),
-    max_length: z.number().int().positive().optional(),
-    required_patterns: z.array(z.string()).optional(),
-    forbidden_patterns: z.array(z.string()).optional(),
+    // NOTE: min_length, max_length, required_patterns, forbidden_patterns, regex_patterns,
+    // and keyword_count are deliberately NOT declared here. They never had an evaluator —
+    // they rendered as reminder prose and never gated anything (B9) — so they are refused
+    // at load rather than accepted and silently ignored. `validateGateSchema` below reads
+    // them off `.passthrough()`'s extra keys and errors, naming the field and the fix: move
+    // the sentence into guidance.md (reminder) or use shell_verify/script_tool (check).
 
     // Framework compliance options
     framework: z.string().optional(),
@@ -102,14 +101,6 @@ export const GatePassCriteriaSchema = z
         })
       )
       .optional(),
-
-    // LLM self-check options
-    prompt_template: z.string().optional(),
-    pass_threshold: z.number().min(0).max(1).optional(),
-
-    // Pattern check options
-    regex_patterns: z.array(z.string()).optional(),
-    keyword_count: z.record(z.string(), z.number()).optional(),
 
     // Shell verification options (ground-truth validation via exit code)
     /**
@@ -213,7 +204,17 @@ function isBlank(value: string | undefined): boolean {
   return value == null || value.trim() === '';
 }
 
-export type GatePassCriteriaYaml = z.infer<typeof GatePassCriteriaSchema>;
+/**
+ * The shape of one `pass_criteria` entry as written in a `gate.yaml` — the WRITE side.
+ *
+ * `z.input`, not `z.infer`: this names the file's shape, which is the parser's INPUT side, so it
+ * is what a caller holds while BUILDING a criterion to write back to disk, where a field the
+ * schema defaults is legitimately absent. A criterion READ back from `GateDefinitionLoader`
+ * arrives inside `LoadedGateDefinition`, the parser's output side, with those defaults already
+ * applied. Naming the two sides apart is what keeps a `?? fallback` from being written against
+ * an object that cannot be missing the field.
+ */
+export type GatePassCriteriaYaml = z.input<typeof GatePassCriteriaSchema>;
 
 // ============================================
 // Activation Schema
@@ -230,6 +231,18 @@ export const GateActivationSchema = z
     explicit_request: z.boolean().optional(),
     /** Framework contexts that trigger this gate */
     framework_context: z.array(z.string()).optional(),
+    /**
+     * Artifact kinds this gate checks (ruling B13).
+     *
+     * When present, ARTIFACTS DECIDE: the gate attaches iff the run declares one of these kinds,
+     * and `prompt_categories` is ignored entirely. Categories remain the fallback only for gates
+     * that name no artifact — a gate that names both is stating what it checks twice, and the
+     * artifact statement is the specific one.
+     *
+     * The vocabulary's only home is `engine/gates/utils/artifact-kinds.ts`, which also owns the
+     * path table that classifies a run's files into these kinds.
+     */
+    artifacts: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
   })
   .partial();
 
@@ -254,6 +267,35 @@ export const GateRetryConfigSchema = z
   .partial();
 
 export type GateRetryConfigYaml = z.infer<typeof GateRetryConfigSchema>;
+
+// ============================================
+// Judge Evaluation Schema
+// ============================================
+
+/**
+ * Schema for a gate's `evaluation` key — the per-gate half of judge routing.
+ *
+ * Declared here rather than left to `.passthrough()`: `gate-loader.ts` copies this key onto
+ * `LightweightGateDefinition` and `review-utils.ts` resolves it against the global defaults, so
+ * it is load-bearing at runtime. A passthrough-only key is typed `unknown` and validated by
+ * nothing, which is how a gate.yaml with `evaluation: { mode: judgee }` used to load clean and
+ * then silently fall back to self-review.
+ *
+ * Kept structurally identical to `JudgeEvaluationConfig` (`../judge/types.js`), which is the
+ * consumer-side spelling of the same object.
+ *
+ * Not exported, unlike the three sibling sub-schemas above: nothing outside this file parses an
+ * `evaluation` block on its own, and an export nothing imports is what the knip ratchet counts.
+ * Export it when a caller exists.
+ */
+const GateJudgeEvaluationSchema = z.object({
+  /** Evaluation mode: 'self' (LLM reviews its own output) or 'judge' (context-isolated sub-agent) */
+  mode: z.enum(['self', 'judge']),
+  /** Model hint for the judge sub-agent (e.g. 'haiku' for cheap evaluation) */
+  model: z.string().optional(),
+  /** Use strict "find failures first" framing (default: true when mode is 'judge') */
+  strict: z.boolean().optional(),
+});
 
 // ============================================
 // Main Gate Definition Schema
@@ -293,6 +335,20 @@ export const GateDefinitionSchema = z
     }),
     /** Description of what this gate checks/guides */
     description: z.string().min(1, 'Gate description is required'),
+    /**
+     * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`,
+     * `security`). An installation's `gates.harnessCovers` (config.json) suppresses
+     * reminders whose subject it lists; checks (`shell_verify`/`script_tool`) are never
+     * suppressed regardless of subject. Surfaced by the generated gate index so an
+     * operator can copy the exact spelling into `harnessCovers`.
+     */
+    subject: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        'subject must be kebab-case: lowercase letters, digits, and hyphens only, e.g. "code-quality"'
+      )
+      .optional(),
 
     // Optional severity and enforcement
     /** Severity level for prioritization */
@@ -322,10 +378,74 @@ export const GateDefinitionSchema = z
     // Activation rules
     /** Rules determining when this gate should be activated */
     activation: GateActivationSchema.optional(),
+
+    /**
+     * When true, a FAIL verdict from this gate suppresses the execution response content —
+     * only the gate review instructions are returned. For critical gates where invalid
+     * output should not reach the user.
+     *
+     * @default false
+     */
+    blockResponseOnFail: z.boolean().optional(),
+
+    /**
+     * Judge evaluation configuration. When `mode` is 'judge', gate review is delegated to a
+     * context-isolated sub-agent instead of self-review.
+     */
+    evaluation: GateJudgeEvaluationSchema.optional(),
   })
   .passthrough(); // Allow additional fields not in schema for extensibility
 
-export type GateDefinitionYaml = z.infer<typeof GateDefinitionSchema>;
+/**
+ * The single source for a gate.yaml's shape.
+ *
+ * Read this as the type of a gate definition everywhere: `types/gate-guide-types.ts` re-exports
+ * it under the same name, so the thirteen consumers that import it from `../types.js` and the
+ * loaders that produce it are describing one object, not two that agree by hand. A field added
+ * to `GateDefinitionSchema` above reaches every consumer; a field added to a consumer's own copy
+ * would not have reached the validator, which is how `subject` (row 0.2) and the six pattern/
+ * length fields (row 1.5) each had to be edited in two places.
+ *
+ * Two consequences of deriving rather than declaring, both deliberate:
+ * - Two names for the two sides of one schema. `GateDefinitionYaml` is `z.input`: the WRITE
+ *   side, the shape of the text a caller authors into a `gate.yaml`, where `severity` and
+ *   `gate_type` may legitimately be absent because the schema supplies them. `LoadedGateDefinition`
+ *   (below) is `z.output`: the READ side, what `GateDefinitionLoader` hands back after parsing,
+ *   where those defaults have been applied and both fields are present. Hold the input side to
+ *   build yaml; hold the output side to read a loaded gate, where a `?? 'medium'` fallback is
+ *   dead code the compiler can point at rather than a guard anyone still needs.
+ * - `.passthrough()` puts an `unknown` index signature on the type, so a key this schema does
+ *   not declare is reachable only as `definition['key']` and only as `unknown`. That is the
+ *   pressure that keeps a load-bearing key declared here: `evaluation` and `blockResponseOnFail`
+ *   were passthrough-only and read at runtime anyway, which is exactly the gap this SSOT closes.
+ */
+export type GateDefinitionYaml = z.input<typeof GateDefinitionSchema>;
+
+/**
+ * A gate definition as `GateDefinitionLoader` hands it back — the READ side.
+ *
+ * `z.output`: the loader parses every `gate.yaml` through `GateDefinitionSchema` and returns the
+ * parse result, so `severity`, `gate_type` and the `retry_config` fields carry their schema
+ * defaults by the time any consumer sees them. Anything holding a LOADED definition takes this
+ * type; anything BUILDING one to write to disk takes `GateDefinitionYaml` above.
+ */
+export type LoadedGateDefinition = z.output<typeof GateDefinitionSchema> & {
+  /**
+   * Root directory this definition was loaded FROM (P4.18).
+   *
+   * Stamped by `GateDefinitionLoader.loadFromYamlDir`, where the root is the argument, and read
+   * back by the quarantine report so a shadowed id names the root currently serving it instead of
+   * "another root". Mirrors `PromptData.sourceRoot`.
+   *
+   * On the OUTPUT side only, and deliberately absent from `GateDefinitionSchema` itself: a key in
+   * the loader's zod schema is a key an operator may author, which `validate:declared-surface`
+   * then requires the tool to expose. This one is written by the loader after validation and
+   * overwrites anything a file declared, so it cannot claim a provenance the file does not have.
+   * Before the input/output split this rode a hand-written interface of the same name; the split
+   * is what gives it a home that keeps the authorable surface unchanged.
+   */
+  sourceRoot?: string;
+};
 
 // ============================================
 // Validation Utilities
@@ -341,8 +461,8 @@ export interface GateSchemaValidationResult {
   errors: string[];
   /** Validation warnings (non-blocking issues) */
   warnings: string[];
-  /** Parsed data if validation passed */
-  data?: GateDefinitionYaml;
+  /** Parsed data if validation passed — zod's output, with schema defaults applied */
+  data?: LoadedGateDefinition;
 }
 
 /**
@@ -394,8 +514,35 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
   }
 
   if (!definition.activation) {
-    warnings.push('No activation rules - gate will always be active');
+    warnings.push(
+      'No activation rules - gate is opt-in and attaches only when a prompt or chain step includes it'
+    );
   }
+
+  // Pattern/length fields have no evaluator: they never gated anything (B9), so they are
+  // no longer declared on GatePassCriteriaSchema and are refused at load rather than
+  // accepted and silently ignored. They still reach here as `.passthrough()` extra keys,
+  // which is why the lookup below goes through an index signature instead of the typed field.
+  const REJECTED_CRITERIA_FIELDS = [
+    'required_patterns',
+    'forbidden_patterns',
+    'regex_patterns',
+    'keyword_count',
+    'min_length',
+    'max_length',
+  ] as const;
+  definition.pass_criteria?.forEach((criterion, index) => {
+    const rawCriterion = criterion as Record<string, unknown>;
+    for (const field of REJECTED_CRITERIA_FIELDS) {
+      if (rawCriterion[field] !== undefined) {
+        errors.push(
+          `pass_criteria[${index}].${field} is not evaluated by any runner and is no longer ` +
+            'accepted; move the sentence into guidance.md (reminder) or use shell_verify/' +
+            'script_tool (check)'
+        );
+      }
+    }
+  });
 
   const resultPayload = {
     valid: errors.length === 0,

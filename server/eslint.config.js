@@ -139,8 +139,33 @@ export default [
       // this". dependency-cruiser resolves, and its `$1` back-reference compares the target layer
       // against the source layer, so the script was deleted rather than kept alongside.
 
-      // General rules - warn on all console usage, use EnhancedLogger instead
-      'no-console': 'warn',
+      // stdout-bound console methods are refused: on STDIO, stdout is the protocol channel, and a
+      // stray line corrupts the stream a client parses. warn and error write to stderr; prefer the
+      // logger for both.
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+      // no-console cannot see a direct stream write, so the same channel is refused by property.
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'stdout',
+          message:
+            'stdout is the STDIO protocol channel. Write diagnostics to stderr or through the logger.',
+        },
+      ],
+      // The same stream imported by name: `import { stdout } from 'node:process'` has no `process.`
+      // member expression for the rule above to match.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['process', 'node:process'].map((name) => ({
+            name,
+            importNames: ['stdout'],
+            message:
+              'stdout is the STDIO protocol channel. Write diagnostics to stderr or through the logger.',
+          })),
+        },
+      ],
 
       // Complexity enforcement (PRIMARY quality gate — ratcheted)
       //
@@ -263,20 +288,6 @@ export default [
 
   // Prettier config (disables conflicting rules)
   prettierConfig,
-
-  // Console usage exemptions - early startup files where logger is not available yet
-  {
-    files: [
-      'src/index.ts', // Main entry point - early startup before logger initialization
-      'src/runtime/startup.ts', // Rollback mechanism and critical diagnostics
-      'src/infra/logging/index.ts', // Logger implementation - fallback console for error cases
-    ],
-    rules: {
-      // Allow console usage in these files for early startup and critical diagnostics
-      // All other files must use EnhancedLogger
-      'no-console': 'off',
-    },
-  },
 
   // Lifecycle annotations required for guarded runtime files
   // Replaces scripts/validate-no-execution-mode.js, deleted 2026-08-06 (row 1.4).

@@ -61,9 +61,20 @@ describe('Gate Category Selection Integration', () => {
     const categoryGates = (promptCategory: string): string[] =>
       gateManager.selectGates({ promptCategory, enabledOnly: true }).selectedIds;
 
-    test('returns code-quality gate for development category', () => {
+    // code-quality declares `activation.artifacts: [source]` (ruling B13), so artifacts decide
+    // and `prompt_categories` is not consulted at all — category alone no longer activates it.
+    test('returns code-quality gate when the run declares a source artifact', () => {
+      const result = gateManager.selectGates({
+        promptCategory: 'development',
+        declaredArtifacts: ['source'],
+        enabledOnly: true,
+      });
+      expect(result.selectedIds).toContain('code-quality');
+    });
+
+    test('does NOT return code-quality gate for development category alone (no artifacts declared)', () => {
       const gates = categoryGates('development');
-      expect(gates).toContain('code-quality');
+      expect(gates).not.toContain('code-quality');
     });
 
     test('does NOT return code-quality gate for research category', () => {
@@ -80,10 +91,20 @@ describe('Gate Category Selection Integration', () => {
       expect(researchGates).not.toContain('research-quality');
     });
 
-    test('returns security-awareness for development category', () => {
-      // security-awareness has development in categories and explicit_request: false
+    // security-awareness declares `activation.artifacts: [source]` too (ruling B13): category
+    // and explicit_request: false describe the OLD contract, artifacts decide the current one.
+    test('returns security-awareness gate when the run declares a source artifact', () => {
+      const result = gateManager.selectGates({
+        promptCategory: 'development',
+        declaredArtifacts: ['source'],
+        enabledOnly: true,
+      });
+      expect(result.selectedIds).toContain('security-awareness');
+    });
+
+    test('does NOT return security-awareness gate for development category alone (no artifacts declared)', () => {
       const gates = categoryGates('development');
-      expect(gates).toContain('security-awareness');
+      expect(gates).not.toContain('security-awareness');
     });
 
     test('excludes framework gates when no framework is in context', () => {

@@ -374,11 +374,17 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain('Repair of quarantined gate via resource_manager');
   });
 
-  it('POSITIVE CONTROL — the row count discriminates: a gate nobody repaired has none', async () => {
+  it('POSITIVE CONTROL — the row count discriminates: a gate nobody wrote has none', async () => {
     // Without this, `toBe(1)` above is satisfied by a query that returns 1 for everything, and by
     // a suite whose temp database happens to hold one stray row.
+    //
+    // `healthy-gate` is the zero case and has to be: it is loaded from disk and never written
+    // through the tool. `fresh-gate` stopped being one when the create path learned to record its
+    // created state as version 1 — so it now holds a row for a reason that has nothing to do with
+    // repair, which is precisely why it is asserted here rather than dropped. The control is that
+    // the query tells the two apart.
     expect(countVersionRows(dbManager, 'gate', 'healthy-gate')).toBe(0);
-    expect(countVersionRows(dbManager, 'gate', 'fresh-gate')).toBe(0);
+    expect(countVersionRows(dbManager, 'gate', 'fresh-gate')).toBe(1);
 
     const result = await call({ action: 'history', id: 'healthy-gate' });
     expect(result.body).toContain('No version history');

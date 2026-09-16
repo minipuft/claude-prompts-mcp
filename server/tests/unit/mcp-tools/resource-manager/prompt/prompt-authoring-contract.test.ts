@@ -27,6 +27,7 @@ interface Harness {
     }>
   >;
   recordEditResult: jest.Mock;
+  saveVersion: jest.Mock;
   onRefresh: jest.Mock;
 }
 
@@ -40,6 +41,8 @@ function createHarness(
     getResolvedPromptsDirectory: () => '/workspace/prompts',
   } as unknown as ConfigManager;
   let currentVersion = options.currentVersion ?? 4;
+  /** Version numbers `saveVersion` has assigned to ids that did not exist before this harness. */
+  const createdVersions = new Map<string, number>();
   let pendingPrompt: Record<string, unknown> | undefined;
   let convertedPrompts: Record<string, unknown>[] = [
     {
@@ -94,14 +97,24 @@ function createHarness(
       };
     }
   );
-  const loadHistory = jest.fn(async (_type: string, id: string) =>
-    id === 'existing_prompt' || pendingPrompt?.['id'] === id
-      ? ({ current_version: currentVersion } as never)
-      : null
-  );
+  const loadHistory = jest.fn(async (_type: string, id: string) => {
+    if (id === 'existing_prompt') return { current_version: currentVersion } as never;
+    const created = createdVersions.get(id);
+    return created !== undefined && pendingPrompt?.['id'] === id
+      ? ({ current_version: created } as never)
+      : null;
+  });
   const recordEditResult = jest.fn(async () => {
     currentVersion += 1;
     return { success: true, version: currentVersion, bridged: false };
+  });
+  // The create-path writer: no prior state to bridge, so it saves version 1 for a
+  // fresh id directly — mirroring `saveVersion`'s real MAX(existing)+1 arithmetic, which an id
+  // with no rows yet resolves to 1 on its own. Untyped rest params (matching `recordEditResult`
+  // above): an explicitly typed signature here does not structurally match `jest.Mock`.
+  const saveVersion = jest.fn(async (...args: unknown[]) => {
+    createdVersions.set(args[1] as string, 1);
+    return { success: true, version: 1 };
   });
   const context = {
     dependencies,
@@ -109,11 +122,12 @@ function createHarness(
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     comparisonEngine: new ComparisonEngine(logger),
     textDiffService: new ObjectDiffGenerator(),
-    fileOperations: { updatePromptImplementation },
+    fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
     versionHistoryService: {
       isAutoVersionEnabled: () => true,
       loadHistory,
       recordEditResult,
+      saveVersion,
     },
     getData: () => ({ convertedPrompts }),
   } as unknown as PromptResourceContext;
@@ -122,6 +136,7 @@ function createHarness(
     processor: new PromptLifecycleProcessor(context),
     updatePromptImplementation,
     recordEditResult,
+    saveVersion,
     onRefresh,
   };
 }
@@ -207,10 +222,32 @@ describe('prompt validate/create authoring contract', () => {
         resource_root: '/workspace/prompts',
         refresh_status: 'loaded',
         loaded_after_refresh: true,
-        current_version: 4,
+        // The created state is recorded as version 1, not 0.
+        current_version: 1,
       },
     });
     expect(harness.onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  // A create records the created state as version 1 — through `saveVersion` directly, never
+  // through `recordEditResult` (there is no prior state to bridge).
+  test('records the created state as version 1 through saveVersion, not recordEditResult', async () => {
+    const harness = createHarness();
+
+    await harness.processor.createPrompt({
+      id: 'created_prompt',
+      ...draftBase,
+      user_message_template: 'Create {{input}}',
+    } as never);
+
+    expect(harness.saveVersion).toHaveBeenCalledTimes(1);
+    expect(harness.saveVersion).toHaveBeenCalledWith(
+      'prompt',
+      'created_prompt',
+      expect.objectContaining({ id: 'created_prompt' }),
+      expect.objectContaining({ description: expect.stringContaining('Created') })
+    );
+    expect(harness.recordEditResult).not.toHaveBeenCalled();
   });
 
   test('marks a write as failed when refresh does not expose the produced state', async () => {

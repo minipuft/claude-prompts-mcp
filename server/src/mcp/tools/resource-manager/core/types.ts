@@ -11,6 +11,7 @@ import type {
   PromptInjectionConfigYaml,
 } from '#modules/prompts/prompt-schema.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
+import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type {
   FrameworkManagerInput,
   FrameworkGate,
@@ -25,7 +26,6 @@ import type {
   QualityIndicators,
 } from '../../framework-manager/core/types.js';
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
-import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { GateToolHandler } from '../../gate-manager/index.js';
 import type { PreviewableAction } from '../../shared/preview-action.js';
@@ -293,6 +293,10 @@ export interface ResourceManagerInput {
   execution_hint?: 'single' | 'chain';
   is_chain?: boolean;
   full_restart?: boolean;
+  /** Read by prompt `guide`: what the caller is trying to do. */
+  goal?: string;
+  /** Read by prompt `guide`: show full details for actions not marked working. */
+  include_legacy?: boolean;
   filter?: string;
   detail?: 'summary' | 'full';
   search_query?: string;
@@ -302,6 +306,8 @@ export interface ResourceManagerInput {
   type?: 'validation' | 'guidance';
   /** Writes the gate.yaml key `gate_type` — the framework/category/custom classification. */
   gate_type?: 'framework' | 'category' | 'custom';
+  /** Free kebab-case tag naming what the gate reminds about; suppressed via `gates.harnessCovers`. */
+  subject?: string;
   severity?: 'critical' | 'high' | 'medium' | 'low';
   enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   guidance?: string;

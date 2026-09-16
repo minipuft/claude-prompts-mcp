@@ -2,18 +2,11 @@ id: code-quality
 name: Code Quality Standards
 type: validation
 description: Ensures generated code follows best practices and quality standards
+subject: code-quality
 guidanceFile: guidance.md
 
 pass_criteria:
   - type: inline_guidance
-    min_length: 100
-    required_patterns:
-      - function
-      - return
-  - type: inline_guidance
-    regex_patterns:
-      - 'const|let|var'
-      - '\(.*\)'
 
 retry_config:
   max_attempts: 2
@@ -21,6 +14,8 @@ retry_config:
   preserve_context: true
 
 activation:
+  artifacts:
+    - source
   prompt_categories:
     - development
     - code_generation

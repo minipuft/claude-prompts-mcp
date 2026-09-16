@@ -3,19 +3,15 @@ name: Plan Quality Standards
 type: validation
 severity: high
 description: Ensures implementation plans are complete, actionable, and risk-aware
+subject: planning
 guidanceFile: guidance.md
 
 pass_criteria:
   - type: inline_guidance
-    min_length: 150
-    required_patterns:
-      - file
-      - step
-  - type: inline_guidance
-    keyword_count:
-      risk: 1
 
 activation:
+  artifacts:
+    - plan
   prompt_categories:
     - planning
     - development

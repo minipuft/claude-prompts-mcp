@@ -11,7 +11,7 @@ import type {
   SemanticAnalysisConfig,
   LoggingConfig,
   ResolvedFrameworkConfig,
-  GateSystemSettings as GatesConfig,
+  GateSystemSettings,
   ChainSessionConfig,
   ExecutionConfig,
   VersioningConfig,
@@ -20,6 +20,15 @@ import type {
   TransportMode,
 } from './core-config.js';
 import type { InjectionConfig } from './injection.js';
+
+export interface ConfigSchemaValidationResult {
+  /** 'valid' = AJV accepted the config. 'invalid' = AJV rejected it. 'unavailable' = the schema
+   *  itself could not be read, parsed, or compiled — this is NOT a claim about the config. */
+  status: 'valid' | 'invalid' | 'unavailable';
+  /** True only when status is 'valid'. Kept alongside `status` so existing reads keep compiling. */
+  valid: boolean;
+  errors: string[];
+}
 
 /**
  * Read-only configuration access + event subscription for hot-reload.
@@ -36,6 +45,12 @@ export interface ConfigManager {
   getPromptsRegisterWithMcp(): boolean | undefined;
   getTransportMode(): TransportMode;
 
+  // ── Schema validation ────────────────────────────────────────────────
+
+  /** Schema check from the last successful config load. Undefined means NOT validated — no
+   *  schema path was injected, or the last load fell back to defaults; never read as valid. */
+  getSchemaValidation(): ConfigSchemaValidationResult | undefined;
+
   // ── Domain config getters ────────────────────────────────────────────
 
   // No `getAnalysisConfig` / `getSemanticAnalysisConfig`: the deprecated
@@ -43,7 +58,7 @@ export interface ConfigManager {
   // but nothing reads the parsed value any more — the analyzer that took it never read a field.
   getLoggingConfig(): LoggingConfig;
   getFrameworksConfig(): ResolvedFrameworkConfig;
-  getGatesConfig(): GatesConfig;
+  getGatesConfig(): GateSystemSettings;
   getChainSessionConfig(): ChainSessionConfig;
   getExecutionConfig(): ExecutionConfig;
   isJudgeEnabled(): boolean;
@@ -61,6 +76,8 @@ export interface ConfigManager {
   getServerRoot(): string;
   getGatesDirectory(): string;
   getFrameworksDirectory(): string;
+  getScriptsDirectory(): string;
+  getStylesDirectory(): string;
   /**
    * The bundled (package-shipped) directory for a resource type — always read, never written.
    * Undefined when no path source is injected, meaning "no distinct bundled source".

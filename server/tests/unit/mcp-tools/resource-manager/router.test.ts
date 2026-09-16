@@ -277,7 +277,8 @@ describe('ResourceManagerRouter', () => {
           system_message: 'System-only prompt',
           expected_version: 12,
           full_restart: true,
-          is_chain: false,
+          goal: 'gate config',
+          include_legacy: true,
         } as ResourceManagerInput,
         {}
       );
@@ -287,7 +288,8 @@ describe('ResourceManagerRouter', () => {
           action: 'validate',
           expected_version: 12,
           full_restart: true,
-          is_chain: false,
+          goal: 'gate config',
+          include_legacy: true,
           system_message: 'System-only prompt',
         }),
         {}

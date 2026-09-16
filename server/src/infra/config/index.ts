@@ -10,6 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
+import { validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -19,6 +20,8 @@ const logger = createLogger(
     enableDebug: false,
   })
 );
+
+import type { ConfigSchemaValidationResult } from '#shared/types/config-manager.js';
 
 import {
   Config,
@@ -36,10 +39,11 @@ import {
   TelemetryConfig,
   DEFAULT_VERSIONING_CONFIG,
   DEFAULT_TELEMETRY_CONFIG,
+  DEFAULT_GATES_CONFIG,
   DEFAULT_INJECTION_CONFIG,
   type InjectionConfig,
   type ConfigManager,
-  type GatesConfig,
+  type GateSystemSettings,
 } from '#shared/types/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
@@ -166,12 +170,6 @@ const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   },
 };
 
-const DEFAULT_GATES_CONFIG: GatesConfig = {
-  enabled: true,
-  definitionsDirectory: 'gates',
-  enableFrameworkGates: true,
-};
-
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
   sessionTimeoutMinutes: 24 * 60,
   reviewTimeoutMinutes: 30,
@@ -239,6 +237,8 @@ export interface ResourcePathSource {
   getPromptsPath(): string;
   getGatesPath(): string;
   getFrameworksPath(): string;
+  getScriptsPath(): string;
+  getStylesPath(): string;
   /**
    * The bundled (package-shipped) directory for a resource type — the lowest-precedence root,
    * always read, never written.
@@ -269,15 +269,30 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private frameworksConfigCache: ResolvedFrameworkConfig;
   /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
   private warnedAnalysisDeprecated = false;
+  /**
+   * The package's own `config.schema.json`, injected by the composition root. Never read from the
+   * config's `$schema`, which is an editor hint. Undefined means the file is not schema-checked.
+   */
+  private readonly schemaPath: string | undefined;
+  /** The schema check of the last successful parse; undefined when none ran or the load failed. */
+  private schemaValidation: ConfigSchemaValidationResult | undefined;
+  /**
+   * Status + errors of the last result that WARNED. Unlike `warnedAnalysisDeprecated` this is not
+   * once-per-process: hot reload re-enters `loadConfig`, so an unchanged file must stay quiet while
+   * a new mistake must still be reported. Cleared by a valid load, so a reintroduced error warns.
+   */
+  private lastWarnedSchemaSignature: string | undefined;
 
   constructor(
     configPath: string,
-    private readonly resourcePaths?: ResourcePathSource
+    private readonly resourcePaths?: ResourcePathSource,
+    options: { readonly schemaPath?: string } = {}
   ) {
     super();
     this.configPath = configPath;
     this.config = DEFAULT_CONFIG;
     this.frameworksConfigCache = { ...DEFAULT_FRAMEWORKS_CONFIG };
+    this.schemaPath = options.schemaPath;
   }
 
   /**
@@ -287,7 +302,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     const previousFrameworks = { ...this.frameworksConfigCache };
     try {
       const configContent = await readFile(this.configPath, 'utf8');
-      this.config = JSON.parse(configContent) as Config;
+      const parsedConfig = JSON.parse(configContent) as Config;
+
+      // Checked against the RAW file, before `validateAndSetDefaults`: that rewrites inert
+      // spellings in place and fills defaults the schema does not declare, so a check after it
+      // would report the loader's own additions and no longer see what the user wrote.
+      await this.checkAgainstSchema(parsedConfig);
+
+      this.config = parsedConfig;
 
       // Validate and set defaults for any missing properties
       this.validateAndSetDefaults();
@@ -296,8 +318,11 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
       return this.config;
     } catch (error) {
+      // Whatever the last check said describes a file this load did not serve.
+      this.schemaValidation = undefined;
       console.error(`Error loading configuration from ${this.configPath}:`, error);
-      console.info('Using default configuration');
+      // stderr, not stdout: on STDIO stdout is the protocol channel, and a stray line corrupts it.
+      console.error('Using default configuration');
       this.config = DEFAULT_CONFIG;
       this.validateAndSetDefaults();
       this.emitConfigChange(previousFrameworks);
@@ -310,6 +335,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getConfig(): Config {
     return this.config;
+  }
+
+  /**
+   * The schema check of the last successful parse. Undefined means NOT VALIDATED — no schema path
+   * was injected, or the last load fell back to defaults — and must never be read as valid.
+   */
+  getSchemaValidation(): ConfigSchemaValidationResult | undefined {
+    return this.schemaValidation;
   }
 
   /**
@@ -412,12 +445,18 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Get gates configuration (unified gate settings)
    * Reads from gates config section with new property names
    */
-  getGatesConfig(): GatesConfig {
+  getGatesConfig(): GateSystemSettings {
     const gatesConfig = this.config.gates ?? {};
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
       enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
+      executeInlineGateDefinitions:
+        gatesConfig.executeInlineGateDefinitions ??
+        DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
+      harnessCovers: gatesConfig.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
+      reminderTokenBudget:
+        gatesConfig.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
     };
   }
 
@@ -696,6 +735,37 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     return path.join(configDir, 'resources', 'gates');
   }
 
+  /**
+   * Get scripts directory path — the primary root `WorkspaceScriptLoader` searches after
+   * prompt-local scripts, for `{{script:id}}` references (`prompt-executor.ts`).
+   *
+   * Fourth instance of the prompts/gates/frameworks defect: this loader built its search
+   * directory from `getServerRoot()` directly, so it read the package tree even with a
+   * workspace configured — the read side never went through `PathResolver` at all, prompts'
+   * starting point before D8 Arc 1.
+   */
+  getScriptsDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getScriptsPath();
+    }
+
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'scripts');
+  }
+
+  /**
+   * Get styles directory path — the primary root `StyleManager` resolves `#style` references
+   * against (`prompt-executor.ts`). Same defect and fix as {@link getScriptsDirectory}.
+   */
+  getStylesDirectory(): string {
+    if (this.resourcePaths !== undefined) {
+      return this.resourcePaths.getStylesPath();
+    }
+
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'styles');
+  }
+
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts
 
   /**
@@ -821,6 +891,55 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
         'For model-graded gate evaluation use the `%judge` modifier or `gates.evaluation.defaultMode`. ' +
         'Remove the `analysis` section from config.json to silence this notice.'
     );
+  }
+
+  /**
+   * Validates the raw parsed file against the injected schema and records the result. Reports,
+   * never gates: a config that fails its schema still loads, because refusing to start over a
+   * typo would turn a warning into an outage.
+   */
+  private async checkAgainstSchema(rawConfig: Config): Promise<void> {
+    if (this.schemaPath === undefined) {
+      this.schemaValidation = undefined;
+      return;
+    }
+
+    const result = await validateConfigAgainstSchema(
+      rawConfig as unknown as Record<string, unknown>,
+      this.schemaPath
+    );
+    this.schemaValidation = result;
+    this.warnOnSchemaResult(result, this.schemaPath);
+  }
+
+  /**
+   * Warns only when the status + error set differs from the last one warned. An unreadable schema
+   * says nothing about the config, so it is reported as unchecked, never as invalid.
+   */
+  private warnOnSchemaResult(result: ConfigSchemaValidationResult, schemaPath: string): void {
+    if (result.status === 'valid') {
+      this.lastWarnedSchemaSignature = undefined;
+      return;
+    }
+
+    const signature = JSON.stringify([result.status, [...result.errors].sort()]);
+    if (signature === this.lastWarnedSchemaSignature) return;
+    this.lastWarnedSchemaSignature = signature;
+
+    if (result.status === 'unavailable') {
+      logger.warn(
+        `[CONFIG] Could not read the config schema at ${schemaPath}, so ${this.configPath} was not ` +
+          `checked against it (${result.errors.join('; ')}). The server keeps running.`
+      );
+      return;
+    }
+
+    for (const error of result.errors) {
+      logger.warn(
+        `[CONFIG] ${this.configPath} does not match its schema: ${error} — the server keeps ` +
+          'running, but this setting may not take effect as written.'
+      );
+    }
   }
 
   /**

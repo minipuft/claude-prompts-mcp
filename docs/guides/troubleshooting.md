@@ -29,15 +29,34 @@ npx claude-prompts --workspace=/path/to/workspace
 MCP_WORKSPACE=/path/to/workspace npx claude-prompts
 ```
 
-### Config JSON Syntax Error
+### "Refusing to start: ... is set to ..."
 
-**Cause**: Invalid JSON in `config.json` blocks startup.
+**Cause**: A path you set cannot be used, so the server stopped before serving instead of running on
+something you did not ask for. The message names the variable or flag, its value, the path it
+resolved to, what is wrong, and what removing the setting would fall back to. It fires for:
 
-**Fix**:
+- `MCP_WORKSPACE` / `--workspace` or `MCP_RESOURCES_PATH` naming a path that does not exist or is
+  not a directory. The server no longer creates a missing workspace.
+- `MCP_CONFIG_PATH` / `--config` naming a file that is missing, a directory, unreadable, or invalid
+  JSON.
+- A `config.json` inside your workspace that is unreadable, a directory, invalid JSON, or valid JSON
+  that is not an object.
+
+**Fix**: correct the path in your client config, create the directory, or unset the setting. A
+relative value resolves against the server's working directory, which for most clients is not your
+shell's, so prefer absolute paths. To check a config file:
 
 ```bash
 node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 ```
+
+### Config JSON Syntax Error in the packaged config
+
+**Cause**: Only the `config.json` shipped with the server still falls back instead of refusing:
+invalid JSON there logs `Error loading configuration` and `Using default configuration` to stderr,
+and the server starts on built-in defaults.
+
+**Fix**: reinstall the package, or point `MCP_CONFIG_PATH` at a valid config file.
 
 > [!NOTE]
 > For all CLI flags and environment variables, see the [CLI Configuration](../reference/mcp-tools.md#cli-configuration) section in the MCP Tools reference.

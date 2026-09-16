@@ -70,7 +70,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
     this.confirmationTracker = config.confirmationTracker ?? getDefaultPendingConfirmationTracker();
 
     if (this.debug) {
-      // eslint-disable-next-line no-console
       console.error('[ToolTriggerFilter] Initialized');
     }
   }
@@ -138,7 +137,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
       const tool = toolMap.get(match.toolId);
       if (tool === undefined) {
         if (this.debug) {
-          // eslint-disable-next-line no-console
           console.error(`[ToolTriggerFilter] Tool not found: ${match.toolId}`);
         }
         continue;
@@ -151,7 +149,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
       if (isExplicit) {
         readyForExecution.push(match);
         if (this.debug && needsConfirmation) {
-          // eslint-disable-next-line no-console
           console.error(
             `[ToolTriggerFilter] Tool '${tool.id}' confirmation bypassed via explicit arg`
           );
@@ -171,7 +168,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
         if (autoApproved) {
           readyForExecution.push(match);
           if (this.debug) {
-            // eslint-disable-next-line no-console
             console.error(`[ToolTriggerFilter] Tool '${tool.id}' auto-approved via re-run`);
           }
           continue;
@@ -193,7 +189,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
     };
 
     if (this.debug) {
-      // eslint-disable-next-line no-console
       console.error('[ToolTriggerFilter] Filter result:', {
         ready: readyForExecution.length,
         pending: pendingConfirmation.length,
@@ -260,7 +255,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
    * @param toolId - Tool ID that was force-executed
    */
   logManualOverride(toolId: string): void {
-    // eslint-disable-next-line no-console
     console.warn(
       `[ToolTriggerFilter] WARN: Tool '${toolId}' confirmation bypassed via explicit arg`
     );

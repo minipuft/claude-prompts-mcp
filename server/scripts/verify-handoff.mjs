@@ -26,6 +26,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildServerEnv } from './lib/hermetic-server-env.js';
+
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const WS = mkdtempSync(path.join(tmpdir(), 'handoff-drive-'));
 const PORT_A = 47311;
@@ -33,10 +35,8 @@ const PORT_B = 47312;
 
 function spawnServer(port) {
   const log = openSync(path.join(WS, `server-${port}.log`), 'w');
-  const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: WS };
-  delete env.NODE_OPTIONS;
-  delete env.NODE_ENV;
-  delete env.JEST_WORKER_ID;
+  // The shared scrub (lib/hermetic-server-env.js); the temp workspace is this drive's own.
+  const env = buildServerEnv({ PORT: String(port), MCP_WORKSPACE: WS });
   return spawn('node', [DIST, '--transport=streamable-http', '--quiet'], {
     env,
     stdio: ['ignore', log, log],

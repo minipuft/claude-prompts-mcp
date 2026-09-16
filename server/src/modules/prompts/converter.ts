@@ -189,6 +189,13 @@ export class PromptConverter {
           convertedPrompt.injection = promptFile.injection;
         }
 
+        // B13: the prompt's artifact declaration. Carried for the same reason `budget` above is —
+        // gate resolution reads the CONVERTED prompt, so a declaration that stops at the loaded
+        // file never reaches activation.
+        if (promptFile.artifacts !== undefined) {
+          convertedPrompt.artifacts = promptFile.artifacts;
+        }
+
         // Load script tools if prompt declares any (Phase 2 integration)
         if (promptData.tools && promptData.tools.length > 0) {
           try {

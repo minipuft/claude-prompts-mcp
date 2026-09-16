@@ -13,8 +13,6 @@
  *                 └── PipelineStage[] (22 stages)
  */
 
-import * as path from 'node:path';
-
 import { ChainSessionRouter } from './chain-session-router.js';
 import { PipelineBuilder } from './pipeline-builder.js';
 import { ToolDescriptionLoader } from '../../tool-description-loader.js';
@@ -31,7 +29,7 @@ import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
-import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
+import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
@@ -120,6 +118,13 @@ export class PromptExecutor {
   private readonly gateManager: GateManager;
   /** StyleManager for dynamic style guidance (# operator) */
   private styleManager?: StyleManager;
+  /**
+   * Settles once `initializeStyleManager()` has run to completion (success or handled
+   * failure). The constructor kicks that load off in the background, so a caller reading
+   * `styleManager` before it settles would see `undefined` even when the load is about to
+   * succeed; `resolveStyleManager()` awaits this instead of racing it.
+   */
+  private styleManagerReady!: Promise<void>;
   /** Resolver for {{ref:prompt_id}} references in templates */
   private referenceResolver?: PromptReferenceResolver;
   /** Resolver for {{script:id}} references in templates */
@@ -131,6 +136,13 @@ export class PromptExecutor {
    * than holding the instance.
    */
   private scriptToolRuntime?: ScriptToolRuntime;
+  /**
+   * Same instance as `scriptToolRuntime.loader`, held separately and concretely typed:
+   * `scriptToolRuntime.loader` is a `ScriptLoader` port (deliberately minimal, crossing the
+   * `engine/` boundary), so it carries no `clearCache()`. Script hot reload needs one to
+   * invalidate a workspace-tier script edit between reloads.
+   */
+  private workspaceScriptLoader?: WorkspaceScriptLoader;
   /** Hook registry for pipeline event emissions */
   private hookRegistry?: HookRegistryPort;
   /** Notification emitter for MCP client notifications */
@@ -150,7 +162,8 @@ export class PromptExecutor {
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager,
     mcpToolsManager?: any,
-    promptGuidanceService?: PromptGuidanceService
+    promptGuidanceService?: PromptGuidanceService,
+    databasePort?: DatabasePort
   ) {
     this.logger = logger;
     this.promptManager = promptManager;
@@ -158,7 +171,14 @@ export class PromptExecutor {
     this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
     this.executionPlanner = new ExecutionPlanner(semanticAnalyzer, logger);
-    this.parsingSystem = createParsingSystem(logger);
+    // `@id` detection asks the framework manager on every parse, so a framework created, updated
+    // or deleted while the server runs is recognized the same moment the rest of the server sees
+    // it. Until the manager arrives, every `@word` is treated as a framework operator.
+    this.parsingSystem = createParsingSystem(
+      logger,
+      (normalizedId) =>
+        this.frameworkManager === undefined || this.frameworkManager.has(normalizedId)
+    );
     this.inlineGateParser = createSymbolicCommandParser(logger);
     this.mcpToolsManager = mcpToolsManager;
     this.promptGuidanceService = promptGuidanceService;
@@ -194,6 +214,9 @@ export class PromptExecutor {
           }
         : {}),
       ...(workspaceScope !== undefined ? { defaultScope: workspaceScope } : {}),
+      // Given at construction because the store begins initializing in its constructor: a port
+      // that arrives only through `setDatabasePort` leaves it warning "persistence disabled" first.
+      ...(databasePort !== undefined ? { databasePort } : {}),
     };
 
     this.argumentHistoryTracker = new ArgumentHistoryTracker(logger, 50);
@@ -236,6 +259,9 @@ export class PromptExecutor {
 
         return Array.from(identifiers);
       },
+      // A provider, not a snapshot: `system_control` can change `gates.harnessCovers` /
+      // `gates.reminderTokenBudget` after startup, and the renderer reads it per render.
+      gatesConfigProvider: () => this.configManager.getGatesConfig(),
     });
 
     this.chainSessionRouter = new ChainSessionRouter(
@@ -254,8 +280,9 @@ export class PromptExecutor {
       this.executionPlanner.setGateManager(this.gateManager);
     }
 
-    // Initialize StyleManager asynchronously
-    void this.initializeStyleManager();
+    // Initialize StyleManager asynchronously; `resolveStyleManager()` is how a caller waits
+    // for it rather than reading `styleManager` mid-load.
+    this.styleManagerReady = this.initializeStyleManager();
 
     this.logger.info('[PromptExecutor] Initialized pipeline dependencies');
   }
@@ -265,10 +292,14 @@ export class PromptExecutor {
     this.chainSessionRouter.updatePrompts(convertedPrompts);
     // Create reference resolver with updated prompts
     this.referenceResolver = new PromptReferenceResolver(this.logger, convertedPrompts);
-    // Create script reference resolver with workspace loader
+    // Create script reference resolver with workspace loader. `getScriptsDirectory()` resolves
+    // through `PathResolver` (workspace `resources/scripts/` when a custom workspace is
+    // configured, the package tree only as the no-resolver fallback) — `this.serverRoot` is
+    // always the package root and never saw a workspace script.
     const scriptLoader = new WorkspaceScriptLoader({
-      workspaceScriptsPath: path.join(this.serverRoot, 'resources', 'scripts'),
+      workspaceScriptsPath: this.configManager.getScriptsDirectory(),
     });
+    this.workspaceScriptLoader = scriptLoader;
     const scriptExecutor = createScriptExecutor({ debug: false });
     this.scriptReferenceResolver = new ScriptReferenceResolver(
       this.logger,
@@ -290,11 +321,6 @@ export class PromptExecutor {
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();
     void this.initializePromptGuidanceService();
-
-    // Update parsing system with registered framework IDs for quote-aware @framework detection
-    // This allows @docs/, @mention, etc. to be treated as literal text while @CAGEERF works
-    const frameworkIds = new Set(frameworkManager.getFrameworkIds(false));
-    this.parsingSystem.updateRegisteredFrameworkIds(frameworkIds);
   }
 
   setToolDescriptionLoader(manager: ToolDescriptionLoader): void {
@@ -320,6 +346,10 @@ export class PromptExecutor {
         'PromptExecutor.setDatabasePort called without an argument-history store; argument history will not persist.'
       );
     }
+    // Still forwarded: an executor constructed without a port (tests, and any composition that
+    // opens the database late) gets its chain persistence here. When the store was constructed
+    // with this same port the call is inert — its re-arm is guarded by `!runRegistry`, and the
+    // chained step re-checks after `initPromise` settles — so no second registry or load occurs.
     if ('setDatabasePort' in this.chainSessionStore) {
       (this.chainSessionStore as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
     }
@@ -937,9 +967,12 @@ export class PromptExecutor {
     }
 
     try {
+      const stylesDir = this.configManager.getStylesDirectory();
+      const additionalStylesDirs = this.overlayDirsFor('styles', stylesDir);
       this.styleManager = await createStyleManager(this.logger, {
         loaderConfig: {
-          stylesDir: path.join(this.serverRoot, 'resources', 'styles'),
+          stylesDir,
+          ...(additionalStylesDirs.length > 0 ? { additionalStylesDirs } : {}),
         },
       });
       this.logger.info('[PromptExecutor] StyleManager initialized');
@@ -949,6 +982,50 @@ export class PromptExecutor {
       });
       // StyleManager is optional - pipeline will fall back to hardcoded styles
     }
+  }
+
+  /**
+   * Resolve the style manager the pipeline renders `#style` guidance from, once its
+   * background load has settled. Callers that need a wired instance — hot reload
+   * registration is the current one — must await this rather than reading `styleManager`
+   * synchronously, which can still be `undefined` while the load is in flight. Resolves to
+   * `undefined` only when `initializeStyleManager()` failed and logged the reason.
+   */
+  async resolveStyleManager(): Promise<StyleManager | undefined> {
+    await this.styleManagerReady;
+    return this.styleManager;
+  }
+
+  /**
+   * Clear cached script-tool definitions — prompt-local and workspace alike — on the
+   * `WorkspaceScriptLoader` instance `{{script:id}}` resolution currently reads. Rebuilt fresh
+   * on every `updateData()`, so this only matters between reloads: a workspace script edit that
+   * reaches hot reload (`runtime/script-hot-reload.ts`) without also touching the prompts tree
+   * would otherwise keep serving whatever this instance already cached.
+   */
+  clearScriptToolCache(): void {
+    this.workspaceScriptLoader?.clearCache();
+  }
+
+  /**
+   * Every directory `StyleDefinitionLoader` should fall back to beyond `primaryDir`: workspace
+   * overlay candidates, then the bundled package tree last when it is a distinct source —
+   * `StyleDefinitionLoader` itself drops entries that do not exist or duplicate the primary.
+   *
+   * Mirrors the combination `runtime/resource-roots.ts`'s `resolveResourceRoots` performs for
+   * `module-initializer.ts`'s own style loader (used only for the startup inventory line, never
+   * fed to the pipeline). Not imported from there: `mcp/` does not reach into `runtime/`, the
+   * application composition boundary. Both derive from the same `PathResolver` primitives,
+   * reached here through `ConfigManager.getOverlayResourceDirectories` /
+   * `getBundledResourceDirectory` — one resolution, two call sites.
+   */
+  private overlayDirsFor(resourceType: string, primaryDir: string): string[] {
+    const overlays = this.configManager.getOverlayResourceDirectories(resourceType, primaryDir);
+    const bundled = this.configManager.getBundledResourceDirectory(resourceType);
+    if (bundled !== undefined && bundled !== primaryDir && !overlays.includes(bundled)) {
+      return [...overlays, bundled];
+    }
+    return overlays;
   }
 
   private resetPipeline(): void {
@@ -1080,7 +1157,8 @@ export function createPromptExecutor(
   textReferenceStore: TextReferenceStore,
   gateManager: GateManager,
   mcpToolsManager?: any,
-  promptGuidanceService?: PromptGuidanceService
+  promptGuidanceService?: PromptGuidanceService,
+  databasePort?: DatabasePort
 ): PromptExecutor {
   return new PromptExecutor(
     logger,
@@ -1090,7 +1168,8 @@ export function createPromptExecutor(
     textReferenceStore,
     gateManager,
     mcpToolsManager,
-    promptGuidanceService
+    promptGuidanceService,
+    databasePort
   );
 }
 

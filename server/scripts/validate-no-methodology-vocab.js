@@ -138,17 +138,10 @@ const ALLOWLIST = [
     closedBy: RETIREMENT.NOTE_USEFUL,
   },
 
-  // --- Prose explaining what was renamed and why.
-  // ---
-  // --- Its condition was `FOLD_DOCUMENTED` ("when the fold this prose documents goes"), which was
-  // --- wrong: re-read at 5.7, the comment records a dropped `keyword_count` ENTRY, not a fold. The
-  // --- folds are now gone and this note is unaffected, which is exactly how a mis-stated condition
-  // --- surfaces — it came due for a reason that had nothing to do with it.
-  {
-    file: 'resources/gates/framework-compliance/gate.yaml',
-    match: 'methodology',
-    closedBy: RETIREMENT.NOTE_USEFUL,
-  },
+  // --- resources/gates/framework-compliance/gate.yaml — REMOVED (row 0.9,
+  // --- gate-checks-and-reminders). The `keyword_count: { framework: 1 }` pass_criteria entry
+  // --- this exception covered was dropped from the gate.yaml itself, so the file no longer
+  // --- contains a 'methodology' hit for the scan to suppress.
   //
   // Two entries removed here 2026-08-06 (row 0.7), for DIFFERENT reasons — worth distinguishing:
   //

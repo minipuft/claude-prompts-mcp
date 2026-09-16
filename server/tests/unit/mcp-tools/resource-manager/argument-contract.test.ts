@@ -164,7 +164,7 @@ describe('resource_manager argument contract', () => {
  */
 describe('prompt.yaml write coverage', () => {
   it('accounts for every field the writer emits as settable, preserved, or identity', () => {
-    // Read off `createOrUpdateYamlPrompt` — the single writer of a prompt's own prompt.yaml.
+    // Read off `planPromptFiles` — the one place a prompt's own prompt.yaml content is built.
     const emittedByWriter = [
       'id',
       'name',

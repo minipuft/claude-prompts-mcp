@@ -83,17 +83,18 @@ export class FrameworkVersioningProcessor {
     const currentState = frameworkSnapshotContract.project(id, existingData);
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
-    // way the real call does, and BEFORE the version row is recorded.
+    // way the real call does, and BEFORE the version row is recorded. The diff is projected from
+    // the write the rollback below performs — same write model, same merge base — so it names the
+    // framework files that write lands in rather than the snapshot's fields rendered as one YAML
+    // document.
     if (isPreviewRequest(args)) {
       return this.success(
         describeRollbackPreview(
           'framework',
           id,
           version,
-          this.ctx.textDiffService.generateObjectDiff(
-            currentState,
-            snapshot,
-            `${id}/framework.yaml`
+          this.ctx.textDiffService.generateFileChangeDiff(
+            await this.ctx.fileService.projectFrameworkWrite(restore.writeModel, existingData)
           ),
           restore.unrecordedFields
         )

@@ -618,18 +618,20 @@ MCP notification sent to clients
 
 ### Watched Directories
 
-| Resource   | Directory Source                           | Registration                                         |
-| ---------- | ------------------------------------------ | ---------------------------------------------------- |
-| Prompts    | `getPromptsDirectory()` + category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`     |
-| Gates      | `getGatesDirectory()`                      | `createGateHotReloadRegistration()` auxiliary reload |
-| Frameworks | `runtimeLoader.getFrameworksDir()`         | `framework-hot-reload.ts` auxiliary reload           |
-| Styles     | `loader.getStylesDir()`                    | `style-hot-reload.ts` auxiliary reload               |
+| Resource     | Directory Source                                                                                               | Registration                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts      | `getPromptsDirectory()` + category subdirs (primary resolved directory only — see Limitations)                 | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
+| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
+| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
+| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
+| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`) | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
 
 ### Limitations
 
 - **Debounce delay**: FileObserver uses ~500ms debounce, so rapid successive writes may batch into a single reload event.
 - **No write coordination**: If the MCP tool and CLI write the same resource simultaneously, the last write wins. This is acceptable because concurrent writes to the same resource are not an expected usage pattern.
 - **CLI writes are invisible until detected**: After a CLI write, the MCP server sees stale state until the FileObserver fires. Next MCP tool call after the debounce window will see updated state.
+- **Prompts watch one resolved directory, not every root the loader reads.** Startup composes bundled + primary + every overlay when it loads the catalog, but hot reload watches only the primary directory `getPromptsDirectory()` resolves to (`discoverPromptDirectories()`/`buildWatchTargets()` in `prompt-watch-setup.ts` both take a single `promptsDir`). An edit to a bundled-only or overlay-only prompt is not observed by the file watcher; gates, styles, frameworks and script tools do not share this limitation, since each watches its own overlay directories directly.
 
 ---
 
@@ -844,7 +846,8 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 ### Styles (`src/modules/formatting/`)
 
 - **Manager**: Orchestrates style lifecycle
-- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`
+- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`, overlaid by a
+  workspace `resources/styles/{id}/` the same way prompts, gates and frameworks are
 - **Loader**: YAML + MD parsing with schema validation
 
 ### Execution (`src/engine/execution/`)

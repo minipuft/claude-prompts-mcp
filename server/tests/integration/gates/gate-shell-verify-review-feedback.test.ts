@@ -185,8 +185,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
               shell_timeout: 5000,
             },
             {
-              type: 'llm_self_check',
-              prompt_template: 'Code follows conventions',
+              type: 'inline_guidance',
             },
           ],
         },
@@ -257,7 +256,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           name: 'LLM Gate',
           type: 'validation',
           description: 'No shell_verify',
-          pass_criteria: [{ type: 'llm_self_check', prompt_template: 'Quality check' }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         },
       });
 
@@ -449,7 +448,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           name: 'LLM Only',
           type: 'validation',
           description: 'Pure LLM gate',
-          pass_criteria: [{ type: 'llm_self_check', prompt_template: 'Quality' }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         },
       });
 
@@ -549,7 +548,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
           name: 'LLM',
           type: 'validation',
           description: 'No shell',
-          pass_criteria: [{ type: 'llm_self_check', prompt_template: 'Good' }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         },
       });
 

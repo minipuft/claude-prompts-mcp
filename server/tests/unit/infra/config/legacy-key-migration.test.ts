@@ -11,8 +11,15 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { ConfigLoader } from '../../../../src/infra/config/index.js';
+
+// Same resolution pattern as config-schema-warning.test.ts — the schema ships beside the server
+// root, one directory shallower than this test file.
+const __filename = fileURLToPath(import.meta.url);
+const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..', '..');
+const SCHEMA_PATH = path.join(SERVER_ROOT, 'config.schema.json');
 
 async function loadConfigFrom(raw: Record<string, unknown>) {
   const dir = await mkdtemp(path.join(tmpdir(), 'cfg-migration-'));
@@ -439,5 +446,149 @@ describe('legacy config key migration', () => {
 
       await cleanup();
     });
+  });
+});
+
+// Row 0.3 (gate-checks-and-reminders): `gates.harnessCovers` and `gates.reminderTokenBudget`
+// resolve through `getGatesConfig()`'s `??` fold, same as `enableFrameworkGates` above — these
+// pin the default AND the custom-value path, plus a mutation-verified RED on the fold itself.
+describe('reminder guidance config (gates.harnessCovers, gates.reminderTokenBudget)', () => {
+  it('defaults to [] and 800 when both keys are absent', async () => {
+    const { manager, cleanup } = await loadConfigFrom({ gates: { enabled: true } });
+
+    expect(manager.getGatesConfig().harnessCovers).toEqual([]);
+    expect(manager.getGatesConfig().reminderTokenBudget).toBe(800);
+
+    await cleanup();
+  });
+
+  it('resolves harnessCovers and reminderTokenBudget when both are set', async () => {
+    const { manager, cleanup } = await loadConfigFrom({
+      gates: { enabled: true, harnessCovers: ['security'], reminderTokenBudget: 300 },
+    });
+
+    expect(manager.getGatesConfig().harnessCovers).toEqual(['security']);
+    expect(manager.getGatesConfig().reminderTokenBudget).toBe(300);
+
+    await cleanup();
+  });
+
+  // POSITIVE CONTROL for the #288 mismatch path: a typo'd key is reported by name, not silently
+  // dropped — same AJV `additionalProperties` path config-schema-warning.test.ts pins for
+  // `gates.enabld`.
+  it('reports a typo of harnessCovers as a schema mismatch naming the bad key', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'cfg-harness-typo-'));
+    const configPath = path.join(dir, 'config.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ gates: { enabled: true, harnessCover: ['security'] } }),
+      'utf8'
+    );
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+    await manager.loadConfig();
+
+    const validation = manager.getSchemaValidation();
+    expect(validation).toMatchObject({ status: 'invalid', valid: false });
+    expect(validation?.errors.some((line) => line.includes('harnessCover'))).toBe(true);
+
+    warnSpy.mockRestore();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  // Sibling to the 'persistFrameworkConfig key paths' block above: both new keys must be
+  // reachable from `cpm config set`, not just from a hand-authored config.json.
+  // Both settable-key surfaces — cli-shared (`cpm config set`) and mcp/tools (`system_control`) —
+  // same pattern as the 'offers no setter for the retired analysis section, on either surface'
+  // case above: the coordinator ruled the asymmetry between the two was not intended for this row.
+  it('accepts both keys on both settable-key surfaces (cli-shared and mcp/tools)', async () => {
+    const cli = await import('../../../../src/cli-shared/config-input-validator.js');
+    const mcp = await import('../../../../src/mcp/tools/config-utils.js');
+
+    for (const surface of [cli, mcp]) {
+      expect(surface.CONFIG_VALID_KEYS).toContain('gates.harnessCovers');
+      expect(surface.validateConfigInput('gates.harnessCovers', 'security,testing')).toMatchObject({
+        valid: true,
+        convertedValue: ['security', 'testing'],
+      });
+
+      expect(surface.CONFIG_VALID_KEYS).toContain('gates.reminderTokenBudget');
+      expect(surface.validateConfigInput('gates.reminderTokenBudget', '300')).toMatchObject({
+        valid: true,
+        convertedValue: 300,
+      });
+    }
+  });
+});
+
+// Row 2.2 (gate-checks-and-reminders): `gates.executeInlineGateDefinitions` is the opt-in the
+// release notes already tell operators to set. It resolved through no fold at all until this row —
+// the knob existed only on the engine-side type, so a config.json that set it was refused by the
+// schema and read by nobody. These pin the fold, the default, and both settable-key surfaces.
+describe('inline gate execution opt-in (gates.executeInlineGateDefinitions)', () => {
+  it('resolves an explicit opt-in', async () => {
+    const { manager, cleanup } = await loadConfigFrom({
+      gates: { enabled: true, executeInlineGateDefinitions: true },
+    });
+
+    expect(manager.getGatesConfig().executeInlineGateDefinitions).toBe(true);
+
+    await cleanup();
+  });
+
+  it('defaults to false when the key is absent', async () => {
+    const { manager, cleanup } = await loadConfigFrom({ gates: {} });
+
+    // False, not undefined: stage 11 reads `=== true`, so an unset key must resolve to the
+    // release's stated default rather than to the absence of one.
+    expect(manager.getGatesConfig().executeInlineGateDefinitions).toBe(false);
+
+    await cleanup();
+  });
+
+  it('passes schema validation, where an unknown gates key does not', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'cfg-inline-gates-'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const validate = async (gates: Record<string, unknown>) => {
+      const configPath = path.join(dir, `${Object.keys(gates).join('-')}.json`);
+      await writeFile(configPath, JSON.stringify({ gates }), 'utf8');
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      return manager.getSchemaValidation();
+    };
+
+    expect(await validate({ enabled: true, executeInlineGateDefinitions: true })).toMatchObject({
+      status: 'valid',
+      valid: true,
+    });
+
+    // POSITIVE CONTROL: the check above is only evidence if the same probe rejects a key the
+    // schema does not declare — otherwise it would pass against a schema that accepts anything.
+    const nonsense = await validate({ enabled: true, nonsenseKey: true });
+    expect(nonsense).toMatchObject({ status: 'invalid', valid: false });
+    expect(nonsense?.errors.some((line) => line.includes('nonsenseKey'))).toBe(true);
+
+    warnSpy.mockRestore();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('is settable on both surfaces (cli-shared and mcp/tools), unlike an unknown key', async () => {
+    const cli = await import('../../../../src/cli-shared/config-input-validator.js');
+    const mcp = await import('../../../../src/mcp/tools/config-utils.js');
+
+    for (const surface of [cli, mcp]) {
+      expect(surface.CONFIG_VALID_KEYS).toContain('gates.executeInlineGateDefinitions');
+      expect(
+        surface.validateConfigInput('gates.executeInlineGateDefinitions', 'true')
+      ).toMatchObject({ valid: true, convertedValue: true });
+
+      // POSITIVE CONTROL for the same two calls.
+      expect(surface.CONFIG_VALID_KEYS).not.toContain('gates.nonsenseKey');
+      expect(surface.validateConfigInput('gates.nonsenseKey', 'true')).toMatchObject({
+        valid: false,
+      });
+    }
   });
 });

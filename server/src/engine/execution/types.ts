@@ -18,6 +18,7 @@ import type {
   PromptArgument,
   PromptInjectionConfig,
 } from '#shared/types/index.js';
+import type { ArtifactKind } from './../gates/utils/artifact-kinds.js';
 
 // Re-exported for engine/ consumers. `CustomCheck`, `GateScope`, `GateSpecification` and
 // `ChainStep` were re-exported here too and had ZERO consumers via this path — dropped
@@ -82,6 +83,17 @@ export interface ConvertedPrompt {
    * whether framework-scoring gates are coherent for this execution.
    */
   injection?: PromptInjectionConfig;
+  /**
+   * The prompt's `artifacts:` declaration (ruling B13), carried from its own YAML.
+   *
+   * `produces` alone is decidable from the prompt; `fromArgument` names an argument, so the
+   * union is resolved per invocation by `resolveDeclaredArtifacts` — this field is the
+   * declaration, never the resolved set.
+   */
+  artifacts?: {
+    produces?: readonly ArtifactKind[] | undefined;
+    fromArgument?: string | undefined;
+  };
   // Script tools
   /**
    * Loaded script tools for this prompt. The converter reads the YAML `tools:` id list and

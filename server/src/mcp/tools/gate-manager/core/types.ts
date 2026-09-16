@@ -3,6 +3,7 @@
  * Gate Manager Types
  */
 
+import type { GatePassCriteriaYaml } from '#engine/gates/core/gate-schema.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 
@@ -44,14 +45,18 @@ export interface GateManagerInput {
   /** Enforcement mode override; absent, the loader derives it from `severity`. */
   enforcementMode?: 'blocking' | 'advisory' | 'informational';
   description?: string;
+  /**
+   * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
+   * installation's `gates.harnessCovers` (config.json) suppresses reminders whose subject
+   * it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
+   */
+  subject?: string;
   guidance?: string;
-  pass_criteria?: Array<{
-    type?: string;
-    min_length?: number;
-    required_patterns?: string[];
-    keyword_count?: Record<string, number>;
-    regex_patterns?: string[];
-  }>;
+  /**
+   * The gate schema's write-side shape — what a caller supplies when building a criterion.
+   * min_length/required_patterns/keyword_count/regex_patterns are absent because the loader refuses them at load.
+   */
+  pass_criteria?: GatePassCriteriaYaml[];
   activation?: {
     prompt_categories?: string[];
     frameworks?: string[];
@@ -121,4 +126,6 @@ export interface GateCreationData {
   severity?: GateManagerInput['severity'];
   enforcementMode?: GateManagerInput['enforcementMode'];
   gate_type?: GateManagerInput['gate_type'];
+  /** Same class as `severity`/`enforcementMode` above — settable half of `PRESERVED_GATE_YAML_KEYS`. */
+  subject?: GateManagerInput['subject'];
 }

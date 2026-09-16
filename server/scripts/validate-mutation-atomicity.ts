@@ -17,8 +17,8 @@
  * typecheck, both ratchets, `validate:all` and 3026 unit tests. This check is what fails when a
  * seventh call site appears outside a `commit:`, rather than the class being rediscovered.
  *
- * WHAT IT CHECKS. Every call to `.recordEditResult(...)` or `.commitEdit(...)` under
- * `src/mcp/tools/` has a `commit:` property assignment among its ancestors.
+ * WHAT IT CHECKS. Every call to `.recordEditResult(...)`, `.commitEdit(...)` or `.saveVersion(...)`
+ * under `src/mcp/tools/` has a `commit:` property assignment among its ancestors.
  *
  * Parsed with the TypeScript AST rather than matched by text: a regex cannot tell a call inside a
  * `commit` callback from one merely near it, and brace counting misreads braces in strings and
@@ -41,10 +41,11 @@ const SCAN_ROOT = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
  *
  * `saveVersion` is the primitive the other two are built on, and it was absent from this list
  * while no call site under `src/mcp/tools/` used it — so the enumeration was complete by accident
- * rather than by construction. P4.20 added the first such call site (a quarantined resource's
- * repair records the produced state alone, because it has no prior live state to bridge), and a
- * durable write the gate cannot see is the shape this gate exists to prevent, whatever the method
- * is called. Adding the name makes the gate stricter; it relaxes nothing.
+ * rather than by construction. TWO call sites arrived independently and each would have been
+ * invisible to this gate: the create path (a create has no prior state to bridge) and a
+ * quarantined resource's repair (no prior LOADABLE state to bridge). A durable write the gate
+ * cannot see is the shape this gate exists to prevent, whatever the method is called. Adding the
+ * name makes the gate stricter; it relaxes nothing.
  */
 const RECORDING_METHODS = ['recordEditResult', 'commitEdit', 'saveVersion'] as const;
 

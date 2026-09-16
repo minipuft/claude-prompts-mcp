@@ -17,10 +17,11 @@
  * Only the I/O location is redirected, via MCP_SERVER_ROOT + an outputDir override.
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { mkdir, readFile, writeFile, rm, access, symlink } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, access, symlink, cp } from 'node:fs/promises';
 import { mkdtempSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 
 import {
@@ -28,6 +29,12 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+
+// The real `server/` root, computed rather than hardcoded so a directory move does not
+// silently stop this file from finding the resources it copies fixtures from below.
+const REAL_SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const REAL_RESOURCES = path.join(REAL_SERVER_ROOT, 'resources');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -90,9 +97,10 @@ describe('Export Command Integration', () => {
 
   /**
    * `extra` carries `activation` and `gate_type`. A gate written without `activation` is
-   * ALWAYS active — `isGateActiveForContext` reads absent rules as "no restriction", the same
-   * as `GateManager.selectGates` does at runtime — so a fixture that wants to stay out of an
-   * unrelated prompt has to say so.
+   * OPT-IN ONLY (Ruling A1) — `isGateActiveForContext` reads absent rules as "never
+   * registry-auto-activated", the same as `GateManager.selectGates` does at runtime. It still
+   * attaches when a prompt or chain step names it explicitly via `gateConfiguration.include` /
+   * `inlineGateIds`, which never routes through that function.
    */
   async function writeGate(
     id: string,
@@ -143,7 +151,8 @@ describe('Export Command Integration', () => {
     const out = silentOutput();
     await runSkillsSyncCommand(
       { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
     return out;
   }
@@ -170,7 +179,8 @@ describe('Export Command Integration', () => {
       const out = silentOutput();
       const report = await runSkillsSyncCommand(
         { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // The foreign render is untouched — the whole point.
@@ -240,15 +250,29 @@ describe('Export Command Integration', () => {
    * `creed-fidelity` below is here to pin.
    */
   describe('gate activation follows the engine (F1)', () => {
-    it('activates a gate that declares no category restriction', async () => {
-      // The five-gate half of the measured gap. The old check demanded a category MATCH; the
-      // engine only requires the absence of a CONFLICT, so an unrestricted gate is active.
+    it('does not auto-activate a gate that declares no activation block (Ruling A1)', async () => {
+      // isGateActiveForContext now reads an absent `activation` as opt-in-only, not
+      // always-active — registry-auto (no explicit include) must withhold it.
       await writeGate('unrestricted', 'Unrestricted');
       await writePrompt('general', 'plain');
       await writeConfig('claude-code');
       await runExport();
 
       const skill = await readFile(path.join(outputDir, 'plain', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('unrestricted');
+    });
+
+    it('still activates a no-activation-block gate once a prompt includes it explicitly', async () => {
+      // gateConfiguration.include never calls isGateActiveForContext — it registers the id
+      // directly — so the same gate the test above withholds still resolves here.
+      await writeGate('unrestricted', 'Unrestricted');
+      await writePrompt('general', 'explicit', {
+        gateConfiguration: { include: ['unrestricted'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'explicit', 'SKILL.md'), 'utf-8');
       expect(skill).toContain('unrestricted');
     });
 
@@ -424,7 +448,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       const degraded = report.failures.filter((f) => f.id === 'dropped_owner/beta-widget');
@@ -446,7 +471,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           dbManager: indexKnowing(['indexed_owner/alpha-widget']) as never,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // Without this the previous test also passes for a fix that warns about
@@ -469,7 +495,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           json: true,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       // An export normally logs a banner, a per-file `wrote ...` line and a
@@ -509,7 +536,8 @@ describe('Export Command Integration', () => {
           scope: 'user',
           json: true,
         } as SkillsSyncOptions,
-        out
+        out,
+        resolveSkillsSyncPaths()
       );
 
       expect(report.failures.some((f) => f.reason.includes('manifest not saved'))).toBe(true);
@@ -606,6 +634,7 @@ describe('Export Command Integration', () => {
     it('emits both the frontmatter hook and the script it points at', async () => {
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('claude-code');
       await runExport();
@@ -631,6 +660,7 @@ describe('Export Command Integration', () => {
     it('claims enforcement only when it actually shipped a hook', async () => {
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('claude-code');
       await runExport();
@@ -641,10 +671,12 @@ describe('Export Command Integration', () => {
     });
 
     it('says it is NOT enforced on a client with no frontmatter-hook support', async () => {
-      // codex uses the agent-skills adapter, which assigns no meaning to `hooks`.
-      // Claiming enforcement there is the exact lie this branch exists to prevent.
+      // codex uses the agent-skills adapter, which assigns no meaning to `hooks`. Opted in
+      // (Ruling A3) so this isolates the client-capability branch from the opt-in branch:
+      // claiming enforcement here would be the exact lie this branch exists to prevent.
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('codex');
       await runExport('codex');
@@ -664,6 +696,51 @@ describe('Export Command Integration', () => {
       const skill = await readFile(path.join(outputDir, 'ungated', 'SKILL.md'), 'utf-8');
       expect(frontmatterOf(skill)['hooks']).toBeUndefined();
       expect(await exists(path.join(outputDir, 'ungated', 'hooks', 'gate-review.py'))).toBe(false);
+    });
+  });
+
+  /**
+   * Ruling A3. A skill's frontmatter hooks register at SESSION scope; a worker's Skill
+   * invocation under an Agent-tool subagent was measured (2026-09-14) firing its hook at the
+   * PLANNER session's own stop rather than the subagent's. Hook enforcement is therefore
+   * opt-in per prompt (`enforceGateHooks: true`) — the default renders gates as prose only,
+   * even when the prompt has gates and the client can honour the frontmatter block.
+   */
+  describe('gate hook enforcement is opt-in per prompt (Ruling A3)', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality', {
+        activation: { prompt_categories: ['code'] },
+      });
+    });
+
+    it('renders gates as prose only by default, with no Stop hook shipped', async () => {
+      await writePrompt('general', 'unopted', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'unopted', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('## Quality Gates');
+      expect(skill).toContain('Not mechanically enforced');
+      expect(skill).not.toContain('registers a `Stop` hook');
+      expect(frontmatterOf(skill)['hooks']).toBeUndefined();
+      expect(await exists(path.join(outputDir, 'unopted', 'hooks', 'gate-review.py'))).toBe(false);
+    });
+
+    it('ships the Stop hook once the prompt opts in with enforceGateHooks: true', async () => {
+      await writePrompt('general', 'opted', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'opted', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('registers a `Stop` hook');
+      expect(skill).not.toContain('Not mechanically enforced');
+      expect(frontmatterOf(skill)['hooks']).toBeDefined();
+      expect(await exists(path.join(outputDir, 'opted', 'hooks', 'gate-review.py'))).toBe(true);
     });
   });
 
@@ -691,6 +768,7 @@ describe('Export Command Integration', () => {
       await writeGate('code-quality', 'Code Quality');
       await writePrompt('general', 'gated', {
         gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
       });
       await writeConfig('claude-code');
       await runExport();
@@ -737,6 +815,195 @@ describe('Export Command Integration', () => {
         { input: 'not json at all', encoding: 'utf-8' }
       );
       expect(result.status).toBe(0);
+    });
+  });
+
+  // ── Removal warnings: re-exporting over a managed SKILL.md ──────────────────
+
+  describe('warns before a re-export removes something the on-disk skill has', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality');
+    });
+
+    it('warns when the hooks block would be dropped', async () => {
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport(); // first export: SKILL.md carries the frontmatter hooks block
+
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        // enforceGateHooks dropped — the second export would lose the block silently.
+      });
+      const out = await runExport();
+
+      expect(
+        out.warns.some((w) => w.includes('reexported') && w.includes('enforceGateHooks'))
+      ).toBe(true);
+    });
+
+    it('does not warn when the hooks block is kept', async () => {
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      await writePrompt('general', 'reexported', {
+        gateConfiguration: { include: ['code-quality'] },
+        enforceGateHooks: true, // still opted in — nothing is taken away
+      });
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('enforceGateHooks'))).toBe(false);
+    });
+
+    it('warns when a section present on disk is absent from the new content', async () => {
+      await writePrompt('general', 'extra_section');
+      await writeConfig('claude-code');
+
+      // Hand-written on-disk state, same pattern as the foreign-alias fixture above: a prior
+      // managed export that carried a section this run's compiled content does not produce.
+      const skillDir = path.join(outputDir, 'extra_section');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        [
+          '---',
+          'name: extra_section',
+          'description: extra_section description',
+          'managed-by: claude-prompts-skills-sync',
+          'managed-client: claude-code',
+          'managed-scope: user',
+          'managed-resource-key: prompt:general/extra_section',
+          '---',
+          '',
+          '## Instructions',
+          '',
+          'Old content.',
+          '',
+          '## Extra',
+          '',
+          'Old content this export does not produce.',
+          '',
+        ].join('\n')
+      );
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('extra_section') && w.includes('## Extra'))).toBe(
+        true
+      );
+    });
+
+    it('does not warn about a hand-written SKILL.md with no managed-by marker', async () => {
+      await writePrompt('general', 'handwritten');
+      await writeConfig('claude-code');
+
+      const skillDir = path.join(outputDir, 'handwritten');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        '---\nname: handwritten\ndescription: hand-written\n---\n\n## Extra\n\nHand-written.\n'
+      );
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('handwritten'))).toBe(false);
+    });
+
+    it('does not warn on a first export with nothing on disk yet', async () => {
+      await writePrompt('general', 'fresh');
+      await writeConfig('claude-code');
+
+      const out = await runExport();
+
+      expect(out.warns.some((w) => w.includes('export removes'))).toBe(false);
+    });
+  });
+
+  // ── Stale gate directories: pruned on export ─────────────────────────────
+
+  describe('export prunes stale gates/<id>/ directories under a managed skill', () => {
+    beforeEach(async () => {
+      await writeGate('code-quality', 'Code Quality');
+    });
+
+    it("removes a gates/<id>/ directory no longer in the skill's gate set, and names it", async () => {
+      await writePrompt('general', 'pruned_gate', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport(); // first export: SKILL.md is stamped managed, gates/code-quality/ is written
+
+      // A gate directory this tool wrote on an earlier run that the current gate set no longer
+      // includes — the fixture stands in for a gate dropped from `gateConfiguration.include`.
+      const staleGateDir = path.join(outputDir, 'pruned_gate', 'gates', 'stale');
+      await mkdir(staleGateDir, { recursive: true });
+      await writeFile(
+        path.join(staleGateDir, 'gate.yaml'),
+        yaml.dump({ id: 'stale', name: 'Stale', type: 'validation', description: 'Stale gate' })
+      );
+
+      const out = silentOutput();
+      const report = await runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      expect(await exists(staleGateDir)).toBe(false);
+      expect(
+        out.logs.some((l) => l.includes('pruned_gate') && l.includes('removed stale gates/stale/'))
+      ).toBe(true);
+      expect(report.pruned).toBeGreaterThan(0);
+      // The gate still in the current set survives the same run.
+      expect(await exists(path.join(outputDir, 'pruned_gate', 'gates', 'code-quality'))).toBe(true);
+    });
+
+    it('leaves a hand-written gates/<id>/ directory with no gate.yaml untouched', async () => {
+      await writePrompt('general', 'handwritten_notes', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+      await runExport();
+
+      const handwrittenDir = path.join(outputDir, 'handwritten_notes', 'gates', 'handwritten');
+      await mkdir(handwrittenDir, { recursive: true });
+      await writeFile(path.join(handwrittenDir, 'notes.md'), 'Hand-written, no gate.yaml here.');
+
+      await runExport();
+
+      expect(await exists(path.join(handwrittenDir, 'notes.md'))).toBe(true);
+    });
+
+    it('does not prune a stale gate directory under a skill with no managed marker', async () => {
+      await writePrompt('general', 'unmanaged_gate', {
+        gateConfiguration: { include: ['code-quality'] },
+      });
+      await writeConfig('claude-code');
+
+      // Hand-written SKILL.md carrying no managed-by marker — positive control on the guard:
+      // without it, this fixture would be indistinguishable from the managed case above.
+      const skillDir = path.join(outputDir, 'unmanaged_gate');
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        '---\nname: unmanaged_gate\ndescription: hand-written\n---\n\n## Instructions\n\nHand-written.\n'
+      );
+      const staleGateDir = path.join(skillDir, 'gates', 'stale');
+      await mkdir(staleGateDir, { recursive: true });
+      await writeFile(
+        path.join(staleGateDir, 'gate.yaml'),
+        yaml.dump({ id: 'stale', name: 'Stale', type: 'validation', description: 'Stale gate' })
+      );
+
+      await runExport();
+
+      expect(await exists(staleGateDir)).toBe(true);
     });
   });
 
@@ -922,22 +1189,17 @@ describe('Export Command Integration', () => {
 
     it('renders an inline_guidance criterion as prose with no JSON object', async () => {
       // The section is a checklist a model self-reviews against. A serialized config
-      // blob is not a reviewable instruction.
+      // blob is not a reviewable instruction. required_patterns/min_length are no longer
+      // a legal criterion shape (B9: rejected at load), so framework/min_compliance_score
+      // stand in as the still-valid multi-field case.
       const skill = await gateSkillWithCriteria('prose-gate', [
-        {
-          type: 'inline_guidance',
-          min_length: 100,
-          required_patterns: ['States the work type'],
-          forbidden_patterns: ['TODO'],
-        },
+        { type: 'inline_guidance', framework: 'CAGEERF', min_compliance_score: 0.8 },
       ]);
       const section = passCriteriaSection(skill);
 
-      expect(section).toContain('States the work type');
-      expect(section).toContain('100 characters');
-      expect(section).toContain('TODO');
+      expect(section).toContain('Complies with the CAGEERF framework');
+      expect(section).toContain('0.8');
       expect(section).not.toContain('{"');
-      expect(section).not.toContain('min_length');
       expect(section).not.toContain('[inline_guidance]');
     });
 
@@ -957,32 +1219,36 @@ describe('Export Command Integration', () => {
 
     it('names an unrecognized criterion by its keys rather than serializing it', async () => {
       // GatePassCriteria is a passthrough schema, so unknown keys reach the exporter.
-      // The fallback must stay lossy-but-readable — never a JSON dump.
+      // The fallback must stay lossy-but-readable — never a JSON dump. keyword_count is
+      // no longer an example of this: it is now a rejected-at-load field (B9), not merely
+      // an unrecognized one, so a genuinely unknown key stands in instead.
       const section = passCriteriaSection(
         await gateSkillWithCriteria('odd-gate', [
-          { type: 'inline_guidance', keyword_count: { evidence: 2 } },
+          { type: 'inline_guidance', confidence_threshold: 0.9 },
         ])
       );
 
-      expect(section).toContain('keyword_count');
+      expect(section).toContain('confidence_threshold');
       expect(section).not.toContain('{"');
-      expect(section).not.toContain('evidence');
+      expect(section).not.toContain('0.9');
     });
 
     it('renders prose for the generic adapter too, not just claude-code', async () => {
       // The defect existed as byte-identical copies in BOTH exporters. Breaking only
       // the generic one left the whole 74-test suite green (mutation M-K), so a
-      // claude-code-only assertion cannot close this row.
+      // claude-code-only assertion cannot close this row. required_patterns/min_length
+      // are no longer a legal criterion shape (B9), so framework/min_compliance_score
+      // stand in, same as the claude-code case above.
       const section = passCriteriaSection(
         await gateSkillWithCriteria(
           'generic-gate',
-          [{ type: 'inline_guidance', min_length: 100, required_patterns: ['Cites evidence'] }],
+          [{ type: 'inline_guidance', framework: 'CAGEERF', min_compliance_score: 0.8 }],
           'codex'
         )
       );
 
-      expect(section).toContain('Cites evidence');
-      expect(section).toContain('100 characters');
+      expect(section).toContain('Complies with the CAGEERF framework');
+      expect(section).toContain('0.8');
       expect(section).not.toContain('{"');
       expect(section).not.toContain('min_length');
     });
@@ -1070,6 +1336,155 @@ describe('Export Command Integration', () => {
       const skill = await promptWithScriptTool('tooled', clientId);
       expect(skill).toContain('Word Counter');
       expect(skill).toContain('tools/word_count/script.py');
+    });
+  });
+
+  // ── strategic_worker excludes its category's auto-gates ────────────────────
+
+  describe('strategic_worker export (real prompt.yaml, real gates)', () => {
+    // Copies the PRODUCTION resource, not a synthetic fixture: `gateConfiguration.exclude`
+    // in the real prompt.yaml lists every gate that auto-activates for the `development`
+    // category, and a maintainer emptying that list should turn this test red — a fixture
+    // with its own copy of the exclude array would not observe that mutation.
+    async function exportRealStrategicWorker() {
+      await cp(path.join(REAL_RESOURCES, 'gates'), path.join(serverRoot, 'resources', 'gates'), {
+        recursive: true,
+      });
+      const promptDir = path.join(
+        serverRoot,
+        'resources',
+        'prompts',
+        'development',
+        'strategic_worker'
+      );
+      await mkdir(promptDir, { recursive: true });
+      await cp(path.join(REAL_RESOURCES, 'prompts', 'development', 'strategic_worker'), promptDir, {
+        recursive: true,
+      });
+      await writeConfig('claude-code');
+      await runExport();
+    }
+
+    it('registers zero gate refs, so the Quality Gates section is absent', async () => {
+      await exportRealStrategicWorker();
+
+      const skill = await readFile(path.join(outputDir, 'strategic_worker', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('## Quality Gates');
+    });
+
+    it('renders no hooks: frontmatter', async () => {
+      await exportRealStrategicWorker();
+
+      const skill = await readFile(path.join(outputDir, 'strategic_worker', 'SKILL.md'), 'utf-8');
+      expect(frontmatterOf(skill)['hooks']).toBeUndefined();
+    });
+
+    it('writes neither hooks/gate-review.py nor a gates/ directory', async () => {
+      await exportRealStrategicWorker();
+
+      expect(
+        await exists(path.join(outputDir, 'strategic_worker', 'hooks', 'gate-review.py'))
+      ).toBe(false);
+      expect(await exists(path.join(outputDir, 'strategic_worker', 'gates'))).toBe(false);
+    });
+  });
+
+  // ── B2 / row 1.4: check-tier gates render as commands, reminders keep the
+  // criteria table, and gates.harnessCovers suppresses a reminder whose subject the
+  // installation's harness already covers ──────────────────────────────────────
+
+  describe('check/reminder tiers and gates.harnessCovers (ruling B2, row 1.4)', () => {
+    /** `config.json`'s `gates.harnessCovers` — a plain JSON write, the shape the exporter reads. */
+    async function writeServerConfig(harnessCovers: string[]): Promise<void> {
+      await writeFile(
+        path.join(serverRoot, 'config.json'),
+        JSON.stringify({ gates: { harnessCovers } }, null, 2)
+      );
+    }
+
+    beforeEach(async () => {
+      // Real shapes, not synthetic ones: mirrors resources/gates/test-suite,
+      // security-awareness, code-quality — one shell_verify check, two subject-tagged
+      // reminders.
+      await writeGate('test-suite', 'Test Suite Verification', {
+        subject: 'testing',
+        pass_criteria: [{ type: 'shell_verify', shell_command: ['npm', 'test'] }],
+      });
+      await writeGate('security-awareness', 'Security Best Practices', {
+        subject: 'security',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+      await writeGate('code-quality', 'Code Quality Standards', {
+        subject: 'code-quality',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+      await writePrompt('general', 'tiered', {
+        gateConfiguration: { include: ['test-suite', 'security-awareness', 'code-quality'] },
+      });
+    });
+
+    it('renders the check under ### Checks, keeps code-quality under ### Reminders, and omits the harness-covered reminder', async () => {
+      await writeServerConfig(['security']);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+      const checksSection = /### Checks\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
+      const remindersSection = /### Reminders\n([\s\S]*?)(?=\n###|\n## |$)/.exec(skill)?.[1] ?? '';
+
+      expect(checksSection).toContain('check: runs `npm test`');
+      expect(remindersSection).toContain('code-quality');
+      expect(remindersSection).not.toContain('| security-awareness |');
+      expect(skill).toContain(
+        "Omitted 1 reminder(s) this installation's harness covers: security-awareness (security)."
+      );
+    });
+
+    it('ships no gates/<id>/ files or manifest entry for a harness-covered reminder', async () => {
+      await writeServerConfig(['security']);
+      await writeConfig('claude-code');
+      const out = await runExport();
+
+      const writtenFiles = out.logs.join('\n');
+      expect(writtenFiles).not.toContain('gates/security-awareness/');
+
+      expect(
+        await exists(path.join(outputDir, 'tiered', 'gates', 'security-awareness', 'gate.yaml'))
+      ).toBe(false);
+      expect(
+        await exists(path.join(outputDir, 'tiered', 'gates', 'security-awareness', 'guidance.md'))
+      ).toBe(false);
+
+      // Positive control: a check is never suppressed, so its files ship regardless.
+      expect(await exists(path.join(outputDir, 'tiered', 'gates', 'test-suite', 'gate.yaml'))).toBe(
+        true
+      );
+
+      const manifestRaw = await readFile(
+        path.join(outputDir, 'tiered', 'gates', 'index.json'),
+        'utf-8'
+      );
+      const manifest = JSON.parse(manifestRaw) as {
+        gates: Array<{ id: string }>;
+      };
+      expect(manifest.gates.some((g) => g.id === 'security-awareness')).toBe(false);
+      expect(manifest.gates.some((g) => g.id === 'test-suite')).toBe(true);
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+      expect(skill).toContain('security-awareness (security)');
+    });
+
+    it('keeps every gate and emits no omission line when harnessCovers is empty', async () => {
+      await writeServerConfig([]);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+
+      expect(skill).toContain('check: runs `npm test`');
+      expect(skill).toContain('security-awareness');
+      expect(skill).toContain('code-quality');
+      expect(skill).not.toContain('Omitted');
     });
   });
 });

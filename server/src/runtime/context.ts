@@ -107,12 +107,23 @@ export async function createRuntimeFoundation(
     dependencies.pathResolver ??
     new PathResolver({ cli: options.paths, packageRoot: serverRoot, debug: options.verbose });
 
+  // Refuse an unusable workspace, resources path or config before anything below reads, watches or
+  // creates one — the logs mkdir would otherwise create a missing workspace. Both transports pass
+  // through here, so both refuse identically.
+  pathResolver.assertUsablePathSettings();
+
   // Use PathResolver for config path (supports workspace override)
   const configPath = pathResolver.getConfigPath();
 
   // PathResolver is passed in so prompt WRITES resolve through the same chain reads do. Without
   // it, `MCP_RESOURCES_PATH` moved reads only and edits landed back in the package (T1.1/D7).
-  const configManager = dependencies.configManager ?? new ConfigLoader(configPath, pathResolver);
+  // The schema is the PACKAGE's own, never the config's `$schema`: that is an editor hint, and a
+  // config loaded via `--config`/`MCP_CONFIG_PATH` can sit anywhere while the schema ships here.
+  const configManager =
+    dependencies.configManager ??
+    new ConfigLoader(configPath, pathResolver, {
+      schemaPath: path.join(serverRoot, 'config.schema.json'),
+    });
   await configManager.loadConfig();
   const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 

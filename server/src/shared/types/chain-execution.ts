@@ -338,6 +338,32 @@ export interface GateReviewPrompt {
 }
 
 /**
+ * A gate's tier, mirrored from `deriveGateTier` in
+ * `engine/gates/core/gate-tier.ts` as a literal union rather than imported.
+ *
+ * Same reason `PendingShellVerificationSnapshot` below mirrors its engine type: this module is
+ * the shared contract the session store persists, and it does not import engine types. The two
+ * spellings are structurally identical, so an engine `GateTier` assigns to this and back.
+ */
+export type PendingGateTier = 'check' | 'reminder';
+
+/**
+ * One ground-truth check result the ENGINE recorded for a gate — never the model's opinion.
+ *
+ * Written by `GateReviewStage` after it runs a gate's `shell_verify` / `script_tool` criteria,
+ * read by `GateVerdictProcessor` before it clears a review (ruling B4,
+ * `~/.claude/plans/gate-checks-and-reminders.md`). Without it a model PASS silently overrode a
+ * recorded shell failure: the stage ran the command, printed the failure into the review, and
+ * then had nowhere to put the result, so the processor cleared on the verdict alone.
+ */
+export interface GateCheckResult {
+  gateId: string;
+  passed: boolean;
+  /** One line: the command or tool id plus its exit code / reason. Capped at 200 chars. */
+  summary: string;
+}
+
+/**
  * Pending gate review payload stored on the session manager so multi-turn
  * reviews can resume after the user responds through the MCP session.
  */
@@ -359,6 +385,23 @@ export interface PendingGateReview {
    */
   metadata?: Record<string, unknown>;
   history?: GateReviewHistoryEntry[];
+  /**
+   * Ground-truth results for this review's check-tier gates, one per criterion that ran.
+   *
+   * Absent when the review's gates declare no `shell_verify` / `script_tool` criteria — a review
+   * of reminders alone records nothing. Present results outrank any verdict: the processor
+   * refuses a PASS while one of these is `passed: false`.
+   */
+  checkResults?: ReadonlyArray<GateCheckResult>;
+  /**
+   * Tier per gate id for this review, derived from each gate's `pass_criteria`.
+   *
+   * Recorded here because the formatting layer has no synchronous reach to gate definitions —
+   * `ResponseAssembler` takes no gate provider, and the verdict template it renders must list
+   * only check-tier gates under `per_gate`. An id missing from this map is treated as `check`,
+   * which is the pre-B4 shape.
+   */
+  gateTiers?: Readonly<Record<string, PendingGateTier>>;
 }
 
 /**

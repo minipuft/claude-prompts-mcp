@@ -76,6 +76,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'typecheck:scripts',
+    io: 'read',
+    reads: ['spawn'],
+    converse:
+      "CHECKED — a planted type error in a new scripts/*.ts file (scripts/_planted_row05.ts, `const x: number = 'not a number'`) is reported by file name and the run exits non-zero; deleting the file returns the run to exit 0",
+  },
+  {
     script: 'typecheck:tests:ratchet',
     io: 'read',
     reads: ['file', 'spawn'],
@@ -84,7 +91,7 @@ export const SUITE = [
   {
     script: 'validate:knip-ratchet',
     io: 'read',
-    reads: ['file', 'spawn'],
+    reads: ['file', 'spawn', 'walk'],
     converse: 'unexamined',
   },
   {
@@ -95,6 +102,20 @@ export const SUITE = [
     io: 'read',
     reads: ['file'],
     converse: 'unexamined',
+  },
+  {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `\bnpm run\b`, and validate-test-directory-membership.js's self-test fixtures carry that
+    // literal inside synthetic `package.json` script strings ('npm run test:unit') used to prove
+    // the delegation-following logic. The script spawns no process and imports only node:fs,
+    // node:os, node:path and node:url. Declared rather than worked around, for the reason
+    // validate:contributing and validate:hermetic-child-env already declare it: the detector is
+    // textual by design and omitting a matched substrate fails.
+    script: 'validate:test-directory-membership',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives a fixture tree with a planted stray *.test.ts outside every declared directory (must report, naming the file) and a clean fixture with only allowed-directory tests plus a non-test file at tests/ root (must stay silent); a synthetic declared-directory audit also proves the drift check fires when a directory string no longer appears in any CI-run script's resolved command — following one level of npm-run indirection (test:ci -> test:unit), rejecting a shared-prefix false match (tests/unit vs tests/unit-renamed), a missing CI script, and a self-referential delegation cycle, each independently. The motivating instance (server/tests/tool-description-loader.test.ts) is the fifth case, restored as a positive control after the real move and confirmed to fail naming that exact path",
   },
   {
     script: 'validate:format',
@@ -177,8 +198,9 @@ export const SUITE = [
   {
     script: 'validate:config-schema',
     io: 'read',
-    reads: ['file'],
-    converse: 'unexamined',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the SHIPPED schema with the shipped config (must stay silent; without this positive control every rejection below would pass against a schema that rejects everything), misspelled keys at depth 1 and 2 in three different sections (must report; these are the motivating instances, since before 2026-09-11 `additionalProperties: false` sat at the root only and all 27 subsections accepted anything), a root-level unknown and a wrongly-typed port (must report, proving the per-section change did not displace what already worked). Case 2 asserts the property STRUCTURALLY, so a subsection added later without `additionalProperties: false` fails here; falsified 2026-09-11 by stripping it from the top-level `gates` section (reported `gates`) and by swapping every occurrence for `unevaluatedProperties` (reported all 27 — that keyword is accepted and IGNORED by AJV under draft-07 with strict:false, which is why case 8 bans it outright)',
   },
   {
     script: 'validate:gate-index',
@@ -366,7 +388,7 @@ export const SUITE = [
   {
     script: 'validate:hook-harness:self-test',
     io: 'read',
-    reads: ['file'],
+    reads: ['file', 'spawn'],
     converse: 'unexamined',
   },
   {
@@ -384,11 +406,16 @@ export const SUITE = [
       'CHECKED both ways — UNWIRED (a check in no SUITE) and FALSE REASON (an exception whose consumers vanished); the header records that only the first was guarded originally',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `spawnSync`, and validate-hermetic-child-env.js carries that literal in three self-test
+    // fixture strings that exercise its server-spawn classifier. The script starts no process and
+    // imports only node:fs, node:path and node:url. Declared rather than worked around, because the
+    // detector is textual by design and omitting a matched substrate fails.
     script: 'validate:hermetic-child-env',
     io: 'read',
-    reads: ['file', 'walk'],
+    reads: ['file', 'spawn', 'walk'],
     converse:
-      'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
+      'CHECKED — covers tests/e2e (no spread) and server-spawning scripts (must import scripts/lib/hermetic-server-env.js, no spread); the self-test runs each predicate over input that must trip it and input that must not, a run classifying zero spawners fails, and a positive control restoring a spread in capture-tool-schemas.mjs exits 1 naming it. UNCHECKED and known — a server spawned through an entry spelling the classifier does not recognise',
   },
   {
     script: 'validate:shipped-frameworks',
@@ -430,7 +457,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops",
+      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations",
   },
   {
     script: 'validate:agent-plugins',

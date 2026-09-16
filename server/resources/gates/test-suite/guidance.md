@@ -23,6 +23,7 @@ If tests fail, you'll receive the error output from the test runner. Use this fe
 ## Configuration
 
 This gate uses the `:full` preset:
+
 - **Max Attempts**: 3
 - **Timeout**: 5 minutes
 

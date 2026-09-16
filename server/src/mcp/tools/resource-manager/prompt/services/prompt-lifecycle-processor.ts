@@ -2,12 +2,13 @@
 
 import { PromptDraftService, type PromptDraftInput } from './prompt-draft-service.js';
 import {
+  normalizeReloadShape,
   PromptMutationReceiptService,
   type PromptMutationReceipt,
 } from './prompt-mutation-receipt-service.js';
 import { isPreviewRequest } from '../../../shared/preview-action.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
-import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
+import { ObjectDiffGenerator, type DiffResult } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { mergeArgumentUpdates, type PromptArgumentUpdate } from '../operations/argument-updates.js';
@@ -15,6 +16,7 @@ import {
   ALL_PROMPT_DATA_KEYS,
   FileOperations,
   NO_WRITE_INTENT,
+  type PromptWriteIntent,
 } from '../operations/file-operations.js';
 import {
   PATCH_TARGET_FIELDS,
@@ -140,13 +142,70 @@ export class PromptLifecycleProcessor {
     const displayName = String(promptData['name']);
     const description = String(promptData['description']);
 
+    // The created state is recorded as version 1 — the same `saveVersion` numbering every edit
+    // uses (MAX(existing)+1), which a resource with no rows yet resolves to 1 on its own. No
+    // bridge: a create has no prior live state to carry across, unlike an edit of an unrecorded
+    // resource. Runs as the writer transaction's `commit` step (P4.2 / SF-3 contract, matching
+    // `updatePrompt` below) so a persistence failure aborts the create with nothing written.
+    //
+    // Recorded through `canonicalPromptSnapshot` + `normalizeReloadShape` — the SAME projection
+    // and loader-default normalization `PromptMutationReceiptService` applies to the "expected"
+    // side of its own post-refresh comparison. Measured: recording the raw draft `promptData`
+    // carried keys the loader never produces (`isChain`, `tools`) and omitted `systemMessage`'s
+    // loader default, so the first update's prior-state check never matched and always bridged.
+    let versionFailure: string | undefined;
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.context.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              try {
+                await this.context.versionHistoryService.saveVersion(
+                  'prompt',
+                  canonicalId,
+                  normalizeReloadShape(canonicalPromptSnapshot(canonicalId, promptData)),
+                  { description: 'Created via resource_manager', diff_summary: '' }
+                );
+              } catch (error) {
+                versionFailure = error instanceof Error ? error.message : String(error);
+                throw error;
+              }
+            },
+          }
+        : {};
+
     // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
     // against — so it passes the full key set rather than computing one (Fix B, tier-b-
     // settability-proposal §2 / §5 increment 3).
-    const writeResult = await this.fileOperations.updatePromptImplementation(
-      promptData,
-      ALL_PROMPT_DATA_KEYS
-    );
+    let writeResult;
+    try {
+      writeResult = await this.fileOperations.updatePromptImplementation(
+        promptData,
+        ALL_PROMPT_DATA_KEYS,
+        undefined,
+        NO_WRITE_INTENT,
+        commitOptions
+      );
+    } catch (error) {
+      if (versionFailure === undefined) throw error;
+
+      this.context.dependencies.logger.error(
+        `Aborting creation of prompt ${canonicalId}: ${versionFailure}`
+      );
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `❌ **Prompt creation aborted**: the version snapshot could not be saved.\n\n` +
+              `${versionFailure}\n\n` +
+              `💡 Nothing was written for '${canonicalId}'. Retry, or pass ` +
+              `\`skip_version: true\` to create without recording a version.`,
+          },
+        ],
+        isError: true,
+      };
+    }
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     // The headline is composed at the END, once verification has run — see `mutationHeadline`.
@@ -568,11 +627,25 @@ export class PromptLifecycleProcessor {
       );
     }
 
+    // One projection of the write serves the preview, the version's diff summary and the update's
+    // own diff. It is resolved from the plan the writer applies, with the arguments the writer is
+    // handed below, so every diff this call reports names the files the write lands in and the
+    // lines that change in them.
+    const writeIntent: PromptWriteIntent = { unsetKeys, toolBinding, removedToolIds };
+    const diffResult = this.textDiffService.generateFileChangeDiff(
+      await this.fileOperations.projectPromptWrite(
+        promptData,
+        suppliedKeys,
+        currentPrompt?.sourceRoot,
+        writeIntent
+      )
+    );
+
     // A preview returns the produced bodies and the diff and stops here — ahead of the version
     // record and the write, so neither happens. It is the operator's pre-check that an anchor
     // matched before a version is spent.
     if (isPreviewRequest(args)) {
-      return this.renderPreview(beforeContent, promptData, patchedFields, diagnosis.preExisting);
+      return this.renderPreview(promptData, diffResult, patchedFields, diagnosis.preExisting);
     }
 
     // `recordEditResult` throws on persistence failure (P7-D2, OQ-P7-6), and the update ABORTS on
@@ -602,10 +675,6 @@ export class PromptLifecycleProcessor {
             // position lexically, and a gate that cannot see the property is not guarding it.
             commit: async (): Promise<void> => {
               try {
-                const diffForVersion = this.textDiffService.generatePromptDiff(
-                  beforeContent,
-                  promptData
-                );
                 const versionResult = await this.context.versionHistoryService.recordEditResult(
                   'prompt',
                   promptData.id,
@@ -613,7 +682,7 @@ export class PromptLifecycleProcessor {
                   { ...promptData },
                   {
                     description: 'Update via resource_manager',
-                    diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                    diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                   }
                 );
                 versionSaved = versionResult.version;
@@ -637,7 +706,7 @@ export class PromptLifecycleProcessor {
         promptData,
         suppliedKeys,
         currentPrompt?.sourceRoot ?? repairTarget?.root,
-        { unsetKeys, toolBinding, removedToolIds },
+        writeIntent,
         commitOptions
       );
     } catch (error) {
@@ -661,7 +730,6 @@ export class PromptLifecycleProcessor {
       };
     }
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
-    const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 
     // The headline is composed at the END, once verification has run — see `mutationHeadline`.
     let response = `${result.message}\n\n`;
@@ -884,13 +952,11 @@ export class PromptLifecycleProcessor {
    * of both the version record and the file write, so this method is the whole effect of the call.
    */
   private renderPreview(
-    beforeContent: ConvertedPrompt | null,
     promptData: Record<string, unknown>,
+    diff: DiffResult,
     patchedFields: readonly PatchTargetField[],
     preExisting: readonly PromptWriteDefect[]
   ): ToolResponse {
-    const diff = this.textDiffService.generatePromptDiff(beforeContent, promptData);
-
     let text = `🔍 **Preview** — nothing written, no version recorded for \`${String(promptData['id'])}\`\n\n`;
     if (patchedFields.length > 0) {
       text += `🩹 Patched field(s): ${patchedFields.map((field) => `\`${field}\``).join(', ')}\n\n`;

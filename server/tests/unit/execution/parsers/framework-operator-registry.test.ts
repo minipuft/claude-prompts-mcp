@@ -26,7 +26,7 @@ describe('framework operator — registry is the single definition', () => {
       warn: jest.fn(),
       error: jest.fn(),
     } as unknown as Logger;
-    parser = createSymbolicCommandParser(logger, new Set(['CAGEERF']));
+    parser = createSymbolicCommandParser(logger, (normalizedId) => normalizedId === 'CAGEERF');
   });
 
   test('registry declares `^` canonical with `@` deprecated, not removed', () => {
@@ -70,5 +70,49 @@ describe('framework operator — registry is the single definition', () => {
     // derive from the registry.
     expect(findFrameworkOperatorOutsideQuotes('see @docs/guide >>x')).toBeNull();
     expect(findFrameworkOperatorOutsideQuotes('see @file.md >>x')).toBeNull();
+  });
+});
+
+/**
+ * The framework set changes while the server runs, so the parser asks the lookup on every parse
+ * instead of holding the ids it was built with. A copy taken at construction kept a framework
+ * created afterwards out of `@id` detection until restart.
+ */
+describe('framework operator — registration is read at parse time', () => {
+  const logger = {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  } as unknown as Logger;
+
+  const frameworkOperatorIn = (
+    parser: ReturnType<typeof createSymbolicCommandParser>,
+    command: string
+  ): unknown => parser.detectOperators(command).operators.find((op) => op.type === 'framework');
+
+  test('an id registered after the parser was built is detected, and stops being once removed', () => {
+    const registered = new Set(['CAGEERF']);
+    const parser = createSymbolicCommandParser(logger, (normalizedId) =>
+      registered.has(normalizedId)
+    );
+
+    expect(frameworkOperatorIn(parser, '@later >>x')).toBeUndefined();
+
+    registered.add('LATER');
+    expect(frameworkOperatorIn(parser, '@later >>x')).toMatchObject({
+      frameworkId: 'later',
+      normalizedId: 'LATER',
+    });
+
+    registered.delete('LATER');
+    expect(frameworkOperatorIn(parser, '@later >>x')).toBeUndefined();
+  });
+
+  test('without a lookup, every @word is treated as a framework operator', () => {
+    const parser = createSymbolicCommandParser(logger);
+    expect(frameworkOperatorIn(parser, '@anything >>x')).toMatchObject({
+      normalizedId: 'ANYTHING',
+    });
   });
 });
