@@ -620,7 +620,7 @@ MCP notification sent to clients
 
 | Resource     | Directory Source                                                                                               | Registration                                              |
 | ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Prompts      | `getPromptsDirectory()` + category subdirs (primary resolved directory only — see Limitations)                 | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
+| Prompts      | every root the catalog is composed from — primary, bundled, and each workspace overlay — plus category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
 | Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
 | Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
 | Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
@@ -631,7 +631,7 @@ MCP notification sent to clients
 - **Debounce delay**: FileObserver uses ~500ms debounce, so rapid successive writes may batch into a single reload event.
 - **No write coordination**: If the MCP tool and CLI write the same resource simultaneously, the last write wins. This is acceptable because concurrent writes to the same resource are not an expected usage pattern.
 - **CLI writes are invisible until detected**: After a CLI write, the MCP server sees stale state until the FileObserver fires. Next MCP tool call after the debounce window will see updated state.
-- **Prompts watch one resolved directory, not every root the loader reads.** Startup composes bundled + primary + every overlay when it loads the catalog, but hot reload watches only the primary directory `getPromptsDirectory()` resolves to (`discoverPromptDirectories()`/`buildWatchTargets()` in `prompt-watch-setup.ts` both take a single `promptsDir`). An edit to a bundled-only or overlay-only prompt is not observed by the file watcher; gates, styles, frameworks and script tools do not share this limitation, since each watches its own overlay directories directly.
+- **An overlay directory that does not exist at startup is not watched.** `getOverlayResourceDirs()` filters overlay candidates by existence, so a workspace overlay created after the server starts contributes to neither the watch list nor the loaded catalog until a restart. This applies equally to prompts, gates, frameworks and styles. A _primary_ root is exempt: it is registered even when absent, and `FileObserver` watches it once it is created.
 
 ---
 

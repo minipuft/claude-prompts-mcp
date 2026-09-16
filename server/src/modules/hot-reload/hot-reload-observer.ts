@@ -410,6 +410,15 @@ export class HotReloadObserver {
         continue;
       }
 
+      // The framework id the observer already resolved travels with the event.
+      //
+      // `FileObserver` extracts it from the path when it classifies a framework file, and the
+      // framework reload handler refuses an event without one ("missing frameworkId, skipping").
+      // Auxiliary events are the ONLY path framework files take — `setFrameworkReloadCallback`
+      // is not wired — so dropping the id here meant every framework edit and every framework
+      // deletion was observed by the watcher, logged as a file event, and then discarded: an
+      // edited `framework.yaml` kept serving its previous guidance, and a deleted framework
+      // stayed selected, until a restart.
       const hotReloadEvent: HotReloadEvent = {
         type: 'reload_required',
         reason: `${reload.id} file ${event.type}: ${event.filename}`,
@@ -417,6 +426,7 @@ export class HotReloadObserver {
         timestamp: event.timestamp,
         requiresFullReload: false,
         changeType: this.mapToChangeOperation(event.type),
+        ...(event.frameworkId !== undefined ? { frameworkId: event.frameworkId } : {}),
       };
 
       try {

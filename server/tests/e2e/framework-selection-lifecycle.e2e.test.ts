@@ -446,4 +446,45 @@ describe('framework selection when the selected framework goes away (Streamable 
     expect(rendered.isError).toBe(false);
     expect(rendered.text).toContain(FRAMEWORK_GUIDANCE);
   }, 120000);
+
+  /**
+   * Deleting the folder is a different route to the same outcome than deleting through the tool,
+   * and it used to have a different result at EVERY timing. The file watcher saw the removal and
+   * logged it, but the reload event it built carried no framework id, so the handler refused it
+   * and the deleted framework stayed selected and kept rendering until a restart. The tool-driven
+   * deletion above never exercised that path, because it calls the registry directly.
+   *
+   * WHY THIS WAITS BEFORE REMOVING. A workspace's `resources/frameworks/` does not exist when the
+   * server starts; it is created by the first framework write. `FileObserver` cannot hand a
+   * not-yet-existing path to chokidar (measured against chokidar 5.0.0: watching a path that does
+   * not exist yet emits nothing at all, not even once it appears), so it polls for the directory
+   * once a second and arms then. A removal inside that one-second window is never reported —
+   * the watcher arms afterwards and snapshots the post-deletion state. That window is a separate,
+   * still-open defect; closing it needs a reconcile-on-arm pass, not a faster poll. This test
+   * waits past the window on purpose so it measures the reload path rather than the race.
+   */
+  it("removing the active framework's folder selects the configured default", async () => {
+    const workspace = await newWorkspace();
+    const session = await start(startHttpSession, workspace);
+    await createPromptAndFramework(session);
+    await switchTo(session, FRAMEWORK_ID);
+
+    // Past the 1s pending-directory poll, so the watcher is armed on the frameworks folder.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
+    await rm(workspace.frameworkDir, { recursive: true, force: true });
+
+    let active = await activeFramework(session);
+    const deadline = Date.now() + 20000;
+    while (active !== CONFIGURED_DEFAULT && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      active = await activeFramework(session);
+    }
+    expect(active).toBe(CONFIGURED_DEFAULT);
+
+    const rendered = await render(session);
+    expect(rendered.isError).toBe(false);
+    expect(rendered.text).toContain(PROMPT_BODY);
+    expect(await session.countTools()).toBe(3);
+  }, 90000);
 });
