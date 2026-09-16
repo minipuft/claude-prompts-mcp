@@ -16,8 +16,4 @@ retry_config:
 activation:
   artifacts:
     - source
-  prompt_categories:
-    - development
-    - code_generation
-    - debugging
   explicit_request: false

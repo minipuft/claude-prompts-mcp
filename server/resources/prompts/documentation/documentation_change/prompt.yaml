@@ -35,6 +35,10 @@ arguments:
     required: false
     description: Relevant charter, product boundary, or release context
     type: string
+artifacts:
+  produces:
+    - docs
+    - readme
 gateConfiguration:
   include:
     - product-positioning-fidelity

@@ -41,6 +41,11 @@ const STRATEGIC_WORKER_DIR = join(
   '../../../../resources/prompts/development/strategic_worker'
 );
 
+const README_IMPROVER_DIR = join(
+  __dirname,
+  '../../../../resources/prompts/documentation/readme_improver'
+);
+
 /** Loads the real `strategic_worker/prompt.yaml` through the real loader + schema validator. */
 function loadStrategicWorkerArtifacts(): {
   category: string;
@@ -76,6 +81,35 @@ function declaredArtifactsFor(
   files: string
 ): ArtifactKind[] {
   return resolveDeclaredArtifacts(artifacts, { files });
+}
+
+/** Loads the real bundled `readme_improver/prompt.yaml` through the real loader + schema validator. */
+function loadReadmeImproverArtifacts(): {
+  category: string;
+  artifacts: ArtifactDeclaration | undefined;
+} {
+  const logger = createLogger();
+  const ctx: YamlLoadContext = {
+    logger,
+    cache: new Map(),
+    stats: { cacheHits: 0, cacheMisses: 0, loadErrors: 0 },
+    enableCache: false,
+    debug: false,
+  };
+
+  const loaded = loadYamlPrompt(README_IMPROVER_DIR, undefined, ctx);
+  if (loaded === null) {
+    throw new Error(
+      `Failed to load the real readme_improver prompt.yaml from ${README_IMPROVER_DIR} — ` +
+        'this test asserts against that file, so a load failure here means the fixture path or ' +
+        'the file itself is broken, not that the assertions below are wrong.'
+    );
+  }
+
+  return {
+    category: loaded.promptData.category ?? 'documentation',
+    artifacts: loaded.loadedContent.artifacts,
+  };
 }
 
 describe('Artifact-based gate activation — real registry, real strategic_worker prompt (row 1.2)', () => {
@@ -137,5 +171,55 @@ describe('Artifact-based gate activation — real registry, real strategic_worke
 
     expect(gateIds).toContain('information-placement');
     expect(gateIds).toContain('prose-hygiene');
+  });
+});
+
+/**
+ * B44: a documentation-category prompt that declares no `artifacts:` gets none of the four
+ * artifact-scoped documentation gates (B13 attaches by artifact, not by category) — exactly the
+ * regression that dropped these gates from `readme_improver`. This proves the restored
+ * declaration against the REAL bundled prompt and the REAL gate registry, the same shape
+ * `strategic_worker`'s suite above uses.
+ */
+describe('Artifact-based gate activation — real registry, real readme_improver prompt (B44)', () => {
+  let gateManager: GateManager;
+  let resolver: GateSetResolver;
+  let readmeImprover: { category: string; artifacts: ArtifactDeclaration | undefined };
+
+  beforeAll(async () => {
+    const logger = createLogger();
+    gateManager = new GateManager(logger);
+    await gateManager.initialize();
+    resolver = new GateSetResolver(logger, gateManager);
+    readmeImprover = loadReadmeImproverArtifacts();
+  });
+
+  test('readme_improver declares artifacts.produces: [docs, readme]', () => {
+    // Guards the case below: if this drifts, the resolution test would exercise the wrong
+    // declaration and pass for the wrong reason.
+    expect(readmeImprover.artifacts).toEqual({ produces: ['docs', 'readme'] });
+  });
+
+  test('the declared artifacts activate all four documentation gates', async () => {
+    const declaredArtifacts = resolveDeclaredArtifacts(readmeImprover.artifacts, {});
+    const prompt = {
+      id: 'readme_improver',
+      name: 'Documentation Writer (Diátaxis)',
+      description: 'documentation writer',
+      category: readmeImprover.category,
+      userMessageTemplate: '',
+    } as unknown as ConvertedPrompt;
+
+    const result = await resolver.resolve({
+      prompt,
+      category: readmeImprover.category,
+      frameworkInjected: true,
+      declaredArtifacts,
+    });
+
+    expect(result.gateIds).toContain('information-placement');
+    expect(result.gateIds).toContain('product-positioning-fidelity');
+    expect(result.gateIds).toContain('prose-hygiene');
+    expect(result.gateIds).toContain('semantic-discoverability');
   });
 });
