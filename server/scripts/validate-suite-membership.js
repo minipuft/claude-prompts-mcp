@@ -348,11 +348,40 @@ function runSelfTest() {
   process.exit(failures === 0 ? 0 : 1);
 }
 
+/**
+ * Fails when the ROOT manifest declares a `validate:*`/`verify:*` script this gate cannot see.
+ *
+ * `definedChecks()` enumerates `server/package.json` only, and that matches this gate's predicate
+ * exactly as long as every check lives there — which is true today (measured 2026-09-15: the root
+ * manifest declares none). It stops being true silently, which is the failure this guard converts
+ * into a loud one: the gate would keep reporting green over a root validator nothing runs.
+ *
+ * This is a DETECTOR, not a widening. Widening `definedChecks()` with no instance to test against
+ * would change a load-bearing gate on the strength of a hypothetical. When this fires, widen it
+ * then — the instance that fires it is also the fixture that proves the widening works.
+ */
+function assertNoUnseenRootChecks() {
+  const rootManifest = path.join(REPO_ROOT, 'package.json');
+  const { scripts = {} } = JSON.parse(readFileSync(rootManifest, 'utf8'));
+  const unseen = Object.keys(scripts).filter((name) => /^(validate|verify):/.test(name));
+  if (unseen.length === 0) return true;
+
+  console.error(
+    `UNSEEN: the root package.json declares ${unseen.length} check(s) this gate does not ` +
+      `enumerate: ${unseen.join(', ')}.\n` +
+      '  definedChecks() reads server/package.json only. Widen it to cover the root manifest,\n' +
+      '  and wire each check into SUITE or declare it in ALLOWED_OUTSIDE.\n'
+  );
+  return false;
+}
+
 function main() {
   if (process.argv.includes('--self-test')) {
     runSelfTest();
     return;
   }
+
+  const rootChecksSeen = assertNoUnseenRootChecks();
 
   const defined = definedChecks();
   const files = consumerFiles();
@@ -414,6 +443,7 @@ function main() {
   const unexamined = SUITE.filter((step) => step.converse === 'unexamined');
 
   if (
+    !rootChecksSeen ||
     unwired.length > 0 ||
     falseReasons.length > 0 ||
     exceptionProblems > 0 ||
