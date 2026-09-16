@@ -83,17 +83,17 @@ export class CategoryVersioningProcessor {
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither side-effect
-    // surface moves.
+    // surface moves. The diff is projected from the write the rollback below performs — same
+    // write model — so it names `category.yaml` as that write leaves it rather than the
+    // snapshot's fields rendered as a YAML document no write produces.
     if (isPreviewRequest(args)) {
       return this.success(
         describeRollbackPreview(
           'category',
           id,
           version,
-          this.ctx.textDiffService.generateObjectDiff(
-            currentState,
-            snapshot,
-            `${id}/${CATEGORY_YAML_FILENAME}`
+          this.ctx.textDiffService.generateFileChangeDiff(
+            await this.ctx.categoryFileService.projectCategoryWrite(restore.writeModel)
           )
         )
       );
