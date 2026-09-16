@@ -26,7 +26,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { buildStyleAuxiliaryReloadConfig } from '../../../src/runtime/style-hot-reload.js';
-import { createStyleManager, StyleManager } from '../../../src/modules/formatting/index.js';
+import {
+  createStyleDefinitionLoader,
+  createStyleManager,
+  StyleManager,
+} from '../../../src/modules/formatting/index.js';
 
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
 import type { HotReloadEvent } from '../../../src/shared/types/index.js';
@@ -115,9 +119,10 @@ describe('style hot reload wires the pipeline instance and every folder it reads
   });
 
   it('awaits a style manager that becomes ready after this call starts — the ordering fix', async () => {
-    const manager = await createStyleManager(logger, {
-      loaderConfig: { stylesDir: primary, additionalStylesDirs: [additional] },
-    });
+    const manager = await createStyleManager(
+      logger,
+      createStyleDefinitionLoader({ stylesDir: primary, additionalStylesDirs: [additional] })
+    );
 
     // Simulates `PromptExecutor.initializeStyleManager()` still running in the background: the
     // manager is not ready the instant `buildStyleAuxiliaryReloadConfig` is called. A caller
@@ -130,9 +135,10 @@ describe('style hot reload wires the pipeline instance and every folder it reads
   });
 
   it('watches the primary directory AND every additional directory the manager was configured with', async () => {
-    const manager = await createStyleManager(logger, {
-      loaderConfig: { stylesDir: primary, additionalStylesDirs: [additional] },
-    });
+    const manager = await createStyleManager(
+      logger,
+      createStyleDefinitionLoader({ stylesDir: primary, additionalStylesDirs: [additional] })
+    );
 
     const config = await buildStyleAuxiliaryReloadConfig(logger, routerResolvingTo(manager));
 
@@ -141,9 +147,10 @@ describe('style hot reload wires the pipeline instance and every folder it reads
   });
 
   it('reloads a style edited in the PRIMARY directory — the positive control', async () => {
-    const manager = await createStyleManager(logger, {
-      loaderConfig: { stylesDir: primary, additionalStylesDirs: [additional] },
-    });
+    const manager = await createStyleManager(
+      logger,
+      createStyleDefinitionLoader({ stylesDir: primary, additionalStylesDirs: [additional] })
+    );
     const config = await buildStyleAuxiliaryReloadConfig(logger, routerResolvingTo(manager));
     expect(config).toBeDefined();
 
@@ -154,9 +161,10 @@ describe('style hot reload wires the pipeline instance and every folder it reads
   });
 
   it('reloads a style edited in an ADDITIONAL directory — the reported defect', async () => {
-    const manager = await createStyleManager(logger, {
-      loaderConfig: { stylesDir: primary, additionalStylesDirs: [additional] },
-    });
+    const manager = await createStyleManager(
+      logger,
+      createStyleDefinitionLoader({ stylesDir: primary, additionalStylesDirs: [additional] })
+    );
     const config = await buildStyleAuxiliaryReloadConfig(logger, routerResolvingTo(manager));
     expect(config).toBeDefined();
 
@@ -171,9 +179,10 @@ describe('style hot reload wires the pipeline instance and every folder it reads
   });
 
   it('clears a deleted style from cache instead of continuing to serve it', async () => {
-    const manager = await createStyleManager(logger, {
-      loaderConfig: { stylesDir: primary, additionalStylesDirs: [additional] },
-    });
+    const manager = await createStyleManager(
+      logger,
+      createStyleDefinitionLoader({ stylesDir: primary, additionalStylesDirs: [additional] })
+    );
     const config = await buildStyleAuxiliaryReloadConfig(logger, routerResolvingTo(manager));
     expect(config).toBeDefined();
 
