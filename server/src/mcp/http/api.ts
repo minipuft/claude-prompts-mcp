@@ -373,7 +373,6 @@ export class ApiRouter {
         system_message: req.body['systemMessage'],
         arguments: promptArgs,
         chain_steps: req.body['chainSteps'],
-        is_chain: req.body['isChain'],
         gate_configuration: gateConfiguration,
         full_restart: req.body['restartServer'] === true,
       };

@@ -291,7 +291,6 @@ export interface ResourceManagerInput {
   subagent_model?: 'heavy' | 'standard' | 'fast';
   agent_type?: string;
   execution_hint?: 'single' | 'chain';
-  is_chain?: boolean;
   full_restart?: boolean;
   /** Read by prompt `guide`: what the caller is trying to do. */
   goal?: string;
