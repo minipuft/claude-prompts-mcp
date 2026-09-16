@@ -27,10 +27,11 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { Application } from '../../../src/runtime/application.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..');
-const TMP_ROOT = path.join(process.cwd(), 'tests/tmp/shutdown-order');
+const TMP_ROOT = testScratchPath('shutdown-order');
 
 /**
  * `PathResolver` reads the environment before its own options, so an operator shell that
