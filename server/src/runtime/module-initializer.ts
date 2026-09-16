@@ -94,6 +94,14 @@ export interface ModuleInitResult {
   toolDescriptionLoader: ToolDescriptionLoader;
   /** Resource change tracker for audit logging (undefined if serverRoot not provided) */
   resourceChangeTracker?: ResourceChangeTracker;
+  /**
+   * Every loader's refusal record, merged once — what the resource index must withhold.
+   *
+   * Returned rather than rebuilt by the caller: `Application` holds the prompt and gate managers
+   * and no framework or style loader, so its hot-reload re-sync cannot assemble this and must
+   * consume it. Live, not a snapshot — see the assembly site for what each leaf reads through.
+   */
+  indexQuarantine: QuarantineView;
 }
 
 /**
@@ -369,18 +377,16 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     logger.info(`✅ GateManager initialized with ${gateManager.getStats().totalGates} gates`);
   }
 
-  // The loaders' record of what they refused, read by the two consumers that run their OWN
-  // filesystem walk: this baseline comparison, and the ResourceIndexer near the bottom of this
-  // function.
+  // The loaders' record of what they refused, as the CHANGE TRACKER needs it.
   //
   // Prompts AND gates here, because `TrackedResourceType` is exactly `'prompt' | 'gate'` — this
   // covers the comparison's whole domain, and adding the framework view would widen the merge past
-  // anything that reads it. The indexer walks frameworks too and merges a third view of its own.
+  // anything that reads it. The indexer walks all four kinds and extends this merge below.
   //
   // Both views are live: `GateManager.getQuarantine()` resolves its registry on every read
   // (`lazyQuarantineView`), so this expression does not depend on having been evaluated after
   // `createGateManager` — which it is, but a reader should not have to verify that to trust it.
-  const quarantine = mergeQuarantineViews(
+  const trackedQuarantine = mergeQuarantineViews(
     promptManager.getQuarantine(),
     gateManager.getQuarantine()
   );
@@ -390,7 +396,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       resourceChangeTracker,
       configManager,
       logger,
-      quarantine,
+      trackedQuarantine,
       isVerbose
     );
   }
@@ -419,6 +425,36 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   for (const inventory of inventories) {
     if (inventory !== undefined) logResourceInventory(logger, inventory);
   }
+
+  // The whole catalog's refusal record, and the ONLY place it is assembled.
+  //
+  // `resource_index` is a projection of the SERVED catalog, so a file the loaders refused gets no
+  // row: the Python hooks read this table and hand its ids straight to `prompt_engine`, which
+  // rejects an unloadable one. A quarantine MARKER would work only for readers that remember to
+  // check it, and some of those readers are not in this repo.
+  //
+  // Built HERE rather than at the indexer below, and returned in `ModuleInitResult`, because the
+  // hot-reload re-sync in `application.ts` indexes the same four kinds and that file holds only
+  // `promptManager` and `gateManager` — no framework or style loader. It rebuilt what it could,
+  // which was the prompt view alone, under a comment claiming the other three joined there; the
+  // first hot reload then re-indexed every refused gate, framework and style (P4.25). One owner
+  // for one merged view is what makes that unrepeatable: the reload path can only consume it.
+  //
+  // Read by reference, never snapshotted. Every leaf is a live collection — `PromptLoader`'s is a
+  // `private readonly` field re-filled per root walk, and `GateManager`/`FrameworkManager` resolve
+  // theirs through `lazyQuarantineView` on every read — so a repair that lands between two syncs
+  // is reflected without anything re-registering.
+  //
+  // `styleLoader`, not a `StyleManager`: the manager builds its OWN `StyleDefinitionLoader` from
+  // its own config (see `PromptExecutor`), so its collection describes a different root set than
+  // the one `indexerResourceRoots` walks — and `isRefused` is path-keyed, so a record from the
+  // wrong root can never match. The loader this line reads is the same singleton instance
+  // `styleRoots` configured above.
+  const indexQuarantine = mergeQuarantineViews(
+    trackedQuarantine,
+    frameworkLoader.getQuarantine(),
+    styleLoader.getQuarantine()
+  );
 
   const chainCount = convertedPrompts.filter((p) => isChainPrompt(p)).length;
   if (isVerbose) {
@@ -526,28 +562,11 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         resourcesDir,
         resourceRoots: indexerResourceRoots(pathResolver),
         toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
-        // `resource_index` is a projection of the SERVED catalog, so a file the loaders refused
-        // gets no row: the Python hooks read this table and hand its ids straight to
-        // `prompt_engine`, which rejects an unloadable one. A quarantine MARKER would work only
-        // for readers that remember to check it, and some of those readers are not in this repo.
-        //
-        // The framework and style views join here and NOT in the `quarantine` merge above, because
-        // that one feeds the change tracker, whose `TrackedResourceType` is exactly
-        // `'prompt' | 'gate'`. This walk indexes all four directory-form kinds, so all four
-        // views are merged and the absent-from-the-index property holds for every one of them
-        // (P4.16 closed `style`, which was the only kind the indexer walked with no refusal
-        // record at all).
-        //
-        // `styleLoader`, not a `StyleManager`: the manager builds its OWN
-        // `StyleDefinitionLoader` from its own config (see `PromptExecutor`), so its collection
-        // describes a different root set than the one `indexerResourceRoots` walks — and
-        // `isRefused` is path-keyed, so a record from the wrong root can never match. The loader
-        // this line reads is the same singleton instance `styleRoots` configured above.
-        quarantine: mergeQuarantineViews(
-          quarantine,
-          frameworkLoader.getQuarantine(),
-          styleLoader.getQuarantine()
-        ),
+        // Assembled above and returned to `Application`, so this walk and the hot-reload walk
+        // read one view rather than two that can drift. All four directory-form kinds are in it
+        // (P4.16 closed `style`, the last kind the indexer walked with no refusal record at all);
+        // the change tracker's narrower merge is `trackedQuarantine`, which this one extends.
+        quarantine: indexQuarantine,
       });
       const syncResult = await indexer.syncAll();
       reportSyncFindings(syncResult, logger);
@@ -586,5 +605,6 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     mcpToolsManager,
     toolDescriptionLoader,
     resourceChangeTracker,
+    indexQuarantine,
   };
 }

@@ -35,6 +35,7 @@ import type { ApiRouter } from '#mcp/http/api.js';
 import type { McpToolRouter } from '#mcp/tools/index.js';
 import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { ListChangeTargets } from './list-change-notifier.js';
 import type { PathResolver } from './paths.js';
 import type { McpServerFactory } from '@modelcontextprotocol/server';
@@ -66,6 +67,15 @@ export class Application {
   private mcpToolsManager!: McpToolRouter;
   private frameworkStateStore!: FrameworkStateStore;
   private gateManager?: GateManager;
+  /**
+   * The merged refusal record the resource index reads, owned by the composition root.
+   *
+   * Assigned from `initializeModules` and never built here: this class holds the prompt and gate
+   * managers and no framework or style loader, so anything it assembled would be a partial view
+   * wearing a complete name — which is exactly what the reload path used to pass (P4.25). Live by
+   * reference, so a repair between two syncs is reflected without re-registering anything.
+   */
+  private indexQuarantine?: QuarantineView;
   private hookRegistry!: HookRegistry;
   private notificationEmitter!: McpNotificationEmitter;
   private telemetryLifecycle?: TelemetryLifecycle;
@@ -349,6 +359,7 @@ export class Application {
     this.frameworkStateStore = result.frameworkStateStore;
     this.gateManager = result.gateManager;
     this.mcpToolsManager = result.mcpToolsManager;
+    this.indexQuarantine = result.indexQuarantine;
 
     const currentFrameworkConfig = this.configManager.getFrameworksConfig();
     this.syncFrameworkSystemStateFromConfig(
@@ -811,6 +822,17 @@ export class Application {
       // meant that boundary never fired while the refresh went on to report
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
+        // Not a skip. An unset view means `initializeModules` never ran, and indexing on ahead
+        // would publish every refused gate, framework and style to the hooks while reporting
+        // "refresh completed successfully" — the failure this row exists to remove. Unreachable
+        // in a served process: the only caller of `fullServerRefresh` is a callback
+        // `initializeModules` itself wires.
+        if (this.indexQuarantine === undefined) {
+          throw new Error(
+            'Resource index re-sync has no quarantine view: initializeModules() must run before a hot reload.'
+          );
+        }
+        const indexQuarantine = this.indexQuarantine;
         const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
         const { createResourceIndexer, reportSyncFindings } =
           await import('#infra/database/resource-indexer.js');
@@ -825,12 +847,17 @@ export class Application {
           resourcesDir,
           resourceRoots: indexerResourceRoots(this.pathResolver),
           toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
-          // Read by reference and re-read on every sync, which is what makes this the reload
-          // path's correction as well as startup's: `loadPromptsData()` above has just re-walked
-          // every root and replaced each one's quarantine records, so a prompt REPAIRED since the
-          // last load is no longer refused here and indexes as `added` on this very pass.
-          // `mergeQuarantineViews(...)` is where the gate and framework sinks join.
-          quarantine: this.promptManager.getQuarantine(),
+          // The SAME merged view the startup sync reads, assembled once by `initializeModules`
+          // and handed over in `ModuleInitResult`. This line used to pass the prompt view alone
+          // under a comment claiming the other three joined here; they did not, and the first hot
+          // reload re-indexed every refused gate, framework and style (P4.25).
+          //
+          // Read by reference, so this is the reload path's correction as well as startup's:
+          // `loadAndProcessData()` above has just re-walked every prompt root and replaced that
+          // root's records, so a prompt REPAIRED since the last load is no longer refused here and
+          // indexes as `added` on this very pass. The gate and framework leaves resolve through
+          // their registries on every read, so their auxiliary reloads are reflected too.
+          quarantine: indexQuarantine,
         });
         const syncResult = await indexer.syncAll();
         reportSyncFindings(syncResult, this.logger);
