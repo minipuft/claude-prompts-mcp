@@ -165,7 +165,22 @@ export class TransportRouter {
   setupStreamableHttpTransport(app: express.Application): void {
     this.logger.info('Setting up Streamable HTTP transport endpoints');
 
-    this.httpHandler = createMcpHandler(this.mcpServerFactory, { legacy: 'stateless' });
+    // `onerror` is what makes a failed request say why it failed. The handler
+    // answers a request it could not serve with `-32603 Internal server error`
+    // and reports the cause through this callback only — it returns that
+    // response rather than throwing, so `toNodeHandler`'s own `onerror` below
+    // never sees these. Without it, a failure while building a request's server
+    // was reported by nothing at all unless the failing stage happened to log
+    // for itself: the request failed, the next one succeeded, and no line
+    // anywhere named the cause.
+    this.httpHandler = createMcpHandler(this.mcpServerFactory, {
+      legacy: 'stateless',
+      onerror: (error: Error) => {
+        this.logger.error(
+          `Streamable HTTP request failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      },
+    });
 
     // `toNodeHandler` converts the Node request to a web-standard Request, calls
     // the handler, then writes the Response back, honoring SSE backpressure.
