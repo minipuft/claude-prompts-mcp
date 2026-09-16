@@ -61,7 +61,7 @@ export interface ModuleInitCallbacks {
   handleFrameworkConfigChange: (
     config: ResolvedFrameworkConfig,
     previous?: ResolvedFrameworkConfig
-  ) => void;
+  ) => Promise<void>;
 }
 
 export interface ModuleInitParams {
@@ -314,7 +314,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   });
   if (isVerbose) logger.info('✅ FrameworkStateStore initialized successfully');
 
-  callbacks.handleFrameworkConfigChange(currentFrameworkConfig);
+  // Awaited: this applies the configured framework toggle to the state store, which
+  // persists it. Left unawaited, a save that failed here was never reported and the
+  // store's memory silently disagreed with the database for the rest of the run.
+  await callbacks.handleFrameworkConfigChange(currentFrameworkConfig);
 
   // Initialize Gate Manager (Phase 4 - registry-based gate system)
   if (isVerbose) logger.info('🔄 Initializing Gate Manager...');

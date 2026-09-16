@@ -277,13 +277,12 @@ export class FrameworkActionHandler extends ActionHandler {
       );
     }
 
-    try {
-      await (this.frameworkStateStore as any).enableFrameworkSystem?.(
-        args.reason || 'User requested to enable framework system'
-      );
-    } catch {
-      // Method may not exist
-    }
+    // Not caught here: a toggle that failed to save must not be answered with the
+    // success message below. `system_control` catches at the tool boundary and
+    // returns the error to the caller.
+    await this.frameworkStateStore.enableFrameworkSystem(
+      args.reason || 'User requested to enable framework system'
+    );
 
     const persistenceNotes: string[] = [];
     if (args.persist) {
@@ -318,13 +317,10 @@ export class FrameworkActionHandler extends ActionHandler {
       );
     }
 
-    try {
-      await (this.frameworkStateStore as any).disableFrameworkSystem?.(
-        args.reason || 'User requested to disable framework system'
-      );
-    } catch {
-      // Method may not exist
-    }
+    // Not caught here, for the reason the enable path above gives.
+    await this.frameworkStateStore.disableFrameworkSystem(
+      args.reason || 'User requested to disable framework system'
+    );
 
     const persistenceNotes: string[] = [];
     if (args.persist) {
