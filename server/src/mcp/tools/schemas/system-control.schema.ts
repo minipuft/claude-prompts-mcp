@@ -70,15 +70,17 @@ export function buildSystemControlSchema(resolve: DescriptionResolver = identity
       .describe(describe('resource_type')),
 
     // ── config ──────────────────────────────────────────────────────────
+    // The only nested-config shape left reachable: a per-key candidate check. `list`/`keys`
+    // read via the top-level `operation` alone (see config-action-handler.ts); `get`/`set` were
+    // removed from this surface (R41/R27) and never populated this object with those values.
     config: z
       .object({
         key: z.string(),
         value: z.string().optional(),
-        operation: z.enum(['get', 'set', 'list', 'validate']),
+        operation: z.enum(['validate']),
       })
       .optional()
       .describe(describe('config')),
-    backup_path: z.string().optional().describe(describe('backup_path')),
 
     // ── injection ───────────────────────────────────────────────────────
     type: z.enum(INJECTION_TYPES).optional().describe(describe('type')),

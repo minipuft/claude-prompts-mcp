@@ -10,7 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
-import { validateConfigAgainstSchema } from './config-schema-validator.js';
+import { getParsedConfigSchema, validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -21,7 +21,10 @@ const logger = createLogger(
   })
 );
 
-import type { ConfigSchemaValidationResult } from '#shared/types/config-manager.js';
+import type {
+  ConfigSchemaValidationResult,
+  ConfigValueWithSource,
+} from '#shared/types/config-manager.js';
 
 import {
   Config,
@@ -113,6 +116,54 @@ function resolveContainer(
   }
   return current;
 }
+
+/**
+ * Walks a dot-path key (`"server.port"`) over an arbitrary value tree, returning the leaf or
+ * `undefined` the moment a segment is missing or not an object. Same shape as the reduce-based
+ * dot-walkers already used at the MCP config handler and in `cli-shared/config-operations.ts`
+ * (`getConfigValue`) — reimplemented locally rather than imported, because `infra/` sits below
+ * `cli-shared` in the layer model and `cli-shared`'s reader has no notion of provenance anyway.
+ */
+function readDotPath(root: unknown, key: string): unknown {
+  let current: unknown = root;
+  for (const segment of key.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+/**
+ * Recursively collects the dot-path leaf keys a JSON Schema's `properties` tree declares. A
+ * property carrying its own nested `properties` is a branch (walked, not listed itself);
+ * everything else — string/number/boolean/array/tuple-typed leaves — is recorded as one key.
+ * `$schema` is excluded: the schema declares it as an allowed property so a config file may carry
+ * the editor-hint `"$schema": "./config.schema.json"`, but it is not a config key.
+ */
+function collectSchemaKeys(schemaNode: unknown, prefix = ''): string[] {
+  if (schemaNode === null || typeof schemaNode !== 'object') return [];
+  const properties = (schemaNode as { properties?: unknown }).properties;
+  if (properties === null || typeof properties !== 'object') {
+    return prefix ? [prefix] : [];
+  }
+
+  const keys: string[] = [];
+  for (const [propKey, propSchema] of Object.entries(properties as Record<string, unknown>)) {
+    if (!prefix && propKey === '$schema') continue;
+    const path = prefix ? `${prefix}.${propKey}` : propKey;
+    const nestedProperties = (propSchema as { properties?: unknown } | null)?.properties;
+    if (nestedProperties !== null && typeof nestedProperties === 'object') {
+      keys.push(...collectSchemaKeys(propSchema, path));
+    } else {
+      keys.push(path);
+    }
+  }
+  return keys;
+}
+
+/** Log levels `LOG_LEVEL` may override `logging.level` with — shared so the override check inside
+ *  `getConfigValueWithSource` agrees with the one `getLoggingConfig` already applies. */
+const VALID_LOG_LEVELS: string[] = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
 
 /**
  * Adopts each inert spelling into its canonical key, then deletes the inert one so a config sees
@@ -282,6 +333,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * a new mistake must still be reported. Cleared by a valid load, so a reintroduced error warns.
    */
   private lastWarnedSchemaSignature: string | undefined;
+  /**
+   * A snapshot of the parsed config FILE, taken before `validateAndSetDefaults` fills in missing
+   * sections in place — `this.config` and `parsedConfig` are the same object past that point, so
+   * without this snapshot nothing distinguishes "the file set this key" from "the default filled
+   * it in". Undefined when no file has been successfully parsed (constructed but never loaded, or
+   * the last `loadConfig` fell back to `DEFAULT_CONFIG`). Read only by `getConfigValueWithSource`.
+   */
+  private rawFileConfig: Record<string, unknown> | undefined;
 
   constructor(
     configPath: string,
@@ -309,6 +368,11 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // would report the loader's own additions and no longer see what the user wrote.
       await this.checkAgainstSchema(parsedConfig);
 
+      // Snapshot before `this.config = parsedConfig` + `validateAndSetDefaults()`: the latter
+      // mutates `this.config` in place, and since it is the SAME object as `parsedConfig`, cloning
+      // is the only way to keep a copy of what the file actually declared.
+      this.rawFileConfig = structuredClone(parsedConfig) as unknown as Record<string, unknown>;
+
       this.config = parsedConfig;
 
       // Validate and set defaults for any missing properties
@@ -320,6 +384,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     } catch (error) {
       // Whatever the last check said describes a file this load did not serve.
       this.schemaValidation = undefined;
+      this.rawFileConfig = undefined;
       console.error(`Error loading configuration from ${this.configPath}:`, error);
       // stderr, not stdout: on STDIO stdout is the protocol channel, and a stray line corrupts it.
       console.error('Using default configuration');
@@ -343,6 +408,102 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getSchemaValidation(): ConfigSchemaValidationResult | undefined {
     return this.schemaValidation;
+  }
+
+  /**
+   * The effective value of a dot-path key and which layer produced it.
+   *
+   * `server.port` and `logging.level` are special-cased ahead of the file/default walk because
+   * both have a live environment override (`PORT`, `LOG_LEVEL`) that a generic dot-walk over
+   * `getConfig()` cannot see — `getPort()` and `getLoggingConfig()` already resolve the override,
+   * so this defers to them and reports `'environment'` only when the override actually applied
+   * (an unset or invalid env var falls through to the file/default walk below, same as those
+   * getters already do).
+   *
+   * Below that: `'file'` when the raw file set it, `'default'` when the file didn't but
+   * `validateAndSetDefaults` filled in a real value at load time, and `'deferred'` — see
+   * {@link ConfigValueSource} — when neither did, because the key's section is one this loader
+   * never writes back and only its owning getter defaults at read time.
+   */
+  getConfigValueWithSource(key: string): ConfigValueWithSource {
+    if (key === 'server.port' && process.env['PORT']) {
+      // Same truthy check `getPort()` applies internally — an empty-string `PORT` is "unset" to
+      // that getter too, and reporting `'environment'` here must agree with what it returns.
+      return { key, value: this.getPort(), source: 'environment' };
+    }
+    if (key === 'logging.level') {
+      const envLogLevel = process.env['LOG_LEVEL'];
+      if (envLogLevel && VALID_LOG_LEVELS.includes(envLogLevel.toUpperCase())) {
+        return { key, value: this.getLoggingConfig().level, source: 'environment' };
+      }
+    }
+
+    // `value` always comes from the EFFECTIVE merged config, never from the raw file: a section
+    // `validateAndSetDefaults` treats as missing/invalid is replaced wholesale (e.g.
+    // `this.config.server = DEFAULT_CONFIG.server` when the file's `server` is falsy), so a raw
+    // value can be present on disk while the process runs on the default it was replaced with.
+    // Reporting the raw value there would be exactly the false-confidence case this method exists
+    // to end. `rawFileConfig` therefore decides only whether the SOURCE LABEL is `'file'`.
+    const rawValue = readDotPath(this.rawFileConfig, key);
+    const mergedValue = readDotPath(this.config, key);
+
+    if (rawValue !== undefined) {
+      // Legacy-spelling exception: `adoptInertSpellings` renames a handful of keys inside
+      // `this.config` (e.g. `gates.mode` -> `gates.enabled`) and deletes the old spelling, so the
+      // OLD path can be present in `rawFileConfig` (the file, snapshotted before the rename) yet
+      // resolve to `undefined` on the merged side under that same old path. There is no discarded
+      // default to fall back to here — the raw value IS what the rename carried forward under a
+      // different key — so this is the one case where the raw file's own value is reported.
+      return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
+    }
+
+    // Neither the file nor `validateAndSetDefaults` produced a value: `gates`, `resources`,
+    // `logging`, `identity`, `verification`, `phaseGuards` and `hooks` are never written back by
+    // that method (unlike `server`/`prompts`/`analysis`/`frameworks`/`advanced`/`execution`/
+    // `versioning`/`telemetry`, which always resolve to a concrete value here), so a key living in
+    // one of those sections stays genuinely absent from `this.config` until its OWNING getter
+    // applies a default at read time (e.g. `gates.enabled` inside `getGatesConfig()`). Reporting
+    // `'default'` with an `undefined` value here would be indistinguishable from a default that IS
+    // `undefined` by design (`getPromptsRegisterWithMcp()`, `telemetry.attributePolicy.allowlist`)
+    // — exactly the false-confidence case `getConfigValueWithSource` exists to end. `'deferred'`
+    // names the state honestly instead of guessing at a value no layer has produced yet.
+    if (mergedValue === undefined) {
+      return { key, value: undefined, source: 'deferred' };
+    }
+
+    return { key, value: mergedValue, source: 'default' };
+  }
+
+  /**
+   * The dot-path keys the packaged `config.schema.json` declares. Reads the parsed schema through
+   * `getParsedConfigSchema` (`config-schema-validator.ts`), the same mtime-keyed cache entry the
+   * compiled AJV validator is drawn from — one read, one parse, one invalidation rule shared by
+   * both consumers, instead of this method re-reading and re-parsing the file on every call.
+   *
+   * Rejects rather than returning an empty array: no schema path, an unreadable file, and invalid
+   * JSON are all "cannot enumerate", never "zero keys declared" — `getParsedConfigSchema` throws
+   * on the latter two, and this wraps that failure with the schema path for context.
+   */
+  async listConfigKeys(): Promise<string[]> {
+    if (this.schemaPath === undefined) {
+      throw new Error(
+        'listConfigKeys: no config schema path was injected; cannot enumerate config keys.'
+      );
+    }
+
+    let schema: unknown;
+    try {
+      schema = await getParsedConfigSchema(this.schemaPath);
+    } catch (error) {
+      throw new Error(
+        `listConfigKeys: could not load the config schema at ${this.schemaPath}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error }
+      );
+    }
+
+    return collectSchemaKeys(schema);
   }
 
   /**
@@ -390,17 +551,16 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     // Override log level from LOG_LEVEL environment variable if present
     const envLogLevel = process.env['LOG_LEVEL'];
     if (envLogLevel) {
-      const validLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
       const normalizedLevel = envLogLevel.toUpperCase();
 
-      if (validLevels.includes(normalizedLevel)) {
+      if (VALID_LOG_LEVELS.includes(normalizedLevel)) {
         return {
           ...configLogging,
           level: normalizedLevel.toLowerCase(), // Normalize to lowercase for consistency
         };
       } else {
         // Invalid LOG_LEVEL - warn but continue with config value
-        const validLevelsStr = validLevels.join(', ');
+        const validLevelsStr = VALID_LOG_LEVELS.join(', ');
         console.warn(
           `Invalid LOG_LEVEL environment variable: "${envLogLevel}". ` +
             `Valid levels: ${validLevelsStr}. Using configured level: "${configLogging.level}"`

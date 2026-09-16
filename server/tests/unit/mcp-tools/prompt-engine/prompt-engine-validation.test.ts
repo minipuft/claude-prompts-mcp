@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
 
-import type { ConfigManager } from '../../../../src/infra/config/index.js';
+import type { ConfigManager } from '../../../../src/shared/types/config-manager.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
 import type { ContentAnalyzer as SemanticAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
@@ -32,6 +32,12 @@ const mockConfigManager: ConfigManager = {
   getChainSessionConfig: jest.fn().mockReturnValue(undefined),
   getServerRoot: jest.fn().mockReturnValue(process.cwd()),
   getSchemaValidation: () => undefined,
+  getConfigValueWithSource: jest.fn().mockReturnValue({
+    key: 'server.port',
+    value: undefined,
+    source: 'default',
+  }),
+  listConfigKeys: jest.fn().mockResolvedValue([]),
   on: jest.fn(),
   off: jest.fn(),
 } as any;
