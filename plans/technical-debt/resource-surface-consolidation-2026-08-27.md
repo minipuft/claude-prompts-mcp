@@ -459,6 +459,43 @@ independence of FILES, and the dispatch table below is sequenced on the second.
 
 **Eight rows stay open (P4.29, the test audit, joined 2026-09-13; P4.30, from the merge with main, joined 2026-09-15), none bears on the gate's clauses, and closing seven opened six — which is the honest shape of this work rather than a failure of it.** Batch 4 closed two rows and opened six; batch 5 closed seven of those and opened six more. The open set has turned over completely and its SIZE has barely moved, and that is the finding the count alone hides: each closure is a real property now held by a test, and each new row is something that property's own measurement exposed. P4.23 is the seventh shadow surface, found only because P4.18 enumerated the other six. P4.24 is the root P4.19's premise did not cover. P4.25 is the hot-reload path silently reversing three closed rows while a comment claims it does not. P4.26 is the gate that was supposed to hold the wiring and holds half of it. P4.27 and P4.28 are the two-derivations disagreement in the kinds and the direction P4.21 did not reach. **Every one exists because something was measured, not because something was deferred**, and each carries its own falsifier so none depends on this paragraph being re-read. Two of them — P4.25 and P4.26 — bear on rows already marked ✓, and they are open rows rather than reopened ones on purpose: the ✓ claims the property was observed, which it was; these say a channel exists where it is not preserved. The gate's two clauses are held by `validate:declared-surface` and by P4.7's writer, and neither is touched by any open row.
 
+### Rulings R18–R22 (final slice, 2026-09-16)
+
+Ruled BEFORE dispatch, because a question ruled after dispatch is N workers guessing N ways.
+
+- **R18 (P4.33) — `tools/` is RESERVED; nothing under it is a prompt.** The indexer is right and the
+  loader must stop recursing. P4.28 matched the loader on the grounds that the loader defines what is
+  served, which was the correct tiebreak for THAT row and the wrong rule here: `tools/` already has a
+  meaning (script tools) and its own composite id scheme (`{promptId}/{toolId}`), so admitting prompts
+  there gives one directory two id schemes. `shared/utils/prompt-layout.ts` already documents `tools/`
+  as reserved — the fix makes the loader match the rule the shared module states.
+- **R19 (P4.37) — DELETE the read API with its tests.** Re-measured on `f2e07a45`: the only method
+  reached on a `ResourceIndexer` instance anywhere in `src/` is `syncAll()`, at 2 call sites. Python
+  hooks read `resource_index` with their own SQL and `skills-sync` runs a raw `SELECT`, so nothing
+  wants an in-process ranked search. Keeping ~120 lines and ~26 tests alive for no consumer is the
+  parallel-system shape this plan exists to remove. A future consumer writes the query it needs.
+- **R20 (P4.42) — decompose `shutdown()`, NOT the file.** `refactoring.md` is explicit that splitting a
+  file to satisfy a number produces a file whose only justification is arithmetic. Cognitive complexity
+  57 against a limit of 15 is a real reading cost, and decomposing it drops both signals at once.
+- **R21 (P4.41) — ONE shared staleness helper, not a per-file check.** 10+ e2e files spawn
+  `dist/index.js`. `scripts/verify-mcp-surface.mjs` already has a working, documented `newestMtime`
+  refusal — reuse it rather than re-derive it. A per-file guard is the 1-of-10 shape this arc has
+  already paid for twice.
+- **R22 (P4.31) — ONE `StyleDefinitionLoader` instance: the one `module-initializer` wires.**
+  `StyleManager` building its own via `createStyleDefinitionLoader` (`style-manager.ts:95`) is the
+  defect, not a second legitimate owner. Re-measured: `module-initializer.ts:417` and
+  `tool-description-overlays.ts:118` both take the singleton; `StyleManager` is the lone dissenter.
+
+**Two premises corrected on re-measurement (2026-09-16, `f2e07a45`):**
+
+- **P4.32 said the shared layout module "has two remaining non-consumers".** It has none — all three
+  walks (`resource-indexer.ts`, `resource-change-tracking.ts`, `yaml-prompt-loader.ts`) import it. What
+  survives is narrower: the indexer keeps its OWN `entry.name === 'tools'` skip at line 1013 while the
+  shared module documents the same rule in prose. The row is a duplicated RULE, not a missing import.
+- **P4.38 is confirmed and slightly worse than written.** `SHARED` is guarded at line 537
+  (`toBeGreaterThan(0)`); the `isolated` describe at line 559 has no such case at all, so its
+  `it.each` at 589 generates zero tests silently.
+
 ### Findings (P4 batch B)
 
 - **P4-F32 — a gate that fires on the right file for the wrong reason is the defect it was built to
