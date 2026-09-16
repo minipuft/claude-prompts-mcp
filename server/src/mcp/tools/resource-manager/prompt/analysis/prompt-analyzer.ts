@@ -101,7 +101,10 @@ export class PromptAnalyzer {
       requiresFramework: true, // Default to requiring framework for fallback
       confidence: 0.5,
       reasoning: [`Fallback analysis: ${error}`],
-      suggestedGates: ['execution_validation'],
+      // Never a hardcoded id: analysis failed, so there is no basis to name a gate, and naming
+      // one that does not resolve through the gate registry would be a suggestion the caller
+      // cannot act on.
+      suggestedGates: [],
       framework: 'fallback',
       analysisMode: 'fallback',
       capabilities: {

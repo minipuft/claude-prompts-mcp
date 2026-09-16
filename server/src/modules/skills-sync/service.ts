@@ -614,6 +614,12 @@ export interface SkillsSyncRunReport {
   resources: number;
   /** Files written (0 on a preview) */
   written: number;
+  /**
+   * `written`, broken out by client — `export` and `sync` only. Absent rather than
+   * empty for every other command, same reasoning as `drift`: a command that never
+   * writes a file per client should not read as "wrote zero for each of them".
+   */
+  writtenByClient?: Record<string, number>;
   /** Managed directories pruned — whole skill dirs (sync only) plus stale gates/<id>/ dirs (both) */
   pruned: number;
   failures: SkillsSyncFailure[];
@@ -3497,6 +3503,8 @@ async function exportCommand(
             await mkdir(path.dirname(fullPath), { recursive: true });
             await writeFile(fullPath, file.content);
             report.written++;
+            report.writtenByClient = report.writtenByClient ?? {};
+            report.writtenByClient[clientId] = (report.writtenByClient[clientId] ?? 0) + 1;
             output.log(`  wrote ${file.relativePath}`);
           }
         }
@@ -3746,6 +3754,7 @@ async function syncCommand(
   if (opts.id) filters.id = opts.id;
 
   const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
+  report.resources = resources.length;
   output.log(`Loaded ${resources.length} resources`);
 
   const idCounts = new Map<string, number>();
@@ -3892,6 +3901,8 @@ async function syncCommand(
             await mkdir(path.dirname(fullPath), { recursive: true });
             await writeFile(fullPath, file.content);
             report.written++;
+            report.writtenByClient = report.writtenByClient ?? {};
+            report.writtenByClient[clientId] = (report.writtenByClient[clientId] ?? 0) + 1;
             output.log(`  wrote ${file.relativePath}`);
           }
         }
@@ -4001,6 +4012,7 @@ async function diffCommand(
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
   const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
+  report.resources = resources.length;
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
 
   // When --output is provided, collect patches and write .patch files
@@ -4353,6 +4365,7 @@ async function pullCommand(
   if (opts.resourceType) filters.resourceType = opts.resourceType;
   if (opts.id) filters.id = opts.id;
   const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
+  report.resources = resources.length;
   const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
 
   for (const clientId of clientIds) {
