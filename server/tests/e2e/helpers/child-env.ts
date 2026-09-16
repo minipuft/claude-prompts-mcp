@@ -16,11 +16,25 @@
  *     about a fixture holding one. Its assertion was `> 1`, so it passed, and the leak stayed
  *     invisible until a stricter case landed beside it.
  *
+ *   - `HOME`: a `system_control skills_sync export` writes client skill folders under `$HOME`.
+ *     Measured 2026-09-15 against a temp home: one ordinary export wrote 224 files into
+ *     `$HOME/.claude/skills`, refused by nothing. Every spawn here inherited the developer's real
+ *     home until `buildServerEnv` started requiring an isolated one, so only the absence of such
+ *     a scenario in this suite stood between a green run and a real `~/.claude/skills` overwrite.
+ *     `HOME` is REQUIRED rather than scrubbed — an unset one falls back to the passwd entry.
+ *
  * The scrub list and the builder live in `scripts/lib/hermetic-server-env.js`, because the scripts
  * that spawn the built server (`verify:mcp`, the tool-schema snapshot capture) are plain node and
  * cannot import TypeScript. Every spawn in `tests/e2e` goes through here, every server spawn in
  * `scripts` imports that module, and `validate:hermetic-child-env` fails a new one that does
  * neither.
+ *
+ * Use `createHermeticRoots()` for the `HOME` + `MCP_RUNTIME_ROOT` pair; `startServerWithHttp`
+ * already creates a pair per spawn and tears it down in `killServer`.
  */
 
-export { buildServerEnv } from '../../../scripts/lib/hermetic-server-env.js';
+export {
+  buildServerEnv,
+  createHermeticRoots,
+  type HermeticRoots,
+} from '../../../scripts/lib/hermetic-server-env.js';

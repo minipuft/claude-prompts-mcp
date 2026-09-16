@@ -23,6 +23,7 @@ import {
 } from '../../../src/infra/database/index.js';
 
 import type { ShadowedResource } from '../../../src/infra/database/resource-indexer.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -31,7 +32,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/indexer-roots-test');
+const TEST_DIR = testScratchPath('indexer-roots-test');
 const BUNDLED = path.join(TEST_DIR, 'bundled', 'prompts');
 const WORKSPACE = path.join(TEST_DIR, 'workspace', 'prompts');
 

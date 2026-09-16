@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 import { SqliteEngine, ResourceIndexer } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -21,7 +22,7 @@ const mockLogger = {
 };
 
 describe('ResourceIndexer — live server resources', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/indexer-live-test');
+  const testDir = testScratchPath('indexer-live-test');
   const resourcesDir = path.join(process.cwd(), 'resources');
   let dbManager: SqliteEngine;
   let indexer: ResourceIndexer;

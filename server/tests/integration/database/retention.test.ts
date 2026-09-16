@@ -21,6 +21,7 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { enforceRetention } from '../../../src/infra/database/retention.js';
 import { TABLE_CONTRACTS } from '../../../src/infra/database/table-contracts.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -29,7 +30,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const testDir = path.join(process.cwd(), 'tests/tmp/retention-test');
+const testDir = testScratchPath('retention-test');
 
 function capFor(table: string): number {
   const contract = TABLE_CONTRACTS.find((c) => c.table === table);

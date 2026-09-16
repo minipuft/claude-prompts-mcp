@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -26,7 +27,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const testDir = path.join(process.cwd(), 'tests/tmp/wal-checkpoint-test');
+const testDir = testScratchPath('wal-checkpoint-test');
 const walPath = path.join(testDir, 'runtime-state', 'state.db-wal');
 
 /** Write enough rows that the WAL is unambiguously non-empty before we checkpoint. */

@@ -21,6 +21,7 @@ import {
   reportResourceSyncFailures,
 } from '../../../src/infra/database/index.js';
 import { reportRefusedResources } from '../../../src/infra/database/resource-indexer.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 // Mock logger
 const mockLogger = {
@@ -30,7 +31,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/indexer-test');
+const TEST_DIR = testScratchPath('indexer-test');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 
 /**

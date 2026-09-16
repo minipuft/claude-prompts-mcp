@@ -25,7 +25,7 @@ import {
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots, type HermeticRoots } from './helpers/child-env.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -41,13 +41,32 @@ let httpServerPort: number | null = null;
 let streamableHttpServerProcess: ChildProcess | null = null;
 let streamableHttpServerPort: number | null = null;
 
+/** Roots created by `spawnServer`, drained in `afterEach`. */
+const spawnedRoots: HermeticRoots[] = [];
+
+/** Hand a pair to the `afterEach` drain and return it, for a spawn that wants only one half. */
+function trackRoots(roots: HermeticRoots): HermeticRoots {
+  spawnedRoots.push(roots);
+  return roots;
+}
+
 /**
  * Helper to spawn MCP server with proper env
+ *
+ * `MCP_WORKSPACE` here is PROJECT_ROOT — the repository — so a child with no runtime root of its
+ * own resolves the runtime root FROM the workspace and writes `runtime-state/state.db` and
+ * `logs/mcp-server.log` at the repo root. That is not hypothetical: it is what a fully green
+ * `test:e2e` left behind on every run until 2026-09-15 (18/18 suites passing, three ignored
+ * directories in the tree). The pair is created unconditionally, and an explicit `runtimeRoot`
+ * overrides only that half.
  */
 function spawnServer(runtimeRoot?: string): ChildProcess {
+  const roots = createHermeticRoots('mcp-server-smoke');
+  spawnedRoots.push(roots);
   return spawn('node', [SERVER_PATH, '--transport=stdio', '--quiet'], {
     cwd: path.join(PROJECT_ROOT, 'server'),
     env: buildServerEnv({
+      ...roots.env,
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
       ...(runtimeRoot !== undefined ? { MCP_RUNTIME_ROOT: runtimeRoot } : {}),
@@ -128,6 +147,7 @@ describe('MCP Server Smoke Tests', () => {
       streamableHttpServerProcess = null;
       streamableHttpServerPort = null;
     }
+    while (spawnedRoots.length > 0) spawnedRoots.pop()?.cleanup();
   });
 
   describe('Server Entry Point', () => {
@@ -171,9 +191,11 @@ describe('MCP Server Smoke Tests', () => {
 
     it('writes state and logs beneath an explicit runtime root', async () => {
       const runtimeRoot = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-runtime-'));
+      const roots = createHermeticRoots('smoke-explicit-runtime-root');
       const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
         cwd: path.join(PROJECT_ROOT, 'server'),
         env: buildServerEnv({
+          ...roots.env,
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',
@@ -198,6 +220,7 @@ describe('MCP Server Smoke Tests', () => {
       await fs.access(path.join(runtimeRoot, 'runtime-state', 'state.db'));
       await fs.access(path.join(runtimeRoot, 'logs', 'mcp-server.log'));
       await fs.rm(runtimeRoot, { recursive: true, force: true });
+      roots.cleanup();
     }, 30000);
 
     // The sibling above pins MCP_RUNTIME_ROOT, which every consumer reads through one resolver
@@ -213,8 +236,11 @@ describe('MCP Server Smoke Tests', () => {
       const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
         cwd: path.join(PROJECT_ROOT, 'server'),
         // No MCP_RUNTIME_ROOT: this case is about the fallback to MCP_WORKSPACE, and the helper
-        // scrubs an inherited one rather than each caller remembering to blank it.
+        // scrubs an inherited one rather than each caller remembering to blank it. `HOME` is the
+        // one key the pair still has to supply — it is required, never scrubbed, and this case
+        // deliberately withholds the other half.
         env: buildServerEnv({
+          HOME: trackRoots(createHermeticRoots('smoke-workspace-fallback')).home,
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',

@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
 import { SqliteEngine, ResourceIndexer } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -24,7 +25,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/search-test');
+const TEST_DIR = testScratchPath('search-test');
 
 /**
  * Insert a resource row directly into SQLite, bypassing filesystem sync.

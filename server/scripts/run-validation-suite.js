@@ -413,9 +413,12 @@ export const SUITE = [
     // detector is textual by design and omitting a matched substrate fails.
     script: 'validate:hermetic-child-env',
     io: 'read',
+    // `spawn` is re-derived from self-test FIXTURE strings (`spawnSync(tsc, …)`,
+    // `execFileSync('git', …)`) — the checker itself launches no process. Declared rather than
+    // dodged by rewriting the fixtures, since the fixtures are what prove the classifier.
     reads: ['file', 'spawn', 'walk'],
     converse:
-      'CHECKED — covers tests/e2e (no spread) and server-spawning scripts (must import scripts/lib/hermetic-server-env.js, no spread); the self-test runs each predicate over input that must trip it and input that must not, a run classifying zero spawners fails, and a positive control restoring a spread in capture-tool-schemas.mjs exits 1 naming it. UNCHECKED and known — a server spawned through an entry spelling the classifier does not recognise',
+      'CHECKED 2026-09-16 — every server spawn SITE (per call, tests/ + scripts/, through a second binding or a local import) must pass an env, not pass env: process.env, and sit in a file importing the builder; every call to the env builder must state HOME. Positive controls: planted e2e spawn with no env exits 1 naming the line; planted builder call with no HOME exits 1; planted script reaching the entry through `const args` exits 1; a git-only planted script stays green; pre-fix HEAD content yields 15 HOME findings. UNCHECKED and known — an entry spelling the classifier does not recognise, and the provenance of an env value (presence is checked, not that the builder produced it)',
   },
   {
     script: 'validate:shipped-frameworks',
@@ -563,10 +566,26 @@ function runStep(step, index, total) {
  */
 const RECEIPT_PATH = path.join(SERVER_ROOT, '.cache', 'validation-receipt.json');
 
+/**
+ * Where THIS run records its receipt.
+ *
+ * A `--manifest` run is not the suite — it is a fixture list, which is how
+ * `tests/unit/scripts/validation-suite-runner.test.ts` drives two deliberately missing steps. Until
+ * 2026-09-16 such a run wrote the real receipt, so every `test:unit` replaced a developer's
+ * `firstSeen` history with two fixture names, and the next real `validate:all` reported every
+ * pre-existing failure as `NEW this run` — the one question the receipt exists to answer. Found by
+ * the tree-state guard, which reported `server/.cache/` appearing during a unit-test run. The
+ * fixture's receipt now lives beside its manifest and goes when the manifest's directory does.
+ */
+function receiptPathFor(manifestPath) {
+  if (manifestPath === undefined) return RECEIPT_PATH;
+  return path.join(path.dirname(path.resolve(manifestPath)), 'validation-receipt.json');
+}
+
 /** Previous run's receipt, or null. Never throws — a missing receipt is the normal first run. */
-function readReceipt() {
+function readReceipt(receiptPath) {
   try {
-    return JSON.parse(readFileSync(RECEIPT_PATH, 'utf8'));
+    return JSON.parse(readFileSync(receiptPath, 'utf8'));
   } catch {
     return null;
   }
@@ -582,8 +601,8 @@ function readReceipt() {
  *
  * Fails soft: a receipt that cannot be written must never turn a green suite red.
  */
-function writeReceipt(results) {
-  const previous = readReceipt();
+function writeReceipt(results, receiptPath) {
+  const previous = readReceipt(receiptPath);
   const seenBefore = new Map(
     (previous?.failing ?? []).map((entry) => [entry.script, entry.firstSeen])
   );
@@ -597,9 +616,9 @@ function writeReceipt(results) {
     }));
 
   try {
-    mkdirSync(path.dirname(RECEIPT_PATH), { recursive: true });
+    mkdirSync(path.dirname(receiptPath), { recursive: true });
     writeFileSync(
-      RECEIPT_PATH,
+      receiptPath,
       `${JSON.stringify({ ts: now, steps: results.length, failing }, null, 2)}\n`
     );
   } catch {
@@ -653,7 +672,7 @@ async function main() {
   const results = suite.map((step, index) => runStep(step, index, suite.length));
   const totalMs = Number((process.hrtime.bigint() - startedAt) / 1_000_000n);
 
-  printSummary(results, totalMs, writeReceipt(results));
+  printSummary(results, totalMs, writeReceipt(results, receiptPathFor(manifestPath)));
   process.exit(results.some((entry) => entry.status !== 0) ? 1 : 0);
 }
 
