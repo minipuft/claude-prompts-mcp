@@ -417,55 +417,34 @@ export class Application {
       // workspace-scoped. `ctx` is the only scope signal available here: the
       // schema is built now, before any call has been dispatched, so the
       // per-call `extra` the rest of the server reads does not exist yet.
-      const scope = resolveServingUnitScope(
-        ctx,
-        this.configManager.getConfig().identity?.launchDefaults?.workspaceId
-      );
-      // Each stage names itself, so a failure says which stage failed instead of
-      // arriving as a bare message from somewhere inside it. It is rethrown,
-      // never swallowed: the SDK answers this request with an error and calls
-      // this factory again for the next one, which succeeds if the cause was
-      // transient. Returning a server whose binding did not finish would
-      // advertise a tool surface missing the tools that failed to bind, and
-      // every client reads that as success.
-      await this.bindServingUnitStage('tools', () =>
-        this.mcpToolsManager.registerAllTools(server, scope)
-      );
-      await this.bindServingUnitStage('resources', () => this.registerMcpResources(server));
-      // Prompts bind per unit for the same reason tools do. They were the one
-      // primitive left on the construction-time shell, so `prompts/list` came
-      // back empty on a live connection while startup logged them as
-      // registered.
-      if (this._convertedPrompts.length > 0) {
-        await this.bindServingUnitStage('prompts', () =>
-          this.promptManager.registerAllPrompts(this._convertedPrompts, server)
-        );
+      const launchDefaults = this.configManager.getConfig().identity?.launchDefaults;
+      const scope = resolveServingUnitScope(ctx, launchDefaults?.workspaceId);
+      // `stage` is what the failure names, so a request that cannot be served
+      // says which step failed instead of carrying a bare message from
+      // somewhere inside it. The error is rethrown, never swallowed: the SDK
+      // answers this request with an error and calls this factory again for the
+      // next one, which succeeds if the cause was transient. Returning a server
+      // whose binding did not finish would advertise a tool surface missing the
+      // tools that failed to bind, and every client reads that as success.
+      let stage = 'tools';
+      try {
+        await this.mcpToolsManager.registerAllTools(server, scope);
+        stage = 'resources';
+        this.registerMcpResources(server);
+        // Prompts bind per unit for the same reason tools do. They were the one
+        // primitive left on the construction-time shell, so `prompts/list` came
+        // back empty on a live connection while startup logged them as
+        // registered.
+        stage = 'prompts';
+        if (this._convertedPrompts.length > 0) {
+          await this.promptManager.registerAllPrompts(this._convertedPrompts, server);
+        }
+      } catch (error) {
+        const why = `Failed to bind ${stage} for this request's MCP server: ${String(error)}`;
+        throw new Error(why, { cause: error });
       }
       return server;
     };
-  }
-
-  /**
-   * Run one binding stage of a serving unit, naming the stage if it fails.
-   *
-   * A failure fails the request being served, which is the whole of its blast
-   * radius: the next request builds a fresh instance. It is deliberately not
-   * caught into a partial server — a tool surface that answers while missing
-   * the tools that failed to bind reports health it does not have.
-   */
-  private async bindServingUnitStage(
-    stage: string,
-    bind: () => Promise<unknown> | unknown
-  ): Promise<void> {
-    try {
-      await bind();
-    } catch (error) {
-      throw new Error(
-        `Failed to build this request's MCP server while binding ${stage}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
   }
 
   /**
@@ -1218,13 +1197,9 @@ export class Application {
       // boundary that owns the failure and reports it. Leaving the promise
       // unhandled instead would reach the process-level rejection handler,
       // which shuts the server down over a state write that can be retried.
-      void this.handleFrameworkConfigChange(newConfig, previousConfig).catch((error: unknown) => {
-        this.logger.error(
-          `Failed to apply a framework configuration change: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      });
+      void this.handleFrameworkConfigChange(newConfig, previousConfig).catch((error: unknown) =>
+        this.logger.error(`Failed to apply a framework configuration change: ${String(error)}`)
+      );
     };
 
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
