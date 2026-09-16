@@ -21,6 +21,7 @@ const logger = createLogger(
   })
 );
 
+import type { ConfigFile, ConfigFileVersioning } from '#shared/types/config-file.js';
 import type {
   ConfigSchemaValidationResult,
   ConfigValueWithSource,
@@ -29,6 +30,7 @@ import type {
 import {
   Config,
   AnalysisConfig,
+  FrameworkInjectionConfig,
   SemanticAnalysisConfig,
   LLMIntegrationConfig,
   LoggingConfig,
@@ -271,6 +273,291 @@ const DEFAULT_CONFIG: Config = {
 };
 
 /**
+ * What actually reaches {@link normalizeConfigFile}: the 5.0 `ConfigFile` shape plus the two
+ * things the steps before it leave on a parsed file.
+ *
+ * - `analysis` is the deprecated section `ConfigFile` deliberately omits — it is no longer a 5.0
+ *   key, and this loader still parses it for one cycle so an existing config keeps its values
+ *   (see {@link ConfigLoader.warnAnalysisSectionDeprecated}).
+ * - `versioning.max_versions` / `versioning.auto_version` are what `adoptInertSpellings` WRITES:
+ *   the file spells that pair camelCase, every runtime reader spells it snake_case, and the fold
+ *   runs before this type is applied.
+ * - `version` is optional here and required on `ConfigFile`: a file already on disk may predate
+ *   the key entirely, and translating such a file into the 5.0 shape is a later step of this
+ *   initiative. Until it lands, an undeclared version means "read what is there".
+ */
+type AdoptedConfigFile = Omit<ConfigFile, 'version'> & {
+  version?: ConfigFile['version'];
+  analysis?: Partial<AnalysisConfig>;
+  versioning?: ConfigFileVersioning & { max_versions?: number; auto_version?: boolean };
+};
+
+/**
+ * `Config` as this loader resolves it: `frameworks` carries the NESTED `injection` block the
+ * runtime reads, which `FrameworkSettings` (core-config.ts) does not declare because it still
+ * describes the seven flat 4.x injection keys it replaces.
+ *
+ * `DEFAULT_CONFIG.frameworks` has carried a nested `injection` at runtime all along — it is
+ * assigned `DEFAULT_FRAMEWORKS_CONFIG`, a `ResolvedFrameworkConfig` — so this alias makes an
+ * existing runtime shape visible to the compiler rather than inventing one. It collapses to plain
+ * `Config` when `FrameworkSettings` declares `injection` and drops the flat keys; that file is
+ * owned by a later row of this initiative.
+ */
+export type ResolvedConfig = Config & {
+  frameworks?: FrameworkSettings & { injection?: FrameworkInjectionConfig };
+};
+
+/**
+ * Parses the config file into a plain object, or throws.
+ *
+ * A top-level JSON value that is not an object (`[]`, `"text"`, `5`) is a broken config, not a
+ * config with odd keys: it is rejected here, loudly, so `loadConfig`'s catch reports the path and
+ * serves the defaults — rather than the old unchecked-cast path, which wrote properties onto a
+ * primitive and produced a TypeError from somewhere further in.
+ */
+function parseConfigRecord(content: string, configPath: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(content);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${configPath} must hold a JSON object at its top level.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/**
+ * THE boundary between the parsed FILE and the runtime `Config` — the one place a file shape is
+ * asserted, and the reason nothing below it casts again.
+ *
+ * This is a contract with the file, not a proof about it. The schema check that ran before it
+ * REPORTS and serves (`checkAgainstSchema`): a config that fails its schema still loads, so what
+ * arrives here may not match `ConfigFile` at all. That is survivable because every member of
+ * `ConfigFile` except `version` is optional and {@link normalizeConfigFile} reads each one through
+ * `??` against a default — a key of the wrong type resolves to the value the file holds, exactly
+ * as it did before, and a key the file omits resolves to the default.
+ */
+function asConfigFile(parsed: Record<string, unknown>): AdoptedConfigFile {
+  return parsed;
+}
+
+/**
+ * Framework injection, read NESTED from the file.
+ *
+ * The 4.x file spelled this as seven flat `frameworks.*` keys that the loader reassembled into
+ * three objects; the 5.0 file carries the objects, so this passes them through and defaults each
+ * leaf. `systemPrompt.enabled` falls back to `frameworks.enabled` when the file does not say:
+ * turning the framework system off has always turned system-prompt injection off, and the nested
+ * key is the narrower, newer intent.
+ */
+function normalizeInjection(frameworks: ConfigFile['frameworks']): FrameworkInjectionConfig {
+  const defaults = DEFAULT_FRAMEWORKS_CONFIG.injection as Required<FrameworkInjectionConfig>;
+  const injection = frameworks?.injection;
+  return {
+    systemPrompt: {
+      enabled: injection?.systemPrompt?.enabled ?? frameworks?.enabled ?? true,
+      frequency: injection?.systemPrompt?.frequency ?? defaults.systemPrompt.frequency,
+      target: injection?.systemPrompt?.target ?? defaults.systemPrompt.target,
+    },
+    gateGuidance: {
+      frequency: injection?.gateGuidance?.frequency ?? defaults.gateGuidance.frequency,
+      target: injection?.gateGuidance?.target ?? defaults.gateGuidance.target,
+    },
+    styleGuidance: {
+      enabled: injection?.styleGuidance?.enabled ?? defaults.styleGuidance.enabled,
+      frequency: injection?.styleGuidance?.frequency ?? defaults.styleGuidance.frequency,
+      target: injection?.styleGuidance?.target ?? defaults.styleGuidance.target,
+    },
+  };
+}
+
+/** Framework settings, with the injection block nested rather than reassembled from flat keys. */
+function normalizeFrameworks(file: AdoptedConfigFile): ResolvedConfig['frameworks'] {
+  const frameworks = file.frameworks;
+  return {
+    enabled: frameworks?.enabled ?? true,
+    dynamicToolDescriptions:
+      frameworks?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+    defaultFramework: frameworks?.defaultFramework ?? DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
+    injection: normalizeInjection(frameworks),
+  };
+}
+
+/**
+ * Chain session lifetimes, read from the file's ROOT `chainSessions`.
+ *
+ * The rename the mapping makes visible: the file says `timeoutMinutes`, the runtime reads
+ * `sessionTimeoutMinutes`. A cast could not have caught that; this signature does.
+ */
+function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
+  const sessions = file.chainSessions;
+  return {
+    sessionTimeoutMinutes:
+      sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+    reviewTimeoutMinutes:
+      sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
+    cleanupIntervalMinutes:
+      sessions?.cleanupIntervalMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
+  };
+}
+
+/**
+ * Gates, carried across key by key and NOT defaulted here.
+ *
+ * `getGatesConfig()` owns this section's defaults, at read time — which is what lets
+ * `getConfigValueWithSource` report an unset gates key as `'deferred'` rather than inventing a
+ * value for it. The wire-to-internal rename (`directory` -> `definitionsDirectory`) also stays in
+ * that getter; moving it here would change the key `system_control config list` prints.
+ */
+function normalizeGates(file: AdoptedConfigFile): Config['gates'] {
+  const gates = file.gates;
+  if (gates === undefined) return undefined;
+  return {
+    enabled: gates.enabled,
+    directory: gates.directory,
+    frameworkGates: gates.frameworkGates,
+    executeInlineGateDefinitions: gates.executeInlineGateDefinitions,
+    evaluation: gates.evaluation,
+    harnessCovers: gates.harnessCovers,
+    reminderTokenBudget: gates.reminderTokenBudget,
+  };
+}
+
+/**
+ * Phase guards, carried across only when the file sets the section.
+ *
+ * The two leaf defaults are the ones every reader already falls back to when the section is absent
+ * (`pipeline-builder.ts`, `19-phase-guard-verification-stage.ts`), applied here so a half-set
+ * section resolves to a number rather than to `undefined` — that stage computes
+ * `maxRetries + 1`.
+ */
+function normalizePhaseGuards(file: AdoptedConfigFile): Config['phaseGuards'] {
+  const phaseGuards = file.phaseGuards;
+  if (phaseGuards === undefined) return undefined;
+  return { mode: phaseGuards.mode ?? 'enforce', maxRetries: phaseGuards.maxRetries ?? 2 };
+}
+
+/**
+ * Logging, carried across only when the file sets the section — `getLoggingConfig()` owns the
+ * absent case, with the same two values used here for a half-set one.
+ */
+function normalizeLogging(file: AdoptedConfigFile): Config['logging'] {
+  const logging = file.logging;
+  if (logging === undefined) return undefined;
+  return { directory: logging.directory ?? './logs', level: logging.level ?? 'info' };
+}
+
+/** MCP resource toggles, carried across; `getResourcesConfig()` owns their defaults. */
+function normalizeResources(file: AdoptedConfigFile): Config['resources'] {
+  const resources = file.resources;
+  if (resources === undefined) return undefined;
+  return {
+    registerWithMcp: resources.registerWithMcp,
+    prompts: resources.prompts,
+    gates: resources.gates,
+    frameworks: resources.frameworks,
+    observability: resources.observability,
+    logs: resources.logs,
+  };
+}
+
+/**
+ * Versioning, reading the snake_case spelling `adoptInertSpellings` writes and the camelCase one
+ * the file declares — in that order, because the fold has already run and the canonical key wins.
+ */
+function normalizeVersioning(file: AdoptedConfigFile): VersioningConfig {
+  const versioning = file.versioning;
+  return {
+    enabled: versioning?.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
+    max_versions:
+      versioning?.max_versions ?? versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
+    auto_version:
+      versioning?.auto_version ?? versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.auto_version,
+  };
+}
+
+/** Telemetry, merged over the safe defaults — the same fold the loader has always applied. */
+function normalizeTelemetry(file: AdoptedConfigFile): TelemetryConfig {
+  const telemetry = file.telemetry;
+  return {
+    ...DEFAULT_TELEMETRY_CONFIG,
+    ...telemetry,
+    attributePolicy: {
+      ...DEFAULT_TELEMETRY_CONFIG.attributePolicy,
+      ...telemetry?.attributePolicy,
+    },
+  };
+}
+
+/**
+ * The deprecated `analysis` section, merged with its defaults.
+ *
+ * Parsed-and-ignored, not parsed-and-dropped: nothing reads the result any more, but `config.json`
+ * is declared public API surface, so a config that sets the section keeps its values through the
+ * deprecation cycle. Removal is the breaking act.
+ */
+function normalizeAnalysis(analysisConfig: Partial<AnalysisConfig> | undefined): AnalysisConfig {
+  const defaults = DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration;
+  const llm: Partial<LLMIntegrationConfig> = analysisConfig?.semanticAnalysis?.llmIntegration ?? {};
+  return {
+    semanticAnalysis: {
+      llmIntegration: {
+        enabled: llm.enabled ?? defaults.enabled,
+        apiKey: llm.apiKey ?? defaults.apiKey,
+        endpoint: llm.endpoint ?? defaults.endpoint,
+        model: llm.model ?? defaults.model,
+        maxTokens: llm.maxTokens ?? defaults.maxTokens,
+        temperature: llm.temperature ?? defaults.temperature,
+      },
+    },
+  };
+}
+
+/**
+ * Maps a config FILE onto the resolved runtime `Config`. The one function that crosses that
+ * boundary, and the reason the loader no longer casts one shape to the other.
+ *
+ * Pure: its inputs are the file and this module's `DEFAULT_*` constants, and it mutates neither.
+ * Sections this loader has never defaulted at load time (`gates`, `resources`, `logging`,
+ * `identity`, `verification`, `phaseGuards`) are carried across only when the file sets them, so
+ * an absent key stays absent and its OWNING getter still applies the default at read time —
+ * `getConfigValueWithSource` depends on that distinction to label a value `'deferred'` rather than
+ * `'default'`.
+ *
+ * Keys the file may carry that the runtime has no member for — `hooks` (read by the Python hooks
+ * straight off the file) and `server.transport` (read by nobody; the transport the runtime uses is
+ * `Config.transport`) — are not carried across, and are reported by
+ * `getConfigValueWithSource` from the raw-file snapshot instead.
+ */
+function normalizeConfigFile(file: AdoptedConfigFile): ResolvedConfig {
+  return {
+    server: {
+      name: file.server?.name ?? DEFAULT_CONFIG.server.name,
+      // Not a file key: the server's own version is the package's, never an operator's choice.
+      version: DEFAULT_CONFIG.server.version,
+      port: file.server?.port ?? DEFAULT_CONFIG.server.port,
+    },
+    prompts: {
+      directory: file.prompts?.directory ?? DEFAULT_CONFIG.prompts.directory,
+      registerWithMcp: file.prompts?.registerWithMcp,
+    },
+    analysis: normalizeAnalysis(file.analysis),
+    gates: normalizeGates(file),
+    phaseGuards: normalizePhaseGuards(file),
+    execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge ?? true },
+    frameworks: normalizeFrameworks(file),
+    chainSessions: normalizeChainSessions(file),
+    transport: DEFAULT_TRANSPORT_MODE,
+    logging: normalizeLogging(file),
+    versioning: normalizeVersioning(file),
+    verification: file.verification,
+    resources: normalizeResources(file),
+    telemetry: normalizeTelemetry(file),
+    identity: file.identity,
+  };
+}
+
+/** A 5.0 file that declares nothing: what a missing or unreadable config resolves to. */
+const EMPTY_CONFIG_FILE: ConfigFile = { version: 5 };
+
+/**
  * Configuration manager class
  */
 /**
@@ -311,7 +598,7 @@ export interface ResourcePathSource {
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
-  private config: Config;
+  private config: ResolvedConfig;
   private configPath: string;
   // Removed: private toolDescriptionLoader - now injected via dependency injection
   private fileWatcher: FSWatcher | undefined;
@@ -334,11 +621,11 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   private lastWarnedSchemaSignature: string | undefined;
   /**
-   * A snapshot of the parsed config FILE, taken before `validateAndSetDefaults` fills in missing
-   * sections in place — `this.config` and `parsedConfig` are the same object past that point, so
-   * without this snapshot nothing distinguishes "the file set this key" from "the default filled
-   * it in". Undefined when no file has been successfully parsed (constructed but never loaded, or
-   * the last `loadConfig` fell back to `DEFAULT_CONFIG`). Read only by `getConfigValueWithSource`.
+   * A snapshot of the parsed config FILE, taken before `adoptInertSpellings` rewrites it in place
+   * — that fold renames keys and deletes the old spelling, so without this copy nothing
+   * distinguishes "the file set this key" from "the loader put it there". Undefined when no file
+   * has been successfully parsed (constructed but never loaded, or the last `loadConfig` fell back
+   * to the defaults). Read only by `getConfigValueWithSource`.
    */
   private rawFileConfig: Record<string, unknown> | undefined;
 
@@ -357,26 +644,31 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   /**
    * Load configuration from file
    */
-  async loadConfig(): Promise<Config> {
+  async loadConfig(): Promise<ResolvedConfig> {
     const previousFrameworks = { ...this.frameworksConfigCache };
     try {
       const configContent = await readFile(this.configPath, 'utf8');
-      const parsedConfig = JSON.parse(configContent) as Config;
+      const parsedRecord = parseConfigRecord(configContent, this.configPath);
 
-      // Checked against the RAW file, before `validateAndSetDefaults`: that rewrites inert
-      // spellings in place and fills defaults the schema does not declare, so a check after it
-      // would report the loader's own additions and no longer see what the user wrote.
-      await this.checkAgainstSchema(parsedConfig);
+      // Checked against the RAW file, before the adoption below: that rewrites inert spellings in
+      // place, so a check after it would report the loader's own rewrite and no longer see what
+      // the user wrote.
+      await this.checkAgainstSchema(parsedRecord);
 
-      // Snapshot before `this.config = parsedConfig` + `validateAndSetDefaults()`: the latter
-      // mutates `this.config` in place, and since it is the SAME object as `parsedConfig`, cloning
-      // is the only way to keep a copy of what the file actually declared.
-      this.rawFileConfig = structuredClone(parsedConfig) as unknown as Record<string, unknown>;
+      // Snapshot before `adoptInertSpellings` mutates the parsed record: that fold renames keys
+      // and deletes the old spelling, and this copy is the only record of what the file itself
+      // declared. Read only by `getConfigValueWithSource`.
+      this.rawFileConfig = structuredClone(parsedRecord);
 
-      this.config = parsedConfig;
+      // Runs before the mapping, not inside it: an adopted value must be visible to the defaulting
+      // below, or the default overwrites what the user actually asked for.
+      adoptInertSpellings(parsedRecord);
 
-      // Validate and set defaults for any missing properties
-      this.validateAndSetDefaults();
+      const file = asConfigFile(parsedRecord);
+      // Announced from the FILE, so a config that never mentions the section stays silent.
+      if (file.analysis) this.warnAnalysisSectionDeprecated(file.analysis);
+
+      this.config = normalizeConfigFile(file);
 
       this.emitConfigChange(previousFrameworks);
 
@@ -388,17 +680,22 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       console.error(`Error loading configuration from ${this.configPath}:`, error);
       // stderr, not stdout: on STDIO stdout is the protocol channel, and a stray line corrupts it.
       console.error('Using default configuration');
-      this.config = DEFAULT_CONFIG;
-      this.validateAndSetDefaults();
+      // The same mapping a real file goes through, fed a file that declares nothing — so the
+      // fallback config cannot drift from what an empty config.json resolves to.
+      this.config = normalizeConfigFile(EMPTY_CONFIG_FILE);
       this.emitConfigChange(previousFrameworks);
       return this.config;
     }
   }
 
   /**
-   * Get current configuration
+   * Get current configuration.
+   *
+   * `ResolvedConfig`, not `Config`: a caller holding the concrete loader can read
+   * `frameworks.injection`, which the shared `ConfigManager` contract cannot express yet. Every
+   * consumer reaching this through that interface still sees `Config`.
    */
-  getConfig(): Config {
+  getConfig(): ResolvedConfig {
     return this.config;
   }
 
@@ -421,7 +718,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * getters already do).
    *
    * Below that: `'file'` when the raw file set it, `'default'` when the file didn't but
-   * `validateAndSetDefaults` filled in a real value at load time, and `'deferred'` — see
+   * `normalizeConfigFile` resolved a real value at load time, and `'deferred'` — see
    * {@link ConfigValueSource} — when neither did, because the key's section is one this loader
    * never writes back and only its owning getter defaults at read time.
    */
@@ -438,10 +735,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       }
     }
 
-    // `value` always comes from the EFFECTIVE merged config, never from the raw file: a section
-    // `validateAndSetDefaults` treats as missing/invalid is replaced wholesale (e.g.
-    // `this.config.server = DEFAULT_CONFIG.server` when the file's `server` is falsy), so a raw
-    // value can be present on disk while the process runs on the default it was replaced with.
+    // `value` always comes from the EFFECTIVE merged config, never from the raw file: a key
+    // `normalizeConfigFile` does not carry across is replaced by the default (e.g. `server.name`
+    // when the file's `server` is falsy), so a raw value can be present on disk while the process
+    // runs on the default that replaced it.
     // Reporting the raw value there would be exactly the false-confidence case this method exists
     // to end. `rawFileConfig` therefore decides only whether the SOURCE LABEL is `'file'`.
     const rawValue = readDotPath(this.rawFileConfig, key);
@@ -457,11 +754,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
     }
 
-    // Neither the file nor `validateAndSetDefaults` produced a value: `gates`, `resources`,
-    // `logging`, `identity`, `verification`, `phaseGuards` and `hooks` are never written back by
-    // that method (unlike `server`/`prompts`/`analysis`/`frameworks`/`advanced`/`execution`/
-    // `versioning`/`telemetry`, which always resolve to a concrete value here), so a key living in
-    // one of those sections stays genuinely absent from `this.config` until its OWNING getter
+    // Neither the file nor `normalizeConfigFile` produced a value: `gates`, `resources`,
+    // `logging`, `identity`, `verification`, `phaseGuards` and `hooks` are carried across only
+    // when the file sets them (unlike `server`/`prompts`/`analysis`/`frameworks`/`chainSessions`/
+    // `execution`/`versioning`/`telemetry`, which always resolve to a concrete value here), so a
+    // key living in one of those sections stays genuinely absent from `this.config` until its
+    // OWNING getter
     // applies a default at read time (e.g. `gates.enabled` inside `getGatesConfig()`). Reporting
     // `'default'` with an `undefined` value here would be indistinguishable from a default that IS
     // `undefined` by design (`getPromptsRegisterWithMcp()`, `telemetry.attributePolicy.allowlist`)
@@ -576,28 +874,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from frameworks config section
    */
   getFrameworksConfig(): ResolvedFrameworkConfig {
-    const m = this.config.frameworks;
-    const def = DEFAULT_FRAMEWORKS_CONFIG.injection!;
+    const frameworks = this.config.frameworks;
     return {
       dynamicToolDescriptions:
-        m?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
-      defaultFramework: m?.defaultFramework ?? DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
-      injection: {
-        systemPrompt: {
-          enabled: m?.enabled ?? true,
-          frequency: m?.systemPromptFrequency ?? def.systemPrompt!.frequency!,
-          target: m?.systemPromptTarget ?? def.systemPrompt!.target,
-        },
-        gateGuidance: {
-          frequency: m?.gateGuidanceFrequency ?? def.gateGuidance!.frequency!,
-          target: m?.gateGuidanceTarget ?? def.gateGuidance!.target,
-        },
-        styleGuidance: {
-          enabled: m?.styleGuidance ?? def.styleGuidance!.enabled!,
-          frequency: m?.styleGuidanceFrequency ?? def.styleGuidance!.frequency!,
-          target: m?.styleGuidanceTarget ?? def.styleGuidance!.target,
-        },
-      },
+        frameworks?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+      defaultFramework: frameworks?.defaultFramework ?? DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
+      // Already nested and fully defaulted by `normalizeInjection`; the fallback covers a manager
+      // asked for its config before its first load.
+      injection: frameworks?.injection ?? DEFAULT_FRAMEWORKS_CONFIG.injection,
     };
   }
 
@@ -622,13 +906,13 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
   /**
    * Get chain session lifecycle configuration
-   * Reads from advanced.sessions config section
+   * Reads from the root `chainSessions` config section
    */
   getChainSessionConfig(): ChainSessionConfig {
-    const sessions = this.config.advanced?.sessions;
+    const sessions = this.config.chainSessions;
     return {
       sessionTimeoutMinutes:
-        sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+        sessions?.sessionTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
       reviewTimeoutMinutes:
         sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
       cleanupIntervalMinutes:
@@ -929,112 +1213,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts
 
   /**
-   * Validate configuration and set defaults for missing properties
-   */
-  private validateAndSetDefaults(): void {
-    // Runs first, before any default is applied: an adopted value must be visible to the
-    // defaulting below, or the default overwrites what the user actually asked for.
-    adoptInertSpellings(this.config as unknown as Record<string, unknown>);
-
-    // Ensure server config exists
-    if (!this.config.server) {
-      this.config.server = DEFAULT_CONFIG.server;
-    } else {
-      this.config.server = {
-        ...DEFAULT_CONFIG.server,
-        ...this.config.server,
-      };
-    }
-
-    // Ensure prompts config exists
-    if (!this.config.prompts) {
-      this.config.prompts = DEFAULT_CONFIG.prompts;
-    } else {
-      this.config.prompts = {
-        ...DEFAULT_CONFIG.prompts,
-        ...this.config.prompts,
-      };
-    }
-
-    // Ensure analysis config exists.
-    //
-    // DEPRECATED SECTION: `analysis` is parsed and defaulted, and nothing consults the result any
-    // more. It stays for one cycle because `config.json` is declared public API surface
-    // (CLAUDE.md §Public API Contract), so a config that sets it must keep loading rather than
-    // fail. The warning below is the deprecation notice; removal is the breaking act and carries
-    // the major bump.
-    if (!this.config.analysis) {
-      this.config.analysis = DEFAULT_ANALYSIS_CONFIG;
-    } else {
-      this.warnAnalysisSectionDeprecated(this.config.analysis);
-      this.config.analysis = this.validateAnalysisConfig(this.config.analysis);
-    }
-
-    // Ensure transport mode is set
-    if (!this.config.transport) {
-      this.config.transport = DEFAULT_TRANSPORT_MODE;
-    }
-
-    if (!this.config.frameworks) {
-      this.config.frameworks = {
-        enabled: true,
-        dynamicToolDescriptions: DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
-        defaultFramework: DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
-        systemPromptFrequency: DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ?? 2,
-        styleGuidance: DEFAULT_FRAMEWORKS_CONFIG.injection?.styleGuidance?.enabled ?? true,
-      };
-    }
-
-    // Ensure advanced.sessions config exists (new-style)
-    if (!this.config.advanced) {
-      this.config.advanced = {
-        sessions: {
-          timeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
-          reviewTimeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
-          cleanupIntervalMinutes: DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
-        },
-      };
-    } else if (!this.config.advanced.sessions) {
-      this.config.advanced.sessions = {
-        timeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
-        reviewTimeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
-        cleanupIntervalMinutes: DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
-      };
-    }
-
-    // Ensure execution config exists
-    if (!this.config.execution) {
-      this.config.execution = { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
-    } else {
-      const judgeValue = this.config.execution.judge;
-      this.config.execution =
-        judgeValue !== undefined
-          ? { judge: judgeValue }
-          : { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
-    }
-
-    // Ensure versioning config exists with all required fields
-    this.config.versioning = {
-      ...DEFAULT_VERSIONING_CONFIG,
-      ...this.config.versioning,
-    };
-
-    // Ensure telemetry config exists with safe defaults
-    if (!this.config.telemetry) {
-      this.config.telemetry = { ...DEFAULT_TELEMETRY_CONFIG };
-    } else {
-      this.config.telemetry = {
-        ...DEFAULT_TELEMETRY_CONFIG,
-        ...this.config.telemetry,
-        attributePolicy: {
-          ...DEFAULT_TELEMETRY_CONFIG.attributePolicy,
-          ...this.config.telemetry.attributePolicy,
-        },
-      };
-    }
-  }
-
-  /**
    * Emit the `analysis` deprecation notice at most once per process.
    *
    * Fires only when a config file actually carries the section — the defaulted case is silent,
@@ -1058,16 +1236,13 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * never gates: a config that fails its schema still loads, because refusing to start over a
    * typo would turn a warning into an outage.
    */
-  private async checkAgainstSchema(rawConfig: Config): Promise<void> {
+  private async checkAgainstSchema(rawConfig: Record<string, unknown>): Promise<void> {
     if (this.schemaPath === undefined) {
       this.schemaValidation = undefined;
       return;
     }
 
-    const result = await validateConfigAgainstSchema(
-      rawConfig as unknown as Record<string, unknown>,
-      this.schemaPath
-    );
+    const result = await validateConfigAgainstSchema(rawConfig, this.schemaPath);
     this.schemaValidation = result;
     this.warnOnSchemaResult(result, this.schemaPath);
   }
@@ -1100,41 +1275,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
           'running, but this setting may not take effect as written.'
       );
     }
-  }
-
-  /**
-   * Validate and merge analysis configuration with defaults
-   */
-  private validateAnalysisConfig(analysisConfig: Partial<AnalysisConfig>): AnalysisConfig {
-    const semanticAnalysis = analysisConfig.semanticAnalysis || ({} as any);
-
-    // Build LLM integration config
-    const llmIntegration: LLMIntegrationConfig = {
-      enabled:
-        semanticAnalysis.llmIntegration?.enabled ??
-        DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.enabled,
-      apiKey:
-        semanticAnalysis.llmIntegration?.apiKey ??
-        DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.apiKey,
-      endpoint:
-        semanticAnalysis.llmIntegration?.endpoint ??
-        DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.endpoint,
-      model:
-        semanticAnalysis.llmIntegration?.model ??
-        DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.model,
-      maxTokens:
-        semanticAnalysis.llmIntegration?.maxTokens ??
-        DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.maxTokens,
-      temperature:
-        semanticAnalysis.llmIntegration?.temperature ??
-        DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.temperature,
-    };
-
-    return {
-      semanticAnalysis: {
-        llmIntegration,
-      },
-    };
   }
 
   /**

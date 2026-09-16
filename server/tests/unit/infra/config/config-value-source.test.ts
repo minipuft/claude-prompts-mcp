@@ -2,9 +2,9 @@
  * Config value source labeling — the fourth state.
  *
  * `getConfigValueWithSource(key)` reports where an effective config value came from: `'file'`,
- * `'default'`, `'environment'`, or `'deferred'`. `validateAndSetDefaults` writes a real value back
- * into `this.config` for only a handful of sections (`server`, `prompts`, `analysis`,
- * `frameworks`, `advanced`, `execution`, `versioning`, `telemetry`) — every OTHER schema-declared
+ * `'default'`, `'environment'`, or `'deferred'`. `normalizeConfigFile` resolves a real value for
+ * only a handful of sections (`server`, `prompts`, `analysis`, `frameworks`, `chainSessions`,
+ * `execution`, `versioning`, `telemetry`) — every OTHER schema-declared
  * key (`gates`, `resources`, `logging`, `identity`, `verification`, `phaseGuards`, `hooks`, plus a
  * few genuinely default-less leaves inside the sections that ARE written back, e.g.
  * `prompts.registerWithMcp` and `telemetry.attributePolicy.allowlist`) stays `undefined` in the
