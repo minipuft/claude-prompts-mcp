@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T03:50:20.230Z",
+  "generatedAt": "2026-09-16T08:45:14.216Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
@@ -13,11 +13,11 @@
     "TS2307": 5,
     "TS2322": 50,
     "TS2339": 34,
-    "TS2345": 91,
+    "TS2345": 92,
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
-    "TS2459": 15,
+    "TS2459": 14,
     "TS2551": 8,
     "TS2554": 20,
     "TS2558": 1,
