@@ -100,6 +100,15 @@ const NAMED_IMPORT = /import\s*\{([^}]*)\}\s*from\s*['"](\.{1,2}\/[^'"]+)['"]/g;
 /** A `buildServerEnv(` call, and the balanced argument list that follows it. */
 const BUILDER_CALL = /\bbuildServerEnv\s*\(/g;
 /**
+ * `function buildServerEnv(` immediately before a match — a declaration, not a call, whether or
+ * not it carries `export`/`async`. `tests/e2e/helpers/child-env.ts` declares a same-named wrapper
+ * around the shared builder (it refuses a stale `dist/` before forwarding `overrides` untouched),
+ * and its declaration line reads exactly like a call to the regex above. Measured 2026-09-16: that
+ * false positive is why this exclusion exists — `homeFindings` must ask "is this a call site" the
+ * same way `serverSpawnSites` already does, not assume every regex match is one.
+ */
+const DECLARATION_PREFIX = /\bfunction\s+$/;
+/**
  * `HOME` stated directly, or the whole pair spread from `createHermeticRoots()`.
  *
  * `...<name>.env` rather than `...roots.env`: the five call sites that spread a pair spell the
@@ -273,15 +282,22 @@ function withoutComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
-/** `relative:line: text` for every `buildServerEnv(` call that states no `HOME`. */
+/**
+ * `relative:line: text` for every `buildServerEnv(` call that states no `HOME`, plus the count of
+ * matches that were actual call sites (declarations and comment mentions excluded) — the caller
+ * needs that count to report how many calls it validated, not how many times the name appeared.
+ */
 function homeFindings(relative, text) {
   const findings = [];
+  let calls = 0;
   BUILDER_CALL.lastIndex = 0;
   let match;
   while ((match = BUILDER_CALL.exec(text)) !== null) {
     const open = match.index + match[0].length - 1;
     const line = text.slice(0, match.index).split('\n').length;
     if (isCommentLine(text.split('\n')[line - 1] ?? '')) continue;
+    if (DECLARATION_PREFIX.test(text.slice(0, match.index))) continue;
+    calls += 1;
 
     const argument = argumentText(text, open);
     if (argument === null) {
@@ -296,7 +312,7 @@ function homeFindings(relative, text) {
       `${relative}:${line}: buildServerEnv(${stripped.trim().slice(0, 60)}) states no HOME`
     );
   }
-  return findings;
+  return { findings, calls };
 }
 
 /**
@@ -315,9 +331,9 @@ function scanBuilderCalls() {
     const text = readFileSync(file, 'utf8');
     if (!text.includes('buildServerEnv')) continue;
     const relative = path.relative(SERVER_ROOT, file);
-    const before = findings.length;
-    findings.push(...homeFindings(relative, text));
-    calls += (text.match(/\bbuildServerEnv\s*\(/g) ?? []).length - (findings.length - before);
+    const result = homeFindings(relative, text);
+    findings.push(...result.findings);
+    calls += result.calls;
   }
   return { findings, calls };
 }
@@ -445,33 +461,65 @@ function selfTestCases() {
       false,
     ],
     // ── the HOME enumeration ────────────────────────────────────────────────────────────────
-    ['a call stating HOME', homeFindings('f.ts', 'buildServerEnv({ HOME: home });').length, 0],
+    [
+      'a call stating HOME',
+      homeFindings('f.ts', 'buildServerEnv({ HOME: home });').findings.length,
+      0,
+    ],
     [
       'a call spreading a pair',
-      homeFindings('f.ts', 'buildServerEnv({ ...roots.env, PORT: p });').length,
+      homeFindings('f.ts', 'buildServerEnv({ ...roots.env, PORT: p });').findings.length,
       0,
     ],
     [
       'a call spreading a pair off `this`',
-      homeFindings('f.ts', 'buildServerEnv({ ...this.roots.env, MCP_WORKSPACE: w });').length,
+      homeFindings('f.ts', 'buildServerEnv({ ...this.roots.env, MCP_WORKSPACE: w });').findings
+        .length,
       0,
     ],
-    ['a call stating no HOME', homeFindings('f.ts', 'buildServerEnv({ PORT: p });').length, 1],
-    ['a call with no argument at all', homeFindings('f.ts', 'buildServerEnv();').length, 1],
+    [
+      'a call stating no HOME',
+      homeFindings('f.ts', 'buildServerEnv({ PORT: p });').findings.length,
+      1,
+    ],
+    [
+      'a call with no argument at all',
+      homeFindings('f.ts', 'buildServerEnv();').findings.length,
+      1,
+    ],
     [
       'nested parens do not truncate the argument',
-      homeFindings('f.ts', 'buildServerEnv({ PORT: String(p), HOME: h });').length,
+      homeFindings('f.ts', 'buildServerEnv({ PORT: String(p), HOME: h });').findings.length,
       0,
     ],
     [
       'a HOME that only appears in a comment',
-      homeFindings('f.ts', 'buildServerEnv({\n  // HOME: h,\n  PORT: p,\n});').length,
+      homeFindings('f.ts', 'buildServerEnv({\n  // HOME: h,\n  PORT: p,\n});').findings.length,
       1,
     ],
     [
       'a doc-comment example is not a call site',
-      homeFindings('f.ts', ' * buildServerEnv({ PORT: p })').length,
+      homeFindings('f.ts', ' * buildServerEnv({ PORT: p })').findings.length,
       0,
+    ],
+    [
+      'a function declaration is not a call site',
+      homeFindings(
+        'f.ts',
+        'export function buildServerEnv(overrides = {}) {\n  return base(overrides);\n}'
+      ).findings.length,
+      0,
+    ],
+    [
+      'a real call beside its own declaration is still reported',
+      homeFindings(
+        'f.ts',
+        'export function buildServerEnv(overrides = {}) {\n' +
+          '  return base(overrides);\n' +
+          '}\n' +
+          "buildServerEnv({ PORT: '1' });"
+      ).findings.length,
+      1,
     ],
     // ── per-call spawn sites ─────────────────────────────────────────────────────────────────
     [
@@ -522,7 +570,7 @@ function selfTestCases() {
     ],
     [
       'an opaque forwarded argument is accepted on trust',
-      homeFindings('f.ts', 'buildServerEnv(scenarioEnv(scenario));').length,
+      homeFindings('f.ts', 'buildServerEnv(scenarioEnv(scenario));').findings.length,
       0,
     ],
   ];
