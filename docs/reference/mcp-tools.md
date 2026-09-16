@@ -1613,17 +1613,17 @@ Enable/disable in `config.json`:
 {
   "versioning": {
     "enabled": true,
-    "max_versions": 50,
-    "auto_version": true
+    "maxVersions": 50,
+    "autoVersion": true
   }
 }
 ```
 
-| Setting        | Default | Purpose                                  |
-| -------------- | ------- | ---------------------------------------- |
-| `enabled`      | `true`  | Enable version tracking globally         |
-| `max_versions` | `50`    | Maximum versions retained (FIFO pruning) |
-| `auto_version` | `true`  | Auto-save on updates (can skip per-call) |
+| Setting       | Default | Purpose                                  |
+| ------------- | ------- | ---------------------------------------- |
+| `enabled`     | `true`  | Enable version tracking globally         |
+| `maxVersions` | `50`    | Maximum versions retained (FIFO pruning) |
+| `autoVersion` | `true`  | Auto-save on updates (can skip per-call) |
 
 ### View History
 

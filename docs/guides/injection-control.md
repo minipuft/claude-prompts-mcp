@@ -19,22 +19,34 @@ Default settings work for most cases. Customize when you're hitting token budget
 
 ## Configuration (config.json)
 
-All injection settings live under the `frameworks` section:
+All injection settings live under `frameworks.injection`, one nested object per injection type:
 
 ```json
 {
   "frameworks": {
     "enabled": true,
-    "systemPromptFrequency": 3,
-    "systemPromptTarget": "steps",
-    "gateGuidanceFrequency": 0,
-    "gateGuidanceTarget": "both",
-    "styleGuidance": true,
-    "styleGuidanceFrequency": 0,
-    "styleGuidanceTarget": "steps"
+    "injection": {
+      "systemPrompt": {
+        "frequency": 3,
+        "target": "steps"
+      },
+      "gateGuidance": {
+        "frequency": 0,
+        "target": "both"
+      },
+      "styleGuidance": {
+        "enabled": true,
+        "frequency": 0,
+        "target": "steps"
+      }
+    }
   }
 }
 ```
+
+Every key shown here is a default — the shipped `config.json` carries only `$schema` and `version`,
+not a `frameworks` section at all. Omit a key in your own file to keep its default; set only the
+ones you want to change.
 
 ### Frequency
 
@@ -61,11 +73,11 @@ Controls which execution contexts receive injection:
 
 ### Enable/Disable
 
-| Setting                    | Controls                                      |
-| -------------------------- | --------------------------------------------- |
-| `frameworks.enabled`       | System-prompt injection (framework on/off)    |
-| `gates.enabled`            | Gate-guidance injection (follows gate system) |
-| `frameworks.styleGuidance` | Style-guidance injection                      |
+| Setting                                      | Controls                                      |
+| -------------------------------------------- | --------------------------------------------- |
+| `frameworks.enabled`                         | System-prompt injection (framework on/off)    |
+| `gates.enabled`                              | Gate-guidance injection (follows gate system) |
+| `frameworks.injection.styleGuidance.enabled` | Style-guidance injection                      |
 
 ## Command Modifiers (Per-Request Override)
 
@@ -163,7 +175,9 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 {
   "frameworks": {
     "enabled": false,
-    "styleGuidance": false
+    "injection": {
+      "styleGuidance": { "enabled": false }
+    }
   }
 }
 ```
@@ -173,9 +187,11 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 ```json
 {
   "frameworks": {
-    "systemPromptFrequency": 1,
-    "gateGuidanceFrequency": 1,
-    "styleGuidanceFrequency": 1
+    "injection": {
+      "systemPrompt": { "frequency": 1 },
+      "gateGuidance": { "frequency": 1 },
+      "styleGuidance": { "frequency": 1 }
+    }
   }
 }
 ```
@@ -185,9 +201,11 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 ```json
 {
   "frameworks": {
-    "systemPromptFrequency": 3,
-    "gateGuidanceFrequency": 0,
-    "styleGuidanceFrequency": 0
+    "injection": {
+      "systemPrompt": { "frequency": 3 },
+      "gateGuidance": { "frequency": 0 },
+      "styleGuidance": { "frequency": 0 }
+    }
   }
 }
 ```
