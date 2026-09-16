@@ -16,24 +16,28 @@
  * Gates already covered themselves (`GateDefinitionLoader.getWatchDirectories()` was already
  * wired) and are included as the row that was never broken, for contrast.
  *
- * PROMPTS IS A DELIBERATELY NARROWER ROW. Prompt hot reload is not one of the five
- * `AuxiliaryReloadConfig`-shaped builders the other four rows exercise — it is the PRIMARY watch
- * target the other four are layered onto (`modules/prompts/index.ts#startHotReload`), and its
- * loader composes bundled + primary + every overlay at LOAD time
- * (`hot-reload-root-parity.integration.test.ts` covers that composition) while its WATCH target
- * is a single resolved directory (`discoverPromptDirectories`/`buildWatchTargets`, both called
- * with one `promptsDir`). Whether an edit to a bundled-only or overlay-only prompt is ever
- * observed by the file watcher in the first place is consequently a real, separate, larger
- * question than this table answers — closing it would mean teaching `FileObserver`'s prompt/aux
- * file classification about multiple prompt roots, not adding an entry to a `directories` array.
- * This row asserts only what is true today and load-bearing for the other four rows' contrast:
- * the primary directory a `promptsDir` argument names is what gets watched.
+ * PROMPTS IS THE SAME INVARIANT, REACHED DIFFERENTLY. Prompt hot reload is not one of the five
+ * `AuxiliaryReloadConfig`-shaped builders the other rows exercise — it is the PRIMARY watch
+ * target the others are layered onto (`modules/prompts/index.ts#startHotReload`) — but its loader
+ * composes bundled + primary + every overlay at LOAD time
+ * (`hot-reload-root-parity.integration.test.ts` covers that composition), so the same rule binds
+ * it: every one of those roots has to be watched. It used to watch only the primary, and an edit
+ * to a bundled-only or overlay-only prompt was never observed — measured against a live server,
+ * held 20s, while the identical edit in the primary root reloaded in ~4s. The row below asserts
+ * the composed set, not the single directory.
+ *
+ * A WATCHED DIRECTORY IS NOT ENOUGH ON ITS OWN. A registration also has to RECEIVE what its
+ * handler needs, which is why the last two cases here assert on the event rather than the
+ * directory list: the observer used to build auxiliary events without the framework id it had
+ * already resolved, so every framework file change was watched, logged, and then refused with
+ * "missing frameworkId, skipping" — the directories were right and the reload still never ran.
  */
 
 import { afterAll, beforeAll, describe, expect, it, jest } from '@jest/globals';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { buildFrameworkAuxiliaryReloadConfig } from '../../../src/runtime/framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from '../../../src/runtime/gate-hot-reload.js';
@@ -44,11 +48,13 @@ import { createGenericGuide } from '../../../src/engine/frameworks/definitions/g
 import { FrameworkRegistry } from '../../../src/engine/frameworks/definitions/registry.js';
 import { ScriptToolDefinitionLoader } from '../../../src/modules/automation/core/script-definition-loader.js';
 import { createStyleManager } from '../../../src/modules/formatting/index.js';
+import { HotReloadObserver } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import { buildWatchTargets } from '../../../src/modules/prompts/prompt-watch-setup.js';
 
 import type { FrameworkManager } from '../../../src/engine/frameworks/framework-manager.js';
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
-import type { Logger } from '../../../src/shared/types/index.js';
+import type { FileChangeEvent } from '../../../src/modules/hot-reload/file-observer.js';
+import type { HotReloadEvent, Logger } from '../../../src/shared/types/index.js';
 
 const logger: Logger = {
   info: () => {},
@@ -87,6 +93,8 @@ beforeAll(async () => {
   const frameworksPrimary = await mkTemp(workspace, 'frameworks-primary');
   const frameworksAdditional = await mkTemp(workspace, 'frameworks-additional');
   const promptsDir = await mkTemp(workspace, 'prompts');
+  const promptsBundled = await mkTemp(workspace, 'prompts-bundled');
+  const promptsOverlay = await mkTemp(workspace, 'prompts-overlay');
   const workspaceScriptsDir = await mkTemp(workspace, 'scripts', 'workspace');
 
   const gateManager = await createGateManager(logger, {
@@ -151,9 +159,11 @@ beforeAll(async () => {
       })?.directories,
     },
     {
-      name: 'prompts (primary directory only — see file header)',
-      expected: [promptsDir],
-      directories: buildWatchTargets(promptsDir, [], {}).map((target) => target.path),
+      name: 'prompts',
+      expected: [promptsDir, promptsBundled, promptsOverlay],
+      directories: buildWatchTargets(promptsDir, [], {
+        promptRoots: [promptsBundled, promptsOverlay],
+      }).map((target) => target.path),
     },
   ];
 });
@@ -163,13 +173,7 @@ afterAll(async () => {
 });
 
 describe('every hot-reload registration watches what its loader reads', () => {
-  it.each([
-    'gates',
-    'styles',
-    'frameworks',
-    'script tools',
-    'prompts (primary directory only — see file header)',
-  ])('%s', (name) => {
+  it.each(['gates', 'styles', 'frameworks', 'script tools', 'prompts'])('%s', (name) => {
     const row = table.find((candidate) => candidate.name === name);
     if (!row) {
       throw new Error(`no table row named ${name}`);
@@ -298,5 +302,143 @@ describe('a workspace framework reloads its guidance without a restart', () => {
     } finally {
       await rm(dir, { recursive: true, force: true, maxRetries: 5 });
     }
+  });
+});
+
+describe('an auxiliary event carries what its handler needs', () => {
+  /** `triggerAuxiliaryReloads` is the dispatch under test; it is private to the observer. */
+  const dispatch = (observer: HotReloadObserver, event: FileChangeEvent): Promise<void> =>
+    (
+      observer as unknown as {
+        triggerAuxiliaryReloads(fileEvent: FileChangeEvent): Promise<void>;
+      }
+    ).triggerAuxiliaryReloads(event);
+
+  const frameworkFileEvent = (filePath: string, frameworkId?: string): FileChangeEvent => ({
+    type: 'modified',
+    filePath,
+    filename: path.basename(filePath),
+    timestamp: Date.now(),
+    isPromptFile: false,
+    isConfigFile: false,
+    isFrameworkFile: true,
+    isAuxiliaryFile: true,
+    ...(frameworkId !== undefined ? { frameworkId } : {}),
+  });
+
+  /**
+   * The framework id the observer resolved has to reach the handler.
+   *
+   * This asserts on the OBSERVER's event, not on the framework registration, deliberately: the
+   * registration also recovers an id from the path, so a test routed through it would keep
+   * passing if the observer went back to dropping the field. Every auxiliary handler that reads
+   * `frameworkId` depends on this one dispatch.
+   */
+  it('the observer forwards the resolved framework id into the auxiliary event', async () => {
+    const seen: HotReloadEvent[] = [];
+    const observer = new HotReloadObserver(logger, { autoReload: false, batchChanges: false });
+    observer.setAuxiliaryReloads([
+      {
+        id: 'framework',
+        directories: [path.join(path.sep, 'tmp', 'aux', 'frameworks')],
+        handler: async (event) => {
+          seen.push(event);
+        },
+      },
+    ]);
+
+    await dispatch(
+      observer,
+      frameworkFileEvent(
+        path.join(path.sep, 'tmp', 'aux', 'frameworks', 'probe_framework', 'framework.yaml'),
+        'probe_framework'
+      )
+    );
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.frameworkId).toBe('probe_framework');
+    expect(seen[0]?.changeType).toBe('modified');
+  });
+
+  /**
+   * A framework directory holds files the observer does not classify as framework files —
+   * `system-prompt.md` among them — so those arrive with no id at all. The registration resolves
+   * one from the path rather than refusing the event.
+   */
+  it('the framework registration resolves an id for a non-YAML file the observer left untagged', async () => {
+    const reloaded: string[] = [];
+    const registry = new FrameworkRegistry(logger, {
+      autoLoadBuiltIn: false,
+      validateOnRegistration: false,
+      runtimeLoaderConfig: { frameworksDir: path.join(path.sep, 'tmp', 'aux', 'frameworks') },
+    });
+    await registry.initialize();
+    const config = buildFrameworkAuxiliaryReloadConfig(
+      logger,
+      routerWith({
+        getFrameworkManager: () =>
+          ({
+            getFrameworkRegistry: () => registry,
+            reload: async (id: string) => {
+              reloaded.push(id);
+            },
+            removeFramework: async (id: string) => {
+              reloaded.push(`removed:${id}`);
+            },
+          }) as unknown as FrameworkManager,
+      })
+    );
+    expect(config).toBeDefined();
+
+    // No `frameworkId` on the event — exactly what the observer produces for a `.md` file.
+    await config!.handler({
+      type: 'reload_required',
+      reason: 'framework file modified: system-prompt.md',
+      affectedFiles: [
+        path.join(path.sep, 'tmp', 'aux', 'frameworks', 'probe_framework', 'system-prompt.md'),
+      ],
+      changeType: 'removed',
+      timestamp: Date.now(),
+      requiresFullReload: false,
+    });
+
+    // `removed` routes to the deletion path, which is observable without a definition on disk.
+    expect(reloaded).toContain('removed:probe_framework');
+  });
+});
+
+describe('every loader that composes more than one root is represented above', () => {
+  /**
+   * A mechanical enumeration, so a NEW multi-root loader fails here instead of shipping with no
+   * watch coverage. `getWatchDirectories()` is the shape a loader uses to say "I read more than
+   * one directory"; each one that exists must have a row in the table at the top of this file.
+   *
+   * Prompts is deliberately absent from this list: it composes its roots through
+   * `resolveResourceRoots` rather than owning a loader method, and its row covers it.
+   */
+  const COVERED = [
+    'engine/frameworks/definitions/runtime-framework-loader.ts',
+    'engine/gates/core/gate-definition-loader.ts',
+    'modules/formatting/core/style-definition-loader.ts',
+  ];
+
+  it('finds no getWatchDirectories() outside the covered set', async () => {
+    const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src');
+    const entries = await readdir(srcRoot, { recursive: true, withFileTypes: true });
+
+    const definers: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+      const full = path.join(entry.parentPath ?? srcRoot, entry.name);
+      const source = await readFile(full, 'utf8');
+      if (/^\s*getWatchDirectories\s*\(\s*\)\s*:/m.test(source)) {
+        definers.push(path.relative(srcRoot, full).split(path.sep).join('/'));
+      }
+    }
+
+    // A positive control for the scan itself: if this ever finds nothing, the pattern stopped
+    // matching and the check would pass vacuously.
+    expect(definers.length).toBeGreaterThan(0);
+    expect(definers.sort()).toEqual(COVERED);
   });
 });

@@ -40,7 +40,23 @@ export function buildFrameworkAuxiliaryReloadConfig(
     return {
       id: 'framework',
       directories: registration.directories,
-      handler: registration.handler,
+      handler: async (event) => {
+        // Resolve the framework id from the path, the way the gate and style registrations do.
+        //
+        // The observer tags an event with a framework id only when it classifies the file as a
+        // framework file, which requires a `.yaml` extension — so a framework's `system-prompt.md`
+        // or any other non-YAML file it carries arrived here with no id and was refused with
+        // "missing frameworkId, skipping". Deriving it here means a registration never depends on
+        // upstream classification for the one field its handler cannot proceed without.
+        const firstFile = event.affectedFiles[0];
+        const frameworkId =
+          event.frameworkId ?? (firstFile ? extractFrameworkIdFromPath(firstFile) : undefined);
+        if (!frameworkId) {
+          logger.warn('Unable to determine framework ID for hot reload event', event);
+          return;
+        }
+        await registration.handler({ ...event, frameworkId });
+      },
     };
   } catch (error) {
     logger.warn(
@@ -49,4 +65,16 @@ export function buildFrameworkAuxiliaryReloadConfig(
     );
     return undefined;
   }
+}
+
+/**
+ * Extract a framework ID from a file path.
+ *
+ * Expected path pattern: `.../frameworks/{frameworkId}/framework.yaml`, and likewise for any
+ * other file a framework directory carries (`phases.yaml`, `system-prompt.md`).
+ */
+function extractFrameworkIdFromPath(filePath: string): string | undefined {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
+  return match?.[1]?.toLowerCase();
 }

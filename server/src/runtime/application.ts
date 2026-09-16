@@ -24,7 +24,7 @@ import {
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
-import { indexerResourceRoots } from './resource-roots.js';
+import { indexerResourceRoots, resolveResourceRoots } from './resource-roots.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
@@ -875,6 +875,18 @@ export class Application {
 
             if (auxiliaryReloads.length > 0) {
               hotReloadOptions.auxiliaryReloads = auxiliaryReloads;
+            }
+
+            // Watch every root the prompt catalog is composed from, resolved by the same helper
+            // the framework, gate and style loaders are configured from — one derivation of
+            // "which directories contribute this resource type", not a second copy of it.
+            const promptRoots = resolveResourceRoots(
+              this.pathResolver,
+              'prompts',
+              this.promptsDirectory
+            );
+            if (promptRoots.additional.length > 0) {
+              hotReloadOptions.promptRoots = promptRoots.additional;
             }
 
             await this.promptManager.startHotReload(

@@ -14,7 +14,11 @@ import * as path from 'node:path';
 
 import { PromptConverter } from './converter.js';
 import { PromptLoader } from './loader.js';
-import { discoverPromptDirectories, buildWatchTargets } from './prompt-watch-setup.js';
+import {
+  discoverPromptDirectories,
+  buildWatchTargets,
+  type WatchTarget,
+} from './prompt-watch-setup.js';
 import { PromptRegistry, type PromptRegistryServer } from './registry.js';
 import {
   HotReloadObserver,
@@ -260,6 +264,12 @@ export class PromptAssetManager {
         directories?: string[];
       };
       auxiliaryReloads?: AuxiliaryReloadConfig[];
+      /**
+       * Every root the prompt loader reads besides the primary one — the bundled tree and any
+       * workspace overlay. The caller resolves them, because the same set has to be the one the
+       * loader composes the catalog from.
+       */
+      promptRoots?: string[];
     }
   ): Promise<void> {
     if (!this.hotReloadObserver) {
@@ -292,11 +302,23 @@ export class PromptAssetManager {
     await this.hotReloadObserver.start();
 
     const promptsDir = path.dirname(promptsConfigPath);
-    const categoryDirs = await discoverPromptDirectories(promptsDir, this.loader, this.logger);
+
+    // Discover categories under EVERY root the loader reads, not just the primary one.
+    //
+    // The catalog is composed from the bundled tree, the primary root and every workspace
+    // overlay, so an edit in any of them changes what is served. Watching only the primary made
+    // an edit to a bundled-only or overlay-only prompt invisible to the watcher: the reload it
+    // should have triggered never ran, and the previous body was served until a restart.
+    const promptRoots = [promptsDir, ...(options?.promptRoots ?? [])];
+    const categoryDirs: WatchTarget[] = [];
+    for (const root of promptRoots) {
+      categoryDirs.push(...(await discoverPromptDirectories(root, this.loader, this.logger)));
+    }
 
     const watchTargets = buildWatchTargets(promptsDir, categoryDirs, {
       frameworkDirectories: options?.frameworkHotReload?.directories,
       auxiliaryDirectories: options?.auxiliaryReloads?.map((r) => r.directories),
+      ...(options?.promptRoots ? { promptRoots: options.promptRoots } : {}),
     });
 
     await this.hotReloadObserver.watchDirectories(watchTargets);
