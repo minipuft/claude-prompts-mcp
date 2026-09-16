@@ -619,6 +619,11 @@ Scripts are searched in priority order:
 
 First match wins. Prompt-local scripts take priority.
 
+`tools/` is **reserved**: no prompt is served from below it. A `prompt.yaml` placed there is
+ignored by the prompt loader, by the resource index, and by the startup change report alike,
+because the id it would claim (`{prompt}/tools/{script_id}`) is the one a script tool already
+answers to.
+
 ### Error Handling
 
 Script execution is **blocking**. Errors stop template processing:

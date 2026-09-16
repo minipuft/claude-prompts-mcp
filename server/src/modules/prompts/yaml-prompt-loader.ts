@@ -24,7 +24,11 @@ import { linearize } from '#modules/workflow-ir/linearizer.js';
 import { type Logger, PromptArgument } from '#shared/types/index.js';
 import { INJECTION_TYPES } from '#shared/types/injection.js';
 import { mintNodeIds } from '#shared/utils/node-order.js';
-import { isSingleFilePromptName, singleFilePromptBaseName } from '#shared/utils/prompt-layout.js';
+import {
+  isReservedPromptDirectoryName,
+  isSingleFilePromptName,
+  singleFilePromptBaseName,
+} from '#shared/utils/prompt-layout.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ============================================
@@ -316,6 +320,12 @@ export function discoverYamlPrompts(categoryDir: string, prefix: string = ''): s
     if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue;
 
     if (entry.isDirectory()) {
+      // A prompt's `tools/` is reserved for script tools and nothing below it is a prompt — the
+      // rule `#shared/utils/prompt-layout.js` states and now owns. Without it this function, which
+      // DEFINES what is served, recursed in and served `{prompt}/tools/{toolId}` as a prompt id,
+      // overlapping the composite id the script tool already answers to.
+      if (isReservedPromptDirectoryName(entry.name)) continue;
+
       // Directory pattern: {prompt_id}/prompt.yaml
       const promptYamlPath = path.join(categoryDir, entry.name, 'prompt.yaml');
       const nestedPrefix = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
