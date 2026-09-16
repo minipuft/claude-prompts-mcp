@@ -83,9 +83,9 @@ export function buildWatchTargets(
   targets.set(promptsDir, { path: promptsDir });
 
   // Every other root the loader composes the catalog from
-  if (options?.promptRoots) {
+  if (options?.promptRoots !== undefined) {
     for (const dir of options.promptRoots) {
-      if (dir) {
+      if (dir !== '') {
         targets.set(dir, { path: dir });
       }
     }

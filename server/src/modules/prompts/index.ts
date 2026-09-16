@@ -331,7 +331,7 @@ export class PromptAssetManager {
     const watchTargets = buildWatchTargets(promptsDir, categoryDirs, {
       frameworkDirectories: options?.frameworkHotReload?.directories,
       auxiliaryDirectories: options?.auxiliaryReloads?.map((r) => r.directories),
-      ...(options?.promptRoots ? { promptRoots: options.promptRoots } : {}),
+      ...(options?.promptRoots !== undefined ? { promptRoots: options.promptRoots } : {}),
     });
 
     await this.hotReloadObserver.watchDirectories(watchTargets);

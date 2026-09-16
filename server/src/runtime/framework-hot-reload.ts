@@ -50,8 +50,9 @@ export function buildFrameworkAuxiliaryReloadConfig(
         // upstream classification for the one field its handler cannot proceed without.
         const firstFile = event.affectedFiles[0];
         const frameworkId =
-          event.frameworkId ?? (firstFile ? extractFrameworkIdFromPath(firstFile) : undefined);
-        if (!frameworkId) {
+          event.frameworkId ??
+          (firstFile !== undefined ? extractFrameworkIdFromPath(firstFile) : undefined);
+        if (frameworkId === undefined) {
           logger.warn('Unable to determine framework ID for hot reload event', event);
           return;
         }
