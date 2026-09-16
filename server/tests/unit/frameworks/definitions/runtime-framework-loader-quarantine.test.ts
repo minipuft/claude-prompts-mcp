@@ -110,8 +110,12 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
   });
 
   it('leaves the id served from the other root — a broken file never takes an id dark', () => {
-    writeFramework(primary, 'sharedfw', schemaInvalidFramework('sharedfw'));
-    writeFramework(overlay, 'sharedfw', validFramework('sharedfw'));
+    // Broken file in the HIGHER-precedence root (P4.27: an overlay outranks the primary) — the
+    // only arrangement that reaches a refusal at all, since a root the loader never opens records
+    // nothing. Here that also keeps the server startable: `loadBuiltInGuides` throws FATAL on an
+    // id it cannot resolve, so one malformed overlay must not be able to refuse the boot.
+    writeFramework(overlay, 'sharedfw', schemaInvalidFramework('sharedfw'));
+    writeFramework(primary, 'sharedfw', validFramework('sharedfw'));
 
     const loader = new RuntimeFrameworkLoader({
       frameworksDir: primary,
@@ -123,7 +127,7 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
 
     const records = loader.getQuarantine().byId('sharedfw');
     expect(records).toHaveLength(1);
-    expect(records[0]?.root).toBe(primary);
+    expect(records[0]?.root).toBe(overlay);
   });
 
   it('does not record an id a root simply does not hold', () => {
@@ -191,8 +195,8 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
    * two answers to one question start disagreeing.
    */
   it('stamps the root a definition was read from, not the root that was asked first', () => {
-    writeFramework(primary, 'sharedfw', schemaInvalidFramework('sharedfw'));
-    writeFramework(overlay, 'sharedfw', validFramework('sharedfw'));
+    writeFramework(overlay, 'sharedfw', schemaInvalidFramework('sharedfw'));
+    writeFramework(primary, 'sharedfw', validFramework('sharedfw'));
     writeFramework(primary, 'primaryfw', validFramework('primaryfw'));
 
     const loader = new RuntimeFrameworkLoader({
@@ -200,15 +204,16 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
       additionalFrameworksDirs: [overlay],
     });
 
-    // The shadow case: `primary` refused, so the root that SERVES is the one trailing it.
-    expect(loader.loadFramework('sharedfw')?.sourceRoot).toBe(overlay);
-    // POSITIVE CONTROL, same probe: a framework the primary did serve stamps the primary.
+    // The shadow case: `overlay` outranks the primary, was consulted first, and refused — so the
+    // root that SERVES is the one below it.
+    expect(loader.loadFramework('sharedfw')?.sourceRoot).toBe(primary);
+    // POSITIVE CONTROL, same probe: a framework only the primary holds also stamps the primary.
     expect(loader.loadFramework('primaryfw')?.sourceRoot).toBe(primary);
   });
 
   it('stamps the serving root while the refusal record keeps the refused root', () => {
-    writeFramework(primary, 'sharedfw', schemaInvalidFramework('sharedfw'));
-    writeFramework(overlay, 'sharedfw', validFramework('sharedfw'));
+    writeFramework(overlay, 'sharedfw', schemaInvalidFramework('sharedfw'));
+    writeFramework(primary, 'sharedfw', validFramework('sharedfw'));
 
     const loader = new RuntimeFrameworkLoader({
       frameworksDir: primary,
@@ -217,8 +222,8 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
 
     // Both halves of the shadow line, from one load: the file to repair is in one root, the
     // definition being served is from the other.
-    expect(loader.loadFramework('sharedfw')?.sourceRoot).toBe(overlay);
-    expect(loader.getQuarantine().byId('sharedfw')[0]?.root).toBe(primary);
+    expect(loader.loadFramework('sharedfw')?.sourceRoot).toBe(primary);
+    expect(loader.getQuarantine().byId('sharedfw')[0]?.root).toBe(overlay);
   });
 
   it('overwrites a sourceRoot the file itself declared', () => {

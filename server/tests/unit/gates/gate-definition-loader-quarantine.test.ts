@@ -113,22 +113,25 @@ describe('GateDefinitionLoader quarantine (P4.15)', () => {
   });
 
   it('leaves the id served from the other root — a broken file never takes an id dark', () => {
-    writeGate(primary, 'shared-gate', schemaInvalidGate('shared-gate'));
-    writeGate(overlay, 'shared-gate', validGate('shared-gate'));
+    // The broken file sits in the HIGHER-precedence root (P4.27: an overlay outranks the primary),
+    // because that is the only arrangement in which a refusal is reached at all. A root the loader
+    // never opens records nothing, which is the "not walked, not refused" rule two tests below.
+    writeGate(overlay, 'shared-gate', schemaInvalidGate('shared-gate'));
+    writeGate(primary, 'shared-gate', validGate('shared-gate'));
 
     const loader = new GateDefinitionLoader({
       gatesDir: primary,
       additionalGatesDirs: [overlay],
     });
 
-    // The falsifier's second half: the refusal in the nearer root must not remove the id.
+    // The falsifier's second half: the refusal in the winning root must not remove the id.
     const definition = loader.loadGate('shared-gate');
     expect(definition?.name).toBe('shared-gate gate');
 
     // …and the refusal is still ANNOUNCED, against the file that actually failed.
     const records = loader.getQuarantine().byId('shared-gate');
     expect(records).toHaveLength(1);
-    expect(records[0]?.root).toBe(primary);
+    expect(records[0]?.root).toBe(overlay);
   });
 
   it('does not record an id a root simply does not hold', () => {
@@ -140,8 +143,8 @@ describe('GateDefinitionLoader quarantine (P4.15)', () => {
     });
     expect(loader.loadGate('overlay-only')).toBeDefined();
 
-    // The primary root was consulted first and had no such directory. Recording that as a refusal
-    // would quarantine every id the fall-through asks about, which is most of them.
+    // The primary holds no such directory. Recording that as a refusal would quarantine every id
+    // the fall-through asks about, which is most of them.
     expect(loader.getQuarantine().size).toBe(0);
   });
 
@@ -189,8 +192,8 @@ describe('GateDefinitionLoader quarantine (P4.15)', () => {
     loader.loadGate(id) as GateDefinitionYaml | undefined;
 
   it('stamps the root a definition was read from, not the root that was asked first', () => {
-    writeGate(primary, 'shared-gate', schemaInvalidGate('shared-gate'));
-    writeGate(overlay, 'shared-gate', validGate('shared-gate'));
+    writeGate(overlay, 'shared-gate', schemaInvalidGate('shared-gate'));
+    writeGate(primary, 'shared-gate', validGate('shared-gate'));
     writeGate(primary, 'primary-gate', validGate('primary-gate'));
 
     const loader = new GateDefinitionLoader({
@@ -198,20 +201,21 @@ describe('GateDefinitionLoader quarantine (P4.15)', () => {
       additionalGatesDirs: [overlay],
     });
 
-    // The shadow case: `primary` was consulted first and refused, so the root that SERVES is the
-    // one trailing it. The two roots are distinct temp directories, so this distinguishes "names
-    // the serving root" from "names a root".
-    expect(served(loader, 'shared-gate')?.sourceRoot).toBe(overlay);
+    // The shadow case: `overlay` outranks the primary and was consulted first, and it refused — so
+    // the root that SERVES is the one below it. The two roots are distinct temp directories, so
+    // this distinguishes "names the serving root" from "names a root".
+    expect(served(loader, 'shared-gate')?.sourceRoot).toBe(primary);
 
-    // POSITIVE CONTROL, from the same probe: a gate the primary did serve stamps the primary. A
-    // stamp hard-wired to either root, or to the loader's configured directory, fails one of these
-    // two lines.
+    // POSITIVE CONTROL, from the same probe: a gate only the primary holds also stamps the primary
+    // — so the line above cannot be passing merely because the stamp is wired to `gatesDir`.
+    // The overlay-wins direction is asserted over all three kinds in
+    // `tests/integration/resources/flat-kind-root-precedence.integration.test.ts`.
     expect(served(loader, 'primary-gate')?.sourceRoot).toBe(primary);
   });
 
   it('stamps the serving root while the refusal record keeps the refused root', () => {
-    writeGate(primary, 'shared-gate', schemaInvalidGate('shared-gate'));
-    writeGate(overlay, 'shared-gate', validGate('shared-gate'));
+    writeGate(overlay, 'shared-gate', schemaInvalidGate('shared-gate'));
+    writeGate(primary, 'shared-gate', validGate('shared-gate'));
 
     const loader = new GateDefinitionLoader({
       gatesDir: primary,
@@ -221,8 +225,8 @@ describe('GateDefinitionLoader quarantine (P4.15)', () => {
     // Both halves of what the shadow line renders, from one load: the file to repair lives in one
     // root and the definition being served comes from the other. Reporting the same root for both
     // would tell an operator their broken file is the one answering.
-    expect(served(loader, 'shared-gate')?.sourceRoot).toBe(overlay);
-    expect(loader.getQuarantine().byId('shared-gate')[0]?.root).toBe(primary);
+    expect(served(loader, 'shared-gate')?.sourceRoot).toBe(primary);
+    expect(loader.getQuarantine().byId('shared-gate')[0]?.root).toBe(overlay);
   });
 
   it('overwrites a sourceRoot the file itself declared', () => {

@@ -26,11 +26,8 @@ import {
 } from './style-schema.js';
 
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-  discoverNestedYamlDirectories,
-} from '#shared/utils/yaml/index.js';
+import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,7 +38,13 @@ const __dirname = dirname(__filename);
 export interface StyleDefinitionLoaderConfig {
   /** Override default styles directory */
   stylesDir?: string;
-  /** Additional directories to scan for style overlays (workspace resources) */
+  /**
+   * Every other contributing style directory, HIGHEST precedence first.
+   *
+   * An overlay listed here OUTRANKS `stylesDir` — see `resourceLookupOrder`. The composition root
+   * places `stylesDir` itself inside this list, at its own rank; a caller configuring the loader by
+   * hand may omit it, in which case it is consulted last.
+   */
   additionalStylesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
@@ -107,12 +110,18 @@ export class StyleDefinitionLoader {
   private readonly quarantine = new ResourceQuarantine();
   private stylesDir: string;
   private additionalStylesDirs: string[];
+  /** Every root this loader consults for an id, highest precedence first. */
+  private readonly lookupDirs: string[];
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
 
   constructor(config: StyleDefinitionLoaderConfig = {}) {
     this.stylesDir = config.stylesDir ?? this.resolveStylesDir();
+    // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
+    // filtering it out first would drop it behind the bundled tree.
+    this.lookupDirs = resourceLookupOrder(this.stylesDir, config.additionalStylesDirs ?? []);
+    // Reported and watched, not looked up.
     this.additionalStylesDirs = (config.additionalStylesDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.stylesDir
     );
@@ -148,9 +157,7 @@ export class StyleDefinitionLoader {
 
     this.stats.cacheMisses++;
 
-    // Load from primary YAML directory, then fall through to additional dirs
-    const definition =
-      this.loadFromYamlDir(normalizedId) ?? this.loadFromAdditionalDirs(normalizedId);
+    const definition = this.loadFromLookupOrder(normalizedId);
 
     if (!definition) {
       return undefined;
@@ -170,14 +177,11 @@ export class StyleDefinitionLoader {
    * @returns Array of style IDs from YAML directories
    */
   discoverStyles(): string[] {
-    // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.stylesDir, 'style.yaml');
-    const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
-
-    // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
-    for (const dir of this.additionalStylesDirs) {
-      const additionalIds = discoverNestedYamlDirectories(dir, 'style.yaml');
-      for (const id of additionalIds) {
+    // One scan shape for every root — see the gate loader's twin. This answers WHICH ids exist;
+    // `loadStyle` answers which root serves each.
+    const idSet = new Set<string>();
+    for (const dir of this.lookupDirs) {
+      for (const id of discoverNestedYamlDirectories(dir, 'style.yaml')) {
         idSet.add(id.toLowerCase());
       }
     }
@@ -211,15 +215,7 @@ export class StyleDefinitionLoader {
    * @returns True if the style has a valid entry point
    */
   styleExists(id: string): boolean {
-    const normalizedId = id.toLowerCase();
-
-    // Check primary
-    if (existsSync(join(this.stylesDir, normalizedId, 'style.yaml'))) {
-      return true;
-    }
-
-    // Check additional dirs (flat + grouped)
-    return this.findInAdditionalDirs(normalizedId) !== undefined;
+    return this.entryRootsFor(id.toLowerCase()).length > 0;
   }
 
   /**
@@ -279,41 +275,22 @@ export class StyleDefinitionLoader {
   // Private Implementation - Overlay Loading
   // ============================================================================
 
-  /**
-   * Attempt to load a style from additional directories.
-   * Tries flat path first, then scans for grouped nesting.
-   */
-  private loadFromAdditionalDirs(id: string): StyleDefinitionYaml | undefined {
-    const resolvedDir = this.findInAdditionalDirs(id);
-    if (resolvedDir === undefined) return undefined;
-    return this.loadFromYamlDir(id, resolvedDir);
+  /** The roots holding this id, highest precedence first. */
+  private entryRootsFor(id: string): string[] {
+    return resourceEntryRoots(this.lookupDirs, id, 'style.yaml');
   }
 
   /**
-   * Find which additional directory contains a style ID.
-   * Checks flat ({dir}/{id}/style.yaml) and grouped ({dir}/{group}/{id}/style.yaml).
+   * Load from the highest-precedence root that both holds this id AND yields a valid definition.
    *
-   * @returns The base directory to pass to loadFromYamlDir, or undefined
+   * The fall-through on a refusal is the property `getQuarantine`'s docstring states for the other
+   * two kinds: a broken workspace style leaves the bundled style of that id serving, rather than
+   * removing the id from the catalog.
    */
-  private findInAdditionalDirs(id: string): string | undefined {
-    for (const dir of this.additionalStylesDirs) {
-      // Flat: {dir}/{id}/style.yaml
-      if (existsSync(join(dir, id, 'style.yaml'))) {
-        return dir;
-      }
-
-      // Grouped: {dir}/{group}/{id}/style.yaml
-      try {
-        const groups = readdirSync(dir, { withFileTypes: true });
-        for (const group of groups) {
-          if (!group.isDirectory()) continue;
-          if (existsSync(join(dir, group.name, id, 'style.yaml'))) {
-            return join(dir, group.name);
-          }
-        }
-      } catch {
-        // Directory read failure — skip
-      }
+  private loadFromLookupOrder(id: string): StyleDefinitionYaml | undefined {
+    for (const base of this.entryRootsFor(id)) {
+      const definition = this.loadFromYamlDir(id, base);
+      if (definition !== undefined) return definition;
     }
     return undefined;
   }
@@ -323,13 +300,12 @@ export class StyleDefinitionLoader {
   // ============================================================================
 
   /**
-   * Load a style from YAML directory format ({baseDir}/{id}/style.yaml)
+   * Load a style from YAML directory format ({root}/{id}/style.yaml)
    *
    * @param id - Style ID
-   * @param baseDir - Directory to load from (defaults to primary stylesDir)
+   * @param root - The directory to load from; for a grouped tree this is `{dir}/{group}`
    */
-  private loadFromYamlDir(id: string, baseDir?: string): StyleDefinitionYaml | undefined {
-    const root = baseDir ?? this.stylesDir;
+  private loadFromYamlDir(id: string, root: string): StyleDefinitionYaml | undefined {
     const styleDir = join(root, id);
     const entryPath = join(styleDir, 'style.yaml');
 

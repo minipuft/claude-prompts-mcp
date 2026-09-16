@@ -301,9 +301,12 @@ export function mergeQuarantineViews(...views: readonly QuarantineView[]): Quara
 /**
  * The record a repair should write back to, when several roots hold the same broken id.
  *
- * Lowest-precedence-last mirrors `resolveResourceRoots`: `additional` trails the bundled tree, so
- * the record from the root NEAREST the operator is the one an unqualified `update` means. Returns
- * undefined for an id nothing quarantined.
+ * Keyed on WRITABILITY, not on precedence. The primary is the root a `resource_manager` write
+ * lands in, so its record is the one an unqualified `update` means — the operator can edit that
+ * file, and cannot edit the bundled one. That reason is now the only one: since P4.27 the primary
+ * is no longer the highest-precedence root either (`shared/utils/resource-root-lookup.ts`
+ * §resourceRootPrecedence), and this docstring previously justified the same behaviour by citing a
+ * precedence that has moved. Returns undefined for an id nothing quarantined.
  */
 export function preferredRepairTarget(
   records: readonly QuarantinedResource[],
