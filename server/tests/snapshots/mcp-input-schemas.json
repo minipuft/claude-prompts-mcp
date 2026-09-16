@@ -2114,6 +2114,20 @@
     "properties": {
       "action": {
         "description": "<present>",
+        "enum": [
+          "status",
+          "framework",
+          "gates",
+          "analytics",
+          "config",
+          "maintenance",
+          "guide",
+          "injection",
+          "session",
+          "changes",
+          "execution_history",
+          "skills_sync"
+        ],
         "type": "string"
       },
       "category": {

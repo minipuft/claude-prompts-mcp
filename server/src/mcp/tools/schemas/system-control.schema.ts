@@ -18,6 +18,7 @@ import {
   system_controlParameters,
   type system_controlParamName,
 } from '../../contracts/schemas/_generated/system_control.generated.js';
+import { SYSTEM_CONTROL_ACTION_IDS } from '../../metadata/definitions/system-control.js';
 
 import type { DescriptionResolver } from './prompt-engine.schema.js';
 
@@ -43,7 +44,13 @@ export function buildSystemControlSchema(resolve: DescriptionResolver = identity
     resolve(name, CONTRACT_DESCRIPTIONS[name]);
 
   return z.object({
-    action: z.string().describe(describe('action')),
+    /**
+     * The action ids come from the same registry the router refuses unknown actions against
+     * (`SYSTEM_CONTROL_ACTION_IDS`), so the published surface, the dispatch table, and the
+     * contract's enum are one list. As `z.string()` the tool advertised no values at all, and a
+     * client had to discover them from the description prose.
+     */
+    action: z.enum(SYSTEM_CONTROL_ACTION_IDS).describe(describe('action')),
     operation: z.string().optional().describe(describe('operation')),
     session_id: z.string().optional().describe(describe('session_id')),
     framework: z.string().optional().describe(describe('framework')),
