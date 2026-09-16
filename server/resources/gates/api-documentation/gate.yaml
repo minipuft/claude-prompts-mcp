@@ -12,8 +12,4 @@ activation:
   artifacts:
     - docs
     - readme
-  prompt_categories:
-    - documentation
-    - api
-    - development
   explicit_request: false

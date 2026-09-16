@@ -12,7 +12,4 @@ pass_criteria:
 activation:
   artifacts:
     - plan
-  prompt_categories:
-    - planning
-    - development
   explicit_request: false

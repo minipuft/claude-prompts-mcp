@@ -2,7 +2,7 @@
 
 # Gate Index
 
-26 gates across 7 groups.
+26 gates across 5 groups.
 
 For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
 
@@ -18,9 +18,11 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 |------|------|----------|------------|---------|---------|-------------|
 | `handoff-artifacts` | check | high | explicit only | evidence | 122 | Fails a delegated step whose handoff names no artifacts, or names one that does not exist where the check runs |
 | `math-fidelity` | reminder | high | explicit only | math | 627 | New shader/GL math must ship as a complete derivation card: optical model naming the finest visible feature, continuous math with range contracts, MEASURED discretization (regime classified from probed numbers, never eyeballed), a LOCK/identity contract, an offline harness, and a live probe with a numeric threshold. |
+| `plan-quality` | reminder | high | artifacts: plan | planning | 39 | Ensures implementation plans are complete, actionable, and risk-aware |
 | `workflow-diagnosis` | reminder | high | workflow, refactoring | diagnosis | 233 | Validates that the Diagnosis Card synthesizes collected signals into a named pattern before implementation. Required when pre-flight has 2+ failures, multiple skills flag the same area, or multi-file changes are planned. |
 | `workflow-integration` | reminder | high | workflow, implementation | integration | 219 | Validates that replaced systems are fully removed, integration points are tested, and no orphaned references remain. Ensures clean state before marking work complete. |
 | `workflow-preflight` | reminder | high | workflow, refactoring | preflight | 372 | Validates that the mandatory pre-flight checklist from refactoring.md was completed before implementation begins. Checks domain ownership, complexity, layer identification, naming, and dependency analysis. |
+| `pr-performance` | reminder | medium (advisory) | artifacts: source · explicit only | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
 | `workflow-changelog` | reminder | medium | artifacts: changelog | changelog | 147 | Validates that CHANGELOG.md [Unreleased] section was updated during implementation. Changes should be documented as they happen, not at release. |
 | `workflow-growth` | reminder | medium | workflow, implementation | growth | 291 | Validates that the task explicitly declares its learning outcome. Every task must state whether it produced novel patterns, confirmed existing ones, or found nothing new. Silence is not acceptable. |
 | `api-documentation` | reminder | — | artifacts: docs, readme | api-docs | 77 | Ensures API documentation includes all required sections and follows best practices |
@@ -37,6 +39,7 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
+| `pr-security` | reminder | critical (blocking) | artifacts: source · explicit only | security | 345 | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
 | `security-awareness` | reminder | — | artifacts: source | security | 119 | Ensures security-conscious development practices and prevents common vulnerabilities |
 
 ## Testing
@@ -46,25 +49,12 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 | `test-suite` | check | high | code, development, implementation · explicit only | testing | 233 | Validates implementation by running the test suite. Uses shell verification for ground-truth validation via exit codes. |
 | `test-coverage` | reminder | — | artifacts: test | testing | 48 | Ensures code changes include appropriate test coverage |
 
-## Planning
-
-| Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
-|------|------|----------|------------|---------|---------|-------------|
-| `plan-quality` | reminder | high | artifacts: plan | planning | 39 | Ensures implementation plans are complete, actionable, and risk-aware |
-
 ## Research
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
 | `content-structure` | reminder | — | documentation, content_processing, education, analysis, research, general | content-structure | 89 | Ensures well-organized, readable content with clear structure |
 | `research-quality` | reminder | — | research, analysis · explicit only | research | 97 | Ensures thorough research with proper citations and credible sources |
-
-## PR Review
-
-| Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
-|------|------|----------|------------|---------|---------|-------------|
-| `pr-security` | reminder | critical (blocking) | artifacts: source · explicit only | security | 345 | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
-| `pr-performance` | reminder | medium (advisory) | artifacts: source · explicit only | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
 
 ## Framework
 
@@ -75,4 +65,4 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 ---
 
-*Generated: 2026-09-15*
+*Generated: 2026-09-16*

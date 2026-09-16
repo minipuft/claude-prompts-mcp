@@ -223,3 +223,48 @@ describe('Artifact-based gate activation — real registry, real readme_improver
     expect(result.gateIds).toContain('semantic-discoverability');
   });
 });
+
+/**
+ * B44 round 2: `code-quality` shipped `activation.artifacts` AND `activation.prompt_categories`
+ * together, and `isGateActiveForContext` (`gate-activation.ts`) returns on the artifacts branch
+ * before `prompt_categories` is ever read whenever `artifacts` is non-empty — for every
+ * `gate_type`, framework included. That makes `prompt_categories` provably dead the moment a gate
+ * also declares `artifacts`, not merely redundant-looking. `api-documentation`,
+ * `workflow-changelog`, `plan-quality`, `pr-performance`, `pr-security`, `security-awareness`,
+ * and `test-coverage` carried the identical shape and were fixed alongside `code-quality`.
+ *
+ * This enumerates every REAL bundled gate the manager loads, so the class stays closed: a new
+ * gate authored with both fields set fails here the day it lands, without anyone updating a
+ * hand-maintained list of ids.
+ */
+describe('No bundled gate declares both artifacts and prompt_categories (B44 round 2)', () => {
+  let gateManager: GateManager;
+
+  beforeAll(async () => {
+    gateManager = new GateManager(createLogger());
+    await gateManager.initialize();
+  });
+
+  test('the bundled gate catalog is non-empty', () => {
+    // Guards every case below: an empty catalog would make the enumeration below vacuously pass.
+    const guides = gateManager.getGateRegistry().getAllGuides(false);
+    expect(guides.length).toBeGreaterThan(20);
+  });
+
+  test('no gate combines non-empty artifacts with non-empty prompt_categories', () => {
+    const guides = gateManager.getGateRegistry().getAllGuides(false);
+
+    const offenders = guides
+      .map((guide) => ({ gateId: guide.gateId, rules: guide.getActivationRules() }))
+      .filter(
+        ({ rules }) =>
+          Array.isArray(rules.artifacts) &&
+          rules.artifacts.length > 0 &&
+          Array.isArray(rules.prompt_categories) &&
+          rules.prompt_categories.length > 0
+      )
+      .map(({ gateId }) => gateId);
+
+    expect(offenders).toEqual([]);
+  });
+});

@@ -18,7 +18,4 @@ retry_config:
 activation:
   artifacts:
     - changelog
-  prompt_categories:
-    - workflow
-    - implementation
   explicit_request: false
