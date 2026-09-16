@@ -338,6 +338,56 @@ export type ChangeSource = 'filesystem' | 'mcp-tool' | 'external';
 /** Type of tracked resource */
 export type TrackedResourceType = 'prompt' | 'gate';
 
+/** Kind of change recorded against a resource */
+export type ChangeOperation = 'added' | 'modified' | 'removed';
+
+/** Individual change entry in the audit log */
+export interface ResourceChangeEntry {
+  timestamp: string;
+  source: ChangeSource;
+  operation: ChangeOperation;
+  resourceType: TrackedResourceType;
+  resourceId: string;
+  filePath: string;
+  contentHash: string;
+  previousHash?: string;
+}
+
+/** Parameters for recording one change */
+export interface LogChangeParams {
+  source: ChangeSource;
+  operation: ChangeOperation;
+  resourceType: TrackedResourceType;
+  resourceId: string;
+  filePath: string;
+  content?: string;
+}
+
+/** Query parameters for reading back recorded changes */
+export interface GetChangesParams {
+  limit?: number;
+  source?: ChangeSource;
+  resourceType?: TrackedResourceType;
+  since?: string;
+  resourceId?: string;
+}
+
+/**
+ * The write-and-read surface of the resource change audit log.
+ *
+ * The concrete implementation is `ResourceChangeTracker` in infra/observability/tracking/, which
+ * owns a SQLite connection and a hash cache; the composition root registers it through
+ * `shared/core/resource-change-log.js`. mcp/ tools depend on this interface rather than on either
+ * of those, for the same reason `ApiRouterPort` exists above: a layer that names the concrete
+ * holder has taken a dependency on how the application is assembled.
+ */
+export interface ResourceChangeLogPort {
+  /** Record one change. Implementations persist; callers treat failure as non-fatal. */
+  logChange(params: LogChangeParams): Promise<void>;
+  /** Read back recorded changes, newest first. */
+  getChanges(params?: GetChangesParams): Promise<ResourceChangeEntry[]>;
+}
+
 // Automation/script-tool types (cross-layer: engine + modules)
 export * from './automation.js';
 

@@ -63,9 +63,14 @@ const CALL = 'SqliteEngine.getInstance(';
  */
 const ACCEPTED_INHERITORS = [
   {
-    file: 'src/runtime/application.ts',
-    reason: 'fullServerRefresh — hot reload, runs long after startup has claimed',
-    closedBy: 'threading the resolved dbPath through Application, or removing the refresh path',
+    file: 'src/runtime/resource-index-resync.ts',
+    reason:
+      'resyncResourceIndexAfterReload — called from Application#fullServerRefresh on hot reload, ' +
+      'long after startup has claimed. Moved out of application.ts intact when that file crossed ' +
+      'the max-lines ratchet',
+    closedBy:
+      'threading the resolved dbPath through the resyncResourceIndexAfterReload params, or ' +
+      'removing the refresh path',
   },
   {
     file: 'src/runtime/module-initializer.ts',
