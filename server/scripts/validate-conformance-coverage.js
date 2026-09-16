@@ -231,15 +231,6 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       '`preview: true` export filtered by `id`.'
   ),
   ...exceptionGroup(
-    'system_control',
-    ['backup_path'],
-    'Read only by `config` restore, which replaces config.json from a backup. The corpus never ' +
-      'restores config on either server; `confirm` is covered by analytics reset instead.',
-    'A scenario on a server with its own throwaway config.json, restoring with `confirm: true` ' +
-      "and a missing `backup_path`, asserting the writer's error names that path."
-  ),
-
-  ...exceptionGroup(
     'prompt_engine',
     ['handoff', 'claim_token'],
     'Cross-client handoff (plan 2A): minting needs a live run and claiming needs a SECOND ' +

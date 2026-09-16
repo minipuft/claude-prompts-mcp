@@ -6,12 +6,13 @@ import type { ErrorObject, ValidateFunction } from 'ajv';
 
 type JsonSchema = Record<string, unknown>;
 
-interface CachedValidator {
+interface CachedSchemaEntry {
   validator: ValidateFunction;
+  schema: JsonSchema;
   schemaMtimeMs: number;
 }
 
-const validatorCache = new Map<string, CachedValidator>();
+const schemaCache = new Map<string, CachedSchemaEntry>();
 
 /**
  * AJV reports an undeclared key as "must NOT have additional properties" and names the key only in
@@ -36,11 +37,17 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string[] {
   });
 }
 
-async function getCompiledValidator(schemaPath: string): Promise<ValidateFunction> {
+/**
+ * The one read + parse + compile of `schemaPath`, cached by mtime. Both the compiled AJV
+ * validator (`getCompiledValidator`) and the parsed schema object (`getParsedConfigSchema`) read
+ * from this single entry — there is exactly one cache, keyed on the same mtime check, so a
+ * schema edited between calls invalidates both consumers together rather than one at a time.
+ */
+async function getOrLoadSchemaEntry(schemaPath: string): Promise<CachedSchemaEntry> {
   const stat = await import('node:fs/promises').then((fs) => fs.stat(schemaPath));
-  const cached = validatorCache.get(schemaPath);
+  const cached = schemaCache.get(schemaPath);
   if (cached?.schemaMtimeMs === stat.mtimeMs) {
-    return cached.validator;
+    return cached;
   }
 
   const schemaContent = await readFile(schemaPath, 'utf8');
@@ -54,12 +61,35 @@ async function getCompiledValidator(schemaPath: string): Promise<ValidateFunctio
   });
   const validator = ajv.compile(schema);
 
-  validatorCache.set(schemaPath, {
+  const entry: CachedSchemaEntry = {
     validator,
+    schema,
     schemaMtimeMs: stat.mtimeMs,
-  });
+  };
+  schemaCache.set(schemaPath, entry);
 
-  return validator;
+  return entry;
+}
+
+async function getCompiledValidator(schemaPath: string): Promise<ValidateFunction> {
+  const entry = await getOrLoadSchemaEntry(schemaPath);
+  return entry.validator;
+}
+
+/**
+ * The parsed JSON Schema object at `schemaPath`, from the same mtime-keyed cache entry
+ * `getCompiledValidator` populates — one read, one parse, one invalidation rule shared by the
+ * compiled validator and the raw schema object alike. Callers that only need to walk the schema
+ * shape (e.g. `ConfigLoader.listConfigKeys()`, which reads `properties` trees rather than
+ * validating data) use this instead of re-reading and re-parsing the file themselves.
+ *
+ * Propagates read/parse failures by throwing — same as a cold `getCompiledValidator` call — so a
+ * missing file or invalid JSON surfaces at the caller rather than being reported as an empty
+ * schema.
+ */
+export async function getParsedConfigSchema(schemaPath: string): Promise<JsonSchema> {
+  const entry = await getOrLoadSchemaEntry(schemaPath);
+  return entry.schema;
 }
 
 /**
