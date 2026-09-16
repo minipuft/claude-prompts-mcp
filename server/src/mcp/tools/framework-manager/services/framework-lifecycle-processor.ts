@@ -539,7 +539,12 @@ export class FrameworkLifecycleProcessor {
             `'${id}' ships with the server and is served from the bundled resources tree ` +
               `(${bundledDir}), which is read-only — deleting it is not possible. ` +
               `Your resources root is ${frameworksDir}. Update it instead: the update copies it ` +
-              `into your own root first and your copy takes precedence.`
+              // "over the bundled one", not bare "takes precedence" — this branch compares the
+              // writable root to the bundled tree only, and the writable root is no longer the top
+              // of the order. An operator with a workspace overlay reading the unqualified clause
+              // would be told their copy wins a contest it can lose. The gate twin already says it
+              // this way; the prompt twin (`prompt/operations/file-operations.ts`) does not.
+              `into your own root first and your copy takes precedence over the bundled one.`
           );
         }
       }
