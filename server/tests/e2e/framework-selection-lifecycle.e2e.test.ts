@@ -197,10 +197,13 @@ async function createWorkspace(): Promise<Workspace> {
   const workspace = await mkdtemp(path.join(tmpdir(), 'framework-selection-ws-'));
   const runtimeRoot = await mkdtemp(path.join(tmpdir(), 'framework-selection-rt-'));
   const config = JSON.parse(readFileSync(path.join(SERVER_ROOT, 'config.json'), 'utf8')) as {
-    frameworks: Record<string, unknown>;
+    frameworks?: Record<string, unknown>;
   };
   const configPath = path.join(runtimeRoot, 'config.json');
   const setConfiguredDefault = async (frameworkId: string): Promise<void> => {
+    // The shipped config.json carries no sections — code owns the defaults — so `frameworks`
+    // is absent until a test writes into it.
+    config.frameworks ??= {};
     config.frameworks.defaultFramework = frameworkId;
     await writeFile(configPath, JSON.stringify(config, null, 2));
   };
