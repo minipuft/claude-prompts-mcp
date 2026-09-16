@@ -1,5 +1,7 @@
 // @lifecycle canonical - Prompt create/update/delete operations.
 
+import * as path from 'node:path';
+
 import { PromptDraftService, type PromptDraftInput } from './prompt-draft-service.js';
 import {
   normalizeReloadShape,
@@ -7,6 +9,7 @@ import {
   type PromptMutationReceipt,
 } from './prompt-mutation-receipt-service.js';
 import { isPreviewRequest } from '../../../shared/preview-action.js';
+import { formatRepairServingLine } from '../../../shared/quarantine-report.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator, type DiffResult } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -923,23 +926,59 @@ export class PromptLifecycleProcessor {
   }
 
   /**
-   * Say, in the update's own response, whether the repair actually took.
+   * Say, in the update's own response, what happened to the refused file AND which root serves now.
    *
    * This is the row's falsifier rendered at the surface an operator reads. The receipt above
-   * already forced a refresh, so the quarantine has been rebuilt from disk by the time this runs:
-   * a record still standing for the same path means the file is still refused, whatever the write
-   * reported. Saying nothing when the repair worked would leave "did it load?" answerable only by
-   * a second call.
+   * already forced a refresh, so the quarantine and the catalog have both been rebuilt from disk
+   * by the time this runs: a record still standing for the same path means the file is still
+   * refused, whatever the write reported. Saying nothing when the repair worked would leave "did
+   * it load?" answerable only by a second call.
+   *
+   * THREE OUTCOMES, NOT TWO — the gate and framework twins had this split and prompts did not.
+   * A prompt write always lands under `getResolvedPromptsDirectory()` (`planPromptWrite` composes
+   * `promptDir` from it; `sourceRoot` only selects a subtree to copy IN, never where to write),
+   * so a refused file in another root is left exactly as broken while a working copy appears in
+   * the primary. Two outcomes reported that as `Still quarantined … the prompt remains absent
+   * from the catalog`, and the second clause was false: the prompt was in the catalog, served
+   * from the copy this call had just written. Reachable today — a malformed prompt in the bundled
+   * tree whose id nothing else claims takes exactly this path.
+   *
+   * WHICH ROOT SERVES is measured, not inferred: `sourceRoot` off the reloaded catalog entry, the
+   * stamp `PromptLoader` wrote. `formatRepairServingLine` is the one renderer allowed to turn that
+   * into a sentence, so this and the two twins cannot drift.
    */
   private formatRepairOutcome(repairTarget: QuarantinedResource): string {
-    const stillQuarantined = (
-      this.context.dependencies.quarantine?.byId(repairTarget.id) ?? []
-    ).some((record) => record.path === repairTarget.path);
-    return stillQuarantined
-      ? `\n🚧 **Still quarantined**: \`${repairTarget.path}\` did not load after the write — ` +
-          `the prompt remains absent from the catalog.\n`
-      : `\n🩹 **Repaired**: \`${repairTarget.path}\` now loads; its quarantine record is cleared ` +
-          `and \`${repairTarget.id}\` is served again.\n`;
+    const stillRefused = (this.context.dependencies.quarantine?.byId(repairTarget.id) ?? []).some(
+      (record) => record.path === repairTarget.path
+    );
+    const writtenRoot = this.context.dependencies.configManager.getResolvedPromptsDirectory();
+    const servedFrom = this.getConvertedPrompts().find(
+      (prompt) => prompt.id === repairTarget.id
+    )?.sourceRoot;
+    const serving = formatRepairServingLine(repairTarget.id, writtenRoot, servedFrom);
+
+    if (!stillRefused) {
+      return (
+        `\n🩹 **Repaired**: \`${repairTarget.path}\` now loads and its quarantine record is ` +
+        `cleared.\n` +
+        serving
+      );
+    }
+
+    // Root, not full path: the write reuses the record's own category (`promptData.category` is
+    // set from it above), so a record whose root IS the write root names the same file.
+    if (path.resolve(repairTarget.root) !== path.resolve(writtenRoot)) {
+      return (
+        `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
+        `your copy under \`${writtenRoot}\`; \`${repairTarget.path}\` stays quarantined.\n` +
+        serving
+      );
+    }
+
+    return (
+      `\n🚧 **Still quarantined**: \`${repairTarget.path}\` did not load after the write — ` +
+      `the prompt remains absent from the catalog.\n`
+    );
   }
 
   private blockedUpdate(text: string): ToolResponse {

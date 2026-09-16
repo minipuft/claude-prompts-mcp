@@ -793,7 +793,10 @@ export class FrameworkLifecycleProcessor {
         `Cannot delete framework '${id}': it ships with the server and is served from ` +
           `${frameworkDir}, which is read-only for deletion. Only frameworks you created can be ` +
           `deleted. Update it instead — the update copies it into your own resources root first ` +
-          `and your copy takes precedence.`
+          // Qualified for the same reason as its sibling in `handleDelete`'s bundled branch, which
+          // was fixed while this one was missed: the comparison is against the SHIPPED copy, and
+          // the writable root is no longer the top of the order.
+          `and your copy takes precedence over the bundled one.`
       );
     }
 

@@ -31,13 +31,17 @@
  * them before anyone invokes anything. A file that failed validation is precisely the one whose
  * content has not been checked, so quarantine must not become the surface that publishes it.
  *
- * WHY IT NEVER PARTICIPATES IN ID RESOLUTION. All three loaders resolve an id as
- * `primary ?? additional[0] ?? …` with the bundled tree trailing (`runtime/resource-roots.ts`), so
- * a workspace file that fails to load is simply absent and the bundled definition answers. A
+ * WHY IT NEVER PARTICIPATES IN ID RESOLUTION. All three flat-kind loaders walk their roots in the
+ * one order `shared/utils/resource-root-lookup.ts` §resourceRootPrecedence states — overlays
+ * highest with a later one winning, then the primary, then the bundled tree — and serve the first
+ * root that yields a VALID definition, so a file that fails to load is simply absent and the next
+ * root down answers. (This paragraph described `primary ?? additional[0] ?? …` with the bundled
+ * tree trailing, which was the pre-P4.27 order and put the writable root at the top; it is stated
+ * here once and only here, rather than re-derived, precisely so it cannot go stale twice.) A
  * quarantine that re-entered the resolution chain at the winning position would take that id DARK
- * — a typo in a workspace resource would cost the bundled one. Availability is byte-identical to
- * before this module existed, because nothing here is reachable from a lookup: the registry maps
- * consumers read are built from loaded resources alone.
+ * — a typo in a workspace resource would cost the definition that is still serving. Availability
+ * is byte-identical to before this module existed, because nothing here is reachable from a
+ * lookup: the registry maps consumers read are built from loaded resources alone.
  */
 
 /**

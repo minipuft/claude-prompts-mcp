@@ -24,6 +24,17 @@ interface CategoryView {
   readonly id: string;
   /** The root whose declaration wins, or `undefined` when no root declares one. */
   readonly declaringRoot: string | undefined;
+  /**
+   * WHERE that winning root sits in the order — carried, not re-derived.
+   *
+   * `declaringRoot` alone cannot answer whether an update would change what serves. The walk
+   * below visits bundled -> primary -> overlays with a later declaration overwriting the recorded
+   * one, so the winner is as often an OVERLAY as the bundled tree, and those two sit on opposite
+   * sides of the root a write lands in. Recording the label at the moment the root wins is the
+   * measurement; asking again later would be a second derivation of a question this walk has
+   * already answered, which is the shape P4.18 (ruling R7) forbids.
+   */
+  readonly declaringRootLabel: CategoryRoot['label'] | undefined;
   readonly declarationPath: string | undefined;
   /** Prompt count across every root that holds this category. */
   readonly promptCount: number;
@@ -128,8 +139,8 @@ export class CategoryDiscoveryProcessor {
 
     if (view.declaringRoot !== undefined && view.declaringRoot !== this.writableRoot()) {
       lines.push(
-        `  - Source Root: ${view.declaringRoot} (read-only here) — an update writes your own ` +
-          `copy under ${this.writableRoot()}, which then takes precedence`
+        `  - Source Root: ${view.declaringRoot} (read-only here)`,
+        this.updateOutcome(view)
       );
     }
 
@@ -146,6 +157,42 @@ export class CategoryDiscoveryProcessor {
     }
 
     return lines;
+  }
+
+  /**
+   * What an `update` would actually do to this category, for a declaration in another root.
+   *
+   * THIS SENTENCE WAS FALSE. It read "an update writes your own copy under <primary>, which then
+   * takes precedence" — and a write lands in the PRIMARY, which every workspace overlay outranks
+   * (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence). `collectViews` lets a later
+   * root's declaration win, and overlays are walked last, so the declaring root is an overlay at
+   * least as often as it is the bundled tree. For those categories the operator was told their
+   * copy would take over while the overlay went on answering.
+   *
+   * Nothing has been written yet, so there is no served value to read back the way a repair
+   * response does — the honest substitute is the rank the walk already recorded, which is exactly
+   * what `declaringRootLabel` carries. An `undefined` label cannot reach here (the caller tests
+   * `declaringRoot`, which is assigned in the same expression), and it is answered without a
+   * precedence claim rather than by guessing at one.
+   */
+  private updateOutcome(view: CategoryView): string {
+    if (view.declaringRootLabel === 'overlay') {
+      return (
+        `  - An update writes your own copy under ${this.writableRoot()} — but ` +
+        `${view.declaringRoot} outranks that root, so '${view.id}' would still be declared from ` +
+        `there. Edit the declaration where it lives.`
+      );
+    }
+    if (view.declaringRootLabel === 'bundled') {
+      return (
+        `  - An update writes your own copy under ${this.writableRoot()}, which takes precedence ` +
+        `over the bundled tree, so '${view.id}' would then be declared from your copy.`
+      );
+    }
+    return (
+      `  - An update writes your own copy under ${this.writableRoot()}. Which declaration then ` +
+      `wins depends on where ${view.declaringRoot} sits in the root order.`
+    );
   }
 
   private writableRoot(): string {
@@ -192,6 +239,7 @@ export class CategoryDiscoveryProcessor {
           view: {
             id,
             declaringRoot: declares ? root.path : existing?.view.declaringRoot,
+            declaringRootLabel: declares ? root.label : existing?.view.declaringRootLabel,
             declarationPath: declares ? yamlPath : existing?.view.declarationPath,
             promptCount: 0,
             roots: [...(existing?.view.roots ?? []), root.path],

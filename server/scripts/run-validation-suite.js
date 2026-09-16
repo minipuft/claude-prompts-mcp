@@ -439,6 +439,13 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the predicate over a wired indexer and baseline call (must stay silent), an indexer config omitting `quarantine` and a baseline call missing its fourth argument (both must report; these are the motivating instances), and a `quarantine` named on the line above an unwired config (must still report, since proximity must not launder it); the live tree is the fifth case, and a scan finding no call site at all exits 1 rather than passing on a probe that observed nothing. All three production call sites were individually unwired and each exits 1 — the property-form config, the shorthand-form config, and the positional argument',
   },
   {
+    script: 'validate:serving-claims',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over the shipped pre-fix text of every site that motivated it (the two P4.34 repair responses, the category `inspect` line, and both bundled-delete refusals; all five must report) AND over each fixed form plus the sanctioned renderer and a pure report (all must stay silent); the live tree is the eleventh case. The comment blind spot is asserted as a case rather than left implicit, so narrowing it later is a test change and not a silent widening. NOT checked: that a named comparand is the CORRECT one — `takes precedence over the moon` passes, because naming is what makes a claim checkable by a reader and correctness is not lexically decidable',
+  },
+  {
     script: 'validate:declared-surface',
     io: 'read',
     reads: ['declared'],
