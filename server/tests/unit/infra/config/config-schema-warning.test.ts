@@ -95,8 +95,11 @@ describe('config schema validation warnings', () => {
     const shipped = await readShippedConfig();
     const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
 
-    // Step 1: typo (gates.enabld) — 1 warning naming /gates and enabld; status 'invalid'.
+    // Step 1: typo (gates.enabld) — 1 warning naming /gates and enabld; status 'invalid'. `c.gates`
+    // is no longer guaranteed present on `shipped` (row 4.5, ruling R46: the shipped config.json
+    // holds only `$schema`/`version`), so the mutation creates the section rather than assuming it.
     const withTypo = mutate(shipped, (c) => {
+      c.gates ??= {};
       c.gates.enabld = true;
     });
     await writeFile(configPath, JSON.stringify(withTypo), 'utf8');
@@ -116,8 +119,12 @@ describe('config schema validation warnings', () => {
     expect(manager.getSchemaValidation()).toMatchObject({ status: 'invalid', valid: false });
 
     // Step 3: a second typo added, reloaded — 2 warnings (the whole new set); still 'invalid'.
+    // Same defensive init as step 1: `resources`/`resources.logs` are no longer guaranteed
+    // present either.
     warnSpy.mockClear();
     const withTwoTypos = mutate(withTypo, (c) => {
+      c.resources ??= {};
+      c.resources.logs ??= {};
       c.resources.logs.maxEntrys = 5;
     });
     await writeFile(configPath, JSON.stringify(withTwoTypos), 'utf8');

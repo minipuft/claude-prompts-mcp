@@ -48,7 +48,7 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     configPath = path.join(tempDir, 'config.json');
     // "Almost nothing": one explicit key (exercises 'file'), everything else left to the loader
     // — this is the shape the row's background names as the worked example (gates.enabled).
-    await writeFile(configPath, JSON.stringify({ gates: { enabled: true } }), 'utf8');
+    await writeFile(configPath, JSON.stringify({ version: 5, gates: { enabled: true } }), 'utf8');
     process.env['PORT'] = '4321'; // exercises 'environment' for server.port
     process.env['LOG_LEVEL'] = 'DEBUG'; // exercises 'environment' for logging.level
     manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });

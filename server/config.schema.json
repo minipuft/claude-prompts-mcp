@@ -23,7 +23,9 @@
         "port": {
           "type": "integer",
           "description": "Port for the Streamable HTTP transport (ignored for stdio).",
-          "default": 9090
+          "default": 9090,
+          "minimum": 1024,
+          "maximum": 65535
         }
       },
       "additionalProperties": false,
@@ -147,7 +149,8 @@
                   "type": "integer",
                   "description": "Inject framework guidance every N chain steps. Higher values reduce token usage at the cost of less frequent framework reinforcement.",
                   "default": 3,
-                  "minimum": 1
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "target": {
                   "type": "string",
@@ -170,7 +173,8 @@
                   "type": "integer",
                   "description": "Inject gate criteria every N chain steps. 0 = first step only. Gate review steps always receive guidance regardless of this setting.",
                   "default": 0,
-                  "minimum": 0
+                  "minimum": 0,
+                  "maximum": 100
                 },
                 "target": {
                   "type": "string",
@@ -198,7 +202,8 @@
                   "type": "integer",
                   "description": "Inject style guidance every N chain steps. 0 = first step only. Set to 1 for every step.",
                   "default": 0,
-                  "minimum": 0
+                  "minimum": 0,
+                  "maximum": 100
                 },
                 "target": {
                   "type": "string",
@@ -297,7 +302,8 @@
           "type": "integer",
           "description": "Fix attempts within current context before spawning isolation. Set to 0 for immediate isolation.",
           "default": 3,
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 10
         },
         "isolation": {
           "type": "object",
@@ -311,13 +317,15 @@
               "type": "number",
               "description": "Maximum cost (USD) per isolation spawn.",
               "default": 1,
-              "minimum": 0.01
+              "minimum": 0.01,
+              "maximum": 10
             },
             "timeout": {
               "type": "integer",
               "description": "Timeout in seconds for each isolation spawn.",
               "default": 300,
-              "minimum": 30
+              "minimum": 30,
+              "maximum": 3600
             },
             "permissionMode": {
               "type": "string",
@@ -354,7 +362,8 @@
           "type": "integer",
           "description": "Maximum versions to retain per prompt.",
           "default": 50,
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 500
         }
       },
       "additionalProperties": false,
@@ -600,17 +609,23 @@
         "timeoutMinutes": {
           "type": "integer",
           "description": "Idle session timeout in minutes (default: 24 hours).",
-          "default": 1440
+          "default": 1440,
+          "minimum": 1,
+          "maximum": 10080
         },
         "reviewTimeoutMinutes": {
           "type": "integer",
           "description": "Gate review timeout in minutes.",
-          "default": 30
+          "default": 30,
+          "minimum": 1,
+          "maximum": 10080
         },
         "cleanupIntervalMinutes": {
           "type": "integer",
           "description": "Background cleanup frequency in minutes.",
-          "default": 5
+          "default": 5,
+          "minimum": 1,
+          "maximum": 10080
         }
       },
       "additionalProperties": false,

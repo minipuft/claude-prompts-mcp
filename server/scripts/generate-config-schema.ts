@@ -1,7 +1,16 @@
 #!/usr/bin/env tsx
 /**
- * Generates `server/config.schema.json` from the `ConfigFile` type
- * (`src/shared/types/config-file.ts`).
+ * Generates `server/config.schema.json` AND `src/cli-shared/_generated/config-keys.ts` from the
+ * `ConfigFile` type (`src/shared/types/config-file.ts`).
+ *
+ * WHY BOTH ARTIFACTS COME OUT OF ONE RUN
+ * The schema says what a config DOCUMENT may contain; the key table says what an operator may
+ * SET and what each value is checked against. Those were two hand-maintained lists — in fact
+ * three, counting the duplicate in `mcp/tools/config-utils.ts` — so a key could exist in the
+ * schema and be unsettable, or be settable and rejected by the loader, with nothing forcing the
+ * two into agreement. Deriving the table from the schema this generator just built makes the
+ * disagreement unrepresentable: the settable set IS the schema's leaf set minus the two
+ * document-level members named in `DOCUMENT_META_LEAVES` below.
  *
  * WHY THIS EXISTS
  * `config.schema.json` was hand-maintained, so a member added to `ConfigFile` had no mechanical
@@ -66,7 +75,7 @@
  * could quietly diverge from it.
  */
 import { createGenerator } from 'ts-json-schema-generator';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -75,6 +84,13 @@ const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const SOURCE_PATH = path.join(SERVER_ROOT, 'src', 'shared', 'types', 'config-file.ts');
 const TSCONFIG_PATH = path.join(SERVER_ROOT, 'tsconfig.json');
 const OUTPUT_PATH = path.join(SERVER_ROOT, 'config.schema.json');
+const KEYS_OUTPUT_PATH = path.join(
+  SERVER_ROOT,
+  'src',
+  'cli-shared',
+  '_generated',
+  'config-keys.ts'
+);
 
 /**
  * The schema `$id` kept stable across the hand-written and generated files. A later row changes
@@ -117,13 +133,189 @@ function assertIntegerTagsOnNumberMembers(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Leaf key table emission
+// ---------------------------------------------------------------------------
+
+/** The subset of JSON Schema a settable leaf may carry, in the order it is emitted. */
+interface LeafRule {
+  readonly type: 'string' | 'integer' | 'number' | 'boolean' | 'array';
+  readonly enum?: readonly string[];
+  readonly minimum?: number;
+  readonly maximum?: number;
+  readonly items?: { readonly type: string; readonly pattern?: string };
+}
+
 /**
- * Generates the `ConfigFile` JSON Schema and writes it to `outputPath` (defaults to the
- * committed `server/config.schema.json`). The single codepath both `main()` (the CLI entry
- * point) and `validate-config-schema.ts`'s drift check call — the drift check proves the real
- * generate output matches disk, not a parallel render function's output.
+ * Document-level members of `ConfigFile` that are NOT settings. `$schema` is the editor hint and
+ * `version` is the file-format discriminator the loader migrates — offering a setter for either
+ * would let an operator write a value that changes how the file is READ. They stay in
+ * `config.schema.json` (they are legal members of the document) and stay out of the key table.
  */
-export function generateConfigSchema(outputPath: string = OUTPUT_PATH): void {
+const DOCUMENT_META_LEAVES: ReadonlySet<string> = new Set(['$schema', 'version']);
+
+/** Prettier's `printWidth` for `server/**` (`.prettierrc.json`). */
+const PRINT_WIDTH = 100;
+
+type SchemaNode = Record<string, unknown>;
+
+/**
+ * Every leaf path in the generated schema, keyed by dotted path. A node carrying `properties` is
+ * a SECTION and is descended into; anything else is a leaf. Sorted, so the emitted file's order
+ * depends on the key names rather than on member-declaration order in `config-file.ts` — moving a
+ * member then produces no diff here.
+ */
+function collectLeaves(schema: SchemaNode): Map<string, LeafRule> {
+  const leaves = new Map<string, LeafRule>();
+
+  const walk = (node: SchemaNode, prefix: string): void => {
+    const properties = node['properties'] as Record<string, SchemaNode> | undefined;
+    if (properties) {
+      for (const [key, child] of Object.entries(properties)) {
+        walk(child, prefix ? `${prefix}.${key}` : key);
+      }
+      return;
+    }
+    if (prefix === '' || DOCUMENT_META_LEAVES.has(prefix)) return;
+    leaves.set(prefix, toLeafRule(prefix, node));
+  };
+
+  walk(schema, '');
+  return new Map([...leaves.entries()].sort(([a], [b]) => (a < b ? -1 : 1)));
+}
+
+/** Narrows one schema leaf to the fields the validator reads, failing loudly on an unknown type. */
+function toLeafRule(dottedKey: string, node: SchemaNode): LeafRule {
+  const type = node['type'];
+  if (
+    type !== 'string' &&
+    type !== 'integer' &&
+    type !== 'number' &&
+    type !== 'boolean' &&
+    type !== 'array'
+  ) {
+    throw new Error(
+      `generate-config-schema: leaf "${dottedKey}" has type ${JSON.stringify(type)}, which the ` +
+        `config key table cannot express. Give it one of string/integer/number/boolean/array in ` +
+        `${SOURCE_PATH}, or exclude it as a document-level member.`
+    );
+  }
+
+  const rule: {
+    type: LeafRule['type'];
+    enum?: readonly string[];
+    minimum?: number;
+    maximum?: number;
+    items?: { type: string; pattern?: string };
+  } = { type };
+
+  const enumValues = node['enum'];
+  if (Array.isArray(enumValues)) rule.enum = enumValues.map((value) => String(value));
+
+  const minimum = node['minimum'];
+  if (typeof minimum === 'number') rule.minimum = minimum;
+
+  const maximum = node['maximum'];
+  if (typeof maximum === 'number') rule.maximum = maximum;
+
+  const items = node['items'] as SchemaNode | undefined;
+  if (items) {
+    const itemType = typeof items['type'] === 'string' ? items['type'] : 'string';
+    const pattern = items['pattern'];
+    rule.items = typeof pattern === 'string' ? { type: itemType, pattern } : { type: itemType };
+  }
+
+  return rule;
+}
+
+function quote(value: string): string {
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
+/**
+ * A string-array literal on one line when it fits `PRINT_WIDTH` at `indent`, one element per line
+ * otherwise — the same choice prettier makes, so the emitted file is already formatted and
+ * `lint-staged`'s `prettier --check` on a staged `.ts` has nothing to reflow.
+ */
+function renderStringArray(values: readonly string[], indent: string, prefix: string): string {
+  const inline = `${indent}${prefix}[${values.map(quote).join(', ')}],`;
+  if (inline.length <= PRINT_WIDTH) return inline;
+  const lines = values.map((value) => `${indent}  ${quote(value)},`);
+  return [`${indent}${prefix}[`, ...lines, `${indent}],`].join('\n');
+}
+
+function renderLeafRule(rule: LeafRule): string {
+  const lines = [`    type: ${quote(rule.type)},`];
+  if (rule.enum) lines.push(renderStringArray(rule.enum, '    ', 'enum: '));
+  if (rule.minimum !== undefined) lines.push(`    minimum: ${rule.minimum},`);
+  if (rule.maximum !== undefined) lines.push(`    maximum: ${rule.maximum},`);
+  if (rule.items) {
+    const pattern = rule.items.pattern;
+    const body =
+      pattern === undefined
+        ? `{ type: ${quote(rule.items.type)} }`
+        : `{ type: ${quote(rule.items.type)}, pattern: ${quote(pattern)} }`;
+    lines.push(`    items: ${body},`);
+  }
+  return lines.join('\n');
+}
+
+const GENERATED_HEADER = `// Auto-generated by scripts/generate-config-schema.ts from src/shared/types/config-file.ts.
+// Do not edit manually — run \`npm run generate:config-schema\`. \`npm run validate:config-schema\`
+// fails when this file and the generator disagree.
+//
+// This is the ONE table \`config-input-validator.ts\` validates against, so a key an operator may
+// set, the constraint it is checked by, and the schema the loader validates the whole document
+// against all come from one declaration: \`ConfigFile\` (src/shared/types/config-file.ts).
+`;
+
+/** The whole text of `src/cli-shared/_generated/config-keys.ts`. */
+function renderConfigKeysModule(leaves: ReadonlyMap<string, LeafRule>): string {
+  const keys = [...leaves.keys()];
+
+  return `${GENERATED_HEADER}
+/** The subset of JSON Schema a settable config leaf may carry. */
+export interface ConfigLeafRule {
+  readonly type: 'string' | 'integer' | 'number' | 'boolean' | 'array';
+  /** Permitted values for a \`string\` leaf, in schema order. */
+  readonly enum?: readonly string[];
+  readonly minimum?: number;
+  readonly maximum?: number;
+  /** Element contract for an \`array\` leaf. */
+  readonly items?: { readonly type: string; readonly pattern?: string };
+}
+
+/**
+ * Every dotted key an operator may set, sorted. Derived from the leaves of
+ * \`config.schema.json\` minus the document-level members (\`$schema\`, \`version\`), which decide
+ * how the file is READ rather than what it configures.
+ */
+export const CONFIG_VALID_KEYS = [
+${keys.map((key) => `  ${quote(key)},`).join('\n')}
+] as const;
+
+export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
+
+/**
+ * The constraint each key carries. Typed as a total \`Record<ConfigKey, …>\`, so the compiler —
+ * not a convention — is what keeps this table and \`CONFIG_VALID_KEYS\` naming the same set.
+ */
+export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
+${keys.map((key) => `  ${quote(key)}: {\n${renderLeafRule(leaves.get(key)!)}\n  },`).join('\n')}
+};
+`;
+}
+
+/**
+ * Generates the `ConfigFile` JSON Schema and the leaf key table derived from it, writing them to
+ * `outputPath` / `keysOutputPath` (defaulting to the committed files). The single codepath both
+ * `main()` (the CLI entry point) and `validate-config-schema.ts`'s drift check call — the drift
+ * check proves the real generate output matches disk, not a parallel render function's output.
+ */
+export function generateConfigSchema(
+  outputPath: string = OUTPUT_PATH,
+  keysOutputPath: string = KEYS_OUTPUT_PATH
+): void {
   assertIntegerTagsOnNumberMembers();
 
   const schema = createGenerator({
@@ -139,11 +331,15 @@ export function generateConfigSchema(outputPath: string = OUTPUT_PATH): void {
 
   const content = JSON.stringify(schema, null, 2) + '\n';
   writeFileSync(outputPath, content);
+
+  mkdirSync(path.dirname(keysOutputPath), { recursive: true });
+  writeFileSync(keysOutputPath, renderConfigKeysModule(collectLeaves(schema as SchemaNode)));
 }
 
 function main(): void {
   generateConfigSchema();
   console.log(`✓ config.schema.json generated from ConfigFile (${SOURCE_PATH})`);
+  console.log(`✓ ${path.relative(SERVER_ROOT, KEYS_OUTPUT_PATH)} generated from the same schema`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

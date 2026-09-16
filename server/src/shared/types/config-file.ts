@@ -47,7 +47,7 @@ import type {
  * Log severities a config file may name. Distinct from the `LogLevel` enum in `./index.js`, which
  * is the runtime's uppercase spelling; these are the lowercase values an operator types.
  */
-export type ConfigFileLogLevel = 'error' | 'warn' | 'info' | 'debug';
+type ConfigFileLogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 /**
  * A reminder subject an installation's harness already covers. Spellings are copied from the
@@ -55,10 +55,10 @@ export type ConfigFileLogLevel = 'error' | 'warn' | 'info' | 'debug';
  *
  * @pattern ^[a-z0-9]+(?:-[a-z0-9]+)*$
  */
-export type ConfigFileReminderSubject = string;
+type ConfigFileReminderSubject = string;
 
 /** Server identity and transport settings. */
-export interface ConfigFileServer {
+interface ConfigFileServer {
   /**
    * Server name reported to MCP clients.
    *
@@ -70,12 +70,14 @@ export interface ConfigFileServer {
    *
    * @asType integer
    * @default 9090
+   * @minimum 1024
+   * @maximum 65535
    */
   port?: number;
 }
 
 /** Prompt loading and registration. */
-export interface ConfigFilePrompts {
+interface ConfigFilePrompts {
   /**
    * Directory containing prompt definitions (relative to server root).
    *
@@ -91,7 +93,7 @@ export interface ConfigFilePrompts {
 }
 
 /** Identity and client-profile resolution for scope isolation and delegation routing. */
-export interface ConfigFileIdentity {
+interface ConfigFileIdentity {
   /**
    * Identity precedence mode.
    *
@@ -109,7 +111,7 @@ export interface ConfigFileIdentity {
 }
 
 /** Framework system-prompt injection: the phase guidance a framework contributes to a step. */
-export interface ConfigFileSystemPromptInjection {
+interface ConfigFileSystemPromptInjection {
   /**
    * Inject framework system-prompt guidance at all.
    *
@@ -123,6 +125,7 @@ export interface ConfigFileSystemPromptInjection {
    * @asType integer
    * @default 3
    * @minimum 1
+   * @maximum 100
    */
   frequency?: number;
   /**
@@ -135,7 +138,7 @@ export interface ConfigFileSystemPromptInjection {
 }
 
 /** Gate-guidance injection: the quality criteria a step is asked to satisfy. */
-export interface ConfigFileGateGuidanceInjection {
+interface ConfigFileGateGuidanceInjection {
   /**
    * Inject gate criteria every N chain steps. 0 = first step only. Gate review steps always
    * receive guidance regardless of this setting.
@@ -143,6 +146,7 @@ export interface ConfigFileGateGuidanceInjection {
    * @asType integer
    * @default 0
    * @minimum 0
+   * @maximum 100
    */
   frequency?: number;
   /**
@@ -154,7 +158,7 @@ export interface ConfigFileGateGuidanceInjection {
 }
 
 /** Style-guidance injection: response formatting guidance. */
-export interface ConfigFileStyleGuidanceInjection {
+interface ConfigFileStyleGuidanceInjection {
   /**
    * Include response formatting guidance in prompts.
    *
@@ -167,6 +171,7 @@ export interface ConfigFileStyleGuidanceInjection {
    * @asType integer
    * @default 0
    * @minimum 0
+   * @maximum 100
    */
   frequency?: number;
   /**
@@ -185,7 +190,7 @@ export interface ConfigFileStyleGuidanceInjection {
  * reassemble three objects from seven keys, and every new injection type widened the file's
  * top-level namespace by three more.
  */
-export interface ConfigFileFrameworkInjection {
+interface ConfigFileFrameworkInjection {
   /** System prompt injection settings. */
   systemPrompt?: ConfigFileSystemPromptInjection;
   /** Gate guidance injection settings. */
@@ -199,7 +204,7 @@ export interface ConfigFileFrameworkInjection {
  * system-prompt (framework phases), gate-guidance (quality criteria), and style-guidance (response
  * formatting).
  */
-export interface ConfigFileFrameworks {
+interface ConfigFileFrameworks {
   /**
    * Enable framework system.
    *
@@ -228,7 +233,7 @@ export interface ConfigFileFrameworks {
  * Judge evaluation defaults. Gates with evaluation.mode 'judge' use context-isolated review via
  * delegation.
  */
-export interface ConfigFileGateEvaluation {
+interface ConfigFileGateEvaluation {
   /**
    * Default evaluation mode for all gates: 'self' (same-context review) or 'judge'
    * (context-isolated delegation).
@@ -247,7 +252,7 @@ export interface ConfigFileGateEvaluation {
 }
 
 /** Quality gates for validating LLM outputs. */
-export interface ConfigFileGates {
+interface ConfigFileGates {
   /**
    * Enable the gate validation system.
    *
@@ -296,7 +301,7 @@ export interface ConfigFileGates {
 }
 
 /** Context isolation spawns a fresh Claude CLI to fix issues. */
-export interface ConfigFileVerificationIsolation {
+interface ConfigFileVerificationIsolation {
   /**
    * Enable spawning isolated Claude instances after in-context attempts fail.
    *
@@ -308,6 +313,7 @@ export interface ConfigFileVerificationIsolation {
    *
    * @default 1
    * @minimum 0.01
+   * @maximum 10
    */
   maxBudget?: number;
   /**
@@ -316,6 +322,7 @@ export interface ConfigFileVerificationIsolation {
    * @asType integer
    * @default 300
    * @minimum 30
+   * @maximum 3600
    */
   timeout?: number;
   /**
@@ -327,7 +334,7 @@ export interface ConfigFileVerificationIsolation {
 }
 
 /** Ralph Loops: autonomous verification via shell commands. */
-export interface ConfigFileVerification {
+interface ConfigFileVerification {
   /**
    * Fix attempts within current context before spawning isolation. Set to 0 for immediate
    * isolation.
@@ -335,6 +342,7 @@ export interface ConfigFileVerification {
    * @asType integer
    * @default 3
    * @minimum 0
+   * @maximum 10
    */
   inContextAttempts?: number;
   /** Context isolation settings. */
@@ -361,6 +369,7 @@ export interface ConfigFileVersioning {
    * @asType integer
    * @default 50
    * @minimum 1
+   * @maximum 500
    */
   maxVersions?: number;
 }
@@ -369,7 +378,7 @@ export interface ConfigFileVersioning {
  * Phase guards: deterministic structural validation of LLM output against framework phase
  * definitions (zero LLM cost).
  */
-export interface ConfigFilePhaseGuards {
+interface ConfigFilePhaseGuards {
   /**
    * Enforcement mode: 'enforce' blocks advancement until structural requirements pass, 'warn' logs
    * advisory warnings, 'off' disables phase guards.
@@ -389,7 +398,7 @@ export interface ConfigFilePhaseGuards {
 }
 
 /** Prompt execution behavior. */
-export interface ConfigFileExecution {
+interface ConfigFileExecution {
   /**
    * Enable %judge modifier for framework comparison.
    *
@@ -404,7 +413,7 @@ export interface ConfigFileExecution {
  * Read by the Python hooks directly off the file — `hooks/lib/config_loader.py` — not by any
  * TypeScript path, which is why no member here has a counterpart in `Config`.
  */
-export interface ConfigFileHooks {
+interface ConfigFileHooks {
   /**
    * Show detailed multi-line output instead of compact single-line. Useful for debugging or
    * verbose mode. An absent key resolves to `false` in `hooks/lib/config_loader.py`.
@@ -415,7 +424,7 @@ export interface ConfigFileHooks {
 }
 
 /** Controls which attributes are included in trace spans and events for data safety. */
-export interface ConfigFileTelemetryAttributePolicy {
+interface ConfigFileTelemetryAttributePolicy {
   /**
    * Include safe business-context attributes (cpm.prompt.id, cpm.execution.mode, etc.).
    *
@@ -442,7 +451,7 @@ export interface ConfigFileTelemetryAttributePolicy {
  * OpenTelemetry observability: tracing, metrics, and attribute policy. Separate from
  * resources.observability (MCP resource toggles).
  */
-export interface ConfigFileTelemetry {
+interface ConfigFileTelemetry {
   /**
    * Master switch for the telemetry subsystem. When false, no OTel SDK is initialized.
    *
@@ -474,7 +483,7 @@ export interface ConfigFileTelemetry {
 }
 
 /** Server logging configuration. */
-export interface ConfigFileLogging {
+interface ConfigFileLogging {
   /**
    * Minimum log level.
    *
@@ -490,7 +499,7 @@ export interface ConfigFileLogging {
 }
 
 /** A resource family that is registered with MCP or not. */
-export interface ConfigFileResourceToggle {
+interface ConfigFileResourceToggle {
   /**
    * Enable this resource family.
    *
@@ -500,7 +509,7 @@ export interface ConfigFileResourceToggle {
 }
 
 /** Observability resources (sessions and metrics). */
-export interface ConfigFileObservabilityResources {
+interface ConfigFileObservabilityResources {
   /**
    * Enable observability resources.
    *
@@ -522,7 +531,7 @@ export interface ConfigFileObservabilityResources {
 }
 
 /** Logs resource for debugging and observability. */
-export interface ConfigFileLogsResource {
+interface ConfigFileLogsResource {
   /**
    * Enable logs resource (resource://logs/).
    *
@@ -549,7 +558,7 @@ export interface ConfigFileLogsResource {
 /**
  * MCP resources configuration. Master switch must be enabled for any resources to register.
  */
-export interface ConfigFileResources {
+interface ConfigFileResources {
   /**
    * Master switch: register resources with MCP protocol (default: false for token efficiency).
    *
@@ -575,12 +584,14 @@ export interface ConfigFileResources {
  * routinely tunes, and `sessions` was the only member `advanced` ever held, so the wrapper named
  * nothing.
  */
-export interface ConfigFileChainSessions {
+interface ConfigFileChainSessions {
   /**
    * Idle session timeout in minutes (default: 24 hours).
    *
    * @asType integer
    * @default 1440
+   * @minimum 1
+   * @maximum 10080
    */
   timeoutMinutes?: number;
   /**
@@ -588,6 +599,8 @@ export interface ConfigFileChainSessions {
    *
    * @asType integer
    * @default 30
+   * @minimum 1
+   * @maximum 10080
    */
   reviewTimeoutMinutes?: number;
   /**
@@ -595,6 +608,8 @@ export interface ConfigFileChainSessions {
    *
    * @asType integer
    * @default 5
+   * @minimum 1
+   * @maximum 10080
    */
   cleanupIntervalMinutes?: number;
 }

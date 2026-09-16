@@ -1,11 +1,11 @@
 // @lifecycle canonical - Handler for configuration management operations.
 
-import { validateConfigInput } from '../../config-utils.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 import { createStructuredResponse } from '../core/response-utils.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 
+import { validateConfigInput } from '#cli-shared/config-input-validator.js';
 import { handleError as utilsHandleError } from '#shared/utils/index.js';
 
 /** The one remaining nested-config shape: a per-key candidate check, never a write. */
@@ -123,8 +123,9 @@ export class ConfigActionHandler extends ActionHandler {
 
   /**
    * Reports the schema check the server already ran at config load — never re-validates
-   * `getConfig()`: the normalized config always fails the schema, because loading adds a root
-   * `transport` key the schema does not declare.
+   * `getConfig()`: that is the resolved runtime shape (defaults filled in, keys renamed), not the
+   * file the operator wrote, so validating it against the file's schema would report the loader's
+   * own normalization as the operator's mistake.
    */
   private async handleSchemaValidate(): Promise<ToolResponse> {
     if (this.configManager === undefined) throw new Error('Config manager unavailable');

@@ -4,201 +4,40 @@
  *
  * Provides atomic config operations with backup/rollback capabilities
  * for secure configuration management in system_control tool.
+ *
+ * NO KEY LIST, NO VALIDATOR, NO SECOND WRITER, NO RE-EXPORT (ruling R54)
+ * This file used to define its own `CONFIG_VALID_KEYS` (24 keys against cli-shared's 60) and its
+ * own `validateConfigInput` switch, so the same `key=value` could be valid on the CLI and unknown
+ * over MCP. Both are gone: `#cli-shared/config-input-validator.js` owns validation, driven by the
+ * table generated from `ConfigFile`. This file used to also re-export `CONFIG_VALID_KEYS` /
+ * `CONFIG_RESTART_REQUIRED_KEYS` / `validateConfigInput` as a second import path onto the same
+ * surface — a path nothing outside this module actually took (`config-action-handler.ts` already
+ * imported straight from cli-shared). Two import paths to one implementation still let a reader
+ * land on either name and believe they were reading two surfaces; the re-export block is gone, so
+ * `#cli-shared/config-input-validator.js` is the only place this surface is imported from.
+ *
+ * It also used to WRITE `configManager.getConfig()` back to disk — the RESOLVED runtime object.
+ * That persisted defaults nobody typed, and dropped every section the loader does not map onto
+ * `Config` (`hooks`), so toggling one boolean rewrote the operator's whole file. The writer now
+ * reads the DOCUMENT through `#cli-shared/config-operations.js`, sets one dotted key, and writes
+ * it back; `getConfig()` is never consulted on the write path.
  */
 
-import { access, copyFile, readFile, writeFile } from 'node:fs/promises';
+import { access, copyFile } from 'node:fs/promises';
 
-import { type ConfigManager, type Logger, Config } from '#shared/types/index.js';
-
-export const CONFIG_VALID_KEYS = [
-  'server.name',
-  'server.port',
-  'server.transport',
-  'logging.level',
-  'logging.directory',
-  'gates.enabled',
-  'gates.frameworkGates',
-  'gates.harnessCovers',
-  'gates.reminderTokenBudget',
-  'gates.executeInlineGateDefinitions',
-  'execution.judge',
-  'frameworks.enabled',
-  'frameworks.dynamicToolDescriptions',
-  'frameworks.systemPromptFrequency',
-  'frameworks.styleGuidance',
-  'verification.inContextAttempts',
-  'verification.isolation.enabled',
-  'verification.isolation.maxBudget',
-  'verification.isolation.timeout',
-  // The four `analysis.semanticAnalysis.*` model-integration keys are gone. They set a section no
-  // runtime path reads any more: the LLM side client, the gate service that consumed it, and the
-  // validator branch that read the flag were all removed. The section is still parsed and still
-  // loads (ConfigManager warns once), so an existing config.json keeps working — but offering a
-  // setter for it would let a user turn on something that cannot happen. Model-graded gate
-  // evaluation is the `%judge` modifier / `gates.evaluation.defaultMode`.
-] as const;
-
-export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
-
-export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = ['server.port', 'server.transport'];
-
-export interface ConfigInputValidationResult {
-  valid: boolean;
-  error?: string;
-  convertedValue?: any;
-  // 'array' added for `gates.harnessCovers` — mirrors the same widening in
-  // cli-shared/config-input-validator.ts; no consumer reads valueType downstream.
-  valueType?: 'string' | 'number' | 'boolean' | 'array';
-}
-
-export function validateConfigInput(key: string, value: string): ConfigInputValidationResult {
-  switch (key) {
-    case 'server.port': {
-      const port = parseInt(value, 10);
-      if (isNaN(port) || port < 1024 || port > 65535) {
-        return {
-          valid: false,
-          error: 'Port must be a number between 1024-65535',
-        };
-      }
-      return { valid: true, convertedValue: port, valueType: 'number' };
-    }
-
-    case 'server.name':
-    case 'server.version':
-    case 'logging.directory': {
-      const trimmed = value?.trim();
-      if (!trimmed) {
-        return {
-          valid: false,
-          error: 'Value cannot be empty',
-        };
-      }
-      return { valid: true, convertedValue: trimmed, valueType: 'string' };
-    }
-
-    case 'server.transport': {
-      const normalized = value.trim().toLowerCase();
-      if (!['stdio', 'streamable-http', 'both'].includes(normalized)) {
-        return {
-          valid: false,
-          error: "Transport mode must be 'stdio', 'streamable-http', or 'both'",
-        };
-      }
-      return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'gates.enabled':
-    case 'gates.frameworkGates':
-    case 'gates.executeInlineGateDefinitions':
-    case 'execution.judge':
-    case 'frameworks.enabled':
-    case 'frameworks.dynamicToolDescriptions':
-    case 'frameworks.styleGuidance':
-    case 'verification.isolation.enabled': {
-      const boolValue = value.trim().toLowerCase();
-      if (!['true', 'false'].includes(boolValue)) {
-        return {
-          valid: false,
-          error: "Value must be 'true' or 'false'",
-        };
-      }
-      return {
-        valid: true,
-        convertedValue: boolValue === 'true',
-        valueType: 'boolean',
-      };
-    }
-
-    case 'frameworks.systemPromptFrequency': {
-      const freq = parseInt(value, 10);
-      if (isNaN(freq) || freq < 1 || freq > 100) {
-        return {
-          valid: false,
-          error: 'Frequency must be a number between 1-100',
-        };
-      }
-      return { valid: true, convertedValue: freq, valueType: 'number' };
-    }
-
-    case 'verification.inContextAttempts': {
-      const attempts = parseInt(value, 10);
-      if (isNaN(attempts) || attempts < 1 || attempts > 10) {
-        return {
-          valid: false,
-          error: 'In-context attempts must be a number between 1-10',
-        };
-      }
-      return { valid: true, convertedValue: attempts, valueType: 'number' };
-    }
-
-    case 'verification.isolation.maxBudget': {
-      const budget = parseFloat(value);
-      if (isNaN(budget) || budget < 0.01 || budget > 10) {
-        return {
-          valid: false,
-          error: 'Max budget must be a number between 0.01-10',
-        };
-      }
-      return { valid: true, convertedValue: budget, valueType: 'number' };
-    }
-
-    case 'verification.isolation.timeout': {
-      const timeout = parseInt(value, 10);
-      if (isNaN(timeout) || timeout < 30 || timeout > 3600) {
-        return {
-          valid: false,
-          error: 'Timeout must be a number between 30-3600 seconds',
-        };
-      }
-      return { valid: true, convertedValue: timeout, valueType: 'number' };
-    }
-
-    case 'gates.harnessCovers': {
-      const subjects = value
-        .split(',')
-        .map((subject) => subject.trim())
-        .filter((subject) => subject.length > 0);
-      const pattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-      const invalid = subjects.filter((subject) => !pattern.test(subject));
-      if (invalid.length > 0) {
-        return {
-          valid: false,
-          error: `Harness covers must be comma-separated lowercase-hyphenated subjects (invalid: ${invalid.join(', ')})`,
-        };
-      }
-      return { valid: true, convertedValue: subjects, valueType: 'array' };
-    }
-
-    case 'gates.reminderTokenBudget': {
-      const budget = parseInt(value, 10);
-      if (isNaN(budget) || budget < 0) {
-        return {
-          valid: false,
-          error: 'reminderTokenBudget must be a whole number >= 0',
-        };
-      }
-      return { valid: true, convertedValue: budget, valueType: 'number' };
-    }
-
-    case 'logging.level': {
-      const normalized = value.trim();
-      if (!['debug', 'info', 'warn', 'error'].includes(normalized)) {
-        return {
-          valid: false,
-          error: 'Log level must be: debug, info, warn, or error',
-        };
-      }
-      return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    default:
-      return {
-        valid: false,
-        error: `Unknown configuration key: ${key}`,
-      };
-  }
-}
+import {
+  CONFIG_RESTART_REQUIRED_KEYS,
+  validateConfigInput,
+  type ConfigKey,
+} from '#cli-shared/config-input-validator.js';
+import {
+  applyConfigChange,
+  backupConfig,
+  readConfigFile,
+  validateConfigDocument,
+  writeConfigAtomic,
+} from '#cli-shared/config-operations.js';
+import { type ConfigManager, type Logger } from '#shared/types/index.js';
 
 /**
  * Configuration write result
@@ -212,12 +51,15 @@ export interface ConfigWriteResult {
 }
 
 /**
- * Configuration backup information
+ * Configuration backup information.
+ *
+ * `originalConfig` is the DOCUMENT that was on disk before the write, not a resolved `Config` —
+ * a backup of anything else would restore a file the operator never wrote.
  */
 export interface ConfigBackup {
   backupPath: string;
   timestamp: number;
-  originalConfig: Config;
+  originalConfig: Record<string, unknown>;
 }
 
 /**
@@ -236,7 +78,10 @@ export class SafeConfigWriter {
   }
 
   /**
-   * Safely update a configuration value with atomic operations
+   * Safely update a configuration value with atomic operations.
+   *
+   * The order is the contract: validate the candidate, read the file, apply one key, validate the
+   * whole resulting DOCUMENT, then write. Nothing reaches disk until both checks pass.
    */
   async updateConfigValue(
     key: string,
@@ -244,7 +89,7 @@ export class SafeConfigWriter {
     options?: { createBackup?: boolean }
   ): Promise<ConfigWriteResult> {
     try {
-      // Step 1: Validate the operation
+      // Step 1: Validate the candidate against the generated key table
       const validation = validateConfigInput(key, value);
       if (!validation.valid) {
         const errorMessage = validation.error ?? 'Unknown validation error';
@@ -255,32 +100,43 @@ export class SafeConfigWriter {
         };
       }
 
-      // Step 2: Create backup
+      // Step 2: Read the config DOCUMENT — never `getConfig()`, which is the resolved runtime shape
+      const read = readConfigFile(this.configPath);
+      if (!read.success || !read.config) {
+        const errorMessage = read.error ?? `Could not read ${this.configPath}`;
+        return {
+          success: false,
+          message: `Failed to read configuration: ${errorMessage}`,
+          error: errorMessage,
+        };
+      }
+
+      // Step 3: Create backup
       const shouldCreateBackup = options?.createBackup !== false;
-      const backup = shouldCreateBackup ? await this.createConfigBackup() : undefined;
+      const backup = shouldCreateBackup ? this.createConfigBackup(read.config) : undefined;
       if (backup) {
         this.logger.info(`Config backup created: ${backup.backupPath}`);
       }
 
-      // Step 3: Load current config and apply changes
-      const currentConfig = this.configManager.getConfig();
-      const updatedConfig = this.applyConfigChange(currentConfig, key, validation.convertedValue);
+      // Step 4: Apply the single change, preserving every other key and their order
+      const updatedConfig = applyConfigChange(read.config, key, validation.convertedValue);
 
-      // Step 4: Validate the entire updated configuration
-      const configValidation = this.validateFullConfig(updatedConfig);
-      if (!configValidation.valid) {
+      // Step 5: Validate the entire updated document
+      const documentCheck = validateConfigDocument(updatedConfig);
+      if (!documentCheck.valid) {
+        const errorMessage = documentCheck.errors.join('; ');
         return {
           success: false,
-          message: `Configuration validation failed: ${configValidation.error}`,
-          ...(configValidation.error ? { error: configValidation.error } : {}),
+          message: `Configuration validation failed: ${errorMessage}`,
+          error: errorMessage,
           ...(backup?.backupPath ? { backupPath: backup.backupPath } : {}),
         };
       }
 
-      // Step 5: Write the new configuration atomically
-      await this.writeConfigAtomic(updatedConfig);
+      // Step 6: Write the new configuration atomically
+      writeConfigAtomic(this.configPath, updatedConfig);
 
-      // Step 6: Reload ConfigManager to use new config
+      // Step 7: Reload ConfigManager to use new config
       await this.configManager.loadConfig();
 
       return {
@@ -300,20 +156,15 @@ export class SafeConfigWriter {
   }
 
   /**
-   * Create a timestamped backup of the current configuration
+   * Create a timestamped backup of the current configuration file.
    */
-  private async createConfigBackup(): Promise<ConfigBackup> {
-    const timestamp = Date.now();
-    const backupPath = `${this.configPath}.backup.${timestamp}`;
-
+  private createConfigBackup(originalConfig: Record<string, unknown>): ConfigBackup {
     try {
-      await copyFile(this.configPath, backupPath);
-      const originalConfig = this.configManager.getConfig();
-
+      const backupPath = backupConfig(this.configPath);
       this.logger.debug(`Config backup created: ${backupPath}`);
       return {
         backupPath,
-        timestamp,
+        timestamp: Date.now(),
         originalConfig,
       };
     } catch (error) {
@@ -348,128 +199,6 @@ export class SafeConfigWriter {
         success: false,
         message: `Failed to restore configuration: ${error}`,
         error: String(error),
-      };
-    }
-  }
-
-  /**
-   * Write configuration file atomically (write to temp file, then rename)
-   */
-  private async writeConfigAtomic(config: Config): Promise<void> {
-    const tempPath = `${this.configPath}.tmp`;
-
-    try {
-      // Write to temporary file first
-      const configJson = JSON.stringify(config, null, 2);
-      await writeFile(tempPath, configJson, 'utf8');
-
-      // Validate the written file can be parsed
-      const testContent = await readFile(tempPath, 'utf8');
-      JSON.parse(testContent); // Will throw if invalid
-
-      // Atomic rename (this is the atomic operation)
-      const fs = await import('fs');
-      fs.renameSync(tempPath, this.configPath);
-
-      this.logger.debug('Configuration written atomically');
-    } catch (error) {
-      // Clean up temp file if it exists
-      try {
-        const fs = await import('fs');
-        if (fs.existsSync(tempPath)) {
-          fs.unlinkSync(tempPath);
-        }
-      } catch (cleanupError) {
-        this.logger.warn(`Failed to clean up temp file ${tempPath}:`, cleanupError);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Apply a configuration change to a config object
-   */
-  private applyConfigChange(config: Config, key: string, value: any): Config {
-    // Deep clone the config to avoid mutations
-    const newConfig = JSON.parse(JSON.stringify(config));
-
-    // Apply the change using dot notation
-    const parts = key.split('.');
-    let current: any = newConfig;
-
-    // Navigate to the parent object
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      if (!part) {
-        continue;
-      }
-      if (!current[part]) {
-        current[part] = {};
-      }
-      current = current[part];
-    }
-
-    // Set the final value
-    const finalKey = parts[parts.length - 1];
-    if (finalKey) {
-      current[finalKey] = value;
-    }
-
-    return newConfig as Config;
-  }
-
-  /**
-   * Validate the entire configuration object
-   */
-  private validateFullConfig(config: Config): {
-    valid: boolean;
-    error?: string;
-  } {
-    try {
-      // Basic structure validation
-      if (!config.server) {
-        return {
-          valid: false,
-          error: 'Missing required server configuration section',
-        };
-      }
-
-      // Server validation
-      if (!config.server.name || !config.server.version || !config.server.port) {
-        return { valid: false, error: 'Missing required server configuration' };
-      }
-
-      if (config.server.port < 1024 || config.server.port > 65535) {
-        return { valid: false, error: 'Invalid server port range' };
-      }
-
-      // Transport validation
-      if (config.transport && !['stdio', 'streamable-http', 'both'].includes(config.transport)) {
-        return {
-          valid: false,
-          error: "Invalid transport mode (must be 'stdio', 'streamable-http', or 'both')",
-        };
-      }
-
-      // Logging validation (if present)
-      if (config.logging) {
-        if (!config.logging.directory || !config.logging.level) {
-          return {
-            valid: false,
-            error: 'Missing required logging configuration',
-          };
-        }
-
-        if (!['debug', 'info', 'warn', 'error'].includes(config.logging.level)) {
-          return { valid: false, error: 'Invalid logging level' };
-        }
-      }
-
-      return { valid: true };
-    } catch (error) {
-      return {
-        valid: false,
-        error: `Configuration validation error: ${error}`,
       };
     }
   }
