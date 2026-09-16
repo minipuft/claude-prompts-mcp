@@ -28,6 +28,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 import { SqliteEngine, createResourceIndexer } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -37,7 +38,7 @@ const mockLogger = {
 };
 
 describe('Resource index bootstrap — syncAll over the bundled tree', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/bootstrap-test');
+  const testDir = testScratchPath('bootstrap-test');
   const resourcesDir = path.join(process.cwd(), 'resources');
   let dbManager: SqliteEngine;
 
@@ -61,16 +62,15 @@ describe('Resource index bootstrap — syncAll over the bundled tree', () => {
     const indexer = createResourceIndexer(dbManager, mockLogger as any, { resourcesDir });
     await indexer.syncAll();
 
-    // Verify all resource types are indexed
-    const prompts = indexer.queryByType('prompt');
-    const gates = indexer.queryByType('gate');
-    const frameworks = indexer.queryByType('framework');
-    const styles = indexer.queryByType('style');
+    // Verify all resource types are indexed — read straight from the table, the way every real
+    // consumer (Python hooks, skills-sync) does; the indexer has no in-process read API.
+    const countOf = (type: string) =>
+      dbManager.query(`SELECT id FROM resource_index WHERE type = ?`, [type]).length;
 
-    expect(prompts.length).toBeGreaterThan(0);
-    expect(gates.length).toBeGreaterThan(0);
-    expect(frameworks.length).toBeGreaterThan(0);
-    expect(styles.length).toBeGreaterThan(0);
+    expect(countOf('prompt')).toBeGreaterThan(0);
+    expect(countOf('gate')).toBeGreaterThan(0);
+    expect(countOf('framework')).toBeGreaterThan(0);
+    expect(countOf('style')).toBeGreaterThan(0);
   });
 
   it('should persist data to disk file readable by external consumers', async () => {

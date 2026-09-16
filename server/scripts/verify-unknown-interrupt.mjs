@@ -30,13 +30,13 @@
  */
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, openSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, openSync, readdirSync, statSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './lib/hermetic-server-env.js';
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(SERVER_ROOT, 'dist', 'index.js');
@@ -80,7 +80,7 @@ function reservePort() {
   });
 }
 
-function spawnServer(port, runtimeRoot) {
+function spawnServer(port, roots) {
   const log = openSync(path.join(WS, `server-${port}.log`), 'w');
   // The shared scrub (lib/hermetic-server-env.js): jest markers make the child skip main(), and
   // the ambient MCP_* path overrides would point it at the operator's tree. The workspace is set
@@ -90,7 +90,7 @@ function spawnServer(port, runtimeRoot) {
   const env = buildServerEnv({
     PORT: String(port),
     MCP_WORKSPACE: SERVER_ROOT,
-    MCP_RUNTIME_ROOT: runtimeRoot,
+    ...roots.env,
   });
   return spawn('node', [DIST, '--transport=streamable-http', '--quiet'], {
     env,
@@ -188,8 +188,8 @@ const UNKNOWN_THREE = 'live-drive-isolation';
 refuseStaleDist();
 
 const port = await reservePort();
-const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'unknown-interrupt-runtime-'));
-const server = spawnServer(port, runtimeRoot);
+const roots = createHermeticRoots('unknown-interrupt');
+const server = spawnServer(port, roots);
 try {
   const base = `http://127.0.0.1:${port}`;
   await waitHealth(base);
@@ -341,7 +341,7 @@ try {
     server.kill();
     await once(server, 'exit');
   }
-  rmSync(runtimeRoot, { recursive: true, force: true });
+  roots.cleanup();
 }
 
 if (failures.length > 0) {

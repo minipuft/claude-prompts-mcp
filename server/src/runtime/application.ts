@@ -622,165 +622,32 @@ export class Application {
    */
   async shutdown(): Promise<void> {
     try {
-      if (this.logger) {
-        this.logger.info('Initiating application shutdown...');
-      }
+      this.logger?.info('Initiating application shutdown...');
 
-      // Flush telemetry spans before tearing down services
-      if (this.telemetryLifecycle) {
-        try {
-          await this.telemetryLifecycle.shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down telemetry:', error);
-        }
-      }
+      // The order below IS the contract, and no type checker sees it:
+      // `tests/unit/runtime/application-shutdown-order.test.ts` records the sequence so a
+      // step cannot move silently. Telemetry flushes while the services it instruments are
+      // still up, the transport stops before the stores it routes into, background services
+      // stop before the surfaces that schedule work on them, and the database closes last.
+      await this.shutdownTelemetry();
+      this.shutdownServerLifecycle();
+      await this.shutdownIfSupported(this.transportRouter, 'transport manager');
+      await this.shutdownIfSupported(this.frameworkStateStore, 'framework state manager');
+      await this.shutdownIfSupported(this.promptManager, 'prompt assets');
 
-      //  Stop server and transport layers
-      if (this.serverLifecycle) {
-        if (this.logger) {
-          this.logger.debug('Shutting down server manager...');
-        }
-        this.serverLifecycle.shutdown();
-      }
-
-      // Stop transport layer (if it has shutdown method)
-      if (
-        this.transportRouter &&
-        'shutdown' in this.transportRouter &&
-        typeof (this.transportRouter as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down transport manager...');
-        }
-        try {
-          await (this.transportRouter as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down transport manager:', error);
-        }
-      }
-
-      // Stop monitoring and resource-intensive components (if they have shutdown method)
-      if (
-        this.frameworkStateStore &&
-        'shutdown' in this.frameworkStateStore &&
-        typeof (this.frameworkStateStore as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down framework state manager...');
-        }
-        try {
-          await (this.frameworkStateStore as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down framework state manager:', error);
-        }
-      }
-
-      // Stop file watchers and hot-reload systems (if they have shutdown method)
-      if (
-        this.promptManager &&
-        'shutdown' in this.promptManager &&
-        typeof (this.promptManager as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down prompt assets...');
-        }
-        try {
-          await (this.promptManager as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down prompt assets:', error);
-        }
-      }
-
-      // Stop registered background services (watchers, timers, etc.)
+      // Registered background services (watchers, timers, etc.)
       await this.serviceOrchestrator.stopAll();
 
-      // Stop API and MCP tools (if they have shutdown method)
-      if (
-        this.apiRouter &&
-        'shutdown' in this.apiRouter &&
-        typeof (this.apiRouter as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down API manager...');
-        }
-        try {
-          await (this.apiRouter as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down API manager:', error);
-        }
-      }
+      await this.shutdownIfSupported(this.apiRouter, 'API manager');
+      await this.shutdownIfSupported(this.mcpToolsManager, 'MCP tools manager');
+      await this.shutdownIfSupported(this.conversationStore, 'conversation manager');
+      await this.shutdownIfSupported(this.textReferenceStore, 'text reference manager');
 
-      if (
-        this.mcpToolsManager &&
-        'shutdown' in this.mcpToolsManager &&
-        typeof (this.mcpToolsManager as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down MCP tools manager...');
-        }
-        try {
-          await (this.mcpToolsManager as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down MCP tools manager:', error);
-        }
-      }
-
-      // Stop conversation and text reference managers (if they have shutdown method)
-      if (
-        this.conversationStore &&
-        'shutdown' in this.conversationStore &&
-        typeof (this.conversationStore as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down conversation manager...');
-        }
-        try {
-          await (this.conversationStore as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down conversation manager:', error);
-        }
-      }
-
-      if (
-        this.textReferenceStore &&
-        'shutdown' in this.textReferenceStore &&
-        typeof (this.textReferenceStore as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down text reference manager...');
-        }
-        try {
-          await (this.textReferenceStore as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down text reference manager:', error);
-        }
-      }
-
-      // Clean up internal timers
-      if (this.configManager) {
-        if (this.frameworksConfigListener) {
-          this.configManager.removeListener(
-            'frameworksConfigChanged',
-            this.frameworksConfigListener
-          );
-          this.frameworksConfigListener = undefined;
-        }
-        this.configManager.stopWatching();
-      }
-
+      this.stopConfigWatching();
       this.cleanup();
+      await this.closeDatabase();
 
-      // Close the database LAST. Every subsystem above may still write on its way down
-      // (state stores flush, the chain manager clears its PID-owned rows), so closing
-      // earlier would turn an orderly shutdown into a series of writes against a closed
-      // handle. This is also the only place the WAL gets checkpointed: nothing called
-      // `SqliteEngine.shutdown()` before, so the log grew unbounded across restarts.
-      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      await SqliteEngine.shutdownInstance();
-
-      if (this.logger) {
-        this.logger.info('Application shutdown completed successfully');
-      }
+      this.logger?.info('Application shutdown completed successfully');
     } catch (error) {
       if (this.logger) {
         this.logger.error('Error during shutdown:', error);
@@ -789,6 +656,94 @@ export class Application {
       }
       throw error;
     }
+  }
+
+  /**
+   * Flush telemetry spans before the services they describe are torn down.
+   *
+   * Guarded like the subsystems below: an exporter that cannot reach its collector must not
+   * be the reason a server fails to stop.
+   */
+  private async shutdownTelemetry(): Promise<void> {
+    if (!this.telemetryLifecycle) {
+      return;
+    }
+
+    try {
+      await this.telemetryLifecycle.shutdown();
+    } catch (error) {
+      this.logger?.warn('Error shutting down telemetry:', error);
+    }
+  }
+
+  /**
+   * Stop the server/listener layer.
+   *
+   * Deliberately NOT routed through `shutdownIfSupported`: this call is synchronous and
+   * unguarded, so a failure here reaches the single outer boundary in `shutdown()` instead
+   * of being warned and swallowed.
+   */
+  private shutdownServerLifecycle(): void {
+    if (!this.serverLifecycle) {
+      return;
+    }
+
+    this.logger?.debug('Shutting down server manager...');
+    this.serverLifecycle.shutdown();
+  }
+
+  /**
+   * Stop one subsystem that MAY expose `shutdown()`.
+   *
+   * The duck-typing describes this class's own wiring rather than the collaborators: which
+   * of these fields is assigned depends on the transport and on how far startup got, and
+   * several of the declared types carry no shutdown method at all. A failure is warned and
+   * swallowed on purpose -- one subsystem that cannot stop must not strand the ones after
+   * it, and the database close at the end of `shutdown()` is what must always be reached.
+   */
+  private async shutdownIfSupported(component: unknown, label: string): Promise<void> {
+    if (component === null || (typeof component !== 'object' && typeof component !== 'function')) {
+      return;
+    }
+
+    const candidate = component as { shutdown?: () => unknown };
+    if (typeof candidate.shutdown !== 'function') {
+      return;
+    }
+
+    this.logger?.debug(`Shutting down ${label}...`);
+    try {
+      await candidate.shutdown();
+    } catch (error) {
+      this.logger?.warn(`Error shutting down ${label}:`, error);
+    }
+  }
+
+  /**
+   * Detach the framework config listener, then stop the config file watcher.
+   */
+  private stopConfigWatching(): void {
+    if (!this.configManager) {
+      return;
+    }
+
+    if (this.frameworksConfigListener) {
+      this.configManager.removeListener('frameworksConfigChanged', this.frameworksConfigListener);
+      this.frameworksConfigListener = undefined;
+    }
+    this.configManager.stopWatching();
+  }
+
+  /**
+   * Close the database LAST. Every subsystem above may still write on its way down
+   * (state stores flush, the chain manager clears its PID-owned rows), so closing
+   * earlier would turn an orderly shutdown into a series of writes against a closed
+   * handle. This is also the only place the WAL gets checkpointed: nothing called
+   * `SqliteEngine.shutdown()` before, so the log grew unbounded across restarts.
+   */
+  private async closeDatabase(): Promise<void> {
+    const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+    await SqliteEngine.shutdownInstance();
   }
 
   /**

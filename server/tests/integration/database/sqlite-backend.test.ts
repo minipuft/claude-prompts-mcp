@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 import { SqliteEngine, SqliteStateStore } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 // Mock logger
 const mockLogger = {
@@ -24,7 +25,7 @@ const mockLogger = {
 };
 
 describe('SQLite State Backend', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/sqlite-test');
+  const testDir = testScratchPath('sqlite-test');
   let dbManager: SqliteEngine;
 
   beforeAll(async () => {
@@ -190,7 +191,7 @@ describe('SQLite State Backend', () => {
 });
 
 describe('Schema version bump', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/sqlite-schema-bump');
+  const testDir = testScratchPath('sqlite-schema-bump');
   const dbPath = path.join(testDir, 'runtime-state', 'state.db');
   let engine: SqliteEngine;
 

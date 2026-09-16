@@ -15,6 +15,7 @@ export {
   validateStyleSchema,
   isValidStyleDefinition,
   type StyleDefinitionYaml,
+  type LoadedStyleDefinition,
   type StyleActivationYaml,
   type StyleToolDescriptionYaml,
   type StyleSchemaValidationResult,
@@ -26,6 +27,5 @@ export {
   createStyleDefinitionLoader,
   getDefaultStyleDefinitionLoader,
   resetDefaultStyleDefinitionLoader,
-  type StyleDefinitionLoaderConfig,
   type StyleLoaderStats,
 } from './style-definition-loader.js';

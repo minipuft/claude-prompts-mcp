@@ -1,13 +1,17 @@
-// @lifecycle test - Integration test for ResourceIndexer sync and query
+// @lifecycle test - Integration test for ResourceIndexer sync
 /**
  * ResourceIndexer Integration Test
  *
  * Verifies that:
- * 1. syncAll() discovers and indexes file-based resources
- * 2. queryByType/queryByCategory/search return correct results
- * 3. getStats() reflects actual index counts
- * 4. Incremental sync detects modifications and removals
- * 5. Content hash comparison prevents unnecessary re-indexing
+ * 1. syncAll() discovers and indexes file-based resources into `resource_index`
+ * 2. Incremental sync detects modifications and removals
+ * 3. Content hash comparison prevents unnecessary re-indexing
+ * 4. Tool sync reports refusal, removal, and failure as distinct dispositions
+ *
+ * `resource_index` has no in-process read API (P4.37 removed the last of it — `queryByType`,
+ * `queryByCategory`, `search`, `getResource`, `getStats`, `queryTools`, `clear` — since nothing in
+ * `src/` called any of them on a `ResourceIndexer` instance; every real reader queries the table
+ * directly, which is what the assertions below do too).
  */
 
 import * as fs from 'node:fs/promises';
@@ -21,6 +25,7 @@ import {
   reportResourceSyncFailures,
 } from '../../../src/infra/database/index.js';
 import { reportRefusedResources } from '../../../src/infra/database/resource-indexer.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 // Mock logger
 const mockLogger = {
@@ -30,7 +35,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/indexer-test');
+const TEST_DIR = testScratchPath('indexer-test');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 
 /**
@@ -55,6 +60,23 @@ async function createResource(
 
   const lines = Object.entries(fields).map(([k, v]) => `${k}: "${v}"`);
   await fs.writeFile(path.join(dir, yamlFileName), lines.join('\n'), 'utf-8');
+}
+
+/**
+ * Per-type row counts, read straight from `resource_index` — the test-side substitute for the
+ * `getStats()` method removed in P4.37 (no production caller ever reached it).
+ */
+function countByType(
+  db: SqliteEngine
+): Record<'prompt' | 'gate' | 'framework' | 'style' | 'tool', number> {
+  const stats = { prompt: 0, gate: 0, framework: 0, style: 0, tool: 0 };
+  const rows = db.query<{ type: string; count: number }>(
+    'SELECT type, COUNT(*) as count FROM resource_index GROUP BY type'
+  );
+  for (const row of rows) {
+    if (row.type in stats) stats[row.type as keyof typeof stats] = row.count;
+  }
+  return stats;
 }
 
 describe('ResourceIndexer', () => {
@@ -121,7 +143,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const gate = indexer.getResource('gate', 'quality-check');
+      const gate = dbManager.queryOne<{ name: string; type: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['gate', 'quality-check']
+      );
       expect(gate).not.toBeNull();
       expect(gate!.name).toBe('Quality Check');
       expect(gate!.type).toBe('gate');
@@ -137,7 +162,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const meth = indexer.getResource('framework', 'cageerf');
+      const meth = dbManager.queryOne<{ name: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['framework', 'cageerf']
+      );
       expect(meth).not.toBeNull();
       expect(meth!.name).toBe('CAGEERF');
     });
@@ -152,7 +180,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const style = indexer.getResource('style', 'analytical');
+      const style = dbManager.queryOne<{ name: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['style', 'analytical']
+      );
       expect(style).not.toBeNull();
       expect(style!.name).toBe('Analytical Style');
     });
@@ -168,7 +199,7 @@ describe('ResourceIndexer', () => {
       expect(result.added).toBe(4);
       expect(result.errors).toBe(0);
 
-      const stats = indexer.getStats();
+      const stats = countByType(dbManager);
       expect(stats.prompt).toBe(1);
       expect(stats.gate).toBe(1);
       expect(stats.framework).toBe(1);
@@ -213,7 +244,10 @@ describe('ResourceIndexer', () => {
       expect(result.modified).toBe(1);
       expect(result.added).toBe(0);
 
-      const resource = indexer.getResource('prompt', 'evolving');
+      const resource = dbManager.queryOne<{ name: string; description: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['prompt', 'evolving']
+      );
       expect(resource!.name).toBe('Version 2');
       expect(resource!.description).toBe('Updated description');
     });
@@ -228,7 +262,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
       expect(result.removed).toBe(1);
 
-      const resource = indexer.getResource('prompt', 'temporary');
+      const resource = dbManager.queryOne(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['prompt', 'temporary']
+      );
       expect(resource).toBeNull();
     });
 
@@ -250,105 +287,6 @@ describe('ResourceIndexer', () => {
     });
   });
 
-  describe('query methods', () => {
-    beforeEach(async () => {
-      await createResource('prompts', 'analysis', {
-        id: 'analysis',
-        name: 'Analysis Prompt',
-        category: 'development',
-        description: 'Deep code analysis',
-      });
-      await createResource('prompts', 'review', {
-        id: 'review',
-        name: 'Review Prompt',
-        category: 'development',
-        description: 'Code review checklist',
-      });
-      await createResource('prompts', 'greeting', {
-        id: 'greeting',
-        name: 'Greeting',
-        category: 'general',
-        description: 'Simple greeting',
-      });
-      await createResource('gates', 'quality', {
-        id: 'quality',
-        name: 'Quality Gate',
-        description: 'Output quality check',
-      });
-      await indexer.syncAll();
-    });
-
-    it('queryByType returns resources of that type', () => {
-      const prompts = indexer.queryByType('prompt');
-      expect(prompts).toHaveLength(3);
-      expect(prompts.map((p) => p.id).sort()).toEqual(['analysis', 'greeting', 'review']);
-
-      const gates = indexer.queryByType('gate');
-      expect(gates).toHaveLength(1);
-      expect(gates[0].id).toBe('quality');
-    });
-
-    it('queryByCategory filters by type and category', () => {
-      const devPrompts = indexer.queryByCategory('prompt', 'development');
-      expect(devPrompts).toHaveLength(2);
-      expect(devPrompts.map((p) => p.id).sort()).toEqual(['analysis', 'review']);
-
-      const generalPrompts = indexer.queryByCategory('prompt', 'general');
-      expect(generalPrompts).toHaveLength(1);
-      expect(generalPrompts[0].id).toBe('greeting');
-    });
-
-    it('search matches by name, description, and id', () => {
-      // Search by name
-      const byName = indexer.search('Analysis');
-      expect(byName.some((r) => r.id === 'analysis')).toBe(true);
-
-      // Search by description
-      const byDesc = indexer.search('checklist');
-      expect(byDesc.some((r) => r.id === 'review')).toBe(true);
-
-      // Search by id
-      const byId = indexer.search('greeting');
-      expect(byId.some((r) => r.id === 'greeting')).toBe(true);
-    });
-
-    it('getResource returns specific resource or null', () => {
-      const found = indexer.getResource('prompt', 'analysis');
-      expect(found).not.toBeNull();
-      expect(found!.name).toBe('Analysis Prompt');
-      expect(found!.category).toBe('development');
-
-      const notFound = indexer.getResource('prompt', 'nonexistent');
-      expect(notFound).toBeNull();
-    });
-
-    it('getStats returns per-type counts', () => {
-      const stats = indexer.getStats();
-      expect(stats.prompt).toBe(3);
-      expect(stats.gate).toBe(1);
-      expect(stats.framework).toBe(0);
-      expect(stats.style).toBe(0);
-    });
-  });
-
-  describe('clear', () => {
-    it('should remove all indexed resources', async () => {
-      await createResource('prompts', 'p1', { id: 'p1', name: 'P1' });
-      await createResource('gates', 'g1', { id: 'g1', name: 'G1' });
-      await indexer.syncAll();
-
-      const statsBefore = indexer.getStats();
-      expect(statsBefore.prompt).toBe(1);
-      expect(statsBefore.gate).toBe(1);
-
-      indexer.clear();
-
-      const statsAfter = indexer.getStats();
-      expect(statsAfter.prompt).toBe(0);
-      expect(statsAfter.gate).toBe(0);
-    });
-  });
-
   // ── F6 / P4.17: a tool that fails to load is neither `removed` nor published ──
   //
   // The original defect (F6): `loadTool` returned undefined rather than throwing,
@@ -357,8 +295,8 @@ describe('ResourceIndexer', () => {
   // observable event, and `errors` stayed 0 for both.
   //
   // F6's remedy kept the row so the removal sweep would leave it alone, which fixed
-  // the conflation and left a second one: `queryTools()` publishes every row and
-  // `skills-sync` reads it, so a tool the loader refused was still advertised as an
+  // the conflation and left a second one: every row in `resource_index` is what
+  // `skills-sync` reads, so a tool the loader refused was still advertised as an
   // available tool. P4.17 gives it the `refused` disposition instead — no row, not
   // `removed`, and not a sync `failure` either, because the indexer did its job.
   describe('tool sync refusal reporting', () => {
@@ -442,9 +380,10 @@ describe('ResourceIndexer', () => {
       ).toEqual([]);
     });
 
-    it('drops the failing tool from the index and from queryTools, keeping its valid sibling', async () => {
-      // The published surface, which is the residual F6 left behind: `queryTools()` is what
-      // `skills-sync` reads, so a row kept "so the sweep leaves it alone" was still an offer.
+    it('drops the failing tool from the index, keeping its valid sibling', async () => {
+      // The published surface, which is the residual F6 left behind: every row in
+      // `resource_index` is what `skills-sync` reads, so a row kept "so the sweep leaves it
+      // alone" was still an offer.
       const warm = await indexOnePromptWith(
         loaderReporting(
           [
@@ -457,10 +396,12 @@ describe('ResourceIndexer', () => {
       await warm.syncAll();
       // Positive control on the fixture: both tools really were indexed and published first, so
       // the absence below is a deletion and not a tool that never arrived.
-      expect(Object.keys(warm.queryTools()).sort()).toEqual([
-        'host_prompt/broken-parser',
-        'host_prompt/good-parser',
-      ]);
+      expect(
+        dbManager
+          .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'tool'")
+          .map((r) => r.id)
+          .sort()
+      ).toEqual(['host_prompt/broken-parser', 'host_prompt/good-parser']);
 
       const cold = await indexOnePromptWith(
         loaderReporting(
@@ -473,10 +414,7 @@ describe('ResourceIndexer', () => {
       const rows = dbManager.query<{ id: string }>(
         "SELECT id FROM resource_index WHERE type = 'tool'"
       );
-      // The absence...
       expect(rows.map((r) => r.id)).toEqual(['host_prompt/good-parser']);
-      // ...and its positive control, from the same probe over the same published surface.
-      expect(Object.keys(cold.queryTools())).toEqual(['host_prompt/good-parser']);
       expect(result.removed).toBe(0);
     });
 
@@ -603,7 +541,7 @@ describe('ResourceIndexer', () => {
       const result = await selectiveIndexer.syncAll();
       expect(result.added).toBe(1); // Only the gate
 
-      const stats = selectiveIndexer.getStats();
+      const stats = countByType(dbManager);
       expect(stats.prompt).toBe(0);
       expect(stats.gate).toBe(1);
     });

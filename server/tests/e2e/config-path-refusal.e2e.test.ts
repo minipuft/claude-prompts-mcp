@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 import { getAvailablePort } from './helpers/http-mcp-client.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -53,9 +53,13 @@ async function runServer(
     stdinFrames?: object[];
   }
 ): Promise<Run> {
+  // Every case here asserts a REFUSAL, so the child is not expected to write anywhere — which
+  // is exactly why it needs its own roots: were a case to stop refusing, the write must land in
+  // a temp directory rather than in the developer's home or in the repository.
+  const roots = createHermeticRoots('config-path-refusal');
   const proc = spawn('node', [DIST_ENTRY, ...args], {
     cwd: SERVER_ROOT,
-    env: buildServerEnv(env),
+    env: buildServerEnv({ ...roots.env, ...env }),
     stdio: [options.stdin, 'pipe', 'pipe'],
   });
 
@@ -85,6 +89,7 @@ async function runServer(
     }, 100);
     proc.on('exit', (code) => {
       clearInterval(poll);
+      roots.cleanup();
       resolve({ exitCode: code, timedOut, stdout, stderr });
     });
   });

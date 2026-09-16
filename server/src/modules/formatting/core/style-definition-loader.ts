@@ -23,6 +23,7 @@ import {
   validateStyleSchema,
   type StyleSchemaValidationResult,
   type StyleDefinitionYaml,
+  type LoadedStyleDefinition,
 } from './style-schema.js';
 
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
@@ -45,8 +46,8 @@ export interface StyleDefinitionLoaderConfig {
    * `stylesDir` itself inside this list, at its own rank, because the primary is neither the top of
    * the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list that
    * omitted it could not say where it sits. The accurate name lives at the producing end,
-   * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach the pipeline's
-   * style loader and ~30 test call sites for no behaviour change.
+   * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach ~30 test call
+   * sites for no behaviour change.
    *
    * A caller configuring the loader by hand may omit `stylesDir`, in which case it is consulted
    * last — see `resourceLookupOrder`.
@@ -99,7 +100,7 @@ export type { StyleSchemaValidationResult } from './style-schema.js';
  * ```
  */
 export class StyleDefinitionLoader {
-  private cache = new Map<string, StyleDefinitionYaml>();
+  private cache = new Map<string, LoadedStyleDefinition>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   /**
    * Style files this loader refused, by root. ONE instance for the loader's lifetime.
@@ -152,7 +153,7 @@ export class StyleDefinitionLoader {
    * @param id - Style ID (e.g., 'analytical', 'procedural')
    * @returns Loaded definition or undefined if not found
    */
-  loadStyle(id: string): StyleDefinitionYaml | undefined {
+  loadStyle(id: string): LoadedStyleDefinition | undefined {
     const normalizedId = id.toLowerCase();
 
     // Check cache first
@@ -200,8 +201,8 @@ export class StyleDefinitionLoader {
    *
    * @returns Map of ID to definition for all successfully loaded styles
    */
-  loadAllStyles(): Map<string, StyleDefinitionYaml> {
-    const results = new Map<string, StyleDefinitionYaml>();
+  loadAllStyles(): Map<string, LoadedStyleDefinition> {
+    const results = new Map<string, LoadedStyleDefinition>();
     const ids = this.discoverStyles();
 
     for (const id of ids) {
@@ -301,8 +302,8 @@ export class StyleDefinitionLoader {
    * the exact defect the quarantine exists to remove, relocated rather than fixed. The cost is
    * re-reading a root for an id that already served, paid once per id behind `loadStyle`'s cache.
    */
-  private loadFromLookupOrder(id: string): StyleDefinitionYaml | undefined {
-    let served: StyleDefinitionYaml | undefined;
+  private loadFromLookupOrder(id: string): LoadedStyleDefinition | undefined {
+    let served: LoadedStyleDefinition | undefined;
     for (const base of this.entryRootsFor(id)) {
       const definition = this.loadFromYamlDir(id, base);
       if (definition !== undefined && served === undefined) served = definition;
@@ -320,7 +321,7 @@ export class StyleDefinitionLoader {
    * @param id - Style ID
    * @param root - The directory to load from; for a grouped tree this is `{dir}/{group}`
    */
-  private loadFromYamlDir(id: string, root: string): StyleDefinitionYaml | undefined {
+  private loadFromYamlDir(id: string, root: string): LoadedStyleDefinition | undefined {
     const styleDir = join(root, id);
     const entryPath = join(styleDir, 'style.yaml');
 
@@ -342,7 +343,7 @@ export class StyleDefinitionLoader {
 
     try {
       // Load main style.yaml
-      const definition = loadYamlFileSync<StyleDefinitionYaml>(entryPath, {
+      const definition = loadYamlFileSync<LoadedStyleDefinition>(entryPath, {
         required: true,
       });
 
@@ -366,6 +367,19 @@ export class StyleDefinitionLoader {
       if (this.debug) {
         console.error(`[StyleDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
+
+      // Stamp provenance HERE, where the root is in hand — the rule P4.18 (ruling R7) set for
+      // gates and frameworks, extended to the fourth kind at P4.31. One call loads from exactly
+      // one root and every root reaches this method, so no consumer ever has to RE-DERIVE which
+      // root served an id; a second derivation of a question the loader already answered is the
+      // shape this plan has been bitten by repeatedly.
+      //
+      // After validation, so an authored `sourceRoot:` is overwritten rather than believed.
+      //
+      // For a GROUPED root this is `{dir}/{group}`, not the configured root — the same string
+      // `sinkFor` above stamps on a refusal from this walk, which is what keeps the two sides of
+      // a shadow finding comparable.
+      definition.sourceRoot = root;
 
       // This exact file loaded, so any record of it is now a lie — the stale-`✓` failure in
       // reverse, and the reason a repaired style stops reporting as refused without a restart.

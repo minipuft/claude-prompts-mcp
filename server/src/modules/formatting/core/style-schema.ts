@@ -115,6 +115,32 @@ export const StyleDefinitionSchema = z
 
 export type StyleDefinitionYaml = z.infer<typeof StyleDefinitionSchema>;
 
+/**
+ * A style definition as `StyleDefinitionLoader` hands it back — the READ side.
+ *
+ * Styles were the fourth kind and the only one with no provenance at all: gates and frameworks
+ * both gained a `sourceRoot` stamp at P4.18, so "which root served this definition" was a question
+ * the catalog could answer for three kinds and not for the fourth. A style shadow could only be
+ * asserted by NAME, never by root, and every surface built on the stamp had to special-case the
+ * one kind that lacked it (P4.31).
+ *
+ * On the OUTPUT side only, and deliberately absent from `StyleDefinitionSchema` itself — the same
+ * split `LoadedGateDefinition` documents: a key in the loader's zod schema is a key an operator
+ * may author, and this one is written by the loader AFTER validation and overwrites whatever the
+ * file declared, so it cannot claim a provenance the file does not have. The schema is
+ * `.passthrough()`, so an authored `sourceRoot:` parses; it simply does not survive the stamp.
+ */
+export type LoadedStyleDefinition = StyleDefinitionYaml & {
+  /**
+   * Root directory this definition was loaded FROM.
+   *
+   * For a GROUPED tree this is `{root}/{group}`, not the configured root — the same string
+   * `ResourceQuarantine.sinkFor` records a refusal against, which is what keeps the two sides of a
+   * shadow finding comparable.
+   */
+  sourceRoot?: string;
+};
+
 // ============================================
 // Validation Utilities
 // ============================================

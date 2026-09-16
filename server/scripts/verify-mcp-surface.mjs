@@ -38,14 +38,14 @@
 
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { VERDICT, auditExceptions } from './lib/exception-hygiene.js';
-import { buildServerEnv } from './lib/hermetic-server-env.js';
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
+import { checkDistFreshness as checkDistFreshnessCore } from './lib/dist-freshness.js';
 
 const SERVER_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -236,40 +236,24 @@ function record(name, ok, detail) {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
-/** Newest mtime under a directory, ignoring nothing — staleness must not be under-reported. */
-function newestMtime(dir) {
-  let newest = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    const mtime = entry.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs;
-    if (mtime > newest) newest = mtime;
-  }
-  return newest;
-}
-
 /**
  * `dist/` is the runtime SSOT and does not track `src/`.
  *
  * Verifying a stale binary is worse than not verifying at all: it returns green for code that is
  * not running. This exact trap cost a wasted restart on 2026-07-31, when dist was three hours
  * older than the change under test.
+ *
+ * The comparison itself lives in `lib/dist-freshness.js`, shared with
+ * `tests/e2e/helpers/child-env.ts` — this wrapper only turns the shared result into this script's
+ * two labeled PASS/FAIL rows.
  */
 function checkDistFreshness() {
-  let distMtime;
-  try {
-    distMtime = statSync(DIST_ENTRY).mtimeMs;
-  } catch {
-    record('dist/ built', false, `${DIST_ENTRY} missing — run \`npm run build\``);
+  const result = checkDistFreshnessCore(DIST_ENTRY, path.join(SERVER_ROOT, 'src'));
+  if (!result.fresh) {
+    record(result.kind === 'missing' ? 'dist/ built' : 'dist/ current', false, result.reason);
     return false;
   }
-
-  const srcMtime = newestMtime(path.join(SERVER_ROOT, 'src'));
-  if (srcMtime > distMtime) {
-    const lagMin = Math.round((srcMtime - distMtime) / 60_000);
-    record('dist/ current', false, `src is ${lagMin} min newer — run \`npm run build\` first`);
-    return false;
-  }
-  record('dist/ current', true, `built ${new Date(distMtime).toISOString().slice(11, 19)}`);
+  record('dist/ current', true, `built ${new Date(result.builtAt).toISOString().slice(11, 19)}`);
   return true;
 }
 
@@ -302,11 +286,11 @@ function reservePort() {
  * carries the operator's persisted `system_control` toggles — a gates disable there would reach
  * this verification too.
  */
-function spawnServer(port, runtimeRoot) {
+function spawnServer(port, roots) {
   const env = buildServerEnv({
     PORT: String(port),
     MCP_WORKSPACE: REPO_ROOT,
-    MCP_RUNTIME_ROOT: runtimeRoot,
+    ...roots.env,
   });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
@@ -812,8 +796,8 @@ async function main() {
   }
 
   const port = await reservePort();
-  const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'verify-mcp-runtime-'));
-  const server = spawnServer(port, runtimeRoot);
+  const roots = createHermeticRoots('verify-mcp');
+  const server = spawnServer(port, roots);
   const baseUrl = `http://127.0.0.1:${port}`;
 
   let stderr = '';
@@ -836,7 +820,7 @@ async function main() {
       server.kill('SIGTERM');
       await once(server, 'exit');
     }
-    rmSync(runtimeRoot, { recursive: true, force: true });
+    roots.cleanup();
   }
 
   checkNoMutation(baseline);

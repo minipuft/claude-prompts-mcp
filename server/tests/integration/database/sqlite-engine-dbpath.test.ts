@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/sqlite-engine.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -28,7 +29,7 @@ const mockLogger = {
 };
 
 describe('SqliteEngine dbPath ownership', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/sqlite-dbpath');
+  const testDir = testScratchPath('sqlite-dbpath');
   const packageRoot = path.join(testDir, 'package-root');
   const runtimeRoot = path.join(testDir, 'runtime-root');
   const claimedDbPath = path.join(runtimeRoot, 'runtime-state', 'state.db');

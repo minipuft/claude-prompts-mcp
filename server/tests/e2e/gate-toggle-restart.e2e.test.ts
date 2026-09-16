@@ -15,12 +15,10 @@
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 import {
   getAvailablePort,
   killServer,
@@ -61,10 +59,18 @@ function gateParamsOf(listed: ToolsList): string[] {
 interface Scenario {
   runtimeRoot: string;
   projectDir: string;
+  /**
+   * The child's `HOME`. Held beside `runtimeRoot` rather than derived at each transport, because
+   * `MCP_WORKSPACE` here is the REPOSITORY — an inherited home would put a skills_sync export in
+   * the developer's real client skill folders, the same way an inherited runtime root would put
+   * `state.db` in the repo.
+   */
+  home: string;
 }
 
 function scenarioEnv(scenario: Scenario): Record<string, string> {
   return {
+    HOME: scenario.home,
     MCP_WORKSPACE: REPO_ROOT,
     MCP_RUNTIME_ROOT: scenario.runtimeRoot,
     CLAUDE_PROJECT_DIR: scenario.projectDir,
@@ -167,14 +173,20 @@ describe.each([
   ['Streamable HTTP', startHttpSession],
 ] as const)('%s: a gates toggle survives a restart', (_transport, startSession) => {
   let scenario: Scenario;
+  let cleanupRoots: (() => void) | undefined;
 
   beforeAll(async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'gate-toggle-restart-e2e-'));
-    scenario = { runtimeRoot: path.join(root, 'runtime'), projectDir: path.join(root, 'project') };
+    const roots = createHermeticRoots('gate-toggle-restart-e2e');
+    cleanupRoots = roots.cleanup;
+    scenario = {
+      runtimeRoot: roots.runtimeRoot,
+      projectDir: path.join(roots.root, 'project'),
+      home: roots.home,
+    };
   });
 
-  afterAll(async () => {
-    await rm(path.dirname(scenario.runtimeRoot), { recursive: true, force: true });
+  afterAll(() => {
+    cleanupRoots?.();
   });
 
   it('a disable narrows the next process, and an enable restores the one after', async () => {

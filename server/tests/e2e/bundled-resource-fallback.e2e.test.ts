@@ -26,7 +26,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PACKAGE_RESOURCES = path.join(SERVER_ROOT, 'resources');
@@ -64,8 +64,11 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
   const runtimeRoot = path.join(workspace, 'runtime');
   await mkdir(runtimeRoot, { recursive: true });
 
+  // The runtime root is this function's own (under `workspace`, which the caller removes); the
+  // pair still supplies `HOME`, which nothing here would otherwise set.
+  const roots = createHermeticRoots('bundled-resource-fallback');
   const proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
-    env: buildServerEnv({ MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot }),
+    env: buildServerEnv({ ...roots.env, MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot }),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -86,6 +89,8 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
       resolve(code);
     });
   });
+
+  roots.cleanup();
 
   const logPath = path.join(runtimeRoot, 'logs', 'mcp-server.log');
   const inventory = await readFile(logPath, 'utf8').catch(() => '');
